@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
@@ -73,6 +74,10 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
     public byte[] Serialize() => Array.Empty<byte>();
     public void Deserialize(byte[] data) { }
 
+    // ICheckpointableModel implementation
+    public void SaveState(Stream stream) { }
+    public void LoadState(Stream stream) { }
+
     public IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy()
     {
         var copy = new SimpleMockModel(_parameters.Length);
@@ -95,4 +100,21 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
 
     // IFeatureImportance implementation
     public Dictionary<string, double> GetFeatureImportance() => new Dictionary<string, double>();
+
+    // IGradientComputable implementation
+    public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+
+    public Vector<double> ComputeGradients(Tensor<double> input, Tensor<double> target, ILossFunction<double>? lossFunction = null)
+    {
+        return new Vector<double>(ParameterCount);
+    }
+
+    public void ApplyGradients(Vector<double> gradients, double learningRate)
+    {
+        // Mock implementation - simple parameter update
+        for (int i = 0; i < Math.Min(gradients.Length, _parameters.Length); i++)
+        {
+            _parameters[i] -= learningRate * gradients[i];
+        }
+    }
 }

@@ -46,13 +46,21 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// <para><b>For Beginners:</b> Regularization is a technique used to prevent the model from becoming
     /// too complex and fitting the training data too closely. This helps the model generalize better
     /// to new, unseen data.
-    /// 
+    ///
     /// Think of it like learning to ride a bike:
     /// - Without regularization, you might only learn to ride on one specific path.
     /// - With regularization, you learn general bike-riding skills that work on many different paths.
     /// </para>
     /// </remarks>
     protected IRegularization<T, Matrix<T>, Vector<T>> Regularization { get; private set; }
+
+    /// <summary>
+    /// Gets the default loss function for this async tree-based regression model.
+    /// </summary>
+    /// <value>
+    /// The loss function used for gradient computation.
+    /// </value>
+    private readonly ILossFunction<T> _defaultLossFunction;
 
     /// <summary>
     /// Gets the maximum depth of the decision tree.
@@ -105,12 +113,14 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// </summary>
     /// <param name="options">The options for configuring the decision tree.</param>
     /// <param name="regularization">The regularization method to use.</param>
-    protected AsyncDecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization<T, Matrix<T>, Vector<T>>? regularization)
+    /// <param name="lossFunction">Loss function for gradient computation. If null, defaults to Mean Squared Error.</param>
+    protected AsyncDecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization<T, Matrix<T>, Vector<T>>? regularization, ILossFunction<T>? lossFunction = null)
     {
         Options = options ?? new();
         NumOps = MathHelper.GetNumericOperations<T>();
         FeatureImportances = new Vector<T>(0);
         Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
+        _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>
@@ -882,5 +892,140 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     public virtual int ParameterCount
     {
         get { return CountNodes(Root) * 4 + 1; }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// For async tree-based regression models, the default loss function is Mean Squared Error (MSE).
+    /// This can be customized by passing a different loss function to the constructor.
+    /// </para>
+    /// </remarks>
+    public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>IMPORTANT NOTE:</b> Decision trees (including async variants) are not continuously differentiable.
+    /// This gradient computation provides a numerical approximation for compatibility with
+    /// gradient-based distributed training, but it is NOT the gradient in the traditional sense.
+    ///
+    /// For proper tree-based distributed training with async models, consider:
+    /// - Gradient Boosting (which uses gradients of the loss, not the tree)
+    /// - Model averaging approaches (Random Forests, Extremely Randomized Trees)
+    /// - Ensemble-based distributed training
+    /// </para>
+    /// <para><b>For Beginners:</b> Async tree models (like Random Forests) use multiple trees together.
+    ///
+    /// Each tree makes decisions using "if-then" rules, not smooth math functions.
+    /// This method provides an approximation for compatibility, but true tree training
+    /// happens through splitting algorithms, not gradient descent.
+    ///
+    /// For gradient-based training, use Gradient Boosting or other ensemble methods
+    /// that explicitly use gradients.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        var loss = lossFunction ?? DefaultLossFunction;
+        var predictions = Predict(input);
+
+        // For gradient boosting: compute per-sample loss derivatives (pseudo-residuals)
+        // These are ∂Loss/∂predictions, NOT ∂Loss/∂parameters
+        // In gradient boosting, subsequent trees are fit to these negative gradients
+        var sampleGradients = loss.CalculateDerivative(predictions, target);
+
+        // Map per-sample gradients to per-parameter gradients
+        // For decision trees, parameters typically represent leaf values or split thresholds
+        // We aggregate sample gradients into ParameterCount buckets
+        var gradients = new Vector<T>(ParameterCount);
+
+        if (sampleGradients.Length == 0 || ParameterCount == 0)
+        {
+            return gradients; // Return zeros
+        }
+
+        // Distribute samples across parameters
+        int samplesPerParam = Math.Max(1, (sampleGradients.Length + ParameterCount - 1) / ParameterCount);
+
+        for (int paramIdx = 0; paramIdx < ParameterCount; paramIdx++)
+        {
+            T sum = NumOps.Zero;
+            int count = 0;
+
+            // Aggregate gradients for samples mapped to this parameter
+            int startIdx = paramIdx * samplesPerParam;
+            int endIdx = Math.Min((paramIdx + 1) * samplesPerParam, sampleGradients.Length);
+
+            for (int sampleIdx = startIdx; sampleIdx < endIdx; sampleIdx++)
+            {
+                sum = NumOps.Add(sum, sampleGradients[sampleIdx]);
+                count++;
+            }
+
+            // Average the gradients for this parameter bucket
+            gradients[paramIdx] = count > 0
+                ? NumOps.Divide(sum, NumOps.FromDouble(count))
+                : NumOps.Zero;
+        }
+
+        return gradients;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>IMPORTANT NOTE:</b> Async tree models are not trained via gradient descent.
+    /// This method is provided for interface compatibility.
+    ///
+    /// Async tree models are typically trained using:
+    /// - Parallel tree construction algorithms
+    /// - Bootstrap aggregating (Bagging) for Random Forests
+    /// - Gradient-based ensemble methods for Gradient Boosting
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a no-op for tree-based models.
+    ///
+    /// Trees are built differently than neural networks. They don't learn by
+    /// adjusting weights with gradients. Instead, they:
+    /// 1. Find the best feature to split on at each node
+    /// 2. Build the tree structure recursively
+    /// 3. Combine multiple trees in ensembles (Random Forests, etc.)
+    ///
+    /// This method exists for interface compatibility but doesn't perform gradient updates.
+    /// </para>
+    /// </remarks>
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients.Length != ParameterCount)
+        {
+            throw new ArgumentException($"Expected {ParameterCount} gradients, but got {gradients.Length}", nameof(gradients));
+        }
+
+        // No-op for async tree models - trees are trained via splitting algorithms
+        // Derived classes like GradientBoostingRegression can override with proper gradient-based updates
+    }
+
+    /// <summary>
+    /// Saves the model's current state to a stream.
+    /// </summary>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+        if (!stream.CanWrite) throw new ArgumentException("Stream must be writable.", nameof(stream));
+        var data = Serialize();
+        stream.Write(data, 0, data.Length);
+        stream.Flush();
+    }
+
+    /// <summary>
+    /// Loads the model's state from a stream.
+    /// </summary>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+        if (!stream.CanRead) throw new ArgumentException("Stream must be readable.", nameof(stream));
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        var data = ms.ToArray();
+        if (data.Length == 0) throw new InvalidOperationException("Stream contains no data.");
+        Deserialize(data);
     }
 }

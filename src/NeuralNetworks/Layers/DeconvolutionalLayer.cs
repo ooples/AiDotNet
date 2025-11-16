@@ -212,8 +212,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> Kernel size is how big each "pattern generator" is.
     /// 
     /// For example:
-    /// - A kernel size of 3 means a 3×3 grid (9 weights)
-    /// - A kernel size of 5 means a 5×5 grid (25 weights)
+    /// - A kernel size of 3 means a 3ï¿½3 grid (9 weights)
+    /// - A kernel size of 5 means a 5ï¿½5 grid (25 weights)
     /// 
     /// Larger kernels:
     /// - Can create more complex patterns
@@ -238,8 +238,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// - Stride of 2: Roughly doubles the size
     /// - Stride of 4: Roughly quadruples the size
     /// 
-    /// For example, if your input is 16×16 pixels and you use a stride of 2,
-    /// the output might be around 32×32 pixels (the exact size depends on other factors too).
+    /// For example, if your input is 16ï¿½16 pixels and you use a stride of 2,
+    /// the output might be around 32ï¿½32 pixels (the exact size depends on other factors too).
     /// </para>
     /// </remarks>
     public int Stride { get; }
@@ -400,11 +400,11 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// - How big your pattern generators are (kernel size)
     /// - Any adjustments needed (padding)
     /// 
-    /// For example, if you have a 16×16 input and use stride 2, kernel size 3, and no padding:
+    /// For example, if you have a 16ï¿½16 input and use stride 2, kernel size 3, and no padding:
     /// - The output height will be (16-1)*2 - 0 + 3 = 33
     /// - The output width will be (16-1)*2 - 0 + 3 = 33
     /// 
-    /// So your 16×16 input becomes approximately 33×33 output (about 4 times larger in area).
+    /// So your 16ï¿½16 input becomes approximately 33ï¿½33 output (about 4 times larger in area).
     /// </para>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int outputDepth, int kernelSize, int stride, int padding)
@@ -537,18 +537,31 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// gradient is returned for propagation to earlier layers.
     /// </para>
     /// <para><b>For Beginners:</b> This method helps the layer learn from its mistakes.
-    /// 
+    ///
     /// During the backward pass:
     /// - The layer receives information about how wrong its output was
     /// - It calculates how to adjust its pattern generators to be more accurate
     /// - It prepares the gradients for updating kernels and biases
     /// - It passes information back to previous layers so they can learn too
-    /// 
+    ///
     /// This is where the actual "learning" happens. The layer figures out how to
     /// adjust all its internal values to make better outputs next time.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -599,6 +612,144 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Currently, deconvolution operations
+    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
+    /// </para>
+    /// <para>
+    /// Once deconvolution operations are added to TensorOperations, this method will provide:
+    /// - Automatic gradient computation through the computation graph
+    /// - Verification of manual gradient implementations
+    /// - Support for rapid prototyping with custom modifications
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert parameters to computation nodes
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var kernelNode = Autodiff.TensorOperations<T>.Variable(_kernels, "kernel", requiresGradient: true);
+
+        // Convert biases from Vector to Tensor for TensorOperations
+        var biasesTensor = new Tensor<T>(new int[] { OutputDepth });
+        for (int i = 0; i < OutputDepth; i++)
+        {
+            biasesTensor[i] = _biases[i];
+        }
+        var biasNode = Autodiff.TensorOperations<T>.Variable(biasesTensor, "bias", requiresGradient: true);
+
+        // Forward pass using autodiff ConvTranspose2D operation
+        var stride = new int[] { Stride, Stride };
+        var padding = new int[] { Padding, Padding };
+
+        var deconvOutput = Autodiff.TensorOperations<T>.ConvTranspose2D(
+            inputNode,
+            kernelNode,
+            biasNode,
+            stride,
+            padding,
+            null  // outputPadding - not used in this layer
+        );
+
+        // Apply activation if present
+        // If vector activation is configured, fall back to manual path
+        Autodiff.ComputationNode<T> activated;
+        if (VectorActivation != null)
+        {
+            // Vector activations not supported in autodiff - use manual path
+            return BackwardManual(outputGradient);
+        }
+        activated = ApplyScalarActivationAutodiff(deconvOutput);
+
+        // Perform backward pass
+        activated.Gradient = outputGradient;
+        var topoOrder = GetTopologicalOrder(activated);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients
+        _kernelsGradient = kernelNode.Gradient;
+
+        // Convert bias gradient from Tensor back to Vector
+        if (biasNode.Gradient != null)
+        {
+            _biasesGradient = new Vector<T>(OutputDepth);
+            for (int i = 0; i < OutputDepth; i++)
+            {
+                _biasesGradient[i] = biasNode.Gradient[i];
+            }
+        }
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
+
+    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (ScalarActivation == null)
+            return input;
+
+        // Use generic activation support - works for ALL 39 built-in activations
+        return Autodiff.TensorOperations<T>.ApplyActivation(input, ScalarActivation);
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    /// <param name="root">The root node of the computation graph.</param>
+    /// <returns>A list of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

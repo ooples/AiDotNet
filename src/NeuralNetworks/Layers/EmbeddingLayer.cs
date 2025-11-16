@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class EmbeddingLayer<T> : LayerBase<T>
+public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// The embedding matrix that stores vector representations for each token in the vocabulary.
@@ -48,7 +48,7 @@ public class EmbeddingLayer<T> : LayerBase<T>
     /// The embedding matrix works like this:
     /// - Each row corresponds to one token (word, character, etc.)
     /// - Each column is one dimension of the embedding space
-    /// - If you have 10,000 words and 300 dimensions, the matrix will be 10,000 � 300
+    /// - If you have 10,000 words and 300 dimensions, the matrix will be 10,000 × 300
     /// 
     /// For example, with a vocabulary of 5 words and 4 dimensions:
     /// ```
@@ -114,6 +114,23 @@ public class EmbeddingLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the last computed embedding regularization loss for diagnostics.
+    /// </summary>
+    private T _lastEmbeddingRegularizationLoss;
+
+    /// <summary>
+    /// Gets or sets whether to use auxiliary loss (embedding regularization) during training.
+    /// Default is false. Enable to prevent embeddings from becoming too large or collapsing.
+    /// </summary>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for embedding regularization.
+    /// Default is 0.0001. Controls L2 regularization strength on embedding weights.
+    /// </summary>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -175,6 +192,9 @@ public class EmbeddingLayer<T> : LayerBase<T>
     public EmbeddingLayer(int vocabularySize, int embeddingDimension)
         : base([1], [embeddingDimension])
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.0001);
+        _lastEmbeddingRegularizationLoss = NumOps.Zero;
+
         _embeddingMatrix = new Matrix<T>(vocabularySize, embeddingDimension);
         InitializeParameters();
     }
@@ -286,23 +306,35 @@ public class EmbeddingLayer<T> : LayerBase<T>
     /// Therefore, this method returns a zero-filled tensor with the same shape as the input.
     /// </para>
     /// <para><b>For Beginners:</b> This is where the embedding layer learns from its mistakes during training.
-    /// 
+    ///
     /// During the backward pass:
     /// 1. For each token in the input sequence:
     ///    - Look up which embedding was used (based on the token ID)
     ///    - Add the corresponding gradient to that specific embedding
     /// 2. Return a dummy gradient for the input (since we can't backpropagate through token IDs)
-    /// 
+    ///
     /// For example, if token ID 5 appears three times in different positions:
     /// - All three gradient contributions will be added together for embedding #5
     /// - This accumulates learning from all occurrences of that token
-    /// 
+    ///
     /// This is different from most layers because:
     /// - We only update the embeddings that were actually used in this batch
     /// - We don't pass meaningful gradients back to the input (the token IDs themselves don't change)
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -326,6 +358,28 @@ public class EmbeddingLayer<T> : LayerBase<T>
 
         // We don't compute input gradients for embedding layer
         return new Tensor<T>(_lastInput.Shape);
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// EmbeddingLayer implements table lookup followed by scatter-add for gradients.
+    /// The manual implementation provides the correct gradient computation for embedding lookups.
+    /// Since embedding lookup is a discrete indexing operation (not differentiable with respect to indices),
+    /// and scatter-add operations are not available in TensorOperations, this falls back to manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // EmbeddingLayer performs discrete table lookup: output = embeddingMatrix[indices[i]]
+        // The gradient computation requires scatter-add: embeddingGradient[indices[i]] += outputGradient[i]
+        // This is a discrete indexing operation that cannot be represented with standard differentiable operations
+        // Therefore, we fall back to the manual implementation which correctly handles the scatter operation
+        return BackwardManual(outputGradient);
     }
 
     /// <summary>
@@ -454,6 +508,155 @@ public class EmbeddingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes the auxiliary loss for the EmbeddingLayer, which is embedding regularization.
+    /// </summary>
+    /// <returns>The embedding regularization loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// Embedding regularization prevents embedding vectors from becoming too large or too similar,
+    /// which can lead to overfitting. It applies L2 regularization on the embedding weights:
+    /// Loss = (1/2) * Σ||embedding||²
+    ///
+    /// This regularization:
+    /// - Prevents embeddings from growing unboundedly
+    /// - Encourages smaller, more generalizable embedding values
+    /// - Helps prevent overfitting to the training data
+    /// - Promotes diverse embedding representations
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates a penalty for embeddings that become too large.
+    ///
+    /// Embedding regularization:
+    /// - Measures how large the embedding vectors are
+    /// - Penalizes very large embedding values
+    /// - Encourages the model to use smaller, more manageable numbers
+    /// - Prevents the model from memorizing training data too closely
+    ///
+    /// Why this is important:
+    /// - Large embedding values can indicate overfitting
+    /// - Regularization promotes better generalization to new data
+    /// - Keeps embedding vectors at reasonable scales
+    /// - Prevents embeddings from collapsing or diverging
+    ///
+    /// Think of it like a referee that prevents embeddings from becoming too extreme,
+    /// keeping them in a reasonable range for better model performance.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss)
+        {
+            // Reset cached loss to avoid stale diagnostics
+            _lastEmbeddingRegularizationLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Compute L2 regularization on embedding weights: (1/2) * Σ||embedding||²
+        T sumSquaredNorms = NumOps.Zero;
+
+        for (int i = 0; i < _embeddingMatrix.Rows; i++)
+        {
+            for (int j = 0; j < _embeddingMatrix.Columns; j++)
+            {
+                T value = _embeddingMatrix[i, j];
+                sumSquaredNorms = NumOps.Add(sumSquaredNorms, NumOps.Multiply(value, value));
+            }
+        }
+
+        // Average over all embedding values and scale by 0.5 (standard L2 regularization)
+        int totalElements = _embeddingMatrix.Rows * _embeddingMatrix.Columns;
+        T regularizationLoss = NumOps.Divide(sumSquaredNorms, NumOps.FromDouble(totalElements * 2));
+
+        // Store unweighted loss for diagnostics
+        _lastEmbeddingRegularizationLoss = regularizationLoss;
+
+        // Return weighted auxiliary loss
+        return NumOps.Multiply(AuxiliaryLossWeight, regularizationLoss);
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the embedding regularization.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about embedding health.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides insights into embedding behavior, including:
+    /// - Embedding regularization loss
+    /// - Average embedding magnitude
+    /// - Regularization weight
+    /// </para>
+    /// <para><b>For Beginners:</b> This gives you information to monitor embedding quality.
+    ///
+    /// The diagnostics include:
+    /// - Embedding Regularization Loss: Measure of embedding magnitude
+    /// - Regularization Weight: How much the penalty influences training
+    /// - Average Embedding Magnitude: Typical size of embedding vectors
+    /// - Use Auxiliary Loss: Whether regularization is enabled
+    ///
+    /// These values help you:
+    /// - Monitor if embeddings are growing too large
+    /// - Detect potential overfitting in embedding layer
+    /// - Tune the regularization weight
+    /// - Ensure embeddings remain at reasonable scales
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        var diagnostics = new Dictionary<string, string>
+        {
+            { "EmbeddingRegularizationLoss", _lastEmbeddingRegularizationLoss?.ToString() ?? "0" },
+            { "RegularizationWeight", AuxiliaryLossWeight?.ToString() ?? "0.0001" },
+            { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
+        };
+
+        // Calculate average embedding magnitude
+        T sumMagnitudes = NumOps.Zero;
+        int count = 0;
+
+        for (int i = 0; i < _embeddingMatrix.Rows; i++)
+        {
+            T rowSumSquared = NumOps.Zero;
+            for (int j = 0; j < _embeddingMatrix.Columns; j++)
+            {
+                T value = _embeddingMatrix[i, j];
+                rowSumSquared = NumOps.Add(rowSumSquared, NumOps.Multiply(value, value));
+            }
+            T magnitude = NumOps.Sqrt(rowSumSquared);
+            sumMagnitudes = NumOps.Add(sumMagnitudes, magnitude);
+            count++;
+        }
+
+        if (count > 0)
+        {
+            T avgMagnitude = NumOps.Divide(sumMagnitudes, NumOps.FromDouble(count));
+            diagnostics["AverageEmbeddingMagnitude"] = avgMagnitude?.ToString() ?? "0";
+        }
+
+        return diagnostics;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
+    }
+
+    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -463,17 +666,17 @@ public class EmbeddingLayer<T> : LayerBase<T>
     /// data or when implementing stateful recurrent networks.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - The saved input token IDs are cleared
     /// - The calculated gradients are cleared
     /// - The layer forgets previous calculations it performed
-    /// 
+    ///
     /// This is typically called:
     /// - Between training batches to free up memory
     /// - When switching from training to evaluation mode
     /// - When starting to process completely new data
-    /// 
+    ///
     /// It doesn't affect the learned embeddings themselves, just the temporary
     /// working data used during computation.
     /// </para>

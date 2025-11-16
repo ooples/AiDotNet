@@ -23,17 +23,65 @@ namespace AiDotNet.NeuralNetworks.Layers.Graph;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GraphConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>
 {
+    /// <summary>
+    /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the layer computes a graph smoothness auxiliary loss that encourages connected nodes
+    /// to have similar learned representations. This helps the network learn more coherent graph embeddings.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls whether the layer uses an additional learning signal.
+    ///
+    /// When enabled (true):
+    /// - The layer encourages connected nodes to learn similar features
+    /// - This helps the network understand that connected nodes should be related
+    /// - Training may be more stable and produce better results
+    ///
+    /// When disabled (false):
+    /// - Only the main task loss is used for training
+    /// - This is the default setting
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the auxiliary loss contribution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This value determines how much the graph smoothness loss contributes to the total loss.
+    /// The default value of 0.01 provides a good balance between the main task and smoothness regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much importance to give to the smoothness penalty.
+    ///
+    /// The weight affects training:
+    /// - Higher values (e.g., 0.1) make the network prioritize smooth features more strongly
+    /// - Lower values (e.g., 0.001) make the smoothness penalty less important
+    /// - The default (0.01) works well for most graph learning tasks
+    ///
+    /// If your graph has very clear structure, you might increase this value.
+    /// If the main task is more important, you might decrease it.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
     /// <summary>
     /// Gets the number of input features per node.
     /// </summary>
-    public int InputFeatures { get; }
+    public int InputFeatures { get; private set; }
 
     /// <summary>
     /// Gets the number of output features per node.
     /// </summary>
-    public int OutputFeatures { get; }
+    public int OutputFeatures { get; private set; }
+
+    /// <summary>
+    /// Stores the last computed graph smoothness loss for diagnostic purposes.
+    /// </summary>
+    private T _lastGraphSmoothnessLoss;
 
     /// <summary>
     /// The weight matrix that transforms input features to output features.
@@ -116,6 +164,79 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     private Vector<T>? _biasGradient;
 
     /// <summary>
+    /// Stores the node features from the last forward pass for auxiliary loss computation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the output node features after the graph convolution operation.
+    /// These features are used to compute the Laplacian smoothness regularization loss,
+    /// which encourages connected nodes to have similar feature representations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the features for each node after processing.
+    ///
+    /// The node features:
+    /// - Represent the learned characteristics of each node in the graph
+    /// - Are used to compute regularization losses
+    /// - Help ensure that connected nodes have similar representations
+    ///
+    /// This is useful for graph-based learning where we want neighboring nodes
+    /// to have similar properties while still maintaining their unique characteristics.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastNodeFeatures;
+
+    /// <summary>
+    /// Stores the list of edges in the graph for auxiliary loss computation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores pairs of node indices representing edges in the graph.
+    /// Each tuple contains (sourceNode, targetNode) indices. These edges are extracted
+    /// from the adjacency matrix and used to compute Laplacian smoothness regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores which nodes are connected to each other.
+    ///
+    /// The edge list:
+    /// - Contains pairs of node indices that are connected
+    /// - Is derived from the adjacency matrix
+    /// - Is used to compute smoothness regularization
+    ///
+    /// For example, if nodes 0 and 2 are connected, the list would include (0, 2).
+    /// This helps the layer encourage connected nodes to have similar features.
+    /// </para>
+    /// </remarks>
+    private List<(int Source, int Target)>? _graphEdges;
+
+    /// <summary>
+    /// Tracks whether edges have been extracted from the current adjacency matrix.
+    /// </summary>
+    private bool _edgesExtracted = false;
+
+    /// <summary>
+    /// Gets or sets the weight for Laplacian smoothness regularization.
+    /// </summary>
+    /// <value>
+    /// The weight to apply to the smoothness loss. Default is 0.001.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property controls the strength of Laplacian smoothness regularization applied to
+    /// node features. Higher values encourage more similar representations for connected nodes,
+    /// while lower values allow more variation between neighbors.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how strongly to encourage smooth features across edges.
+    ///
+    /// Smoothness regularization:
+    /// - Encourages connected nodes to have similar features
+    /// - Helps the network learn coherent representations across the graph
+    /// - Can improve generalization by enforcing local consistency
+    ///
+    /// Typical values range from 0.0001 to 0.01. Set to 0 to disable smoothness regularization.
+    /// </para>
+    /// </remarks>
+    public T SmoothnessWeight { get; set; }
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -165,8 +286,13 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     {
         InputFeatures = inputFeatures;
         OutputFeatures = outputFeatures;
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastGraphSmoothnessLoss = NumOps.Zero;
+
         _weights = new Matrix<T>(inputFeatures, outputFeatures);
         _bias = new Vector<T>(outputFeatures);
+
+        SmoothnessWeight = NumOps.FromDouble(0.001);
 
         InitializeParameters();
     }
@@ -198,8 +324,13 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     {
         InputFeatures = inputFeatures;
         OutputFeatures = outputFeatures;
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastGraphSmoothnessLoss = NumOps.Zero;
+
         _weights = new Matrix<T>(inputFeatures, outputFeatures);
         _bias = new Vector<T>(outputFeatures);
+
+        SmoothnessWeight = NumOps.FromDouble(0.001);
 
         InitializeParameters();
     }
@@ -274,22 +405,57 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     /// <para>
     /// This method sets the adjacency matrix that defines the graph structure. The adjacency matrix must be set
     /// before calling the Forward method. A non-zero value at position [i,j] indicates that node i is connected
-    /// to node j.
+    /// to node j. This method also extracts the edge list from the adjacency matrix for use in auxiliary loss
+    /// computation.
+    /// </para>
+    /// <para>
+    /// <b>Important Limitation:</b> Edge extraction only examines the first batch element (batch index 0).
+    /// This assumes all samples in a batch share the same graph structure. If different samples have different
+    /// graph topologies, the smoothness loss computation will only reflect the structure of the first sample.
+    /// For per-sample graph structures, consider extracting edges dynamically or using separate forward passes.
     /// </para>
     /// <para><b>For Beginners:</b> This method tells the layer how the nodes in your graph are connected.
-    /// 
+    ///
     /// The adjacency matrix is like a road map:
     /// - It shows which nodes can directly communicate with each other
     /// - It determines how information flows through your graph
     /// - It must be provided before processing data through the layer
-    /// 
+    ///
     /// For example, in a social network, the adjacency matrix would show who is friends with whom.
     /// In a molecule, it would show which atoms are bonded to each other.
     /// </para>
     /// </remarks>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
+        // Check if we need to re-extract edges (new matrix or first time)
+        bool needsExtraction = _adjacencyMatrix != adjacencyMatrix || !_edgesExtracted;
+
         _adjacencyMatrix = adjacencyMatrix;
+
+        // Extract edges from adjacency matrix for auxiliary loss computation only if needed
+        // We only extract edges from the first batch (assuming all batches have the same graph structure)
+        if (needsExtraction)
+        {
+            _graphEdges = new List<(int, int)>();
+
+            if (adjacencyMatrix.Shape.Length >= 3)
+            {
+                int numNodes = adjacencyMatrix.Shape[1];
+                for (int i = 0; i < numNodes; i++)
+                {
+                    for (int j = 0; j < numNodes; j++)
+                    {
+                        // Check if there's an edge between nodes i and j
+                        if (!MathHelper.AlmostEqual(adjacencyMatrix[0, i, j], NumOps.Zero))
+                        {
+                            _graphEdges.Add((i, j));
+                        }
+                    }
+                }
+            }
+
+            _edgesExtracted = true;
+        }
     }
 
     /// <summary>
@@ -370,6 +536,10 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         }
 
         _lastOutput = ApplyActivation(output);
+
+        // Store node features for auxiliary loss computation
+        _lastNodeFeatures = _lastOutput;
+
         return _lastOutput;
     }
 
@@ -398,6 +568,18 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -467,6 +649,164 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
 
         return inputGradient;
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation via the GraphConv operation to compute gradients.
+    /// The operation handles the full graph convolution with proper gradient flow through
+    /// the adjacency matrix, weights, and bias.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert weights matrix to tensor
+        var weightsTensor = new Tensor<T>([_weights.Rows, _weights.Columns]);
+        for (int i = 0; i < _weights.Rows; i++)
+            for (int j = 0; j < _weights.Columns; j++)
+                weightsTensor[i, j] = _weights[i, j];
+
+        // Convert bias vector to tensor
+        var biasTensor = new Tensor<T>([_bias.Length]);
+        for (int i = 0; i < _bias.Length; i++)
+            biasTensor[i] = _bias[i];
+
+        // Create computation nodes
+        var inputNode = Autodiff.TensorOperations<T>.Variable(
+            _lastInput,
+            "input",
+            requiresGradient: true);
+
+        var adjNode = Autodiff.TensorOperations<T>.Variable(
+            _adjacencyMatrix,
+            "adjacency",
+            requiresGradient: false);  // Adjacency is typically fixed
+
+        var weightsNode = Autodiff.TensorOperations<T>.Variable(
+            weightsTensor,
+            "weights",
+            requiresGradient: true);
+
+        var biasNode = Autodiff.TensorOperations<T>.Variable(
+            biasTensor,
+            "bias",
+            requiresGradient: true);
+
+        // Apply graph convolution
+        var preActivationNode = Autodiff.TensorOperations<T>.GraphConv(
+            inputNode,
+            adjNode,
+            weightsNode,
+            biasNode);
+
+        // Apply activation
+        var outputNode = ApplyActivationAutodiff(preActivationNode);
+
+        // Set the output gradient
+        outputNode.Gradient = outputGradient;
+
+        // Perform backward pass
+        var topoOrder = GetTopologicalOrder(outputNode);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Update parameter gradients
+        if (weightsNode.Gradient != null)
+        {
+            _weightsGradient = new Matrix<T>(_weights.Rows, _weights.Columns);
+            for (int i = 0; i < _weights.Rows; i++)
+                for (int j = 0; j < _weights.Columns; j++)
+                    _weightsGradient[i, j] = weightsNode.Gradient[i, j];
+        }
+
+        if (biasNode.Gradient != null)
+        {
+            _biasGradient = new Vector<T>(_bias.Length);
+            for (int i = 0; i < _bias.Length; i++)
+                _biasGradient[i] = biasNode.Gradient[i];
+        }
+
+        // Return input gradient
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
+
+    /// <summary>
+    /// Applies the activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (UsingVectorActivation)
+        {
+            // For vector activations like Softmax
+            if (VectorActivation is SoftmaxActivation<T>)
+            {
+                // Apply softmax along the feature dimension (last dimension)
+                return Autodiff.TensorOperations<T>.Softmax(input, axis: input.Value.Shape.Length - 1);
+            }
+            return ApplyScalarActivationAutodiff(input);
+        }
+        else
+        {
+            return ApplyScalarActivationAutodiff(input);
+        }
+    }
+
+    /// <summary>
+    /// Applies scalar activation functions element-wise.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        var activation = UsingVectorActivation ? (object)VectorActivation! : ScalarActivation!;
+
+        return activation switch
+        {
+            ReLUActivation<T> => Autodiff.TensorOperations<T>.ReLU(input),
+            SigmoidActivation<T> => Autodiff.TensorOperations<T>.Sigmoid(input),
+            TanhActivation<T> => Autodiff.TensorOperations<T>.Tanh(input),
+            _ => input  // Identity for unknown activations
+        };
+    }
+
+    /// <summary>
+    /// Gets the computation nodes in topological order for backward pass.
+    /// </summary>
+    /// <param name="outputNode">The output node to start from.</param>
+    /// <returns>List of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> outputNode)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var order = new List<Autodiff.ComputationNode<T>>();
+
+        void Visit(Autodiff.ComputationNode<T> node)
+        {
+            if (visited.Contains(node)) return;
+            visited.Add(node);
+
+            foreach (var parent in node.Parents)
+            {
+                Visit(parent);
+            }
+
+            order.Add(node);
+        }
+
+        Visit(outputNode);
+        return order;
+    }
+
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.
@@ -601,6 +941,96 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     }
 
     /// <summary>
+    /// Computes the Laplacian smoothness regularization loss on node features.
+    /// </summary>
+    /// <returns>The Laplacian smoothness loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes graph Laplacian smoothness regularization to encourage connected
+    /// nodes to have similar feature representations. The loss is calculated as the sum of
+    /// squared L2 distances between features of connected nodes, normalized by the number of edges.
+    /// This is equivalent to trace(X^T * L * X) where L is the graph Laplacian matrix (L = D - A).
+    /// </para>
+    /// <para><b>For Beginners:</b> This method encourages connected nodes to have similar features.
+    ///
+    /// Laplacian smoothness regularization:
+    /// - Measures how different neighboring nodes are from each other
+    /// - Adds a penalty when connected nodes have very different features
+    /// - Helps the network learn coherent representations across the graph structure
+    ///
+    /// The process:
+    /// 1. For each edge (i, j) in the graph
+    /// 2. Calculate the squared distance between node i's features and node j's features
+    /// 3. Sum all these distances
+    /// 4. Normalize by the number of edges
+    ///
+    /// A higher loss means connected nodes have very different features.
+    /// A lower loss means connected nodes have similar features, indicating a smooth representation.
+    ///
+    /// This loss encourages the network to learn representations where nearby nodes in the graph
+    /// have similar feature vectors, which often improves generalization on graph-structured data.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (_lastNodeFeatures is null || _graphEdges is null || _graphEdges.Count == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        // Compute Laplacian smoothness: weighted sum of squared L2 distances across all edges
+        // Formula: ∑_{(i,j)} A_ij ||x_i - x_j||²
+        T smoothnessLoss = NumOps.Zero;
+        T totalWeight = NumOps.Zero;
+
+        // Average across batch
+        int batchSize = _lastNodeFeatures.Shape[0];
+        int numFeatures = _lastNodeFeatures.Shape[2];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            foreach (var edge in _graphEdges)
+            {
+                int nodeI = edge.Source;
+                int nodeJ = edge.Target;
+
+                // Get edge weight from adjacency matrix
+                // Use batch-specific weight if available, otherwise use batch 0
+                T edgeWeight = NumOps.One; // Default to 1 if adjacency not available
+                if (_adjacencyMatrix != null && _adjacencyMatrix.Shape.Length >= 3)
+                {
+                    int batchIdx = Math.Min(b, _adjacencyMatrix.Shape[0] - 1);
+                    edgeWeight = _adjacencyMatrix[batchIdx, nodeI, nodeJ];
+                }
+
+                // Compute squared L2 distance between features of connected nodes
+                T squaredDistance = NumOps.Zero;
+                for (int f = 0; f < numFeatures; f++)
+                {
+                    T diff = NumOps.Subtract(_lastNodeFeatures[b, nodeI, f], _lastNodeFeatures[b, nodeJ, f]);
+                    squaredDistance = NumOps.Add(squaredDistance, NumOps.Multiply(diff, diff));
+                }
+
+                // Weight the distance by the adjacency value
+                T weightedDistance = NumOps.Multiply(edgeWeight, squaredDistance);
+                smoothnessLoss = NumOps.Add(smoothnessLoss, weightedDistance);
+                totalWeight = NumOps.Add(totalWeight, edgeWeight);
+            }
+        }
+
+        // Normalize by total weight (not edge count) for proper Laplacian formulation
+        if (NumOps.GreaterThan(totalWeight, NumOps.Zero))
+        {
+            smoothnessLoss = NumOps.Divide(smoothnessLoss, totalWeight);
+        }
+
+        // Apply smoothness weight to allow tuning of this auxiliary loss
+        smoothnessLoss = NumOps.Multiply(smoothnessLoss, SmoothnessWeight);
+
+        return smoothnessLoss;
+    }
+
+    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -609,17 +1039,17 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     /// This is useful when starting to process a new sequence or when implementing stateful recurrent networks.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - Stored inputs and outputs are cleared
     /// - Gradient information is cleared
     /// - The layer forgets any information from previous data
-    /// 
+    ///
     /// This is important for:
     /// - Processing a new, unrelated graph
     /// - Preventing information from one training batch affecting another
     /// - Starting a new training episode
-    /// 
+    ///
     /// For example, if you've processed one graph and want to start with a new graph,
     /// you should reset the state to prevent the new graph from being influenced by the previous one.
     /// </para>
@@ -629,7 +1059,65 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
+        _lastNodeFeatures = null;
         _weightsGradient = null;
         _biasGradient = null;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the auxiliary loss computation.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about the auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns diagnostic information that can be used to monitor the auxiliary loss during training.
+    /// The diagnostics include the total smoothness loss, the weight applied to it, and whether auxiliary loss is enabled.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information to help you understand how the auxiliary loss is working.
+    ///
+    /// The diagnostics show:
+    /// - TotalSmoothnessLoss: The computed penalty for feature differences between connected nodes
+    /// - SmoothnessWeight: How much this penalty affects the overall training
+    /// - UseSmoothnessLoss: Whether this penalty is currently enabled
+    ///
+    /// You can use this information to:
+    /// - Monitor if the smoothness penalty is too high or too low
+    /// - Debug training issues
+    /// - Understand how the graph structure affects learning
+    ///
+    /// Example: If TotalSmoothnessLoss is very high, it might mean your network is learning very different
+    /// features for connected nodes, which might indicate the need to adjust hyperparameters.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalSmoothnessLoss", $"{_lastGraphSmoothnessLoss}" },
+            { "SmoothnessWeight", $"{AuxiliaryLossWeight}" },
+            { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
     }
 }

@@ -49,7 +49,7 @@ public class FlattenLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This remembers the original shape of the input data.
     /// 
     /// For example:
-    /// - For a 28×28 grayscale image: [28, 28, 1]
+    /// - For a 28ï¿½28 grayscale image: [28, 28, 1]
     /// - For RGB color channels: [height, width, 3]
     /// - For a feature map with multiple channels: [height, width, channels]
     /// 
@@ -75,8 +75,8 @@ public class FlattenLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This is the total number of values after flattening.
     /// 
     /// The output size is calculated by multiplying all the dimensions of the input:
-    /// - For a 28×28 image: 28 × 28 = 784 values
-    /// - For a 16×16×32 feature map: 16 × 16 × 32 = 8,192 values
+    /// - For a 28ï¿½28 image: 28 ï¿½ 28 = 784 values
+    /// - For a 16ï¿½16ï¿½32 feature map: 16 ï¿½ 16 ï¿½ 32 = 8,192 values
     /// 
     /// This number tells us:
     /// - How long the flattened vector will be
@@ -154,10 +154,10 @@ public class FlattenLayer<T> : LayerBase<T>
     /// 
     /// For example:
     /// ```csharp
-    /// // Create a flatten layer for 28×28 grayscale images
+    /// // Create a flatten layer for 28ï¿½28 grayscale images
     /// var flattenLayer = new FlattenLayer<float>(new int[] { 28, 28, 1 });
     /// 
-    /// // Create a flatten layer for output from a convolutional layer with 64 feature maps of size 7×7
+    /// // Create a flatten layer for output from a convolutional layer with 64 feature maps of size 7ï¿½7
     /// var flattenConvOutput = new FlattenLayer<float>(new int[] { 7, 7, 64 });
     /// ```
     /// 
@@ -194,8 +194,8 @@ public class FlattenLayer<T> : LayerBase<T>
     /// 3. Return a tensor with shape [batchSize, flattenedSize]
     /// 
     /// For example, with a batch of 3D data like [batchSize, height, width, channels]:
-    /// - Input shape: [32, 7, 7, 64] (32 examples, each 7×7 with 64 channels)
-    /// - Output shape: [32, 3136] (32 examples, each with 7×7×64=3136 values)
+    /// - Input shape: [32, 7, 7, 64] (32 examples, each 7ï¿½7 with 64 channels)
+    /// - Output shape: [32, 3136] (32 examples, each with 7ï¿½7ï¿½64=3136 values)
     /// 
     /// The method carefully preserves the order of values so they can be
     /// "unflattened" back to the original shape during backpropagation.
@@ -271,24 +271,37 @@ public class FlattenLayer<T> : LayerBase<T>
     /// the original input shape. This allows the gradients to flow back to previous layers with the correct shape.
     /// </para>
     /// <para><b>For Beginners:</b> This method converts the flat gradients back to the original multi-dimensional shape.
-    /// 
+    ///
     /// During the backward pass:
     /// 1. Take the gradient vector from the next layer
     /// 2. For each example in the batch:
     ///    - Go through all positions in the flat gradient vector
     ///    - Place each value back into the corresponding position in a multi-dimensional tensor
     /// 3. Return a gradient tensor with the same shape as the original input
-    /// 
+    ///
     /// This "unflattening" is essential because:
     /// - Previous layers (like convolutional layers) expect gradients in multi-dimensional form
     /// - Each gradient value needs to go back to its original position
     /// - The layer must maintain the exact inverse mapping of the forward pass
-    /// 
+    ///
     /// It's like taking a long string of text and reformatting it back into pages,
     /// paragraphs, and lines of a book.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Performs the backward pass using manual gradient computation (optimized implementation).
+    /// </summary>
+    /// <param name="outputGradient">The gradient tensor from the next layer. Shape: [batchSize, outputSize].</param>
+    /// <returns>The gradient tensor reshaped to the original input shape. Shape: [batchSize, ...inputShape].</returns>
+    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -300,6 +313,90 @@ public class FlattenLayer<T> : LayerBase<T>
             UnflattenRecursive(outputGradient, i, new int[_inputShape.Length], ref flatIndex, inputGradient);
         }
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Performs the backward pass using automatic differentiation via TensorOperations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient tensor from the next layer. Shape: [batchSize, outputSize].</param>
+    /// <returns>The gradient tensor reshaped to the original input shape. Shape: [batchSize, ...inputShape].</returns>
+    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Create computation node for input
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Replay forward pass: flatten is just a reshape operation
+        int batchSize = _lastInput.Shape[0];
+        var flattenedShape = new int[] { batchSize, _outputSize };
+        var outputNode = Autodiff.TensorOperations<T>.Reshape(inputNode, flattenedShape);
+
+        // Set the output gradient and perform backward pass manually
+        outputNode.Gradient = outputGradient;
+
+        // Get topological order
+        var topoOrder = GetTopologicalOrder(outputNode);
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract and return the input gradient
+        if (inputNode.Gradient == null)
+            throw new InvalidOperationException("Gradient computation failed in automatic differentiation.");
+
+        return inputNode.Gradient;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

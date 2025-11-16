@@ -402,7 +402,7 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     ///   - Lower is better
     ///   - In the same units as the original data
     /// 
-    /// - R� (R-squared): The proportion of variance explained by the model
+    /// - R² (R-squared): The proportion of variance explained by the model
     ///   - Ranges from 0 to 1 (higher is better)
     ///   - 0.7 means the model explains 70% of the variation in the data
     /// 

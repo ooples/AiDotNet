@@ -791,5 +791,67 @@ public enum ModelType
 
     ProphetModel,
 
-    NeuralNetworkARIMA
+    NeuralNetworkARIMA,
+
+    /// <summary>
+    /// A neural network architecture that employs multiple specialist networks (experts) with learned routing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixture-of-Experts is like having a team of specialists rather than one generalist.
+    ///
+    /// Imagine a hospital with different specialists:
+    /// - A cardiologist handles heart problems
+    /// - A neurologist handles brain issues
+    /// - A pediatrician handles children's health
+    /// - A triage system (gating network) directs patients to the right specialist(s)
+    ///
+    /// In a MoE neural network:
+    /// - Multiple "expert" networks specialize in different patterns
+    /// - A "gating network" learns to route inputs to the best expert(s)
+    /// - Only a few experts process each input (sparse activation), making it efficient
+    /// - Final predictions combine outputs from selected experts
+    ///
+    /// Key advantages:
+    /// - Increased model capacity without proportional compute cost
+    /// - Different experts specialize in different aspects of the problem
+    /// - Scalable to very large models
+    /// - Efficient through sparse expert activation
+    /// </para>
+    /// </remarks>
+    MixtureOfExperts,
+
+    /// <summary>
+    /// A model trained through knowledge distillation - compressing a larger teacher model into a smaller student.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Knowledge Distillation is like having a student learn from an expert teacher.
+    /// The "teacher" is a large, accurate model, and the "student" is a smaller, faster model that learns
+    /// to mimic the teacher's behavior while being much more efficient to deploy.
+    ///
+    /// Real-world analogy: An expert chef (teacher) trains an apprentice (student). The apprentice learns
+    /// not just the recipes (hard labels), but also the chef's intuitions, techniques, and reasoning process
+    /// (soft targets). This deeper knowledge transfer helps the apprentice become highly skilled.
+    ///
+    /// How it works:
+    /// - Teacher model provides "soft" predictions (probabilities) that reveal relationships between classes
+    /// - Student learns from both soft predictions and true labels
+    /// - Result: Student model that's 40-90% smaller but retains 90-97% of teacher's accuracy
+    ///
+    /// Key benefits:
+    /// - **Model Compression**: Deploy on mobile, edge devices, browsers
+    /// - **Faster Inference**: 2-10x speedup with minimal accuracy loss
+    /// - **Lower Costs**: Reduced compute and memory requirements
+    /// - **Better Calibration**: Improved confidence estimates
+    ///
+    /// Success stories:
+    /// - DistilBERT: 40% smaller than BERT, 97% performance, 60% faster
+    /// - MobileNet: Distilled from ResNet, runs on smartphones
+    /// - TinyBERT: 7.5x smaller, suitable for edge deployment
+    ///
+    /// Use ConfigureKnowledgeDistillation() on PredictionModelBuilder to enable this technique.
+    /// </para>
+    /// </remarks>
+    KnowledgeDistillation
 }

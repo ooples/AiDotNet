@@ -312,9 +312,9 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// through all operations in the forward pass.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the error gradients flow backward through this layer.
-    /// 
+    ///
     /// During backpropagation, this method:
-    /// 
+    ///
     /// 1. Checks that Forward() was called first
     /// 2. Creates tensors to hold the gradients for inputs and parameters
     /// 3. Calculates the inverse standard deviation (1/sqrt(variance + epsilon))
@@ -323,20 +323,32 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     ///    - Sums the product of output gradients and normalized values
     ///    - Calculates gradients for gamma and beta parameters
     ///    - Calculates gradients for each input value
-    /// 
+    ///
     /// The calculation is complex because in batch normalization, each input affects:
     /// - Its own normalized value directly
     /// - The mean of the batch (which affects all normalized values)
     /// - The variance of the batch (which affects all normalized values)
-    /// 
+    ///
     /// The formula accounts for all these dependencies using the chain rule of calculus.
-    /// 
+    ///
     /// This method stores the gradients for gamma and beta to use during parameter updates,
     /// and returns the gradient for the input to pass to previous layers.
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastNormalized == null || _lastMean == null || _lastVariance == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -393,6 +405,154 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It recreates the forward
+    /// computation graph for normalization, scaling, and shifting, then propagates gradients through it.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        int featureSize = _lastInput.Shape[1];
+
+        // Convert to computation nodes
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Convert gamma and beta to tensors for autodiff
+        var gammaTensor = VectorToTensor(_gamma);
+        var betaTensor = VectorToTensor(_beta);
+        var gammaNode = Autodiff.TensorOperations<T>.Variable(gammaTensor, "gamma", requiresGradient: true);
+        var betaNode = Autodiff.TensorOperations<T>.Variable(betaTensor, "beta", requiresGradient: true);
+
+        // Convert running statistics to tensors
+        var runningMeanTensor = VectorToTensor(_runningMean);
+        var runningVarTensor = VectorToTensor(_runningVariance);
+
+        // Forward pass using autodiff BatchNorm operation
+        var outputNode = Autodiff.TensorOperations<T>.BatchNorm(
+            inputNode,
+            gammaNode,
+            betaNode,
+            runningMeanTensor,
+            runningVarTensor,
+            IsTrainingMode,
+            NumOps.ToDouble(_epsilon)
+        );
+
+        // Perform backward pass
+        outputNode.Gradient = outputGradient;
+        var topoOrder = GetTopologicalOrder(outputNode);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients
+        _gammaGradient = TensorToVector(gammaNode.Gradient ?? throw new InvalidOperationException("Gamma gradient is null."));
+        _betaGradient = TensorToVector(betaNode.Gradient ?? throw new InvalidOperationException("Beta gradient is null."));
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
+
+    /// <summary>
+    /// Converts a Vector to a 1D Tensor.
+    /// </summary>
+    private Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>(new int[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+        {
+            tensor[i] = vector[i];
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a 1D Tensor to a Vector.
+    /// </summary>
+    private Vector<T> TensorToVector(Tensor<T> tensor)
+    {
+        var vector = new Vector<T>(tensor.Length);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            vector[i] = tensor[i];
+        }
+        return vector;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Broadcasts a 1D vector across the batch dimension to create a 2D tensor.
+    /// </summary>
+    private Tensor<T> BroadcastVector(Tensor<T> vector, int batchSize)
+    {
+        var featureSize = vector.Length;
+        var broadcasted = new Tensor<T>(new int[] { batchSize, featureSize });
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            for (int j = 0; j < featureSize; j++)
+            {
+                broadcasted[i, j] = vector[j];
+            }
+        }
+
+        return broadcasted;
     }
 
     /// <summary>
@@ -467,10 +627,10 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// 3. Average all these squared differences
     /// 
     /// Using the same example as before, for the first feature with mean 5.5:
-    /// - (1.0 - 5.5)² = (-4.5)² = 20.25
-    /// - (4.0 - 5.5)² = (-1.5)² = 2.25
-    /// - (7.0 - 5.5)² = (1.5)² = 2.25
-    /// - (10.0 - 5.5)² = (4.5)² = 20.25
+    /// - (1.0 - 5.5)ï¿½ = (-4.5)ï¿½ = 20.25
+    /// - (4.0 - 5.5)ï¿½ = (-1.5)ï¿½ = 2.25
+    /// - (7.0 - 5.5)ï¿½ = (1.5)ï¿½ = 2.25
+    /// - (10.0 - 5.5)ï¿½ = (4.5)ï¿½ = 20.25
     /// - Average: (20.25 + 2.25 + 2.25 + 20.25) / 4 = 11.25
     /// 
     /// The variance is used in the normalization process to scale the data to have

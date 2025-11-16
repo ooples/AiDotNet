@@ -516,8 +516,8 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// The backward pass is more complex in GLU layers because of the two paths:
     /// 
     /// 1. First, compute gradients for both paths:
-    ///    - Linear path gradient: outputGradient × gate values
-    ///    - Gate path gradient: outputGradient × linear output
+    ///    - Linear path gradient: outputGradient ï¿½ gate values
+    ///    - Gate path gradient: outputGradient ï¿½ linear output
     /// 
     /// 2. For the gate path, apply the activation derivative
     ///    - This accounts for how the activation affected the gates
@@ -537,6 +537,18 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null || _lastLinearOutput == null || _lastGateOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
@@ -555,6 +567,200 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
                             .Add(gateGradient.Multiply(_gateWeights.Transpose()));
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It's slower than the
+    /// manual implementation but can be useful for:
+    /// - Verifying gradient correctness
+    /// - Rapid prototyping with custom modifications
+    /// - Research and experimentation
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastLinearOutput == null || _lastGateOutput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Create computation graph
+        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Weights are stored as [outputDim, inputDim] but autodiff expects [inputDim, outputDim]
+        // Transpose before creating variables
+        var linearWeights = Autodiff.TensorOperations<T>.Variable(MatrixToTensor(_linearWeights), "linearWeights", requiresGradient: true);
+        var gateWeights = Autodiff.TensorOperations<T>.Variable(MatrixToTensor(_gateWeights), "gateWeights", requiresGradient: true);
+        var linearBias = Autodiff.TensorOperations<T>.Variable(VectorToTensor(_linearBias), "linearBias", requiresGradient: true);
+        var gateBias = Autodiff.TensorOperations<T>.Variable(VectorToTensor(_gateBias), "gateBias", requiresGradient: true);
+
+        // Transpose weights for correct matrix multiplication: input [batch, inputDim] Ã— weights^T [inputDim, outputDim]
+        var linearWeightsTransposed = Autodiff.TensorOperations<T>.Transpose(linearWeights);
+        var gateWeightsTransposed = Autodiff.TensorOperations<T>.Transpose(gateWeights);
+
+        // Forward computation
+        var linearOutput = Autodiff.TensorOperations<T>.MatrixMultiply(input, linearWeightsTransposed);
+        linearOutput = Autodiff.TensorOperations<T>.Add(linearOutput, linearBias);
+
+        var gateOutput = Autodiff.TensorOperations<T>.MatrixMultiply(input, gateWeightsTransposed);
+        gateOutput = Autodiff.TensorOperations<T>.Add(gateOutput, gateBias);
+        gateOutput = ApplyActivationAutodiff(gateOutput);
+
+        var output = Autodiff.TensorOperations<T>.ElementwiseMultiply(linearOutput, gateOutput);
+
+        // Backward pass
+        output.Gradient = outputGradient;
+        var topoOrder = GetTopologicalOrder(output);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients
+        // The Transpose operation's backward pass automatically transposes gradients back to [outputDim, inputDim]
+        _linearWeightsGradient = TensorToMatrix(linearWeights.Gradient!);
+        _gateWeightsGradient = TensorToMatrix(gateWeights.Gradient!);
+        _linearBiasGradient = TensorToVector(linearBias.Gradient!);
+        _gateBiasGradient = TensorToVector(gateBias.Gradient!);
+
+        return input.Gradient!;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Applies activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (ScalarActivation is ReLUActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.ReLU(input);
+        }
+        else if (ScalarActivation is SigmoidActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Sigmoid(input);
+        }
+        else if (ScalarActivation is TanhActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Tanh(input);
+        }
+        else
+        {
+            return input;
+        }
+    }
+
+    /// <summary>
+    /// Converts a Matrix to a 2D Tensor.
+    /// </summary>
+    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
+    {
+        var tensor = new Tensor<T>(new int[] { matrix.Rows, matrix.Columns });
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                tensor[i, j] = matrix[i, j];
+            }
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a Vector to a 1D Tensor.
+    /// </summary>
+    private Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>(new int[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+        {
+            tensor[i] = vector[i];
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a 2D Tensor to a Matrix.
+    /// </summary>
+    private Matrix<T> TensorToMatrix(Tensor<T> tensor)
+    {
+        if (tensor.Rank != 2)
+            throw new ArgumentException("Tensor must be 2D to convert to Matrix");
+
+        var matrix = new Matrix<T>(tensor.Shape[0], tensor.Shape[1]);
+        for (int i = 0; i < tensor.Shape[0]; i++)
+        {
+            for (int j = 0; j < tensor.Shape[1]; j++)
+            {
+                matrix[i, j] = tensor[i, j];
+            }
+        }
+        return matrix;
+    }
+
+    /// <summary>
+    /// Converts a 1D Tensor to a Vector.
+    /// </summary>
+    private Vector<T> TensorToVector(Tensor<T> tensor)
+    {
+        if (tensor.Rank != 1)
+            throw new ArgumentException("Tensor must be 1D to convert to Vector");
+
+        var vector = new Vector<T>(tensor.Shape[0]);
+        for (int i = 0; i < tensor.Shape[0]; i++)
+        {
+            vector[i] = tensor[i];
+        }
+        return vector;
     }
 
     /// <summary>
@@ -622,8 +828,8 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// - Advanced optimization techniques
     /// 
     /// For a layer with 100 inputs and 50 outputs, this would return:
-    /// - 5,000 linear weight parameters (100 × 50)
-    /// - 5,000 gate weight parameters (100 × 50)
+    /// - 5,000 linear weight parameters (100 ï¿½ 50)
+    /// - 5,000 gate weight parameters (100 ï¿½ 50)
     /// - 50 linear bias parameters
     /// - 50 gate bias parameters
     /// - Totaling 10,100 parameters

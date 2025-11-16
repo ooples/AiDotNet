@@ -29,8 +29,63 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
+public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets whether auxiliary loss (graph smoothness regularization) should be used during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Graph smoothness regularization encourages connected nodes to have similar representations.
+    /// This is based on the principle that nodes with edges between them should have similar features,
+    /// which is a common assumption in many graph-based learning tasks.
+    /// </para>
+    /// <para><b>For Beginners:</b> Graph smoothness is like encouraging friends to be similar.
+    ///
+    /// In a graph:
+    /// - Nodes that are connected (like friends in a social network) should have similar features
+    /// - This auxiliary loss penalizes the network when connected nodes have very different representations
+    /// - It helps the network learn more meaningful patterns that respect the graph structure
+    ///
+    /// For example:
+    /// - In a social network, friends often have similar interests
+    /// - In a molecule, bonded atoms influence each other's properties
+    /// - In a citation network, papers that cite each other often cover similar topics
+    ///
+    /// Enabling this helps the network learn representations that are consistent with the graph structure.
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the graph smoothness auxiliary loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This weight controls how much the graph smoothness regularization contributes to the total loss.
+    /// The total loss is: main_loss + (auxiliary_weight * smoothness_loss).
+    /// Typical values range from 0.01 to 0.1.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much the network should enforce similarity between connected nodes.
+    ///
+    /// The weight determines the balance between:
+    /// - Task accuracy (main loss) - making correct predictions
+    /// - Graph smoothness (auxiliary loss) - keeping connected nodes similar
+    ///
+    /// Common values:
+    /// - 0.05 (default): Balanced smoothness regularization
+    /// - 0.01-0.03: Light smoothness enforcement
+    /// - 0.08-0.1: Strong smoothness enforcement
+    ///
+    /// Higher values make the network focus more on keeping connected nodes similar,
+    /// which can help with generalization but may reduce flexibility.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    private T _lastGraphSmoothnessLoss;
+    private Tensor<T>? _lastNodeRepresentations = null;
+    private Tensor<T>? _lastAdjacencyMatrix = null;
     /// <summary>
     /// Gets or sets the vector activation function used in graph convolutional layers.
     /// </summary>
@@ -191,11 +246,14 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public GraphNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null,
-        IVectorActivationFunction<T>? graphConvolutionalVectorActivation = null, 
-        IVectorActivationFunction<T>? activationLayerVectorActivation = null, IVectorActivationFunction<T>? finalDenseLayerVectorActivation = null, 
-        IVectorActivationFunction<T>? finalActivationLayerVectorActivation = null) : 
+        IVectorActivationFunction<T>? graphConvolutionalVectorActivation = null,
+        IVectorActivationFunction<T>? activationLayerVectorActivation = null, IVectorActivationFunction<T>? finalDenseLayerVectorActivation = null,
+        IVectorActivationFunction<T>? finalActivationLayerVectorActivation = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.05);
+        _lastGraphSmoothnessLoss = NumOps.Zero;
+
         _graphConvolutionalVectorActivation = graphConvolutionalVectorActivation;
         _activationLayerVectorActivation = activationLayerVectorActivation;
         _finalDenseLayerVectorActivation = finalDenseLayerVectorActivation;
@@ -229,11 +287,14 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public GraphNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null,
-        IActivationFunction<T>? graphConvolutionalActivation = null, 
-        IActivationFunction<T>? activationLayerActivation = null, IActivationFunction<T>? finalDenseLayerActivation = null, 
-        IActivationFunction<T>? finalActivationLayerActivation = null) : 
+        IActivationFunction<T>? graphConvolutionalActivation = null,
+        IActivationFunction<T>? activationLayerActivation = null, IActivationFunction<T>? finalDenseLayerActivation = null,
+        IActivationFunction<T>? finalActivationLayerActivation = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.05);
+        _lastGraphSmoothnessLoss = NumOps.Zero;
+
         _graphConvolutionalScalarActivation = graphConvolutionalActivation;
         _activationLayerScalarActivation = activationLayerActivation;
         _finalDenseLayerScalarActivation = finalDenseLayerActivation;
@@ -275,6 +336,149 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Computes the auxiliary loss for graph smoothness regularization.
+    /// </summary>
+    /// <returns>The computed graph smoothness auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes the graph smoothness loss, which encourages connected nodes
+    /// to have similar representations. The loss is computed as the sum of squared differences
+    /// between representations of connected nodes, weighted by the adjacency matrix.
+    /// Formula: L_smooth = Σ_edges ||h_i - h_j||² * A_{ij}
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates how different connected nodes are from each other.
+    ///
+    /// Graph smoothness works by:
+    /// 1. Looking at each pair of connected nodes in the graph
+    /// 2. Measuring how different their learned representations are
+    /// 3. Penalizing large differences between connected nodes
+    /// 4. Summing up these penalties across all edges
+    ///
+    /// This helps because:
+    /// - It encourages the network to respect the graph structure
+    /// - Connected nodes learn similar representations
+    /// - The network generalizes better to new graph data
+    ///
+    /// For example, in a social network, friends (connected nodes) will have
+    /// similar learned features, which makes sense since friends often share interests.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || _lastNodeRepresentations == null || _lastAdjacencyMatrix == null)
+        {
+            _lastGraphSmoothnessLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Compute graph smoothness loss: Σ_ij A_ij * ||h_i - h_j||²
+        // where A is the adjacency matrix and h are node representations
+        T smoothnessLoss = NumOps.Zero;
+        int numNodes = _lastNodeRepresentations.Shape[0];
+
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                // Get edge weight from adjacency matrix
+                T edgeWeight = _lastAdjacencyMatrix[new int[] { i, j }];
+
+                // Skip if no edge
+                if (NumOps.Equals(edgeWeight, NumOps.Zero))
+                    continue;
+
+                // Compute squared difference between node representations
+                var nodeI = _lastNodeRepresentations.GetRow(i);
+                var nodeJ = _lastNodeRepresentations.GetRow(j);
+                var diff = nodeI.Subtract(nodeJ);
+                T squaredDiff = diff.DotProduct(diff);
+
+                // Add weighted difference to smoothness loss
+                smoothnessLoss = NumOps.Add(smoothnessLoss, NumOps.Multiply(edgeWeight, squaredDiff));
+            }
+        }
+
+        // Normalize by number of edges
+        int edgeCount = 0;
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                if (!NumOps.Equals(_lastAdjacencyMatrix[new int[] { i, j }], NumOps.Zero))
+                    edgeCount++;
+            }
+        }
+
+        if (edgeCount > 0)
+        {
+            smoothnessLoss = NumOps.Divide(smoothnessLoss, NumOps.FromDouble(edgeCount));
+        }
+
+        _lastGraphSmoothnessLoss = smoothnessLoss;
+        return smoothnessLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the graph smoothness auxiliary loss.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about auxiliary losses.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed diagnostics about the graph smoothness regularization, including
+    /// the computed smoothness loss, weight applied, and whether the feature is enabled.
+    /// This information is useful for monitoring training progress and debugging.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about how graph smoothness regularization is working.
+    ///
+    /// The diagnostics include:
+    /// - Total smoothness loss (how different connected nodes are)
+    /// - Weight applied to the smoothness loss
+    /// - Whether smoothness regularization is enabled
+    /// - Whether node representations are being tracked
+    ///
+    /// This helps you:
+    /// - Monitor if smoothness regularization is helping training
+    /// - Debug issues with graph structure learning
+    /// - Understand the impact of smoothness enforcement on learning
+    ///
+    /// You can use this information to adjust the auxiliary loss weight for better results.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalGraphSmoothnessLoss", _lastGraphSmoothnessLoss?.ToString() ?? "0" },
+            { "SmoothnessWeight", AuxiliaryLossWeight?.ToString() ?? "0.05" },
+            { "UseGraphSmoothness", UseAuxiliaryLoss.ToString() },
+            { "NodeRepresentationsCached", (_lastNodeRepresentations != null).ToString() },
+            { "AdjacencyMatrixCached", (_lastAdjacencyMatrix != null).ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = new Dictionary<string, string>();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
+    }
+
+    /// <summary>
     /// Performs a forward pass through the network to generate a prediction from graph data.
     /// </summary>
     /// <param name="nodeFeatures">A tensor containing features for each node in the graph.</param>
@@ -288,20 +492,22 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     /// This method processes graph data through the network. It takes node features and an adjacency matrix
     /// as input and passes them through graph-specific and standard layers, applying appropriate transformations
     /// at each step. The method concludes with hybrid pooling to generate the final output.
+    /// If graph smoothness regularization is enabled, it caches the node representations for auxiliary loss computation.
     /// </para>
-    /// <para><b>For Beginners:</b> This method processes a graph (like a social network) 
+    /// <para><b>For Beginners:</b> This method processes a graph (like a social network)
     /// through the neural network to make predictions.
-    /// 
+    ///
     /// You provide two pieces of information:
     /// - nodeFeatures: Information about each node (like age, interests for each person)
     /// - adjacencyMatrix: Information about how nodes are connected (like who is friends with whom)
-    /// 
+    ///
     /// The method:
     /// - Passes this information through specialized graph layers
     /// - Also passes it through standard neural network layers
     /// - Combines the results using a technique called "hybrid pooling"
+    /// - If smoothness regularization is enabled, saves intermediate representations
     /// - Returns a prediction based on the entire graph structure
-    /// 
+    ///
     /// This is useful for tasks like predicting which users might become friends,
     /// which products a customer might like, or how a molecule might behave.
     /// </para>
@@ -313,6 +519,12 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
 
         if (nodeFeatures.Shape[0] != adjacencyMatrix.Shape[0] || nodeFeatures.Shape[1] != adjacencyMatrix.Shape[1])
             throw new ArgumentException("Node features and adjacency matrix dimensions are incompatible.");
+
+        // Cache for auxiliary loss computation
+        if (UseAuxiliaryLoss)
+        {
+            _lastAdjacencyMatrix = adjacencyMatrix;
+        }
 
         var current = nodeFeatures;
         foreach (var layer in Layers)
@@ -334,6 +546,12 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
             // Ensure the output maintains the expected shape
             if (current.Rank < 2)
                 throw new InvalidOperationException($"Layer {layer.GetType().Name} produced an invalid output shape.");
+        }
+
+        // Cache node representations for auxiliary loss
+        if (UseAuxiliaryLoss)
+        {
+            _lastNodeRepresentations = current;
         }
 
         // Implement hybrid pooling
@@ -528,10 +746,18 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         // Forward pass with graph data
         Tensor<T> prediction = PredictGraph(nodeFeatures, adjacencyMatrix);
 
-        // Calculate loss
+        // Calculate main loss
         var flattenedPredictions = prediction.ToVector();
         var flattenedExpected = expectedOutput.ToVector();
         LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
+
+        // Add auxiliary loss if enabled
+        if (UseAuxiliaryLoss)
+        {
+            T auxLoss = ComputeAuxiliaryLoss();
+            T weightedAuxLoss = NumOps.Multiply(AuxiliaryLossWeight, auxLoss);
+            LastLoss = NumOps.Add(LastLoss, weightedAuxLoss);
+        }
 
         // Calculate output gradients
         var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
@@ -592,10 +818,18 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         // Forward pass with graph data
         Tensor<T> prediction = PredictGraph(nodeFeatures, adjacencyMatrix);
 
-        // Calculate loss
+        // Calculate main loss
         var flattenedPredictions = prediction.ToVector();
         var flattenedExpected = expectedOutput.ToVector();
         var loss = new MeanSquaredErrorLoss<T>().CalculateLoss(flattenedPredictions, flattenedExpected);
+
+        // Add auxiliary loss if enabled
+        if (UseAuxiliaryLoss)
+        {
+            T auxLoss = ComputeAuxiliaryLoss();
+            T weightedAuxLoss = NumOps.Multiply(AuxiliaryLossWeight, auxLoss);
+            loss = NumOps.Add(loss, weightedAuxLoss);
+        }
 
         // Calculate output gradients
         var outputGradients = new MeanSquaredErrorLoss<T>().CalculateDerivative(flattenedPredictions, flattenedExpected);
