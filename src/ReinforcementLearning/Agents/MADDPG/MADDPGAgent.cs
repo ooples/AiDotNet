@@ -273,7 +273,9 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Compute target using target networks (centralized)
-            var nextStateActionInput = ConcatenateStateAction(experience.NextState, experience.Action);
+            // In MADDPG, target Q uses actions from target actors, not the actual actions taken
+            var targetNextActions = ComputeJointTargetActions(experience.NextState);
+            var nextStateActionInput = ConcatenateStateAction(experience.NextState, targetNextActions);
             var nextStateActionTensor = Tensor<T>.FromVector(nextStateActionInput);
             var targetQTensor = _targetCriticNetworks[agentId].Predict(nextStateActionTensor);
             var targetQ = targetQTensor.ToVector()[0];
@@ -444,6 +446,33 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             result[state.Length + i] = action[i];
         }
         return result;
+    }
+
+    private Vector<T> ComputeJointTargetActions(Vector<T> jointNextState)
+    {
+        // Decompose joint state into individual agent states
+        var individualActions = new List<Vector<T>>();
+
+        for (int i = 0; i < _options.NumAgents; i++)
+        {
+            // Extract this agent's next state from joint state
+            int stateOffset = i * _options.StateSize;
+            var agentNextState = new Vector<T>(_options.StateSize);
+            for (int j = 0; j < _options.StateSize; j++)
+            {
+                agentNextState[j] = jointNextState[stateOffset + j];
+            }
+
+            // Compute action using target actor network
+            var agentNextStateTensor = Tensor<T>.FromVector(agentNextState);
+            var targetActionTensor = _targetActorNetworks[i].Predict(agentNextStateTensor);
+            var targetAction = targetActionTensor.ToVector();
+
+            individualActions.Add(targetAction);
+        }
+
+        // Concatenate all target actions into joint action vector
+        return ConcatenateVectors(individualActions);
     }
 
     public override Dictionary<string, T> GetMetrics()
