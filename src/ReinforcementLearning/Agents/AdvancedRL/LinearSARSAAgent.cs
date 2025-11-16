@@ -176,12 +176,13 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     public override void Deserialize(byte[] data)
     {
         string json = System.Text.Encoding.UTF8.GetString(data);
-        dynamic state = Newtonsoft.Json.JsonConvert.DeserializeObject(json);
-        if (state != null)
+        var state = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is not null)
         {
-            Vector<T> weights = state.Weights;
-            if (weights != null)
+            var weightsObj = state.Weights;
+            if (weightsObj is not null)
             {
+                Vector<T> weights = weightsObj;
                 SetParameters(weights);
             }
             if (state.Epsilon != null)

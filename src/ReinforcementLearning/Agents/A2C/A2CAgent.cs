@@ -375,7 +375,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         _policyNetwork.UpdateParameters(params_);
-        _policyNetwork.ResetGradients(); // Clear accumulated gradients for next batch
+        // Gradients are managed internally by the network
     }
 
     private void UpdateValueNetwork()
@@ -392,7 +392,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         _valueNetwork.UpdateParameters(params_);
-        _valueNetwork.ResetGradients(); // Clear accumulated gradients for next batch
+        // Gradients are managed internally by the network
     }
 
     private T ComputeEntropy(Vector<T> state)

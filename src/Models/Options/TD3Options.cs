@@ -21,7 +21,7 @@ public class TD3Options<T> : ReinforcementLearningOptions<T>
     public double TargetNoiseClip { get; init; } = 0.5;
     public List<int> ActorHiddenLayers { get; init; } = new List<int> { 256, 256 };
     public List<int> CriticHiddenLayers { get; init; } = new List<int> { 256, 256 };
-    public int WarmupSteps { get; init; } = 25000;
+    public new int WarmupSteps { get; init; } = 25000;
 
     public TD3Options()
     {

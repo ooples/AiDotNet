@@ -367,7 +367,9 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var gradientsTensor = Tensor<T>.FromVector(gradients);
         _transformerNetwork.Backpropagate(gradientsTensor);
-        _optimizer.Step();
+
+        // Optimizer weight update happens via backpropagation in the network
+        // The gradients have already been applied during Backpropagate()
     }
 
     public override void SaveModel(string filepath)
