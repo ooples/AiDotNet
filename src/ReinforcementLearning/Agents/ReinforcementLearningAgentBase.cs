@@ -346,6 +346,72 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     {
         GC.SuppressFinalize(this);
     }
+
+    /// <summary>
+    /// Saves the agent's current state (parameters and configuration) to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the agent state to.</param>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanWrite)
+            throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+        try
+        {
+            var data = this.Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to save agent state to stream: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Unexpected error while saving agent state: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads the agent's state (parameters and configuration) from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the agent state from.</param>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanRead)
+            throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+        try
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            var data = ms.ToArray();
+
+            if (data.Length == 0)
+                throw new InvalidOperationException("Stream contains no data.");
+
+            this.Deserialize(data);
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to read agent state from stream: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to deserialize agent state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+        }
+    }
 }
 
 /// <summary>
