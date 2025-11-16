@@ -74,6 +74,11 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T>? _lastAttentionCoefficients;
 
     /// <summary>
+    /// Cached transformed features from forward pass for gradient computation.
+    /// </summary>
+    private Tensor<T>? _lastTransformed;
+
+    /// <summary>
     /// Gradients for weight parameters.
     /// </summary>
     private Tensor<T>? _weightsGradient;
@@ -230,6 +235,9 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Store attention coefficients for all heads
         _lastAttentionCoefficients = new Tensor<T>([batchSize, _numHeads, numNodes, numNodes]);
 
+        // Store transformed features for gradient computation
+        _lastTransformed = new Tensor<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
+
         // Output for each head: [batchSize, numHeads, numNodes, outputFeatures]
         var headOutputs = new Tensor<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
 
@@ -252,6 +260,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                                 NumOps.Multiply(input[b, n, inF], _weights[h, inF, outF]));
                         }
                         transformed[b, n, outF] = sum;
+                        _lastTransformed[b, h, n, outF] = sum;
                     }
                 }
             }
@@ -381,7 +390,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <inheritdoc/>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null)
+        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null || _lastTransformed == null || _lastAttentionCoefficients == null)
         {
             throw new InvalidOperationException("Forward pass must be called before Backward.");
         }
@@ -397,8 +406,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _biasGradient = new Vector<T>(_outputFeatures);
         var inputGradient = new Tensor<T>(_lastInput.Shape);
 
-        // Simplified backward pass (full implementation would include attention gradient flow)
-        // This is a basic implementation - production code would need complete gradient computation
+        // Compute bias gradient
         for (int b = 0; b < batchSize; b++)
         {
             for (int n = 0; n < numNodes; n++)
@@ -410,13 +418,75 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             }
         }
 
+        // Compute weight gradients and input gradients for each head
+        for (int h = 0; h < _numHeads; h++)
+        {
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int i = 0; i < numNodes; i++)
+                {
+                    // Gradient contribution from aggregated neighbors
+                    for (int j = 0; j < numNodes; j++)
+                    {
+                        if (!NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                        {
+                            T attnCoeff = _lastAttentionCoefficients[b, h, i, j];
+
+                            // Weight gradient: dL/dW = attnCoeff * input^T * outputGrad
+                            for (int inF = 0; inF < _inputFeatures; inF++)
+                            {
+                                for (int outF = 0; outF < _outputFeatures; outF++)
+                                {
+                                    T grad = NumOps.Multiply(attnCoeff, NumOps.Multiply(_lastInput[b, j, inF], activationGradient[b, i, outF]));
+                                    _weightsGradient[h, inF, outF] = NumOps.Add(_weightsGradient[h, inF, outF], grad);
+                                }
+                            }
+
+                            // Input gradient: dL/dInput = attnCoeff * W^T * outputGrad
+                            for (int inF = 0; inF < _inputFeatures; inF++)
+                            {
+                                T grad = NumOps.Zero;
+                                for (int outF = 0; outF < _outputFeatures; outF++)
+                                {
+                                    grad = NumOps.Add(grad, NumOps.Multiply(_weights[h, inF, outF], activationGradient[b, i, outF]));
+                                }
+                                grad = NumOps.Multiply(attnCoeff, grad);
+                                inputGradient[b, j, inF] = NumOps.Add(inputGradient[b, j, inF], grad);
+                            }
+                        }
+                    }
+
+                    // Attention weight gradients (simplified - full implementation would backprop through softmax)
+                    for (int j = 0; j < numNodes; j++)
+                    {
+                        if (!NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                        {
+                            // Approximate gradient for attention parameters
+                            for (int outF = 0; outF < _outputFeatures; outF++)
+                            {
+                                T transformedI = _lastTransformed[b, h, i, outF];
+                                T transformedJ = _lastTransformed[b, h, j, outF];
+                                T grad = activationGradient[b, i, outF];
+
+                                // Gradient w.r.t. attention weights for source node features
+                                _attentionWeightsGradient[h, outF] = NumOps.Add(_attentionWeightsGradient[h, outF], NumOps.Multiply(transformedI, grad));
+
+                                // Gradient w.r.t. attention weights for neighbor node features
+                                _attentionWeightsGradient[h, _outputFeatures + outF] = NumOps.Add(_attentionWeightsGradient[h, _outputFeatures + outF], NumOps.Multiply(transformedJ, grad));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         return inputGradient;
     }
 
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)
     {
-        if (_weightsGradient == null || _biasGradient == null)
+        if (_weightsGradient == null || _attentionWeightsGradient == null || _biasGradient == null)
         {
             throw new InvalidOperationException("Backward must be called before UpdateParameters.");
         }
@@ -431,6 +501,16 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     _weights[h, i, j] = NumOps.Subtract(_weights[h, i, j],
                         NumOps.Multiply(learningRate, _weightsGradient[h, i, j]));
                 }
+            }
+        }
+
+        // Update attention weights
+        for (int h = 0; h < _numHeads; h++)
+        {
+            for (int j = 0; j < 2 * _outputFeatures; j++)
+            {
+                _attentionWeights[h, j] = NumOps.Subtract(_attentionWeights[h, j],
+                    NumOps.Multiply(learningRate, _attentionWeightsGradient[h, j]));
             }
         }
 
