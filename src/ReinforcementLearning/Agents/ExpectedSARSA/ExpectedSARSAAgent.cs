@@ -45,6 +45,24 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         }
 
         _options = options;
+
+        // Defensive validation - properties may bypass init accessors if left at default zero
+        if (_options.StateSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                _options.StateSize,
+                "StateSize must be greater than zero. Ensure ExpectedSARSAOptions.StateSize is initialized to a positive value.");
+        }
+
+        if (_options.ActionSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                _options.ActionSize,
+                "ActionSize must be greater than zero. Ensure ExpectedSARSAOptions.ActionSize is initialized to a positive value.");
+        }
+
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _epsilon = _options.EpsilonStart;
         _random = new Random();
