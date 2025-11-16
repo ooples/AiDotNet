@@ -188,6 +188,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         T totalLoss = NumOps.Zero;
 
+        // FIX ISSUE 4: Accumulate gradients across batch, then update once
         foreach (var experience in batch)
         {
             // Encode observations to latent states
@@ -221,7 +222,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             var loss = NumOps.Add(dynamicsLoss, NumOps.Add(rewardLoss, continueLoss));
             totalLoss = NumOps.Add(totalLoss, loss);
 
-            // Backprop through world model
+            // Backprop through world model (accumulate gradients, don't update yet)
             // MSE derivative: d/dx[(pred - target)^2] = 2(pred - target)
             var gradient = new Vector<T>(predictedNextLatent.Length);
             for (int i = 0; i < gradient.Length; i++)
@@ -230,8 +231,6 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             _dynamicsNetwork.Backpropagate(Tensor<T>.FromVector(gradient));
-            var dynamicsParams = _dynamicsNetwork.GetParameters();
-            _dynamicsNetwork.UpdateParameters(dynamicsParams);
 
             // Train representation network (backprop gradient from dynamics loss)
             // Representation network should minimize reconstruction error of latent states
@@ -244,21 +243,29 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
                 representationGradient[j] = j < gradient.Length ? gradient[j] : NumOps.Zero;
             }
             _representationNetwork.Backpropagate(Tensor<T>.FromVector(representationGradient));
-            var representationParams = _representationNetwork.GetParameters();
-            _representationNetwork.UpdateParameters(representationParams);
 
+            // FIX ISSUE 5: Use consistent gradient calculation with factor of 2 for MSE
             var rewardGradient = new Vector<T>(1);
-            rewardGradient[0] = rewardDiff;
+            rewardGradient[0] = NumOps.Multiply(NumOps.FromDouble(2.0), rewardDiff);
             _rewardNetwork.Backpropagate(Tensor<T>.FromVector(rewardGradient));
-            var rewardParams = _rewardNetwork.GetParameters();
-            _rewardNetwork.UpdateParameters(rewardParams);
 
             var continueGradient = new Vector<T>(1);
-            continueGradient[0] = continueDiff;
+            continueGradient[0] = NumOps.Multiply(NumOps.FromDouble(2.0), continueDiff);
             _continueNetwork.Backpropagate(Tensor<T>.FromVector(continueGradient));
-            var continueParams = _continueNetwork.GetParameters();
-            _continueNetwork.UpdateParameters(continueParams);
         }
+
+        // FIX ISSUE 4: Update parameters once after processing entire batch
+        var dynamicsParams = _dynamicsNetwork.GetParameters();
+        _dynamicsNetwork.UpdateParameters(dynamicsParams);
+
+        var representationParams = _representationNetwork.GetParameters();
+        _representationNetwork.UpdateParameters(representationParams);
+
+        var rewardParams = _rewardNetwork.GetParameters();
+        _rewardNetwork.UpdateParameters(rewardParams);
+
+        var continueParams = _continueNetwork.GetParameters();
+        _continueNetwork.UpdateParameters(continueParams);
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
@@ -302,7 +309,6 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
                 valueParams[i] = NumOps.Subtract(valueParams[i], NumOps.Multiply(learningRate, valueGrads[i]));
             }
             _valueNetwork.UpdateParameters(valueParams);
-            _valueNetwork.ResetGradients();
 
             // Actor maximizes expected return using policy gradient
             // For Dreamer, the actor loss is -E[V(imagination)] where we want to maximize V
@@ -332,7 +338,6 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
                 actorParams[i] = NumOps.Subtract(actorParams[i], NumOps.Multiply(actorLearningRate, actorGrads[i]));
             }
             _actorNetwork.UpdateParameters(actorParams);
-            _actorNetwork.ResetGradients();
 
             totalLoss = NumOps.Add(totalLoss, valueLoss);
         }
