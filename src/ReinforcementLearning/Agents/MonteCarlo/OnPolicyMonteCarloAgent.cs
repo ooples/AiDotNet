@@ -340,28 +340,15 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SaveModel(string filepath)
     {
-        if (string.IsNullOrWhiteSpace(filepath))
-        {
-            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
-        }
-
-        var data = Serialize();
-        System.IO.File.WriteAllBytes(filepath, data);
+        throw new NotSupportedException(
+            "OnPolicyMonteCarlo persistence is not yet fully supported. " +
+            "Use Serialize() for manual serialization or GetParameters() to extract Q-values.");
     }
 
     public override void LoadModel(string filepath)
     {
-        if (string.IsNullOrWhiteSpace(filepath))
-        {
-            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
-        }
-
-        if (!System.IO.File.Exists(filepath))
-        {
-            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
-        }
-
-        var data = System.IO.File.ReadAllBytes(filepath);
-        Deserialize(data);
+        throw new NotSupportedException(
+            "OnPolicyMonteCarlo persistence is not yet fully supported. " +
+            "Use Deserialize() for manual deserialization or SetParameters() for parameter restoration.");
     }
 }
