@@ -15,6 +15,8 @@ global using AiDotNet.Tools;
 global using AiDotNet.Models;
 global using AiDotNet.Enums;
 global using AiDotNet.MixedPrecision;
+global using AiDotNet.KnowledgeDistillation;
+global using AiDotNet.Deployment.Configuration;
 
 namespace AiDotNet;
 
@@ -60,8 +62,17 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private ICrossValidator<T, TInput, TOutput>? _crossValidator;
     private AgentConfiguration<T>? _agentConfig;
     private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
+    private KnowledgeDistillationOptions<T, TInput, TOutput>? _knowledgeDistillationOptions;
     private MixedPrecisionConfig? _mixedPrecisionConfig;
     private ReinforcementLearning.Interfaces.IEnvironment<T>? _environment;
+
+    // Deployment configuration fields
+    private QuantizationConfig? _quantizationConfig;
+    private CacheConfig? _cacheConfig;
+    private VersioningConfig? _versioningConfig;
+    private ABTestingConfig? _abTestingConfig;
+    private TelemetryConfig? _telemetryConfig;
+    private ExportConfig? _exportConfig;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -321,6 +332,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Perform meta-training using parameters from config (specified during meta-learner construction)
         var metaResult = _metaLearner.Train();
 
+        // Create deployment configuration from individual configs
+        var deploymentConfig = DeploymentConfiguration.Create(
+            _quantizationConfig,
+            _cacheConfig,
+            _versioningConfig,
+            _abTestingConfig,
+            _telemetryConfig,
+            _exportConfig);
+
         // Create PredictionModelResult with meta-learning constructor
         var result = new PredictionModelResult<T, TInput, TOutput>(
             metaLearner: _metaLearner,
@@ -332,7 +352,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             ragReranker: _ragReranker,
             ragGenerator: _ragGenerator,
             queryProcessors: _queryProcessors,
-            agentConfig: _agentConfig);
+            agentConfig: _agentConfig,
+            deploymentConfiguration: deploymentConfig);
 
         return Task.FromResult(result);
     }
@@ -525,8 +546,37 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // This prevents state contamination from CV (accumulated fitness lists, cache, learning rates)
         optimizer.Reset();
 
-// Optimize the final model on the full training set (using distributed optimizer if configured)
-        var optimizationResult = finalOptimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
+        OptimizationResult<T, TInput, TOutput> optimizationResult;
+
+        // Check if knowledge distillation is configured
+        if (_knowledgeDistillationOptions != null)
+        {
+            // KNOWLEDGE DISTILLATION PATH
+            optimizationResult = await PerformKnowledgeDistillationAsync(
+                model,
+                finalOptimizer,
+                XTrain,
+                yTrain,
+                XVal,
+                yVal,
+                XTest,
+                yTest);
+        }
+        else
+        {
+            // REGULAR TRAINING PATH
+            // Optimize the final model on the full training set (using distributed optimizer if configured)
+            optimizationResult = finalOptimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
+        }
+
+        // Create deployment configuration from individual configs
+        var deploymentConfig = DeploymentConfiguration.Create(
+            _quantizationConfig,
+            _cacheConfig,
+            _versioningConfig,
+            _abTestingConfig,
+            _telemetryConfig,
+            _exportConfig);
 
         // Return PredictionModelResult with CV results and agent data
         var finalResult = new PredictionModelResult<T, TInput, TOutput>(
@@ -541,7 +591,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _loraConfiguration,
             cvResults,
             _agentConfig,
-            agentRecommendation);
+            agentRecommendation,
+            deploymentConfig);
 
         return finalResult;
     }
@@ -1102,6 +1153,425 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var agent = new Agent<T>(chatModel, tools);
 
         return await agent.RunAsync(question);
+    }
+
+    /// <summary>
+    /// Configures knowledge distillation to train a smaller, faster student model from a larger teacher model.
+    /// </summary>
+    /// <param name="options">The knowledge distillation configuration options.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Knowledge distillation is a technique to compress a large, accurate "teacher" model
+    /// into a smaller, faster "student" model while preserving most of the teacher's accuracy. Think of it like
+    /// an expert (teacher) teaching a student - the student learns not just the answers, but also the reasoning process.</para>
+    ///
+    /// <para><b>Benefits:</b>
+    /// - **Model Compression**: 40-90% size reduction with 90-97% accuracy preserved
+    /// - **Faster Inference**: Smaller models run 2-10x faster
+    /// - **Edge Deployment**: Deploy on mobile devices, IoT, browsers
+    /// - **Cost Reduction**: Lower compute and memory costs</para>
+    ///
+    /// <para><b>Common Use Cases:</b>
+    /// - Deploy BERT/GPT models on mobile devices (DistilBERT is 40% smaller, 60% faster)
+    /// - Run vision models on edge devices (MobileNet distilled from ResNet)
+    /// - Reduce cloud compute costs for inference
+    /// - Multi-teacher ensembles distilled into single student</para>
+    ///
+    /// <para><b>Quick Start Example:</b>
+    /// <code>
+    /// // Configure knowledge distillation with default settings (good for most cases)
+    /// var distillationOptions = new KnowledgeDistillationOptions&lt;Vector&lt;double&gt;, Vector&lt;double&gt;, double&gt;
+    /// {
+    ///     TeacherModelType = TeacherModelType.NeuralNetwork,
+    ///     StrategyType = DistillationStrategyType.ResponseBased,
+    ///     Temperature = 3.0,      // Soften predictions (2-5 typical)
+    ///     Alpha = 0.3,            // 30% hard labels, 70% teacher knowledge
+    ///     Epochs = 20,
+    ///     BatchSize = 32,
+    ///     LearningRate = 0.001
+    /// };
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureModel(studentModel)
+    ///     .ConfigureKnowledgeDistillation(distillationOptions)
+    ///     .BuildAsync(trainInputs, trainLabels);
+    /// </code>
+    /// </para>
+    ///
+    /// <para><b>Advanced Techniques:</b>
+    /// - **Response-Based**: Standard Hinton distillation (recommended start)
+    /// - **Feature-Based**: Match intermediate layer representations
+    /// - **Attention-Based**: For transformers (BERT, GPT)
+    /// - **Relational**: Preserve relationships between samples
+    /// - **Self-Distillation**: Model teaches itself for better calibration
+    /// - **Ensemble**: Multiple teachers for richer knowledge</para>
+    ///
+    /// <para><b>Key Parameters:</b>
+    /// - **Temperature** (2-5): Higher = softer predictions, more knowledge transfer
+    /// - **Alpha** (0.2-0.5): Lower = rely more on teacher, higher = rely more on labels
+    /// - **Strategy**: ResponseBased (standard), FeatureBased (deeper), AttentionBased (transformers)
+    /// - **Teacher Type**: NeuralNetwork (single), Ensemble (multiple), Self (no separate teacher)</para>
+    ///
+    /// <para><b>Success Stories:</b>
+    /// - DistilBERT: 40% smaller than BERT, 97% performance, 60% faster
+    /// - TinyBERT: 7.5x smaller than BERT for mobile deployment
+    /// - MobileNet: Distilled from ResNet, 10x fewer parameters
+    /// - SqueezeNet: AlexNet-level accuracy at 50x smaller size</para>
+    ///
+    /// <para><b>References:</b>
+    /// - Hinton et al. (2015). Distilling the Knowledge in a Neural Network
+    /// - Sanh et al. (2019). DistilBERT
+    /// - Park et al. (2019). Relational Knowledge Distillation</para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureKnowledgeDistillation(
+        KnowledgeDistillationOptions<T, TInput, TOutput>? options = null)
+    {
+        _knowledgeDistillationOptions = options ?? new KnowledgeDistillationOptions<T, TInput, TOutput>();
+        return this;
+    }
+
+    // ============================================================================
+    // Deployment Configuration Methods
+    // ============================================================================
+
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureQuantization(QuantizationConfig? config = null)
+    {
+        _quantizationConfig = config;
+        return this;
+    }
+
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCaching(CacheConfig? config = null)
+    {
+        _cacheConfig = config;
+        return this;
+    }
+
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureVersioning(VersioningConfig? config = null)
+    {
+        _versioningConfig = config;
+        return this;
+    }
+
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureABTesting(ABTestingConfig? config = null)
+    {
+        _abTestingConfig = config;
+        return this;
+    }
+
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null)
+    {
+        _telemetryConfig = config;
+        return this;
+    }
+
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null)
+    {
+        _exportConfig = config;
+        return this;
+    }
+
+    // ============================================================================
+    // Private Knowledge Distillation Helper Methods
+    // ============================================================================
+
+    /// <summary>
+    /// Performs knowledge distillation training using the configured options.
+    /// </summary>
+    private Task<OptimizationResult<T, TInput, TOutput>> PerformKnowledgeDistillationAsync(
+        IFullModel<T, TInput, TOutput> studentModel,
+        IOptimizer<T, TInput, TOutput> optimizer,
+        TInput XTrain,
+        TOutput yTrain,
+        TInput XVal,
+        TOutput yVal,
+        TInput XTest,
+        TOutput yTest)
+    {
+        if (_knowledgeDistillationOptions == null)
+            throw new InvalidOperationException("Knowledge distillation options not configured");
+
+        var options = _knowledgeDistillationOptions;
+        
+            
+
+        var NumOps = MathHelper.GetNumericOperations<T>();
+
+        // Get a reference input for shape conversions (needed for Matrix<T> and Tensor<T>)
+        // Use InputHelper to extract a single sample from the training data
+        TInput referenceInput = InputHelper<T, TInput>.GetItem(XTrain, 0);
+
+        try
+        {
+            // Step 1: Create teacher model using factory
+            // Trainer expects Vector<T> for single samples, but options.TeacherModel uses TInput/TOutput (dataset types)
+            ITeacherModel<Vector<T>, Vector<T>> teacher;
+            if (options.TeacherModel != null)
+            {
+                // Wrap IFullModel as teacher - requires explicit output dimension
+                if (!options.OutputDimension.HasValue)
+                    throw new InvalidOperationException(
+                        "OutputDimension is required when using TeacherModel. " +
+                        "Please specify options.OutputDimension explicitly.");
+
+                // Adapter function: IFullModel<T, TInput, TOutput>.Predict -> Func<Vector<T>, Vector<T>>
+                Func<Vector<T>, Vector<T>> adaptedTeacherPredict = inputSampleVector =>
+                {
+                    // Convert trainer's Vector<T> (single sample) to teacher's TInput type
+                    TInput teacherInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(inputSampleVector, referenceInput);
+                    // Call teacher's predict method with TInput
+                    TOutput teacherOutput = options.TeacherModel.Predict(teacherInput);
+                    // Convert teacher's TOutput back to trainer's Vector<T>
+                    return ConversionsHelper.ConvertToVector<T, TOutput>(teacherOutput);
+                };
+
+                teacher = new KnowledgeDistillation.TeacherModelWrapper<T>(
+                    adaptedTeacherPredict,
+                    options.OutputDimension.Value);
+            }
+            else if (options.Teachers != null && options.Teachers.Length > 0)
+            {
+                // Adapt each teacher in the ensemble to work with Vector<T> samples
+                var adaptedTeachers = options.Teachers.Select(t =>
+                {
+                    Func<Vector<T>, Vector<T>> adaptedPredict = inputSampleVector =>
+                    {
+                        TInput teacherInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(inputSampleVector, referenceInput);
+                        TOutput teacherOutput = t.GetLogits(teacherInput);
+                        return ConversionsHelper.ConvertToVector<T, TOutput>(teacherOutput);
+                    };
+                    return new KnowledgeDistillation.TeacherModelWrapper<T>(adaptedPredict, t.OutputDimension);
+                }).ToArray();
+
+                teacher = KnowledgeDistillation.TeacherModelFactory<T>.CreateTeacher(
+                    TeacherModelType.Ensemble,
+                    ensembleModels: adaptedTeachers,
+                    ensembleWeights: options.EnsembleWeights != null ? (double[])options.EnsembleWeights : null);
+            }
+            else if (options.TeacherForward != null)
+            {
+                if (!options.OutputDimension.HasValue)
+                    throw new InvalidOperationException(
+                        "OutputDimension is required when using TeacherForward. " +
+                        "Please specify options.OutputDimension explicitly.");
+
+                // Adapter function: Func<TInput, TOutput> -> Func<Vector<T>, Vector<T>>
+                Func<Vector<T>, Vector<T>> adaptedTeacherForward = inputSampleVector =>
+                {
+                    // Convert trainer's Vector<T> (single sample) to teacher's TInput type
+                    TInput teacherInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(inputSampleVector, referenceInput);
+                    // Call teacher's forward function with TInput
+                    TOutput teacherOutput = options.TeacherForward(teacherInput);
+                    // Convert teacher's TOutput back to trainer's Vector<T>
+                    return ConversionsHelper.ConvertToVector<T, TOutput>(teacherOutput);
+                };
+
+                teacher = new KnowledgeDistillation.TeacherModelWrapper<T>(
+                    adaptedTeacherForward,
+                    options.OutputDimension.Value);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    "No teacher model configured. Please set TeacherModel, Teachers, or TeacherForward in KnowledgeDistillationOptions.");
+            }
+
+            // Step 2: Create distillation strategy using factory
+            var strategy = KnowledgeDistillation.DistillationStrategyFactory<T>.CreateStrategy(
+                options.StrategyType,
+                temperature: options.Temperature,
+                alpha: options.Alpha);
+
+            // Step 3: Create checkpoint configuration from options
+            DistillationCheckpointConfig? checkpointConfig = null;
+            if (options.SaveCheckpoints)
+            {
+                checkpointConfig = new DistillationCheckpointConfig
+                {
+                    CheckpointDirectory = options.CheckpointDirectory ?? "./checkpoints",
+                    SaveEveryEpochs = options.CheckpointFrequency,
+                    KeepBestN = options.SaveOnlyBestCheckpoint ? 1 : 0,
+                    SaveStudent = true,
+                    BestMetric = "validation_loss",
+                    LowerIsBetter = true
+                };
+            }
+
+            // Step 4: Create trainer with early stopping and checkpointing configuration
+            var trainer = new KnowledgeDistillation.KnowledgeDistillationTrainer<T>(
+                teacher,
+                strategy,
+                checkpointConfig: checkpointConfig,
+                useEarlyStopping: options.UseEarlyStopping,
+                earlyStoppingMinDelta: options.EarlyStoppingMinDelta,
+                earlyStoppingPatience: options.EarlyStoppingPatience);
+
+            Console.WriteLine($"Starting Knowledge Distillation:");
+            Console.WriteLine($"  Strategy: {options.StrategyType}");
+            Console.WriteLine($"  Temperature: {options.Temperature}");
+            Console.WriteLine($"  Alpha: {options.Alpha}");
+            Console.WriteLine($"  Epochs: {options.Epochs}");
+            Console.WriteLine($"  Batch Size: {options.BatchSize}");
+            Console.WriteLine();
+
+            // Step 4: Prepare training data - convert to Vector<Vector<T>>
+            var trainMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(XTrain);
+            var trainVector = ConversionsHelper.ConvertToVector<T, TOutput>(yTrain);
+            var valMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(XVal);
+            var valVector = ConversionsHelper.ConvertToVector<T, TOutput>(yVal);
+
+            var trainInputs = new Vector<Vector<T>>(trainMatrix.Rows);
+            var trainLabels = new Vector<Vector<T>>(trainMatrix.Rows);
+            for (int i = 0; i < trainMatrix.Rows; i++)
+            {
+                trainInputs[i] = trainMatrix.GetRow(i);
+                // Create one-hot encoded labels
+                var oneHot = new Vector<T>(teacher.OutputDimension);
+                int labelIdx = (int)Convert.ToDouble(trainVector[i]);
+                if (labelIdx >= 0 && labelIdx < teacher.OutputDimension)
+                    oneHot[labelIdx] = NumOps.One;
+                trainLabels[i] = oneHot;
+            }
+
+            Vector<Vector<T>>? valInputs = null;
+            Vector<Vector<T>>? valLabels = null;
+            if (valMatrix.Rows > 0)
+            {
+                valInputs = new Vector<Vector<T>>(valMatrix.Rows);
+                valLabels = new Vector<Vector<T>>(valMatrix.Rows);
+                for (int i = 0; i < valMatrix.Rows; i++)
+                {
+                    valInputs[i] = valMatrix.GetRow(i);
+                    var oneHot = new Vector<T>(teacher.OutputDimension);
+                    int labelIdx = (int)Convert.ToDouble(valVector[i]);
+                    if (labelIdx >= 0 && labelIdx < teacher.OutputDimension)
+                        oneHot[labelIdx] = NumOps.One;
+                    valLabels[i] = oneHot;
+                }
+            }
+
+            // Step 5: Define forward and backward functions
+            // Storage for per-sample inputs to enable forward pass replay during backprop
+            // Use a queue to match forward inputs with backward gradients in FIFO order
+            var inputQueue = new Queue<Vector<T>>();
+
+            // Forward function must save activations for backprop AND capture inputs for replay
+            // Convert Vector<T> (from KD trainer) → TInput → model.Predict → TOutput → Vector<T>
+            Func<Vector<T>, Vector<T>> studentForwardCapturing = input =>
+            {
+                // Capture input for forward replay in backward pass (FIFO queue)
+                var capturedInput = new Vector<T>(input.Length);
+                for (int i = 0; i < input.Length; i++)
+                    capturedInput[i] = input[i];
+                inputQueue.Enqueue(capturedInput);
+
+                // Convert KD trainer's Vector<T> to model's TInput type using reference for shape
+                TInput modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(input, referenceInput);
+
+                if (studentModel is NeuralNetworkModel<T> nnModel)
+                {
+                    // Use ForwardWithMemory() to save activations for backpropagation
+                    var output = nnModel.Network.ForwardWithMemory(Tensor<T>.FromVector(input));
+                    return output.ToVector();
+                }
+
+                // Fallback for non-NeuralNetworkModel: call Predict and convert result
+                TOutput modelOutput = studentModel.Predict(modelInput);
+                return ConversionsHelper.ConvertToVector<T, TOutput>(modelOutput);
+            };
+
+            // Prepare backward function for parameter updates during distillation training
+            // This function receives output gradients from distillation strategy and applies them to the model
+            Action<Vector<T>> studentBackward = gradient =>
+            {
+                // Cast to NeuralNetworkModel to access backpropagation methods
+                if (studentModel is not NeuralNetworkModel<T> nnModel)
+                {
+                    throw new InvalidOperationException(
+                        "Knowledge distillation requires a NeuralNetworkModel for gradient backpropagation. " +
+                        $"Current model type: {studentModel.GetType().Name}");
+                }
+
+                try
+                {
+                    // CRITICAL FIX: Replay forward pass to restore correct activations before backprop
+                    // The KD trainer calls forward for all batch samples first, which overwrites
+                    // the activation memory. We must dequeue and rerun forward with the matching input
+                    // to ensure Backpropagate uses the correct activations for this specific sample.
+                    if (inputQueue.Count > 0)
+                    {
+                        var matchingInput = inputQueue.Dequeue();
+                        nnModel.Network.ForwardWithMemory(Tensor<T>.FromVector(matchingInput));
+                    }
+
+                    // Step 1: Backpropagate output gradient through network to compute parameter gradients
+                    nnModel.Network.Backpropagate(Tensor<T>.FromVector(gradient));
+
+                    // Step 2: Get parameter gradients from backpropagation
+                    var paramGradients = nnModel.Network.GetParameterGradients();
+
+                    // Step 3: Apply gradient-based optimizer update if available
+                    if (optimizer is IGradientBasedOptimizer<T, Vector<T>, Vector<T>> gradOptimizer)
+                    {
+                        // Use optimizer's UpdateParameters to apply gradients with proper state management
+                        // This preserves momentum, ADAM state, and uses configured learning rate
+                        var currentParams = nnModel.GetParameters();
+                        var updatedParams = gradOptimizer.UpdateParameters(currentParams, paramGradients);
+                        nnModel.Network.UpdateParameters(updatedParams);
+                    }
+                    else
+                    {
+                        // Fallback: Simple gradient descent with configured learning rate
+                        // This doesn't preserve optimizer state but respects the learning rate
+                        var currentParams = nnModel.GetParameters();
+                        var learningRate = NumOps.FromDouble(options.LearningRate);
+                        var newParams = new Vector<T>(currentParams.Length);
+
+                        for (int i = 0; i < currentParams.Length; i++)
+                        {
+                            // Apply gradient descent: params = params - learningRate * gradient
+                            newParams[i] = NumOps.Subtract(currentParams[i],
+                                NumOps.Multiply(learningRate, paramGradients[i]));
+                        }
+
+                        nnModel.Network.UpdateParameters(newParams);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        "Failed to apply gradient updates during knowledge distillation. " +
+                        "Ensure the model supports backpropagation.", ex);
+                }
+            };
+
+            // Step 5: Run knowledge distillation training
+            Console.WriteLine("Training student model with knowledge distillation...");
+            trainer.Train(
+                studentForwardCapturing,
+                studentBackward,
+                trainInputs,
+                trainLabels,
+                epochs: options.Epochs,
+                batchSize: options.BatchSize,
+                validationInputs: valInputs,
+                validationLabels: valLabels);
+
+            // Step 7: Return result from KD-trained model (don't re-optimize)
+            // Model is already trained via knowledge distillation, just wrap it in result
+            var result = new OptimizationResult<T, TInput, TOutput>
+            {
+                BestSolution = studentModel,
+                BestFitnessScore = NumOps.FromDouble(0.0) // Score tracking happened during KD training
+            };
+            return Task.FromResult(result);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error setting up knowledge distillation: {ex.Message}");
+            Console.WriteLine("Falling back to standard training.");
+            return Task.FromResult(optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
+                XTrain, yTrain, XVal, yVal, XTest, yTest)));
+        }
     }
 
     // ============================================================================

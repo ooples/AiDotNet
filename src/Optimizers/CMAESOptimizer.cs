@@ -314,13 +314,28 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         int mu = lambda / 2;
 
         // Sort and select the best individuals
-        var sortedIndices = fitnessValues.Argsort().Reverse().ToArray();
+        // Create index-fitness pairs and sort by fitness descending
+        var indexedFitness = new List<(int index, T fitness)>();
+        for (int i = 0; i < lambda; i++)
+        {
+            indexedFitness.Add((i, fitnessValues[i]));
+        }
+
+        // Sort descending by fitness (best first)
+        indexedFitness.Sort((a, b) =>
+        {
+            if (NumOps.GreaterThan(a.fitness, b.fitness)) return -1;
+            if (NumOps.LessThan(a.fitness, b.fitness)) return 1;
+            return 0;
+        });
+
         var selectedPopulation = new Matrix<T>(mu, dimensions);
         for (int i = 0; i < mu; i++)
         {
+            int sourceIndex = indexedFitness[i].index;
             for (int j = 0; j < dimensions; j++)
             {
-                selectedPopulation[i, j] = population[sortedIndices[i], j];
+                selectedPopulation[i, j] = population[sourceIndex, j];
             }
         }
 

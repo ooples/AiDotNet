@@ -1427,4 +1427,123 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         byte[] serializedData = File.ReadAllBytes(filePath);
         Deserialize(serializedData);
     }
+
+    /// <summary>
+    /// Saves the expression tree's current state (structure and values) to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the expression tree state to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the complete expression tree structure, including all node types,
+    /// values, and connections. It uses the existing Serialize method and writes the data
+    /// to the provided stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a snapshot of your mathematical formula.
+    ///
+    /// When you call SaveState:
+    /// - The entire tree structure is written to the stream
+    /// - All node types (constants, variables, operations) are preserved
+    /// - All values and connections are saved
+    ///
+    /// This is particularly useful for:
+    /// - Checkpointing during evolutionary algorithm training
+    /// - Knowledge distillation with symbolic models
+    /// - Saving the best formula found during optimization
+    /// - Creating formula ensembles
+    ///
+    /// You can later use LoadState to restore the formula to this exact state.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanWrite)
+            throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+        try
+        {
+            var data = this.Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to save expression tree state to stream: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Unexpected error while saving expression tree state: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads the expression tree's state (structure and values) from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the expression tree state from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes expression tree state that was previously saved with SaveState,
+    /// restoring the complete tree structure, node types, values, and connections.
+    /// It uses the existing Deserialize method after reading data from the stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your mathematical formula.
+    ///
+    /// When you call LoadState:
+    /// - The tree structure is read from the stream
+    /// - All node types and values are restored
+    /// - The formula becomes identical to when SaveState was called
+    ///
+    /// After loading, the formula can:
+    /// - Make predictions using the restored structure
+    /// - Continue evolving during optimization
+    /// - Be used for symbolic regression or genetic programming
+    ///
+    /// This is essential for:
+    /// - Resuming interrupted evolutionary training
+    /// - Loading the best formula after optimization
+    /// - Deploying symbolic models to production
+    /// - Knowledge distillation with interpretable models
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanRead)
+            throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+        try
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            var data = ms.ToArray();
+
+            if (data.Length == 0)
+                throw new InvalidOperationException("Stream contains no data.");
+
+            this.Deserialize(data);
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to read expression tree state from stream: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw InvalidOperationException from Deserialize
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to deserialize expression tree state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+        }
+    }
 }

@@ -1108,5 +1108,39 @@ public enum ModelType
     /// Strengths: Fast training in learned models, good for visual environments, interpretable latent space
     /// </para>
     /// </remarks>
-    WorldModelsAgent
+    WorldModelsAgent,
+
+    /// <summary>
+    /// A model trained through knowledge distillation - compressing a larger teacher model into a smaller student.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Knowledge Distillation is like having a student learn from an expert teacher.
+    /// The "teacher" is a large, accurate model, and the "student" is a smaller, faster model that learns
+    /// to mimic the teacher's behavior while being much more efficient to deploy.
+    ///
+    /// Real-world analogy: An expert chef (teacher) trains an apprentice (student). The apprentice learns
+    /// not just the recipes (hard labels), but also the chef's intuitions, techniques, and reasoning process
+    /// (soft targets). This deeper knowledge transfer helps the apprentice become highly skilled.
+    ///
+    /// How it works:
+    /// - Teacher model provides "soft" predictions (probabilities) that reveal relationships between classes
+    /// - Student learns from both soft predictions and true labels
+    /// - Result: Student model that's 40-90% smaller but retains 90-97% of teacher's accuracy
+    ///
+    /// Key benefits:
+    /// - **Model Compression**: Deploy on mobile, edge devices, browsers
+    /// - **Faster Inference**: 2-10x speedup with minimal accuracy loss
+    /// - **Lower Costs**: Reduced compute and memory requirements
+    /// - **Better Calibration**: Improved confidence estimates
+    ///
+    /// Success stories:
+    /// - DistilBERT: 40% smaller than BERT, 97% performance, 60% faster
+    /// - MobileNet: Distilled from ResNet, runs on smartphones
+    /// - TinyBERT: 7.5x smaller, suitable for edge deployment
+    ///
+    /// Use ConfigureKnowledgeDistillation() on PredictionModelBuilder to enable this technique.
+    /// </para>
+    /// </remarks>
+    KnowledgeDistillation
 }

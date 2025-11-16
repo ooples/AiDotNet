@@ -2266,6 +2266,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Saves the model's current state to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+        if (!stream.CanWrite) throw new ArgumentException("Stream must be writable.", nameof(stream));
+        var data = Serialize();
+        stream.Write(data, 0, data.Length);
+        stream.Flush();
+    }
+
+    /// <summary>
+    /// Loads the model's state from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+        if (!stream.CanRead) throw new ArgumentException("Stream must be readable.", nameof(stream));
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        var data = ms.ToArray();
+        if (data.Length == 0) throw new InvalidOperationException("Stream contains no data.");
+        Deserialize(data);
+    }
+
+    /// <summary>
     /// Disposes resources used by the neural network.
     /// </summary>
     /// <remarks>

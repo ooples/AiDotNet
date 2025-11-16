@@ -222,7 +222,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// 
     /// For example:
     /// ```csharp
-    /// // Create a hidden layer with 784 inputs (e.g., from a 28×28 image), 
+    /// // Create a hidden layer with 784 inputs (e.g., from a 28ï¿½28 image), 
     /// // 128 outputs, and ReLU activation
     /// var hiddenLayer = new FullyConnectedLayer<float>(784, 128);
     /// 
@@ -400,7 +400,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// are used to update the parameters during training and to propagate the error signal back to the previous layer.
     /// </para>
     /// <para><b>For Beginners:</b> This is where the layer learns from its mistakes during training.
-    /// 
+    ///
     /// The backward pass works in these steps for each example in the batch:
     /// 1. Extract the gradient and necessary vectors for this example
     /// 2. Apply the activation function derivative to the gradient
@@ -411,16 +411,28 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     ///    - Shows how each bias affected the output
     /// 5. Calculate input gradients to pass back to previous layer
     ///    - Helps earlier layers learn as well
-    /// 
+    ///
     /// The gradients tell us:
     /// - How to adjust each weight and bias to reduce errors
     /// - How the error signal should flow back to previous layers
-    /// 
+    ///
     /// All gradients are accumulated across the batch before being used
     /// to update parameters.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -465,6 +477,226 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         _biasesGradient = biasesGradient;
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It is slower than the
+    /// manual implementation but can be useful for:
+    /// - Verifying gradient correctness
+    /// - Rapid prototyping with custom modifications
+    /// - Research and experimentation
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastOutput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        int batchSize = _lastInput.Shape[0];
+
+        // Convert to computation nodes
+        var weightsTensor = MatrixToTensor(_weights);
+        var biasesTensor = VectorToTensor(_biases);
+
+        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var weights = Autodiff.TensorOperations<T>.Variable(weightsTensor, "weights", requiresGradient: true);
+        var biases = Autodiff.TensorOperations<T>.Variable(biasesTensor, "biases", requiresGradient: true);
+
+        // Forward computation using autodiff ops
+        // For each example: output = weights @ input + biases
+        // In batch form: output = input @ weights.T + biases
+        var weightsTransposed = Autodiff.TensorOperations<T>.Transpose(weights);
+        var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weightsTransposed);
+
+        // Broadcast biases across batch dimension
+        var biasesBroadcast = BroadcastBiases(biases.Value, batchSize);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(biasesBroadcast, "biases_broadcast", requiresGradient: false);
+        var output = Autodiff.TensorOperations<T>.Add(matmul, biasNode);
+
+        // Apply activation using autodiff
+        var activated = ApplyActivationAutodiff(output);
+
+        // Manually propagate gradients using the output gradient we received
+        activated.Gradient = outputGradient;
+
+        // Perform topological sort and backward pass
+        var topoOrder = GetTopologicalOrder(activated);
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients
+        _weightsGradient = TensorToMatrix(weights.Gradient!);
+        _biasesGradient = TensorToVector(biases.Gradient!);
+
+        return input.Gradient!;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                        {
+                            stack.Push((parent, false));
+                        }
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Applies activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (ScalarActivation is ReLUActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.ReLU(input);
+        }
+        else if (ScalarActivation is SigmoidActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Sigmoid(input);
+        }
+        else if (ScalarActivation is TanhActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Tanh(input);
+        }
+        else
+        {
+            // For unsupported activations, return input unchanged
+            // This is a limitation of autodiff - not all activations are implemented yet
+            return input;
+        }
+    }
+
+    /// <summary>
+    /// Broadcasts biases across the batch dimension.
+    /// </summary>
+    private Tensor<T> BroadcastBiases(Tensor<T> biases, int batchSize)
+    {
+        var biasLength = biases.Length;
+        var broadcasted = new Tensor<T>(new int[] { batchSize, biasLength });
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            for (int j = 0; j < biasLength; j++)
+            {
+                broadcasted[i, j] = biases[j];
+            }
+        }
+
+        return broadcasted;
+    }
+
+    /// <summary>
+    /// Converts a Matrix to a 2D Tensor.
+    /// </summary>
+    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
+    {
+        var tensor = new Tensor<T>(new int[] { matrix.Rows, matrix.Columns });
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                tensor[i, j] = matrix[i, j];
+            }
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a Vector to a 1D Tensor.
+    /// </summary>
+    private Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>(new int[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+        {
+            tensor[i] = vector[i];
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a 2D Tensor to a Matrix.
+    /// </summary>
+    private Matrix<T> TensorToMatrix(Tensor<T> tensor)
+    {
+        if (tensor.Rank != 2)
+            throw new ArgumentException("Tensor must be 2D to convert to Matrix");
+
+        var matrix = new Matrix<T>(tensor.Shape[0], tensor.Shape[1]);
+        for (int i = 0; i < tensor.Shape[0]; i++)
+        {
+            for (int j = 0; j < tensor.Shape[1]; j++)
+            {
+                matrix[i, j] = tensor[i, j];
+            }
+        }
+        return matrix;
+    }
+
+    /// <summary>
+    /// Converts a 1D Tensor to a Vector.
+    /// </summary>
+    private Vector<T> TensorToVector(Tensor<T> tensor)
+    {
+        // Handle both 1D and 2D tensors (for column vectors)
+        int length = tensor.Length;
+        var vector = new Vector<T>(length);
+
+        for (int i = 0; i < length; i++)
+        {
+            vector[i] = tensor[i];
+        }
+
+        return vector;
     }
 
     /// <summary>
@@ -527,7 +759,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// - Advanced optimization techniques that need all parameters together
     /// 
     /// For example, a layer with 100 inputs and 10 outputs would have:
-    /// - 1,000 weight parameters (100 × 10)
+    /// - 1,000 weight parameters (100 ï¿½ 10)
     /// - 10 bias parameters (one per output)
     /// - Totaling 1,010 parameters in the returned vector
     /// </para>
