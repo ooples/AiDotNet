@@ -282,55 +282,18 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        // Get expected parameter count
-        int expectedStates = parameters.Length / (2 * _options.ActionSize);
+        // Tabular RL methods cannot restore Q-values from parameters alone
+        // because the parameter vector contains only Q-values, not state keys.
+        //
+        // For a fresh agent (empty Q-tables), state keys are unknown, so restoration fails.
+        // For proper save/load, use Serialize()/Deserialize() which preserves state mappings.
+        //
+        // This is a fundamental limitation of tabular methods - unlike neural networks,
+        // the "parameters" (Q-values) are meaningless without their state associations.
 
-        // If parameter count doesn't match current state count, we need state keys
-        // This implementation updates existing states in-place when possible
-        var stateKeys = _qTable1.Keys.ToList();
-
-        if (expectedStates == 0 || parameters.Length < 2 * _options.ActionSize)
-        {
-            // Invalid parameter vector - keep current state
-            return;
-        }
-
-        // Update _qTable1 values in-place (indices 0 to expectedStates*actionSize-1)
-        int idx = 0;
-        for (int i = 0; i < Math.Min(expectedStates, stateKeys.Count); i++)
-        {
-            string stateKey = stateKeys[i];
-            if (_qTable1.ContainsKey(stateKey))
-            {
-                for (int action = 0; action < _options.ActionSize; action++)
-                {
-                    _qTable1[stateKey][action] = parameters[idx++];
-                }
-            }
-            else
-            {
-                // Skip this state's parameters
-                idx += _options.ActionSize;
-            }
-        }
-
-        // Update _qTable2 values in-place (indices expectedStates*actionSize to end)
-        for (int i = 0; i < Math.Min(expectedStates, stateKeys.Count); i++)
-        {
-            string stateKey = stateKeys[i];
-            if (_qTable2.ContainsKey(stateKey))
-            {
-                for (int action = 0; action < _options.ActionSize; action++)
-                {
-                    _qTable2[stateKey][action] = parameters[idx++];
-                }
-            }
-            else
-            {
-                // Skip this state's parameters
-                idx += _options.ActionSize;
-            }
-        }
+        throw new NotSupportedException(
+            "Tabular Double Q-Learning agents do not support parameter restoration without state information. " +
+            "Use Serialize()/Deserialize() methods instead, which preserve state-to-Q-value mappings for both Q-tables.");
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
