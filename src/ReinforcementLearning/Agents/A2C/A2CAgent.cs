@@ -46,16 +46,24 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override int FeatureCount => _a2cOptions.StateSize;
 
-    public A2CAgent(A2COptions<T> options)
-        : base(new ReinforcementLearningOptions<T>
+    private static ReinforcementLearningOptions<T> CreateBaseOptions(A2COptions<T> options)
+    {
+        if (options is null)
+            throw new ArgumentNullException(nameof(options));
+
+        return new ReinforcementLearningOptions<T>
         {
             LearningRate = options.PolicyLearningRate,
             DiscountFactor = options.DiscountFactor,
             LossFunction = new MeanSquaredErrorLoss<T>(),
             Seed = options.Seed
-        })
+        };
+    }
+
+    public A2CAgent(A2COptions<T> options)
+        : base(CreateBaseOptions(options))
     {
-        _a2cOptions = options ?? throw new ArgumentNullException(nameof(options));
+        _a2cOptions = options;
         _trajectory = new Trajectory<T>();
 
         _policyNetwork = BuildPolicyNetwork();
