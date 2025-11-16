@@ -328,6 +328,8 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         _qNetwork.UpdateParameters(parameters);
+        // Sync target network to match Q-network after parameter update
+        CopyNetworkWeights(_qNetwork, _targetNetwork);
     }
 
     /// <inheritdoc/>
