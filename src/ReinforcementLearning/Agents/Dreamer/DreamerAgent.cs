@@ -188,7 +188,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         T totalLoss = NumOps.Zero;
 
-        // FIX ISSUE 4: Accumulate gradients across batch, then update once
+        // Accumulate gradients across batch, then update once
         foreach (var experience in batch)
         {
             // Encode observations to latent states
@@ -244,7 +244,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
             _representationNetwork.Backpropagate(Tensor<T>.FromVector(representationGradient));
 
-            // FIX ISSUE 5: Use consistent gradient calculation with factor of 2 for MSE
+            // MSE gradient calculation with factor of 2
             var rewardGradient = new Vector<T>(1);
             rewardGradient[0] = NumOps.Multiply(NumOps.FromDouble(2.0), rewardDiff);
             _rewardNetwork.Backpropagate(Tensor<T>.FromVector(rewardGradient));
@@ -254,7 +254,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             _continueNetwork.Backpropagate(Tensor<T>.FromVector(continueGradient));
         }
 
-        // FIX ISSUE 4: Update parameters once after processing entire batch
+        // Update parameters once after processing entire batch
         var dynamicsParams = _dynamicsNetwork.GetParameters();
         _dynamicsNetwork.UpdateParameters(dynamicsParams);
 
