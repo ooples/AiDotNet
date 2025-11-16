@@ -619,12 +619,37 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override byte[] Serialize()
     {
-        throw new NotSupportedException("QMIX serialization is not supported. Use GetParameters() and SetParameters() for parameter transfer.");
+        var parameters = GetParameters();
+        var state = new
+        {
+            Parameters = parameters,
+            NumAgents = _options.NumAgents,
+            StateSize = _options.StateSize,
+            ActionSize = _options.ActionSize
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotSupportedException("QMIX deserialization is not supported. Use GetParameters() and SetParameters() for parameter transfer.");
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        var parameters = JsonConvert.DeserializeObject<Vector<T>>(state.Parameters.ToString());
+        if (parameters is not null)
+        {
+            SetParameters(parameters);
+        }
     }
 
     public override Vector<T> GetParameters()
@@ -742,11 +767,28 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void SaveModel(string filepath)
     {
-        throw new NotSupportedException("QMIX model saving is not supported. Use GetParameters() and save the parameter vector separately.");
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
     }
 
     public override void LoadModel(string filepath)
     {
-        throw new NotSupportedException("QMIX model loading is not supported. Use SetParameters() with a loaded parameter vector.");
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        if (!System.IO.File.Exists(filepath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
+        }
+
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
     }
 }
