@@ -307,15 +307,10 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
     {
-        var loss = lossFunction ?? LossFunction;
-        var output = _qNetwork.Forward(input);
-        var lossValue = loss.CalculateLoss(output, target);
-        var gradient = loss.CalculateDerivative(output, target);
-
-        _qNetwork.Backward(input, gradient);
-        var gradientVector = new Vector<T>(1); // Note: DuelingNetwork does not expose gradients
-
-        return gradientVector;
+        throw new NotSupportedException(
+            "ComputeGradients is not supported for DuelingDQNAgent; " +
+            "use the agent's internal Train() loop or expose layer gradients. " +
+            "DuelingNetwork stores gradients internally but does not expose them.");
     }
 
     /// <inheritdoc/>
