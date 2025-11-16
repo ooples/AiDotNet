@@ -36,8 +36,9 @@ public class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
         string stateKey = GetStateKey(state);
         string nextStateKey = GetStateKey(nextState);
         int actionIndex = ArgMax(action);
+        int greedyCurrentAction = GetGreedyAction(stateKey);
         int greedyNextAction = GetGreedyAction(nextStateKey);
-        
+
         EnsureStateExists(state);
         EnsureStateExists(nextState);
 
@@ -47,15 +48,18 @@ public class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
 
         _eligibilityTraces[stateKey][actionIndex] = NumOps.Add(_eligibilityTraces[stateKey][actionIndex], NumOps.One);
 
+        // Watkins's Q(λ): Check if current action was greedy
+        bool actionWasGreedy = (actionIndex == greedyCurrentAction);
+
         foreach (var s in _qTable.Keys.ToList())
         {
             for (int a = 0; a < _options.ActionSize; a++)
             {
                 T update = NumOps.Multiply(LearningRate, NumOps.Multiply(delta, _eligibilityTraces[s][a]));
                 _qTable[s][a] = NumOps.Add(_qTable[s][a], update);
-                
-                // Watkins's Q(λ): reset traces if action was non-greedy
-                if (actionIndex != greedyNextAction)
+
+                // Watkins's Q(λ): reset ALL traces if action was non-greedy (exploratory)
+                if (!actionWasGreedy)
                 {
                     _eligibilityTraces[s][a] = NumOps.Zero;
                 }
