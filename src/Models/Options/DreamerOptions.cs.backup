@@ -32,8 +32,8 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class DreamerOptions<T> : ReinforcementLearningOptions<T>
 {
-    private int _observationSize = 1;
-    private int _actionSize = 1;
+    private int _observationSize;
+    private int _actionSize;
 
     public int ObservationSize
     {

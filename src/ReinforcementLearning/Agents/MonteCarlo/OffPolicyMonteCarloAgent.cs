@@ -105,10 +105,12 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
             // Update cumulative weight
             _cTable[stateKey][action] = NumOps.Add(_cTable[stateKey][action], W);
 
-            // Weighted importance sampling update
-            var weightedReturn = NumOps.Multiply(W, G);
-            var increment = NumOps.Divide(weightedReturn, _cTable[stateKey][action]);
-            _qTable[stateKey][action] = NumOps.Add(_qTable[stateKey][action], increment);
+            // Weighted importance sampling update: Q(S,A) ← Q(S,A) + (W/C(S,A)) * (G - Q(S,A))
+            var currentQ = _qTable[stateKey][action];
+            var error = NumOps.Subtract(G, currentQ);
+            var weightRatio = NumOps.Divide(W, _cTable[stateKey][action]);
+            var increment = NumOps.Multiply(weightRatio, error);
+            _qTable[stateKey][action] = NumOps.Add(currentQ, increment);
 
             // Get greedy action according to target policy
             int greedyAction = GetGreedyAction(state);

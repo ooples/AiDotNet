@@ -161,8 +161,39 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _options.ActionSize * _options.FeatureSize;
     public override int FeatureCount => _options.FeatureSize;
-    public override byte[] Serialize() => throw new NotImplementedException();
-    public override void Deserialize(byte[] data) => throw new NotImplementedException();
+    public override byte[] Serialize()
+    {
+        var state = new
+        {
+            Weights = GetParameters(),
+            Epsilon = _epsilon,
+            LastAction = _lastAction,
+            Options = _options
+        };
+        string json = Newtonsoft.Json.JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
+    }
+    public override void Deserialize(byte[] data)
+    {
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        dynamic state = Newtonsoft.Json.JsonConvert.DeserializeObject(json);
+        if (state != null)
+        {
+            Vector<T> weights = state.Weights;
+            if (weights != null)
+            {
+                SetParameters(weights);
+            }
+            if (state.Epsilon != null)
+            {
+                _epsilon = (double)state.Epsilon;
+            }
+            if (state.LastAction != null)
+            {
+                _lastAction = (int)state.LastAction;
+            }
+        }
+    }
 
     public override Vector<T> GetParameters()
     {

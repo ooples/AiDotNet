@@ -82,8 +82,28 @@ public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
             _model[stateKey][actionIndex] = new List<(string, T, T)>();
         }
 
-        // Add transition (assuming deterministic for simplicity)
-        _model[stateKey][actionIndex].Add((nextStateKey, reward, NumOps.One));
+        // For deterministic transitions, replace existing transition instead of accumulating
+        // This prevents duplicate entries for the same (state, action) pair
+        var transitions = _model[stateKey][actionIndex];
+
+        // Check if this exact transition already exists
+        bool exists = false;
+        for (int i = 0; i < transitions.Count; i++)
+        {
+            if (transitions[i].Item1 == nextStateKey)
+            {
+                // Update existing transition with latest reward
+                transitions[i] = (nextStateKey, reward, NumOps.One);
+                exists = true;
+                break;
+            }
+        }
+
+        // Add new transition if it doesn't exist
+        if (!exists)
+        {
+            transitions.Add((nextStateKey, reward, NumOps.One));
+        }
     }
 
     public override T Train()

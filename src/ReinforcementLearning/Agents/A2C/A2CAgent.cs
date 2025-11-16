@@ -355,9 +355,11 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void UpdatePolicyNetwork()
     {
+        // Gradients have been accumulated via Backpropagate() calls in the training loop
         var params_ = _policyNetwork.GetParameters();
         var grads = _policyNetwork.GetGradients();
 
+        // Apply gradient ascent (policy gradient: maximize J, so add gradients)
         for (int i = 0; i < params_.Length; i++)
         {
             var update = NumOps.Multiply(_a2cOptions.PolicyLearningRate, grads[i]);
@@ -365,13 +367,16 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         _policyNetwork.UpdateParameters(params_);
+        _policyNetwork.ResetGradients(); // Clear accumulated gradients for next batch
     }
 
     private void UpdateValueNetwork()
     {
+        // Gradients have been accumulated via Backpropagate() calls in the training loop
         var params_ = _valueNetwork.GetParameters();
         var grads = _valueNetwork.GetGradients();
 
+        // Apply gradient descent (minimize loss, so subtract gradients)
         for (int i = 0; i < params_.Length; i++)
         {
             var update = NumOps.Multiply(_a2cOptions.ValueLearningRate, grads[i]);
@@ -379,6 +384,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         _valueNetwork.UpdateParameters(params_);
+        _valueNetwork.ResetGradients(); // Clear accumulated gradients for next batch
     }
 
     private T ComputeEntropy(Vector<T> state)

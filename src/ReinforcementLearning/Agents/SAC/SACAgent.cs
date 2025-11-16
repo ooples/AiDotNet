@@ -420,19 +420,25 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
             var entropyGradMean = NumOps.Multiply(alpha, dLogPi_dMean);
             var entropyGradLogStd = NumOps.Multiply(alpha, dLogPi_dLogStd);
 
-            // Q-value gradient: -∇θ Q(s, a) where a = tanh(μ + σε)
-            // Using policy gradient approximation: -∇θ log π(a|s) * Q(s,a)
-            // This is mathematically equivalent to REINFORCE with Q as baseline
-            var qGradMean = NumOps.Multiply(
-                NumOps.Negate(qValue),
-                dLogPi_dMean
-            );
-            var qGradLogStd = NumOps.Multiply(
-                NumOps.Negate(qValue),
-                dLogPi_dLogStd
-            );
+            // Q-value gradient using reparameterization trick
+            // SAC gradient: ∇θ [α log π(a|s) - Q(s, f_θ(ε))]
+            // The Q term requires ∇_μ Q and ∇_log_σ Q through the action
+            // For tanh-squashed Gaussian: a = tanh(μ + σε)
+            //
+            // Approximation: Since we can't easily compute ∇_a Q analytically,
+            // we use the fact that for policy gradient methods:
+            // ∇θ Q(s, f_θ(ε)) ≈ ∇θ f_θ(ε) * ∇_a Q(s,a)
+            //
+            // In this simplified version, we scale the gradient by Q-value
+            // A more accurate implementation would use finite differences or
+            // automatic differentiation to compute ∇_a Q
+            var qGradScale = NumOps.Negate(NumOps.Divide(qValue, NumOps.Add(std, NumOps.FromDouble(1e-6))));
+            var qGradMean = qGradScale;  // Simplified: gradient flows through mean
+            var qGradLogStd = NumOps.Multiply(qGradScale, std);  // Scaled by std
 
-            // Total gradient: entropy + Q terms
+            // Total gradient: α * ∇θ log π - ∇θ Q
+            // We negate the sum because networks minimize loss (gradient descent)
+            // but we want to maximize J = E[Q - α log π]
             gradient[i] = NumOps.Negate(NumOps.Add(entropyGradMean, qGradMean));
             gradient[_sacOptions.ActionSize + i] = NumOps.Negate(NumOps.Add(entropyGradLogStd, qGradLogStd));
         }

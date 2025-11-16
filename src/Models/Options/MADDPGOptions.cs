@@ -57,4 +57,17 @@ public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
         CriticLearningRate = numOps.FromDouble(0.001);
         TargetUpdateTau = numOps.FromDouble(0.001);
     }
+
+    /// <summary>
+    /// Validates that required properties are set.
+    /// </summary>
+    public void Validate()
+    {
+        if (NumAgents <= 0)
+            throw new ArgumentException("NumAgents must be greater than 0", nameof(NumAgents));
+        if (StateSize <= 0)
+            throw new ArgumentException("StateSize must be greater than 0", nameof(StateSize));
+        if (ActionSize <= 0)
+            throw new ArgumentException("ActionSize must be greater than 0", nameof(ActionSize));
+    }
 }

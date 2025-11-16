@@ -33,8 +33,8 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TRPOOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int StateSize { get; init; }
-    public int ActionSize { get; init; }
+    public int StateSize { get; init; } = 1;
+    public int ActionSize { get; init; } = 1;
     public bool IsContinuous { get; init; } = false;
     public T ValueLearningRate { get; init; }
     public T GaeLambda { get; init; }

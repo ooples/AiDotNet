@@ -216,7 +216,18 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
                 if (idx < parameters.Length)
                     _policy[s.Key][a] = parameters[idx++];
     }
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new TabularActorCriticAgent<T>(_options);
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new TabularActorCriticAgent<T>(_options);
+        // Copy learned state - the value table and policy preferences
+        clone._valueTable = new Dictionary<string, T>(_valueTable);
+        clone._policy = new Dictionary<string, Dictionary<int, T>>();
+        foreach (var kvp in _policy)
+        {
+            clone._policy[kvp.Key] = new Dictionary<int, T>(kvp.Value);
+        }
+        return clone;
+    }
     public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         var pred = Predict(input);

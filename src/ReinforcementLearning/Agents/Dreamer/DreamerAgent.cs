@@ -283,40 +283,56 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Imagine future trajectory
             var imaginedReturns = ImagineTrajectory(latentState);
 
-            // FIX ISSUE 4: Update value network with correct gradient sign
             // Value network minimizes squared TD error: (return - value)^2
             var predictedValue = _valueNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector()[0];
             var valueDiff = NumOps.Subtract(imaginedReturns, predictedValue);
             var valueLoss = NumOps.Multiply(valueDiff, valueDiff);
 
-            // Gradient of MSE loss: 2 * (prediction - target) = -2 * (target - prediction)
+            // Gradient of MSE loss w.r.t. prediction: d/d(pred) [(target - pred)^2] = -2 * (target - pred)
             var valueGradient = new Vector<T>(1);
             valueGradient[0] = NumOps.Multiply(NumOps.FromDouble(-2.0), valueDiff);
             _valueNetwork.Backpropagate(Tensor<T>.FromVector(valueGradient));
+
+            // Apply gradients using optimizer or manual gradient descent
             var valueParams = _valueNetwork.GetParameters();
+            var valueGrads = _valueNetwork.GetGradients();
+            var learningRate = _options.LearningRate is not null ? _options.LearningRate : NumOps.FromDouble(0.001);
+            for (int i = 0; i < valueParams.Length && i < valueGrads.Length; i++)
+            {
+                valueParams[i] = NumOps.Subtract(valueParams[i], NumOps.Multiply(learningRate, valueGrads[i]));
+            }
             _valueNetwork.UpdateParameters(valueParams);
+            _valueNetwork.ResetGradients();
 
-            // FIX ISSUE 2: Implement proper policy gradient for actor
-            // Actor maximizes expected return using REINFORCE-style policy gradient
-            // Policy gradient: advantage * grad_log_pi(action|state)
-            var advantage = valueDiff;
-
-            // Compute value gradient w.r.t. current action to get policy gradient direction
+            // Actor maximizes expected return using policy gradient
+            // For Dreamer, the actor loss is -E[V(imagination)] where we want to maximize V
             var action = _actorNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector();
             var actorGradient = new Vector<T>(action.Length);
 
-            // Policy gradient: For continuous actions, use advantage-weighted gradient
-            // Gradient direction: -advantage (negative because we want to maximize value)
-            // Each action dimension gets the advantage signal
+            // Policy gradient: maximize value function, so gradient is -dV/daction
+            // Since we're using the imagined return as the value estimate,
+            // the gradient signal is the advantage (return - baseline)
+            var advantage = valueDiff; // (imaginedReturns - predictedValue)
+
+            // For each action dimension, propagate the advantage signal
+            // Negative because we want to maximize (gradient ascent), but networks do gradient descent
             for (int i = 0; i < actorGradient.Length; i++)
             {
-                // Negate advantage because networks minimize loss, but we want to maximize value
                 actorGradient[i] = NumOps.Negate(advantage);
             }
 
             _actorNetwork.Backpropagate(Tensor<T>.FromVector(actorGradient));
+
+            // Apply gradients to actor parameters
             var actorParams = _actorNetwork.GetParameters();
+            var actorGrads = _actorNetwork.GetGradients();
+            var actorLearningRate = _options.LearningRate is not null ? _options.LearningRate : NumOps.FromDouble(0.001);
+            for (int i = 0; i < actorParams.Length && i < actorGrads.Length; i++)
+            {
+                actorParams[i] = NumOps.Subtract(actorParams[i], NumOps.Multiply(actorLearningRate, actorGrads[i]));
+            }
             _actorNetwork.UpdateParameters(actorParams);
+            _actorNetwork.ResetGradients();
 
             totalLoss = NumOps.Add(totalLoss, valueLoss);
         }

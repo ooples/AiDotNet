@@ -251,21 +251,33 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        // Reconstruct Q-table from vector
-        _qTable.Clear();
-
+        // Save existing state keys before clearing
         var stateKeys = _qTable.Keys.ToList();
+
+        // If Q-table is empty, cannot reconstruct from parameters alone
+        // This method updates existing Q-values but preserves table structure
+        if (stateKeys.Count == 0)
+        {
+            // Cannot set parameters on an uninitialized agent
+            // Q-table structure must be built through experience first
+            return;
+        }
+
+        // Update Q-values while preserving the state keys
         int maxStates = parameters.Length / _options.ActionSize;
+        int idx = 0;
 
         for (int i = 0; i < Math.Min(maxStates, stateKeys.Count); i++)
         {
-            var qValues = new Dictionary<int, T>();
+            var stateKey = stateKeys[i];
             for (int action = 0; action < _options.ActionSize; action++)
             {
-                int idx = i * _options.ActionSize + action;
-                qValues[action] = parameters[idx];
+                if (idx < parameters.Length)
+                {
+                    _qTable[stateKey][action] = parameters[idx];
+                    idx++;
+                }
             }
-            _qTable[stateKeys[i]] = qValues;
         }
     }
 

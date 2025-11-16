@@ -248,12 +248,13 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             var loss = _options.CriticLossFunction.CalculateLoss(prediction, target);
             totalLoss = NumOps.Add(totalLoss, loss);
 
-            // Backprop
+            // Backpropagate gradient through critic network
             var gradient = _options.CriticLossFunction.CalculateDerivative(prediction, target);
             var gradientTensor = Tensor<T>.FromVector(gradient);
+            _criticNetwork.Backpropagate(gradientTensor);
         }
 
-        // Update critic weights
+        // Update critic weights using accumulated gradients
         UpdateNetworkParameters(_criticNetwork, _options.CriticLearningRate);
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
@@ -375,9 +376,22 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void UpdateNetworkParameters(NeuralNetwork<T> network, T learningRate)
     {
-        // TODO: Implement gradient-based parameter updates
-        // This requires implementing GetFlattenedGradients in NeuralNetwork
-        // For now, this is a placeholder
+        // Apply accumulated gradients from Backpropagate() calls
+        var parameters = network.GetParameters();
+        var gradients = network.GetGradients();
+
+        if (gradients.Length > 0)
+        {
+            for (int i = 0; i < parameters.Length && i < gradients.Length; i++)
+            {
+                // Gradient descent: θ ← θ - α * ∇θ J
+                var update = NumOps.Multiply(learningRate, gradients[i]);
+                parameters[i] = NumOps.Subtract(parameters[i], update);
+            }
+
+            network.UpdateParameters(parameters);
+            network.ResetGradients();
+        }
     }
 
     private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
