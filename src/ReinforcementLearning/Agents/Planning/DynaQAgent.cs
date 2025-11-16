@@ -281,7 +281,10 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         return grad;
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        throw new NotSupportedException("Dyna-Q uses direct Q-value updates via temporal difference learning, not gradient-based optimization.");
+    }
 
     public override void SaveModel(string filepath)
     {
