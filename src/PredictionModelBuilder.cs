@@ -746,6 +746,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Create normalization info (RL doesn't use normalization like supervised learning)
         var normInfo = new NormalizationInfo<T, TInput, TOutput>();
 
+        // Create deployment configuration from individual configs
+        var deploymentConfig = DeploymentConfiguration.Create(
+            _quantizationConfig,
+            _cacheConfig,
+            _versioningConfig,
+            _abTestingConfig,
+            _telemetryConfig,
+            _exportConfig);
+
         // Return standard PredictionModelResult
         var result = new PredictionModelResult<T, TInput, TOutput>(
             optimizationResult,
@@ -759,7 +768,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _loraConfiguration,
             crossValidationResult: null,
             _agentConfig,
-            agentRecommendation: null);
+            agentRecommendation: null,
+            deploymentConfig);
 
         return result;
     }
