@@ -82,7 +82,13 @@ public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
         double sum = 0.0;
         for (int i = 0; i < shape; i++)
         {
-            sum += -Math.Log(_random.NextDouble());
+            // Ensure NextDouble() never returns exactly 0 to avoid -infinity in log
+            double u = _random.NextDouble();
+            while (u == 0.0)
+            {
+                u = _random.NextDouble();
+            }
+            sum += -Math.Log(u);
         }
         return sum;
     }
