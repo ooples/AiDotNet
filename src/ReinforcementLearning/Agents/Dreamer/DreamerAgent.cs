@@ -530,12 +530,11 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        if (Networks.Count > 0 && Networks[0] is NeuralNetwork<T> network)
-        {
-            network.Backpropagate(Tensor<T>.FromVector(gradients));
-            var networkParams = network.GetParameters();
-            network.UpdateParameters(networkParams);
-        }
+        throw new NotSupportedException(
+            "Dreamer agent requires per-network gradient distribution for six networks " +
+            "(VAE encoder/decoder, RNN world model, reward/continue/value predictors). " +
+            "The current signature cannot distribute gradients appropriately. " +
+            "Use the internal Train() method for training, which handles multi-network updates correctly.");
     }
 
     public override void SaveModel(string filepath)
