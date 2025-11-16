@@ -337,6 +337,13 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             {
                 mixingParams[j] = NumOps.Subtract(mixingParams[j],
                     NumOps.Multiply(LearningRate, mixingGrads[j]));
+
+                // Enforce QMIX monotonicity: all mixing network weights must be non-negative
+                // This ensures that increasing any agent's Q-value increases the team Q-value
+                if (NumOps.LessThan(mixingParams[j], NumOps.Zero))
+                {
+                    mixingParams[j] = NumOps.Zero;
+                }
             }
             _mixingNetwork.UpdateParameters(mixingParams);
 
@@ -721,6 +728,12 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         for (int i = 0; i < mixingParamCount; i++)
         {
             mixingParams[i] = parameters[offset + i];
+
+            // Enforce QMIX monotonicity: all mixing network weights must be non-negative
+            if (NumOps.LessThan(mixingParams[i], NumOps.Zero))
+            {
+                mixingParams[i] = NumOps.Zero;
+            }
         }
         _mixingNetwork.UpdateParameters(mixingParams);
     }
