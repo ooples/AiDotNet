@@ -225,20 +225,18 @@ public class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        // Reconstruct Q-table from vector using linear indexing
-        var stateKeys = _qTable.Keys.ToList();
-        int maxStates = parameters.Length / _options.ActionSize;
+        // Tabular RL methods cannot restore Q-values from parameters alone
+        // because the parameter vector contains only Q-values, not state keys.
+        //
+        // For a fresh agent (empty Q-table), state keys are unknown, so restoration fails.
+        // For proper save/load, use Serialize()/Deserialize() which preserves state mappings.
+        //
+        // This is a fundamental limitation of tabular methods - unlike neural networks,
+        // the "parameters" (Q-values) are meaningless without their state associations.
 
-        for (int i = 0; i < Math.Min(maxStates, stateKeys.Count); i++)
-        {
-            var qValues = new Dictionary<int, T>();
-            for (int action = 0; action < _options.ActionSize; action++)
-            {
-                int idx = i * _options.ActionSize + action;
-                qValues[action] = parameters[idx];
-            }
-            _qTable[stateKeys[i]] = qValues;
-        }
+        throw new NotSupportedException(
+            "Tabular N-Step Q-Learning agents do not support parameter restoration without state information. " +
+            "Use Serialize()/Deserialize() methods instead, which preserve state-to-Q-value mappings.");
     }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
