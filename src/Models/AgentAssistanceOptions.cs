@@ -213,6 +213,125 @@ public class AgentAssistanceOptions
     public bool EnableMetaLearningAdvice { get; set; } = false;
 
     /// <summary>
+    /// Gets or sets a value indicating whether the agent should use Chain-of-Thought reasoning.
+    /// </summary>
+    /// <value>True to enable reasoning; false to disable. Default is false.</value>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the agent will generate step-by-step reasoning explanations when making decisions
+    /// or recommendations during model building. This provides transparency into the agent's decision-making
+    /// process and can help users understand why certain recommendations are made.
+    /// </para>
+    /// <para><b>For Beginners:</b> Chain-of-Thought reasoning makes the AI explain its thinking step-by-step.
+    ///
+    /// What this does:
+    /// - Agent shows its reasoning process (not just final answers)
+    /// - Each decision is broken down into logical steps
+    /// - You can see why the agent recommends certain choices
+    /// - Helps you learn and verify the agent's logic
+    ///
+    /// Example without reasoning:
+    /// - "I recommend using a Random Forest model."
+    ///
+    /// Example with reasoning:
+    /// - "Step 1: Your dataset has 10,000 samples, which is medium-sized."
+    /// - "Step 2: You have 50 features with complex non-linear relationships."
+    /// - "Step 3: Random Forest handles non-linearity well and doesn't require feature scaling."
+    /// - "Conclusion: I recommend using a Random Forest model."
+    ///
+    /// Why enable this:
+    /// - Learn how AI agents make decisions
+    /// - Verify the agent's reasoning is sound
+    /// - Build trust in AI recommendations
+    /// - Educational value for understanding ML concepts
+    ///
+    /// Why it's disabled by default:
+    /// - Generates more output (can be verbose)
+    /// - Takes slightly more time
+    /// - Not necessary if you just want quick recommendations
+    ///
+    /// Enable this when: You want to understand the agent's reasoning or are learning about ML.
+    /// </para>
+    /// </remarks>
+    public bool EnableReasoning { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the maximum number of reasoning steps the agent should generate.
+    /// </summary>
+    /// <value>The maximum number of reasoning steps. Default is 5.</value>
+    /// <remarks>
+    /// <para>
+    /// When Chain-of-Thought reasoning is enabled, this controls how many reasoning steps the agent
+    /// will generate. More steps provide more detailed explanations but take longer to generate.
+    /// This is only used when EnableReasoning is true.
+    /// </para>
+    /// <para><b>For Beginners:</b> This limits how many steps the AI shows in its reasoning.
+    ///
+    /// Why this matters:
+    /// - More steps = more detailed explanation but takes longer
+    /// - Fewer steps = quicker but less detailed
+    /// - 5 steps is usually enough for most decisions
+    ///
+    /// Example with 3 steps (brief):
+    /// - "Step 1: Dataset is small (100 samples)"
+    /// - "Step 2: Linear patterns detected"
+    /// - "Step 3: Recommend Linear Regression"
+    ///
+    /// Example with 7 steps (detailed):
+    /// - "Step 1: Dataset has 100 samples"
+    /// - "Step 2: That's considered small for ML"
+    /// - "Step 3: Checking feature relationships..."
+    /// - "Step 4: Found linear correlations"
+    /// - "Step 5: Linear models work well here"
+    /// - "Step 6: Comparing Linear Regression vs Ridge Regression"
+    /// - "Step 7: Recommend Linear Regression due to no multicollinearity"
+    ///
+    /// Recommended values:
+    /// - 3-5: Quick, concise reasoning
+    /// - 5-7: Balanced detail
+    /// - 7-10: Very detailed explanations
+    /// </para>
+    /// </remarks>
+    public int MaxReasoningSteps { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets the minimum confidence threshold for agent reasoning verification.
+    /// </summary>
+    /// <value>The confidence threshold (0.0 to 1.0). Default is 0.7.</value>
+    /// <remarks>
+    /// <para>
+    /// When Chain-of-Thought reasoning is enabled, this threshold determines the minimum confidence
+    /// score required for reasoning steps to be considered valid. Steps below this threshold may trigger
+    /// refinement or additional verification. Higher values require more confident reasoning.
+    /// This is only used when EnableReasoning is true.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the quality bar for the AI's reasoning.
+    ///
+    /// How it works:
+    /// - Each reasoning step gets a confidence score (0.0 to 1.0)
+    /// - 1.0 = completely confident, 0.0 = no confidence
+    /// - Steps below the threshold are flagged as uncertain
+    /// - The agent may revise or refine low-confidence steps
+    ///
+    /// Example with threshold 0.7:
+    /// - Step with 0.9 confidence: Accepted (high quality)
+    /// - Step with 0.6 confidence: Flagged for refinement (below threshold)
+    ///
+    /// Choosing the right threshold:
+    /// - 0.5-0.6: Lenient, accepts most reasoning (faster but less rigorous)
+    /// - 0.7-0.8: Balanced, good quality control (recommended)
+    /// - 0.8-0.9: Strict, only high-confidence reasoning (slower but more reliable)
+    ///
+    /// Trade-offs:
+    /// - Higher threshold = more reliable but slower (more refinement iterations)
+    /// - Lower threshold = faster but may accept weaker reasoning
+    ///
+    /// Default of 0.7 is a good balance for most use cases.
+    /// </para>
+    /// </remarks>
+    public double ReasoningConfidenceThreshold { get; set; } = 0.7;
+
+    /// <summary>
     /// Gets a predefined configuration with data analysis and model selection enabled.
     /// </summary>
     /// <value>An AgentAssistanceOptions instance with default settings suitable for most users.</value>
@@ -225,6 +344,7 @@ public class AgentAssistanceOptions
     /// - ✗ Hyperparameter tuning (uses default settings)
     /// - ✗ Feature analysis (keeps all features)
     /// - ✗ Meta-learning advice (not needed for standard problems)
+    /// - ✗ Reasoning (disabled for simplicity)
     ///
     /// Use this when: You're getting started and want helpful guidance without overwhelming detail.
     /// It's a good balance between AI assistance and keeping things simple.
@@ -236,7 +356,10 @@ public class AgentAssistanceOptions
         EnableModelSelection = true,
         EnableHyperparameterTuning = false,
         EnableFeatureAnalysis = false,
-        EnableMetaLearningAdvice = false
+        EnableMetaLearningAdvice = false,
+        EnableReasoning = false,
+        MaxReasoningSteps = 5,
+        ReasoningConfidenceThreshold = 0.7
     };
 
     /// <summary>
@@ -252,6 +375,7 @@ public class AgentAssistanceOptions
     /// - ✗ Hyperparameter tuning (you'll tune manually)
     /// - ✗ Feature analysis (you'll handle features yourself)
     /// - ✗ Meta-learning advice (not needed)
+    /// - ✗ Reasoning (disabled for speed)
     ///
     /// Use this when: You're experienced with ML and only want validation on which model type to use.
     /// Everything else you'll handle yourself. This gives you maximum control with one helpful suggestion.
@@ -263,7 +387,10 @@ public class AgentAssistanceOptions
         EnableModelSelection = true,
         EnableHyperparameterTuning = false,
         EnableFeatureAnalysis = false,
-        EnableMetaLearningAdvice = false
+        EnableMetaLearningAdvice = false,
+        EnableReasoning = false,
+        MaxReasoningSteps = 5,
+        ReasoningConfidenceThreshold = 0.7
     };
 
     /// <summary>
@@ -279,12 +406,14 @@ public class AgentAssistanceOptions
     /// - ✓ Hyperparameter tuning (optimizes settings)
     /// - ✓ Feature analysis (identifies important variables)
     /// - ✓ Meta-learning advice (if using meta-learning)
+    /// - ✓ Reasoning (explains all decisions step-by-step)
     ///
     /// Use this when:
     /// - You want the AI to help with every decision
     /// - You're working on an important project and want maximum performance
     /// - You want to learn what the AI recommends for each aspect
     /// - You're new to ML and want comprehensive guidance
+    /// - You want to understand the agent's reasoning process
     ///
     /// Note: This will make model building take longer because the agent does more analysis, but you'll
     /// get more insights and potentially better results.
@@ -296,7 +425,10 @@ public class AgentAssistanceOptions
         EnableModelSelection = true,
         EnableHyperparameterTuning = true,
         EnableFeatureAnalysis = true,
-        EnableMetaLearningAdvice = true
+        EnableMetaLearningAdvice = true,
+        EnableReasoning = true,
+        MaxReasoningSteps = 7,
+        ReasoningConfidenceThreshold = 0.7
     };
 
     /// <summary>
@@ -331,6 +463,9 @@ public class AgentAssistanceOptions
         EnableModelSelection = this.EnableModelSelection,
         EnableHyperparameterTuning = this.EnableHyperparameterTuning,
         EnableFeatureAnalysis = this.EnableFeatureAnalysis,
-        EnableMetaLearningAdvice = this.EnableMetaLearningAdvice
+        EnableMetaLearningAdvice = this.EnableMetaLearningAdvice,
+        EnableReasoning = this.EnableReasoning,
+        MaxReasoningSteps = this.MaxReasoningSteps,
+        ReasoningConfidenceThreshold = this.ReasoningConfidenceThreshold
     };
 }

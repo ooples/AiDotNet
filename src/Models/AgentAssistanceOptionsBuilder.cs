@@ -41,7 +41,10 @@ public class AgentAssistanceOptionsBuilder
         EnableModelSelection = false,
         EnableHyperparameterTuning = false,
         EnableFeatureAnalysis = false,
-        EnableMetaLearningAdvice = false
+        EnableMetaLearningAdvice = false,
+        EnableReasoning = false,
+        MaxReasoningSteps = 5,
+        ReasoningConfidenceThreshold = 0.7
     };
 
     /// <summary>
@@ -305,6 +308,129 @@ public class AgentAssistanceOptionsBuilder
     public AgentAssistanceOptionsBuilder DisableMetaLearningAdvice()
     {
         _options.EnableMetaLearningAdvice = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Enables Chain-of-Thought reasoning for agent decision-making.
+    /// </summary>
+    /// <returns>The current builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the AI agent will generate step-by-step reasoning explanations when making decisions
+    /// or recommendations during model building. This provides transparency into the agent's decision-making
+    /// process and can help users understand why certain recommendations are made.
+    /// </para>
+    /// <para><b>For Beginners:</b> This makes the AI show its step-by-step thinking process.
+    ///
+    /// What you get:
+    /// - Detailed explanation of why the AI recommends certain choices
+    /// - Step-by-step breakdown of the agent's reasoning
+    /// - Transparency into AI decision-making
+    /// - Educational insights about ML best practices
+    ///
+    /// This is useful when:
+    /// - You want to understand why the AI makes certain recommendations
+    /// - You're learning about machine learning
+    /// - You need to verify the agent's logic
+    /// - You want to build trust in AI recommendations
+    ///
+    /// For example, instead of just saying "Use Random Forest", the AI might explain:
+    /// - "Step 1: Your dataset has 10,000 samples (medium-sized)"
+    /// - "Step 2: Features show non-linear relationships"
+    /// - "Step 3: Random Forest handles non-linearity well"
+    /// - "Conclusion: Recommend Random Forest"
+    ///
+    /// Note: This may make responses slightly longer and take more time.
+    /// </para>
+    /// </remarks>
+    public AgentAssistanceOptionsBuilder EnableReasoning()
+    {
+        _options.EnableReasoning = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Disables Chain-of-Thought reasoning.
+    /// </summary>
+    /// <returns>The current builder instance for method chaining.</returns>
+    /// <remarks>
+    /// This method turns off reasoning explanations, useful if you want quick recommendations
+    /// without detailed step-by-step explanations.
+    /// </remarks>
+    public AgentAssistanceOptionsBuilder DisableReasoning()
+    {
+        _options.EnableReasoning = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the maximum number of reasoning steps the agent should generate.
+    /// </summary>
+    /// <param name="maxSteps">The maximum number of reasoning steps (1-10).</param>
+    /// <returns>The current builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Controls how many reasoning steps the agent will generate when EnableReasoning is true.
+    /// More steps provide more detailed explanations but take longer to generate.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how detailed the AI's explanations are.
+    ///
+    /// Recommended values:
+    /// - 3-5: Quick, concise reasoning (faster)
+    /// - 5-7: Balanced detail (recommended)
+    /// - 7-10: Very detailed explanations (slower but thorough)
+    ///
+    /// Default is 5 steps, which works well for most cases.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when maxSteps is less than 1 or greater than 10.
+    /// </exception>
+    public AgentAssistanceOptionsBuilder WithMaxReasoningSteps(int maxSteps)
+    {
+        if (maxSteps < 1 || maxSteps > 10)
+            throw new ArgumentOutOfRangeException(nameof(maxSteps), "Maximum reasoning steps must be between 1 and 10.");
+
+        _options.MaxReasoningSteps = maxSteps;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the minimum confidence threshold for reasoning verification.
+    /// </summary>
+    /// <param name="threshold">The confidence threshold (0.0 to 1.0).</param>
+    /// <returns>The current builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Controls the minimum confidence score required for reasoning steps to be considered valid.
+    /// Steps below this threshold may trigger refinement or additional verification.
+    /// </para>
+    /// <para><b>For Beginners:</b> This sets the quality bar for the AI's reasoning.
+    ///
+    /// How it works:
+    /// - Each reasoning step gets a confidence score (0.0 to 1.0)
+    /// - Steps below the threshold are flagged for refinement
+    /// - Higher threshold = more reliable but slower
+    /// - Lower threshold = faster but may accept weaker reasoning
+    ///
+    /// Recommended values:
+    /// - 0.5-0.6: Lenient (faster, less rigorous)
+    /// - 0.7-0.8: Balanced (recommended)
+    /// - 0.8-0.9: Strict (slower, more reliable)
+    ///
+    /// Default is 0.7, which provides good quality control.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when threshold is less than 0.0 or greater than 1.0.
+    /// </exception>
+    public AgentAssistanceOptionsBuilder WithReasoningConfidenceThreshold(double threshold)
+    {
+        if (threshold < 0.0 || threshold > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(threshold), "Reasoning confidence threshold must be between 0.0 and 1.0.");
+
+        _options.ReasoningConfidenceThreshold = threshold;
         return this;
     }
 

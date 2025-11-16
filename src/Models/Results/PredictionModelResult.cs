@@ -1478,6 +1478,167 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// Asks a question about the model's predictions or behavior using the configured AI agent.
+    /// </summary>
+    /// <param name="question">The question to ask about the model, its predictions, or recommendations.</param>
+    /// <param name="prediction">Optional prediction result to provide context for the question.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation. The task result contains the agent's answer,
+    /// optionally with step-by-step reasoning if Chain-of-Thought reasoning is enabled.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method allows you to have a conversation with the AI agent about your trained model.
+    /// The agent uses the configuration (API keys, provider settings) that was set up during model building
+    /// via ConfigureAgentAssistance(). If Chain-of-Thought reasoning is enabled in the AgentAssistanceOptions,
+    /// the agent will provide detailed step-by-step explanations of its reasoning.
+    /// </para>
+    /// <para><b>For Beginners:</b> This lets you ask questions about your model and get AI-powered answers.
+    ///
+    /// What you can ask:
+    /// - "Why did the model make this prediction?"
+    /// - "What features were most important for this result?"
+    /// - "Is this prediction reliable?"
+    /// - "How can I improve the model's accuracy?"
+    /// - "What does this prediction mean in business terms?"
+    ///
+    /// How reasoning works:
+    /// - **Without reasoning**: Agent gives direct answers
+    ///   Example: "The model predicted 'Positive' because the input features match positive patterns."
+    ///
+    /// - **With reasoning**: Agent shows step-by-step thinking
+    ///   Example:
+    ///   "Step 1: Analyzing input features [1.0, 2.0, 3.0]..."
+    ///   "Step 2: Feature 1 (value=1.0) is below the decision boundary..."
+    ///   "Step 3: Features 2 and 3 together indicate positive class..."
+    ///   "Conclusion: The model predicted 'Positive' with high confidence."
+    ///
+    /// Requirements:
+    /// - Agent must be configured via ConfigureAgentAssistance() during model building
+    /// - API key must be valid and have sufficient credits
+    /// - Internet connection required to call the LLM service
+    ///
+    /// The agent has access to:
+    /// - Your model's architecture and configuration
+    /// - Training results and metrics
+    /// - The specific prediction you're asking about (if provided)
+    /// - General ML best practices and explanations
+    /// </para>
+    /// <para><b>Example Usage:</b>
+    /// <code>
+    /// // After training a model with agent assistance
+    /// var model = await builder.BuildAsync();
+    ///
+    /// // Make a prediction
+    /// var prediction = model.Predict(new double[] { 1.0, 2.0, 3.0 });
+    ///
+    /// // Ask questions about it
+    /// var answer = await model.AskAsync(
+    ///     "Why did the model predict this result?",
+    ///     prediction
+    /// );
+    ///
+    /// Console.WriteLine(answer);
+    /// // If reasoning enabled: Shows step-by-step analysis
+    /// // If reasoning disabled: Shows direct explanation
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <b>Note:</b> Chain-of-Thought reasoning can be enabled by configuring the AgentAssistanceOptions:
+    /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "your-api-key",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true,
+    ///     AssistanceOptions = AgentAssistanceOptions.Create()
+    ///         .EnableReasoning()
+    ///         .WithMaxReasoningSteps(7)
+    ///         .Build()
+    /// };
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when agent assistance is not configured or is disabled.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the question is null or empty.
+    /// </exception>
+    public virtual async Task<string> AskAsync(
+        string question,
+        TOutput? prediction = default,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(question))
+            throw new ArgumentException("Question cannot be null or empty.", nameof(question));
+
+        if (this.AgentConfig == null || !this.AgentConfig.IsEnabled)
+            throw new InvalidOperationException(
+                "Agent assistance is not configured. Please configure agent assistance using " +
+                "ConfigureAgentAssistance() during model building to use AskAsync().");
+
+        // TODO: This implementation requires the Chain-of-Thought reasoning infrastructure
+        // from the reasoning feature branch. Once that branch is merged, this will use:
+        // - ChainOfThoughtStrategy<T> for reasoning-enabled responses
+        // - ReasoningConfig for configuration
+        // - ReasoningResult<T> for structured results
+        //
+        // For now, returning a placeholder response.
+        // The full implementation will:
+        // 1. Check if reasoning is enabled in this.AgentConfig.AssistanceOptions
+        // 2. Create appropriate chat model based on provider
+        // 3. Use ChainOfThoughtStrategy if reasoning enabled
+        // 4. Format and return the response with or without reasoning steps
+
+        // Get assistance options (use default if not specified)
+        var options = this.AgentConfig.AssistanceOptions ?? AgentAssistanceOptions.Default;
+
+        // Build context about the model and prediction
+        var context = BuildQuestionContext(question, prediction);
+
+        // Placeholder response until reasoning infrastructure is merged
+        var response = $"[Placeholder] Question: {question}\n\n" +
+                      $"Agent would answer using:\n" +
+                      $"- Provider: {this.AgentConfig.Provider}\n" +
+                      $"- Reasoning enabled: {options.EnableReasoning}\n" +
+                      $"- Max reasoning steps: {options.MaxReasoningSteps}\n" +
+                      $"- Confidence threshold: {options.ReasoningConfidenceThreshold}\n\n" +
+                      $"Context: {context}\n\n" +
+                      $"Note: Full implementation pending merge of reasoning feature branch.";
+
+        await Task.CompletedTask; // Suppress async warning
+        return response;
+    }
+
+    /// <summary>
+    /// Builds contextual information about the model and prediction for agent questions.
+    /// </summary>
+    /// <param name="question">The user's question.</param>
+    /// <param name="prediction">Optional prediction to provide context.</param>
+    /// <returns>A formatted context string.</returns>
+    private string BuildQuestionContext(string question, TOutput? prediction)
+    {
+        var context = new System.Text.StringBuilder();
+
+        context.AppendLine($"Question: {question}");
+        context.AppendLine($"Model type: {this.Model?.GetType().Name ?? "Unknown"}");
+
+        if (prediction != null)
+        {
+            context.AppendLine($"Prediction: {prediction}");
+        }
+
+        if (this.OptimizationResult != null)
+        {
+            context.AppendLine($"Final training loss: {this.OptimizationResult.BestFitnessScore}");
+        }
+
+        return context.ToString();
+    }
+
+    /// <summary>
     /// Saves the prediction model result's current state to a stream.
     /// </summary>
     /// <param name="stream">The stream to write the model state to.</param>
