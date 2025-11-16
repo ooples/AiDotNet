@@ -36,7 +36,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private readonly int _outputFeatures;
     private readonly int _numHeads;
     private readonly T _alpha; // LeakyReLU negative slope
-    private readonly T _dropoutRate;
+    private readonly double _dropoutRate;
+    private readonly Random _random;
 
     /// <summary>
     /// Weight matrices for each attention head. Shape: [numHeads, inputFeatures, outputFeatures].
@@ -143,7 +144,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _outputFeatures = outputFeatures;
         _numHeads = numHeads;
         _alpha = NumOps.FromDouble(alpha);
-        _dropoutRate = NumOps.FromDouble(dropoutRate);
+        _dropoutRate = dropoutRate;
+        _random = new Random();
 
         // Initialize weights for each attention head
         _weights = new Tensor<T>([_numHeads, _inputFeatures, _outputFeatures]);
@@ -325,9 +327,33 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     // Normalize
                     for (int j = 0; j < numNodes; j++)
                     {
-                        _lastAttentionCoefficients[b, h, i, j] = !NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero)
-                            ? NumOps.Divide(_lastAttentionCoefficients[b, h, i, j], sumExp)
-                            : NumOps.Zero;
+                        if (!NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                        {
+                            T normalizedCoeff = NumOps.Divide(_lastAttentionCoefficients[b, h, i, j], sumExp);
+
+                            // Apply dropout to attention coefficients during training
+                            if (_dropoutRate > 0.0)
+                            {
+                                // Dropout: randomly zero out with probability dropoutRate
+                                double rand = _random.NextDouble();
+                                if (rand < _dropoutRate)
+                                {
+                                    normalizedCoeff = NumOps.Zero;
+                                }
+                                else
+                                {
+                                    // Scale by 1/(1-p) during training to maintain expected value
+                                    T scale = NumOps.FromDouble(1.0 / (1.0 - _dropoutRate));
+                                    normalizedCoeff = NumOps.Multiply(normalizedCoeff, scale);
+                                }
+                            }
+
+                            _lastAttentionCoefficients[b, h, i, j] = normalizedCoeff;
+                        }
+                        else
+                        {
+                            _lastAttentionCoefficients[b, h, i, j] = NumOps.Zero;
+                        }
                     }
                 }
             }
@@ -609,6 +635,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _lastInput = null;
         _lastOutput = null;
         _lastAttentionCoefficients = null;
+        _lastTransformed = null;
         _weightsGradient = null;
         _attentionWeightsGradient = null;
         _biasGradient = null;
