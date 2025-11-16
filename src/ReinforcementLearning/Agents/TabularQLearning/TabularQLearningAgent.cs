@@ -234,21 +234,21 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        // Reconstruct Q-table from vector
-        _qTable.Clear();
-
+        // Get state keys BEFORE clearing to preserve them
         var stateKeys = _qTable.Keys.ToList();
         int maxStates = parameters.Length / _options.ActionSize;
 
+        // Update Q-values for existing states
         for (int i = 0; i < Math.Min(maxStates, stateKeys.Count); i++)
         {
-            var qValues = new Dictionary<int, T>();
-            for (int action = 0; action < _options.ActionSize; action++)
+            if (_qTable.ContainsKey(stateKeys[i]))
             {
-                int idx = i * _options.ActionSize + action;
-                qValues[action] = parameters[idx];
+                for (int action = 0; action < _options.ActionSize; action++)
+                {
+                    int idx = i * _options.ActionSize + action;
+                    _qTable[stateKeys[i]][action] = parameters[idx];
+                }
             }
-            _qTable[stateKeys[i]] = qValues;
         }
     }
 
