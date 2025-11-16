@@ -528,10 +528,10 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // PPO clipped objective:
             // L^CLIP = E[min(r_t * A_t, clip(r_t, 1-ε, 1+ε) * A_t)]
-            var epsilon = _ppoOptions.ClipEpsilon;
+            var epsilonValue = NumOps.ToDouble(_ppoOptions.ClipEpsilon);
             var clippedRatio = MathHelper.Clamp(ratio,
-                NumOps.FromDouble(1.0 - epsilon),
-                NumOps.FromDouble(1.0 + epsilon));
+                NumOps.FromDouble(1.0 - epsilonValue),
+                NumOps.FromDouble(1.0 + epsilonValue));
 
             var obj1 = NumOps.Multiply(ratio, advantage);
             var obj2 = NumOps.Multiply(clippedRatio, advantage);

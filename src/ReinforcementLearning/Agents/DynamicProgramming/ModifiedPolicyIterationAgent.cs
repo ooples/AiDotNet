@@ -12,9 +12,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class TransitionData<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     public string NextState { get; set; } = string.Empty;
-    public T Reward { get; set; } = default(T);
-    public T Probability { get; set; } = default(T);
+    public T Reward { get; set; }
+    public T Probability { get; set; }
+
+    public TransitionData()
+    {
+        Reward = NumOps.Zero;
+        Probability = NumOps.Zero;
+    }
 }
 
 /// <summary>

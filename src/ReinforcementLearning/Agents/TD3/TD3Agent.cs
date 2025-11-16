@@ -246,8 +246,16 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             }
             else
             {
-                var discountedQ = _numOps.Multiply(_options.DiscountFactor, minQTarget);
-                targetQ = _numOps.Add(experience.Reward, discountedQ);
+                // Ensure both DiscountFactor and minQTarget are not null before using in arithmetic operations
+                if (_options.DiscountFactor is not null && minQTarget is not null)
+                {
+                    var discountedQ = _numOps.Multiply(_options.DiscountFactor, minQTarget);
+                    targetQ = _numOps.Add(experience.Reward, discountedQ);
+                }
+                else
+                {
+                    targetQ = experience.Reward;
+                }
             }
 
             // Concatenate state and action for critic input
