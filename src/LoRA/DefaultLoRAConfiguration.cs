@@ -206,7 +206,7 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
     /// <para><b>Supported Layer Types:</b>
     /// - <b>Dense/Linear:</b> DenseLayer, FullyConnectedLayer, FeedForwardLayer
     /// - <b>Convolutional:</b> ConvolutionalLayer, DeconvolutionalLayer, DepthwiseSeparableConvolutionalLayer,
-    ///   DilatedConvolutionalLayer, SeparableConvolutionalLayer, SubpixelConvolutionalLayer, GraphConvolutionalLayer
+    ///   DilatedConvolutionalLayer, SeparableConvolutionalLayer, SubpixelConvolutionalLayer
     /// - <b>Recurrent:</b> LSTMLayer, GRULayer, RecurrentLayer, ConvLSTMLayer, BidirectionalLayer
     /// - <b>Attention:</b> AttentionLayer, MultiHeadAttentionLayer, SelfAttentionLayer
     /// - <b>Transformer:</b> TransformerEncoderLayer, TransformerDecoderLayer
@@ -214,8 +214,9 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
     /// - <b>Specialized:</b> LocallyConnectedLayer, HighwayLayer, GatedLinearUnitLayer, SqueezeAndExcitationLayer
     /// - <b>Advanced:</b> CapsuleLayer, PrimaryCapsuleLayer, DigitCapsuleLayer, ConditionalRandomFieldLayer
     ///
-    /// <b>Excluded Layer Types</b> (no trainable weights or not suitable):
-    /// - Activation, Pooling, Dropout, Flatten, Reshape, Normalization, etc.
+    /// <b>Excluded Layer Types:</b>
+    /// - Activation, Pooling, Dropout, Flatten, Reshape, Normalization (no trainable weights)
+    /// - GraphConvolutionalLayer (requires specialized adapter that implements IGraphConvolutionLayer)
     /// </para>
     /// <para><b>For Beginners:</b> This method decides whether to add LoRA to each layer.
     ///
@@ -301,10 +302,19 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
 
         // Specialized layers with trainable weights
         if (layer is LocallyConnectedLayer<T> || layer is HighwayLayer<T> ||
-            layer is GatedLinearUnitLayer<T> || layer is SqueezeAndExcitationLayer<T> ||
-            layer is GraphConvolutionalLayer<T>)
+            layer is GatedLinearUnitLayer<T> || layer is SqueezeAndExcitationLayer<T>)
         {
             return CreateAdapter(layer);
+        }
+
+        // NOTE: GraphConvolutionalLayer is intentionally excluded from LoRA adaptation
+        // because StandardLoRAAdapter does not implement IGraphConvolutionLayer<T>,
+        // which breaks type checks in GraphNeuralNetwork (SetAdjacencyMatrix, etc.).
+        // Future work: Create GraphLoRAAdapter<T> that implements IGraphConvolutionLayer<T>
+        // and delegates graph-specific methods to the wrapped layer.
+        if (layer is GraphConvolutionalLayer<T>)
+        {
+            return layer; // Return unwrapped for now
         }
 
         // Capsule layers
