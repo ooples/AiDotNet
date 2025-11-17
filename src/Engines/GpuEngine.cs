@@ -102,6 +102,8 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorMultiplyKernelFloat;
     private readonly Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _tensorMultiplyScalarKernelFloat;
     private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorDivideKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>? _maxPool2DKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>? _avgPool2DKernelFloat;
 
     // Kernel cache for tensor operations - double (Phase B: Epic 3)
     private readonly Action<Index3D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _batchMatMulKernelDouble;
@@ -110,6 +112,8 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorMultiplyKernelDouble;
     private readonly Action<Index1D, ArrayView<double>, double, ArrayView<double>>? _tensorMultiplyScalarKernelDouble;
     private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorDivideKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>? _maxPool2DKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>? _avgPool2DKernelDouble;
 
     /// <inheritdoc/>
     public string Name => _accelerator != null
@@ -422,6 +426,142 @@ public class GpuEngine : IEngine, IDisposable
                 _tensorDivideKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
                     (index, a, b, result) => result[index] = a[index] / b[index]);
+
+                // Pre-compile pooling kernels - float (Phase B: Epic 3, US-GPU-012)
+                _maxPool2DKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>(
+                    (index, input, output, batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding) =>
+                    {
+                        // Convert flat index to 4D coordinates
+                        int ow = (int)index % outputWidth;
+                        int temp = (int)index / outputWidth;
+                        int oh = temp % outputHeight;
+                        temp /= outputHeight;
+                        int c = temp % channels;
+                        int b = temp / channels;
+
+                        float maxVal = float.NegativeInfinity;
+
+                        for (int kh = 0; kh < poolSize; kh++)
+                        {
+                            for (int kw = 0; kw < poolSize; kw++)
+                            {
+                                int ih = oh * stride + kh - padding;
+                                int iw = ow * stride + kw - padding;
+
+                                if (ih >= 0 && ih < height && iw >= 0 && iw < width)
+                                {
+                                    int inputIdx = ((b * channels + c) * height + ih) * width + iw;
+                                    float val = input[inputIdx];
+                                    if (val > maxVal) maxVal = val;
+                                }
+                            }
+                        }
+
+                        output[index] = maxVal;
+                    });
+
+                _avgPool2DKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>(
+                    (index, input, output, batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding) =>
+                    {
+                        // Convert flat index to 4D coordinates
+                        int ow = (int)index % outputWidth;
+                        int temp = (int)index / outputWidth;
+                        int oh = temp % outputHeight;
+                        temp /= outputHeight;
+                        int c = temp % channels;
+                        int b = temp / channels;
+
+                        float sum = 0;
+                        int count = 0;
+
+                        for (int kh = 0; kh < poolSize; kh++)
+                        {
+                            for (int kw = 0; kw < poolSize; kw++)
+                            {
+                                int ih = oh * stride + kh - padding;
+                                int iw = ow * stride + kw - padding;
+
+                                if (ih >= 0 && ih < height && iw >= 0 && iw < width)
+                                {
+                                    int inputIdx = ((b * channels + c) * height + ih) * width + iw;
+                                    sum += input[inputIdx];
+                                    count++;
+                                }
+                            }
+                        }
+
+                        output[index] = count > 0 ? sum / count : 0;
+                    });
+
+                // Pre-compile pooling kernels - double (Phase B: Epic 3, US-GPU-012)
+                _maxPool2DKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>(
+                    (index, input, output, batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding) =>
+                    {
+                        // Convert flat index to 4D coordinates
+                        int ow = (int)index % outputWidth;
+                        int temp = (int)index / outputWidth;
+                        int oh = temp % outputHeight;
+                        temp /= outputHeight;
+                        int c = temp % channels;
+                        int b = temp / channels;
+
+                        double maxVal = double.NegativeInfinity;
+
+                        for (int kh = 0; kh < poolSize; kh++)
+                        {
+                            for (int kw = 0; kw < poolSize; kw++)
+                            {
+                                int ih = oh * stride + kh - padding;
+                                int iw = ow * stride + kw - padding;
+
+                                if (ih >= 0 && ih < height && iw >= 0 && iw < width)
+                                {
+                                    int inputIdx = ((b * channels + c) * height + ih) * width + iw;
+                                    double val = input[inputIdx];
+                                    if (val > maxVal) maxVal = val;
+                                }
+                            }
+                        }
+
+                        output[index] = maxVal;
+                    });
+
+                _avgPool2DKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>(
+                    (index, input, output, batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding) =>
+                    {
+                        // Convert flat index to 4D coordinates
+                        int ow = (int)index % outputWidth;
+                        int temp = (int)index / outputWidth;
+                        int oh = temp % outputHeight;
+                        temp /= outputHeight;
+                        int c = temp % channels;
+                        int b = temp / channels;
+
+                        double sum = 0;
+                        int count = 0;
+
+                        for (int kh = 0; kh < poolSize; kh++)
+                        {
+                            for (int kw = 0; kw < poolSize; kw++)
+                            {
+                                int ih = oh * stride + kh - padding;
+                                int iw = ow * stride + kw - padding;
+
+                                if (ih >= 0 && ih < height && iw >= 0 && iw < width)
+                                {
+                                    int inputIdx = ((b * channels + c) * height + ih) * width + iw;
+                                    sum += input[inputIdx];
+                                    count++;
+                                }
+                            }
+                        }
+
+                        output[index] = count > 0 ? sum / count : 0;
+                    });
 
                 Console.WriteLine("[GpuEngine] Tensor kernels pre-compiled");
 
@@ -2088,6 +2228,246 @@ public class GpuEngine : IEngine, IDisposable
                 throw new ArgumentException(
                     $"Tensor shapes must match. Got [{string.Join(", ", a.Shape)}] and [{string.Join(", ", b.Shape)}].");
             }
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MaxPool2D<T>(Tensor<T> input, int poolSize, int stride = 0, int padding = 0)
+    {
+        // Adaptive execution: use pooling threshold (Phase B: US-GPU-004)
+        if (input.Length < _thresholds.Pooling)
+        {
+            return _cpuFallback.MaxPool2D(input, poolSize, stride, padding);
+        }
+
+        // Check GPU health and type support (Phase B: US-GPU-006)
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)MaxPool2DGpu((Tensor<float>)(object)input, poolSize, stride, padding);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)MaxPool2DGpuDouble((Tensor<double>)(object)input, poolSize, stride, padding);
+        }
+
+        return _cpuFallback.MaxPool2D(input, poolSize, stride, padding);
+    }
+
+    private Tensor<float> MaxPool2DGpu(Tensor<float> input, int poolSize, int stride, int padding)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 4)
+        {
+            throw new ArgumentException($"MaxPool2D requires a 4D tensor. Got rank {input.Rank}.");
+        }
+
+        if (stride == 0) stride = poolSize;
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outputHeight = (height + 2 * padding - poolSize) / stride + 1;
+        int outputWidth = (width + 2 * padding - poolSize) / stride + 1;
+
+        try
+        {
+            var result = new Tensor<float>(new[] { batch, channels, outputHeight, outputWidth });
+            int outputSize = batch * channels * outputHeight * outputWidth;
+
+            var gpuInput = _memoryPoolFloat!.Rent(input.Length);
+            var gpuOutput = _memoryPoolFloat!.Rent(outputSize);
+
+            try
+            {
+                gpuInput.CopyFromCPU(input.AsSpan());
+
+                _maxPool2DKernelFloat!(outputSize, gpuInput.View, gpuOutput.View,
+                    batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
+                _accelerator!.Synchronize();
+
+                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU max pool 2D failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MaxPool2D(input, poolSize, stride, padding);
+        }
+    }
+
+    private Tensor<double> MaxPool2DGpuDouble(Tensor<double> input, int poolSize, int stride, int padding)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 4)
+        {
+            throw new ArgumentException($"MaxPool2D requires a 4D tensor. Got rank {input.Rank}.");
+        }
+
+        if (stride == 0) stride = poolSize;
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outputHeight = (height + 2 * padding - poolSize) / stride + 1;
+        int outputWidth = (width + 2 * padding - poolSize) / stride + 1;
+
+        try
+        {
+            var result = new Tensor<double>(new[] { batch, channels, outputHeight, outputWidth });
+            int outputSize = batch * channels * outputHeight * outputWidth;
+
+            var gpuInput = _memoryPoolDouble!.Rent(input.Length);
+            var gpuOutput = _memoryPoolDouble!.Rent(outputSize);
+
+            try
+            {
+                gpuInput.CopyFromCPU(input.AsSpan());
+
+                _maxPool2DKernelDouble!(outputSize, gpuInput.View, gpuOutput.View,
+                    batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
+                _accelerator!.Synchronize();
+
+                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU max pool 2D (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MaxPool2D(input, poolSize, stride, padding);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> AvgPool2D<T>(Tensor<T> input, int poolSize, int stride = 0, int padding = 0)
+    {
+        if (input.Length < _thresholds.Pooling)
+        {
+            return _cpuFallback.AvgPool2D(input, poolSize, stride, padding);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)AvgPool2DGpu((Tensor<float>)(object)input, poolSize, stride, padding);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)AvgPool2DGpuDouble((Tensor<double>)(object)input, poolSize, stride, padding);
+        }
+
+        return _cpuFallback.AvgPool2D(input, poolSize, stride, padding);
+    }
+
+    private Tensor<float> AvgPool2DGpu(Tensor<float> input, int poolSize, int stride, int padding)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 4)
+        {
+            throw new ArgumentException($"AvgPool2D requires a 4D tensor. Got rank {input.Rank}.");
+        }
+
+        if (stride == 0) stride = poolSize;
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outputHeight = (height + 2 * padding - poolSize) / stride + 1;
+        int outputWidth = (width + 2 * padding - poolSize) / stride + 1;
+
+        try
+        {
+            var result = new Tensor<float>(new[] { batch, channels, outputHeight, outputWidth });
+            int outputSize = batch * channels * outputHeight * outputWidth;
+
+            var gpuInput = _memoryPoolFloat!.Rent(input.Length);
+            var gpuOutput = _memoryPoolFloat!.Rent(outputSize);
+
+            try
+            {
+                gpuInput.CopyFromCPU(input.AsSpan());
+
+                _avgPool2DKernelFloat!(outputSize, gpuInput.View, gpuOutput.View,
+                    batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
+                _accelerator!.Synchronize();
+
+                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU avg pool 2D failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.AvgPool2D(input, poolSize, stride, padding);
+        }
+    }
+
+    private Tensor<double> AvgPool2DGpuDouble(Tensor<double> input, int poolSize, int stride, int padding)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 4)
+        {
+            throw new ArgumentException($"AvgPool2D requires a 4D tensor. Got rank {input.Rank}.");
+        }
+
+        if (stride == 0) stride = poolSize;
+
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outputHeight = (height + 2 * padding - poolSize) / stride + 1;
+        int outputWidth = (width + 2 * padding - poolSize) / stride + 1;
+
+        try
+        {
+            var result = new Tensor<double>(new[] { batch, channels, outputHeight, outputWidth });
+            int outputSize = batch * channels * outputHeight * outputWidth;
+
+            var gpuInput = _memoryPoolDouble!.Rent(input.Length);
+            var gpuOutput = _memoryPoolDouble!.Rent(outputSize);
+
+            try
+            {
+                gpuInput.CopyFromCPU(input.AsSpan());
+
+                _avgPool2DKernelDouble!(outputSize, gpuInput.View, gpuOutput.View,
+                    batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
+                _accelerator!.Synchronize();
+
+                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU avg pool 2D (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.AvgPool2D(input, poolSize, stride, padding);
         }
     }
 

@@ -519,5 +519,148 @@ public class CpuEngine : IEngine
         return "[" + string.Join(", ", shape) + "]";
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> MaxPool2D<T>(Tensor<T> input, int poolSize, int stride = 0, int padding = 0)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 4)
+        {
+            throw new ArgumentException($"MaxPool2D requires a 4D tensor [batch, channels, height, width]. Got rank {input.Rank}.");
+        }
+        if (poolSize <= 0) throw new ArgumentException("Pool size must be positive.");
+
+        if (stride == 0) stride = poolSize; // Default stride equals pool size
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outputHeight = (height + 2 * padding - poolSize) / stride + 1;
+        int outputWidth = (width + 2 * padding - poolSize) / stride + 1;
+
+        if (outputHeight <= 0 || outputWidth <= 0)
+        {
+            throw new ArgumentException(
+                $"Invalid pooling parameters. Output dimensions would be {outputHeight}x{outputWidth}. " +
+                $"Ensure poolSize={poolSize}, stride={stride}, padding={padding} are compatible with input size {height}x{width}.");
+        }
+
+        var result = new Tensor<T>(new[] { batch, channels, outputHeight, outputWidth });
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int oh = 0; oh < outputHeight; oh++)
+                {
+                    for (int ow = 0; ow < outputWidth; ow++)
+                    {
+                        T maxValue = numOps.NegativeInfinity;
+
+                        for (int kh = 0; kh < poolSize; kh++)
+                        {
+                            for (int kw = 0; kw < poolSize; kw++)
+                            {
+                                int ih = oh * stride + kh - padding;
+                                int iw = ow * stride + kw - padding;
+
+                                // Check bounds (handle padding)
+                                if (ih >= 0 && ih < height && iw >= 0 && iw < width)
+                                {
+                                    T value = input[b, c, ih, iw];
+                                    if (numOps.GreaterThan(value, maxValue))
+                                    {
+                                        maxValue = value;
+                                    }
+                                }
+                            }
+                        }
+
+                        result[b, c, oh, ow] = maxValue;
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> AvgPool2D<T>(Tensor<T> input, int poolSize, int stride = 0, int padding = 0)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 4)
+        {
+            throw new ArgumentException($"AvgPool2D requires a 4D tensor [batch, channels, height, width]. Got rank {input.Rank}.");
+        }
+        if (poolSize <= 0) throw new ArgumentException("Pool size must be positive.");
+
+        if (stride == 0) stride = poolSize; // Default stride equals pool size
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outputHeight = (height + 2 * padding - poolSize) / stride + 1;
+        int outputWidth = (width + 2 * padding - poolSize) / stride + 1;
+
+        if (outputHeight <= 0 || outputWidth <= 0)
+        {
+            throw new ArgumentException(
+                $"Invalid pooling parameters. Output dimensions would be {outputHeight}x{outputWidth}. " +
+                $"Ensure poolSize={poolSize}, stride={stride}, padding={padding} are compatible with input size {height}x{width}.");
+        }
+
+        var result = new Tensor<T>(new[] { batch, channels, outputHeight, outputWidth });
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int oh = 0; oh < outputHeight; oh++)
+                {
+                    for (int ow = 0; ow < outputWidth; ow++)
+                    {
+                        T sum = numOps.Zero;
+                        int count = 0;
+
+                        for (int kh = 0; kh < poolSize; kh++)
+                        {
+                            for (int kw = 0; kw < poolSize; kw++)
+                            {
+                                int ih = oh * stride + kh - padding;
+                                int iw = ow * stride + kw - padding;
+
+                                // Check bounds (handle padding)
+                                if (ih >= 0 && ih < height && iw >= 0 && iw < width)
+                                {
+                                    sum = numOps.Add(sum, input[b, c, ih, iw]);
+                                    count++;
+                                }
+                            }
+                        }
+
+                        // Calculate average
+                        if (count > 0)
+                        {
+                            var countValue = numOps.FromInt(count);
+                            result[b, c, oh, ow] = numOps.Divide(sum, countValue);
+                        }
+                        else
+                        {
+                            result[b, c, oh, ow] = numOps.Zero;
+                        }
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
     #endregion
 }
