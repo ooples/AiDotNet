@@ -301,25 +301,28 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             var loss = NumOps.Multiply(error, error);
             totalLoss = NumOps.Add(totalLoss, loss);
 
-            // Backpropagate
-            var gradientVec = new Vector<T>(1);
-            gradientVec[0] = error;
-            var gradientTensor = Tensor<T>.FromVector(gradientVec);
+            // Compute loss derivative (error signal for output layer)
+            // For MSE loss: dL/dQ = 2 * (Q - target) = -2 * error
+            var currentQValuesVector = new Vector<T>(1) { [0] = currentQ };
+            var targetQValuesVector = new Vector<T>(1) { [0] = target };
 
-            // Cast to NeuralNetwork to access Backpropagate
+            var gradients = LossFunction.CalculateDerivative(currentQValuesVector, targetQValuesVector);
+            var gradientsTensor = Tensor<T>.FromVector(gradients);
+
+            // Backpropagate the error signal through the critic network
             if (_criticNetworks[agentId] is NeuralNetwork<T> criticNetwork)
             {
-                criticNetwork.Backpropagate(gradientTensor);
-            }
+                criticNetwork.Backpropagate(gradientsTensor);
 
-            // Update parameters using gradient descent
-            var criticParams = _criticNetworks[agentId].GetParameters();
-            for (int i = 0; i < criticParams.Length; i++)
-            {
-                var gradient = NumOps.Multiply(_options.CriticLearningRate, NumOps.Multiply(error, error));
-                criticParams[i] = NumOps.Subtract(criticParams[i], gradient);
+                // Apply gradient descent updates to critic network parameters
+                var parameters = criticNetwork.GetParameters();
+                for (int i = 0; i < parameters.Length && i < gradients.Length; i++)
+                {
+                    var update = NumOps.Multiply(_options.CriticLearningRate, gradients[Math.Min(i, gradients.Length - 1)]);
+                    parameters[i] = NumOps.Subtract(parameters[i], update);
+                }
+                criticNetwork.UpdateParameters(parameters);
             }
-            _criticNetworks[agentId].UpdateParameters(criticParams);
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
