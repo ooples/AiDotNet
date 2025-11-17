@@ -116,8 +116,9 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </remarks>
     public AdaDeltaOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        AdaDeltaOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        AdaDeltaOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
+        : base(model, options ?? new(), engine)
     {
         _options = options ?? new AdaDeltaOptimizerOptions<T, TInput, TOutput>();
 
@@ -275,7 +276,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _previousAccumulatedSquaredUpdates = new Vector<T>(parameters.Length);
         }
 
-        // Save pre-update state for accurate reverse updates
+        // Save pre-update state for accurate reverse updates (element-wise copy required for reverse)
         if (_previousAccumulatedSquaredGradients == null || _previousAccumulatedSquaredUpdates == null)
         {
             _previousAccumulatedSquaredGradients = new Vector<T>(parameters.Length);
@@ -288,31 +289,36 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _previousAccumulatedSquaredUpdates[i] = _accumulatedSquaredUpdates[i];
         }
 
-        var updatedParams = new Vector<T>(parameters.Length);
+        // === Vectorized AdaDelta Update using IEngine (Phase B: US-GPU-015) ===
+        T rho = NumOps.FromDouble(_options.Rho);
+        T oneMinusRho = NumOps.FromDouble(1 - _options.Rho);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            // Update accumulated squared gradients
-            _accumulatedSquaredGradients[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(_options.Rho), _accumulatedSquaredGradients[i]),
-                NumOps.Multiply(NumOps.FromDouble(1 - _options.Rho), NumOps.Multiply(gradient[i], gradient[i]))
-            );
+        // Update accumulated squared gradients: accSqGrad = rho * accSqGrad + (1 - rho) * gradient^2
+        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
+        var rhoTimesAccSqGrad = (Vector<T>)Engine.Multiply(_accumulatedSquaredGradients, rho);
+        var oneMinusRhoTimesGradSq = (Vector<T>)Engine.Multiply(gradSquared, oneMinusRho);
+        _accumulatedSquaredGradients = (Vector<T>)Engine.Add(rhoTimesAccSqGrad, oneMinusRhoTimesGradSq);
 
-            // Compute update
-            var update = NumOps.Multiply(
-                NumOps.Sqrt(NumOps.Add(_accumulatedSquaredUpdates[i], NumOps.FromDouble(_options.Epsilon))),
-                NumOps.Divide(gradient[i], NumOps.Sqrt(NumOps.Add(_accumulatedSquaredGradients[i], NumOps.FromDouble(_options.Epsilon))))
-            );
+        // Compute RMS of accumulated squared updates and gradients
+        var accSqUpdPlusEps = (Vector<T>)Engine.Add(_accumulatedSquaredUpdates, epsilon);
+        var rmsUpdate = (Vector<T>)Engine.Sqrt(accSqUpdPlusEps);
 
-            // Update accumulated squared updates
-            _accumulatedSquaredUpdates[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(_options.Rho), _accumulatedSquaredUpdates[i]),
-                NumOps.Multiply(NumOps.FromDouble(1 - _options.Rho), NumOps.Multiply(update, update))
-            );
+        var accSqGradPlusEps = (Vector<T>)Engine.Add(_accumulatedSquaredGradients, epsilon);
+        var rmsGrad = (Vector<T>)Engine.Sqrt(accSqGradPlusEps);
 
-            // Update parameters
-            updatedParams[i] = NumOps.Subtract(parameters[i], update);
-        }
+        // Compute update: update = (RMS[Δ] / RMS[g]) * gradient
+        var ratio = (Vector<T>)Engine.Divide(rmsUpdate, rmsGrad);
+        var update = (Vector<T>)Engine.Multiply(ratio, gradient);
+
+        // Update accumulated squared updates: accSqUpd = rho * accSqUpd + (1 - rho) * update^2
+        var updateSquared = (Vector<T>)Engine.Multiply(update, update);
+        var rhoTimesAccSqUpd = (Vector<T>)Engine.Multiply(_accumulatedSquaredUpdates, rho);
+        var oneMinusRhoTimesUpdSq = (Vector<T>)Engine.Multiply(updateSquared, oneMinusRho);
+        _accumulatedSquaredUpdates = (Vector<T>)Engine.Add(rhoTimesAccSqUpd, oneMinusRhoTimesUpdSq);
+
+        // Update parameters: params = params - update
+        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
 
         return updatedParams;
     }
