@@ -438,6 +438,7 @@ public static class MathHelper
     /// <typeparam name="T">The numeric type to return.</typeparam>
     /// <param name="mean">The mean of the normal distribution.</param>
     /// <param name="stdDev">The standard deviation of the normal distribution.</param>
+    /// <param name="random">Optional Random instance to use. If null, creates a new unseeded Random instance.</param>
     /// <returns>A random number from the specified normal distribution.</returns>
     /// <remarks>
     /// <para>
@@ -446,20 +447,24 @@ public static class MathHelper
     /// </para>
     /// <para><b>For Beginners:</b> Normal distribution (also called Gaussian distribution) is a
     /// bell-shaped probability distribution that is symmetric around its mean.
-    /// 
+    ///
     /// This method generates random numbers that follow this distribution, which is important for
     /// neural network initialization. Using normally distributed values helps prevent issues during
     /// training and improves convergence.
     /// </para>
+    /// <para>
+    /// For reproducible results, pass in a seeded Random instance. Otherwise, a new unseeded
+    /// Random will be created on each call, which breaks reproducibility.
+    /// </para>
     /// </remarks>
-    public static T GetNormalRandom<T>(T mean, T stdDev)
+    public static T GetNormalRandom<T>(T mean, T stdDev, Random? random = null)
     {
         var numOps = GetNumericOperations<T>();
-        var random = new Random();
+        var rng = random ?? new Random();
 
         // Box-Muller transform
-        double u1 = 1.0 - random.NextDouble(); // Uniform(0,1] random numbers
-        double u2 = 1.0 - random.NextDouble();
+        double u1 = 1.0 - rng.NextDouble(); // Uniform(0,1] random numbers
+        double u2 = 1.0 - rng.NextDouble();
         double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
 
         // Scale and shift to get desired mean and standard deviation
@@ -638,7 +643,7 @@ public static class MathHelper
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The factorial of a number (written as n!) is the product of all positive 
-    /// integers less than or equal to n. For example, 5! = 5 × 4 × 3 × 2 × 1 = 120.
+    /// integers less than or equal to n. For example, 5! = 5 ï¿½ 4 ï¿½ 3 ï¿½ 2 ï¿½ 1 = 120.
     /// Factorials are used in many probability and statistics calculations.
     /// </para>
     /// </remarks>
@@ -747,7 +752,7 @@ public static class MathHelper
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The base-2 logarithm (log2) tells you what power you need to raise 2 to in order 
-    /// to get a specific number. For example, log2(8) = 3 because 2³ = 8. Base-2 logarithms are commonly 
+    /// to get a specific number. For example, log2(8) = 3 because 2ï¿½ = 8. Base-2 logarithms are commonly 
     /// used in computer science and information theory because computers use binary (base-2) number systems.
     /// </para>
     /// </remarks>
@@ -957,7 +962,7 @@ public static class MathHelper
     /// before considering any features.
     /// </para>
     /// <para>
-    /// This method uses the formula: y-intercept = mean(y) - (coefficient1 × mean(x1) + coefficient2 × mean(x2) + ...)
+    /// This method uses the formula: y-intercept = mean(y) - (coefficient1 ï¿½ mean(x1) + coefficient2 ï¿½ mean(x2) + ...)
     /// which ensures that the regression line passes through the point of means (the average of all data points).
     /// </para>
     /// <para>
