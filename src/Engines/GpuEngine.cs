@@ -104,6 +104,7 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorDivideKernelFloat;
     private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>? _maxPool2DKernelFloat;
     private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>? _avgPool2DKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int, int, int, int, int>? _conv2DKernelFloat;
 
     // Kernel cache for tensor operations - double (Phase B: Epic 3)
     private readonly Action<Index3D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _batchMatMulKernelDouble;
@@ -114,6 +115,7 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorDivideKernelDouble;
     private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>? _maxPool2DKernelDouble;
     private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>? _avgPool2DKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int, int, int, int, int>? _conv2DKernelDouble;
 
     /// <inheritdoc/>
     public string Name => _accelerator != null
@@ -561,6 +563,88 @@ public class GpuEngine : IEngine, IDisposable
                         }
 
                         output[index] = count > 0 ? sum / count : 0;
+                    });
+
+                // Pre-compile Conv2D kernels - float (Phase B: Epic 3, US-GPU-011)
+                _conv2DKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>,
+                    int, int, int, int, int, int, int, int, int, int, int, int, int, int>(
+                    (index, input, kernel, output, batch, inChannels, height, width, outChannels,
+                     outputHeight, outputWidth, kernelHeight, kernelWidth, stride, padding, dilation) =>
+                    {
+                        // Convert flat index to 4D coordinates
+                        int ow = (int)index % outputWidth;
+                        int temp = (int)index / outputWidth;
+                        int oh = temp % outputHeight;
+                        temp /= outputHeight;
+                        int oc = temp % outChannels;
+                        int b = temp / outChannels;
+
+                        float sum = 0;
+
+                        // Sum over all input channels
+                        for (int ic = 0; ic < inChannels; ic++)
+                        {
+                            // Sum over kernel window
+                            for (int kh = 0; kh < kernelHeight; kh++)
+                            {
+                                for (int kw = 0; kw < kernelWidth; kw++)
+                                {
+                                    int ih = oh * stride + kh * dilation - padding;
+                                    int iw = ow * stride + kw * dilation - padding;
+
+                                    if (ih >= 0 && ih < height && iw >= 0 && iw < width)
+                                    {
+                                        int inputIdx = ((b * inChannels + ic) * height + ih) * width + iw;
+                                        int kernelIdx = ((oc * inChannels + ic) * kernelHeight + kh) * kernelWidth + kw;
+                                        sum += input[inputIdx] * kernel[kernelIdx];
+                                    }
+                                }
+                            }
+                        }
+
+                        output[index] = sum;
+                    });
+
+                // Pre-compile Conv2D kernels - double (Phase B: Epic 3, US-GPU-011)
+                _conv2DKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>,
+                    int, int, int, int, int, int, int, int, int, int, int, int, int, int>(
+                    (index, input, kernel, output, batch, inChannels, height, width, outChannels,
+                     outputHeight, outputWidth, kernelHeight, kernelWidth, stride, padding, dilation) =>
+                    {
+                        // Convert flat index to 4D coordinates
+                        int ow = (int)index % outputWidth;
+                        int temp = (int)index / outputWidth;
+                        int oh = temp % outputHeight;
+                        temp /= outputHeight;
+                        int oc = temp % outChannels;
+                        int b = temp / outChannels;
+
+                        double sum = 0;
+
+                        // Sum over all input channels
+                        for (int ic = 0; ic < inChannels; ic++)
+                        {
+                            // Sum over kernel window
+                            for (int kh = 0; kh < kernelHeight; kh++)
+                            {
+                                for (int kw = 0; kw < kernelWidth; kw++)
+                                {
+                                    int ih = oh * stride + kh * dilation - padding;
+                                    int iw = ow * stride + kw * dilation - padding;
+
+                                    if (ih >= 0 && ih < height && iw >= 0 && iw < width)
+                                    {
+                                        int inputIdx = ((b * inChannels + ic) * height + ih) * width + iw;
+                                        int kernelIdx = ((oc * inChannels + ic) * kernelHeight + kh) * kernelWidth + kw;
+                                        sum += input[inputIdx] * kernel[kernelIdx];
+                                    }
+                                }
+                            }
+                        }
+
+                        output[index] = sum;
                     });
 
                 Console.WriteLine("[GpuEngine] Tensor kernels pre-compiled");
@@ -2468,6 +2552,147 @@ public class GpuEngine : IEngine, IDisposable
         {
             Console.WriteLine($"[GpuEngine] GPU avg pool 2D (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.AvgPool2D(input, poolSize, stride, padding);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Conv2D<T>(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0, int dilation = 1)
+    {
+        // Adaptive execution: use convolution threshold (Phase B: US-GPU-004)
+        if (input.Length < _thresholds.Convolution)
+        {
+            return _cpuFallback.Conv2D(input, kernel, stride, padding, dilation);
+        }
+
+        // Check GPU health and type support (Phase B: US-GPU-006)
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)Conv2DGpu((Tensor<float>)(object)input, (Tensor<float>)(object)kernel, stride, padding, dilation);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)Conv2DGpuDouble((Tensor<double>)(object)input, (Tensor<double>)(object)kernel, stride, padding, dilation);
+        }
+
+        return _cpuFallback.Conv2D(input, kernel, stride, padding, dilation);
+    }
+
+    private Tensor<float> Conv2DGpu(Tensor<float> input, Tensor<float> kernel, int stride, int padding, int dilation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (input.Rank != 4 || kernel.Rank != 4)
+        {
+            throw new ArgumentException($"Conv2D requires 4D tensors. Got input rank {input.Rank}, kernel rank {kernel.Rank}.");
+        }
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outChannels = kernel.Shape[0];
+        int kernelHeight = kernel.Shape[2];
+        int kernelWidth = kernel.Shape[3];
+
+        int effectiveKernelHeight = dilation * (kernelHeight - 1) + 1;
+        int effectiveKernelWidth = dilation * (kernelWidth - 1) + 1;
+
+        int outputHeight = (height + 2 * padding - effectiveKernelHeight) / stride + 1;
+        int outputWidth = (width + 2 * padding - effectiveKernelWidth) / stride + 1;
+
+        try
+        {
+            var result = new Tensor<float>(new[] { batch, outChannels, outputHeight, outputWidth });
+            int outputSize = batch * outChannels * outputHeight * outputWidth;
+
+            var gpuInput = _memoryPoolFloat!.Rent(input.Length);
+            var gpuKernel = _memoryPoolFloat!.Rent(kernel.Length);
+            var gpuOutput = _memoryPoolFloat!.Rent(outputSize);
+
+            try
+            {
+                gpuInput.CopyFromCPU(input.AsSpan());
+                gpuKernel.CopyFromCPU(kernel.AsSpan());
+
+                _conv2DKernelFloat!(outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View,
+                    batch, inChannels, height, width, outChannels,
+                    outputHeight, outputWidth, kernelHeight, kernelWidth, stride, padding, dilation);
+                _accelerator!.Synchronize();
+
+                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuKernel);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU Conv2D failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Conv2D(input, kernel, stride, padding, dilation);
+        }
+    }
+
+    private Tensor<double> Conv2DGpuDouble(Tensor<double> input, Tensor<double> kernel, int stride, int padding, int dilation)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (input.Rank != 4 || kernel.Rank != 4)
+        {
+            throw new ArgumentException($"Conv2D requires 4D tensors. Got input rank {input.Rank}, kernel rank {kernel.Rank}.");
+        }
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outChannels = kernel.Shape[0];
+        int kernelHeight = kernel.Shape[2];
+        int kernelWidth = kernel.Shape[3];
+
+        int effectiveKernelHeight = dilation * (kernelHeight - 1) + 1;
+        int effectiveKernelWidth = dilation * (kernelWidth - 1) + 1;
+
+        int outputHeight = (height + 2 * padding - effectiveKernelHeight) / stride + 1;
+        int outputWidth = (width + 2 * padding - effectiveKernelWidth) / stride + 1;
+
+        try
+        {
+            var result = new Tensor<double>(new[] { batch, outChannels, outputHeight, outputWidth });
+            int outputSize = batch * outChannels * outputHeight * outputWidth;
+
+            var gpuInput = _memoryPoolDouble!.Rent(input.Length);
+            var gpuKernel = _memoryPoolDouble!.Rent(kernel.Length);
+            var gpuOutput = _memoryPoolDouble!.Rent(outputSize);
+
+            try
+            {
+                gpuInput.CopyFromCPU(input.AsSpan());
+                gpuKernel.CopyFromCPU(kernel.AsSpan());
+
+                _conv2DKernelDouble!(outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View,
+                    batch, inChannels, height, width, outChannels,
+                    outputHeight, outputWidth, kernelHeight, kernelWidth, stride, padding, dilation);
+                _accelerator!.Synchronize();
+
+                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuKernel);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU Conv2D (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Conv2D(input, kernel, stride, padding, dilation);
         }
     }
 

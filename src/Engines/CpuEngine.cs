@@ -662,5 +662,96 @@ public class CpuEngine : IEngine
         return result;
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> Conv2D<T>(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0, int dilation = 1)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (input.Rank != 4)
+        {
+            throw new ArgumentException($"Conv2D input requires a 4D tensor [batch, in_channels, height, width]. Got rank {input.Rank}.");
+        }
+        if (kernel.Rank != 4)
+        {
+            throw new ArgumentException($"Conv2D kernel requires a 4D tensor [out_channels, in_channels, kernel_height, kernel_width]. Got rank {kernel.Rank}.");
+        }
+        if (stride <= 0) throw new ArgumentException("Stride must be positive.");
+        if (dilation <= 0) throw new ArgumentException("Dilation must be positive.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outChannels = kernel.Shape[0];
+        int kernelInChannels = kernel.Shape[1];
+        int kernelHeight = kernel.Shape[2];
+        int kernelWidth = kernel.Shape[3];
+
+        if (inChannels != kernelInChannels)
+        {
+            throw new ArgumentException(
+                $"Input channels ({inChannels}) must match kernel input channels ({kernelInChannels}).");
+        }
+
+        int effectiveKernelHeight = dilation * (kernelHeight - 1) + 1;
+        int effectiveKernelWidth = dilation * (kernelWidth - 1) + 1;
+
+        int outputHeight = (height + 2 * padding - effectiveKernelHeight) / stride + 1;
+        int outputWidth = (width + 2 * padding - effectiveKernelWidth) / stride + 1;
+
+        if (outputHeight <= 0 || outputWidth <= 0)
+        {
+            throw new ArgumentException(
+                $"Invalid convolution parameters. Output dimensions would be {outputHeight}x{outputWidth}. " +
+                $"Ensure stride={stride}, padding={padding}, dilation={dilation} are compatible with input size {height}x{width} and kernel size {kernelHeight}x{kernelWidth}.");
+        }
+
+        var result = new Tensor<T>(new[] { batch, outChannels, outputHeight, outputWidth });
+
+        // Perform convolution
+        for (int b = 0; b < batch; b++)
+        {
+            for (int oc = 0; oc < outChannels; oc++)
+            {
+                for (int oh = 0; oh < outputHeight; oh++)
+                {
+                    for (int ow = 0; ow < outputWidth; ow++)
+                    {
+                        T sum = numOps.Zero;
+
+                        // Sum over all input channels
+                        for (int ic = 0; ic < inChannels; ic++)
+                        {
+                            // Sum over kernel window
+                            for (int kh = 0; kh < kernelHeight; kh++)
+                            {
+                                for (int kw = 0; kw < kernelWidth; kw++)
+                                {
+                                    int ih = oh * stride + kh * dilation - padding;
+                                    int iw = ow * stride + kw * dilation - padding;
+
+                                    // Check bounds (handle padding)
+                                    if (ih >= 0 && ih < height && iw >= 0 && iw < width)
+                                    {
+                                        T inputVal = input[b, ic, ih, iw];
+                                        T kernelVal = kernel[oc, ic, kh, kw];
+                                        sum = numOps.Add(sum, numOps.Multiply(inputVal, kernelVal));
+                                    }
+                                }
+                            }
+                        }
+
+                        result[b, oc, oh, ow] = sum;
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
     #endregion
 }

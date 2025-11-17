@@ -347,5 +347,39 @@ public interface IEngine
     /// </remarks>
     Tensor<T> AvgPool2D<T>(Tensor<T> input, int poolSize, int stride = 0, int padding = 0);
 
+    /// <summary>
+    /// Performs 2D convolution on a 4D input tensor using a 4D kernel.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, in_channels, height, width].</param>
+    /// <param name="kernel">The convolution kernel [out_channels, in_channels, kernel_height, kernel_width].</param>
+    /// <param name="stride">The stride of the convolution. Defaults to 1.</param>
+    /// <param name="padding">The amount of zero-padding to add to the input. Defaults to 0.</param>
+    /// <param name="dilation">The spacing between kernel elements. Defaults to 1.</param>
+    /// <returns>The convolved tensor [batch, out_channels, output_height, output_width].</returns>
+    /// <exception cref="ArgumentException">Thrown when input or kernel dimensions are invalid.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-011: Conv2D</b></para>
+    /// <para>
+    /// 2D convolution is the core operation in convolutional neural networks (CNNs).
+    /// It applies learned filters to detect features like edges, textures, and patterns.
+    /// Critical for:
+    /// - Image classification (ResNet, VGG, etc.)
+    /// - Object detection (YOLO, Faster R-CNN)
+    /// - Semantic segmentation (U-Net, DeepLab)
+    /// - Style transfer and image generation
+    /// </para>
+    /// <para>
+    /// Output dimensions:
+    /// output_height = floor((height + 2*padding - dilation*(kernel_height-1) - 1) / stride) + 1
+    /// output_width = floor((width + 2*padding - dilation*(kernel_width-1) - 1) / stride) + 1
+    /// </para>
+    /// <para>
+    /// GPU acceleration provides 50-500x speedup for typical CNN layers.
+    /// This is the most computationally expensive operation in deep learning.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Conv2D<T>(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0, int dilation = 1);
+
     #endregion
 }
