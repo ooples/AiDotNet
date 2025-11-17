@@ -324,4 +324,65 @@ public class CpuEngine : IEngine
     }
 
     #endregion
+
+    #region Tensor Operations (Phase B: Epic 3)
+
+    /// <inheritdoc/>
+    public Tensor<T> BatchMatMul<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Rank != 3 || b.Rank != 3)
+        {
+            throw new ArgumentException(
+                $"BatchMatMul requires 3D tensors. Got ranks {a.Rank} and {b.Rank}.");
+        }
+
+        int batchSize = a.Shape[0];
+        int m = a.Shape[1];
+        int k = a.Shape[2];
+        int k2 = b.Shape[1];
+        int n = b.Shape[2];
+
+        if (b.Shape[0] != batchSize)
+        {
+            throw new ArgumentException(
+                $"Batch sizes must match. Got {batchSize} and {b.Shape[0]}.");
+        }
+        if (k != k2)
+        {
+            throw new ArgumentException(
+                $"Matrix dimensions incompatible for multiplication. " +
+                $"First tensor has shape [{batchSize}, {m}, {k}], " +
+                $"second has shape [{b.Shape[0]}, {k2}, {n}]. " +
+                $"Inner dimensions must match ({k} != {k2}).");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(new[] { batchSize, m, n });
+
+        // Process each batch
+        for (int batch = 0; batch < batchSize; batch++)
+        {
+            // Standard matrix multiplication for this batch: C[batch] = A[batch] @ B[batch]
+            for (int i = 0; i < m; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    T sum = numOps.Zero;
+                    for (int p = 0; p < k; p++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(
+                            a[batch, i, p],
+                            b[batch, p, j]));
+                    }
+                    result[batch, i, j] = sum;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    #endregion
 }

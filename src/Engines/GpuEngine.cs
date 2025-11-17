@@ -95,6 +95,12 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>? _matrixAddKernelDouble;
     private readonly Action<Index2D, ArrayView2D<double, Stride2D.DenseX>, double, ArrayView2D<double, Stride2D.DenseX>>? _matrixMultiplyScalarKernelDouble;
 
+    // Kernel cache for tensor operations - float (Phase B: Epic 3)
+    private readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>? _batchMatMulKernelFloat;
+
+    // Kernel cache for tensor operations - double (Phase B: Epic 3)
+    private readonly Action<Index3D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _batchMatMulKernelDouble;
+
     /// <inheritdoc/>
     public string Name => _accelerator != null
         ? $"GPU Engine ({_accelerator.Name})"
@@ -318,6 +324,53 @@ public class GpuEngine : IEngine, IDisposable
                     Index2D, ArrayView2D<double, Stride2D.DenseX>, double, ArrayView2D<double, Stride2D.DenseX>>(
                     (index, matrix, scalar, result) => result[index] = matrix[index] * scalar);
                 Console.WriteLine("[GpuEngine] Double matrix kernels pre-compiled");
+
+                // Pre-compile kernels for tensor operations - float (Phase B: Epic 3)
+                _batchMatMulKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>(
+                    (index, a, b, result, m, k, n) =>
+                    {
+                        int batch = index.X;
+                        int i = index.Y;
+                        int j = index.Z;
+
+                        // Compute flat indices for 3D tensors stored in row-major order
+                        // Tensor shape: [batchSize, rows, cols]
+                        // Flat index: batch * (rows * cols) + row * cols + col
+                        float sum = 0;
+                        for (int p = 0; p < k; p++)
+                        {
+                            int aIndex = batch * (m * k) + i * k + p;
+                            int bIndex = batch * (k * n) + p * n + j;
+                            sum += a[aIndex] * b[bIndex];
+                        }
+
+                        int resultIndex = batch * (m * n) + i * n + j;
+                        result[resultIndex] = sum;
+                    });
+
+                // Pre-compile kernels for tensor operations - double (Phase B: Epic 3)
+                _batchMatMulKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index3D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>(
+                    (index, a, b, result, m, k, n) =>
+                    {
+                        int batch = index.X;
+                        int i = index.Y;
+                        int j = index.Z;
+
+                        // Compute flat indices for 3D tensors stored in row-major order
+                        double sum = 0;
+                        for (int p = 0; p < k; p++)
+                        {
+                            int aIndex = batch * (m * k) + i * k + p;
+                            int bIndex = batch * (k * n) + p * n + j;
+                            sum += a[aIndex] * b[bIndex];
+                        }
+
+                        int resultIndex = batch * (m * n) + i * n + j;
+                        result[resultIndex] = sum;
+                    });
+                Console.WriteLine("[GpuEngine] Tensor kernels pre-compiled");
 
                 Console.WriteLine("[GpuEngine] All kernel pre-compilation complete");
 
@@ -1329,6 +1382,188 @@ public class GpuEngine : IEngine, IDisposable
         {
             Console.WriteLine($"[GpuEngine] GPU matrix scalar multiply (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.MatrixMultiplyScalar(matrix, scalar);
+        }
+    }
+
+    #endregion
+
+    #region Tensor Operations (Phase B: Epic 3)
+
+    /// <inheritdoc/>
+    public Tensor<T> BatchMatMul<T>(Tensor<T> a, Tensor<T> b)
+    {
+        // Adaptive execution: check size threshold (Phase B: US-GPU-004)
+        if (Math.Max(a.Shape[1], a.Shape[2]) < _thresholds.BatchMatMul)
+        {
+            return _cpuFallback.BatchMatMul(a, b);
+        }
+
+        // Check GPU health and type support (Phase B: US-GPU-006)
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)BatchMatMulGpu((Tensor<float>)(object)a, (Tensor<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)BatchMatMulGpuDouble((Tensor<double>)(object)a, (Tensor<double>)(object)b);
+        }
+
+        // Fallback to CPU for unsupported types or unhealthy GPU
+        return _cpuFallback.BatchMatMul(a, b);
+    }
+
+    private Tensor<float> BatchMatMulGpu(Tensor<float> a, Tensor<float> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Rank != 3 || b.Rank != 3)
+        {
+            throw new ArgumentException(
+                $"BatchMatMul requires 3D tensors. Got ranks {a.Rank} and {b.Rank}.");
+        }
+
+        int batchSize = a.Shape[0];
+        int m = a.Shape[1];
+        int k = a.Shape[2];
+        int k2 = b.Shape[1];
+        int n = b.Shape[2];
+
+        if (b.Shape[0] != batchSize)
+        {
+            throw new ArgumentException(
+                $"Batch sizes must match. Got {batchSize} and {b.Shape[0]}.");
+        }
+        if (k != k2)
+        {
+            throw new ArgumentException(
+                $"Matrix dimensions incompatible for multiplication. " +
+                $"First tensor has shape [{batchSize}, {m}, {k}], " +
+                $"second has shape [{b.Shape[0]}, {k2}, {n}]. " +
+                $"Inner dimensions must match ({k} != {k2}).");
+        }
+
+        try
+        {
+            var result = new Tensor<float>(new[] { batchSize, m, n });
+
+            // Allocate GPU buffers using memory pool (Phase B: US-GPU-002)
+            var gpuA = _memoryPoolFloat!.Rent(batchSize * m * k);
+            var gpuB = _memoryPoolFloat!.Rent(batchSize * k * n);
+            var gpuResult = _memoryPoolFloat!.Rent(batchSize * m * n);
+
+            try
+            {
+                // Zero-copy transfer (Phase B: US-GPU-003)
+                gpuA.CopyFromCPU(a.AsSpan());
+                gpuB.CopyFromCPU(b.AsSpan());
+
+                // Execute pre-compiled kernel (Phase B: US-GPU-001, US-GPU-013)
+                _batchMatMulKernelFloat!(new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
+                _accelerator!.Synchronize();
+
+                // Zero-copy result transfer
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuA);
+                _memoryPoolFloat.Return(gpuB);
+                _memoryPoolFloat.Return(gpuResult);
+            }
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted for batch matmul: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.BatchMatMul(a, b);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            _gpuHealthy = false;
+            Console.WriteLine($"[GpuEngine] Critical GPU failure in batch matmul: {ex.Message}. GPU disabled.");
+            return _cpuFallback.BatchMatMul(a, b);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU batch matmul failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.BatchMatMul(a, b);
+        }
+    }
+
+    private Tensor<double> BatchMatMulGpuDouble(Tensor<double> a, Tensor<double> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Rank != 3 || b.Rank != 3)
+        {
+            throw new ArgumentException(
+                $"BatchMatMul requires 3D tensors. Got ranks {a.Rank} and {b.Rank}.");
+        }
+
+        int batchSize = a.Shape[0];
+        int m = a.Shape[1];
+        int k = a.Shape[2];
+        int k2 = b.Shape[1];
+        int n = b.Shape[2];
+
+        if (b.Shape[0] != batchSize)
+        {
+            throw new ArgumentException(
+                $"Batch sizes must match. Got {batchSize} and {b.Shape[0]}.");
+        }
+        if (k != k2)
+        {
+            throw new ArgumentException(
+                $"Matrix dimensions incompatible for multiplication. " +
+                $"First tensor has shape [{batchSize}, {m}, {k}], " +
+                $"second has shape [{b.Shape[0]}, {k2}, {n}]. " +
+                $"Inner dimensions must match ({k} != {k2}).");
+        }
+
+        try
+        {
+            var result = new Tensor<double>(new[] { batchSize, m, n });
+
+            // Allocate GPU buffers using memory pool (Phase B: US-GPU-002)
+            var gpuA = _memoryPoolDouble!.Rent(batchSize * m * k);
+            var gpuB = _memoryPoolDouble!.Rent(batchSize * k * n);
+            var gpuResult = _memoryPoolDouble!.Rent(batchSize * m * n);
+
+            try
+            {
+                // Zero-copy transfer (Phase B: US-GPU-003)
+                gpuA.CopyFromCPU(a.AsSpan());
+                gpuB.CopyFromCPU(b.AsSpan());
+
+                // Execute pre-compiled kernel (Phase B: US-GPU-001, US-GPU-013)
+                _batchMatMulKernelDouble!(new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
+                _accelerator!.Synchronize();
+
+                // Zero-copy result transfer
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuA);
+                _memoryPoolDouble.Return(gpuB);
+                _memoryPoolDouble.Return(gpuResult);
+            }
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted for batch matmul (double): {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.BatchMatMul(a, b);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            _gpuHealthy = false;
+            Console.WriteLine($"[GpuEngine] Critical GPU failure in batch matmul (double): {ex.Message}. GPU disabled.");
+            return _cpuFallback.BatchMatMul(a, b);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU batch matmul (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.BatchMatMul(a, b);
         }
     }
 

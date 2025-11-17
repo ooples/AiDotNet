@@ -119,6 +119,17 @@ public class AdaptiveThresholds
     public int Pooling { get; set; } = 2_000;
 
     /// <summary>
+    /// Threshold for batched matrix multiplication (matrix dimension).
+    /// </summary>
+    /// <remarks>
+    /// Default: 128 (128x128 matrices in batch)
+    /// BatchMatMul benefits from GPU earlier than single GEMM due to parallel batch processing.
+    /// Below 128x128: CPU is competitive
+    /// Above 128x128: GPU is 50-500x faster due to batch parallelism
+    /// </remarks>
+    public int BatchMatMul { get; set; } = 128;
+
+    /// <summary>
     /// Gets the default thresholds optimized for typical desktop GPUs.
     /// </summary>
     public static AdaptiveThresholds Default => new AdaptiveThresholds();
@@ -137,7 +148,8 @@ public class AdaptiveThresholds
         MatrixMultiply = 128,
         MatrixVectorMultiply = 256,
         Convolution = 500,
-        Pooling = 1_000
+        Pooling = 1_000,
+        BatchMatMul = 64
     };
 
     /// <summary>
@@ -154,7 +166,8 @@ public class AdaptiveThresholds
         MatrixMultiply = 512,
         MatrixVectorMultiply = 1024,
         Convolution = 5_000,
-        Pooling = 10_000
+        Pooling = 10_000,
+        BatchMatMul = 256
     };
 
     /// <summary>
@@ -171,7 +184,8 @@ public class AdaptiveThresholds
         MatrixMultiply = int.MaxValue,
         MatrixVectorMultiply = int.MaxValue,
         Convolution = int.MaxValue,
-        Pooling = int.MaxValue
+        Pooling = int.MaxValue,
+        BatchMatMul = int.MaxValue
     };
 
     /// <summary>
@@ -188,7 +202,8 @@ public class AdaptiveThresholds
         MatrixMultiply = 0,
         MatrixVectorMultiply = 0,
         Convolution = 0,
-        Pooling = 0
+        Pooling = 0,
+        BatchMatMul = 0
     };
 
     /// <summary>
