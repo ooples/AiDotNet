@@ -79,8 +79,9 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     public AdamOptimizer(
         IFullModel<T, TInput, TOutput>? model,
-        AdamOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        AdamOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
+        : base(model, options ?? new(), engine)
     {
         _m = Vector<T>.Empty();
         _v = Vector<T>.Empty();
@@ -202,17 +203,47 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var parameters = currentSolution.GetParameters();
-        for (int i = 0; i < gradient.Length; i++)
+
+        // === Vectorized Adam Update using IEngine ===
+        // Phase B: US-GPU-015 - GPU-accelerated gradient updates
+
+        T oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
+        T oneMinusBeta2 = NumOps.Subtract(NumOps.One, _currentBeta2);
+        T biasCorrection1 = NumOps.Subtract(NumOps.One, NumOps.Power(_currentBeta1, NumOps.FromDouble(_t)));
+        T biasCorrection2 = NumOps.Subtract(NumOps.One, NumOps.Power(_currentBeta2, NumOps.FromDouble(_t)));
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+
+        // Update biased first moment: m = beta1 * m + (1 - beta1) * gradient
+        var mScaled = (Vector<T>)Engine.Multiply(_m, _currentBeta1);
+        var gradScaled = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
+        _m = (Vector<T>)Engine.Add(mScaled, gradScaled);
+
+        // Update biased second moment: v = beta2 * v + (1 - beta2) * gradient^2
+        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
+        var vScaled = (Vector<T>)Engine.Multiply(_v, _currentBeta2);
+        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
+        _v = (Vector<T>)Engine.Add(vScaled, gradSquaredScaled);
+
+        // Compute bias-corrected first moment: mHat = m / (1 - beta1^t)
+        var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1);
+
+        // Compute bias-corrected second moment: vHat = v / (1 - beta2^t)
+        var vHat = (Vector<T>)Engine.Divide(_v, biasCorrection2);
+
+        // Compute update: update = learningRate * mHat / (sqrt(vHat) + epsilon)
+        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
+        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, vHatSqrt.Length));
+        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
+        var updateDiv = (Vector<T>)Engine.Divide(mHat, denominator);
+        var update = (Vector<T>)Engine.Multiply(updateDiv, _currentLearningRate);
+
+        // Apply update: parameters = parameters - update
+        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
+
+        // Update parameters in the model (need to copy back)
+        for (int i = 0; i < parameters.Length; i++)
         {
-            _m[i] = NumOps.Add(NumOps.Multiply(_currentBeta1, _m[i]), NumOps.Multiply(NumOps.Subtract(NumOps.One, _currentBeta1), gradient[i]));
-            _v[i] = NumOps.Add(NumOps.Multiply(_currentBeta2, _v[i]), NumOps.Multiply(NumOps.Subtract(NumOps.One, _currentBeta2), NumOps.Multiply(gradient[i], gradient[i])));
-
-            var mHat = NumOps.Divide(_m[i], NumOps.Subtract(NumOps.One, NumOps.Power(_currentBeta1, NumOps.FromDouble(_t))));
-            var vHat = NumOps.Divide(_v[i], NumOps.Subtract(NumOps.One, NumOps.Power(_currentBeta2, NumOps.FromDouble(_t))));
-
-            var update = NumOps.Divide(NumOps.Multiply(_currentLearningRate, mHat), NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon)));
-
-            parameters[i] = NumOps.Subtract(parameters[i], update);
+            parameters[i] = updatedParams[i];
         }
 
         return currentSolution;
@@ -248,6 +279,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             _previousV = new Vector<T>(parameters.Length);
         }
 
+        // Copy _m and _v to _previousM and _previousV
         for (int i = 0; i < parameters.Length; i++)
         {
             _previousM[i] = _m[i];
@@ -257,33 +289,46 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         _t++;
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _m[i] = NumOps.Add(
-                NumOps.Multiply(_m[i], NumOps.FromDouble(_options.Beta1)),
-                NumOps.Multiply(gradient[i], NumOps.FromDouble(1 - _options.Beta1))
-            );
+        // === Vectorized Adam Update using IEngine ===
+        // Phase B: US-GPU-015 - GPU-accelerated gradient updates
 
-            _v[i] = NumOps.Add(
-                NumOps.Multiply(_v[i], NumOps.FromDouble(_options.Beta2)),
-                NumOps.Multiply(NumOps.Multiply(gradient[i], gradient[i]), NumOps.FromDouble(1 - _options.Beta2))
-            );
+        T beta1 = NumOps.FromDouble(_options.Beta1);
+        T beta2 = NumOps.FromDouble(_options.Beta2);
+        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
+        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
 
-            T mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
-            T vHat = NumOps.Divide(_v[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t)));
+        // Update biased first moment: m = beta1 * m + (1 - beta1) * gradient
+        var mScaled = (Vector<T>)Engine.Multiply(_m, beta1);
+        var gradScaled = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
+        _m = (Vector<T>)Engine.Add(mScaled, gradScaled);
 
-            T update = NumOps.Divide(
-                mHat,
-                NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon))
-            );
+        // Update biased second moment: v = beta2 * v + (1 - beta2) * gradient^2
+        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
+        var vScaled = (Vector<T>)Engine.Multiply(_v, beta2);
+        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
+        _v = (Vector<T>)Engine.Add(vScaled, gradSquaredScaled);
 
-            parameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(update, _currentLearningRate)
-            );
-        }
+        // Compute bias-corrected first moment: mHat = m / (1 - beta1^t)
+        var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1);
 
-        return parameters;
+        // Compute bias-corrected second moment: vHat = v / (1 - beta2^t)
+        var vHat = (Vector<T>)Engine.Divide(_v, biasCorrection2);
+
+        // Compute update: update = mHat / (sqrt(vHat) + epsilon)
+        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
+        // Add epsilon for numerical stability (create epsilon vector)
+        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, vHatSqrt.Length));
+        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
+        var update = (Vector<T>)Engine.Divide(mHat, denominator);
+
+        // Apply update: parameters = parameters - learningRate * update
+        var scaledUpdate = (Vector<T>)Engine.Multiply(update, _currentLearningRate);
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, scaledUpdate);
+
+        return updatedParameters;
     }
 
 
@@ -300,48 +345,77 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     public override Matrix<T> UpdateParameters(Matrix<T> parameters, Matrix<T> gradient)
     {
-        if (_m == null || _v == null || _m.Length != parameters.Rows * parameters.Columns)
+        int totalSize = parameters.Rows * parameters.Columns;
+
+        if (_m == null || _v == null || _m.Length != totalSize)
         {
-            _m = new Vector<T>(parameters.Rows * parameters.Columns);
-            _v = new Vector<T>(parameters.Rows * parameters.Columns);
+            _m = new Vector<T>(totalSize);
+            _v = new Vector<T>(totalSize);
             _t = 0;
         }
 
         _t++;
 
-        var updatedMatrix = new Matrix<T>(parameters.Rows, parameters.Columns);
-        int index = 0;
+        // === Vectorized Adam Update using IEngine ===
+        // Phase B: US-GPU-015 - GPU-accelerated gradient updates
+        // Flatten matrices to vectors for vectorized operations
 
+        // Flatten matrix to vector
+        var paramVec = new Vector<T>(totalSize);
+        var gradVec = new Vector<T>(totalSize);
+        int idx = 0;
         for (int i = 0; i < parameters.Rows; i++)
         {
             for (int j = 0; j < parameters.Columns; j++)
             {
-                T g = gradient[i, j];
+                paramVec[idx] = parameters[i, j];
+                gradVec[idx] = gradient[i, j];
+                idx++;
+            }
+        }
 
-                _m[index] = NumOps.Add(
-                    NumOps.Multiply(_m[index], NumOps.FromDouble(_options.Beta1)),
-                    NumOps.Multiply(g, NumOps.FromDouble(1 - _options.Beta1))
-                );
+        T beta1 = NumOps.FromDouble(_options.Beta1);
+        T beta2 = NumOps.FromDouble(_options.Beta2);
+        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
+        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
 
-                _v[index] = NumOps.Add(
-                    NumOps.Multiply(_v[index], NumOps.FromDouble(_options.Beta2)),
-                    NumOps.Multiply(NumOps.Multiply(g, g), NumOps.FromDouble(1 - _options.Beta2))
-                );
+        // Update biased first moment: m = beta1 * m + (1 - beta1) * gradient
+        var mScaled = (Vector<T>)Engine.Multiply(_m, beta1);
+        var gradScaled = (Vector<T>)Engine.Multiply(gradVec, oneMinusBeta1);
+        _m = (Vector<T>)Engine.Add(mScaled, gradScaled);
 
-                T mHat = NumOps.Divide(_m[index], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
-                T vHat = NumOps.Divide(_v[index], NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t)));
+        // Update biased second moment: v = beta2 * v + (1 - beta2) * gradient^2
+        var gradSquared = (Vector<T>)Engine.Multiply(gradVec, gradVec);
+        var vScaled = (Vector<T>)Engine.Multiply(_v, beta2);
+        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
+        _v = (Vector<T>)Engine.Add(vScaled, gradSquaredScaled);
 
-                T update = NumOps.Divide(
-                    mHat,
-                    NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon))
-                );
+        // Compute bias-corrected moments
+        var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1);
+        var vHat = (Vector<T>)Engine.Divide(_v, biasCorrection2);
 
-                updatedMatrix[i, j] = NumOps.Subtract(
-                    parameters[i, j],
-                    NumOps.Multiply(update, _currentLearningRate)
-                );
+        // Compute update
+        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
+        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, vHatSqrt.Length));
+        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
+        var update = (Vector<T>)Engine.Divide(mHat, denominator);
+        var scaledUpdate = (Vector<T>)Engine.Multiply(update, _currentLearningRate);
 
-                index++;
+        // Apply update
+        var updatedVec = (Vector<T>)Engine.Subtract(paramVec, scaledUpdate);
+
+        // Unflatten vector back to matrix
+        var updatedMatrix = new Matrix<T>(parameters.Rows, parameters.Columns);
+        idx = 0;
+        for (int i = 0; i < parameters.Rows; i++)
+        {
+            for (int j = 0; j < parameters.Columns; j++)
+            {
+                updatedMatrix[i, j] = updatedVec[idx];
+                idx++;
             }
         }
 

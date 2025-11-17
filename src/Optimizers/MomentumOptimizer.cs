@@ -70,8 +70,9 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </remarks>
     public MomentumOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        MomentumOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        MomentumOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
+        : base(model, options ?? new(), engine)
     {
         _options = options ?? new MomentumOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();
@@ -168,13 +169,13 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <returns>The updated velocity vector.</returns>
     private Vector<T> UpdateVelocity(Vector<T> gradient)
     {
-        for (int i = 0; i < _velocity!.Length; i++)
-        {
-            _velocity[i] = NumOps.Add(
-                NumOps.Multiply(CurrentMomentum, _velocity[i]),
-                NumOps.Multiply(CurrentLearningRate, gradient[i])
-            );
-        }
+        // === Vectorized Momentum Update using IEngine ===
+        // Phase B: US-GPU-015 - GPU-accelerated gradient updates
+        // velocity = momentum * velocity + learningRate * gradient
+
+        var momentumScaled = (Vector<T>)Engine.Multiply(_velocity!, CurrentMomentum);
+        var gradientScaled = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
+        _velocity = (Vector<T>)Engine.Add(momentumScaled, gradientScaled);
 
         return _velocity;
     }
@@ -197,11 +198,11 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> velocity)
     {
         var parameters = currentSolution.GetParameters();
-        var newCoefficients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            newCoefficients[i] = NumOps.Subtract(parameters[i], velocity[i]);
-        }
+
+        // === Vectorized Update using IEngine ===
+        // Phase B: US-GPU-015 - GPU-accelerated parameter updates
+        // params = params - velocity
+        var newCoefficients = (Vector<T>)Engine.Subtract(parameters, velocity);
 
         return currentSolution.WithParameters(newCoefficients);
     }
@@ -231,19 +232,16 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _velocity = new Vector<T>(parameters.Length);
         }
 
-        var updatedParams = new Vector<T>(parameters.Length);
+        // === Vectorized Momentum Update using IEngine ===
+        // Phase B: US-GPU-015 - GPU-accelerated gradient updates
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            // Update velocity: velocity = momentum * velocity + lr * gradient
-            _velocity[i] = NumOps.Add(
-                NumOps.Multiply(CurrentMomentum, _velocity[i]),
-                NumOps.Multiply(CurrentLearningRate, gradient[i])
-            );
+        // Update velocity: velocity = momentum * velocity + learningRate * gradient
+        var momentumScaled = (Vector<T>)Engine.Multiply(_velocity, CurrentMomentum);
+        var gradientScaled = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
+        _velocity = (Vector<T>)Engine.Add(momentumScaled, gradientScaled);
 
-            // Update parameters: params = params - velocity
-            updatedParams[i] = NumOps.Subtract(parameters[i], _velocity[i]);
-        }
+        // Update parameters: params = params - velocity
+        var updatedParams = (Vector<T>)Engine.Subtract(parameters, _velocity);
 
         return updatedParams;
     }
