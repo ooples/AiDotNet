@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-	  <TargetFrameworks>net8.0;net462</TargetFrameworks>
+	  <TargetFrameworks>net8.0;net471</TargetFrameworks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
@@ -49,6 +49,8 @@
 	  <PackageReference Include="Azure.Search.Documents" Version="11.7.0" />
 	  <PackageReference Include="Elastic.Clients.Elasticsearch" Version="9.2.1" />
 	  <PackageReference Include="Google.Protobuf" Version="3.28.3" />
+	  <PackageReference Include="ILGPU" Version="1.5.3" />
+	  <PackageReference Include="ILGPU.Algorithms" Version="1.5.3" />
 	  <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
 	  <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.21" />
 	  <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.20.1" />
