@@ -207,7 +207,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         for (int i = 0; i < _options.ActionSize; i++)
         {
             var std = NumOps.Exp(logStd[i]);
-            var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.One);
+            var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.One, _random);
             var rawAction = _numOps.Add(mean[i], _numOps.Multiply(std, noise));
             action[i] = MathHelper.Tanh<T>(rawAction);
         }
