@@ -14,7 +14,6 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
     private double _epsilon;
     private Vector<T> _lastState;
     private int _lastAction;
-    private Random _random;
 
     public SARSALambdaAgent(SARSALambdaOptions<T> options) : base(options)
     {
@@ -23,7 +22,6 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
         _eligibilityTraces = new Dictionary<string, Dictionary<int, T>>();
         _epsilon = options.EpsilonStart;
         _lastState = new Vector<T>(options.StateSize);
-        _random = new Random();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -32,9 +30,9 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
         string stateKey = GetStateKey(state);
 
         int selectedAction;
-        if (training && _random.NextDouble() < _epsilon)
+        if (training && Random.NextDouble() < _epsilon)
         {
-            selectedAction = _random.Next(_options.ActionSize);
+            selectedAction = Random.Next(_options.ActionSize);
         }
         else
         {
