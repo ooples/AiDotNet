@@ -113,4 +113,83 @@ public interface IEngine
     Vector<T> Power<T>(Vector<T> vector, T exponent);
 
     #endregion
+
+    #region Matrix Operations (Phase B: Epic 2)
+
+    /// <summary>
+    /// Performs matrix-matrix multiplication (GEMM: General Matrix Multiply).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of matrix elements.</typeparam>
+    /// <param name="a">The first matrix (M x K).</param>
+    /// <param name="b">The second matrix (K x N).</param>
+    /// <returns>The product matrix (M x N).</returns>
+    /// <exception cref="ArgumentException">Thrown when matrix dimensions are incompatible.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-007: GEMM</b></para>
+    /// <para>
+    /// Matrix multiplication is O(n³) - highly computationally intensive.
+    /// GPU acceleration provides 100-1000x speedup for large matrices.
+    /// Essential for dense neural network layers.
+    /// </para>
+    /// </remarks>
+    Matrix<T> MatrixMultiply<T>(Matrix<T> a, Matrix<T> b);
+
+    /// <summary>
+    /// Performs matrix-vector multiplication (GEMV).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="matrix">The matrix (M x N).</param>
+    /// <param name="vector">The vector (N elements).</param>
+    /// <returns>The result vector (M elements).</returns>
+    /// <exception cref="ArgumentException">Thrown when dimensions are incompatible.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-008: GEMV</b></para>
+    /// <para>
+    /// Computes result[i] = sum(matrix[i, j] * vector[j]) for all i.
+    /// Critical for neural network inference.
+    /// </para>
+    /// </remarks>
+    Vector<T> MatrixVectorMultiply<T>(Matrix<T> matrix, Vector<T> vector);
+
+    /// <summary>
+    /// Transposes a matrix (rows become columns).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of matrix elements.</typeparam>
+    /// <param name="matrix">The input matrix (M x N).</param>
+    /// <returns>The transposed matrix (N x M).</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-009: Matrix Transpose</b></para>
+    /// <para>
+    /// Required for backpropagation in neural networks.
+    /// GPU implementation uses shared memory for coalesced access.
+    /// </para>
+    /// </remarks>
+    Matrix<T> MatrixTranspose<T>(Matrix<T> matrix);
+
+    /// <summary>
+    /// Adds two matrices element-wise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of matrix elements.</typeparam>
+    /// <param name="a">The first matrix.</param>
+    /// <param name="b">The second matrix.</param>
+    /// <returns>A new matrix containing the element-wise sum.</returns>
+    /// <exception cref="ArgumentException">Thrown when matrix dimensions don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-010: Matrix Element-Wise Operations</b></para>
+    /// </remarks>
+    Matrix<T> MatrixAdd<T>(Matrix<T> a, Matrix<T> b);
+
+    /// <summary>
+    /// Multiplies a matrix by a scalar.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="matrix">The matrix to multiply.</param>
+    /// <param name="scalar">The scalar value.</param>
+    /// <returns>A new matrix with all elements multiplied by the scalar.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-010: Matrix Element-Wise Operations</b></para>
+    /// </remarks>
+    Matrix<T> MatrixMultiplyScalar<T>(Matrix<T> matrix, T scalar);
+
+    #endregion
 }

@@ -81,6 +81,20 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>? _divideKernelLong;
     private readonly Action<Index1D, ArrayView<long>, long, ArrayView<long>>? _divideScalarKernelLong;
 
+    // Kernel cache for matrix operations - float (Phase B: Epic 2)
+    private readonly Action<Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, int>? _matrixMultiplyKernelFloat;
+    private readonly Action<Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, ArrayView<float>, int, int>? _matrixVectorMultiplyKernelFloat;
+    private readonly Action<Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>>? _matrixTransposeKernelFloat;
+    private readonly Action<Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>>? _matrixAddKernelFloat;
+    private readonly Action<Index2D, ArrayView2D<float, Stride2D.DenseX>, float, ArrayView2D<float, Stride2D.DenseX>>? _matrixMultiplyScalarKernelFloat;
+
+    // Kernel cache for matrix operations - double (Phase B: Epic 2)
+    private readonly Action<Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, int>? _matrixMultiplyKernelDouble;
+    private readonly Action<Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, ArrayView<double>, int, int>? _matrixVectorMultiplyKernelDouble;
+    private readonly Action<Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>? _matrixTransposeKernelDouble;
+    private readonly Action<Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>? _matrixAddKernelDouble;
+    private readonly Action<Index2D, ArrayView2D<double, Stride2D.DenseX>, double, ArrayView2D<double, Stride2D.DenseX>>? _matrixMultiplyScalarKernelDouble;
+
     /// <inheritdoc/>
     public string Name => _accelerator != null
         ? $"GPU Engine ({_accelerator.Name})"
@@ -236,6 +250,74 @@ public class GpuEngine : IEngine, IDisposable
                     Index1D, ArrayView<long>, long, ArrayView<long>>(
                     (index, vec, scalar, result) => result[index] = vec[index] / scalar);
                 Console.WriteLine("[GpuEngine] Long kernels pre-compiled");
+
+                // Pre-compile kernels for matrix operations - float (Phase B: Epic 2)
+                _matrixMultiplyKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, int>(
+                    (index, a, b, result, k) =>
+                    {
+                        float sum = 0;
+                        for (int i = 0; i < k; i++)
+                            sum += a[index.X, i] * b[i, index.Y];
+                        result[index] = sum;
+                    });
+
+                _matrixVectorMultiplyKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, ArrayView<float>, int, int>(
+                    (index, matrix, vector, result, rows, cols) =>
+                    {
+                        float sum = 0;
+                        for (int j = 0; j < cols; j++)
+                            sum += matrix[index, j] * vector[j];
+                        result[index] = sum;
+                    });
+
+                _matrixTransposeKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>>(
+                    (index, input, output) => output[index.Y, index.X] = input[index]);
+
+                _matrixAddKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>>(
+                    (index, a, b, result) => result[index] = a[index] + b[index]);
+
+                _matrixMultiplyScalarKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index2D, ArrayView2D<float, Stride2D.DenseX>, float, ArrayView2D<float, Stride2D.DenseX>>(
+                    (index, matrix, scalar, result) => result[index] = matrix[index] * scalar);
+                Console.WriteLine("[GpuEngine] Float matrix kernels pre-compiled");
+
+                // Pre-compile kernels for matrix operations - double (Phase B: Epic 2)
+                _matrixMultiplyKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, int>(
+                    (index, a, b, result, k) =>
+                    {
+                        double sum = 0;
+                        for (int i = 0; i < k; i++)
+                            sum += a[index.X, i] * b[i, index.Y];
+                        result[index] = sum;
+                    });
+
+                _matrixVectorMultiplyKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, ArrayView<double>, int, int>(
+                    (index, matrix, vector, result, rows, cols) =>
+                    {
+                        double sum = 0;
+                        for (int j = 0; j < cols; j++)
+                            sum += matrix[index, j] * vector[j];
+                        result[index] = sum;
+                    });
+
+                _matrixTransposeKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>(
+                    (index, input, output) => output[index.Y, index.X] = input[index]);
+
+                _matrixAddKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>(
+                    (index, a, b, result) => result[index] = a[index] + b[index]);
+
+                _matrixMultiplyScalarKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index2D, ArrayView2D<double, Stride2D.DenseX>, double, ArrayView2D<double, Stride2D.DenseX>>(
+                    (index, matrix, scalar, result) => result[index] = matrix[index] * scalar);
+                Console.WriteLine("[GpuEngine] Double matrix kernels pre-compiled");
 
                 Console.WriteLine("[GpuEngine] All kernel pre-compilation complete");
 
@@ -688,6 +770,565 @@ public class GpuEngine : IEngine, IDisposable
             _memoryPoolLong.Return(gpuA);
             _memoryPoolLong.Return(gpuB);
             _memoryPoolLong.Return(gpuResult);
+        }
+    }
+
+    #endregion
+
+    #region Matrix Operations (Phase B: Epic 2)
+
+    /// <inheritdoc/>
+    public Matrix<T> MatrixMultiply<T>(Matrix<T> a, Matrix<T> b)
+    {
+        // Adaptive execution: check matrix size threshold (Phase B: US-GPU-004)
+        if (Math.Max(a.Rows, Math.Max(a.Columns, b.Columns)) < _thresholds.MatrixMultiply)
+        {
+            return _cpuFallback.MatrixMultiply(a, b);
+        }
+
+        // Check GPU health and type support (Phase B: US-GPU-006)
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Matrix<T>)(object)MatrixMultiplyGpu((Matrix<float>)(object)a, (Matrix<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Matrix<T>)(object)MatrixMultiplyGpuDouble((Matrix<double>)(object)a, (Matrix<double>)(object)b);
+        }
+
+        // Fallback to CPU for unsupported types or unhealthy GPU
+        return _cpuFallback.MatrixMultiply(a, b);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> MatrixVectorMultiply<T>(Matrix<T> matrix, Vector<T> vector)
+    {
+        // Adaptive execution
+        if (Math.Max(matrix.Rows, matrix.Columns) < _thresholds.MatrixVectorMultiply)
+        {
+            return _cpuFallback.MatrixVectorMultiply(matrix, vector);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)MatrixVectorMultiplyGpu((Matrix<float>)(object)matrix, (Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)MatrixVectorMultiplyGpuDouble((Matrix<double>)(object)matrix, (Vector<double>)(object)vector);
+        }
+
+        return _cpuFallback.MatrixVectorMultiply(matrix, vector);
+    }
+
+    /// <inheritdoc/>
+    public Matrix<T> MatrixTranspose<T>(Matrix<T> matrix)
+    {
+        // Transpose is memory-bound, benefit from GPU at smaller sizes
+        if (Math.Max(matrix.Rows, matrix.Columns) < _thresholds.MatrixMultiply / 2)
+        {
+            return _cpuFallback.MatrixTranspose(matrix);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Matrix<T>)(object)MatrixTransposeGpu((Matrix<float>)(object)matrix);
+            if (typeof(T) == typeof(double))
+                return (Matrix<T>)(object)MatrixTransposeGpuDouble((Matrix<double>)(object)matrix);
+        }
+
+        return _cpuFallback.MatrixTranspose(matrix);
+    }
+
+    /// <inheritdoc/>
+    public Matrix<T> MatrixAdd<T>(Matrix<T> a, Matrix<T> b)
+    {
+        // Element-wise operations benefit from GPU at similar thresholds to vector ops
+        if (a.Rows * a.Columns < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.MatrixAdd(a, b);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Matrix<T>)(object)MatrixAddGpu((Matrix<float>)(object)a, (Matrix<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Matrix<T>)(object)MatrixAddGpuDouble((Matrix<double>)(object)a, (Matrix<double>)(object)b);
+        }
+
+        return _cpuFallback.MatrixAdd(a, b);
+    }
+
+    /// <inheritdoc/>
+    public Matrix<T> MatrixMultiplyScalar<T>(Matrix<T> matrix, T scalar)
+    {
+        if (matrix.Rows * matrix.Columns < _thresholds.VectorMultiply)
+        {
+            return _cpuFallback.MatrixMultiplyScalar(matrix, scalar);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Matrix<T>)(object)MatrixMultiplyScalarGpu((Matrix<float>)(object)matrix, (float)(object)scalar);
+            if (typeof(T) == typeof(double))
+                return (Matrix<T>)(object)MatrixMultiplyScalarGpuDouble((Matrix<double>)(object)matrix, (double)(object)scalar);
+        }
+
+        return _cpuFallback.MatrixMultiplyScalar(matrix, scalar);
+    }
+
+    // GPU implementations for float matrices
+
+    private Matrix<float> MatrixMultiplyGpu(Matrix<float> a, Matrix<float> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Columns != b.Rows)
+        {
+            throw new ArgumentException(
+                $"Matrix dimensions incompatible for multiplication. " +
+                $"First matrix is {a.Rows}x{a.Columns}, second is {b.Rows}x{b.Columns}.");
+        }
+
+        try
+        {
+            var result = new Matrix<float>(a.Rows, b.Columns);
+            int m = a.Rows, k = a.Columns, n = b.Columns;
+
+            // Allocate GPU buffers using memory pool (Phase B: US-GPU-002)
+            var gpuA = _memoryPoolFloat!.Rent(m * k);
+            var gpuB = _memoryPoolFloat!.Rent(k * n);
+            var gpuResult = _memoryPoolFloat!.Rent(m * n);
+
+            try
+            {
+                // Zero-copy transfer (Phase B: US-GPU-003)
+                gpuA.CopyFromCPU(a.AsSpan());
+                gpuB.CopyFromCPU(b.AsSpan());
+
+                // Create 2D views
+                var viewA = gpuA.View.As2DDenseX<Stride2D.DenseX>(new Index2D(m, k));
+                var viewB = gpuB.View.As2DDenseX<Stride2D.DenseX>(new Index2D(k, n));
+                var viewResult = gpuResult.View.As2DDenseX<Stride2D.DenseX>(new Index2D(m, n));
+
+                // Execute pre-compiled kernel (Phase B: US-GPU-001, US-GPU-007)
+                _matrixMultiplyKernelFloat!(new Index2D(m, n), viewA, viewB, viewResult, k);
+                _accelerator!.Synchronize();
+
+                // Zero-copy result transfer
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuA);
+                _memoryPoolFloat.Return(gpuB);
+                _memoryPoolFloat.Return(gpuResult);
+            }
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted for matrix multiply: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixMultiply(a, b);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            _gpuHealthy = false;
+            Console.WriteLine($"[GpuEngine] Critical GPU failure in matrix multiply: {ex.Message}. GPU disabled.");
+            return _cpuFallback.MatrixMultiply(a, b);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix multiply failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixMultiply(a, b);
+        }
+    }
+
+    private Vector<float> MatrixVectorMultiplyGpu(Matrix<float> matrix, Vector<float> vector)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        if (matrix.Columns != vector.Length)
+        {
+            throw new ArgumentException(
+                $"Matrix-vector dimensions incompatible. Matrix is {matrix.Rows}x{matrix.Columns}, vector has {vector.Length} elements.");
+        }
+
+        try
+        {
+            var result = new Vector<float>(matrix.Rows);
+            int rows = matrix.Rows, cols = matrix.Columns;
+
+            var gpuMatrix = _memoryPoolFloat!.Rent(rows * cols);
+            var gpuVector = _memoryPoolFloat!.Rent(cols);
+            var gpuResult = _memoryPoolFloat!.Rent(rows);
+
+            try
+            {
+                gpuMatrix.CopyFromCPU(matrix.AsSpan());
+                gpuVector.CopyFromCPU(vector.AsSpan());
+
+                var viewMatrix = gpuMatrix.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                _matrixVectorMultiplyKernelFloat!(rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuMatrix);
+                _memoryPoolFloat.Return(gpuVector);
+                _memoryPoolFloat.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix-vector multiply failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixVectorMultiply(matrix, vector);
+        }
+    }
+
+    private Matrix<float> MatrixTransposeGpu(Matrix<float> matrix)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+
+        try
+        {
+            var result = new Matrix<float>(matrix.Columns, matrix.Rows);
+            int rows = matrix.Rows, cols = matrix.Columns;
+
+            var gpuInput = _memoryPoolFloat!.Rent(rows * cols);
+            var gpuOutput = _memoryPoolFloat!.Rent(rows * cols);
+
+            try
+            {
+                gpuInput.CopyFromCPU(matrix.AsSpan());
+
+                var viewInput = gpuInput.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewOutput = gpuOutput.View.As2DDenseX<Stride2D.DenseX>(new Index2D(cols, rows));
+
+                _matrixTransposeKernelFloat!(new Index2D(rows, cols), viewInput, viewOutput);
+                _accelerator!.Synchronize();
+
+                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix transpose failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixTranspose(matrix);
+        }
+    }
+
+    private Matrix<float> MatrixAddGpu(Matrix<float> a, Matrix<float> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Rows != b.Rows || a.Columns != b.Columns)
+        {
+            throw new ArgumentException($"Matrix dimensions must match for addition.");
+        }
+
+        try
+        {
+            var result = new Matrix<float>(a.Rows, a.Columns);
+            int rows = a.Rows, cols = a.Columns;
+
+            var gpuA = _memoryPoolFloat!.Rent(rows * cols);
+            var gpuB = _memoryPoolFloat!.Rent(rows * cols);
+            var gpuResult = _memoryPoolFloat!.Rent(rows * cols);
+
+            try
+            {
+                gpuA.CopyFromCPU(a.AsSpan());
+                gpuB.CopyFromCPU(b.AsSpan());
+
+                var viewA = gpuA.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewB = gpuB.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewResult = gpuResult.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+
+                _matrixAddKernelFloat!(new Index2D(rows, cols), viewA, viewB, viewResult);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuA);
+                _memoryPoolFloat.Return(gpuB);
+                _memoryPoolFloat.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix add failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixAdd(a, b);
+        }
+    }
+
+    private Matrix<float> MatrixMultiplyScalarGpu(Matrix<float> matrix, float scalar)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+
+        try
+        {
+            var result = new Matrix<float>(matrix.Rows, matrix.Columns);
+            int rows = matrix.Rows, cols = matrix.Columns;
+
+            var gpuMatrix = _memoryPoolFloat!.Rent(rows * cols);
+            var gpuResult = _memoryPoolFloat!.Rent(rows * cols);
+
+            try
+            {
+                gpuMatrix.CopyFromCPU(matrix.AsSpan());
+
+                var viewMatrix = gpuMatrix.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewResult = gpuResult.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+
+                _matrixMultiplyScalarKernelFloat!(new Index2D(rows, cols), viewMatrix, scalar, viewResult);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuMatrix);
+                _memoryPoolFloat.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix scalar multiply failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixMultiplyScalar(matrix, scalar);
+        }
+    }
+
+    // GPU implementations for double matrices
+
+    private Matrix<double> MatrixMultiplyGpuDouble(Matrix<double> a, Matrix<double> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Columns != b.Rows)
+        {
+            throw new ArgumentException(
+                $"Matrix dimensions incompatible for multiplication. " +
+                $"First matrix is {a.Rows}x{a.Columns}, second is {b.Rows}x{b.Columns}.");
+        }
+
+        try
+        {
+            var result = new Matrix<double>(a.Rows, b.Columns);
+            int m = a.Rows, k = a.Columns, n = b.Columns;
+
+            var gpuA = _memoryPoolDouble!.Rent(m * k);
+            var gpuB = _memoryPoolDouble!.Rent(k * n);
+            var gpuResult = _memoryPoolDouble!.Rent(m * n);
+
+            try
+            {
+                gpuA.CopyFromCPU(a.AsSpan());
+                gpuB.CopyFromCPU(b.AsSpan());
+
+                var viewA = gpuA.View.As2DDenseX<Stride2D.DenseX>(new Index2D(m, k));
+                var viewB = gpuB.View.As2DDenseX<Stride2D.DenseX>(new Index2D(k, n));
+                var viewResult = gpuResult.View.As2DDenseX<Stride2D.DenseX>(new Index2D(m, n));
+
+                _matrixMultiplyKernelDouble!(new Index2D(m, n), viewA, viewB, viewResult, k);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuA);
+                _memoryPoolDouble.Return(gpuB);
+                _memoryPoolDouble.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix multiply (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixMultiply(a, b);
+        }
+    }
+
+    private Vector<double> MatrixVectorMultiplyGpuDouble(Matrix<double> matrix, Vector<double> vector)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        if (matrix.Columns != vector.Length)
+        {
+            throw new ArgumentException(
+                $"Matrix-vector dimensions incompatible. Matrix is {matrix.Rows}x{matrix.Columns}, vector has {vector.Length} elements.");
+        }
+
+        try
+        {
+            var result = new Vector<double>(matrix.Rows);
+            int rows = matrix.Rows, cols = matrix.Columns;
+
+            var gpuMatrix = _memoryPoolDouble!.Rent(rows * cols);
+            var gpuVector = _memoryPoolDouble!.Rent(cols);
+            var gpuResult = _memoryPoolDouble!.Rent(rows);
+
+            try
+            {
+                gpuMatrix.CopyFromCPU(matrix.AsSpan());
+                gpuVector.CopyFromCPU(vector.AsSpan());
+
+                var viewMatrix = gpuMatrix.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                _matrixVectorMultiplyKernelDouble!(rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuMatrix);
+                _memoryPoolDouble.Return(gpuVector);
+                _memoryPoolDouble.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix-vector multiply (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixVectorMultiply(matrix, vector);
+        }
+    }
+
+    private Matrix<double> MatrixTransposeGpuDouble(Matrix<double> matrix)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+
+        try
+        {
+            var result = new Matrix<double>(matrix.Columns, matrix.Rows);
+            int rows = matrix.Rows, cols = matrix.Columns;
+
+            var gpuInput = _memoryPoolDouble!.Rent(rows * cols);
+            var gpuOutput = _memoryPoolDouble!.Rent(rows * cols);
+
+            try
+            {
+                gpuInput.CopyFromCPU(matrix.AsSpan());
+
+                var viewInput = gpuInput.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewOutput = gpuOutput.View.As2DDenseX<Stride2D.DenseX>(new Index2D(cols, rows));
+
+                _matrixTransposeKernelDouble!(new Index2D(rows, cols), viewInput, viewOutput);
+                _accelerator!.Synchronize();
+
+                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix transpose (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixTranspose(matrix);
+        }
+    }
+
+    private Matrix<double> MatrixAddGpuDouble(Matrix<double> a, Matrix<double> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Rows != b.Rows || a.Columns != b.Columns)
+        {
+            throw new ArgumentException($"Matrix dimensions must match for addition.");
+        }
+
+        try
+        {
+            var result = new Matrix<double>(a.Rows, a.Columns);
+            int rows = a.Rows, cols = a.Columns;
+
+            var gpuA = _memoryPoolDouble!.Rent(rows * cols);
+            var gpuB = _memoryPoolDouble!.Rent(rows * cols);
+            var gpuResult = _memoryPoolDouble!.Rent(rows * cols);
+
+            try
+            {
+                gpuA.CopyFromCPU(a.AsSpan());
+                gpuB.CopyFromCPU(b.AsSpan());
+
+                var viewA = gpuA.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewB = gpuB.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewResult = gpuResult.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+
+                _matrixAddKernelDouble!(new Index2D(rows, cols), viewA, viewB, viewResult);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuA);
+                _memoryPoolDouble.Return(gpuB);
+                _memoryPoolDouble.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix add (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixAdd(a, b);
+        }
+    }
+
+    private Matrix<double> MatrixMultiplyScalarGpuDouble(Matrix<double> matrix, double scalar)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+
+        try
+        {
+            var result = new Matrix<double>(matrix.Rows, matrix.Columns);
+            int rows = matrix.Rows, cols = matrix.Columns;
+
+            var gpuMatrix = _memoryPoolDouble!.Rent(rows * cols);
+            var gpuResult = _memoryPoolDouble!.Rent(rows * cols);
+
+            try
+            {
+                gpuMatrix.CopyFromCPU(matrix.AsSpan());
+
+                var viewMatrix = gpuMatrix.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewResult = gpuResult.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+
+                _matrixMultiplyScalarKernelDouble!(new Index2D(rows, cols), viewMatrix, scalar, viewResult);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuMatrix);
+                _memoryPoolDouble.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix scalar multiply (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixMultiplyScalar(matrix, scalar);
         }
     }
 

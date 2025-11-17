@@ -296,7 +296,7 @@ public abstract class MatrixBase<T>
     /// <exception cref="IndexOutOfRangeException">Thrown when the row index is out of range.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method extracts a single row from the matrix and returns it as a vector.
-    /// For example, if you have a 3×4 matrix and call GetRow(1), you'll get a vector with 4 elements containing
+    /// For example, if you have a 3ï¿½4 matrix and call GetRow(1), you'll get a vector with 4 elements containing
     /// all values from the second row (remember that indices start at 0).</para>
     /// </remarks>
     public virtual Vector<T> GetRow(int row)
@@ -313,7 +313,7 @@ public abstract class MatrixBase<T>
     /// <exception cref="IndexOutOfRangeException">Thrown when the column index is out of range.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method extracts a single column from the matrix and returns it as a vector.
-    /// For example, if you have a 3×4 matrix and call GetColumn(2), you'll get a vector with 3 elements containing
+    /// For example, if you have a 3ï¿½4 matrix and call GetColumn(2), you'll get a vector with 3 elements containing
     /// all values from the third column (remember that indices start at 0).</para>
     /// </remarks>
     public virtual Vector<T> GetColumn(int col)
@@ -356,7 +356,7 @@ public abstract class MatrixBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method extracts a rectangular portion of the matrix.
     /// Think of it like cutting out a rectangular section from the original matrix.
-    /// For example, SubMatrix(1, 2, 3, 2) would extract a 3×2 matrix starting from position [1,2]
+    /// For example, SubMatrix(1, 2, 3, 2) would extract a 3ï¿½2 matrix starting from position [1,2]
     /// (the 2nd row and 3rd column, since indices start at 0).</para>
     /// </remarks>
     public Matrix<T> SubMatrix(int startRow, int startCol, int numRows, int numCols)
@@ -580,7 +580,7 @@ public abstract class MatrixBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> The transpose of a matrix is created by flipping the matrix over its diagonal.
     /// This means that rows become columns and columns become rows.
-    /// For example, if you have a 2×3 matrix, its transpose will be a 3×2 matrix.
+    /// For example, if you have a 2ï¿½3 matrix, its transpose will be a 3ï¿½2 matrix.
     /// The element at position [i,j] in the original matrix will be at position [j,i] in the transposed matrix.
     /// Transposing is commonly used in many mathematical operations and algorithms.</para>
     /// </remarks>
@@ -641,6 +641,41 @@ public abstract class MatrixBase<T>
     {
         if (row < 0 || row >= _rows || col < 0 || col >= _cols)
             throw new IndexOutOfRangeException("Invalid matrix indices.");
+    }
+
+    /// <summary>
+    /// Gets a read-only span over the internal matrix data.
+    /// </summary>
+    /// <returns>A read-only span view of the matrix data (row-major order).</returns>
+    /// <remarks>
+    /// <para><b>Phase B: US-GPU-003 - Zero-Copy Operations</b></para>
+    /// <para>
+    /// This method provides direct access to the underlying storage without copying.
+    /// The matrix is stored in row-major order: [row0col0, row0col1, ..., row0colN-1, row1col0, ...]
+    /// </para>
+    /// <para><b>For Beginners:</b> A span is a view over memory that doesn't copy the data.
+    /// This is much faster than copying the entire matrix into a new array, especially for large matrices.
+    /// Use this when you need to pass matrix data to GPU or other operations that can work with spans.</para>
+    /// </remarks>
+    public ReadOnlySpan<T> AsSpan()
+    {
+        return new ReadOnlySpan<T>(_data);
+    }
+
+    /// <summary>
+    /// Gets a writable span over the internal matrix data.
+    /// </summary>
+    /// <returns>A writable span view of the matrix data (row-major order).</returns>
+    /// <remarks>
+    /// <para><b>Phase B: US-GPU-003 - Zero-Copy Operations</b></para>
+    /// <para>
+    /// Internal use only. Provides direct write access to underlying storage.
+    /// Used by GpuEngine to write results directly without intermediate copying.
+    /// </para>
+    /// </remarks>
+    internal Span<T> AsWritableSpan()
+    {
+        return new Span<T>(_data);
     }
 
     /// <summary>

@@ -195,4 +195,133 @@ public class CpuEngine : IEngine
 
         return result;
     }
+
+    #region Matrix Operations (Phase B: Epic 2)
+
+    /// <inheritdoc/>
+    public Matrix<T> MatrixMultiply<T>(Matrix<T> a, Matrix<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Columns != b.Rows)
+        {
+            throw new ArgumentException(
+                $"Matrix dimensions incompatible for multiplication. " +
+                $"First matrix is {a.Rows}x{a.Columns}, second is {b.Rows}x{b.Columns}. " +
+                $"First matrix columns ({a.Columns}) must equal second matrix rows ({b.Rows}).");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Matrix<T>(a.Rows, b.Columns);
+
+        // Standard O(n³) matrix multiplication
+        for (int i = 0; i < a.Rows; i++)
+        {
+            for (int j = 0; j < b.Columns; j++)
+            {
+                T sum = numOps.Zero;
+                for (int k = 0; k < a.Columns; k++)
+                {
+                    sum = numOps.Add(sum, numOps.Multiply(a[i, k], b[k, j]));
+                }
+                result[i, j] = sum;
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> MatrixVectorMultiply<T>(Matrix<T> matrix, Vector<T> vector)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        if (matrix.Columns != vector.Length)
+        {
+            throw new ArgumentException(
+                $"Matrix-vector dimensions incompatible. " +
+                $"Matrix is {matrix.Rows}x{matrix.Columns}, vector has {vector.Length} elements. " +
+                $"Matrix columns ({matrix.Columns}) must equal vector length ({vector.Length}).");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(matrix.Rows);
+
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            T sum = numOps.Zero;
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                sum = numOps.Add(sum, numOps.Multiply(matrix[i, j], vector[j]));
+            }
+            result[i] = sum;
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Matrix<T> MatrixTranspose<T>(Matrix<T> matrix)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+
+        var result = new Matrix<T>(matrix.Columns, matrix.Rows);
+
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[j, i] = matrix[i, j];
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Matrix<T> MatrixAdd<T>(Matrix<T> a, Matrix<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Rows != b.Rows || a.Columns != b.Columns)
+        {
+            throw new ArgumentException(
+                $"Matrix dimensions must match for addition. " +
+                $"First matrix is {a.Rows}x{a.Columns}, second is {b.Rows}x{b.Columns}.");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Matrix<T>(a.Rows, a.Columns);
+
+        for (int i = 0; i < a.Rows; i++)
+        {
+            for (int j = 0; j < a.Columns; j++)
+            {
+                result[i, j] = numOps.Add(a[i, j], b[i, j]);
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Matrix<T> MatrixMultiplyScalar<T>(Matrix<T> matrix, T scalar)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Matrix<T>(matrix.Rows, matrix.Columns);
+
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                result[i, j] = numOps.Multiply(matrix[i, j], scalar);
+            }
+        }
+
+        return result;
+    }
+
+    #endregion
 }
