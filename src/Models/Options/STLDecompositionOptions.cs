@@ -685,7 +685,7 @@ public class STLDecompositionOptions<T> : TimeSeriesRegressionOptions<T>
     /// like [2020-01-01, 2020-02-01, 2020-03-01, ...] to properly align the data with the calendar.
     /// </para>
     /// </remarks>
-    public DateTime[] Dates { get; set; } = [];
+    public DateTime[] Dates { get; set; } = Array.Empty<DateTime>();
 
     /// <summary>
     /// Gets or sets the start date of the time series.
@@ -982,7 +982,7 @@ public class STLDecompositionOptions<T> : TimeSeriesRegressionOptions<T>
     /// This is particularly useful for retail, travel, or other data heavily influenced by holidays.
     /// </para>
     /// </remarks>
-    public Dictionary<DateTime, T> Holidays { get; set; } = [];
+    public Dictionary<DateTime, T> Holidays { get; set; } = new Dictionary<DateTime, T>();
 
     /// <summary>
     /// Gets or sets the method used for detecting outliers in the time series.
