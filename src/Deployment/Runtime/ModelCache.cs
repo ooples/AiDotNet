@@ -180,16 +180,37 @@ public class ModelCache<T>
 
     private string ComputeHash(T[] input)
     {
-        // Convert input array to bytes
-        var bytes = new byte[input.Length * System.Runtime.InteropServices.Marshal.SizeOf<T>()];
-        Buffer.BlockCopy(input, 0, bytes, 0, bytes.Length);
+        if (input == null || input.Length == 0)
+            return "empty";
 
-        // Compute SHA256 hash
-        using var sha256 = SHA256.Create();
-        var hashBytes = sha256.ComputeHash(bytes);
+        // Use SHA256 for cryptographically secure hashing to prevent collisions
+        // This is critical for model caching where hash collisions would cause incorrect predictions
+        using (var sha256 = SHA256.Create())
+        {
+            // Convert array to byte representation for hashing
+            var bytes = ArrayToBytes(input);
+            var hashBytes = sha256.ComputeHash(bytes);
 
-        // Convert to hex string
-        return BitConverter.ToString(hashBytes).Replace("-", "");
+            // Convert to hex string
+            var builder = new StringBuilder(hashBytes.Length * 2);
+            foreach (var b in hashBytes)
+            {
+                builder.Append(b.ToString("x2"));
+            }
+            return builder.ToString();
+        }
+    }
+
+    private byte[] ArrayToBytes(T[] array)
+    {
+        // Get element size for the generic type T
+        var elementSize = System.Runtime.InteropServices.Marshal.SizeOf<T>();
+        var bytes = new byte[array.Length * elementSize];
+
+        // Copy array data to byte array for hashing
+        Buffer.BlockCopy(array, 0, bytes, 0, bytes.Length);
+
+        return bytes;
     }
 }
 
