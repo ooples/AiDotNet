@@ -443,6 +443,7 @@ public static class MathHelper
     /// <typeparam name="T">The numeric type to return.</typeparam>
     /// <param name="mean">The mean of the normal distribution.</param>
     /// <param name="stdDev">The standard deviation of the normal distribution.</param>
+    /// <param name="random">Optional Random instance to use. If null, creates a new unseeded Random instance.</param>
     /// <returns>A random number from the specified normal distribution.</returns>
     /// <remarks>
     /// <para>
@@ -451,20 +452,24 @@ public static class MathHelper
     /// </para>
     /// <para><b>For Beginners:</b> Normal distribution (also called Gaussian distribution) is a
     /// bell-shaped probability distribution that is symmetric around its mean.
-    /// 
+    ///
     /// This method generates random numbers that follow this distribution, which is important for
     /// neural network initialization. Using normally distributed values helps prevent issues during
     /// training and improves convergence.
     /// </para>
+    /// <para>
+    /// For reproducible results, pass in a seeded Random instance. Otherwise, a new unseeded
+    /// Random will be created on each call, which breaks reproducibility.
+    /// </para>
     /// </remarks>
-    public static T GetNormalRandom<T>(T mean, T stdDev)
+    public static T GetNormalRandom<T>(T mean, T stdDev, Random? random = null)
     {
         var numOps = GetNumericOperations<T>();
-        var random = new Random();
+        var rng = random ?? new Random();
 
         // Box-Muller transform
-        double u1 = 1.0 - random.NextDouble(); // Uniform(0,1] random numbers
-        double u2 = 1.0 - random.NextDouble();
+        double u1 = 1.0 - rng.NextDouble(); // Uniform(0,1] random numbers
+        double u2 = 1.0 - rng.NextDouble();
         double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
 
         // Scale and shift to get desired mean and standard deviation
