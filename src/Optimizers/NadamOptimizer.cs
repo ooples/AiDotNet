@@ -70,8 +70,9 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <param name="options">The Nadam-specific optimization options.</param>
     public NadamOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        NadamOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        NadamOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
+        : base(model, options ?? new(), engine)
     {
         _options = options ?? new NadamOptimizerOptions<T, TInput, TOutput>();
 
@@ -173,33 +174,47 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var parameters = currentSolution.GetParameters();
-        var newCoefficients = new Vector<T>(parameters.Length);
-        var beta1 = NumOps.FromDouble(_options.Beta1);
-        var beta2 = NumOps.FromDouble(_options.Beta2);
-        var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
-        var oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            // Update biased first moment estimate
-            _m![i] = NumOps.Add(NumOps.Multiply(beta1, _m[i]), NumOps.Multiply(oneMinusBeta1, gradient[i]));
+        // === Vectorized Nadam Update using IEngine (Phase B: US-GPU-015) ===
+        T beta1 = NumOps.FromDouble(_options.Beta1);
+        T beta2 = NumOps.FromDouble(_options.Beta2);
+        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T biasCorrectionM = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
+        T biasCorrectionV = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
+        T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
 
-            // Update biased second raw moment estimate
-            _v![i] = NumOps.Add(NumOps.Multiply(beta2, _v[i]), NumOps.Multiply(oneMinusBeta2, NumOps.Multiply(gradient[i], gradient[i])));
+        // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
+        var beta1TimesM = (Vector<T>)Engine.Multiply(_m!, beta1);
+        var oneMinusBeta1TimesGrad = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
+        _m = (Vector<T>)Engine.Add(beta1TimesM, oneMinusBeta1TimesGrad);
 
-            // Compute bias-corrected first moment estimate
-            var mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+        // Update biased second raw moment estimate: v = beta2 * v + (1 - beta2) * gradient^2
+        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
+        var beta2TimesV = (Vector<T>)Engine.Multiply(_v!, beta2);
+        var oneMinusBeta2TimesGradSq = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
+        _v = (Vector<T>)Engine.Add(beta2TimesV, oneMinusBeta2TimesGradSq);
 
-            // Compute bias-corrected second raw moment estimate
-            var vHat = NumOps.Divide(_v[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t)));
+        // Compute bias-corrected first moment estimate: mHat = m / (1 - beta1^t)
+        var mHat = (Vector<T>)Engine.Divide(_m, biasCorrectionM);
 
-            // Compute the Nesterov momentum term
-            var mHatNesterov = NumOps.Add(NumOps.Multiply(beta1, mHat), NumOps.Multiply(NumOps.Divide(oneMinusBeta1, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t))), gradient[i]));
+        // Compute bias-corrected second raw moment estimate: vHat = v / (1 - beta2^t)
+        var vHat = (Vector<T>)Engine.Divide(_v, biasCorrectionV);
 
-            // Update parameters
-            var update = NumOps.Divide(NumOps.Multiply(CurrentLearningRate, mHatNesterov), NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon)));
-            newCoefficients[i] = NumOps.Subtract(parameters[i], update);
-        }
+        // Compute the Nesterov momentum term: mHatNesterov = beta1 * mHat + nesterovFactor * gradient
+        var beta1TimesMHat = (Vector<T>)Engine.Multiply(mHat, beta1);
+        var nesterovGrad = (Vector<T>)Engine.Multiply(gradient, nesterovFactor);
+        var mHatNesterov = (Vector<T>)Engine.Add(beta1TimesMHat, nesterovGrad);
+
+        // Update parameters: update = (lr * mHatNesterov) / (sqrt(vHat) + epsilon)
+        var sqrtVHat = (Vector<T>)Engine.Sqrt(vHat);
+        var denominator = (Vector<T>)Engine.Add(sqrtVHat, epsilon);
+        var lrTimesMHatNesterov = (Vector<T>)Engine.Multiply(mHatNesterov, CurrentLearningRate);
+        var update = (Vector<T>)Engine.Divide(lrTimesMHatNesterov, denominator);
+
+        // params = params - update
+        var newCoefficients = (Vector<T>)Engine.Subtract(parameters, update);
 
         return currentSolution.WithParameters(newCoefficients);
     }
@@ -235,33 +250,46 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
         _t++;
 
-        var updatedParams = new Vector<T>(parameters.Length);
-        var beta1 = NumOps.FromDouble(_options.Beta1);
-        var beta2 = NumOps.FromDouble(_options.Beta2);
-        var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
-        var oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
+        // === Vectorized Nadam Update using IEngine (Phase B: US-GPU-015) ===
+        T beta1 = NumOps.FromDouble(_options.Beta1);
+        T beta2 = NumOps.FromDouble(_options.Beta2);
+        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T biasCorrectionM = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
+        T biasCorrectionV = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
+        T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            // Update biased first moment estimate
-            _m[i] = NumOps.Add(NumOps.Multiply(beta1, _m[i]), NumOps.Multiply(oneMinusBeta1, gradient[i]));
+        // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
+        var beta1TimesM = (Vector<T>)Engine.Multiply(_m, beta1);
+        var oneMinusBeta1TimesGrad = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
+        _m = (Vector<T>)Engine.Add(beta1TimesM, oneMinusBeta1TimesGrad);
 
-            // Update biased second raw moment estimate
-            _v[i] = NumOps.Add(NumOps.Multiply(beta2, _v[i]), NumOps.Multiply(oneMinusBeta2, NumOps.Multiply(gradient[i], gradient[i])));
+        // Update biased second raw moment estimate: v = beta2 * v + (1 - beta2) * gradient^2
+        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
+        var beta2TimesV = (Vector<T>)Engine.Multiply(_v, beta2);
+        var oneMinusBeta2TimesGradSq = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
+        _v = (Vector<T>)Engine.Add(beta2TimesV, oneMinusBeta2TimesGradSq);
 
-            // Compute bias-corrected first moment estimate
-            var mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+        // Compute bias-corrected first moment estimate: mHat = m / (1 - beta1^t)
+        var mHat = (Vector<T>)Engine.Divide(_m, biasCorrectionM);
 
-            // Compute bias-corrected second raw moment estimate
-            var vHat = NumOps.Divide(_v[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t)));
+        // Compute bias-corrected second raw moment estimate: vHat = v / (1 - beta2^t)
+        var vHat = (Vector<T>)Engine.Divide(_v, biasCorrectionV);
 
-            // Compute the Nesterov momentum term
-            var mHatNesterov = NumOps.Add(NumOps.Multiply(beta1, mHat), NumOps.Multiply(NumOps.Divide(oneMinusBeta1, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t))), gradient[i]));
+        // Compute the Nesterov momentum term: mHatNesterov = beta1 * mHat + nesterovFactor * gradient
+        var beta1TimesMHat = (Vector<T>)Engine.Multiply(mHat, beta1);
+        var nesterovGrad = (Vector<T>)Engine.Multiply(gradient, nesterovFactor);
+        var mHatNesterov = (Vector<T>)Engine.Add(beta1TimesMHat, nesterovGrad);
 
-            // Update parameters
-            var update = NumOps.Divide(NumOps.Multiply(CurrentLearningRate, mHatNesterov), NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon)));
-            updatedParams[i] = NumOps.Subtract(parameters[i], update);
-        }
+        // Update parameters: update = (lr * mHatNesterov) / (sqrt(vHat) + epsilon)
+        var sqrtVHat = (Vector<T>)Engine.Sqrt(vHat);
+        var denominator = (Vector<T>)Engine.Add(sqrtVHat, epsilon);
+        var lrTimesMHatNesterov = (Vector<T>)Engine.Multiply(mHatNesterov, CurrentLearningRate);
+        var update = (Vector<T>)Engine.Divide(lrTimesMHatNesterov, denominator);
+
+        // params = params - update
+        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
 
         return updatedParams;
     }
