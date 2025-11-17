@@ -61,4 +61,19 @@ public class IQLOptions<T>
         TargetUpdateTau = numOps.FromDouble(0.005);
         Temperature = numOps.FromDouble(3.0);
     }
+
+    /// <summary>
+    /// Validates that required properties are set.
+    /// </summary>
+    public void Validate()
+    {
+        if (StateSize <= 0)
+            throw new ArgumentException("StateSize must be greater than 0", nameof(StateSize));
+        if (ActionSize <= 0)
+            throw new ArgumentException("ActionSize must be greater than 0", nameof(ActionSize));
+        if (BatchSize <= 0)
+            throw new ArgumentException("BatchSize must be greater than 0", nameof(BatchSize));
+        if (BufferSize <= 0)
+            throw new ArgumentException("BufferSize must be greater than 0", nameof(BufferSize));
+    }
 }
