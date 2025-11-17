@@ -269,6 +269,13 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
             _accumulatedSquaredGradients = new Vector<T>(parameters.Length);
         }
 
+        // Try GPU-accelerated parameter update for large parameter sets
+        if (IsGpuAccelerationEnabled && typeof(T) == typeof(float) && parameters.Length >= 10000)
+        {
+            return UpdateParametersGpu(parameters, gradient);
+        }
+
+        // CPU fallback
         var updatedParams = new Vector<T>(parameters.Length);
 
         for (int i = 0; i < parameters.Length; i++)
@@ -293,6 +300,72 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         }
 
         return updatedParams;
+    }
+
+    /// <summary>
+    /// GPU-accelerated version of parameter update.
+    /// </summary>
+    private Vector<T> UpdateParametersGpu(Vector<T> parameters, Vector<T> gradient)
+    {
+        var backend = _gpuContext!.GpuBackend as Gpu.IlgpuBackend<float>;
+        if (backend == null) return UpdateParameters(parameters, gradient);
+
+        // Cast to float
+        var paramsFloat = VectorToTensor(parameters as Vector<float>!);
+        var gradFloat = VectorToTensor(gradient as Vector<float>!);
+        var accSqGradFloat = VectorToTensor(_accumulatedSquaredGradients as Vector<float>!);
+
+        _gpuContext.Statistics.IncrementGpuOperations();
+
+        // Transfer to GPU
+        using var gpuParams = backend.ToGpu(paramsFloat);
+        using var gpuGrad = backend.ToGpu(gradFloat);
+        using var gpuAccSqGrad = backend.ToGpu(accSqGradFloat);
+
+        // Constants
+        var epsilonTensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 }) { [0] = (float)_options.Epsilon });
+        var lrTensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 }) { [0] = (float)CurrentLearningRate });
+
+        // accSqGrad = accSqGrad + gradient^2
+        using var gradSquared = backend.Multiply(gpuGrad, gpuGrad);
+        using var newAccSqGrad = backend.Add(gpuAccSqGrad, gradSquared);
+
+        // adaptiveLearningRate = lr / (sqrt(accSqGrad) + epsilon)
+        using var sqrtAccSqGrad = backend.Sqrt(newAccSqGrad);
+        using var denominator = backend.Add(sqrtAccSqGrad, epsilonTensor);
+        using var adaptiveLR = backend.Divide(lrTensor, denominator);
+
+        // update = adaptiveLR * gradient
+        using var update = backend.Multiply(adaptiveLR, gpuGrad);
+
+        // params = params - update
+        using var newParams = backend.Subtract(gpuParams, update);
+
+        // Transfer back and update state
+        _accumulatedSquaredGradients = TensorToVector(backend.ToCpu(newAccSqGrad)) as Vector<T>!;
+        var result = backend.ToCpu(newParams);
+
+        // Cleanup
+        epsilonTensor.Dispose();
+        lrTensor.Dispose();
+
+        return TensorToVector(result) as Vector<T>!;
+    }
+
+    private LinearAlgebra.Tensor<float> VectorToTensor(Vector<float> vector)
+    {
+        var tensor = new LinearAlgebra.Tensor<float>(new[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+            tensor[i] = vector[i];
+        return tensor;
+    }
+
+    private Vector<float> TensorToVector(LinearAlgebra.Tensor<float> tensor)
+    {
+        var vector = new Vector<float>(tensor.Length);
+        for (int i = 0; i < tensor.Length; i++)
+            vector[i] = tensor[i];
+        return vector;
     }
 
 

@@ -231,6 +231,13 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _velocity = new Vector<T>(parameters.Length);
         }
 
+        // Try GPU-accelerated parameter update
+        if (IsGpuAccelerationEnabled && typeof(T) == typeof(float) && parameters.Length >= 10000)
+        {
+            return UpdateParametersGpu(parameters, gradient);
+        }
+
+        // CPU implementation
         var updatedParams = new Vector<T>(parameters.Length);
 
         for (int i = 0; i < parameters.Length; i++)
@@ -246,6 +253,63 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         }
 
         return updatedParams;
+    }
+
+    private Vector<T> UpdateParametersGpu(Vector<T> parameters, Vector<T> gradient)
+    {
+        var backend = _gpuContext!.GpuBackend as Gpu.IlgpuBackend<float>;
+        if (backend == null) return UpdateParameters(parameters, gradient);
+
+        var paramsFloat = VectorToTensor(parameters as Vector<float>!);
+        var gradFloat = VectorToTensor(gradient as Vector<float>!);
+        var velFloat = VectorToTensor(_velocity as Vector<float>!);
+
+        _gpuContext.Statistics.IncrementGpuOperations();
+
+        using var gpuParams = backend.ToGpu(paramsFloat);
+        using var gpuGrad = backend.ToGpu(gradFloat);
+        using var gpuVel = backend.ToGpu(velFloat);
+
+        var momentumTensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 }) { [0] = NumOps.ToFloat(CurrentMomentum) });
+        var lrTensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 }) { [0] = NumOps.ToFloat(CurrentLearningRate) });
+
+        // velocity = momentum * velocity + lr * gradient
+        using var momentumVel = backend.Multiply(gpuVel, momentumTensor);
+        using var lrGrad = backend.Multiply(gpuGrad, lrTensor);
+        using var newVel = backend.Add(momentumVel, lrGrad);
+
+        // params = params - velocity
+        using var newParams = backend.Subtract(gpuParams, newVel);
+
+        var resultParams = backend.ToCpu(newParams);
+        var resultVel = backend.ToCpu(newVel);
+
+        _velocity = TensorToVector(resultVel) as Vector<T>!;
+
+        momentumTensor.Dispose();
+        lrTensor.Dispose();
+
+        return TensorToVector(resultParams) as Vector<T>!;
+    }
+
+    private LinearAlgebra.Tensor<float> VectorToTensor(Vector<float> vector)
+    {
+        var tensor = new LinearAlgebra.Tensor<float>(new[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+        {
+            tensor[i] = vector[i];
+        }
+        return tensor;
+    }
+
+    private Vector<float> TensorToVector(LinearAlgebra.Tensor<float> tensor)
+    {
+        var vector = new Vector<float>(tensor.Length);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            vector[i] = tensor[i];
+        }
+        return vector;
     }
 
 

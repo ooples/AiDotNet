@@ -278,6 +278,120 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     }
 
     /// <summary>
+    /// Updates a vector of parameters using the Proximal Gradient Descent algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter vector to be updated.</param>
+    /// <param name="gradient">The gradient vector corresponding to the parameters.</param>
+    /// <returns>The updated parameter vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// PGD uses a two-step update: 1) gradient step: params = params - lr * gradient,
+    /// then 2) proximal operator (regularization): params = prox(params).
+    /// </para>
+    /// <para><b>For Beginners:</b> This takes a gradient descent step, then applies
+    /// regularization to keep the solution well-behaved.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        // Save pre-update parameters for reverse updates
+        if (_previousParameters == null || _previousParameters.Length != parameters.Length)
+        {
+            _previousParameters = new Vector<T>(parameters.Length);
+        }
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _previousParameters[i] = parameters[i];
+        }
+
+        // Try GPU-accelerated gradient step for large parameter sets
+        Vector<T> afterGradientStep;
+        if (IsGpuAccelerationEnabled && typeof(T) == typeof(float) && parameters.Length >= 10000)
+        {
+            afterGradientStep = UpdateParametersGpu(parameters, gradient);
+        }
+        else
+        {
+            // CPU fallback: params = params - lr * gradient
+            afterGradientStep = new Vector<T>(parameters.Length);
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                afterGradientStep[i] = NumOps.Subtract(
+                    parameters[i],
+                    NumOps.Multiply(CurrentLearningRate, gradient[i])
+                );
+            }
+        }
+
+        // Apply regularization (proximal operator) - always on CPU
+        var regularized = _regularization.Regularize(afterGradientStep);
+
+        return regularized;
+    }
+
+    /// <summary>
+    /// GPU-accelerated version of gradient descent step (before proximal operator).
+    /// </summary>
+    private Vector<T> UpdateParametersGpu(Vector<T> parameters, Vector<T> gradient)
+    {
+        var backend = _gpuContext!.GpuBackend as Gpu.IlgpuBackend<float>;
+        if (backend == null)
+        {
+            // Fallback to CPU
+            var result = new Vector<T>(parameters.Length);
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                result[i] = NumOps.Subtract(
+                    parameters[i],
+                    NumOps.Multiply(CurrentLearningRate, gradient[i])
+                );
+            }
+            return result;
+        }
+
+        // Cast to float
+        var paramsFloat = VectorToTensor(parameters as Vector<float>!);
+        var gradFloat = VectorToTensor(gradient as Vector<float>!);
+
+        _gpuContext.Statistics.IncrementGpuOperations();
+
+        // Transfer to GPU
+        using var gpuParams = backend.ToGpu(paramsFloat);
+        using var gpuGrad = backend.ToGpu(gradFloat);
+
+        // Constants
+        var lrTensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 }) { [0] = (float)CurrentLearningRate });
+
+        // params = params - lr * gradient
+        using var lrGrad = backend.Multiply(gpuGrad, lrTensor);
+        using var newParams = backend.Subtract(gpuParams, lrGrad);
+
+        // Transfer back
+        var resultTensor = backend.ToCpu(newParams);
+
+        // Cleanup
+        lrTensor.Dispose();
+
+        return TensorToVector(resultTensor) as Vector<T>!;
+    }
+
+    private LinearAlgebra.Tensor<float> VectorToTensor(Vector<float> vector)
+    {
+        var tensor = new LinearAlgebra.Tensor<float>(new[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+            tensor[i] = vector[i];
+        return tensor;
+    }
+
+    private Vector<float> TensorToVector(LinearAlgebra.Tensor<float> tensor)
+    {
+        var vector = new Vector<float>(tensor.Length);
+        for (int i = 0; i < tensor.Length; i++)
+            vector[i] = tensor[i];
+        return vector;
+    }
+
+    /// <summary>
     /// Reverses a Proximal Gradient Descent update to recover original parameters.
     /// </summary>
     /// <param name="updatedParameters">Parameters after PGD update</param>

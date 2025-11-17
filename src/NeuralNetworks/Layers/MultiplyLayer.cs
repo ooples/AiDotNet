@@ -240,6 +240,16 @@ public class MultiplyLayer<T> : LayerBase<T>
         }
 
         _lastInputs = inputs;
+
+        // Try GPU acceleration if available
+        if (IsGpuAccelerationAvailable && typeof(T) == typeof(float))
+        {
+            var result = ForwardGpu(inputs);
+            _lastOutput = result;
+            return result;
+        }
+
+        // CPU implementation
         var result = inputs[0].Clone();
         for (int i = 1; i < inputs.Length; i++)
         {
@@ -248,6 +258,93 @@ public class MultiplyLayer<T> : LayerBase<T>
 
         _lastOutput = ApplyActivation(result);
         return _lastOutput;
+    }
+
+    private Tensor<T> ForwardGpu(Tensor<T>[] inputs)
+    {
+        var backend = GpuContext!.GpuBackend as Gpu.IlgpuBackend<float>;
+        if (backend == null)
+        {
+            var cpuResult = inputs[0].Clone();
+            for (int i = 1; i < inputs.Length; i++)
+                cpuResult = cpuResult.ElementwiseMultiply(inputs[i]);
+            return ApplyActivation(cpuResult);
+        }
+
+        var inputsFloat = inputs.Select(i => i as Tensor<float>).ToArray();
+        if (inputsFloat.Any(i => i == null))
+        {
+            var cpuResult = inputs[0].Clone();
+            for (int i = 1; i < inputs.Length; i++)
+                cpuResult = cpuResult.ElementwiseMultiply(inputs[i]);
+            return ApplyActivation(cpuResult);
+        }
+
+        bool useGpu = inputsFloat.Any(i => GpuContext.ShouldUseGpu(i!));
+
+        if (useGpu)
+        {
+            GpuContext.Statistics.IncrementGpuOperations();
+
+            var gpuInputs = inputsFloat.Select(i => backend.ToGpu(i!)).ToArray();
+            var gpuResult = gpuInputs[0];
+            for (int i = 1; i < gpuInputs.Length; i++)
+            {
+                var temp = backend.Multiply(gpuResult, gpuInputs[i]);
+                if (i > 1) gpuResult.Dispose();
+                gpuResult = temp;
+            }
+
+            Gpu.GpuTensor<float> gpuActivated;
+            if (ScalarActivation != null)
+            {
+                gpuActivated = ApplyActivationGpu(gpuResult, backend);
+                gpuResult.Dispose();
+            }
+            else
+            {
+                gpuActivated = gpuResult;
+            }
+
+            var result = backend.ToCpu(gpuActivated);
+            gpuActivated.Dispose();
+            foreach (var gpuInput in gpuInputs)
+                gpuInput.Dispose();
+
+            return result as Tensor<T> ?? inputs[0];
+        }
+        else
+        {
+            GpuContext.Statistics.IncrementCpuOperations();
+            var cpuResult = inputs[0].Clone();
+            for (int i = 1; i < inputs.Length; i++)
+                cpuResult = cpuResult.ElementwiseMultiply(inputs[i]);
+            return ApplyActivation(cpuResult);
+        }
+    }
+
+    private Gpu.GpuTensor<float> ApplyActivationGpu(Gpu.GpuTensor<float> input, Gpu.IlgpuBackend<float> backend)
+    {
+        if (ScalarActivation is ReLUActivation<float>)
+            return backend.ReLU(input);
+        else if (ScalarActivation is SigmoidActivation<float>)
+            return backend.Sigmoid(input);
+        else if (ScalarActivation is TanhActivation<float>)
+            return backend.Tanh(input);
+        else if (ScalarActivation is LeakyReLUActivation<float> leakyRelu)
+            return backend.LeakyReLU(input, leakyRelu.Alpha);
+        else if (ScalarActivation is ELUActivation<float> elu)
+            return backend.ELU(input, elu.Alpha);
+        else if (ScalarActivation is GELUActivation<float>)
+            return backend.GELU(input);
+        else if (ScalarActivation is SwishActivation<float>)
+            return backend.Swish(input);
+        else
+        {
+            var cpuTensor = backend.ToCpu(input);
+            var activated = ApplyActivation(cpuTensor as Tensor<T>!) as Tensor<float>;
+            return backend.ToGpu(activated!);
+        }
     }
     
     /// <summary>

@@ -201,7 +201,65 @@ public class ActivationLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+
+        // Try GPU acceleration if available
+        if (IsGpuAccelerationAvailable && typeof(T) == typeof(float) && !_useVectorActivation)
+        {
+            return ForwardGpu(input);
+        }
+
         return _useVectorActivation ? ApplyVectorActivation(input) : ApplyScalarActivation(input);
+    }
+
+    private Tensor<T> ForwardGpu(Tensor<T> input)
+    {
+        var backend = GpuContext!.GpuBackend as Gpu.IlgpuBackend<float>;
+        if (backend == null) return ApplyScalarActivation(input);
+
+        var inputFloat = input as Tensor<float>;
+        if (inputFloat == null) return ApplyScalarActivation(input);
+
+        bool useGpu = GpuContext.ShouldUseGpu(inputFloat);
+
+        if (useGpu)
+        {
+            GpuContext.Statistics.IncrementGpuOperations();
+
+            using var gpuInput = backend.ToGpu(inputFloat);
+            using var gpuResult = ApplyActivationGpu(gpuInput, backend);
+            var result = backend.ToCpu(gpuResult);
+            return result as Tensor<T> ?? input;
+        }
+        else
+        {
+            GpuContext.Statistics.IncrementCpuOperations();
+            return ApplyScalarActivation(input);
+        }
+    }
+
+    private Gpu.GpuTensor<float> ApplyActivationGpu(Gpu.GpuTensor<float> input, Gpu.IlgpuBackend<float> backend)
+    {
+        if (ScalarActivation is ReLUActivation<float>)
+            return backend.ReLU(input);
+        else if (ScalarActivation is SigmoidActivation<float>)
+            return backend.Sigmoid(input);
+        else if (ScalarActivation is TanhActivation<float>)
+            return backend.Tanh(input);
+        else if (ScalarActivation is LeakyReLUActivation<float> leakyRelu)
+            return backend.LeakyReLU(input, leakyRelu.Alpha);
+        else if (ScalarActivation is ELUActivation<float> elu)
+            return backend.ELU(input, elu.Alpha);
+        else if (ScalarActivation is GELUActivation<float>)
+            return backend.GELU(input);
+        else if (ScalarActivation is SwishActivation<float>)
+            return backend.Swish(input);
+        else
+        {
+            // Unsupported activation, fallback to CPU
+            var cpuTensor = backend.ToCpu(input);
+            var activated = ApplyScalarActivation(cpuTensor as Tensor<T>!) as Tensor<float>;
+            return backend.ToGpu(activated!);
+        }
     }
 
     /// <summary>

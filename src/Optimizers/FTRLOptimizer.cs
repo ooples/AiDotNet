@@ -216,6 +216,85 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     }
 
     /// <summary>
+    /// Updates a vector of parameters using the FTRL algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter vector to be updated.</param>
+    /// <param name="gradient">The gradient vector corresponding to the parameters.</param>
+    /// <returns>The updated parameter vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// FTRL uses per-coordinate adaptive learning rates with L1 and L2 regularization.
+    /// The algorithm maintains auxiliary variables z and n for each parameter.
+    /// </para>
+    /// <para><b>For Beginners:</b> FTRL adjusts each parameter independently based on
+    /// its history, with automatic sparsity-inducing regularization.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        if (_z == null || _z.Length != parameters.Length)
+        {
+            _z = new Vector<T>(parameters.Length);
+            _n = new Vector<T>(parameters.Length);
+            _t = 0;
+        }
+
+        _t++;
+
+        // Save pre-update parameters for reverse updates
+        if (_previousParameters == null || _previousParameters.Length != parameters.Length)
+        {
+            _previousParameters = new Vector<T>(parameters.Length);
+        }
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _previousParameters[i] = parameters[i];
+        }
+
+        // FTRL has complex thresholding logic, so we keep it on CPU
+        // GPU acceleration would require custom kernels for the conditional logic
+        var updatedParams = new Vector<T>(parameters.Length);
+        var alpha = NumOps.FromDouble(_options.Alpha);
+        var beta = NumOps.FromDouble(_options.Beta);
+        var lambda1 = NumOps.FromDouble(_options.Lambda1);
+        var lambda2 = NumOps.FromDouble(_options.Lambda2);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var sigma = NumOps.Divide(
+                NumOps.Subtract(NumOps.Sqrt(NumOps.Add(_n![i], NumOps.Multiply(gradient[i], gradient[i]))), NumOps.Sqrt(_n[i])),
+                alpha
+            );
+            _z![i] = NumOps.Add(_z[i], NumOps.Subtract(gradient[i], NumOps.Multiply(sigma, parameters[i])));
+            _n![i] = NumOps.Add(_n[i], NumOps.Multiply(gradient[i], gradient[i]));
+
+            var sign = NumOps.SignOrZero(_z[i]);
+            if (NumOps.GreaterThan(NumOps.Abs(_z[i]), lambda1))
+            {
+                updatedParams[i] = NumOps.Divide(
+                    NumOps.Multiply(
+                        NumOps.Subtract(lambda1, _z[i]),
+                        sign
+                    ),
+                    NumOps.Add(
+                        NumOps.Multiply(lambda2, NumOps.FromDouble(1 + _options.Beta)),
+                        NumOps.Divide(
+                            NumOps.Sqrt(_n[i]),
+                            alpha
+                        )
+                    )
+                );
+            }
+            else
+            {
+                updatedParams[i] = NumOps.FromDouble(0);
+            }
+        }
+
+        return updatedParams;
+    }
+
+    /// <summary>
     /// Reverses an FTRL gradient update to recover original parameters.
     /// </summary>
     /// <param name="updatedParameters">Parameters after FTRL update</param>
