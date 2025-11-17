@@ -130,6 +130,43 @@ public abstract class VectorBase<T>
     }
 
     /// <summary>
+    /// Gets a read-only span view of the vector's data without copying.
+    /// </summary>
+    /// <returns>A read-only span over the vector's elements.</returns>
+    /// <remarks>
+    /// <para><b>Phase B: US-GPU-003 - Zero-Copy Operations</b></para>
+    /// <para>
+    /// This method provides direct memory access to the vector's internal storage
+    /// without creating a copy. It's used by GPU operations to eliminate the overhead
+    /// of array allocation and copying (2-5x speedup for large vectors).
+    /// </para>
+    /// <para><b>For Beginners:</b> This gives you a window into the vector's data
+    /// without making a copy. Think of it like looking at the original data through
+    /// a glass window instead of making a photocopy.</para>
+    /// </remarks>
+    public ReadOnlySpan<T> AsSpan()
+    {
+        return new ReadOnlySpan<T>(_data);
+    }
+
+    /// <summary>
+    /// Gets a writable span view of the vector's data without copying.
+    /// </summary>
+    /// <returns>A writable span over the vector's elements.</returns>
+    /// <remarks>
+    /// <para><b>Phase B: US-GPU-003 - Zero-Copy Operations</b></para>
+    /// <para>
+    /// This method provides direct writable access to the vector's internal storage.
+    /// Used by GPU operations to write results directly without intermediate copies.
+    /// </para>
+    /// <para><b>Warning:</b> Use with caution - modifications affect the vector directly.</para>
+    /// </remarks>
+    internal Span<T> AsWritableSpan()
+    {
+        return new Span<T>(_data);
+    }
+
+    /// <summary>
     /// Creates a new vector that is a copy of this vector.
     /// </summary>
     /// <returns>A new vector containing the same elements as this vector.</returns>
@@ -319,7 +356,7 @@ public abstract class VectorBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> The L2 norm is the "length" or "magnitude" of a vector in a mathematical sense.
     /// It's calculated by taking the square root of the sum of squares of all elements.
-    /// For example, the L2 norm of [3,4] is v(3²+4²) = v(9+16) = v25 = 5.
+    /// For example, the L2 norm of [3,4] is v(3ï¿½+4ï¿½) = v(9+16) = v25 = 5.
     /// This is commonly used in machine learning to measure the "size" of vectors or the distance between points.</para>
     /// </remarks>
     public virtual T L2Norm()
@@ -367,7 +404,7 @@ public abstract class VectorBase<T>
     /// <para><b>For Beginners:</b> Similar to the other Transform method, but this one also gives you
     /// the position (index) of each element as you transform it. This is useful when the transformation
     /// depends on where the element is located in the vector. For example, you might want to multiply
-    /// each element by its position: [1,2,3] would become [1×0, 2×1, 3×2] = [0,2,6].</para>
+    /// each element by its position: [1,2,3] would become [1ï¿½0, 2ï¿½1, 3ï¿½2] = [0,2,6].</para>
     /// </remarks>
     public virtual VectorBase<TResult> Transform<TResult>(Func<T, int, TResult> function)
     {

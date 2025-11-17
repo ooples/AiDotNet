@@ -257,16 +257,16 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            // Copy to GPU
-            gpuA.CopyFromCPU(a.ToArray());
-            gpuB.CopyFromCPU(b.ToArray());
+            // Zero-copy: Use span instead of ToArray() (Phase B: US-GPU-003)
+            gpuA.CopyFromCPU(a.AsSpan());
+            gpuB.CopyFromCPU(b.AsSpan());
 
             // Use pre-compiled cached kernel (Phase B: US-GPU-001)
             _addKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
             _accelerator!.Synchronize();
 
-            // Copy back to CPU
-            gpuResult.CopyToCPU(result.ToArray());
+            // Zero-copy: Write directly to result's internal storage (Phase B: US-GPU-003)
+            gpuResult.CopyToCPU(result.AsWritableSpan());
 
             return result;
         }
@@ -285,21 +285,17 @@ public class GpuEngine : IEngine, IDisposable
             throw new ArgumentException("Vector lengths must match");
 
         var result = new Vector<float>(a.Length);
-
         var gpuA = _memoryPoolFloat!.Rent(a.Length);
         var gpuB = _memoryPoolFloat.Rent(b.Length);
         var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
         try
         {
-            gpuA.CopyFromCPU(a.ToArray());
-            gpuB.CopyFromCPU(b.ToArray());
-
+            gpuA.CopyFromCPU(a.AsSpan());
+            gpuB.CopyFromCPU(b.AsSpan());
             _subtractKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
             _accelerator!.Synchronize();
-
-            gpuResult.CopyToCPU(result.ToArray());
-
+            gpuResult.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -322,11 +318,11 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuA.CopyFromCPU(a.ToArray());
-            gpuB.CopyFromCPU(b.ToArray());
+            gpuA.CopyFromCPU(a.AsSpan());
+            gpuB.CopyFromCPU(b.AsSpan());
             _multiplyKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
             _accelerator!.Synchronize();
-            gpuResult.CopyToCPU(result.ToArray());
+            gpuResult.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -345,10 +341,10 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.ToArray());
+            gpuVector.CopyFromCPU(vector.AsSpan());
             _multiplyScalarKernelFloat!(vector.Length, gpuVector.View, scalar, gpuResult.View);
             _accelerator!.Synchronize();
-            gpuResult.CopyToCPU(result.ToArray());
+            gpuResult.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -370,11 +366,11 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuA.CopyFromCPU(a.ToArray());
-            gpuB.CopyFromCPU(b.ToArray());
+            gpuA.CopyFromCPU(a.AsSpan());
+            gpuB.CopyFromCPU(b.AsSpan());
             _divideKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
             _accelerator!.Synchronize();
-            gpuResult.CopyToCPU(result.ToArray());
+            gpuResult.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -393,10 +389,10 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.ToArray());
+            gpuVector.CopyFromCPU(vector.AsSpan());
             _divideScalarKernelFloat!(vector.Length, gpuVector.View, scalar, gpuResult.View);
             _accelerator!.Synchronize();
-            gpuResult.CopyToCPU(result.ToArray());
+            gpuResult.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -414,10 +410,10 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.ToArray());
+            gpuVector.CopyFromCPU(vector.AsSpan());
             _sqrtKernelFloat!(vector.Length, gpuVector.View, gpuResult.View);
             _accelerator!.Synchronize();
-            gpuResult.CopyToCPU(result.ToArray());
+            gpuResult.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -435,10 +431,10 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.ToArray());
+            gpuVector.CopyFromCPU(vector.AsSpan());
             _powerKernelFloat!(vector.Length, gpuVector.View, exponent, gpuResult.View);
             _accelerator!.Synchronize();
-            gpuResult.CopyToCPU(result.ToArray());
+            gpuResult.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
