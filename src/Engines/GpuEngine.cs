@@ -35,7 +35,18 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Context? _context;
     private readonly Accelerator? _accelerator;
     private readonly CpuEngine _cpuFallback;
+    private readonly GpuMemoryPool<float>? _memoryPoolFloat;
     private bool _disposed;
+
+    // Kernel cache for float operations (pre-compiled in constructor)
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _addKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _subtractKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _multiplyKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _multiplyScalarKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _divideKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _divideScalarKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>>? _sqrtKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _powerKernelFloat;
 
     /// <inheritdoc/>
     public string Name => _accelerator != null
@@ -70,6 +81,47 @@ public class GpuEngine : IEngine, IDisposable
             {
                 _accelerator = device.CreateAccelerator(_context);
                 Console.WriteLine($"[GpuEngine] Initialized: {_accelerator.Name}");
+
+                // Pre-compile all kernels for float operations (Phase B: US-GPU-001)
+                Console.WriteLine("[GpuEngine] Pre-compiling GPU kernels...");
+
+                _addKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
+                    (index, a, b, result) => result[index] = a[index] + b[index]);
+
+                _subtractKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
+                    (index, a, b, result) => result[index] = a[index] - b[index]);
+
+                _multiplyKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
+                    (index, a, b, result) => result[index] = a[index] * b[index]);
+
+                _multiplyScalarKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, float, ArrayView<float>>(
+                    (index, vec, scalar, result) => result[index] = vec[index] * scalar);
+
+                _divideKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
+                    (index, a, b, result) => result[index] = a[index] / b[index]);
+
+                _divideScalarKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, float, ArrayView<float>>(
+                    (index, vec, scalar, result) => result[index] = vec[index] / scalar);
+
+                _sqrtKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, vec, result) => result[index] = XMath.Sqrt(vec[index]));
+
+                _powerKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, float, ArrayView<float>>(
+                    (index, vec, exp, result) => result[index] = XMath.Pow(vec[index], exp));
+
+                Console.WriteLine("[GpuEngine] Kernel pre-compilation complete");
+
+                // Initialize memory pool for float operations (Phase B: US-GPU-002)
+                _memoryPoolFloat = new GpuMemoryPool<float>(_accelerator);
+                Console.WriteLine("[GpuEngine] Memory pool initialized");
             }
         }
         catch (Exception ex)
@@ -181,27 +233,33 @@ public class GpuEngine : IEngine, IDisposable
 
         var result = new Vector<float>(a.Length);
 
-        // Allocate GPU memory
-        using var gpuA = _accelerator!.Allocate1D<float>(a.Length);
-        using var gpuB = _accelerator.Allocate1D<float>(b.Length);
-        using var gpuResult = _accelerator.Allocate1D<float>(a.Length);
+        // Rent GPU memory from pool (Phase B: US-GPU-002)
+        var gpuA = _memoryPoolFloat!.Rent(a.Length);
+        var gpuB = _memoryPoolFloat.Rent(b.Length);
+        var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
-        // Copy to GPU
-        gpuA.CopyFromCPU(a.ToArray());
-        gpuB.CopyFromCPU(b.ToArray());
+        try
+        {
+            // Copy to GPU
+            gpuA.CopyFromCPU(a.ToArray());
+            gpuB.CopyFromCPU(b.ToArray());
 
-        // Define and launch kernel
-        var kernel = _accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
-            (index, aView, bView, resultView) => resultView[index] = aView[index] + bView[index]);
+            // Use pre-compiled cached kernel (Phase B: US-GPU-001)
+            _addKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _accelerator!.Synchronize();
 
-        kernel(a.Length, gpuA.View, gpuB.View, gpuResult.View);
-        _accelerator.Synchronize();
+            // Copy back to CPU
+            gpuResult.CopyToCPU(result.ToArray());
 
-        // Copy back to CPU
-        gpuResult.CopyToCPU(result.ToArray());
-
-        return result;
+            return result;
+        }
+        finally
+        {
+            // Return buffers to pool for reuse
+            _memoryPoolFloat.Return(gpuA);
+            _memoryPoolFloat.Return(gpuB);
+            _memoryPoolFloat.Return(gpuResult);
+        }
     }
 
     private Vector<float> SubtractGpu(Vector<float> a, Vector<float> b)
@@ -211,23 +269,28 @@ public class GpuEngine : IEngine, IDisposable
 
         var result = new Vector<float>(a.Length);
 
-        using var gpuA = _accelerator!.Allocate1D<float>(a.Length);
-        using var gpuB = _accelerator.Allocate1D<float>(b.Length);
-        using var gpuResult = _accelerator.Allocate1D<float>(a.Length);
+        var gpuA = _memoryPoolFloat!.Rent(a.Length);
+        var gpuB = _memoryPoolFloat.Rent(b.Length);
+        var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
-        gpuA.CopyFromCPU(a.ToArray());
-        gpuB.CopyFromCPU(b.ToArray());
+        try
+        {
+            gpuA.CopyFromCPU(a.ToArray());
+            gpuB.CopyFromCPU(b.ToArray());
 
-        var kernel = _accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
-            (index, aView, bView, resultView) => resultView[index] = aView[index] - bView[index]);
+            _subtractKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _accelerator!.Synchronize();
 
-        kernel(a.Length, gpuA.View, gpuB.View, gpuResult.View);
-        _accelerator.Synchronize();
+            gpuResult.CopyToCPU(result.ToArray());
 
-        gpuResult.CopyToCPU(result.ToArray());
-
-        return result;
+            return result;
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuA);
+            _memoryPoolFloat.Return(gpuB);
+            _memoryPoolFloat.Return(gpuResult);
+        }
     }
 
     private Vector<float> MultiplyGpu(Vector<float> a, Vector<float> b)
@@ -236,45 +299,46 @@ public class GpuEngine : IEngine, IDisposable
             throw new ArgumentException("Vector lengths must match");
 
         var result = new Vector<float>(a.Length);
+        var gpuA = _memoryPoolFloat!.Rent(a.Length);
+        var gpuB = _memoryPoolFloat.Rent(b.Length);
+        var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
-        using var gpuA = _accelerator!.Allocate1D<float>(a.Length);
-        using var gpuB = _accelerator.Allocate1D<float>(b.Length);
-        using var gpuResult = _accelerator.Allocate1D<float>(a.Length);
-
-        gpuA.CopyFromCPU(a.ToArray());
-        gpuB.CopyFromCPU(b.ToArray());
-
-        var kernel = _accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
-            (index, aView, bView, resultView) => resultView[index] = aView[index] * bView[index]);
-
-        kernel(a.Length, gpuA.View, gpuB.View, gpuResult.View);
-        _accelerator.Synchronize();
-
-        gpuResult.CopyToCPU(result.ToArray());
-
-        return result;
+        try
+        {
+            gpuA.CopyFromCPU(a.ToArray());
+            gpuB.CopyFromCPU(b.ToArray());
+            _multiplyKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _accelerator!.Synchronize();
+            gpuResult.CopyToCPU(result.ToArray());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuA);
+            _memoryPoolFloat.Return(gpuB);
+            _memoryPoolFloat.Return(gpuResult);
+        }
     }
 
     private Vector<float> MultiplyScalarGpu(Vector<float> vector, float scalar)
     {
         var result = new Vector<float>(vector.Length);
+        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuResult = _memoryPoolFloat.Rent(vector.Length);
 
-        using var gpuVector = _accelerator!.Allocate1D<float>(vector.Length);
-        using var gpuResult = _accelerator.Allocate1D<float>(vector.Length);
-
-        gpuVector.CopyFromCPU(vector.ToArray());
-
-        var kernel = _accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, float, ArrayView<float>>(
-            (index, vecView, scalarVal, resultView) => resultView[index] = vecView[index] * scalarVal);
-
-        kernel(vector.Length, gpuVector.View, scalar, gpuResult.View);
-        _accelerator.Synchronize();
-
-        gpuResult.CopyToCPU(result.ToArray());
-
-        return result;
+        try
+        {
+            gpuVector.CopyFromCPU(vector.ToArray());
+            _multiplyScalarKernelFloat!(vector.Length, gpuVector.View, scalar, gpuResult.View);
+            _accelerator!.Synchronize();
+            gpuResult.CopyToCPU(result.ToArray());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuVector);
+            _memoryPoolFloat.Return(gpuResult);
+        }
     }
 
     private Vector<float> DivideGpu(Vector<float> a, Vector<float> b)
@@ -283,87 +347,88 @@ public class GpuEngine : IEngine, IDisposable
             throw new ArgumentException("Vector lengths must match");
 
         var result = new Vector<float>(a.Length);
+        var gpuA = _memoryPoolFloat!.Rent(a.Length);
+        var gpuB = _memoryPoolFloat.Rent(b.Length);
+        var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
-        using var gpuA = _accelerator!.Allocate1D<float>(a.Length);
-        using var gpuB = _accelerator.Allocate1D<float>(b.Length);
-        using var gpuResult = _accelerator.Allocate1D<float>(a.Length);
-
-        gpuA.CopyFromCPU(a.ToArray());
-        gpuB.CopyFromCPU(b.ToArray());
-
-        var kernel = _accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
-            (index, aView, bView, resultView) => resultView[index] = aView[index] / bView[index]);
-
-        kernel(a.Length, gpuA.View, gpuB.View, gpuResult.View);
-        _accelerator.Synchronize();
-
-        gpuResult.CopyToCPU(result.ToArray());
-
-        return result;
+        try
+        {
+            gpuA.CopyFromCPU(a.ToArray());
+            gpuB.CopyFromCPU(b.ToArray());
+            _divideKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _accelerator!.Synchronize();
+            gpuResult.CopyToCPU(result.ToArray());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuA);
+            _memoryPoolFloat.Return(gpuB);
+            _memoryPoolFloat.Return(gpuResult);
+        }
     }
 
     private Vector<float> DivideScalarGpu(Vector<float> vector, float scalar)
     {
         var result = new Vector<float>(vector.Length);
+        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuResult = _memoryPoolFloat.Rent(vector.Length);
 
-        using var gpuVector = _accelerator!.Allocate1D<float>(vector.Length);
-        using var gpuResult = _accelerator.Allocate1D<float>(vector.Length);
-
-        gpuVector.CopyFromCPU(vector.ToArray());
-
-        var kernel = _accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, float, ArrayView<float>>(
-            (index, vecView, scalarVal, resultView) => resultView[index] = vecView[index] / scalarVal);
-
-        kernel(vector.Length, gpuVector.View, scalar, gpuResult.View);
-        _accelerator.Synchronize();
-
-        gpuResult.CopyToCPU(result.ToArray());
-
-        return result;
+        try
+        {
+            gpuVector.CopyFromCPU(vector.ToArray());
+            _divideScalarKernelFloat!(vector.Length, gpuVector.View, scalar, gpuResult.View);
+            _accelerator!.Synchronize();
+            gpuResult.CopyToCPU(result.ToArray());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuVector);
+            _memoryPoolFloat.Return(gpuResult);
+        }
     }
 
     private Vector<float> SqrtGpu(Vector<float> vector)
     {
         var result = new Vector<float>(vector.Length);
+        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuResult = _memoryPoolFloat.Rent(vector.Length);
 
-        using var gpuVector = _accelerator!.Allocate1D<float>(vector.Length);
-        using var gpuResult = _accelerator.Allocate1D<float>(vector.Length);
-
-        gpuVector.CopyFromCPU(vector.ToArray());
-
-        var kernel = _accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>>(
-            (index, vecView, resultView) => resultView[index] = XMath.Sqrt(vecView[index]));
-
-        kernel(vector.Length, gpuVector.View, gpuResult.View);
-        _accelerator.Synchronize();
-
-        gpuResult.CopyToCPU(result.ToArray());
-
-        return result;
+        try
+        {
+            gpuVector.CopyFromCPU(vector.ToArray());
+            _sqrtKernelFloat!(vector.Length, gpuVector.View, gpuResult.View);
+            _accelerator!.Synchronize();
+            gpuResult.CopyToCPU(result.ToArray());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuVector);
+            _memoryPoolFloat.Return(gpuResult);
+        }
     }
 
     private Vector<float> PowerGpu(Vector<float> vector, float exponent)
     {
         var result = new Vector<float>(vector.Length);
+        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuResult = _memoryPoolFloat.Rent(vector.Length);
 
-        using var gpuVector = _accelerator!.Allocate1D<float>(vector.Length);
-        using var gpuResult = _accelerator.Allocate1D<float>(vector.Length);
-
-        gpuVector.CopyFromCPU(vector.ToArray());
-
-        var kernel = _accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, float, ArrayView<float>>(
-            (index, vecView, exp, resultView) => resultView[index] = XMath.Pow(vecView[index], exp));
-
-        kernel(vector.Length, gpuVector.View, exponent, gpuResult.View);
-        _accelerator.Synchronize();
-
-        gpuResult.CopyToCPU(result.ToArray());
-
-        return result;
+        try
+        {
+            gpuVector.CopyFromCPU(vector.ToArray());
+            _powerKernelFloat!(vector.Length, gpuVector.View, exponent, gpuResult.View);
+            _accelerator!.Synchronize();
+            gpuResult.CopyToCPU(result.ToArray());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuVector);
+            _memoryPoolFloat.Return(gpuResult);
+        }
     }
 
     #endregion
@@ -375,6 +440,7 @@ public class GpuEngine : IEngine, IDisposable
     {
         if (_disposed) return;
 
+        _memoryPoolFloat?.Dispose();
         _accelerator?.Dispose();
         _context?.Dispose();
 
