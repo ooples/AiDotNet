@@ -53,8 +53,9 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <param name="gradientCache">The gradient cache to use.</param>
     public NesterovAcceleratedGradientOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
+        : base(model, options ?? new(), engine)
     {
         _options = options ?? new NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>();
 
@@ -153,12 +154,12 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <returns>A predicted future solution.</returns>
     private IFullModel<T, TInput, TOutput> GetLookaheadSolution(IFullModel<T, TInput, TOutput> currentSolution)
     {
+        // === Vectorized NAG Lookahead using IEngine (Phase B: US-GPU-015) ===
+        // lookahead = params - momentum * velocity
+
         var parameters = currentSolution.GetParameters();
-        var lookaheadCoefficients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            lookaheadCoefficients[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(CurrentMomentum, _velocity![i]));
-        }
+        var momentumVelocity = (Vector<T>)Engine.Multiply(_velocity!, CurrentMomentum);
+        var lookaheadCoefficients = (Vector<T>)Engine.Subtract(parameters, momentumVelocity);
 
         return currentSolution.WithParameters(lookaheadCoefficients);
     }
@@ -179,13 +180,13 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <returns>The updated velocity vector.</returns>
     private Vector<T> UpdateVelocity(Vector<T> gradient)
     {
-        for (int i = 0; i < _velocity!.Length; i++)
-        {
-            _velocity[i] = NumOps.Add(
-                NumOps.Multiply(CurrentMomentum, _velocity[i]),
-                NumOps.Multiply(CurrentLearningRate, gradient[i])
-            );
-        }
+        // === Vectorized NAG Velocity Update using IEngine (Phase B: US-GPU-015) ===
+        // velocity = momentum * velocity + learningRate * gradient
+
+        var momentumVelocity = (Vector<T>)Engine.Multiply(_velocity!, CurrentMomentum);
+        var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
+        _velocity = (Vector<T>)Engine.Add(momentumVelocity, scaledGradient);
+
         return _velocity;
     }
 
@@ -205,12 +206,11 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <returns>The updated solution.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> velocity)
     {
+        // === Vectorized NAG Update using IEngine (Phase B: US-GPU-015) ===
+        // params = params - velocity
+
         var parameters = currentSolution.GetParameters();
-        var newCoefficients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            newCoefficients[i] = NumOps.Subtract(parameters[i], velocity[i]);
-        }
+        var newCoefficients = (Vector<T>)Engine.Subtract(parameters, velocity);
 
         return currentSolution.WithParameters(newCoefficients);
     }
@@ -238,20 +238,16 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
             _velocity = new Vector<T>(parameters.Length);
         }
 
-        var updatedParams = new Vector<T>(parameters.Length);
+        // === Vectorized NAG Update using IEngine (Phase B: US-GPU-015) ===
+        // Note: In NAG, the gradient is evaluated at the lookahead position
 
         // Update velocity: velocity = momentum * velocity + lr * gradient
-        // Note: In NAG, the gradient is evaluated at the lookahead position
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _velocity[i] = NumOps.Add(
-                NumOps.Multiply(CurrentMomentum, _velocity[i]),
-                NumOps.Multiply(CurrentLearningRate, gradient[i])
-            );
+        var momentumVelocity = (Vector<T>)Engine.Multiply(_velocity, CurrentMomentum);
+        var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
+        _velocity = (Vector<T>)Engine.Add(momentumVelocity, scaledGradient);
 
-            // Update parameters: params = params - velocity
-            updatedParams[i] = NumOps.Subtract(parameters[i], _velocity[i]);
-        }
+        // Update parameters: params = params - velocity
+        var updatedParams = (Vector<T>)Engine.Subtract(parameters, _velocity);
 
         return updatedParams;
     }

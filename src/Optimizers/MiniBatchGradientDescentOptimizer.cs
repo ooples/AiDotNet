@@ -47,8 +47,9 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// <param name="model">The model to optimize.</param>
     public MiniBatchGradientDescentOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        MiniBatchGradientDescentOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        MiniBatchGradientDescentOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
+        : base(model, options ?? new(), engine)
     {
         _options = options ?? new MiniBatchGradientDescentOptions<T, TInput, TOutput>();
 
@@ -165,12 +166,12 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// <returns>An updated symbolic model with improved coefficients.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        // === Vectorized Mini-Batch GD Update using IEngine (Phase B: US-GPU-015) ===
+        // params = params - learningRate * gradient
+
         var parameters = currentSolution.GetParameters();
-        var newCoefficients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            newCoefficients[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(CurrentLearningRate, gradient[i]));
-        }
+        var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
+        var newCoefficients = (Vector<T>)Engine.Subtract(parameters, scaledGradient);
 
         return currentSolution.WithParameters(newCoefficients);
     }
