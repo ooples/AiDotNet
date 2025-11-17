@@ -37,6 +37,7 @@ public class GpuEngine : IEngine, IDisposable
     private readonly CpuEngine _cpuFallback;
     private readonly AdaptiveThresholds _thresholds;
     private bool _disposed;
+    private bool _gpuHealthy = true; // Track GPU health (Phase B: US-GPU-006)
 
     // Memory pools (Phase B: US-GPU-002, US-GPU-005)
     private readonly GpuMemoryPool<float>? _memoryPoolFloat;
@@ -262,8 +263,8 @@ public class GpuEngine : IEngine, IDisposable
             return _cpuFallback.Add(a, b); // CPU for small operations
         }
 
-        // Runtime type dispatch to GPU implementations (Phase B: US-GPU-005)
-        if (SupportsGpu)
+        // Check GPU health before attempting GPU operations (Phase B: US-GPU-006)
+        if (SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
                 return (Vector<T>)(object)AddGpu((Vector<float>)(object)a, (Vector<float>)(object)b);
@@ -275,7 +276,7 @@ public class GpuEngine : IEngine, IDisposable
                 return (Vector<T>)(object)AddGpuLong((Vector<long>)(object)a, (Vector<long>)(object)b);
         }
 
-        // Fallback to CPU for unsupported types
+        // Fallback to CPU for unsupported types or unhealthy GPU
         return _cpuFallback.Add(a, b);
     }
 
@@ -408,6 +409,25 @@ public class GpuEngine : IEngine, IDisposable
             gpuResult.CopyToCPU(result.AsWritableSpan());
 
             return result;
+        }
+        catch (OutOfMemoryException ex)
+        {
+            // GPU memory exhausted - fallback to CPU (Phase B: US-GPU-006)
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Add(a, b);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            // Critical GPU failure - mark unhealthy and fallback (Phase B: US-GPU-006)
+            _gpuHealthy = false;
+            Console.WriteLine($"[GpuEngine] Critical GPU failure: {ex.Message}. GPU disabled, all operations will use CPU.");
+            return _cpuFallback.Add(a, b);
+        }
+        catch (Exception ex)
+        {
+            // GPU operation failed - fallback to CPU (Phase B: US-GPU-006)
+            Console.WriteLine($"[GpuEngine] GPU operation failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Add(a, b);
         }
         finally
         {
