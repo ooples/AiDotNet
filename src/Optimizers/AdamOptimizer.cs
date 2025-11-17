@@ -232,8 +232,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         // Compute update: update = learningRate * mHat / (sqrt(vHat) + epsilon)
         var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
-        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, vHatSqrt.Length));
-        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
+        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilon);
         var updateDiv = (Vector<T>)Engine.Divide(mHat, denominator);
         var update = (Vector<T>)Engine.Multiply(updateDiv, _currentLearningRate);
 
@@ -319,9 +318,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         // Compute update: update = mHat / (sqrt(vHat) + epsilon)
         var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
-        // Add epsilon for numerical stability (create epsilon vector)
-        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, vHatSqrt.Length));
-        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
+        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilon);
         var update = (Vector<T>)Engine.Divide(mHat, denominator);
 
         // Apply update: parameters = parameters - learningRate * update
