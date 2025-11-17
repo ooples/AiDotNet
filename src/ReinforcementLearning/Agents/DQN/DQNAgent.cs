@@ -214,16 +214,17 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backpropagate
-            var gradients = LossFunction.CalculateDerivative(currentQValues, targetQValues);
-            var gradientsTensor = Tensor<T>.FromVector(gradients);
+            var outputGradients = LossFunction.CalculateDerivative(currentQValues, targetQValues);
+            var gradientsTensor = Tensor<T>.FromVector(outputGradients);
             _qNetwork.Backpropagate(gradientsTensor);
 
-            // Update weights using learning rate
+            // Extract parameter gradients from network layers (not output-space gradients)
+            var parameterGradients = _qNetwork.GetGradients();
             var parameters = _qNetwork.GetParameters();
 
             for (int i = 0; i < parameters.Length; i++)
             {
-                var update = NumOps.Multiply(LearningRate, gradients[i]);
+                var update = NumOps.Multiply(LearningRate, parameterGradients[i]);
                 parameters[i] = NumOps.Subtract(parameters[i], update);
             }
 
