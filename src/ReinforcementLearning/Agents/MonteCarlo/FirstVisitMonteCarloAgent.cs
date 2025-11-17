@@ -152,7 +152,7 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         var parts = new string[state.Length];
         for (int i = 0; i < state.Length; i++)
         {
-            parts[i] = NumOps.ToDouble(state[i]).ToString("F4");
+            parts[i] = NumOps.ToDouble(state[i]).ToString("F8");
         }
         return string.Join(",", parts);
     }
