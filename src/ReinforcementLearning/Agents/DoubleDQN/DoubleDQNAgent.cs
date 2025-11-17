@@ -349,19 +349,19 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         return gradient;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Not supported for DoubleDQNAgent. Use the agent's internal Train() loop instead.
+    /// </summary>
+    /// <param name="gradients">Not used.</param>
+    /// <param name="learningRate">Not used.</param>
+    /// <exception cref="NotSupportedException">
+    /// Always thrown. DoubleDQN manages gradient computation and parameter updates internally through backpropagation.
+    /// </exception>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        var currentParams = GetParameters();
-        var newParams = new Vector<T>(currentParams.Length);
-
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            var update = NumOps.Multiply(learningRate, gradients[i]);
-            newParams[i] = NumOps.Subtract(currentParams[i], update);
-        }
-
-        SetParameters(newParams);
+        throw new NotSupportedException(
+            "ApplyGradients is not supported for DoubleDQNAgent; use the agent's internal Train() loop. " +
+            "DoubleDQN manages gradient computation and parameter updates internally through backpropagation.");
     }
 
     // Helper methods
