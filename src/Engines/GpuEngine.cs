@@ -83,6 +83,12 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _divideScalarKernelFloat;
     private readonly Action<Index1D, ArrayView<float>, ArrayView<float>>? _sqrtKernelFloat;
     private readonly Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _powerKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _maxKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _minKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>>? _absKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>>? _expKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>>? _logKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>>? _signKernelFloat;
 
     // Kernel cache for double operations (Phase B: US-GPU-005)
     private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _addKernelDouble;
@@ -93,6 +99,12 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<Index1D, ArrayView<double>, double, ArrayView<double>>? _divideScalarKernelDouble;
     private readonly Action<Index1D, ArrayView<double>, ArrayView<double>>? _sqrtKernelDouble;
     private readonly Action<Index1D, ArrayView<double>, double, ArrayView<double>>? _powerKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _maxKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _minKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>>? _absKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>>? _expKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>>? _logKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>>? _signKernelDouble;
 
     // Kernel cache for int operations (Phase B: US-GPU-005)
     private readonly Action<Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>? _addKernelInt;
@@ -231,6 +243,30 @@ public class GpuEngine : IEngine, IDisposable
                     Index1D, ArrayView<float>, float, ArrayView<float>>(
                     (index, vec, exp, result) => result[index] = XMath.Pow(vec[index], exp));
 
+                _maxKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
+                    (index, a, b, result) => result[index] = XMath.Max(a[index], b[index]));
+
+                _minKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
+                    (index, a, b, result) => result[index] = XMath.Min(a[index], b[index]));
+
+                _absKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, vec, result) => result[index] = XMath.Abs(vec[index]));
+
+                _expKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, vec, result) => result[index] = XMath.Exp(vec[index]));
+
+                _logKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, vec, result) => result[index] = XMath.Log(vec[index]));
+
+                _signKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, vec, result) => result[index] = vec[index] > 0 ? 1.0f : (vec[index] < 0 ? -1.0f : 0.0f));
+
                 Console.WriteLine("[GpuEngine] Float kernels pre-compiled");
 
                 // Pre-compile kernels for double operations (Phase B: US-GPU-005)
@@ -258,6 +294,31 @@ public class GpuEngine : IEngine, IDisposable
                 _powerKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
                     Index1D, ArrayView<double>, double, ArrayView<double>>(
                     (index, vec, exp, result) => result[index] = XMath.Pow(vec[index], exp));
+
+                _maxKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
+                    (index, a, b, result) => result[index] = XMath.Max(a[index], b[index]));
+
+                _minKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
+                    (index, a, b, result) => result[index] = XMath.Min(a[index], b[index]));
+
+                _absKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>>(
+                    (index, vec, result) => result[index] = XMath.Abs(vec[index]));
+
+                _expKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>>(
+                    (index, vec, result) => result[index] = XMath.Exp(vec[index]));
+
+                _logKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>>(
+                    (index, vec, result) => result[index] = XMath.Log(vec[index]));
+
+                _signKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>>(
+                    (index, vec, result) => result[index] = vec[index] > 0 ? 1.0 : (vec[index] < 0 ? -1.0 : 0.0));
+
                 Console.WriteLine("[GpuEngine] Double kernels pre-compiled");
 
                 // Pre-compile kernels for int operations (Phase B: US-GPU-005)
@@ -819,6 +880,108 @@ public class GpuEngine : IEngine, IDisposable
         return _cpuFallback.Power(vector, exponent);
     }
 
+    /// <inheritdoc/>
+    public Vector<T> Max<T>(Vector<T> a, Vector<T> b)
+    {
+        if (a.Length < _thresholds.VectorAdd) // Reuse VectorAdd threshold
+            return _cpuFallback.Max(a, b);
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)MaxGpu((Vector<float>)(object)a, (Vector<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)MaxGpuDouble((Vector<double>)(object)a, (Vector<double>)(object)b);
+        }
+
+        return _cpuFallback.Max(a, b);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Min<T>(Vector<T> a, Vector<T> b)
+    {
+        if (a.Length < _thresholds.VectorAdd) // Reuse VectorAdd threshold
+            return _cpuFallback.Min(a, b);
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)MinGpu((Vector<float>)(object)a, (Vector<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)MinGpuDouble((Vector<double>)(object)a, (Vector<double>)(object)b);
+        }
+
+        return _cpuFallback.Min(a, b);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Abs<T>(Vector<T> vector)
+    {
+        if (vector.Length < _thresholds.VectorSqrt) // Reuse VectorSqrt threshold
+            return _cpuFallback.Abs(vector);
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)AbsGpu((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)AbsGpuDouble((Vector<double>)(object)vector);
+        }
+
+        return _cpuFallback.Abs(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Exp<T>(Vector<T> vector)
+    {
+        if (vector.Length < _thresholds.VectorSqrt) // Reuse VectorSqrt threshold
+            return _cpuFallback.Exp(vector);
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)ExpGpu((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)ExpGpuDouble((Vector<double>)(object)vector);
+        }
+
+        return _cpuFallback.Exp(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Log<T>(Vector<T> vector)
+    {
+        if (vector.Length < _thresholds.VectorSqrt) // Reuse VectorSqrt threshold
+            return _cpuFallback.Log(vector);
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)LogGpu((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)LogGpuDouble((Vector<double>)(object)vector);
+        }
+
+        return _cpuFallback.Log(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Sign<T>(Vector<T> vector)
+    {
+        if (vector.Length < _thresholds.VectorSqrt) // Reuse VectorSqrt threshold
+            return _cpuFallback.Sign(vector);
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)SignGpu((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)SignGpuDouble((Vector<double>)(object)vector);
+        }
+
+        return _cpuFallback.Sign(vector);
+    }
+
     #region GPU Kernels (Float Implementation)
 
     // Note: These are simple, unoptimized kernels for the prototype.
@@ -1065,7 +1228,6 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             gpuVector.CopyFromCPU(vector.AsSpan());
-            _powerKernelFloat!(vector.Length, gpuVector.View, exponent, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
@@ -1074,6 +1236,210 @@ public class GpuEngine : IEngine, IDisposable
             }
             gpuResult.CopyToCPU(result.AsWritableSpan());
             return result;
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuVector);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private Vector<float> MaxGpu(Vector<float> a, Vector<float> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<float>(a.Length);
+        var gpuA = _memoryPoolFloat!.Rent(a.Length);
+        var gpuB = _memoryPoolFloat.Rent(b.Length);
+        var gpuResult = _memoryPoolFloat.Rent(a.Length);
+
+        try
+        {
+            gpuA.CopyFromCPU(a.AsSpan());
+            gpuB.CopyFromCPU(b.AsSpan());
+
+            // Thread-safe kernel execution (Phase B: US-GPU-019)
+            lock (_gpuLock)
+            {
+                _maxKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator!.Synchronize();
+            }
+
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Max(a, b);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuA);
+            _memoryPoolFloat.Return(gpuB);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private Vector<float> MinGpu(Vector<float> a, Vector<float> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<float>(a.Length);
+        var gpuA = _memoryPoolFloat!.Rent(a.Length);
+        var gpuB = _memoryPoolFloat.Rent(b.Length);
+        var gpuResult = _memoryPoolFloat.Rent(a.Length);
+
+        try
+        {
+            gpuA.CopyFromCPU(a.AsSpan());
+            gpuB.CopyFromCPU(b.AsSpan());
+
+            // Thread-safe kernel execution (Phase B: US-GPU-019)
+            lock (_gpuLock)
+            {
+                _minKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator!.Synchronize();
+            }
+
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Min(a, b);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuA);
+            _memoryPoolFloat.Return(gpuB);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private Vector<float> AbsGpu(Vector<float> vector)
+    {
+        var result = new Vector<float>(vector.Length);
+        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuResult = _memoryPoolFloat.Rent(vector.Length);
+
+        try
+        {
+            gpuVector.CopyFromCPU(vector.AsSpan());
+
+            // Thread-safe kernel execution (Phase B: US-GPU-019)
+            lock (_gpuLock)
+            {
+                _absKernelFloat!(vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator!.Synchronize();
+            }
+
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Abs(vector);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuVector);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private Vector<float> ExpGpu(Vector<float> vector)
+    {
+        var result = new Vector<float>(vector.Length);
+        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuResult = _memoryPoolFloat.Rent(vector.Length);
+
+        try
+        {
+            gpuVector.CopyFromCPU(vector.AsSpan());
+
+            // Thread-safe kernel execution (Phase B: US-GPU-019)
+            lock (_gpuLock)
+            {
+                _expKernelFloat!(vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator!.Synchronize();
+            }
+
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Exp(vector);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuVector);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private Vector<float> LogGpu(Vector<float> vector)
+    {
+        var result = new Vector<float>(vector.Length);
+        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuResult = _memoryPoolFloat.Rent(vector.Length);
+
+        try
+        {
+            gpuVector.CopyFromCPU(vector.AsSpan());
+
+            // Thread-safe kernel execution (Phase B: US-GPU-019)
+            lock (_gpuLock)
+            {
+                _logKernelFloat!(vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator!.Synchronize();
+            }
+
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Log(vector);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuVector);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private Vector<float> SignGpu(Vector<float> vector)
+    {
+        var result = new Vector<float>(vector.Length);
+        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuResult = _memoryPoolFloat.Rent(vector.Length);
+
+        try
+        {
+            gpuVector.CopyFromCPU(vector.AsSpan());
+
+            // Thread-safe kernel execution (Phase B: US-GPU-019)
+            lock (_gpuLock)
+            {
+                _signKernelFloat!(vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator!.Synchronize();
+            }
+
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Sign(vector);
         }
         finally
         {
@@ -1115,6 +1481,210 @@ public class GpuEngine : IEngine, IDisposable
         {
             _memoryPoolDouble.Return(gpuA);
             _memoryPoolDouble.Return(gpuB);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> MaxGpuDouble(Vector<double> a, Vector<double> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<double>(a.Length);
+        var gpuA = _memoryPoolDouble!.Rent(a.Length);
+        var gpuB = _memoryPoolDouble.Rent(b.Length);
+        var gpuResult = _memoryPoolDouble.Rent(a.Length);
+
+        try
+        {
+            gpuA.CopyFromCPU(a.AsSpan());
+            gpuB.CopyFromCPU(b.AsSpan());
+
+            // Thread-safe kernel execution (Phase B: US-GPU-019)
+            lock (_gpuLock)
+            {
+                _maxKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator!.Synchronize();
+            }
+
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Max(a, b);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuA);
+            _memoryPoolDouble.Return(gpuB);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> MinGpuDouble(Vector<double> a, Vector<double> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<double>(a.Length);
+        var gpuA = _memoryPoolDouble!.Rent(a.Length);
+        var gpuB = _memoryPoolDouble.Rent(b.Length);
+        var gpuResult = _memoryPoolDouble.Rent(a.Length);
+
+        try
+        {
+            gpuA.CopyFromCPU(a.AsSpan());
+            gpuB.CopyFromCPU(b.AsSpan());
+
+            // Thread-safe kernel execution (Phase B: US-GPU-019)
+            lock (_gpuLock)
+            {
+                _minKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator!.Synchronize();
+            }
+
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Min(a, b);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuA);
+            _memoryPoolDouble.Return(gpuB);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> AbsGpuDouble(Vector<double> vector)
+    {
+        var result = new Vector<double>(vector.Length);
+        var gpuVector = _memoryPoolDouble!.Rent(vector.Length);
+        var gpuResult = _memoryPoolDouble.Rent(vector.Length);
+
+        try
+        {
+            gpuVector.CopyFromCPU(vector.AsSpan());
+
+            // Thread-safe kernel execution (Phase B: US-GPU-019)
+            lock (_gpuLock)
+            {
+                _absKernelDouble!(vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator!.Synchronize();
+            }
+
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Abs(vector);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuVector);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> ExpGpuDouble(Vector<double> vector)
+    {
+        var result = new Vector<double>(vector.Length);
+        var gpuVector = _memoryPoolDouble!.Rent(vector.Length);
+        var gpuResult = _memoryPoolDouble.Rent(vector.Length);
+
+        try
+        {
+            gpuVector.CopyFromCPU(vector.AsSpan());
+
+            // Thread-safe kernel execution (Phase B: US-GPU-019)
+            lock (_gpuLock)
+            {
+                _expKernelDouble!(vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator!.Synchronize();
+            }
+
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Exp(vector);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuVector);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> LogGpuDouble(Vector<double> vector)
+    {
+        var result = new Vector<double>(vector.Length);
+        var gpuVector = _memoryPoolDouble!.Rent(vector.Length);
+        var gpuResult = _memoryPoolDouble.Rent(vector.Length);
+
+        try
+        {
+            gpuVector.CopyFromCPU(vector.AsSpan());
+
+            // Thread-safe kernel execution (Phase B: US-GPU-019)
+            lock (_gpuLock)
+            {
+                _logKernelDouble!(vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator!.Synchronize();
+            }
+
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Log(vector);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuVector);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> SignGpuDouble(Vector<double> vector)
+    {
+        var result = new Vector<double>(vector.Length);
+        var gpuVector = _memoryPoolDouble!.Rent(vector.Length);
+        var gpuResult = _memoryPoolDouble.Rent(vector.Length);
+
+        try
+        {
+            gpuVector.CopyFromCPU(vector.AsSpan());
+
+            // Thread-safe kernel execution (Phase B: US-GPU-019)
+            lock (_gpuLock)
+            {
+                _signKernelDouble!(vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator!.Synchronize();
+            }
+
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Sign(vector);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuVector);
             _memoryPoolDouble.Return(gpuResult);
         }
     }

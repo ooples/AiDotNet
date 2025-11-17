@@ -196,6 +196,124 @@ public class CpuEngine : IEngine
         return result;
     }
 
+    /// <inheritdoc/>
+    public Vector<T> Max<T>(Vector<T> a, Vector<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Length != b.Length)
+        {
+            throw new ArgumentException($"Vector lengths must match. Got {a.Length} and {b.Length}");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(a.Length);
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            result[i] = numOps.GreaterThan(a[i], b[i]) ? a[i] : b[i];
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Min<T>(Vector<T> a, Vector<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Length != b.Length)
+        {
+            throw new ArgumentException($"Vector lengths must match. Got {a.Length} and {b.Length}");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(a.Length);
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            result[i] = numOps.LessThan(a[i], b[i]) ? a[i] : b[i];
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Abs<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        for (int i = 0; i < vector.Length; i++)
+        {
+            result[i] = numOps.Abs(vector[i]);
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Exp<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        for (int i = 0; i < vector.Length; i++)
+        {
+            result[i] = numOps.Exp(vector[i]);
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Log<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        for (int i = 0; i < vector.Length; i++)
+        {
+            result[i] = numOps.Log(vector[i]);
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Sign<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        for (int i = 0; i < vector.Length; i++)
+        {
+            // Sign returns -1, 0, or +1
+            if (numOps.GreaterThan(vector[i], numOps.Zero))
+            {
+                result[i] = numOps.One;
+            }
+            else if (numOps.LessThan(vector[i], numOps.Zero))
+            {
+                result[i] = numOps.Negate(numOps.One);
+            }
+            else
+            {
+                result[i] = numOps.Zero;
+            }
+        }
+
+        return result;
+    }
+
     #region Matrix Operations (Phase B: Epic 2)
 
     /// <inheritdoc/>

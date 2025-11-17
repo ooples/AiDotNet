@@ -112,6 +112,77 @@ public interface IEngine
     /// <returns>A new vector with elements raised to the power.</returns>
     Vector<T> Power<T>(Vector<T> vector, T exponent);
 
+    /// <summary>
+    /// Computes the element-wise maximum of two vectors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vectors.</typeparam>
+    /// <param name="a">The first vector.</param>
+    /// <param name="b">The second vector.</param>
+    /// <returns>A new vector where each element is max(a[i], b[i]).</returns>
+    /// <exception cref="ArgumentException">Thrown when vectors have different lengths.</exception>
+    /// <remarks>
+    /// <para><b>Phase B: US-GPU-015</b> - Required for AdaMax optimizer.</para>
+    /// </remarks>
+    Vector<T> Max<T>(Vector<T> a, Vector<T> b);
+
+    /// <summary>
+    /// Computes the element-wise minimum of two vectors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vectors.</typeparam>
+    /// <param name="a">The first vector.</param>
+    /// <param name="b">The second vector.</param>
+    /// <returns>A new vector where each element is min(a[i], b[i]).</returns>
+    /// <exception cref="ArgumentException">Thrown when vectors have different lengths.</exception>
+    /// <remarks>
+    /// <para><b>Phase B: US-GPU-015</b> - Required for various optimizers.</para>
+    /// </remarks>
+    Vector<T> Min<T>(Vector<T> a, Vector<T> b);
+
+    /// <summary>
+    /// Computes the absolute value of each element in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing the absolute values.</returns>
+    /// <remarks>
+    /// <para><b>Phase B: US-GPU-015</b> - Required for AdaMax and other optimizers.</para>
+    /// </remarks>
+    Vector<T> Abs<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the exponential (e^x) of each element in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing the exponentials.</returns>
+    /// <remarks>
+    /// <para><b>Phase B: US-GPU-015</b> - Required for natural gradient optimizers.</para>
+    /// </remarks>
+    Vector<T> Exp<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the natural logarithm of each element in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing the logarithms.</returns>
+    /// <exception cref="ArgumentException">Thrown when any element is <= 0.</exception>
+    /// <remarks>
+    /// <para><b>Phase B: US-GPU-015</b> - Required for natural gradient optimizers.</para>
+    /// </remarks>
+    Vector<T> Log<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the sign (-1, 0, or +1) of each element in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing the signs.</returns>
+    /// <remarks>
+    /// <para><b>Phase B: US-GPU-015</b> - Required for Lion optimizer.</para>
+    /// </remarks>
+    Vector<T> Sign<T>(Vector<T> vector);
+
     #endregion
 
     #region Matrix Operations (Phase B: Epic 2)
