@@ -53,6 +53,10 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     private UniformReplayBuffer<T> _replayBuffer;
     private int _stepCount;
 
+    // Track per-agent rewards for competitive/mixed-motive scenarios
+    // Maps experience index to array of per-agent rewards
+    private Dictionary<int, List<T>> _perAgentRewards;
+
     public MADDPGAgent(MADDPGOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
         : base(options)
     {
@@ -68,6 +72,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         });
         _stepCount = 0;
         _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
+        _perAgentRewards = new Dictionary<int, List<T>>();
 
         // Initialize networks directly in constructor
         _actorNetworks = new List<INeuralNetwork<T>>();
@@ -201,15 +206,16 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <summary>
-    /// Store multi-agent experience.
-    
+    /// Store multi-agent experience with per-agent reward tracking.
+    /// </summary>
     /// <remarks>
-    /// Issue #2 fix: This method averages rewards across all agents, which works well for
-    /// cooperative scenarios but may not suit competitive or mixed-motive settings.
-    /// For competitive scenarios, consider storing per-agent rewards separately
-    /// or using a different reward aggregation strategy.
+    /// Stores individual rewards for each agent to support both cooperative and
+    /// competitive/mixed-motive scenarios. For backward compatibility, also stores
+    /// an averaged reward in the experience.
+    ///
+    /// The per-agent rewards are stored keyed by the buffer index where the experience
+    /// will be placed. This accounts for the circular buffer behavior when capacity is reached.
     /// </remarks>
-    
     public void StoreMultiAgentExperience(
         List<Vector<T>> states,
         List<Vector<T>> actions,
@@ -222,8 +228,27 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var jointAction = ConcatenateVectors(actions);
         var jointNextState = ConcatenateVectors(nextStates);
 
-        // Use average reward (suitable for cooperative scenarios)
-        // Note: For competitive scenarios, per-agent reward tracking may be preferable
+        // Compute the buffer index where this experience will be stored
+        // This accounts for circular buffer behavior: if buffer is not full, index = Count
+        // If buffer is full, the circular position is used (which we approximate here)
+        int bufferIndex;
+        if (_replayBuffer.Count < _replayBuffer.Capacity)
+        {
+            // Buffer not full yet, experience goes at the end
+            bufferIndex = _replayBuffer.Count;
+        }
+        else
+        {
+            // Buffer is full, circular overwrite - use modulo to find position
+            // Note: We approximate the position since we don't have access to internal _position field
+            // This works because experiences are added sequentially
+            bufferIndex = _stepCount % _replayBuffer.Capacity;
+        }
+
+        // Store per-agent rewards at the buffer index for competitive/mixed-motive scenarios
+        _perAgentRewards[bufferIndex] = new List<T>(rewards);
+
+        // Also compute average reward for cooperative scenarios (backward compatibility)
         T avgReward = NumOps.Zero;
         foreach (var reward in rewards)
         {
@@ -248,13 +273,14 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             return NumOps.Zero;
         }
 
-        var batch = _replayBuffer.Sample(_options.BatchSize);
+        // Sample batch with indices to retrieve per-agent rewards
+        var (batch, indices) = _replayBuffer.SampleWithIndices(_options.BatchSize);
         T totalLoss = NumOps.Zero;
 
         // Update each agent's critic and actor
         for (int agentId = 0; agentId < _options.NumAgents; agentId++)
         {
-            T criticLoss = UpdateCritic(agentId, batch);
+            T criticLoss = UpdateCritic(agentId, batch, indices);
             T actorLoss = UpdateActor(agentId, batch);
 
             totalLoss = NumOps.Add(totalLoss, NumOps.Add(criticLoss, actorLoss));
@@ -267,12 +293,28 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(_options.NumAgents * 2));
     }
 
-    private T UpdateCritic(int agentId, List<AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>> batch)
+    private T UpdateCritic(int agentId, List<AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>> batch, List<int> indices)
     {
         T totalLoss = NumOps.Zero;
 
-        foreach (var experience in batch)
+        for (int i = 0; i < batch.Count; i++)
         {
+            var experience = batch[i];
+            int bufferIndex = indices[i];
+
+            // Retrieve agent-specific reward if available, otherwise fall back to averaged reward
+            T agentReward;
+            if (_perAgentRewards.ContainsKey(bufferIndex) && agentId < _perAgentRewards[bufferIndex].Count)
+            {
+                // Use agent-specific reward for competitive/mixed-motive scenarios
+                agentReward = _perAgentRewards[bufferIndex][agentId];
+            }
+            else
+            {
+                // Fall back to averaged reward for backward compatibility
+                agentReward = experience.Reward;
+            }
+
             // Compute target using target networks (centralized)
             // In MADDPG, target Q uses actions from target actors, not the actual actions taken
             var targetNextActions = ComputeJointTargetActions(experience.NextState);
@@ -284,11 +326,11 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             T target;
             if (experience.Done)
             {
-                target = experience.Reward;
+                target = agentReward;
             }
             else
             {
-                target = NumOps.Add(experience.Reward, NumOps.Multiply(DiscountFactor, targetQ));
+                target = NumOps.Add(agentReward, NumOps.Multiply(DiscountFactor, targetQ));
             }
 
             // Current Q-value

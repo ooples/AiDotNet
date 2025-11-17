@@ -81,6 +81,39 @@ public class UniformReplayBuffer<T> : IReplayBuffer<T>
         return sampled;
     }
 
+    /// <summary>
+    /// Samples a batch of experiences with their buffer indices.
+    /// </summary>
+    /// <param name="batchSize">Number of experiences to sample.</param>
+    /// <returns>A tuple containing the list of sampled experiences and their corresponding buffer indices.</returns>
+    /// <remarks>
+    /// This method is useful for multi-agent scenarios where additional per-agent data is stored
+    /// separately and needs to be retrieved using the buffer index.
+    /// </remarks>
+    public (List<Experience<T>> Experiences, List<int> Indices) SampleWithIndices(int batchSize)
+    {
+        if (!CanSample(batchSize))
+            throw new InvalidOperationException($"Cannot sample {batchSize} experiences. Buffer only contains {Count} experiences.");
+
+        var sampled = new List<Experience<T>>(batchSize);
+        var sampledIndices = new List<int>(batchSize);
+        var indices = new HashSet<int>();
+
+        // Sample without replacement
+        while (indices.Count < batchSize)
+        {
+            indices.Add(_random.Next(_buffer.Count));
+        }
+
+        foreach (var index in indices)
+        {
+            sampled.Add(_buffer[index]);
+            sampledIndices.Add(index);
+        }
+
+        return (sampled, sampledIndices);
+    }
+
     /// <inheritdoc/>
     public bool CanSample(int batchSize)
     {
