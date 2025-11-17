@@ -382,6 +382,17 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         var currentParams = GetParameters();
+
+        // Validate that gradients vector has the correct length (parameter-space, not output-space)
+        if (gradients.Length != currentParams.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient vector length ({gradients.Length}) must match parameter vector length ({currentParams.Length}). " +
+                $"ApplyGradients expects parameter-space gradients (w.r.t. all network weights), not output-space gradients (w.r.t. network outputs). " +
+                $"Use _qNetwork.GetGradients() after backpropagation to obtain parameter-space gradients.",
+                nameof(gradients));
+        }
+
         var newParams = new Vector<T>(currentParams.Length);
 
         for (int i = 0; i < currentParams.Length; i++)
