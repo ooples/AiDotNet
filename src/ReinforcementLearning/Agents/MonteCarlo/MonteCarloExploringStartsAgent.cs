@@ -312,6 +312,9 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
             }
         }
 
+        // Preserve mid-episode state
+        clone._isFirstAction = this._isFirstAction;
+
         return clone;
     }
 
