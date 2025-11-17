@@ -52,7 +52,7 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         _returns = new Dictionary<string, Dictionary<int, List<T>>>();
         _episode = new List<(string, int, T)>();
         _epsilon = _options.EpsilonStart;
-        _random = new Random();
+        _random = Random;
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
