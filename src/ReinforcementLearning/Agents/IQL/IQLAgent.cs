@@ -67,6 +67,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         })
     {
         _options = options;
+        _options.Validate();
         _numOps = MathHelper.GetNumericOperations<T>();
         _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _updateCount = 0;
