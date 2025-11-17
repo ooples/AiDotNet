@@ -36,6 +36,7 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Accelerator? _accelerator;
     private readonly CpuEngine _cpuFallback;
     private readonly GpuMemoryPool<float>? _memoryPoolFloat;
+    private readonly AdaptiveThresholds _thresholds;
     private bool _disposed;
 
     // Kernel cache for float operations (pre-compiled in constructor)
@@ -57,7 +58,7 @@ public class GpuEngine : IEngine, IDisposable
     public bool SupportsGpu => _accelerator != null;
 
     /// <summary>
-    /// Initializes a new instance of the GpuEngine class.
+    /// Initializes a new instance of the GpuEngine class with default adaptive thresholds.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -66,7 +67,23 @@ public class GpuEngine : IEngine, IDisposable
     /// </para>
     /// </remarks>
     public GpuEngine()
+        : this(AdaptiveThresholds.Default)
     {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the GpuEngine class with custom adaptive thresholds.
+    /// </summary>
+    /// <param name="thresholds">Custom thresholds for adaptive CPU/GPU routing.</param>
+    /// <remarks>
+    /// <para>
+    /// Use this constructor to fine-tune performance for your specific hardware.
+    /// See <see cref="AdaptiveThresholds"/> for preset configurations.
+    /// </para>
+    /// </remarks>
+    public GpuEngine(AdaptiveThresholds thresholds)
+    {
+        _thresholds = thresholds ?? AdaptiveThresholds.Default;
         _cpuFallback = new CpuEngine();
 
         try
