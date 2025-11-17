@@ -355,38 +355,71 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
                 jointAction[agentId * _options.ActionSize + i] = action[i];
             }
 
-            // Compute Q-value (policy gradient)
+            // Compute Q-value from critic (for deterministic policy gradient)
             var jointStateAction = ConcatenateStateAction(experience.State, jointAction);
             var jointStateActionTensor = Tensor<T>.FromVector(jointStateAction);
             var qValueTensor = _criticNetworks[agentId].Predict(jointStateActionTensor);
             var qValue = qValueTensor.ToVector()[0];
 
-            // Actor loss: maximize Q-value
+            // Actor loss: maximize Q-value (negated for minimization)
             totalLoss = NumOps.Add(totalLoss, NumOps.Negate(qValue));
 
-            // Simplified gradient for actor
-            var actorGradient = new Vector<T>(_options.ActionSize);
-            for (int i = 0; i < _options.ActionSize; i++)
-            {
-                actorGradient[i] = NumOps.Divide(qValue, NumOps.FromDouble(_options.ActionSize));
-            }
+            // Deterministic Policy Gradient: backprop through critic to get dQ/dAction
+            // Create upstream gradient for critic output (dLoss/dQ = -1 for maximization)
+            var criticOutputGradient = new Vector<T>(1);
+            criticOutputGradient[0] = NumOps.FromDouble(-1.0); // Negative because we want to maximize Q
+            var criticOutputGradientTensor = Tensor<T>.FromVector(criticOutputGradient);
 
-            var actorGradientTensor = Tensor<T>.FromVector(actorGradient);
-
-            // Cast to NeuralNetwork to access Backpropagate
-            if (_actorNetworks[agentId] is NeuralNetwork<T> actorNetwork)
+            // Backpropagate through critic to compute gradients w.r.t. its input
+            // Note: This computes dQ/d(state,action) internally in the network layers
+            if (_criticNetworks[agentId] is NeuralNetwork<T> criticNetwork)
             {
-                actorNetwork.Backpropagate(actorGradientTensor);
-            }
+                criticNetwork.Backpropagate(criticOutputGradientTensor);
 
-            // Update parameters using gradient ascent (maximize Q-value)
-            var actorParams = _actorNetworks[agentId].GetParameters();
-            for (int i = 0; i < actorParams.Length; i++)
-            {
-                var gradient = NumOps.Multiply(_options.ActorLearningRate, qValue);
-                actorParams[i] = NumOps.Add(actorParams[i], gradient);
+                // Extract input gradients from the first layer (gradient w.r.t. [state, action])
+                // The input to critic is [state, action] concatenated
+                // We need the gradient slice corresponding to action: indices [stateSize, stateSize+actionSize)
+                var inputGradients = criticNetwork.GetInputGradients();
+
+                // Extract dQ/dAction (skip state portion, take action portion)
+                int jointStateSize = experience.State.Length;
+                var actionGradient = new Vector<T>(_options.ActionSize);
+                int actionStartIdx = jointStateSize;
+
+                for (int i = 0; i < _options.ActionSize; i++)
+                {
+                    // Extract gradients for this agent's action from joint action space
+                    int jointActionIdx = agentId * _options.ActionSize + i;
+                    if (actionStartIdx + jointActionIdx < inputGradients.Length)
+                    {
+                        actionGradient[i] = inputGradients[actionStartIdx + jointActionIdx];
+                    }
+                    else
+                    {
+                        // Fallback: use simple gradient estimate
+                        actionGradient[i] = NumOps.Divide(criticOutputGradient[0], NumOps.FromDouble(_options.ActionSize));
+                    }
+                }
+
+                // Backpropagate action gradient through actor to get parameter gradients
+                var actionGradientTensor = Tensor<T>.FromVector(actionGradient);
+                if (_actorNetworks[agentId] is NeuralNetwork<T> actorNetwork)
+                {
+                    actorNetwork.Backpropagate(actionGradientTensor);
+
+                    // Extract parameter gradients from actor network
+                    var parameterGradients = actorNetwork.GetGradients();
+                    var actorParams = actorNetwork.GetParameters();
+
+                    // Gradient ascent: θ ← θ + α * ∇_θ J (maximize Q)
+                    for (int i = 0; i < actorParams.Length && i < parameterGradients.Length; i++)
+                    {
+                        var update = NumOps.Multiply(_options.ActorLearningRate, parameterGradients[i]);
+                        actorParams[i] = NumOps.Add(actorParams[i], update); // Add for ascent
+                    }
+                    actorNetwork.UpdateParameters(actorParams);
+                }
             }
-            _actorNetworks[agentId].UpdateParameters(actorParams);
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
