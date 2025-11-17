@@ -592,6 +592,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var allParams = new List<T>();
 
+        // Collect actor network parameters
         foreach (var network in _actorNetworks)
         {
             var netParams = network.GetParameters();
@@ -601,7 +602,28 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
         }
 
+        // Collect critic network parameters
         foreach (var network in _criticNetworks)
+        {
+            var netParams = network.GetParameters();
+            for (int i = 0; i < netParams.Length; i++)
+            {
+                allParams.Add(netParams[i]);
+            }
+        }
+
+        // Collect target actor network parameters
+        foreach (var network in _targetActorNetworks)
+        {
+            var netParams = network.GetParameters();
+            for (int i = 0; i < netParams.Length; i++)
+            {
+                allParams.Add(netParams[i]);
+            }
+        }
+
+        // Collect target critic network parameters
+        foreach (var network in _targetCriticNetworks)
         {
             var netParams = network.GetParameters();
             for (int i = 0; i < netParams.Length; i++)
@@ -623,6 +645,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         int offset = 0;
 
+        // Load actor network parameters
         foreach (var network in _actorNetworks)
         {
             int paramCount = network.ParameterCount;
@@ -635,6 +658,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             offset += paramCount;
         }
 
+        // Load critic network parameters
         foreach (var network in _criticNetworks)
         {
             int paramCount = network.ParameterCount;
@@ -645,6 +669,46 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
             network.UpdateParameters(netParams);
             offset += paramCount;
+        }
+
+        // Load target actor network parameters
+        foreach (var network in _targetActorNetworks)
+        {
+            int paramCount = network.ParameterCount;
+            var netParams = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
+            {
+                netParams[i] = parameters[offset + i];
+            }
+            network.UpdateParameters(netParams);
+            offset += paramCount;
+        }
+
+        // Load target critic network parameters
+        foreach (var network in _targetCriticNetworks)
+        {
+            int paramCount = network.ParameterCount;
+            var netParams = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
+            {
+                netParams[i] = parameters[offset + i];
+            }
+            network.UpdateParameters(netParams);
+            offset += paramCount;
+        }
+
+        // Synchronize target networks from main networks
+        // This ensures targets match main networks after loading
+        for (int i = 0; i < _actorNetworks.Count; i++)
+        {
+            var actorParams = _actorNetworks[i].GetParameters();
+            _targetActorNetworks[i].UpdateParameters(actorParams);
+        }
+
+        for (int i = 0; i < _criticNetworks.Count; i++)
+        {
+            var criticParams = _criticNetworks[i].GetParameters();
+            _targetCriticNetworks[i].UpdateParameters(criticParams);
         }
     }
 
