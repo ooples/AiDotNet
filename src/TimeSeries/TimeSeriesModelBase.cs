@@ -1713,4 +1713,5 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
                 $"Failed to deserialize time series model state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
         }
     }
+
 }

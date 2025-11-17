@@ -64,6 +64,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
     private KnowledgeDistillationOptions<T, TInput, TOutput>? _knowledgeDistillationOptions;
     private MixedPrecisionConfig? _mixedPrecisionConfig;
+    private ReinforcementLearning.Interfaces.IEnvironment<T>? _environment;
 
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
@@ -597,6 +598,196 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
+    /// Builds and trains a reinforcement learning agent in the configured environment.
+    /// Requires ConfigureEnvironment() and ConfigureModel() (with an RL agent) to be called first.
+    /// </summary>
+    /// <param name="episodes">Number of episodes to train for.</param>
+    /// <param name="verbose">Whether to print training progress.</param>
+    /// <returns>A task that represents the asynchronous operation, containing the trained RL agent.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when environment or RL agent not configured.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This overload is specifically for reinforcement learning. Instead of
+    /// training on a fixed dataset (x, y), the agent learns by interacting with an environment
+    /// over many episodes. Each episode is like playing one game from start to finish.
+    /// </para>
+    /// <para>
+    /// **Reinforcement Learning Training**:
+    /// - Agent interacts with environment for specified number of episodes
+    /// - Each episode: agent takes actions, receives rewards, updates policy
+    /// - No need for x/y data - agent learns from environment feedback
+    /// - Returns standard PredictionModelResult for consistency
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var agent = new DQNAgent&lt;double&gt;(new DQNOptions&lt;double&gt;
+    /// {
+    ///     StateSize = 4,
+    ///     ActionSize = 2,
+    ///     LearningRate = NumOps.FromDouble(0.001)
+    /// });
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureEnvironment(new CartPoleEnvironment&lt;double&gt;())
+    ///     .ConfigureModel(agent)
+    ///     .BuildAsync(episodes: 1000);
+    ///
+    /// // Use trained agent
+    /// var action = result.Predict(stateObservation);
+    /// </code>
+    /// </para>
+    /// </remarks>
+#pragma warning disable CS1998
+    public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(int episodes, bool verbose = true)
+    {
+        // RL TRAINING PATH - requires ConfigureEnvironment() and an RL agent
+        if (_environment == null)
+            throw new InvalidOperationException(
+                "BuildAsync(episodes) requires ConfigureEnvironment() to be called first. " +
+                "For regular training, use BuildAsync(x, y).");
+
+        if (_model == null)
+            throw new InvalidOperationException("Model (RL agent) must be specified using ConfigureModel().");
+
+        if (_model is not ReinforcementLearning.Interfaces.IRLAgent<T> rlAgent)
+            throw new InvalidOperationException(
+                "The configured model must implement IRLAgent<T> for RL training. " +
+                "Use RL agent types like DQNAgent, PPOAgent, SACAgent, etc.");
+
+        // Track training metrics
+        var episodeRewards = new List<T>();
+        var episodeLengths = new List<int>();
+        var losses = new List<T>();
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        if (verbose)
+        {
+            Console.WriteLine($"Starting RL training for {episodes} episodes...");
+            Console.WriteLine($"Environment: {_environment.GetType().Name}");
+            Console.WriteLine($"Agent: {rlAgent.GetType().Name}");
+            Console.WriteLine();
+        }
+
+        // Training loop
+        for (int episode = 0; episode < episodes; episode++)
+        {
+            var state = _environment.Reset();
+            rlAgent.ResetEpisode();
+
+            T episodeReward = numOps.Zero;
+            int steps = 0;
+            bool done = false;
+
+            // Episode loop
+            while (!done)
+            {
+                // Select action
+                var action = rlAgent.SelectAction(state, training: true);
+
+                // Take step in environment
+                var (nextState, reward, isDone, info) = _environment.Step(action);
+
+                // Store experience
+                rlAgent.StoreExperience(state, action, reward, nextState, isDone);
+
+                // Train agent
+                var loss = rlAgent.Train();
+                if (numOps.ToDouble(loss) > 0)
+                {
+                    losses.Add(loss);
+                }
+
+                // Update for next step
+                state = nextState;
+                episodeReward = numOps.Add(episodeReward, reward);
+                steps++;
+                done = isDone;
+            }
+
+            episodeRewards.Add(episodeReward);
+            episodeLengths.Add(steps);
+
+            // Print progress
+            if (verbose && (episode + 1) % Math.Max(1, episodes / 10) == 0)
+            {
+                var recentRewards = episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100).ToList();
+                var avgReward = recentRewards.Count > 0
+                    ? ComputeAverage(recentRewards, numOps)
+                    : numOps.Zero;
+
+                var recentLosses = losses.Skip(Math.Max(0, losses.Count - 100)).Take(100).ToList();
+                var avgLoss = recentLosses.Count > 0
+                    ? ComputeAverage(recentLosses, numOps)
+                    : numOps.Zero;
+
+                Console.WriteLine($"Episode {episode + 1}/{episodes} | " +
+                                  $"Avg Reward (last 100): {numOps.ToDouble(avgReward):F2} | " +
+                                  $"Avg Loss: {numOps.ToDouble(avgLoss):F6} | " +
+                                  $"Steps: {steps}");
+            }
+        }
+
+        if (verbose)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Training completed!");
+            var finalAvgReward = ComputeAverage(episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100), numOps);
+            Console.WriteLine($"Final average reward (last 100 episodes): {numOps.ToDouble(finalAvgReward):F2}");
+        }
+
+        // Create optimization result for RL training
+        var optimizationResult = new OptimizationResult<T, TInput, TOutput>
+        {
+            BestSolution = _model
+        };
+
+        // Create normalization info (RL doesn't use normalization like supervised learning)
+        var normInfo = new NormalizationInfo<T, TInput, TOutput>();
+
+        // Create deployment configuration from individual configs
+        var deploymentConfig = DeploymentConfiguration.Create(
+            _quantizationConfig,
+            _cacheConfig,
+            _versioningConfig,
+            _abTestingConfig,
+            _telemetryConfig,
+            _exportConfig);
+
+        // Return standard PredictionModelResult
+        var result = new PredictionModelResult<T, TInput, TOutput>(
+            optimizationResult,
+            normInfo,
+            _biasDetector,
+            _fairnessEvaluator,
+            _ragRetriever,
+            _ragReranker,
+            _ragGenerator,
+            _queryProcessors,
+            _loraConfiguration,
+            crossValidationResult: null,
+            _agentConfig,
+            agentRecommendation: null,
+            deploymentConfig);
+
+        return result;
+    }
+
+    private static T ComputeAverage(IEnumerable<T> values, INumericOperations<T> numOps)
+    {
+        var list = values.ToList();
+        if (list.Count == 0) return numOps.Zero;
+
+        T sum = numOps.Zero;
+        foreach (var value in list)
+        {
+            sum = numOps.Add(sum, value);
+        }
+        return numOps.Divide(sum, numOps.FromDouble(list.Count));
+    }
+
+    /// <summary>
     /// Uses a trained model to make predictions on new data.
     /// </summary>
     /// <param name="newData">The matrix of new input features to predict outcomes for.</param>
@@ -908,6 +1099,33 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     {
         _agentConfig = configuration;
         _agentOptions = configuration.AssistanceOptions ?? AgentAssistanceOptions.Default;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the environment for reinforcement learning.
+    /// </summary>
+    /// <param name="environment">The RL environment to use for training.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> When training reinforcement learning agents, you need an environment
+    /// for the agent to interact with. This is like setting up a simulation or game for the agent
+    /// to learn from. Common environments include CartPole (balancing a pole), Atari games,
+    /// robotic simulations, etc.
+    ///
+    /// After configuring an environment, use BuildAsync(episodes) to train an RL agent.
+    ///
+    /// Example:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureEnvironment(new CartPoleEnvironment&lt;double&gt;())
+    ///     .ConfigureModel(new DQNAgent&lt;double&gt;())
+    ///     .BuildAsync(episodes: 1000);
+    /// </code>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureEnvironment(ReinforcementLearning.Interfaces.IEnvironment<T> environment)
+    {
+        _environment = environment;
         return this;
     }
 
