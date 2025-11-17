@@ -357,13 +357,16 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             {
                 criticNetwork.Backpropagate(gradientsTensor);
 
-                // Apply gradient descent updates to critic network parameters
+                // Extract parameter gradients from network layers (not output-space gradients)
+                var parameterGradients = criticNetwork.GetGradients();
                 var parameters = criticNetwork.GetParameters();
-                for (int i = 0; i < parameters.Length && i < gradients.Length; i++)
+
+                for (int i = 0; i < parameters.Length; i++)
                 {
-                    var update = NumOps.Multiply(_options.CriticLearningRate, gradients[Math.Min(i, gradients.Length - 1)]);
+                    var update = NumOps.Multiply(_options.CriticLearningRate, parameterGradients[i]);
                     parameters[i] = NumOps.Subtract(parameters[i], update);
                 }
+
                 criticNetwork.UpdateParameters(parameters);
             }
         }
