@@ -35,11 +35,16 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Context? _context;
     private readonly Accelerator? _accelerator;
     private readonly CpuEngine _cpuFallback;
-    private readonly GpuMemoryPool<float>? _memoryPoolFloat;
     private readonly AdaptiveThresholds _thresholds;
     private bool _disposed;
 
-    // Kernel cache for float operations (pre-compiled in constructor)
+    // Memory pools (Phase B: US-GPU-002, US-GPU-005)
+    private readonly GpuMemoryPool<float>? _memoryPoolFloat;
+    private readonly GpuMemoryPool<double>? _memoryPoolDouble;
+    private readonly GpuMemoryPool<int>? _memoryPoolInt;
+    private readonly GpuMemoryPool<long>? _memoryPoolLong;
+
+    // Kernel cache for float operations (Phase B: US-GPU-001)
     private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _addKernelFloat;
     private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _subtractKernelFloat;
     private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _multiplyKernelFloat;
@@ -48,6 +53,32 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _divideScalarKernelFloat;
     private readonly Action<Index1D, ArrayView<float>, ArrayView<float>>? _sqrtKernelFloat;
     private readonly Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _powerKernelFloat;
+
+    // Kernel cache for double operations (Phase B: US-GPU-005)
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _addKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _subtractKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _multiplyKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, double, ArrayView<double>>? _multiplyScalarKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _divideKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, double, ArrayView<double>>? _divideScalarKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>>? _sqrtKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, double, ArrayView<double>>? _powerKernelDouble;
+
+    // Kernel cache for int operations (Phase B: US-GPU-005)
+    private readonly Action<Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>? _addKernelInt;
+    private readonly Action<Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>? _subtractKernelInt;
+    private readonly Action<Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>? _multiplyKernelInt;
+    private readonly Action<Index1D, ArrayView<int>, int, ArrayView<int>>? _multiplyScalarKernelInt;
+    private readonly Action<Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>? _divideKernelInt;
+    private readonly Action<Index1D, ArrayView<int>, int, ArrayView<int>>? _divideScalarKernelInt;
+
+    // Kernel cache for long operations (Phase B: US-GPU-005)
+    private readonly Action<Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>? _addKernelLong;
+    private readonly Action<Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>? _subtractKernelLong;
+    private readonly Action<Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>? _multiplyKernelLong;
+    private readonly Action<Index1D, ArrayView<long>, long, ArrayView<long>>? _multiplyScalarKernelLong;
+    private readonly Action<Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>? _divideKernelLong;
+    private readonly Action<Index1D, ArrayView<long>, long, ArrayView<long>>? _divideScalarKernelLong;
 
     /// <inheritdoc/>
     public string Name => _accelerator != null
@@ -134,11 +165,85 @@ public class GpuEngine : IEngine, IDisposable
                     Index1D, ArrayView<float>, float, ArrayView<float>>(
                     (index, vec, exp, result) => result[index] = XMath.Pow(vec[index], exp));
 
-                Console.WriteLine("[GpuEngine] Kernel pre-compilation complete");
+                Console.WriteLine("[GpuEngine] Float kernels pre-compiled");
 
-                // Initialize memory pool for float operations (Phase B: US-GPU-002)
+                // Pre-compile kernels for double operations (Phase B: US-GPU-005)
+                _addKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
+                    (index, a, b, result) => result[index] = a[index] + b[index]);
+                _subtractKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
+                    (index, a, b, result) => result[index] = a[index] - b[index]);
+                _multiplyKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
+                    (index, a, b, result) => result[index] = a[index] * b[index]);
+                _multiplyScalarKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, double, ArrayView<double>>(
+                    (index, vec, scalar, result) => result[index] = vec[index] * scalar);
+                _divideKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
+                    (index, a, b, result) => result[index] = a[index] / b[index]);
+                _divideScalarKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, double, ArrayView<double>>(
+                    (index, vec, scalar, result) => result[index] = vec[index] / scalar);
+                _sqrtKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>>(
+                    (index, vec, result) => result[index] = XMath.Sqrt(vec[index]));
+                _powerKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, double, ArrayView<double>>(
+                    (index, vec, exp, result) => result[index] = XMath.Pow(vec[index], exp));
+                Console.WriteLine("[GpuEngine] Double kernels pre-compiled");
+
+                // Pre-compile kernels for int operations (Phase B: US-GPU-005)
+                _addKernelInt = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>(
+                    (index, a, b, result) => result[index] = a[index] + b[index]);
+                _subtractKernelInt = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>(
+                    (index, a, b, result) => result[index] = a[index] - b[index]);
+                _multiplyKernelInt = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>(
+                    (index, a, b, result) => result[index] = a[index] * b[index]);
+                _multiplyScalarKernelInt = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<int>, int, ArrayView<int>>(
+                    (index, vec, scalar, result) => result[index] = vec[index] * scalar);
+                _divideKernelInt = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>(
+                    (index, a, b, result) => result[index] = a[index] / b[index]);
+                _divideScalarKernelInt = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<int>, int, ArrayView<int>>(
+                    (index, vec, scalar, result) => result[index] = vec[index] / scalar);
+                Console.WriteLine("[GpuEngine] Int kernels pre-compiled");
+
+                // Pre-compile kernels for long operations (Phase B: US-GPU-005)
+                _addKernelLong = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>(
+                    (index, a, b, result) => result[index] = a[index] + b[index]);
+                _subtractKernelLong = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>(
+                    (index, a, b, result) => result[index] = a[index] - b[index]);
+                _multiplyKernelLong = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>(
+                    (index, a, b, result) => result[index] = a[index] * b[index]);
+                _multiplyScalarKernelLong = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<long>, long, ArrayView<long>>(
+                    (index, vec, scalar, result) => result[index] = vec[index] * scalar);
+                _divideKernelLong = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>(
+                    (index, a, b, result) => result[index] = a[index] / b[index]);
+                _divideScalarKernelLong = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<long>, long, ArrayView<long>>(
+                    (index, vec, scalar, result) => result[index] = vec[index] / scalar);
+                Console.WriteLine("[GpuEngine] Long kernels pre-compiled");
+
+                Console.WriteLine("[GpuEngine] All kernel pre-compilation complete");
+
+                // Initialize memory pools (Phase B: US-GPU-002, US-GPU-005)
                 _memoryPoolFloat = new GpuMemoryPool<float>(_accelerator);
-                Console.WriteLine("[GpuEngine] Memory pool initialized");
+                _memoryPoolDouble = new GpuMemoryPool<double>(_accelerator);
+                _memoryPoolInt = new GpuMemoryPool<int>(_accelerator);
+                _memoryPoolLong = new GpuMemoryPool<long>(_accelerator);
+                Console.WriteLine("[GpuEngine] Memory pools initialized");
             }
         }
         catch (Exception ex)
@@ -157,10 +262,17 @@ public class GpuEngine : IEngine, IDisposable
             return _cpuFallback.Add(a, b); // CPU for small operations
         }
 
-        // Runtime type check - only float supported on GPU currently
-        if (typeof(T) == typeof(float) && SupportsGpu)
+        // Runtime type dispatch to GPU implementations (Phase B: US-GPU-005)
+        if (SupportsGpu)
         {
-            return (Vector<T>)(object)AddGpu((Vector<float>)(object)a, (Vector<float>)(object)b);
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)AddGpu((Vector<float>)(object)a, (Vector<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)AddGpuDouble((Vector<double>)(object)a, (Vector<double>)(object)b);
+            if (typeof(T) == typeof(int))
+                return (Vector<T>)(object)AddGpuInt((Vector<int>)(object)a, (Vector<int>)(object)b);
+            if (typeof(T) == typeof(long))
+                return (Vector<T>)(object)AddGpuLong((Vector<long>)(object)a, (Vector<long>)(object)b);
         }
 
         // Fallback to CPU for unsupported types
@@ -473,6 +585,94 @@ public class GpuEngine : IEngine, IDisposable
 
     #endregion
 
+    #region GPU Kernels (Double, Int, Long Implementation - Phase B: US-GPU-005)
+
+    // GPU operations for double type
+    private Vector<double> AddGpuDouble(Vector<double> a, Vector<double> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<double>(a.Length);
+        var gpuA = _memoryPoolDouble!.Rent(a.Length);
+        var gpuB = _memoryPoolDouble.Rent(b.Length);
+        var gpuResult = _memoryPoolDouble.Rent(a.Length);
+
+        try
+        {
+            gpuA.CopyFromCPU(a.AsSpan());
+            gpuB.CopyFromCPU(b.AsSpan());
+            _addKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _accelerator!.Synchronize();
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuA);
+            _memoryPoolDouble.Return(gpuB);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    // GPU operations for int type
+    private Vector<int> AddGpuInt(Vector<int> a, Vector<int> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<int>(a.Length);
+        var gpuA = _memoryPoolInt!.Rent(a.Length);
+        var gpuB = _memoryPoolInt.Rent(b.Length);
+        var gpuResult = _memoryPoolInt.Rent(a.Length);
+
+        try
+        {
+            gpuA.CopyFromCPU(a.AsSpan());
+            gpuB.CopyFromCPU(b.AsSpan());
+            _addKernelInt!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _accelerator!.Synchronize();
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolInt.Return(gpuA);
+            _memoryPoolInt.Return(gpuB);
+            _memoryPoolInt.Return(gpuResult);
+        }
+    }
+
+    // GPU operations for long type
+    private Vector<long> AddGpuLong(Vector<long> a, Vector<long> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<long>(a.Length);
+        var gpuA = _memoryPoolLong!.Rent(a.Length);
+        var gpuB = _memoryPoolLong.Rent(b.Length);
+        var gpuResult = _memoryPoolLong.Rent(a.Length);
+
+        try
+        {
+            gpuA.CopyFromCPU(a.AsSpan());
+            gpuB.CopyFromCPU(b.AsSpan());
+            _addKernelLong!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _accelerator!.Synchronize();
+            gpuResult.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolLong.Return(gpuA);
+            _memoryPoolLong.Return(gpuB);
+            _memoryPoolLong.Return(gpuResult);
+        }
+    }
+
+    #endregion
+
     /// <summary>
     /// Disposes GPU resources.
     /// </summary>
@@ -480,7 +680,12 @@ public class GpuEngine : IEngine, IDisposable
     {
         if (_disposed) return;
 
+        // Dispose memory pools (Phase B: US-GPU-002, US-GPU-005)
         _memoryPoolFloat?.Dispose();
+        _memoryPoolDouble?.Dispose();
+        _memoryPoolInt?.Dispose();
+        _memoryPoolLong?.Dispose();
+
         _accelerator?.Dispose();
         _context?.Dispose();
 
