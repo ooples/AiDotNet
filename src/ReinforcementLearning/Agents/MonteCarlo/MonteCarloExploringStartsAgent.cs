@@ -228,7 +228,8 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
         {
             QTable = _qTable,
             Returns = _returns,
-            Options = _options
+            Options = _options,
+            IsFirstAction = _isFirstAction
         };
         string json = JsonConvert.SerializeObject(state);
         return System.Text.Encoding.UTF8.GetBytes(json);
@@ -250,6 +251,21 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
 
         _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
         _returns = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, List<T>>>>(state.Returns.ToString()) ?? new Dictionary<string, Dictionary<int, List<T>>>();
+
+        // Safely parse IsFirstAction with backward compatibility
+        // Default to true if field is missing to preserve exploring-starts behavior
+        _isFirstAction = true;
+        if (state.IsFirstAction is not null)
+        {
+            if (state.IsFirstAction is bool boolValue)
+            {
+                _isFirstAction = boolValue;
+            }
+            else if (bool.TryParse(state.IsFirstAction.ToString(), out bool parsedValue))
+            {
+                _isFirstAction = parsedValue;
+            }
+        }
     }
 
     public override Vector<T> GetParameters()
