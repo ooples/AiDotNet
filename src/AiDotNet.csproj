@@ -50,7 +50,7 @@
 	  <PackageReference Include="Elastic.Clients.Elasticsearch" Version="9.2.1" />
 	  <PackageReference Include="Google.Protobuf" Version="3.28.3" />
 	  <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-	  <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.21" />
+	  <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.22" />
 	  <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.20.1" />
 	  <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 	  <PackageReference Include="Pinecone.Client" Version="4.0.2" />
