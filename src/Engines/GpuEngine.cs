@@ -51,13 +51,22 @@ public class GpuEngine : IEngine, IDisposable
     private readonly AdaptiveThresholds _thresholds;
     private bool _disposed;
 
-    // Thread-safe GPU health tracking (Phase B: US-GPU-019)
+    // Thread-safe GPU health tracking (Phase B: US-GPU-019, US-GPU-020)
     // Volatile ensures visibility across threads without full locking
     private volatile bool _gpuHealthy = true;
+
+    // GPU recovery tracking (Phase B: US-GPU-020)
+    private volatile int _consecutiveFailures = 0;
+    private volatile DateTime _lastFailureTime = DateTime.MinValue;
+    private const int MaxRecoveryAttempts = 3;
+    private static readonly TimeSpan RecoveryBackoffPeriod = TimeSpan.FromSeconds(30);
 
     // Synchronization lock for GPU operations (Phase B: US-GPU-019)
     // ILGPU accelerator is not thread-safe, so we serialize kernel launches
     private readonly object _gpuLock = new object();
+
+    // Lock for GPU recovery operations (Phase B: US-GPU-020)
+    private readonly object _recoveryLock = new object();
 
     // Memory pools (Phase B: US-GPU-002, US-GPU-005)
     private readonly GpuMemoryPool<float>? _memoryPoolFloat;
@@ -854,9 +863,8 @@ public class GpuEngine : IEngine, IDisposable
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
         {
-            // Critical GPU failure - mark unhealthy and fallback (Phase B: US-GPU-006)
-            _gpuHealthy = false;
-            Console.WriteLine($"[GpuEngine] Critical GPU failure: {ex.Message}. GPU disabled, all operations will use CPU.");
+            // Critical GPU failure - record and potentially recover (Phase B: US-GPU-006, US-GPU-020)
+            RecordGpuFailure(ex);
             return _cpuFallback.Add(a, b);
         }
         catch (Exception ex)
@@ -1342,8 +1350,7 @@ public class GpuEngine : IEngine, IDisposable
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
         {
-            _gpuHealthy = false;
-            Console.WriteLine($"[GpuEngine] Critical GPU failure in matrix multiply: {ex.Message}. GPU disabled.");
+            RecordGpuFailure(ex);
             return _cpuFallback.MatrixMultiply(a, b);
         }
         catch (Exception ex)
@@ -1883,8 +1890,7 @@ public class GpuEngine : IEngine, IDisposable
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
         {
-            _gpuHealthy = false;
-            Console.WriteLine($"[GpuEngine] Critical GPU failure in batch matmul: {ex.Message}. GPU disabled.");
+            RecordGpuFailure(ex);
             return _cpuFallback.BatchMatMul(a, b);
         }
         catch (Exception ex)
@@ -1966,8 +1972,7 @@ public class GpuEngine : IEngine, IDisposable
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
         {
-            _gpuHealthy = false;
-            Console.WriteLine($"[GpuEngine] Critical GPU failure in batch matmul (double): {ex.Message}. GPU disabled.");
+            RecordGpuFailure(ex);
             return _cpuFallback.BatchMatMul(a, b);
         }
         catch (Exception ex)
@@ -2914,6 +2919,143 @@ public class GpuEngine : IEngine, IDisposable
     /// <summary>
     /// Disposes GPU resources.
     /// </summary>
+    #endregion
+
+    #region GPU Health Monitoring and Recovery (Phase B: US-GPU-020)
+
+    /// <summary>
+    /// Records a GPU failure and determines if recovery should be attempted.
+    /// </summary>
+    /// <param name="exception">The exception that caused the failure.</param>
+    /// <returns>True if the GPU is now marked unhealthy.</returns>
+    private bool RecordGpuFailure(Exception exception)
+    {
+        lock (_recoveryLock)
+        {
+            _consecutiveFailures++;
+            _lastFailureTime = DateTime.UtcNow;
+
+            Console.WriteLine($"[GpuEngine] GPU failure #{_consecutiveFailures}: {exception.Message}");
+
+            // If we've exceeded maximum recovery attempts, permanently disable GPU
+            if (_consecutiveFailures >= MaxRecoveryAttempts)
+            {
+                RecordGpuFailure(ex);
+                return true;
+            }
+
+            // Temporarily mark unhealthy but allow recovery attempts
+            Console.WriteLine($"[GpuEngine] GPU temporarily disabled. Recovery attempt {_consecutiveFailures}/{MaxRecoveryAttempts} will be tried after backoff period.");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Attempts to recover GPU health after a failure.
+    /// </summary>
+    /// <returns>True if GPU recovery succeeded.</returns>
+    private bool AttemptGpuRecovery()
+    {
+        lock (_recoveryLock)
+        {
+            // If GPU is permanently disabled, don't attempt recovery
+            if (!_gpuHealthy)
+                return false;
+
+            // Check if we're in backoff period
+            var timeSinceFailure = DateTime.UtcNow - _lastFailureTime;
+            if (timeSinceFailure < RecoveryBackoffPeriod)
+            {
+                // Still in backoff period - don't attempt recovery yet
+                return false;
+            }
+
+            // Check if accelerator is still responsive
+            if (_accelerator == null)
+            {
+                Console.WriteLine("[GpuEngine] GPU accelerator is null - cannot recover.");
+                _gpuHealthy = false;
+                return false;
+            }
+
+            try
+            {
+                // Test if GPU is responsive with a simple operation
+                lock (_gpuLock)
+                {
+                    // Try to synchronize - if this works, GPU is healthy again
+                    _accelerator.Synchronize();
+                }
+
+                // Recovery successful!
+                _consecutiveFailures = 0;
+                _lastFailureTime = DateTime.MinValue;
+                Console.WriteLine("[GpuEngine] GPU recovery successful! GPU operations re-enabled.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GpuEngine] GPU recovery failed: {ex.Message}");
+                RecordGpuFailure(ex);
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about GPU health status.
+    /// </summary>
+    /// <returns>A string containing GPU health diagnostics.</returns>
+    public string GetGpuHealthDiagnostics()
+    {
+        if (_accelerator == null)
+            return "GPU Status: Not Available (no accelerator initialized)";
+
+        var diagnostics = new System.Text.StringBuilder();
+        diagnostics.AppendLine("GPU Health Diagnostics:");
+        diagnostics.AppendLine($"  Healthy: {_gpuHealthy}");
+        diagnostics.AppendLine($"  Consecutive Failures: {_consecutiveFailures}/{MaxRecoveryAttempts}");
+        diagnostics.AppendLine($"  Last Failure: {(_lastFailureTime == DateTime.MinValue ? "Never" : _lastFailureTime.ToString("yyyy-MM-dd HH:mm:ss UTC"))}");
+
+        if (_lastFailureTime != DateTime.MinValue)
+        {
+            var timeSinceFailure = DateTime.UtcNow - _lastFailureTime;
+            diagnostics.AppendLine($"  Time Since Failure: {timeSinceFailure.TotalSeconds:F1}s");
+
+            if (timeSinceFailure < RecoveryBackoffPeriod)
+            {
+                var timeUntilRecovery = RecoveryBackoffPeriod - timeSinceFailure;
+                diagnostics.AppendLine($"  Recovery Available In: {timeUntilRecovery.TotalSeconds:F1}s");
+            }
+            else
+            {
+                diagnostics.AppendLine("  Recovery Available: Yes");
+            }
+        }
+
+        diagnostics.AppendLine($"  Accelerator: {_accelerator.Name}");
+        diagnostics.AppendLine($"  Memory: {_accelerator.MemorySize / (1024.0 * 1024.0 * 1024.0):F2} GB");
+
+        return diagnostics.ToString();
+    }
+
+    /// <summary>
+    /// Manually triggers a GPU health check and recovery attempt if needed.
+    /// </summary>
+    /// <returns>True if GPU is healthy after the check.</returns>
+    public bool CheckAndRecoverGpuHealth()
+    {
+        if (_gpuHealthy)
+            return true;
+
+        // Attempt recovery
+        return AttemptGpuRecovery();
+    }
+
+    #endregion
+
+    #region IDisposable
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -2930,4 +3072,6 @@ public class GpuEngine : IEngine, IDisposable
         _disposed = true;
         GC.SuppressFinalize(this);
     }
+
+    #endregion
 }
