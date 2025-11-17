@@ -36,7 +36,7 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
         _returns = new Dictionary<string, Dictionary<int, List<T>>>();
         _episode = new List<(Vector<T>, int, T)>();
         _isFirstAction = true;
-        _random = new Random();
+        _random = Random;
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
