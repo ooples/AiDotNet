@@ -151,6 +151,12 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Vector<T> Add<T>(Vector<T> a, Vector<T> b)
     {
+        // Adaptive execution: check size threshold (Phase B: US-GPU-004)
+        if (a.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.Add(a, b); // CPU for small operations
+        }
+
         // Runtime type check - only float supported on GPU currently
         if (typeof(T) == typeof(float) && SupportsGpu)
         {
@@ -164,6 +170,9 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Vector<T> Subtract<T>(Vector<T> a, Vector<T> b)
     {
+        if (a.Length < _thresholds.VectorSubtract)
+            return _cpuFallback.Subtract(a, b);
+
         if (typeof(T) == typeof(float) && SupportsGpu)
         {
             return (Vector<T>)(object)SubtractGpu((Vector<float>)(object)a, (Vector<float>)(object)b);
@@ -175,6 +184,9 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Vector<T> Multiply<T>(Vector<T> a, Vector<T> b)
     {
+        if (a.Length < _thresholds.VectorMultiply)
+            return _cpuFallback.Multiply(a, b);
+
         if (typeof(T) == typeof(float) && SupportsGpu)
         {
             return (Vector<T>)(object)MultiplyGpu((Vector<float>)(object)a, (Vector<float>)(object)b);
@@ -186,6 +198,9 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Vector<T> Multiply<T>(Vector<T> vector, T scalar)
     {
+        if (vector.Length < _thresholds.VectorMultiply)
+            return _cpuFallback.Multiply(vector, scalar);
+
         if (typeof(T) == typeof(float) && SupportsGpu)
         {
             return (Vector<T>)(object)MultiplyScalarGpu((Vector<float>)(object)vector, (float)(object)scalar!);
@@ -197,6 +212,9 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Vector<T> Divide<T>(Vector<T> a, Vector<T> b)
     {
+        if (a.Length < _thresholds.VectorDivide)
+            return _cpuFallback.Divide(a, b);
+
         if (typeof(T) == typeof(float) && SupportsGpu)
         {
             return (Vector<T>)(object)DivideGpu((Vector<float>)(object)a, (Vector<float>)(object)b);
@@ -208,6 +226,9 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Vector<T> Divide<T>(Vector<T> vector, T scalar)
     {
+        if (vector.Length < _thresholds.VectorDivide)
+            return _cpuFallback.Divide(vector, scalar);
+
         if (typeof(T) == typeof(float) && SupportsGpu)
         {
             return (Vector<T>)(object)DivideScalarGpu((Vector<float>)(object)vector, (float)(object)scalar!);
@@ -219,6 +240,9 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Vector<T> Sqrt<T>(Vector<T> vector)
     {
+        if (vector.Length < _thresholds.VectorSqrt)
+            return _cpuFallback.Sqrt(vector);
+
         if (typeof(T) == typeof(float) && SupportsGpu)
         {
             return (Vector<T>)(object)SqrtGpu((Vector<float>)(object)vector);
@@ -230,6 +254,9 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Vector<T> Power<T>(Vector<T> vector, T exponent)
     {
+        if (vector.Length < _thresholds.VectorPower)
+            return _cpuFallback.Power(vector, exponent);
+
         if (typeof(T) == typeof(float) && SupportsGpu)
         {
             return (Vector<T>)(object)PowerGpu((Vector<float>)(object)vector, (float)(object)exponent!);
