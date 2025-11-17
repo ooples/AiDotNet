@@ -361,10 +361,10 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
                 var parameterGradients = criticNetwork.GetGradients();
                 var parameters = criticNetwork.GetParameters();
 
-                for (int i = 0; i < parameters.Length; i++)
+                for (int paramIdx = 0; paramIdx < parameters.Length; paramIdx++)
                 {
-                    var update = NumOps.Multiply(_options.CriticLearningRate, parameterGradients[i]);
-                    parameters[i] = NumOps.Subtract(parameters[i], update);
+                    var update = NumOps.Multiply(_options.CriticLearningRate, parameterGradients[paramIdx]);
+                    parameters[paramIdx] = NumOps.Subtract(parameters[paramIdx], update);
                 }
 
                 criticNetwork.UpdateParameters(parameters);
