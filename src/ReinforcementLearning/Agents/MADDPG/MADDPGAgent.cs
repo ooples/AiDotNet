@@ -57,6 +57,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         : base(options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _options.Validate();
         // Issue #3 fix: Use configured actor learning rate for default optimizer
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
