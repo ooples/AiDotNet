@@ -419,25 +419,25 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Note: This computes dQ/d(state,action) internally in the network layers
             if (_criticNetworks[agentId] is NeuralNetwork<T> criticNetwork)
             {
-                criticNetwork.Backpropagate(criticOutputGradientTensor);
+                // Backpropagate returns gradients w.r.t. network input
+                var inputGradientsTensor = criticNetwork.Backpropagate(criticOutputGradientTensor);
+                var inputGradients = inputGradientsTensor.ToVector();
 
-                // Extract input gradients from the first layer (gradient w.r.t. [state, action])
                 // The input to critic is [state, action] concatenated
-                // We need the gradient slice corresponding to action: indices [stateSize, stateSize+actionSize)
-                var inputGradients = criticNetwork.GetInputGradients();
-
-                // Extract dQ/dAction (skip state portion, take action portion)
+                // Extract dQ/dAction for this specific agent
+                // Action gradients start after all states: jointStateSize
+                // This agent's actions are at: jointStateSize + (agentId * _options.ActionSize)
                 int jointStateSize = experience.State.Length;
+                int jointActionSize = _options.ActionSize * _options.NumAgents;
                 var actionGradient = new Vector<T>(_options.ActionSize);
-                int actionStartIdx = jointStateSize;
 
                 for (int i = 0; i < _options.ActionSize; i++)
                 {
                     // Extract gradients for this agent's action from joint action space
-                    int jointActionIdx = agentId * _options.ActionSize + i;
-                    if (actionStartIdx + jointActionIdx < inputGradients.Length)
+                    int actionGradientIdx = jointStateSize + (agentId * _options.ActionSize + i);
+                    if (actionGradientIdx < inputGradients.Length)
                     {
-                        actionGradient[i] = inputGradients[actionStartIdx + jointActionIdx];
+                        actionGradient[i] = inputGradients[actionGradientIdx];
                     }
                     else
                     {
