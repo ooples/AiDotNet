@@ -126,6 +126,22 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
+    private T ComputeAverage(List<T> values)
+    {
+        if (values.Count == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        T sum = NumOps.Zero;
+        foreach (var value in values)
+        {
+            sum = NumOps.Add(sum, value);
+        }
+
+        return NumOps.Divide(sum, NumOps.FromDouble(values.Count));
+    }
+
     public override T Train()
     {
         return NumOps.Zero;
