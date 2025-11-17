@@ -97,9 +97,19 @@ public class GpuEngine : IEngine, IDisposable
 
     // Kernel cache for tensor operations - float (Phase B: Epic 3)
     private readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>? _batchMatMulKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorAddKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorSubtractKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorMultiplyKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _tensorMultiplyScalarKernelFloat;
+    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorDivideKernelFloat;
 
     // Kernel cache for tensor operations - double (Phase B: Epic 3)
     private readonly Action<Index3D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _batchMatMulKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorAddKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorSubtractKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorMultiplyKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, double, ArrayView<double>>? _tensorMultiplyScalarKernelDouble;
+    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorDivideKernelDouble;
 
     /// <inheritdoc/>
     public string Name => _accelerator != null
@@ -370,6 +380,49 @@ public class GpuEngine : IEngine, IDisposable
                         int resultIndex = batch * (m * n) + i * n + j;
                         result[resultIndex] = sum;
                     });
+
+                // Pre-compile tensor element-wise kernels - float (Phase B: Epic 3, US-GPU-014)
+                _tensorAddKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
+                    (index, a, b, result) => result[index] = a[index] + b[index]);
+
+                _tensorSubtractKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
+                    (index, a, b, result) => result[index] = a[index] - b[index]);
+
+                _tensorMultiplyKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
+                    (index, a, b, result) => result[index] = a[index] * b[index]);
+
+                _tensorMultiplyScalarKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, float, ArrayView<float>>(
+                    (index, tensor, scalar, result) => result[index] = tensor[index] * scalar);
+
+                _tensorDivideKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
+                    (index, a, b, result) => result[index] = a[index] / b[index]);
+
+                // Pre-compile tensor element-wise kernels - double (Phase B: Epic 3, US-GPU-014)
+                _tensorAddKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
+                    (index, a, b, result) => result[index] = a[index] + b[index]);
+
+                _tensorSubtractKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
+                    (index, a, b, result) => result[index] = a[index] - b[index]);
+
+                _tensorMultiplyKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
+                    (index, a, b, result) => result[index] = a[index] * b[index]);
+
+                _tensorMultiplyScalarKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, double, ArrayView<double>>(
+                    (index, tensor, scalar, result) => result[index] = tensor[index] * scalar);
+
+                _tensorDivideKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
+                    (index, a, b, result) => result[index] = a[index] / b[index]);
+
                 Console.WriteLine("[GpuEngine] Tensor kernels pre-compiled");
 
                 Console.WriteLine("[GpuEngine] All kernel pre-compilation complete");
@@ -1564,6 +1617,477 @@ public class GpuEngine : IEngine, IDisposable
         {
             Console.WriteLine($"[GpuEngine] GPU batch matmul (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.BatchMatMul(a, b);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorAdd<T>(Tensor<T> a, Tensor<T> b)
+    {
+        // Adaptive execution: use vector threshold (Phase B: US-GPU-004)
+        if (a.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorAdd(a, b);
+        }
+
+        // Check GPU health and type support (Phase B: US-GPU-006)
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorAddGpu((Tensor<float>)(object)a, (Tensor<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorAddGpuDouble((Tensor<double>)(object)a, (Tensor<double>)(object)b);
+        }
+
+        return _cpuFallback.TensorAdd(a, b);
+    }
+
+    private Tensor<float> TensorAddGpu(Tensor<float> a, Tensor<float> b)
+    {
+        ValidateTensorShapes(a, b);
+
+        try
+        {
+            var result = new Tensor<float>(a.Shape);
+            var gpuA = _memoryPoolFloat!.Rent(a.Length);
+            var gpuB = _memoryPoolFloat!.Rent(b.Length);
+            var gpuResult = _memoryPoolFloat!.Rent(a.Length);
+
+            try
+            {
+                gpuA.CopyFromCPU(a.AsSpan());
+                gpuB.CopyFromCPU(b.AsSpan());
+
+                _tensorAddKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuA);
+                _memoryPoolFloat.Return(gpuB);
+                _memoryPoolFloat.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU tensor add failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorAdd(a, b);
+        }
+    }
+
+    private Tensor<double> TensorAddGpuDouble(Tensor<double> a, Tensor<double> b)
+    {
+        ValidateTensorShapes(a, b);
+
+        try
+        {
+            var result = new Tensor<double>(a.Shape);
+            var gpuA = _memoryPoolDouble!.Rent(a.Length);
+            var gpuB = _memoryPoolDouble!.Rent(b.Length);
+            var gpuResult = _memoryPoolDouble!.Rent(a.Length);
+
+            try
+            {
+                gpuA.CopyFromCPU(a.AsSpan());
+                gpuB.CopyFromCPU(b.AsSpan());
+
+                _tensorAddKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuA);
+                _memoryPoolDouble.Return(gpuB);
+                _memoryPoolDouble.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU tensor add (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorAdd(a, b);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSubtract<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Length < _thresholds.VectorSubtract)
+        {
+            return _cpuFallback.TensorSubtract(a, b);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorSubtractGpu((Tensor<float>)(object)a, (Tensor<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorSubtractGpuDouble((Tensor<double>)(object)a, (Tensor<double>)(object)b);
+        }
+
+        return _cpuFallback.TensorSubtract(a, b);
+    }
+
+    private Tensor<float> TensorSubtractGpu(Tensor<float> a, Tensor<float> b)
+    {
+        ValidateTensorShapes(a, b);
+
+        try
+        {
+            var result = new Tensor<float>(a.Shape);
+            var gpuA = _memoryPoolFloat!.Rent(a.Length);
+            var gpuB = _memoryPoolFloat!.Rent(b.Length);
+            var gpuResult = _memoryPoolFloat!.Rent(a.Length);
+
+            try
+            {
+                gpuA.CopyFromCPU(a.AsSpan());
+                gpuB.CopyFromCPU(b.AsSpan());
+
+                _tensorSubtractKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuA);
+                _memoryPoolFloat.Return(gpuB);
+                _memoryPoolFloat.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU tensor subtract failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorSubtract(a, b);
+        }
+    }
+
+    private Tensor<double> TensorSubtractGpuDouble(Tensor<double> a, Tensor<double> b)
+    {
+        ValidateTensorShapes(a, b);
+
+        try
+        {
+            var result = new Tensor<double>(a.Shape);
+            var gpuA = _memoryPoolDouble!.Rent(a.Length);
+            var gpuB = _memoryPoolDouble!.Rent(b.Length);
+            var gpuResult = _memoryPoolDouble!.Rent(a.Length);
+
+            try
+            {
+                gpuA.CopyFromCPU(a.AsSpan());
+                gpuB.CopyFromCPU(b.AsSpan());
+
+                _tensorSubtractKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuA);
+                _memoryPoolDouble.Return(gpuB);
+                _memoryPoolDouble.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU tensor subtract (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorSubtract(a, b);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorMultiply<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Length < _thresholds.VectorMultiply)
+        {
+            return _cpuFallback.TensorMultiply(a, b);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorMultiplyGpu((Tensor<float>)(object)a, (Tensor<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorMultiplyGpuDouble((Tensor<double>)(object)a, (Tensor<double>)(object)b);
+        }
+
+        return _cpuFallback.TensorMultiply(a, b);
+    }
+
+    private Tensor<float> TensorMultiplyGpu(Tensor<float> a, Tensor<float> b)
+    {
+        ValidateTensorShapes(a, b);
+
+        try
+        {
+            var result = new Tensor<float>(a.Shape);
+            var gpuA = _memoryPoolFloat!.Rent(a.Length);
+            var gpuB = _memoryPoolFloat!.Rent(b.Length);
+            var gpuResult = _memoryPoolFloat!.Rent(a.Length);
+
+            try
+            {
+                gpuA.CopyFromCPU(a.AsSpan());
+                gpuB.CopyFromCPU(b.AsSpan());
+
+                _tensorMultiplyKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuA);
+                _memoryPoolFloat.Return(gpuB);
+                _memoryPoolFloat.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU tensor multiply failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorMultiply(a, b);
+        }
+    }
+
+    private Tensor<double> TensorMultiplyGpuDouble(Tensor<double> a, Tensor<double> b)
+    {
+        ValidateTensorShapes(a, b);
+
+        try
+        {
+            var result = new Tensor<double>(a.Shape);
+            var gpuA = _memoryPoolDouble!.Rent(a.Length);
+            var gpuB = _memoryPoolDouble!.Rent(b.Length);
+            var gpuResult = _memoryPoolDouble!.Rent(a.Length);
+
+            try
+            {
+                gpuA.CopyFromCPU(a.AsSpan());
+                gpuB.CopyFromCPU(b.AsSpan());
+
+                _tensorMultiplyKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuA);
+                _memoryPoolDouble.Return(gpuB);
+                _memoryPoolDouble.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU tensor multiply (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorMultiply(a, b);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorMultiplyScalar<T>(Tensor<T> tensor, T scalar)
+    {
+        if (tensor.Length < _thresholds.VectorMultiply)
+        {
+            return _cpuFallback.TensorMultiplyScalar(tensor, scalar);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorMultiplyScalarGpu((Tensor<float>)(object)tensor, (float)(object)scalar!);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorMultiplyScalarGpuDouble((Tensor<double>)(object)tensor, (double)(object)scalar!);
+        }
+
+        return _cpuFallback.TensorMultiplyScalar(tensor, scalar);
+    }
+
+    private Tensor<float> TensorMultiplyScalarGpu(Tensor<float> tensor, float scalar)
+    {
+        try
+        {
+            var result = new Tensor<float>(tensor.Shape);
+            var gpuTensor = _memoryPoolFloat!.Rent(tensor.Length);
+            var gpuResult = _memoryPoolFloat!.Rent(tensor.Length);
+
+            try
+            {
+                gpuTensor.CopyFromCPU(tensor.AsSpan());
+
+                _tensorMultiplyScalarKernelFloat!(tensor.Length, gpuTensor.View, scalar, gpuResult.View);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuTensor);
+                _memoryPoolFloat.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU tensor scalar multiply failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorMultiplyScalar(tensor, scalar);
+        }
+    }
+
+    private Tensor<double> TensorMultiplyScalarGpuDouble(Tensor<double> tensor, double scalar)
+    {
+        try
+        {
+            var result = new Tensor<double>(tensor.Shape);
+            var gpuTensor = _memoryPoolDouble!.Rent(tensor.Length);
+            var gpuResult = _memoryPoolDouble!.Rent(tensor.Length);
+
+            try
+            {
+                gpuTensor.CopyFromCPU(tensor.AsSpan());
+
+                _tensorMultiplyScalarKernelDouble!(tensor.Length, gpuTensor.View, scalar, gpuResult.View);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuTensor);
+                _memoryPoolDouble.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU tensor scalar multiply (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorMultiplyScalar(tensor, scalar);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorDivide<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Length < _thresholds.VectorDivide)
+        {
+            return _cpuFallback.TensorDivide(a, b);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorDivideGpu((Tensor<float>)(object)a, (Tensor<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorDivideGpuDouble((Tensor<double>)(object)a, (Tensor<double>)(object)b);
+        }
+
+        return _cpuFallback.TensorDivide(a, b);
+    }
+
+    private Tensor<float> TensorDivideGpu(Tensor<float> a, Tensor<float> b)
+    {
+        ValidateTensorShapes(a, b);
+
+        try
+        {
+            var result = new Tensor<float>(a.Shape);
+            var gpuA = _memoryPoolFloat!.Rent(a.Length);
+            var gpuB = _memoryPoolFloat!.Rent(b.Length);
+            var gpuResult = _memoryPoolFloat!.Rent(a.Length);
+
+            try
+            {
+                gpuA.CopyFromCPU(a.AsSpan());
+                gpuB.CopyFromCPU(b.AsSpan());
+
+                _tensorDivideKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuA);
+                _memoryPoolFloat.Return(gpuB);
+                _memoryPoolFloat.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU tensor divide failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorDivide(a, b);
+        }
+    }
+
+    private Tensor<double> TensorDivideGpuDouble(Tensor<double> a, Tensor<double> b)
+    {
+        ValidateTensorShapes(a, b);
+
+        try
+        {
+            var result = new Tensor<double>(a.Shape);
+            var gpuA = _memoryPoolDouble!.Rent(a.Length);
+            var gpuB = _memoryPoolDouble!.Rent(b.Length);
+            var gpuResult = _memoryPoolDouble!.Rent(a.Length);
+
+            try
+            {
+                gpuA.CopyFromCPU(a.AsSpan());
+                gpuB.CopyFromCPU(b.AsSpan());
+
+                _tensorDivideKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator!.Synchronize();
+
+                gpuResult.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuA);
+                _memoryPoolDouble.Return(gpuB);
+                _memoryPoolDouble.Return(gpuResult);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU tensor divide (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorDivide(a, b);
+        }
+    }
+
+    /// <summary>
+    /// Helper method to validate that two tensors have matching shapes.
+    /// </summary>
+    private void ValidateTensorShapes<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+
+        if (a.Shape.Length != b.Shape.Length)
+        {
+            throw new ArgumentException(
+                $"Tensor ranks must match. Got {a.Rank} and {b.Rank}.");
+        }
+
+        for (int i = 0; i < a.Shape.Length; i++)
+        {
+            if (a.Shape[i] != b.Shape[i])
+            {
+                throw new ArgumentException(
+                    $"Tensor shapes must match. Got [{string.Join(", ", a.Shape)}] and [{string.Join(", ", b.Shape)}].");
+            }
         }
     }
 

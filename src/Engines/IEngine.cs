@@ -222,5 +222,75 @@ public interface IEngine
     /// </remarks>
     Tensor<T> BatchMatMul<T>(Tensor<T> a, Tensor<T> b);
 
+    /// <summary>
+    /// Adds two tensors element-wise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A new tensor containing the element-wise sum.</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Element-Wise Operations</b></para>
+    /// <para>
+    /// Performs result[i] = a[i] + b[i] for all elements.
+    /// Both tensors must have identical shapes.
+    /// GPU acceleration provides significant speedup for large tensors.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorAdd<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Subtracts tensor b from tensor a element-wise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A new tensor containing the element-wise difference.</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Element-Wise Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorSubtract<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Multiplies two tensors element-wise (Hadamard product).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A new tensor containing the element-wise product.</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Element-Wise Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorMultiply<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Multiplies a tensor by a scalar.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="tensor">The tensor to multiply.</param>
+    /// <param name="scalar">The scalar value.</param>
+    /// <returns>A new tensor with all elements multiplied by the scalar.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Element-Wise Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorMultiplyScalar<T>(Tensor<T> tensor, T scalar);
+
+    /// <summary>
+    /// Divides tensor a by tensor b element-wise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The numerator tensor.</param>
+    /// <param name="b">The denominator tensor.</param>
+    /// <returns>A new tensor containing the element-wise quotient.</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes don't match.</exception>
+    /// <exception cref="DivideByZeroException">Thrown when any element of b is zero.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Element-Wise Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorDivide<T>(Tensor<T> a, Tensor<T> b);
+
     #endregion
 }

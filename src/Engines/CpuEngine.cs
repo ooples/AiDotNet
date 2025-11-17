@@ -384,5 +384,140 @@ public class CpuEngine : IEngine
         return result;
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> TensorAdd<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (!ShapesMatch(a.Shape, b.Shape))
+        {
+            throw new ArgumentException(
+                $"Tensor shapes must match. Got {FormatShape(a.Shape)} and {FormatShape(b.Shape)}.");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(a.Shape);
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            result._data[i] = numOps.Add(a._data[i], b._data[i]);
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSubtract<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (!ShapesMatch(a.Shape, b.Shape))
+        {
+            throw new ArgumentException(
+                $"Tensor shapes must match. Got {FormatShape(a.Shape)} and {FormatShape(b.Shape)}.");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(a.Shape);
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            result._data[i] = numOps.Subtract(a._data[i], b._data[i]);
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorMultiply<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (!ShapesMatch(a.Shape, b.Shape))
+        {
+            throw new ArgumentException(
+                $"Tensor shapes must match. Got {FormatShape(a.Shape)} and {FormatShape(b.Shape)}.");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(a.Shape);
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            result._data[i] = numOps.Multiply(a._data[i], b._data[i]);
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorMultiplyScalar<T>(Tensor<T> tensor, T scalar)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            result._data[i] = numOps.Multiply(tensor._data[i], scalar);
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorDivide<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (!ShapesMatch(a.Shape, b.Shape))
+        {
+            throw new ArgumentException(
+                $"Tensor shapes must match. Got {FormatShape(a.Shape)} and {FormatShape(b.Shape)}.");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(a.Shape);
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            // Check for division by zero
+            if (numOps.Equals(b._data[i], numOps.Zero))
+            {
+                throw new DivideByZeroException($"Division by zero at index {i}");
+            }
+
+            result._data[i] = numOps.Divide(a._data[i], b._data[i]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Helper method to check if two shapes match.
+    /// </summary>
+    private bool ShapesMatch(int[] shape1, int[] shape2)
+    {
+        if (shape1.Length != shape2.Length)
+            return false;
+
+        for (int i = 0; i < shape1.Length; i++)
+        {
+            if (shape1[i] != shape2[i])
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Helper method to format a shape for error messages.
+    /// </summary>
+    private string FormatShape(int[] shape)
+    {
+        return "[" + string.Join(", ", shape) + "]";
+    }
+
     #endregion
 }
