@@ -1009,7 +1009,7 @@ public class GpuEngine : IEngine, IDisposable
         var result = new Vector<float>(a.Length);
 
         // Rent GPU memory from pool (Phase B: US-GPU-002)
-        var gpuA = _memoryPoolFloat!.Rent(a.Length);
+        var gpuA = _memoryPoolFloat.Rent(a.Length);
         var gpuB = _memoryPoolFloat.Rent(b.Length);
         var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
@@ -1023,8 +1023,8 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 // Use pre-compiled cached kernel (Phase B: US-GPU-001)
-                _addKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _addKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
 
             // Zero-copy: Write directly to result's internal storage (Phase B: US-GPU-003)
@@ -1065,7 +1065,7 @@ public class GpuEngine : IEngine, IDisposable
             throw new ArgumentException("Vector lengths must match");
 
         var result = new Vector<float>(a.Length);
-        var gpuA = _memoryPoolFloat!.Rent(a.Length);
+        var gpuA = _memoryPoolFloat.Rent(a.Length);
         var gpuB = _memoryPoolFloat.Rent(b.Length);
         var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
@@ -1073,12 +1073,12 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.CopyFromCPU(a.AsSpan());
             gpuB.View.CopyFromCPU(b.AsSpan());
-            _subtractKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _subtractKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _subtractKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _subtractKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -1097,7 +1097,7 @@ public class GpuEngine : IEngine, IDisposable
             throw new ArgumentException("Vector lengths must match");
 
         var result = new Vector<float>(a.Length);
-        var gpuA = _memoryPoolFloat!.Rent(a.Length);
+        var gpuA = _memoryPoolFloat.Rent(a.Length);
         var gpuB = _memoryPoolFloat.Rent(b.Length);
         var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
@@ -1105,12 +1105,12 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.CopyFromCPU(a.AsSpan());
             gpuB.View.CopyFromCPU(b.AsSpan());
-            _multiplyKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _multiplyKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _multiplyKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _multiplyKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -1126,18 +1126,18 @@ public class GpuEngine : IEngine, IDisposable
     private Vector<float> MultiplyScalarGpu(Vector<float> vector, float scalar)
     {
         var result = new Vector<float>(vector.Length);
-        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuVector = _memoryPoolFloat.Rent(vector.Length);
         var gpuResult = _memoryPoolFloat.Rent(vector.Length);
 
         try
         {
             gpuVector.View.CopyFromCPU(vector.AsSpan());
-            _multiplyScalarKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
+            _multiplyScalarKernelFloat(_accelerator.DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _multiplyScalarKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
-                _accelerator!.Synchronize();
+                _multiplyScalarKernelFloat(_accelerator.DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
+                _accelerator.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -1155,7 +1155,7 @@ public class GpuEngine : IEngine, IDisposable
             throw new ArgumentException("Vector lengths must match");
 
         var result = new Vector<float>(a.Length);
-        var gpuA = _memoryPoolFloat!.Rent(a.Length);
+        var gpuA = _memoryPoolFloat.Rent(a.Length);
         var gpuB = _memoryPoolFloat.Rent(b.Length);
         var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
@@ -1163,12 +1163,12 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.CopyFromCPU(a.AsSpan());
             gpuB.View.CopyFromCPU(b.AsSpan());
-            _divideKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _divideKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _divideKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _divideKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -1184,18 +1184,18 @@ public class GpuEngine : IEngine, IDisposable
     private Vector<float> DivideScalarGpu(Vector<float> vector, float scalar)
     {
         var result = new Vector<float>(vector.Length);
-        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuVector = _memoryPoolFloat.Rent(vector.Length);
         var gpuResult = _memoryPoolFloat.Rent(vector.Length);
 
         try
         {
             gpuVector.View.CopyFromCPU(vector.AsSpan());
-            _divideScalarKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
+            _divideScalarKernelFloat(_accelerator.DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _divideScalarKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
-                _accelerator!.Synchronize();
+                _divideScalarKernelFloat(_accelerator.DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
+                _accelerator.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -1210,18 +1210,18 @@ public class GpuEngine : IEngine, IDisposable
     private Vector<float> SqrtGpu(Vector<float> vector)
     {
         var result = new Vector<float>(vector.Length);
-        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuVector = _memoryPoolFloat.Rent(vector.Length);
         var gpuResult = _memoryPoolFloat.Rent(vector.Length);
 
         try
         {
             gpuVector.View.CopyFromCPU(vector.AsSpan());
-            _sqrtKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
+            _sqrtKernelFloat(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _sqrtKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _sqrtKernelFloat(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -1236,7 +1236,7 @@ public class GpuEngine : IEngine, IDisposable
     private Vector<float> PowerGpu(Vector<float> vector, float exponent)
     {
         var result = new Vector<float>(vector.Length);
-        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuVector = _memoryPoolFloat.Rent(vector.Length);
         var gpuResult = _memoryPoolFloat.Rent(vector.Length);
 
         try
@@ -1245,8 +1245,8 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _powerKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, exponent, gpuResult.View);
-                _accelerator!.Synchronize();
+                _powerKernelFloat(_accelerator.DefaultStream, vector.Length, gpuVector.View, exponent, gpuResult.View);
+                _accelerator.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -1264,7 +1264,7 @@ public class GpuEngine : IEngine, IDisposable
             throw new ArgumentException("Vector lengths must match");
 
         var result = new Vector<float>(a.Length);
-        var gpuA = _memoryPoolFloat!.Rent(a.Length);
+        var gpuA = _memoryPoolFloat.Rent(a.Length);
         var gpuB = _memoryPoolFloat.Rent(b.Length);
         var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
@@ -1276,8 +1276,8 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _maxKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _maxKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
 
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1302,7 +1302,7 @@ public class GpuEngine : IEngine, IDisposable
             throw new ArgumentException("Vector lengths must match");
 
         var result = new Vector<float>(a.Length);
-        var gpuA = _memoryPoolFloat!.Rent(a.Length);
+        var gpuA = _memoryPoolFloat.Rent(a.Length);
         var gpuB = _memoryPoolFloat.Rent(b.Length);
         var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
@@ -1314,8 +1314,8 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _minKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _minKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
 
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1337,7 +1337,7 @@ public class GpuEngine : IEngine, IDisposable
     private Vector<float> AbsGpu(Vector<float> vector)
     {
         var result = new Vector<float>(vector.Length);
-        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuVector = _memoryPoolFloat.Rent(vector.Length);
         var gpuResult = _memoryPoolFloat.Rent(vector.Length);
 
         try
@@ -1347,8 +1347,8 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _absKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _absKernelFloat(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
 
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1369,7 +1369,7 @@ public class GpuEngine : IEngine, IDisposable
     private Vector<float> ExpGpu(Vector<float> vector)
     {
         var result = new Vector<float>(vector.Length);
-        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuVector = _memoryPoolFloat.Rent(vector.Length);
         var gpuResult = _memoryPoolFloat.Rent(vector.Length);
 
         try
@@ -1379,8 +1379,8 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _expKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _expKernelFloat(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
 
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1401,7 +1401,7 @@ public class GpuEngine : IEngine, IDisposable
     private Vector<float> LogGpu(Vector<float> vector)
     {
         var result = new Vector<float>(vector.Length);
-        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuVector = _memoryPoolFloat.Rent(vector.Length);
         var gpuResult = _memoryPoolFloat.Rent(vector.Length);
 
         try
@@ -1411,8 +1411,8 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _logKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _logKernelFloat(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
 
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1433,7 +1433,7 @@ public class GpuEngine : IEngine, IDisposable
     private Vector<float> SignGpu(Vector<float> vector)
     {
         var result = new Vector<float>(vector.Length);
-        var gpuVector = _memoryPoolFloat!.Rent(vector.Length);
+        var gpuVector = _memoryPoolFloat.Rent(vector.Length);
         var gpuResult = _memoryPoolFloat.Rent(vector.Length);
 
         try
@@ -1443,8 +1443,8 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _signKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _signKernelFloat(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
 
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1473,7 +1473,7 @@ public class GpuEngine : IEngine, IDisposable
             throw new ArgumentException("Vector lengths must match");
 
         var result = new Vector<double>(a.Length);
-        var gpuA = _memoryPoolDouble!.Rent(a.Length);
+        var gpuA = _memoryPoolDouble.Rent(a.Length);
         var gpuB = _memoryPoolDouble.Rent(b.Length);
         var gpuResult = _memoryPoolDouble.Rent(a.Length);
 
@@ -1481,12 +1481,12 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.CopyFromCPU(a.AsSpan());
             gpuB.View.CopyFromCPU(b.AsSpan());
-            _addKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _addKernelDouble(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _addKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _addKernelDouble(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -1505,7 +1505,7 @@ public class GpuEngine : IEngine, IDisposable
             throw new ArgumentException("Vector lengths must match");
 
         var result = new Vector<double>(a.Length);
-        var gpuA = _memoryPoolDouble!.Rent(a.Length);
+        var gpuA = _memoryPoolDouble.Rent(a.Length);
         var gpuB = _memoryPoolDouble.Rent(b.Length);
         var gpuResult = _memoryPoolDouble.Rent(a.Length);
 
@@ -1517,8 +1517,8 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _maxKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _maxKernelDouble(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
 
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1543,7 +1543,7 @@ public class GpuEngine : IEngine, IDisposable
             throw new ArgumentException("Vector lengths must match");
 
         var result = new Vector<double>(a.Length);
-        var gpuA = _memoryPoolDouble!.Rent(a.Length);
+        var gpuA = _memoryPoolDouble.Rent(a.Length);
         var gpuB = _memoryPoolDouble.Rent(b.Length);
         var gpuResult = _memoryPoolDouble.Rent(a.Length);
 
@@ -1555,8 +1555,8 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _minKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _minKernelDouble(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
 
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1578,7 +1578,7 @@ public class GpuEngine : IEngine, IDisposable
     private Vector<double> AbsGpuDouble(Vector<double> vector)
     {
         var result = new Vector<double>(vector.Length);
-        var gpuVector = _memoryPoolDouble!.Rent(vector.Length);
+        var gpuVector = _memoryPoolDouble.Rent(vector.Length);
         var gpuResult = _memoryPoolDouble.Rent(vector.Length);
 
         try
@@ -1588,8 +1588,8 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _absKernelDouble!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _absKernelDouble(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
 
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1610,7 +1610,7 @@ public class GpuEngine : IEngine, IDisposable
     private Vector<double> ExpGpuDouble(Vector<double> vector)
     {
         var result = new Vector<double>(vector.Length);
-        var gpuVector = _memoryPoolDouble!.Rent(vector.Length);
+        var gpuVector = _memoryPoolDouble.Rent(vector.Length);
         var gpuResult = _memoryPoolDouble.Rent(vector.Length);
 
         try
@@ -1620,8 +1620,8 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _expKernelDouble!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _expKernelDouble(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
 
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1642,7 +1642,7 @@ public class GpuEngine : IEngine, IDisposable
     private Vector<double> LogGpuDouble(Vector<double> vector)
     {
         var result = new Vector<double>(vector.Length);
-        var gpuVector = _memoryPoolDouble!.Rent(vector.Length);
+        var gpuVector = _memoryPoolDouble.Rent(vector.Length);
         var gpuResult = _memoryPoolDouble.Rent(vector.Length);
 
         try
@@ -1652,8 +1652,8 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _logKernelDouble!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _logKernelDouble(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
 
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1674,7 +1674,7 @@ public class GpuEngine : IEngine, IDisposable
     private Vector<double> SignGpuDouble(Vector<double> vector)
     {
         var result = new Vector<double>(vector.Length);
-        var gpuVector = _memoryPoolDouble!.Rent(vector.Length);
+        var gpuVector = _memoryPoolDouble.Rent(vector.Length);
         var gpuResult = _memoryPoolDouble.Rent(vector.Length);
 
         try
@@ -1684,8 +1684,8 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _signKernelDouble!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _signKernelDouble(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
 
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1718,12 +1718,12 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.CopyFromCPU(a.AsSpan());
             gpuB.View.CopyFromCPU(b.AsSpan());
-            _addKernelInt!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _addKernelInt(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _addKernelInt!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _addKernelInt(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -1751,12 +1751,12 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.CopyFromCPU(a.AsSpan());
             gpuB.View.CopyFromCPU(b.AsSpan());
-            _addKernelLong!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _addKernelLong(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _addKernelLong!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                _accelerator!.Synchronize();
+                _addKernelLong(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _accelerator.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
@@ -1901,9 +1901,9 @@ public class GpuEngine : IEngine, IDisposable
             int m = a.Rows, k = a.Columns, n = b.Columns;
 
             // Allocate GPU buffers using memory pool (Phase B: US-GPU-002)
-            var gpuA = _memoryPoolFloat!.Rent(m * k);
-            var gpuB = _memoryPoolFloat!.Rent(k * n);
-            var gpuResult = _memoryPoolFloat!.Rent(m * n);
+            var gpuA = _memoryPoolFloat.Rent(m * k);
+            var gpuB = _memoryPoolFloat.Rent(k * n);
+            var gpuResult = _memoryPoolFloat.Rent(m * n);
 
             try
             {
@@ -1920,8 +1920,8 @@ public class GpuEngine : IEngine, IDisposable
                 lock (_gpuLock)
                 {
                     // Execute pre-compiled kernel (Phase B: US-GPU-001, US-GPU-007)
-                    _matrixMultiplyKernelFloat!(_accelerator.DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
-                    _accelerator!.Synchronize();
+                    _matrixMultiplyKernelFloat(_accelerator.DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
+                    _accelerator.Synchronize();
                 }
 
                 // Zero-copy result transfer
@@ -1967,9 +1967,9 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Vector<float>(matrix.Rows);
             int rows = matrix.Rows, cols = matrix.Columns;
 
-            var gpuMatrix = _memoryPoolFloat!.Rent(rows * cols);
-            var gpuVector = _memoryPoolFloat!.Rent(cols);
-            var gpuResult = _memoryPoolFloat!.Rent(rows);
+            var gpuMatrix = _memoryPoolFloat.Rent(rows * cols);
+            var gpuVector = _memoryPoolFloat.Rent(cols);
+            var gpuResult = _memoryPoolFloat.Rent(rows);
 
             try
             {
@@ -1977,12 +1977,12 @@ public class GpuEngine : IEngine, IDisposable
                 gpuVector.View.CopyFromCPU(vector.AsSpan());
 
                 var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                _matrixVectorMultiplyKernelFloat!(_accelerator.DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
+                _matrixVectorMultiplyKernelFloat(_accelerator.DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixVectorMultiplyKernelFloat!(_accelerator.DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
-                    _accelerator!.Synchronize();
+                    _matrixVectorMultiplyKernelFloat(_accelerator.DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2011,8 +2011,8 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Matrix<float>(matrix.Columns, matrix.Rows);
             int rows = matrix.Rows, cols = matrix.Columns;
 
-            var gpuInput = _memoryPoolFloat!.Rent(rows * cols);
-            var gpuOutput = _memoryPoolFloat!.Rent(rows * cols);
+            var gpuInput = _memoryPoolFloat.Rent(rows * cols);
+            var gpuOutput = _memoryPoolFloat.Rent(rows * cols);
 
             try
             {
@@ -2021,12 +2021,12 @@ public class GpuEngine : IEngine, IDisposable
                 var viewInput = gpuInput.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 var viewOutput = gpuOutput.As2DView<Stride2D.DenseX>(new Index2D(cols, rows));
 
-                _matrixTransposeKernelFloat!(_accelerator.DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
+                _matrixTransposeKernelFloat(_accelerator.DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixTransposeKernelFloat!(_accelerator.DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
-                    _accelerator!.Synchronize();
+                    _matrixTransposeKernelFloat(_accelerator.DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
+                    _accelerator.Synchronize();
                 }
 
                 gpuOutput.View.CopyToCPU(result.AsWritableSpan());
@@ -2059,9 +2059,9 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Matrix<float>(a.Rows, a.Columns);
             int rows = a.Rows, cols = a.Columns;
 
-            var gpuA = _memoryPoolFloat!.Rent(rows * cols);
-            var gpuB = _memoryPoolFloat!.Rent(rows * cols);
-            var gpuResult = _memoryPoolFloat!.Rent(rows * cols);
+            var gpuA = _memoryPoolFloat.Rent(rows * cols);
+            var gpuB = _memoryPoolFloat.Rent(rows * cols);
+            var gpuResult = _memoryPoolFloat.Rent(rows * cols);
 
             try
             {
@@ -2072,12 +2072,12 @@ public class GpuEngine : IEngine, IDisposable
                 var viewB = gpuB.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
-                _matrixAddKernelFloat!(_accelerator.DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
+                _matrixAddKernelFloat(_accelerator.DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixAddKernelFloat!(_accelerator.DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
-                    _accelerator!.Synchronize();
+                    _matrixAddKernelFloat(_accelerator.DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2106,8 +2106,8 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Matrix<float>(matrix.Rows, matrix.Columns);
             int rows = matrix.Rows, cols = matrix.Columns;
 
-            var gpuMatrix = _memoryPoolFloat!.Rent(rows * cols);
-            var gpuResult = _memoryPoolFloat!.Rent(rows * cols);
+            var gpuMatrix = _memoryPoolFloat.Rent(rows * cols);
+            var gpuResult = _memoryPoolFloat.Rent(rows * cols);
 
             try
             {
@@ -2116,12 +2116,12 @@ public class GpuEngine : IEngine, IDisposable
                 var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
-                _matrixMultiplyScalarKernelFloat!(_accelerator.DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
+                _matrixMultiplyScalarKernelFloat(_accelerator.DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixMultiplyScalarKernelFloat!(_accelerator.DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
-                    _accelerator!.Synchronize();
+                    _matrixMultiplyScalarKernelFloat(_accelerator.DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2158,9 +2158,9 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Matrix<double>(a.Rows, b.Columns);
             int m = a.Rows, k = a.Columns, n = b.Columns;
 
-            var gpuA = _memoryPoolDouble!.Rent(m * k);
-            var gpuB = _memoryPoolDouble!.Rent(k * n);
-            var gpuResult = _memoryPoolDouble!.Rent(m * n);
+            var gpuA = _memoryPoolDouble.Rent(m * k);
+            var gpuB = _memoryPoolDouble.Rent(k * n);
+            var gpuResult = _memoryPoolDouble.Rent(m * n);
 
             try
             {
@@ -2171,12 +2171,12 @@ public class GpuEngine : IEngine, IDisposable
                 var viewB = gpuB.As2DView<Stride2D.DenseX>(new Index2D(k, n));
                 var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(m, n));
 
-                _matrixMultiplyKernelDouble!(_accelerator.DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
+                _matrixMultiplyKernelDouble(_accelerator.DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixMultiplyKernelDouble!(_accelerator.DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
-                    _accelerator!.Synchronize();
+                    _matrixMultiplyKernelDouble(_accelerator.DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2211,9 +2211,9 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Vector<double>(matrix.Rows);
             int rows = matrix.Rows, cols = matrix.Columns;
 
-            var gpuMatrix = _memoryPoolDouble!.Rent(rows * cols);
-            var gpuVector = _memoryPoolDouble!.Rent(cols);
-            var gpuResult = _memoryPoolDouble!.Rent(rows);
+            var gpuMatrix = _memoryPoolDouble.Rent(rows * cols);
+            var gpuVector = _memoryPoolDouble.Rent(cols);
+            var gpuResult = _memoryPoolDouble.Rent(rows);
 
             try
             {
@@ -2221,12 +2221,12 @@ public class GpuEngine : IEngine, IDisposable
                 gpuVector.View.CopyFromCPU(vector.AsSpan());
 
                 var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                _matrixVectorMultiplyKernelDouble!(_accelerator.DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
+                _matrixVectorMultiplyKernelDouble(_accelerator.DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixVectorMultiplyKernelDouble!(_accelerator.DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
-                    _accelerator!.Synchronize();
+                    _matrixVectorMultiplyKernelDouble(_accelerator.DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2255,8 +2255,8 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Matrix<double>(matrix.Columns, matrix.Rows);
             int rows = matrix.Rows, cols = matrix.Columns;
 
-            var gpuInput = _memoryPoolDouble!.Rent(rows * cols);
-            var gpuOutput = _memoryPoolDouble!.Rent(rows * cols);
+            var gpuInput = _memoryPoolDouble.Rent(rows * cols);
+            var gpuOutput = _memoryPoolDouble.Rent(rows * cols);
 
             try
             {
@@ -2265,12 +2265,12 @@ public class GpuEngine : IEngine, IDisposable
                 var viewInput = gpuInput.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 var viewOutput = gpuOutput.As2DView<Stride2D.DenseX>(new Index2D(cols, rows));
 
-                _matrixTransposeKernelDouble!(_accelerator.DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
+                _matrixTransposeKernelDouble(_accelerator.DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixTransposeKernelDouble!(_accelerator.DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
-                    _accelerator!.Synchronize();
+                    _matrixTransposeKernelDouble(_accelerator.DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
+                    _accelerator.Synchronize();
                 }
 
                 gpuOutput.View.CopyToCPU(result.AsWritableSpan());
@@ -2303,9 +2303,9 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Matrix<double>(a.Rows, a.Columns);
             int rows = a.Rows, cols = a.Columns;
 
-            var gpuA = _memoryPoolDouble!.Rent(rows * cols);
-            var gpuB = _memoryPoolDouble!.Rent(rows * cols);
-            var gpuResult = _memoryPoolDouble!.Rent(rows * cols);
+            var gpuA = _memoryPoolDouble.Rent(rows * cols);
+            var gpuB = _memoryPoolDouble.Rent(rows * cols);
+            var gpuResult = _memoryPoolDouble.Rent(rows * cols);
 
             try
             {
@@ -2316,12 +2316,12 @@ public class GpuEngine : IEngine, IDisposable
                 var viewB = gpuB.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
-                _matrixAddKernelDouble!(_accelerator.DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
+                _matrixAddKernelDouble(_accelerator.DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixAddKernelDouble!(_accelerator.DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
-                    _accelerator!.Synchronize();
+                    _matrixAddKernelDouble(_accelerator.DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2350,8 +2350,8 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Matrix<double>(matrix.Rows, matrix.Columns);
             int rows = matrix.Rows, cols = matrix.Columns;
 
-            var gpuMatrix = _memoryPoolDouble!.Rent(rows * cols);
-            var gpuResult = _memoryPoolDouble!.Rent(rows * cols);
+            var gpuMatrix = _memoryPoolDouble.Rent(rows * cols);
+            var gpuResult = _memoryPoolDouble.Rent(rows * cols);
 
             try
             {
@@ -2360,12 +2360,12 @@ public class GpuEngine : IEngine, IDisposable
                 var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
-                _matrixMultiplyScalarKernelDouble!(_accelerator.DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
+                _matrixMultiplyScalarKernelDouble(_accelerator.DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixMultiplyScalarKernelDouble!(_accelerator.DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
-                    _accelerator!.Synchronize();
+                    _matrixMultiplyScalarKernelDouble(_accelerator.DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2445,9 +2445,9 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Tensor<float>(new[] { batchSize, m, n });
 
             // Allocate GPU buffers using memory pool (Phase B: US-GPU-002)
-            var gpuA = _memoryPoolFloat!.Rent(batchSize * m * k);
-            var gpuB = _memoryPoolFloat!.Rent(batchSize * k * n);
-            var gpuResult = _memoryPoolFloat!.Rent(batchSize * m * n);
+            var gpuA = _memoryPoolFloat.Rent(batchSize * m * k);
+            var gpuB = _memoryPoolFloat.Rent(batchSize * k * n);
+            var gpuResult = _memoryPoolFloat.Rent(batchSize * m * n);
 
             try
             {
@@ -2456,12 +2456,12 @@ public class GpuEngine : IEngine, IDisposable
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
                 // Execute pre-compiled kernel (Phase B: US-GPU-001, US-GPU-013)
-                _batchMatMulKernelFloat!(_accelerator.DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
+                _batchMatMulKernelFloat(_accelerator.DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _batchMatMulKernelFloat!(_accelerator.DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
-                    _accelerator!.Synchronize();
+                    _batchMatMulKernelFloat(_accelerator.DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
+                    _accelerator.Synchronize();
                 }
 
                 // Zero-copy result transfer
@@ -2527,9 +2527,9 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Tensor<double>(new[] { batchSize, m, n });
 
             // Allocate GPU buffers using memory pool (Phase B: US-GPU-002)
-            var gpuA = _memoryPoolDouble!.Rent(batchSize * m * k);
-            var gpuB = _memoryPoolDouble!.Rent(batchSize * k * n);
-            var gpuResult = _memoryPoolDouble!.Rent(batchSize * m * n);
+            var gpuA = _memoryPoolDouble.Rent(batchSize * m * k);
+            var gpuB = _memoryPoolDouble.Rent(batchSize * k * n);
+            var gpuResult = _memoryPoolDouble.Rent(batchSize * m * n);
 
             try
             {
@@ -2538,12 +2538,12 @@ public class GpuEngine : IEngine, IDisposable
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
                 // Execute pre-compiled kernel (Phase B: US-GPU-001, US-GPU-013)
-                _batchMatMulKernelDouble!(_accelerator.DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
+                _batchMatMulKernelDouble(_accelerator.DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _batchMatMulKernelDouble!(_accelerator.DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
-                    _accelerator!.Synchronize();
+                    _batchMatMulKernelDouble(_accelerator.DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
+                    _accelerator.Synchronize();
                 }
 
                 // Zero-copy result transfer
@@ -2602,21 +2602,21 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var result = new Tensor<float>(a.Shape);
-            var gpuA = _memoryPoolFloat!.Rent(a.Length);
-            var gpuB = _memoryPoolFloat!.Rent(b.Length);
-            var gpuResult = _memoryPoolFloat!.Rent(a.Length);
+            var gpuA = _memoryPoolFloat.Rent(a.Length);
+            var gpuB = _memoryPoolFloat.Rent(b.Length);
+            var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
             try
             {
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorAddKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorAddKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorAddKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    _accelerator!.Synchronize();
+                    _tensorAddKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2643,21 +2643,21 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var result = new Tensor<double>(a.Shape);
-            var gpuA = _memoryPoolDouble!.Rent(a.Length);
-            var gpuB = _memoryPoolDouble!.Rent(b.Length);
-            var gpuResult = _memoryPoolDouble!.Rent(a.Length);
+            var gpuA = _memoryPoolDouble.Rent(a.Length);
+            var gpuB = _memoryPoolDouble.Rent(b.Length);
+            var gpuResult = _memoryPoolDouble.Rent(a.Length);
 
             try
             {
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorAddKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorAddKernelDouble(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorAddKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    _accelerator!.Synchronize();
+                    _tensorAddKernelDouble(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2703,21 +2703,21 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var result = new Tensor<float>(a.Shape);
-            var gpuA = _memoryPoolFloat!.Rent(a.Length);
-            var gpuB = _memoryPoolFloat!.Rent(b.Length);
-            var gpuResult = _memoryPoolFloat!.Rent(a.Length);
+            var gpuA = _memoryPoolFloat.Rent(a.Length);
+            var gpuB = _memoryPoolFloat.Rent(b.Length);
+            var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
             try
             {
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorSubtractKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorSubtractKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorSubtractKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    _accelerator!.Synchronize();
+                    _tensorSubtractKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2744,21 +2744,21 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var result = new Tensor<double>(a.Shape);
-            var gpuA = _memoryPoolDouble!.Rent(a.Length);
-            var gpuB = _memoryPoolDouble!.Rent(b.Length);
-            var gpuResult = _memoryPoolDouble!.Rent(a.Length);
+            var gpuA = _memoryPoolDouble.Rent(a.Length);
+            var gpuB = _memoryPoolDouble.Rent(b.Length);
+            var gpuResult = _memoryPoolDouble.Rent(a.Length);
 
             try
             {
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorSubtractKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorSubtractKernelDouble(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorSubtractKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    _accelerator!.Synchronize();
+                    _tensorSubtractKernelDouble(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2804,21 +2804,21 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var result = new Tensor<float>(a.Shape);
-            var gpuA = _memoryPoolFloat!.Rent(a.Length);
-            var gpuB = _memoryPoolFloat!.Rent(b.Length);
-            var gpuResult = _memoryPoolFloat!.Rent(a.Length);
+            var gpuA = _memoryPoolFloat.Rent(a.Length);
+            var gpuB = _memoryPoolFloat.Rent(b.Length);
+            var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
             try
             {
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorMultiplyKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorMultiplyKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorMultiplyKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    _accelerator!.Synchronize();
+                    _tensorMultiplyKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2845,21 +2845,21 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var result = new Tensor<double>(a.Shape);
-            var gpuA = _memoryPoolDouble!.Rent(a.Length);
-            var gpuB = _memoryPoolDouble!.Rent(b.Length);
-            var gpuResult = _memoryPoolDouble!.Rent(a.Length);
+            var gpuA = _memoryPoolDouble.Rent(a.Length);
+            var gpuB = _memoryPoolDouble.Rent(b.Length);
+            var gpuResult = _memoryPoolDouble.Rent(a.Length);
 
             try
             {
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorMultiplyKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorMultiplyKernelDouble(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorMultiplyKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    _accelerator!.Synchronize();
+                    _tensorMultiplyKernelDouble(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2903,19 +2903,19 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var result = new Tensor<float>(tensor.Shape);
-            var gpuTensor = _memoryPoolFloat!.Rent(tensor.Length);
-            var gpuResult = _memoryPoolFloat!.Rent(tensor.Length);
+            var gpuTensor = _memoryPoolFloat.Rent(tensor.Length);
+            var gpuResult = _memoryPoolFloat.Rent(tensor.Length);
 
             try
             {
                 gpuTensor.CopyFromCPU(tensor.AsSpan());
 
-                _tensorMultiplyScalarKernelFloat!(_accelerator.DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
+                _tensorMultiplyScalarKernelFloat(_accelerator.DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorMultiplyScalarKernelFloat!(_accelerator.DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
-                    _accelerator!.Synchronize();
+                    _tensorMultiplyScalarKernelFloat(_accelerator.DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2939,19 +2939,19 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var result = new Tensor<double>(tensor.Shape);
-            var gpuTensor = _memoryPoolDouble!.Rent(tensor.Length);
-            var gpuResult = _memoryPoolDouble!.Rent(tensor.Length);
+            var gpuTensor = _memoryPoolDouble.Rent(tensor.Length);
+            var gpuResult = _memoryPoolDouble.Rent(tensor.Length);
 
             try
             {
                 gpuTensor.CopyFromCPU(tensor.AsSpan());
 
-                _tensorMultiplyScalarKernelDouble!(_accelerator.DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
+                _tensorMultiplyScalarKernelDouble(_accelerator.DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorMultiplyScalarKernelDouble!(_accelerator.DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
-                    _accelerator!.Synchronize();
+                    _tensorMultiplyScalarKernelDouble(_accelerator.DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -2996,21 +2996,21 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var result = new Tensor<float>(a.Shape);
-            var gpuA = _memoryPoolFloat!.Rent(a.Length);
-            var gpuB = _memoryPoolFloat!.Rent(b.Length);
-            var gpuResult = _memoryPoolFloat!.Rent(a.Length);
+            var gpuA = _memoryPoolFloat.Rent(a.Length);
+            var gpuB = _memoryPoolFloat.Rent(b.Length);
+            var gpuResult = _memoryPoolFloat.Rent(a.Length);
 
             try
             {
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorDivideKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorDivideKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorDivideKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    _accelerator!.Synchronize();
+                    _tensorDivideKernelFloat(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -3037,21 +3037,21 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var result = new Tensor<double>(a.Shape);
-            var gpuA = _memoryPoolDouble!.Rent(a.Length);
-            var gpuB = _memoryPoolDouble!.Rent(b.Length);
-            var gpuResult = _memoryPoolDouble!.Rent(a.Length);
+            var gpuA = _memoryPoolDouble.Rent(a.Length);
+            var gpuB = _memoryPoolDouble.Rent(b.Length);
+            var gpuResult = _memoryPoolDouble.Rent(a.Length);
 
             try
             {
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorDivideKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorDivideKernelDouble(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorDivideKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
-                    _accelerator!.Synchronize();
+                    _tensorDivideKernelDouble(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _accelerator.Synchronize();
                 }
 
                 gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -3139,8 +3139,8 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Tensor<float>(new[] { batch, channels, outputHeight, outputWidth });
             int outputSize = batch * channels * outputHeight * outputWidth;
 
-            var gpuInput = _memoryPoolFloat!.Rent(input.Length);
-            var gpuOutput = _memoryPoolFloat!.Rent(outputSize);
+            var gpuInput = _memoryPoolFloat.Rent(input.Length);
+            var gpuOutput = _memoryPoolFloat.Rent(outputSize);
 
             try
             {
@@ -3151,7 +3151,7 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     _maxPool2DKernelFloat!(outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
-                    _accelerator!.Synchronize();
+                    _accelerator.Synchronize();
                 }
 
                 gpuOutput.View.CopyToCPU(result.AsWritableSpan());
@@ -3193,8 +3193,8 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Tensor<double>(new[] { batch, channels, outputHeight, outputWidth });
             int outputSize = batch * channels * outputHeight * outputWidth;
 
-            var gpuInput = _memoryPoolDouble!.Rent(input.Length);
-            var gpuOutput = _memoryPoolDouble!.Rent(outputSize);
+            var gpuInput = _memoryPoolDouble.Rent(input.Length);
+            var gpuOutput = _memoryPoolDouble.Rent(outputSize);
 
             try
             {
@@ -3205,7 +3205,7 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     _maxPool2DKernelDouble!(outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
-                    _accelerator!.Synchronize();
+                    _accelerator.Synchronize();
                 }
 
                 gpuOutput.View.CopyToCPU(result.AsWritableSpan());
@@ -3266,8 +3266,8 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Tensor<float>(new[] { batch, channels, outputHeight, outputWidth });
             int outputSize = batch * channels * outputHeight * outputWidth;
 
-            var gpuInput = _memoryPoolFloat!.Rent(input.Length);
-            var gpuOutput = _memoryPoolFloat!.Rent(outputSize);
+            var gpuInput = _memoryPoolFloat.Rent(input.Length);
+            var gpuOutput = _memoryPoolFloat.Rent(outputSize);
 
             try
             {
@@ -3278,7 +3278,7 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     _avgPool2DKernelFloat!(outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
-                    _accelerator!.Synchronize();
+                    _accelerator.Synchronize();
                 }
 
                 gpuOutput.View.CopyToCPU(result.AsWritableSpan());
@@ -3320,8 +3320,8 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Tensor<double>(new[] { batch, channels, outputHeight, outputWidth });
             int outputSize = batch * channels * outputHeight * outputWidth;
 
-            var gpuInput = _memoryPoolDouble!.Rent(input.Length);
-            var gpuOutput = _memoryPoolDouble!.Rent(outputSize);
+            var gpuInput = _memoryPoolDouble.Rent(input.Length);
+            var gpuOutput = _memoryPoolDouble.Rent(outputSize);
 
             try
             {
@@ -3332,7 +3332,7 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     _avgPool2DKernelDouble!(outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
-                    _accelerator!.Synchronize();
+                    _accelerator.Synchronize();
                 }
 
                 gpuOutput.View.CopyToCPU(result.AsWritableSpan());
@@ -3401,9 +3401,9 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Tensor<float>(new[] { batch, outChannels, outputHeight, outputWidth });
             int outputSize = batch * outChannels * outputHeight * outputWidth;
 
-            var gpuInput = _memoryPoolFloat!.Rent(input.Length);
-            var gpuKernel = _memoryPoolFloat!.Rent(kernel.Length);
-            var gpuOutput = _memoryPoolFloat!.Rent(outputSize);
+            var gpuInput = _memoryPoolFloat.Rent(input.Length);
+            var gpuKernel = _memoryPoolFloat.Rent(kernel.Length);
+            var gpuOutput = _memoryPoolFloat.Rent(outputSize);
 
             try
             {
@@ -3416,7 +3416,7 @@ public class GpuEngine : IEngine, IDisposable
                     _conv2DKernelFloat!(outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View,
                         batch, inChannels, height, width, outChannels,
                         outputHeight, outputWidth, kernelHeight, kernelWidth, stride, padding, dilation);
-                    _accelerator!.Synchronize();
+                    _accelerator.Synchronize();
                 }
 
                 gpuOutput.View.CopyToCPU(result.AsWritableSpan());
@@ -3465,9 +3465,9 @@ public class GpuEngine : IEngine, IDisposable
             var result = new Tensor<double>(new[] { batch, outChannels, outputHeight, outputWidth });
             int outputSize = batch * outChannels * outputHeight * outputWidth;
 
-            var gpuInput = _memoryPoolDouble!.Rent(input.Length);
-            var gpuKernel = _memoryPoolDouble!.Rent(kernel.Length);
-            var gpuOutput = _memoryPoolDouble!.Rent(outputSize);
+            var gpuInput = _memoryPoolDouble.Rent(input.Length);
+            var gpuKernel = _memoryPoolDouble.Rent(kernel.Length);
+            var gpuOutput = _memoryPoolDouble.Rent(outputSize);
 
             try
             {
@@ -3480,7 +3480,7 @@ public class GpuEngine : IEngine, IDisposable
                     _conv2DKernelDouble!(outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View,
                         batch, inChannels, height, width, outChannels,
                         outputHeight, outputWidth, kernelHeight, kernelWidth, stride, padding, dilation);
-                    _accelerator!.Synchronize();
+                    _accelerator.Synchronize();
                 }
 
                 gpuOutput.View.CopyToCPU(result.AsWritableSpan());
