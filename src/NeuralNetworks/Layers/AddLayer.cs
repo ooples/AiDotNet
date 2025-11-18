@@ -49,6 +49,11 @@ public class AddLayer<T> : LayerBase<T>
     private Tensor<T>? _lastOutput;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+    private IEngine _engine;
+
+    /// <summary>
     /// Indicates whether this layer has trainable parameters.
     /// </summary>
     /// <value>Always returns false because addition layers don't have parameters to train.</value>
@@ -103,9 +108,10 @@ public class AddLayer<T> : LayerBase<T>
     /// the dimensions of one input tensor (like [batchSize, height, width, channels]).
     /// </para>
     /// </remarks>
-    public AddLayer(int[][] inputShapes, IActivationFunction<T>? activationFunction = null)
+    public AddLayer(int[][] inputShapes, IActivationFunction<T>? activationFunction = null, IEngine? engine = null)
         : base(inputShapes, inputShapes[0], activationFunction ?? new IdentityActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         ValidateInputShapes(inputShapes);
     }
 
@@ -141,9 +147,10 @@ public class AddLayer<T> : LayerBase<T>
     /// entire vectors rather than individual elements.
     /// </para>
     /// </remarks>
-    public AddLayer(int[][] inputShapes, IVectorActivationFunction<T>? vectorActivationFunction = null)
+    public AddLayer(int[][] inputShapes, IVectorActivationFunction<T>? vectorActivationFunction = null, IEngine? engine = null)
         : base(inputShapes, inputShapes[0], vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         ValidateInputShapes(inputShapes);
     }
 
