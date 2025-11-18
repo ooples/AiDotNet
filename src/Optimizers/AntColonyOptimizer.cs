@@ -40,6 +40,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     /// </summary>
     /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The options for configuring the Ant Colony Optimization algorithm.</param>
+    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the Ant Colony Optimizer with its initial configuration.
     /// You can customize various aspects of how it works, or use default settings.
@@ -47,8 +48,9 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     /// </remarks>
     public AntColonyOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        AntColonyOptimizationOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        AntColonyOptimizationOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
+        : base(model, options ?? new(), engine)
     {
         _antColonyOptions = options ?? new AntColonyOptimizationOptions<T, TInput, TOutput>();
         _currentPheromoneEvaporationRate = NumOps.Zero;
@@ -333,35 +335,30 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     /// </remarks>
     private void UpdatePheromones(Matrix<T> pheromones, List<IFullModel<T, TInput, TOutput>> solutions)
     {
-        // Evaporation
-        for (int i = 0; i < pheromones.Rows; i++)
-        {
-            for (int j = 0; j < pheromones.Columns; j++)
-            {
-                pheromones[i, j] = NumOps.Multiply(
-                    pheromones[i, j], 
-                    NumOps.Subtract(NumOps.One, _currentPheromoneEvaporationRate)
-                );
-            }
-        }
+        // === Partially Vectorized Pheromone Update using IEngine (Phase B: US-GPU-015) ===
 
-        // Deposit
+        // Vectorized evaporation: pheromones *= (1 - evaporationRate)
+        var evaporationFactor = NumOps.Subtract(NumOps.One, _currentPheromoneEvaporationRate);
+        pheromones = pheromones.Multiply(evaporationFactor);
+
+        // Deposit - partially vectorized
         for (int k = 0; k < solutions.Count; k++)
         {
             var model = solutions[k];
             var parameters = model.GetParameters();
             var deposit = NumOps.Divide(_currentPheromoneIntensity, NumOps.Add(NumOps.One, FitnessList[k]));
-            
+
+            // Vectorized absolute value of parameters
+            var absParams = (Vector<T>)Engine.Abs(parameters);
+
             for (int i = 0; i < parameters.Length; i++)
             {
+                var depositScaled = NumOps.Multiply(deposit, absParams[i]);
                 for (int j = 0; j < parameters.Length; j++)
                 {
                     if (i != j)
                     {
-                        pheromones[i, j] = NumOps.Add(
-                            pheromones[i, j], 
-                            NumOps.Multiply(deposit, NumOps.Abs(parameters[i]))
-                        );
+                        pheromones[i, j] = NumOps.Add(pheromones[i, j], depositScaled);
                     }
                 }
             }
