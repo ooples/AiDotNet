@@ -44,10 +44,12 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </remarks>
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">The Newton's Method-specific optimization options.</param>
+    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public NewtonMethodOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        NewtonMethodOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        NewtonMethodOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
+        : base(model, options ?? new(), engine)
     {
         _options = options ?? new NewtonMethodOptimizerOptions<T, TInput, TOutput>();
 
@@ -152,15 +154,19 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <returns>The direction vector for the next step.</returns>
     private Vector<T> CalculateDirection(Vector<T> gradient, Matrix<T> hessian)
     {
+        // === Vectorized Direction Calculation using IEngine (Phase B: US-GPU-015) ===
+        // direction = -H^{-1} * gradient (or -gradient if H is singular)
+
         try
         {
             var inverseHessian = hessian.Inverse();
-            return inverseHessian.Multiply(gradient).Transform(x => NumOps.Negate(x));
+            var direction = inverseHessian.Multiply(gradient);
+            return (Vector<T>)Engine.Multiply(direction, NumOps.Negate(NumOps.One));
         }
         catch (InvalidOperationException)
         {
             // If Hessian is not invertible, fall back to gradient descent
-            return gradient.Transform(x => NumOps.Negate(x));
+            return (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
         }
     }
 
@@ -265,12 +271,12 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <returns>A new ISymbolicModel with updated coefficients.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction)
     {
+        // === Vectorized Solution Update using IEngine (Phase B: US-GPU-015) ===
+        // newCoefficients = parameters - learningRate * direction
+
         var parameters = currentSolution.GetParameters();
-        var newCoefficients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            newCoefficients[i] = NumOps.Subtract(currentSolution.GetParameters()[i], NumOps.Multiply(CurrentLearningRate, direction[i]));
-        }
+        var scaledDirection = (Vector<T>)Engine.Multiply(direction, CurrentLearningRate);
+        var newCoefficients = (Vector<T>)Engine.Subtract(parameters, scaledDirection);
 
         return currentSolution.WithParameters(newCoefficients);
     }
