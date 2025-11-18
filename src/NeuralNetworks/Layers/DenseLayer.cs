@@ -301,7 +301,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
-    private readonly IEngine _engine;
+    private IEngine _engine;
 
     public DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null, IEngine? engine = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())

@@ -498,6 +498,11 @@ public class LSTMLayer<T> : LayerBase<T>
     private readonly bool _useVectorActivation;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+    private IEngine _engine;
+
+    /// <summary>
     /// Gets a dictionary containing the gradients for all trainable parameters after a backward pass.
     /// </summary>
     /// <remarks>
@@ -569,9 +574,11 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public LSTMLayer(int inputSize, int hiddenSize, int[] inputShape,
         IActivationFunction<T>? activation = null,
-        IActivationFunction<T>? recurrentActivation = null)
+        IActivationFunction<T>? recurrentActivation = null,
+        IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, hiddenSize), activation ?? new TanhActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         _inputSize = inputSize;
         _hiddenSize = hiddenSize;
         _useVectorActivation = false;
@@ -633,9 +640,11 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public LSTMLayer(int inputSize, int hiddenSize, int[] inputShape,
         IVectorActivationFunction<T>? activation = null,
-        IVectorActivationFunction<T>? recurrentActivation = null)
+        IVectorActivationFunction<T>? recurrentActivation = null,
+        IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, hiddenSize), activation ?? new TanhActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         _inputSize = inputSize;
         _hiddenSize = hiddenSize;
         _useVectorActivation = true;

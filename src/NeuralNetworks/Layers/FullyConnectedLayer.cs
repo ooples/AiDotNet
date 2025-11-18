@@ -179,7 +179,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
-    private readonly IEngine _engine;
+    private IEngine _engine;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
