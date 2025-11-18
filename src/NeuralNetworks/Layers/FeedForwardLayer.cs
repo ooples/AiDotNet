@@ -182,6 +182,11 @@ public class FeedForwardLayer<T> : LayerBase<T>
     private Tensor<T> BiasesGradient { get; set; }
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+    private IEngine _engine;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -239,9 +244,10 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// starting values to begin training.
     /// </para>
     /// </remarks>
-    public FeedForwardLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
+    public FeedForwardLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null, IEngine? engine = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         Weights = Tensor<T>.CreateRandom([inputSize, outputSize]);
         Biases = Tensor<T>.CreateDefault([1, outputSize], NumOps.Zero);
         WeightsGradient = Tensor<T>.Empty();
@@ -278,9 +284,10 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// which is perfect for classification tasks.
     /// </para>
     /// </remarks>
-    public FeedForwardLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? activationFunction = null)
+    public FeedForwardLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? activationFunction = null, IEngine? engine = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         Weights = Tensor<T>.CreateRandom([inputSize, outputSize]);
         Biases = Tensor<T>.CreateDefault([1, outputSize], NumOps.Zero);
         WeightsGradient = Tensor<T>.Empty();
