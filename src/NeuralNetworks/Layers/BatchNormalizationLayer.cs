@@ -142,7 +142,6 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
-    private IEngine _engine;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training mode.
@@ -210,10 +209,9 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// - Running statistics (mean and variance) initialized to 0.0 and 1.0
     /// </para>
     /// </remarks>
-    public BatchNormalizationLayer(int featureSize, double epsilon = 1e-5, double momentum = 0.9, IEngine? engine = null)
+    public BatchNormalizationLayer(int featureSize, double epsilon = 1e-5, double momentum = 0.9)
         : base([featureSize], [featureSize])
     {
-        _engine = engine ?? CpuEngine.Instance;
         _epsilon = NumOps.FromDouble(epsilon);
         _momentum = NumOps.FromDouble(momentum);
         _gamma = Vector<T>.CreateDefault(featureSize, NumOps.One);
@@ -294,9 +292,9 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             }
 
             // Vectorized: scaled = normalized * gamma
-            var scaled = (Vector<T>)_engine.Multiply(normalizedRow, _gamma);
+            var scaled = (Vector<T>)Engine.Multiply(normalizedRow, _gamma);
             // Vectorized: output = scaled + beta
-            var outputRow = (Vector<T>)_engine.Add(scaled, _beta);
+            var outputRow = (Vector<T>)Engine.Add(scaled, _beta);
 
             for (int j = 0; j < featureSize; j++)
             {

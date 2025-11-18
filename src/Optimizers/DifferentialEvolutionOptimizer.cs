@@ -80,7 +80,7 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
         IFullModel<T, TInput, TOutput> model,
         DifferentialEvolutionOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _deOptions = options ?? new DifferentialEvolutionOptions<T, TInput, TOutput>();
         _currentCrossoverRate = NumOps.Zero;

@@ -64,7 +64,7 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
         IFitnessCalculator<T, TInput, TOutput>? fitnessCalculator = null,
         IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _geneticOptions = options ?? new GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>();
         _currentCrossoverRate = NumOps.Zero;

@@ -72,7 +72,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         IFullModel<T, TInput, TOutput>? model,
         LionOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _m = Vector<T>.Empty();
         _t = 0;
@@ -451,7 +451,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         _m = (Vector<T>)Engine.Add(beta2TimesM, oneMinusBeta2TimesGrad);
 
         // Reshape back to matrix
-        return updatedParams.ToMatrix(parameters.Rows, parameters.Columns);
+        return updatedParams.Reshape(parameters.Rows, parameters.Columns);
     }
 
     /// <summary>

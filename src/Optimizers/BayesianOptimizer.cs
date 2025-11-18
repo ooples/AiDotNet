@@ -56,7 +56,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
         BayesianOptimizerOptions<T, TInput, TOutput>? options = null,
         IGaussianProcess<T>? gaussianProcess = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new BayesianOptimizerOptions<T, TInput, TOutput>();
         _sampledPoints = Matrix<T>.Empty();

@@ -213,7 +213,6 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// - GPU: Massive parallelism for 50-500x speedup on large feature maps
     /// </para>
     /// </remarks>
-    private readonly IEngine _engine;
 
     /// <summary>
     /// Gradient of the kernels computed during backpropagation via autodiff.
@@ -320,7 +319,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public ConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth, int stride = 1, int padding = 0,
-                              IActivationFunction<T>? activation = null, IEngine? engine = null)
+                              IActivationFunction<T>? activation = null)
         : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
                CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding),
                    CalculateOutputDimension(inputWidth, kernelSize, stride, padding)), activation ?? new ReLUActivation<T>())
@@ -330,7 +329,6 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         KernelSize = kernelSize;
         Stride = stride;
         Padding = padding;
-        _engine = engine ?? EngineFactory.GetEngine();
 
         _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _biases = new Vector<T>(OutputDepth);
@@ -372,7 +370,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public ConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth, int stride = 1, int padding = 0,
-                              IVectorActivationFunction<T>? vectorActivation = null, IEngine? engine = null)
+                              IVectorActivationFunction<T>? vectorActivation = null)
         : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
                CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding),
                    CalculateOutputDimension(inputWidth, kernelSize, stride, padding)), vectorActivation ?? new ReLUActivation<T>())
@@ -382,7 +380,6 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         KernelSize = kernelSize;
         Stride = stride;
         Padding = padding;
-        _engine = engine ?? EngineFactory.GetEngine();
 
         _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _biases = new Vector<T>(OutputDepth);
@@ -736,7 +733,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         // Phase B: US-GPU-016 - Replace 6 nested loops with IEngine.Conv2D
         // Achieves 50-500x speedup on GPU for large feature maps
 
-        Tensor<T> output = (Tensor<T>)_engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
+        Tensor<T> output = (Tensor<T>)Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
 
         // Add biases: output[b, o, h, w] += biases[o] for each output channel
         for (int b = 0; b < batchSize; b++)

@@ -124,7 +124,7 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
         IFullModel<T, TInput, TOutput> model,
         AdaMaxOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new AdaMaxOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();

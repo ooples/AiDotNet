@@ -54,7 +54,7 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
         IFullModel<T, TInput, TOutput> model,
         StochasticGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new();
     }

@@ -227,7 +227,6 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
-    private IEngine _engine;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -276,10 +275,9 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// similar to those used in the original transformer paper.
     /// </para>
     /// </remarks>
-    public TransformerEncoderLayer(int embeddingSize, int numHeads, int feedForwardDim, IEngine? engine = null)
+    public TransformerEncoderLayer(int embeddingSize, int numHeads, int feedForwardDim)
         : base([embeddingSize], [embeddingSize])
     {
-        _engine = engine ?? CpuEngine.Instance;
         _embeddingSize = embeddingSize;
         _numHeads = numHeads;
         _feedForwardDim = feedForwardDim;
@@ -289,18 +287,16 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             sequenceLength,
             _embeddingSize,
             _numHeads,
-            new GELUActivation<T>() as IActivationFunction<T>,
-            _engine);
+            new GELUActivation<T>() as IActivationFunction<T>);
 
-        _norm1 = new LayerNormalizationLayer<T>(_embeddingSize, engine: _engine);
+        _norm1 = new LayerNormalizationLayer<T>(_embeddingSize);
 
         _feedForward = new FeedForwardLayer<T>(
             _embeddingSize,
             _feedForwardDim,
-            new GELUActivation<T>() as IActivationFunction<T>,
-            _engine);
+            new GELUActivation<T>() as IActivationFunction<T>);
 
-        _norm2 = new LayerNormalizationLayer<T>(_embeddingSize, engine: _engine);
+        _norm2 = new LayerNormalizationLayer<T>(_embeddingSize);
 
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);

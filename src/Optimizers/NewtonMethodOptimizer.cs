@@ -49,7 +49,7 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         IFullModel<T, TInput, TOutput> model,
         NewtonMethodOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new NewtonMethodOptimizerOptions<T, TInput, TOutput>();
 

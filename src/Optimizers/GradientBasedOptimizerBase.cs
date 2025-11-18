@@ -98,7 +98,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// - GPU: Massive parallelism for 10-100x speedup on large models
     /// </para>
     /// </remarks>
-    protected IEngine Engine;
 
     /// <summary>
     /// Gets whether mixed-precision training is enabled for this optimizer.
@@ -125,8 +124,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <param name="gradientCache">The gradient cache to use.</param>
     protected GradientBasedOptimizerBase(
         IFullModel<T, TInput, TOutput>? model,
-        GradientBasedOptimizerOptions<T, TInput, TOutput> options,
-        IEngine? engine = null) :
+        GradientBasedOptimizerOptions<T, TInput, TOutput> options) :
         base(model, options)
     {
         GradientOptions = options;
@@ -137,7 +135,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         LossFunction = options.LossFunction;
         GradientCache = options.GradientCache;
         Regularization = options.Regularization;
-        Engine = engine ?? EngineFactory.GetEngine(); // Default to global engine
+        // Engine property now returns AiDotNetEngine.Current automatically
     }
 
     /// <inheritdoc/>

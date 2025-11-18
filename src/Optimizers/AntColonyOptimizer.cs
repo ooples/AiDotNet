@@ -50,7 +50,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
         IFullModel<T, TInput, TOutput> model,
         AntColonyOptimizationOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _antColonyOptions = options ?? new AntColonyOptimizationOptions<T, TInput, TOutput>();
         _currentPheromoneEvaporationRate = NumOps.Zero;
@@ -349,7 +349,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
             var deposit = NumOps.Divide(_currentPheromoneIntensity, NumOps.Add(NumOps.One, FitnessList[k]));
 
             // Vectorized absolute value of parameters
-            var absParams = (Vector<T>)Engine.Abs(parameters);
+            var absParams = (Vector<T>)AiDotNetEngine.Current.Abs(parameters);
 
             for (int i = 0; i < parameters.Length; i++)
             {

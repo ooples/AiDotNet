@@ -56,7 +56,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
         IFullModel<T, TInput, TOutput> model,
         LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>();
         _dampingFactor = NumOps.Zero;

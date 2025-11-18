@@ -129,7 +129,6 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
-    private IEngine _engine;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -178,10 +177,9 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// For example, if your data has 128 features, you would use featureSize=128.
     /// </para>
     /// </remarks>
-    public LayerNormalizationLayer(int featureSize, double epsilon = 1e-5, IEngine? engine = null)
+    public LayerNormalizationLayer(int featureSize, double epsilon = 1e-5)
         : base([featureSize], [featureSize])
     {
-        _engine = engine ?? CpuEngine.Instance;
         _epsilon = NumOps.FromDouble(epsilon);
         _gamma = Vector<T>.CreateDefault(featureSize, NumOps.One);
         _beta = new Vector<T>(featureSize);
@@ -244,9 +242,9 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
             }
 
             // Vectorized: scaled = normalized * gamma
-            var scaled = (Vector<T>)_engine.Multiply(normalizedRow, _gamma);
+            var scaled = (Vector<T>)Engine.Multiply(normalizedRow, _gamma);
             // Vectorized: output = scaled + beta
-            var outputRow = (Vector<T>)_engine.Add(scaled, _beta);
+            var outputRow = (Vector<T>)Engine.Add(scaled, _beta);
 
             for (int j = 0; j < featureSize; j++)
             {

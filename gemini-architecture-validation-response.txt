@@ -1,0 +1,687 @@
+Loaded cached credentials.
+File C:\Users\yolan\.cache/vscode-ripgrep/ripgrep-v13.0.0-10-x86_64-pc-windows-msvc.zip has been cached
+Of course. This is a critical architectural decision, and I will provide a thorough analysis to validate your proposal.
+
+First, I will analyze the current codebase to understand the existing structure and potential challenges. I will read the files you've specified in parallel.
+--- C:\Users\yolan\source\repos\AiDotNet\src\Models\NeuralNetworkBase.cs ---
+
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Statistics;
+using Newtonsoft.Json;
+
+namespace AiDotNet.Models;
+
+/// <summary>
+/// Represents the base class for all neural network models.
+/// </summary>
+/// <typeparam name="T">The generic type for the neural network calculations.</typeparam>
+public abstract class NeuralNetworkBase<T> : INeuralNetwork<T>
+{
+    /// <summary>
+    _layers is a list of all the layers in the neural network.
+    </summary>
+    protected List<ILayer<T>> _layers;
+
+    /// <summary>
+    _lossFunction is the loss function used to calculate the error of the neural network.
+    </summary>
+    protected ILossFunction<T> _lossFunction;
+
+    /// <summary>
+    _optimizer is the optimizer used to update the weights of the neural network.
+    </summary>
+    protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    /// <summary>
+    Initializes a new instance of the <see cref="NeuralNetworkBase{T}"/> class.
+    </summary>
+    /// <param name="lossFunction">The loss function to be used in the neural network.</param>
+    /// <param name="optimizer">The optimizer to be used in the neural network.</param>
+    protected NeuralNetworkBase(ILossFunction<T> lossFunction, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    {
+        _layers = new List<ILayer<T>>();
+        _lossFunction = lossFunction;
+        _optimizer = optimizer;
+    }
+
+    /// <summary>
+    Adds a layer to the neural network.
+    </summary>
+    /// <param name="layer">The layer to be added to the neural network.</param>
+    public virtual void AddLayer(ILayer<T> layer)
+    {
+        _layers.Add(layer);
+    }
+
+    /// <summary>
+    Performs a forward pass through the neural network.
+    </summary>
+    /// <param name="inputs">The inputs to the neural network.</param>
+    /// <returns>The outputs of the neural network.</returns>
+    public virtual Tensor<T> Forward(Tensor<T> inputs)
+    {
+        var currentInputs = inputs;
+        foreach (var layer in _layers)
+        {
+            currentInputs = layer.Forward(currentInputs);
+        }
+        return currentInputs;
+    }
+
+
+
+    /// <summary>
+    Performs a backward pass through the neural network.
+    </summary>
+    /// <param name="outputGradient">The gradient of the loss function with respect to the output of the neural network.</param>
+    public virtual void Backward(Tensor<T> outputGradient)
+    {
+        var currentGradient = outputGradient;
+        for (int i = _layers.Count - 1; i >= 0; i--)
+        {
+            currentGradient = _layers[i].Backward(currentGradient);
+        }
+    }
+
+    /// <summary>
+    Trains the neural network on a single batch of data.
+    </summary>
+    /// <param name="inputs">The inputs to the neural network.</param>
+    /// <param name="targets">The target outputs of the neural network.</param>
+    /// <returns>The loss of the neural network on the batch.</returns>
+    public virtual T TrainOnBatch(Tensor<T> inputs, Tensor<T> targets)
+    {
+        // Forward pass
+        var outputs = Forward(inputs);
+
+        // Calculate loss
+        var loss = _lossFunction.CalculateLoss(outputs, targets);
+
+        // Backward pass
+        var lossGradient = _lossFunction.CalculateDerivative(outputs, targets);
+        Backward(lossGradient);
+
+        // Update weights
+        _optimizer.UpdateParameters(_layers);
+
+        return loss;
+    }
+
+    /// <summary>
+    Trains the neural network on the entire dataset for a specified number of epochs.
+    </summary>
+    /// <param name="inputs">The inputs to the neural network.</param>
+    /// <param name="targets">The target outputs of the neural network.</param>
+    /// <param name="epochs">The number of epochs to train for.</param>
+    /// <param name="batchSize">The size of the batches to use for training.</param>
+    public virtual void Fit(Tensor<T> inputs, Tensor<T> targets, int epochs, int batchSize)
+    {
+        int numSamples = inputs.Shape[0];
+        for (int i = 0; i < epochs; i++)
+        {
+            for (int j = 0; j < numSamples; j += batchSize)
+            {
+                var batchInputs = inputs.GetSlice(j, Math.Min(batchSize, numSamples - j));
+                var batchTargets = targets.GetSlice(j, Math.Min(batchSize, numSamples - j));
+                TrainOnBatch(batchInputs, batchTargets);
+            }
+        }
+    }
+
+    /// <summary>
+    Makes predictions on the given inputs.
+    </summary>
+    /// <param name="inputs">The inputs to the neural network.</param>
+    /// <returns>The predictions of the neural network.</returns>
+    public virtual Tensor<T> Predict(Tensor<T> inputs)
+    {
+        return Forward(inputs);
+    }
+
+    /// <summary>
+    Saves the neural network to a file.
+    </summary>
+    /// <param name="filePath">The path to the file to save the neural network to.</param>
+    public virtual void Save(string filePath)
+    {
+        var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.All };
+        var json = JsonConvert.SerializeObject(this, settings);
+        File.WriteAllText(filePath, json);
+    }
+
+    /// <summary>
+    Loads a neural network from a file.
+    </summary>
+    /// <param name="filePath">The path to the file to load the neural network from.</param>
+    /// <returns>The loaded neural network.</returns>
+    public static NeuralNetworkBase<T> Load(string filePath)
+    {
+        var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.All };
+        var json = File.ReadAllText(filePath);
+        return JsonConvert.DeserializeObject<NeuralNetworkBase<T>>(json, settings) ?? throw new Exception("Failed to load neural network.");
+    }
+
+    /// <summary>
+    Gets the parameters of the neural network.
+    </summary>
+    /// <returns>The parameters of the neural network.</returns>
+    public virtual Vector<T> GetParameters()
+    {
+        var parameters = new List<Vector<T>>();
+        foreach (var layer in _layers)
+        {
+            if (layer.SupportsTraining)
+            {
+                parameters.Add(layer.GetParameters());
+            }
+        }
+        return Vector<T>.Concatenate(parameters);
+    }
+
+    /// <summary>
+    Sets the parameters of the neural network.
+    </summary>
+    /// <param name="parameters">The parameters to set.</param>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        int currentIndex = 0;
+        foreach (var layer in _layers)
+        {
+            if (layer.SupportsTraining)
+            {
+                int layerParamCount = layer.GetParameters().Length;
+                var layerParams = parameters.GetSubVector(currentIndex, layerParamCount);
+                layer.SetParameters(layerParams);
+                currentIndex += layerParamCount;
+            }
+        }
+    }
+
+    /// <summary>
+    Creates a new instance of the neural network with the given parameters.
+    </summary>
+    /// <param name="parameters">The parameters to create the new instance with.</param>
+    /// <returns>A new instance of the neural network with the given parameters.</returns>
+    public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        var newNetwork = CreateNewInstance();
+        newNetwork.SetParameters(parameters);
+        return newNetwork;
+    }
+
+    /// <summary>
+    Creates a deep copy of the neural network.
+    </summary>
+    /// <returns>A deep copy of the neural network.</returns>
+    public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        // The most reliable way to create a deep copy is through serialization/deserialization
+        var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.All };
+        var json = JsonConvert.SerializeObject(this, settings);
+        return JsonConvert.DeserializeObject<NeuralNetworkBase<T>>(json, settings) ?? throw new Exception("Failed to deep copy neural network.");
+    }
+
+    /// <summary>
+    Creates a clone of the neural network.
+    </summary>
+    /// <returns>A clone of the neural network.</returns>
+    public virtual IFullModel<T, Tensor<T>, Tensor<T>> Clone()
+    {
+        var newNetwork = CreateNewInstance();
+        newNetwork.SetParameters(GetParameters());
+        return newNetwork;
+    }
+
+    /// <summary>
+    Gets the number of parameters in the neural network.
+    </summary>
+    public virtual int ParameterCount => GetParameters().Length;
+
+    /// <summary>
+    Gets the default loss function for the neural network.
+    </summary>
+    public virtual ILossFunction<T> DefaultLossFunction => _lossFunction;
+
+    /// <summary>
+    Computes the gradients of the loss function with respect to the parameters of the neural network.
+    </summary>
+    /// <param name="input">The inputs to the neural network.</param>
+    /// <param name="target">The target outputs of the neural network.</param>
+    /// <param name="lossFunction">The loss function to use. If null, the default loss function is used.</param>
+    /// <returns>The gradients of the loss function with respect to the parameters of the neural network.</returns>
+    public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        var usedLossFunction = lossFunction ?? _lossFunction;
+
+        // Forward pass
+        var outputs = Forward(input);
+
+        // Backward pass
+        var lossGradient = usedLossFunction.CalculateDerivative(outputs, target);
+        Backward(lossGradient);
+
+        // Collect gradients from all layers
+        var gradients = new List<Vector<T>>();
+        foreach (var layer in _layers)
+        {
+            if (layer.SupportsTraining)
+            {
+                gradients.Add(layer.GetParameterGradients());
+            }
+        }
+
+        return Vector<T>.Concatenate(gradients);
+    }
+
+    /// <summary>
+    Applies the given gradients to the parameters of the neural network.
+    </summary>
+    /// <param name="gradients">The gradients to apply.</param>
+    /// <param name="learningRate">The learning rate to use.</param>
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        int currentIndex = 0;
+        foreach (var layer in _layers)
+        {
+            if (layer.SupportsTraining)
+            {
+                int layerParamCount = layer.GetParameters().Length;
+                var layerGradients = gradients.GetSubVector(currentIndex, layerParamCount);
+                var layerParameters = layer.GetParameters();
+
+                var newParameters = layerParameters.Subtract(layerGradients.Multiply(learningRate));
+                layer.SetParameters(newParameters);
+
+                currentIndex += layerParamCount;
+            }
+        }
+    }
+
+    /// <summary>
+    Gets the metadata of the neural network.
+    </summary>
+    /// <returns>The metadata of the neural network.</returns>
+    public virtual ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = ModelType.NeuralNetwork,
+            FeatureCount = _layers.FirstOrDefault()?.InputSize ?? 0,
+            Complexity = GetParameters().Length,
+            Description = $"Neural network with {_layers.Count} layers.",
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "Layers", _layers.Select(l => l.GetType().Name).ToList() },
+                { "LossFunction", _lossFunction.GetType().Name },
+                { "Optimizer", _optimizer.GetType().Name }
+            }
+        };
+    }
+
+    /// <summary>
+    Creates a new instance of the same type as this neural network.
+    </summary>
+    /// <returns>A new instance of the same neural network type.</returns>
+    protected abstract IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance();
+}
+
+--- C:\Users\yolan\source\repos\AiDotNet\src\ReinforcementLearning\ReinforcementLearningBase.cs ---
+
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Statistics;
+
+namespace AiDotNet.ReinforcementLearning;
+
+/// <summary>
+/// Represents the base class for all reinforcement learning models.
+/// </summary>
+/// <typeparam name="T">The generic type for the reinforcement learning calculations.</typeparam>
+public abstract class ReinforcementLearningBase<T> : IReinforcementLearning<T>
+{
+    /// <summary>
+    Initializes a new instance of the <see cref="ReinforcementLearningBase{T}"/> class.
+    </summary>
+    protected ReinforcementLearningBase()
+    {
+        // Initialization logic for the base class
+    }
+
+    /// <summary>
+    Selects an action based on the current state.
+    </summary>
+    /// <param name="state">The current state of the environment.</param>
+    /// <returns>The action to take.</returns>
+    public abstract int SelectAction(Vector<T> state);
+
+    /// <summary>
+    Trains the model on a single step of the environment.
+    </summary>
+    /// <param name="state">The current state of the environment.</param>
+    /// <param name="action">The action taken.</param>
+    /// <param name="reward">The reward received.</param>
+    /// <param name="nextState">The next state of the environment.</param>
+    /// <param name="done">Whether the episode is finished.</param>
+    public abstract void Train(Vector<T> state, int action, T reward, Vector<T> nextState, bool done);
+
+    /// <summary>
+    Saves the model to a file.
+    </summary>
+    /// <param name="filePath">The path to the file to save the model to.</param>
+    public abstract void Save(string filePath);
+
+    /// <summary>
+    Loads a model from a file.
+    </summary>
+    /// <param name="filePath">The path to the file to load the model from.</param>
+    public abstract void Load(string filePath);
+
+    /// <summary>
+    Gets the parameters of the model.
+    </summary>
+    /// <returns>The parameters of the model.</returns>
+    public abstract Vector<T> GetParameters();
+
+    /// <summary>
+    Sets the parameters of the model.
+    </summary>
+    /// <param name="parameters">The parameters to set.</param>
+    public abstract void SetParameters(Vector<T> parameters);
+
+d
+    /// <summary>
+    Creates a new instance of the model with the given parameters.
+    </summary>
+    /// <param name="parameters">The parameters to create the new instance with.</param>
+    /// <returns>A new instance of the model with the given parameters.</returns>
+    public abstract IFullModel<T, Vector<T>, int> WithParameters(Vector<T> parameters);
+
+    /// <summary>
+    Creates a deep copy of the model.
+    </summary>
+    /// <returns>A deep copy of the model.</returns>
+    public abstract IFullModel<T, Vector<T>, int> DeepCopy();
+
+    /// <summary>
+    Creates a clone of the model.
+    </summary>
+    /// <returns>A clone of the model.</returns>
+    public abstract IFullModel<T, Vector<T>, int> Clone();
+
+    /// <summary>
+    Gets the number of parameters in the model.
+    </summary>
+    public abstract int ParameterCount { get; }
+
+    /// <summary>
+    Gets the default loss function for the model.
+    </summary>
+    public abstract ILossFunction<T> DefaultLossFunction { get; }
+
+    /// <summary>
+    Computes the gradients of the loss function with respect to the parameters of the model.
+    </summary>
+    /// <param name="input">The inputs to the model.</param>
+    /// <param name="target">The target outputs of the model.</param>
+    /// <param name="lossFunction">The loss function to use. If null, the default loss function is used.</param>
+    /// <returns>The gradients of the loss function with respect to the parameters of the model.</returns>
+    public abstract Vector<T> ComputeGradients(Vector<T> input, int target, ILossFunction<T>? lossFunction = null);
+
+    /// <summary>
+    Applies the given gradients to the parameters of the model.
+    </summary>
+    /// <param name="gradients">The gradients to apply.</param>
+    /// <param name="learningRate">The learning rate to use.</param>
+    public abstract void ApplyGradients(Vector<T> gradients, T learningRate);
+
+    /// <summary>
+    Gets the metadata of the model.
+    </summary>
+    /// <returns>The metadata of the model.</returns>
+    public abstract ModelMetadata<T> GetModelMetadata();
+}I have analyzed the provided code. Now, I need to find the definition of the `IParameterizable` interface to fully understand how parameters are managed across different models.Excellent. Now I'll read `src/Interfaces/IParameterizable.cs` to complete my understanding of the current architecture.Thank you for the detailed context and for performing a thorough preliminary analysis. Your proposed architecture is not only viable but is the correct and standard industry approach for integrating high-performance, type-specific backends (like a GPU) into a flexible, generic library.
+
+This architecture directly solves your primary problems:
+1.  **Constraint Cascade:** By creating a "seam" between your generic user-facing API and a non-generic internal `float`-based implementation, you completely isolate the `where T : unmanaged` constraint to the internal GPU-specific code, preventing it from infecting your entire public API.
+2.  **Conversion Overhead:** Data is converted from the user's type `T` to `float` exactly once at the boundary (e.g., `Fit` or `Predict` call) and back to `T` once at the end. All intermediate operations, including epochs, layer-to-layer processing, and optimizer updates, occur entirely within the `float` domain, eliminating the repeated conversions that plagued your previous attempt.
+
+Below is a comprehensive validation of your proposal, answers to your critical questions, and a recommended implementation plan.
+
+### 1. Codebase and Architecture Analysis
+
+My analysis of your codebase confirms your assessment. The library is built around a flexible, unconstrained generic system (`Vector<T>`, `Matrix<T>`, `IParameterizable<T>`) that is fundamentally incompatible with the `unmanaged` constraint required by ILGPU. A major architectural shift is necessary, and your proposal is the right one.
+
+---
+
+### 2. Architecture Validation & Answers to Critical Questions
+
+#### **Question 1: Architecture Viability**
+**Yes, this architecture is highly viable and is the recommended pattern.** It is conceptually similar to how frameworks like PyTorch (Python front-end, C++/CUDA back-end) and TensorFlow operate.
+
+*   **Conversion Overhead:** It will be virtually eliminated. The cost of converting the initial dataset is amortized over the entire training process (potentially thousands of epochs and optimizer steps).
+*   **Constraint Cascade:** It will be completely avoided. The public API remains generic and unconstrained.
+*   **Model Type Support:**
+    *   **NN, Regression, RL:** This pattern works perfectly for any model that is currently based on `Vector`/`Matrix`/`Tensor` and can have its core logic expressed with `float`. This covers all your gradient-based models.
+    *   **Trees, Clustering:** For algorithms that may not be tensor-based (e.g., decision trees), the internal `float` standardization is still beneficial. It simplifies the code and can still offer performance gains on the CPU by avoiding generic math operations in tight loops. GPU acceleration for these models would be a separate task, but this architecture does not prevent it.
+*   **Edge Cases/Risks:**
+    *   **Numeric Precision:** The primary trade-off is that all internal calculations are limited to `float` precision. For users who rely on `double`, `decimal`, or `BigInteger` for high-precision scientific computing, this could be a breaking change in behavior. This is a necessary trade-off for GPU support and should be clearly documented.
+    *   **Refactoring Scope:** This is a significant, cross-cutting refactoring. The risk is in missing a conversion path or incorrectly restructuring a model. A phased rollout is crucial (see Section 4).
+
+#### **Question 2: Generics Strategy**
+**Your proposal to remove generics from internal classes is the correct strategy.**
+
+The adapter pattern is the key. You will have a public, generic `ModelAdapter<T>` that users interact with, which internally holds a reference to a completely non-generic `InternalModel`.
+
+*   **Public `ModelAdapter<T>`:**
+    *   Generic over `<T>`.
+    *   Implements the public `IModel<T>` or `IRegression<T>` interfaces.
+    *   Is responsible for converting input `T` to `float` and output `float` back to `T`.
+*   **`InternalNeuralNetwork`, `InternalRegressionModel`, etc.:**
+    *   **Not generic.**
+    *   All internal data structures are `Tensor<float>` (or a new internal-only tensor type).
+    *   All math is `float`-based.
+    *   This is where the GPU-specific code and `unmanaged` constraints will live, safely hidden from the user.
+
+Keeping generics internally would either re-introduce the constraint cascade or require a complex and inefficient system of runtime type checks and dynamic dispatching that would negate the performance benefits of the GPU.
+
+#### **Question 3: Data Structure Strategy**
+**Your proposal for optimizers to work on flat `float[]` arrays is the best approach.**
+
+*   **Pros:** It creates a clean, simple, and powerful decoupling. The optimizer's job is reduced to pure numerical optimization on a flat array. The model is solely responsible for knowing how to interpret that flat array (i.e., un-flattening it back into its weight tensors/matrices). This separation of concerns is excellent.
+*   **Cons:** The "loss of type information" is a feature, not a bug, for the optimizer. The optimizer *should not* know or care about the model's structure. The flattening/unflattening cost is negligible compared to the training workload.
+
+The `IParameterizable` interface would be adapted. Internal models would implement something like `IInternalParameterizable`:
+```csharp
+internal interface IInternalParameterizable
+{
+    float[] GetParameters();
+    void SetParameters(float[] parameters);
+}
+```
+
+#### **Question 4: GPU Acceleration Scope**
+**Yes, this architecture can provide GPU acceleration for all listed operations.** The key is to unify the backend for all data structures.
+
+My recommendation is to create a new, internal `DeviceTensor` class that `Vector<T>`, `Matrix<T>`, and `Tensor<T>` will all use as their underlying data store.
+
+*   When a user creates a `Vector<decimal>`, it internally uses a CPU-based `float` array.
+*   When a user creates a `Vector<float>` and a GPU is available, it can internally use a GPU-backed `DeviceTensor`.
+*   All operations (`Add`, `Multiply`, etc.) on `Vector`, `Matrix`, and `Tensor` will be dispatched to the appropriate backend (CPU or GPU) of the internal `DeviceTensor`.
+
+The limitation that `decimal` operations cannot be *directly* GPU-accelerated is fundamental and acceptable. No GPU on the market has hardware for `decimal`. The conversion to `float` is the standard and only practical solution.
+
+#### **Question 5: Vector/Matrix/Tensor Relationship**
+**Option C/D is the strongest: Keep the separate types for API convenience, but unify them on a single backend.**
+
+**Recommendation:** Standardize on `Tensor<T>` as the primary internal data structure.
+1.  **Refactor `Tensor<T>`:** Make it the core, powerful, N-dimensional container. This is where you will implement the CPU and GPU backends.
+2.  **Refactor `Vector<T>` and `Matrix<T>`:** Change them to be lightweight wrappers around a `Tensor<T>` instance.
+    *   A `Vector<T>` will wrap a 1D `Tensor<T>`.
+    *   A `Matrix<T>` will wrap a 2D `Tensor<T>`.
+    *   Their methods (`Add`, `Multiply`, etc.) will simply call the corresponding, more powerful methods on the underlying `Tensor`.
+
+This gives you the best of both worlds:
+*   **Unified Backend:** You only need to implement and test your GPU logic in one place (`Tensor`).
+*   **Code Reusability:** `Vector` and `Matrix` operations become trivial calls to the `Tensor` backend.
+*   **API Consistency:** You maintain the existing `Vector` and `Matrix` APIs for users who are comfortable with them, preserving backward compatibility at the source level.
+
+---
+
+### 3. Implementation Plan: A Phased Rollout
+
+This is a large refactoring. I recommend breaking it down into the following user stories. Each story should result in a compilable, testable state.
+
+**Phase 1: The Core `float`-based Infrastructure (CPU-only)**
+
+*   **Story 1: Create `InternalTensor` & `Device` Abstraction.**
+    *   Create a new, non-generic `internal class InternalTensor`. It operates only on `float`.
+    *   It should have a `Device` property (e.g., `CpuDevice`, `GpuDevice`).
+    *   Implement all mathematical operations (Add, MatMul, etc.) for the **CPU only** to start. This class will be the heart of the new system.
+    *   Ensure it is `IDisposable` to handle memory management later.
+
+*   **Story 2: Refactor `Tensor<T>` as a Wrapper.**
+    *   Change the public `Tensor<T>` to be a wrapper around an `InternalTensor`.
+    *   It will handle the `T` <=> `float` conversion and delegate all math operations to the `InternalTensor`.
+
+*   **Story 3: Refactor `Vector<T>` and `Matrix<T>` as Wrappers.**
+    *   Change `Vector<T>` and `Matrix<T>` to wrap the public `Tensor<T>`. A `Vector` is a 1D Tensor, a `Matrix` is a 2D Tensor.
+    *   Remove their old loop-based implementations and have them call the methods on the underlying `Tensor<T>`.
+
+**Phase 2: Internal Model and Optimizer Refactoring**
+
+*   **Story 4: Create Internal, Non-Generic Models.**
+    *   Create `internal class InternalNeuralNetwork`. It is **not generic**.
+    *   It uses `List<IInternalLayer>` where layers operate on `InternalTensor`.
+    *   It implements `IInternalParameterizable` to expose its weights as `float[]`.
+
+*   **Story 5: Create Internal, Non-Generic Optimizers.**
+    *   Create `internal class AdamOptimizerFloat` (or similar). It is **not generic**.
+    *   Its `UpdateParameters` method accepts `float[]` for parameters and gradients.
+
+*   **Story 6: Create the Public Adapter Layer.**
+    *   Create `public class NeuralNetwork<T> : NeuralNetworkBase<T>`.
+    *   This class will be the new user-facing entry point. It holds an instance of `InternalNeuralNetwork`.
+    *   It's responsible for converting user data from `Tensor<T>` to `InternalTensor` (`float`) before passing it to the internal model.
+
+**Phase 3: GPU Enablement and Finalization**
+
+*   **Story 7: Implement the GPU Backend.**
+    *   Create an `IlgpuBackend` that implements the math operations for `InternalTensor`. This is where you will use ILGPU and have the `where T : unmanaged` constraints, safely hidden from the rest of the application.
+    *   Update `InternalTensor` to dispatch to the correct backend based on its `Device` property.
+
+*   **Story 8: Roll out to Other Models.**
+    *   Apply the same adapter pattern (`RegressionModel<T>` wrapping `InternalRegressionModel`) to your other model types like `RegressionBase`.
+
+---
+
+### 4. Test Strategy
+
+*   **Unit Tests for `InternalTensor`:** Create a comprehensive test suite for `InternalTensor`. Run every single test twice: once with the tensor on the `CpuDevice` and once on the `GpuDevice`. The results must be identical (within a small tolerance for floating-point differences, e.g., `1e-6`).
+*   **Adapter Layer Tests:** Test the `ModelAdapter<T>` classes specifically. Ensure that data conversion from various user types (`double`, `int`, `decimal`) to `float` and back is correct.
+*   **Preserve Existing Tests:** Adapt your existing model tests to use the new public adapter classes. Run them against both CPU and GPU backends to ensure consistent behavior.
+*   **Benchmarks:** Create performance benchmarks for key operations (e.g., a full `Fit` cycle, a large matrix multiplication). This is critical to prove that the new architecture is actually faster and that the GPU is being utilized effectively.
+
+---
+
+### 5. Code Examples
+
+Here are some conceptual code skeletons to illustrate the proposed architecture.
+
+**1. The New Core: `InternalTensor` and `Device`**
+```csharp
+// In a new internal namespace, e.g., AiDotNet.Core
+internal interface IDevice { /* ... */ }
+internal class CpuDevice : IDevice { /* ... */ }
+internal class GpuDevice : IDevice { /* ... */ }
+
+internal class InternalTensor : IDisposable
+{
+    private readonly IMemoryBuffer<float> _buffer;
+    private readonly IDevice _device;
+    public int[] Shape { get; }
+
+    public InternalTensor(int[] shape, IDevice device) { ... }
+
+    public InternalTensor MatMul(InternalTensor other)
+    {
+        // Dispatch to the correct backend based on _device
+        // e.g., return _device.MatMul(this, other);
+    }
+
+    public void Dispose() { _buffer.Dispose(); }
+}
+```
+
+**2. The Public Wrapper: `Tensor<T>`**
+```csharp
+// This remains public
+public class Tensor<T>
+{
+    // This is the key: it holds a reference to the non-generic internal tensor
+    private readonly InternalTensor _internalTensor;
+
+    // Public constructor converts and creates the internal tensor
+    public Tensor(T[,,] data)
+    {
+        // 1. Determine device (CPU/GPU)
+        // 2. Convert T[,,] to float[]
+        // 3. Create InternalTensor with the float data on the chosen device
+    }
+
+    public Tensor<T> MatMul(Tensor<T> other)
+    {
+        InternalTensor resultTensor = _internalTensor.MatMul(other._internalTensor);
+        return new Tensor<T>(resultTensor); // Wrap the internal result
+    }
+}
+```
+
+**3. The Internal Optimizer: `AdamOptimizerFloat`**
+```csharp
+// Internal, non-generic
+internal class AdamOptimizerFloat
+{
+    private float[] _m;
+    private float[] _v;
+
+    // Works on flat float arrays
+    public void UpdateParameters(float[] parameters, float[] gradients)
+    {
+        // If on GPU, dispatch to an ILGPU kernel
+        // Otherwise, perform CPU update
+    }
+}
+```
+
+**4. The Public Adapter: `NeuralNetwork<T>`**
+```csharp
+// Public, generic, user-facing class
+public class NeuralNetwork<T> : IModel<T> // Your existing public interface
+{
+    private readonly InternalNeuralNetwork _internalNetwork;
+    private readonly IDataConverter<T> _converter;
+
+    public NeuralNetwork(...)
+    {
+        _internalNetwork = new InternalNeuralNetwork(...);
+        _converter = new DataConverter<T>();
+    }
+
+    public T[] Predict(T[][] inputs)
+    {
+        // 1. Convert user's T data to float
+        InternalTensor floatInputs = _converter.ToInternalTensor(inputs);
+
+        // 2. Run the internal, non-generic network
+        InternalTensor floatOutputs = _internalNetwork.Forward(floatInputs);
+
+        // 3. Convert float results back to user's type T
+        return _converter.FromInternalTensor(floatOutputs);
+    }
+}
+```
+
+This architecture is a significant undertaking, but it is a robust and scalable solution that aligns with industry best practices. It will resolve your current issues and provide a solid foundation for future high-performance features.

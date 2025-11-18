@@ -14,7 +14,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type</typeparam>
 public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 {
-    private IEngine _engine;
     private readonly DenseLayer<T>[] _mlpBlocks;
     private readonly int[] _updateFrequencies;
     private readonly int[] _chunkSizes;
@@ -50,7 +49,6 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         IEngine? engine = null)
         : base(inputShape, new[] { hiddenDim })
     {
-        _engine = engine ?? CpuEngine.Instance;
 
         // Validate inputs
         if (inputShape == null || inputShape.Length == 0)
@@ -223,7 +221,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
                 }
 
                 // Vectorized: accumulatedGrad = accumulatedGrad + gradient
-                _accumulatedGradients[level] = (Vector<T>)_engine.Add(_accumulatedGradients[level], mlpGradient);
+                _accumulatedGradients[level] = (Vector<T>)Engine.Add(_accumulatedGradients[level], mlpGradient);
             }
 
             _stepCounters[level]++;
@@ -292,7 +290,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
                     }
 
                     // Vectorized: accumulatedGrad = accumulatedGrad + gradient
-                    _accumulatedGradients[level] = (Vector<T>)_engine.Add(_accumulatedGradients[level], mlpGradient);
+                    _accumulatedGradients[level] = (Vector<T>)Engine.Add(_accumulatedGradients[level], mlpGradient);
                 }
 
                 _stepCounters[level]++;
@@ -355,8 +353,8 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         {
             // === Vectorized Standard Gradient Descent using IEngine (Phase B: US-GPU-015) ===
             // θ^(fℓ)_{i+1} = θ^(fℓ)_i - η^(ℓ) * Σ gradients
-            var scaledGrad = (Vector<T>)_engine.Multiply(_accumulatedGradients[level], learningRate);
-            var updated = (Vector<T>)_engine.Subtract(currentParams, scaledGrad);
+            var scaledGrad = (Vector<T>)Engine.Multiply(_accumulatedGradients[level], learningRate);
+            var updated = (Vector<T>)Engine.Subtract(currentParams, scaledGrad);
 
             _mlpBlocks[level].SetParameters(updated);
         }
@@ -408,9 +406,9 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
                 }
 
                 // Vectorized: consolidated = slow * (1 - rate) + fast * rate
-                var slowScaled = (Vector<T>)_engine.Multiply(slowOverlap, oneMinusTransfer);
-                var fastScaled = (Vector<T>)_engine.Multiply(fastOverlap, transferRate);
-                var consolidatedOverlap = (Vector<T>)_engine.Add(slowScaled, fastScaled);
+                var slowScaled = (Vector<T>)Engine.Multiply(slowOverlap, oneMinusTransfer);
+                var fastScaled = (Vector<T>)Engine.Multiply(fastOverlap, transferRate);
+                var consolidatedOverlap = (Vector<T>)Engine.Add(slowScaled, fastScaled);
 
                 // Copy back
                 for (int j = 0; j < minLen; j++)

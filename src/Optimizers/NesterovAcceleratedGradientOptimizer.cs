@@ -55,7 +55,7 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
         IFullModel<T, TInput, TOutput> model,
         NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>();
 

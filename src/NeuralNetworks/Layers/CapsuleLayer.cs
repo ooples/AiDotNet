@@ -88,7 +88,6 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     private T _lastRoutingEntropyLoss;
 
-    private IEngine _engine;
     private readonly int _numCapsules;
     private readonly int _capsuleDimension;
     private readonly int _numRoutingIterations;
@@ -158,7 +157,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// helps decide if they should be grouped together as a face.
     /// </para>
     /// </remarks>
-    public CapsuleLayer(int inputCapsules, int inputDimension, int numCapsules, int capsuleDimension, int numRoutingIterations, IActivationFunction<T>? activationFunction = null, IEngine? engine = null)
+    public CapsuleLayer(int inputCapsules, int inputDimension, int numCapsules, int capsuleDimension, int numRoutingIterations, IActivationFunction<T>? activationFunction = null)
         : base([inputCapsules, inputDimension], [numCapsules, capsuleDimension], activationFunction ?? new SquashActivation<T>())
     {
         if (numRoutingIterations < 1)
@@ -166,7 +165,6 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentException("Number of routing iterations must be at least 1.", nameof(numRoutingIterations));
         }
 
-        _engine = engine ?? CpuEngine.Instance;
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastRoutingEntropyLoss = NumOps.Zero;
 
@@ -463,7 +461,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                         }
 
                         // Vectorized: weighted = capsule * coefficient (scalar multiply)
-                        var weighted = (Vector<T>)_engine.Multiply(capsuleVec, couplingCoefficients[b, j, k]);
+                        var weighted = (Vector<T>)Engine.Multiply(capsuleVec, couplingCoefficients[b, j, k]);
 
                         // Accumulate into weightedSum
                         for (int d = 0; d < _capsuleDimension; d++)
@@ -489,7 +487,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                     }
 
                     // Vectorized: sum = sum + bias
-                    var result = (Vector<T>)_engine.Add(sumVec, biasVec);
+                    var result = (Vector<T>)Engine.Add(sumVec, biasVec);
 
                     // Store back
                     for (int d = 0; d < _capsuleDimension; d++)
@@ -522,7 +520,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                             }
 
                             // Vectorized: product = transformed * output (element-wise)
-                            var product = (Vector<T>)_engine.Multiply(transformedVec, outputVec);
+                            var product = (Vector<T>)Engine.Multiply(transformedVec, outputVec);
 
                             // Sum the products to get agreement (dot product)
                             T agreement = NumOps.Zero;
@@ -626,7 +624,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                     }
 
                     // Vectorized: bias_grad = bias_grad + grad
-                    var updatedBiasGrad = (Vector<T>)_engine.Add(currentBiasGrad, gradVec);
+                    var updatedBiasGrad = (Vector<T>)Engine.Add(currentBiasGrad, gradVec);
                     for (int d = 0; d < _capsuleDimension; d++)
                     {
                         _biasGradient[j * _capsuleDimension + d] = updatedBiasGrad[d];
@@ -639,7 +637,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                         T input = _lastInput[b, i, k];
 
                         // Vectorized: grad_weighted = grad * coeff * input (scalar operations on vector)
-                        var gradWeighted = (Vector<T>)_engine.Multiply(gradVec, NumOps.Multiply(coeff, input));
+                        var gradWeighted = (Vector<T>)Engine.Multiply(gradVec, NumOps.Multiply(coeff, input));
 
                         // Accumulate transformation matrix gradient
                         for (int d = 0; d < _capsuleDimension; d++)
@@ -658,7 +656,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                         }
 
                         // Vectorized: weighted_grad = grad * weight
-                        var weightedGrad = (Vector<T>)_engine.Multiply(gradVec, weightVec);
+                        var weightedGrad = (Vector<T>)Engine.Multiply(gradVec, weightVec);
 
                         // Sum and accumulate
                         T inputGradAccum = NumOps.Zero;

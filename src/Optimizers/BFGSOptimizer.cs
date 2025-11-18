@@ -58,7 +58,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         IFullModel<T, TInput, TOutput> model,
         BFGSOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new BFGSOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();

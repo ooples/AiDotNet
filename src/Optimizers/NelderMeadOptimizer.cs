@@ -69,7 +69,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         IFullModel<T, TInput, TOutput> model,
         NelderMeadOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new NelderMeadOptimizerOptions<T, TInput, TOutput>();
         _alpha = NumOps.Zero;

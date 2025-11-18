@@ -134,7 +134,6 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
-    private IEngine _engine;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -192,7 +191,6 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         IEngine? engine = null)
         : base([inputSize], [1])
     {
-        _engine = engine ?? CpuEngine.Instance;
         _anomalyThreshold = anomalyThreshold;
         _historyCapacity = historyCapacity;
         _smoothingFactor = smoothingFactor;

@@ -63,7 +63,7 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
         IFullModel<T, TInput, TOutput> model,
         TrustRegionOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new TrustRegionOptimizerOptions<T, TInput, TOutput>();
         _trustRegionRadius = NumOps.Zero;

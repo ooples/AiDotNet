@@ -54,7 +54,7 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
         IFullModel<T, TInput, TOutput> model,
         CoordinateDescentOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new CoordinateDescentOptimizerOptions<T, TInput, TOutput>();
         _learningRates = Vector<T>.Empty();

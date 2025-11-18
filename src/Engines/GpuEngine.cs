@@ -6,6 +6,20 @@ using ILGPU.Algorithms;
 namespace AiDotNet.Engines;
 
 /// <summary>
+/// Delegate for Conv2D GPU kernel with float precision (18 parameters exceeds Action limit).
+/// </summary>
+internal delegate void Conv2DKernelFloat(Index1D index, ArrayView<float> input, ArrayView<float> kernel, ArrayView<float> output,
+    int batch, int inChannels, int height, int width, int outChannels,
+    int outputHeight, int outputWidth, int kernelHeight, int kernelWidth, int stride, int padding, int dilation);
+
+/// <summary>
+/// Delegate for Conv2D GPU kernel with double precision (18 parameters exceeds Action limit).
+/// </summary>
+internal delegate void Conv2DKernelDouble(Index1D index, ArrayView<double> input, ArrayView<double> kernel, ArrayView<double> output,
+    int batch, int inChannels, int height, int width, int outChannels,
+    int outputHeight, int outputWidth, int kernelHeight, int kernelWidth, int stride, int padding, int dilation);
+
+/// <summary>
 /// GPU-based execution engine using ILGPU for hardware acceleration.
 /// </summary>
 /// <remarks>
@@ -145,7 +159,7 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorDivideKernelFloat;
     private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>? _maxPool2DKernelFloat;
     private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>? _avgPool2DKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int, int, int, int, int>? _conv2DKernelFloat;
+    private readonly Conv2DKernelFloat? _conv2DKernelFloat;
 
     // Kernel cache for tensor operations - double (Phase B: Epic 3)
     private readonly Action<Index3D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _batchMatMulKernelDouble;
@@ -156,7 +170,7 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorDivideKernelDouble;
     private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>? _maxPool2DKernelDouble;
     private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>? _avgPool2DKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int, int, int, int, int>? _conv2DKernelDouble;
+    private readonly Conv2DKernelDouble? _conv2DKernelDouble;
 
     /// <inheritdoc/>
     public string Name => _accelerator != null
@@ -1002,8 +1016,8 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             // Zero-copy: Use span instead of ToArray() (Phase B: US-GPU-003)
-            gpuA.CopyFromCPU(a.AsSpan());
-            gpuB.CopyFromCPU(b.AsSpan());
+            gpuA.View.CopyFromCPU(a.AsSpan());
+            gpuB.View.CopyFromCPU(b.AsSpan());
 
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1014,7 +1028,7 @@ public class GpuEngine : IEngine, IDisposable
             }
 
             // Zero-copy: Write directly to result's internal storage (Phase B: US-GPU-003)
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
 
             return result;
         }
@@ -1057,8 +1071,8 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuA.CopyFromCPU(a.AsSpan());
-            gpuB.CopyFromCPU(b.AsSpan());
+            gpuA.View.CopyFromCPU(a.AsSpan());
+            gpuB.View.CopyFromCPU(b.AsSpan());
             _subtractKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1066,7 +1080,7 @@ public class GpuEngine : IEngine, IDisposable
                 _subtractKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -1089,8 +1103,8 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuA.CopyFromCPU(a.AsSpan());
-            gpuB.CopyFromCPU(b.AsSpan());
+            gpuA.View.CopyFromCPU(a.AsSpan());
+            gpuB.View.CopyFromCPU(b.AsSpan());
             _multiplyKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1098,7 +1112,7 @@ public class GpuEngine : IEngine, IDisposable
                 _multiplyKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -1117,7 +1131,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.AsSpan());
+            gpuVector.View.CopyFromCPU(vector.AsSpan());
             _multiplyScalarKernelFloat!(vector.Length, gpuVector.View, scalar, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1125,7 +1139,7 @@ public class GpuEngine : IEngine, IDisposable
                 _multiplyScalarKernelFloat!(vector.Length, gpuVector.View, scalar, gpuResult.View);
                 _accelerator!.Synchronize();
             }
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -1147,8 +1161,8 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuA.CopyFromCPU(a.AsSpan());
-            gpuB.CopyFromCPU(b.AsSpan());
+            gpuA.View.CopyFromCPU(a.AsSpan());
+            gpuB.View.CopyFromCPU(b.AsSpan());
             _divideKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1156,7 +1170,7 @@ public class GpuEngine : IEngine, IDisposable
                 _divideKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -1175,7 +1189,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.AsSpan());
+            gpuVector.View.CopyFromCPU(vector.AsSpan());
             _divideScalarKernelFloat!(vector.Length, gpuVector.View, scalar, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1183,7 +1197,7 @@ public class GpuEngine : IEngine, IDisposable
                 _divideScalarKernelFloat!(vector.Length, gpuVector.View, scalar, gpuResult.View);
                 _accelerator!.Synchronize();
             }
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -1201,7 +1215,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.AsSpan());
+            gpuVector.View.CopyFromCPU(vector.AsSpan());
             _sqrtKernelFloat!(vector.Length, gpuVector.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1209,7 +1223,7 @@ public class GpuEngine : IEngine, IDisposable
                 _sqrtKernelFloat!(vector.Length, gpuVector.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -1227,14 +1241,14 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.AsSpan());
+            gpuVector.View.CopyFromCPU(vector.AsSpan());
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
                 _powerKernelFloat!(vector.Length, gpuVector.View, exponent, gpuResult.View);
                 _accelerator!.Synchronize();
             }
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -1256,8 +1270,8 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuA.CopyFromCPU(a.AsSpan());
-            gpuB.CopyFromCPU(b.AsSpan());
+            gpuA.View.CopyFromCPU(a.AsSpan());
+            gpuB.View.CopyFromCPU(b.AsSpan());
 
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1266,7 +1280,7 @@ public class GpuEngine : IEngine, IDisposable
                 _accelerator!.Synchronize();
             }
 
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
@@ -1294,8 +1308,8 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuA.CopyFromCPU(a.AsSpan());
-            gpuB.CopyFromCPU(b.AsSpan());
+            gpuA.View.CopyFromCPU(a.AsSpan());
+            gpuB.View.CopyFromCPU(b.AsSpan());
 
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1304,7 +1318,7 @@ public class GpuEngine : IEngine, IDisposable
                 _accelerator!.Synchronize();
             }
 
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
@@ -1328,7 +1342,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.AsSpan());
+            gpuVector.View.CopyFromCPU(vector.AsSpan());
 
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1337,7 +1351,7 @@ public class GpuEngine : IEngine, IDisposable
                 _accelerator!.Synchronize();
             }
 
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
@@ -1360,7 +1374,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.AsSpan());
+            gpuVector.View.CopyFromCPU(vector.AsSpan());
 
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1369,7 +1383,7 @@ public class GpuEngine : IEngine, IDisposable
                 _accelerator!.Synchronize();
             }
 
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
@@ -1392,7 +1406,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.AsSpan());
+            gpuVector.View.CopyFromCPU(vector.AsSpan());
 
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1401,7 +1415,7 @@ public class GpuEngine : IEngine, IDisposable
                 _accelerator!.Synchronize();
             }
 
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
@@ -1424,7 +1438,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.AsSpan());
+            gpuVector.View.CopyFromCPU(vector.AsSpan());
 
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1433,7 +1447,7 @@ public class GpuEngine : IEngine, IDisposable
                 _accelerator!.Synchronize();
             }
 
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
@@ -1465,8 +1479,8 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuA.CopyFromCPU(a.AsSpan());
-            gpuB.CopyFromCPU(b.AsSpan());
+            gpuA.View.CopyFromCPU(a.AsSpan());
+            gpuB.View.CopyFromCPU(b.AsSpan());
             _addKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1474,7 +1488,7 @@ public class GpuEngine : IEngine, IDisposable
                 _addKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -1497,8 +1511,8 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuA.CopyFromCPU(a.AsSpan());
-            gpuB.CopyFromCPU(b.AsSpan());
+            gpuA.View.CopyFromCPU(a.AsSpan());
+            gpuB.View.CopyFromCPU(b.AsSpan());
 
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1507,7 +1521,7 @@ public class GpuEngine : IEngine, IDisposable
                 _accelerator!.Synchronize();
             }
 
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
@@ -1535,8 +1549,8 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuA.CopyFromCPU(a.AsSpan());
-            gpuB.CopyFromCPU(b.AsSpan());
+            gpuA.View.CopyFromCPU(a.AsSpan());
+            gpuB.View.CopyFromCPU(b.AsSpan());
 
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1545,7 +1559,7 @@ public class GpuEngine : IEngine, IDisposable
                 _accelerator!.Synchronize();
             }
 
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
@@ -1569,7 +1583,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.AsSpan());
+            gpuVector.View.CopyFromCPU(vector.AsSpan());
 
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1578,7 +1592,7 @@ public class GpuEngine : IEngine, IDisposable
                 _accelerator!.Synchronize();
             }
 
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
@@ -1601,7 +1615,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.AsSpan());
+            gpuVector.View.CopyFromCPU(vector.AsSpan());
 
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1610,7 +1624,7 @@ public class GpuEngine : IEngine, IDisposable
                 _accelerator!.Synchronize();
             }
 
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
@@ -1633,7 +1647,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.AsSpan());
+            gpuVector.View.CopyFromCPU(vector.AsSpan());
 
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1642,7 +1656,7 @@ public class GpuEngine : IEngine, IDisposable
                 _accelerator!.Synchronize();
             }
 
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
@@ -1665,7 +1679,7 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuVector.CopyFromCPU(vector.AsSpan());
+            gpuVector.View.CopyFromCPU(vector.AsSpan());
 
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1674,7 +1688,7 @@ public class GpuEngine : IEngine, IDisposable
                 _accelerator!.Synchronize();
             }
 
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
@@ -1702,8 +1716,8 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuA.CopyFromCPU(a.AsSpan());
-            gpuB.CopyFromCPU(b.AsSpan());
+            gpuA.View.CopyFromCPU(a.AsSpan());
+            gpuB.View.CopyFromCPU(b.AsSpan());
             _addKernelInt!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1711,7 +1725,7 @@ public class GpuEngine : IEngine, IDisposable
                 _addKernelInt!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -1735,8 +1749,8 @@ public class GpuEngine : IEngine, IDisposable
 
         try
         {
-            gpuA.CopyFromCPU(a.AsSpan());
-            gpuB.CopyFromCPU(b.AsSpan());
+            gpuA.View.CopyFromCPU(a.AsSpan());
+            gpuB.View.CopyFromCPU(b.AsSpan());
             _addKernelLong!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
@@ -1744,7 +1758,7 @@ public class GpuEngine : IEngine, IDisposable
                 _addKernelLong!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
-            gpuResult.CopyToCPU(result.AsWritableSpan());
+            gpuResult.View.CopyToCPU(result.AsWritableSpan());
             return result;
         }
         finally
@@ -1852,9 +1866,17 @@ public class GpuEngine : IEngine, IDisposable
         if (SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
-                return (Matrix<T>)(object)MatrixMultiplyScalarGpu((Matrix<float>)(object)matrix, (float)(object)scalar);
+            {
+                object? scalarObj = (object?)scalar;
+                if (scalarObj == null) throw new ArgumentNullException(nameof(scalar));
+                return (Matrix<T>)(object)MatrixMultiplyScalarGpu((Matrix<float>)(object)matrix, (float)scalarObj);
+            }
             if (typeof(T) == typeof(double))
-                return (Matrix<T>)(object)MatrixMultiplyScalarGpuDouble((Matrix<double>)(object)matrix, (double)(object)scalar);
+            {
+                object? scalarObj = (object?)scalar;
+                if (scalarObj == null) throw new ArgumentNullException(nameof(scalar));
+                return (Matrix<T>)(object)MatrixMultiplyScalarGpuDouble((Matrix<double>)(object)matrix, (double)scalarObj);
+            }
         }
 
         return _cpuFallback.MatrixMultiplyScalar(matrix, scalar);
@@ -1886,13 +1908,13 @@ public class GpuEngine : IEngine, IDisposable
             try
             {
                 // Zero-copy transfer (Phase B: US-GPU-003)
-                gpuA.CopyFromCPU(a.AsSpan());
-                gpuB.CopyFromCPU(b.AsSpan());
+                gpuA.View.CopyFromCPU(a.AsSpan());
+                gpuB.View.CopyFromCPU(b.AsSpan());
 
                 // Create 2D views
-                var viewA = gpuA.View.As2DDenseX<Stride2D.DenseX>(new Index2D(m, k));
-                var viewB = gpuB.View.As2DDenseX<Stride2D.DenseX>(new Index2D(k, n));
-                var viewResult = gpuResult.View.As2DDenseX<Stride2D.DenseX>(new Index2D(m, n));
+                var viewA = gpuA.ViewAs2DView<Stride2D.DenseX>(new Index2D(m, k));
+                var viewB = gpuB.ViewAs2DView<Stride2D.DenseX>(new Index2D(k, n));
+                var viewResult = gpuResult.ViewAs2DView<Stride2D.DenseX>(new Index2D(m, n));
 
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
@@ -1903,7 +1925,7 @@ public class GpuEngine : IEngine, IDisposable
                 }
 
                 // Zero-copy result transfer
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -1952,9 +1974,9 @@ public class GpuEngine : IEngine, IDisposable
             try
             {
                 gpuMatrix.CopyFromCPU(matrix.AsSpan());
-                gpuVector.CopyFromCPU(vector.AsSpan());
+                gpuVector.View.CopyFromCPU(vector.AsSpan());
 
-                var viewMatrix = gpuMatrix.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewMatrix = gpuMatrix.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 _matrixVectorMultiplyKernelFloat!(rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
@@ -1963,7 +1985,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -1994,10 +2016,10 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuInput.CopyFromCPU(matrix.AsSpan());
+                gpuInput.View.CopyFromCPU(matrix.AsSpan());
 
-                var viewInput = gpuInput.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewOutput = gpuOutput.View.As2DDenseX<Stride2D.DenseX>(new Index2D(cols, rows));
+                var viewInput = gpuInput.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewOutput = gpuOutput.ViewAs2DView<Stride2D.DenseX>(new Index2D(cols, rows));
 
                 _matrixTransposeKernelFloat!(new Index2D(rows, cols), viewInput, viewOutput);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2007,7 +2029,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                gpuOutput.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2043,12 +2065,12 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuA.CopyFromCPU(a.AsSpan());
-                gpuB.CopyFromCPU(b.AsSpan());
+                gpuA.View.CopyFromCPU(a.AsSpan());
+                gpuB.View.CopyFromCPU(b.AsSpan());
 
-                var viewA = gpuA.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewB = gpuB.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewResult = gpuResult.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewA = gpuA.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewB = gpuB.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewResult = gpuResult.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
                 _matrixAddKernelFloat!(new Index2D(rows, cols), viewA, viewB, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2058,7 +2080,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2091,8 +2113,8 @@ public class GpuEngine : IEngine, IDisposable
             {
                 gpuMatrix.CopyFromCPU(matrix.AsSpan());
 
-                var viewMatrix = gpuMatrix.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewResult = gpuResult.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewMatrix = gpuMatrix.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewResult = gpuResult.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
                 _matrixMultiplyScalarKernelFloat!(new Index2D(rows, cols), viewMatrix, scalar, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2102,7 +2124,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2142,12 +2164,12 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuA.CopyFromCPU(a.AsSpan());
-                gpuB.CopyFromCPU(b.AsSpan());
+                gpuA.View.CopyFromCPU(a.AsSpan());
+                gpuB.View.CopyFromCPU(b.AsSpan());
 
-                var viewA = gpuA.View.As2DDenseX<Stride2D.DenseX>(new Index2D(m, k));
-                var viewB = gpuB.View.As2DDenseX<Stride2D.DenseX>(new Index2D(k, n));
-                var viewResult = gpuResult.View.As2DDenseX<Stride2D.DenseX>(new Index2D(m, n));
+                var viewA = gpuA.ViewAs2DView<Stride2D.DenseX>(new Index2D(m, k));
+                var viewB = gpuB.ViewAs2DView<Stride2D.DenseX>(new Index2D(k, n));
+                var viewResult = gpuResult.ViewAs2DView<Stride2D.DenseX>(new Index2D(m, n));
 
                 _matrixMultiplyKernelDouble!(new Index2D(m, n), viewA, viewB, viewResult, k);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2157,7 +2179,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2196,9 +2218,9 @@ public class GpuEngine : IEngine, IDisposable
             try
             {
                 gpuMatrix.CopyFromCPU(matrix.AsSpan());
-                gpuVector.CopyFromCPU(vector.AsSpan());
+                gpuVector.View.CopyFromCPU(vector.AsSpan());
 
-                var viewMatrix = gpuMatrix.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewMatrix = gpuMatrix.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 _matrixVectorMultiplyKernelDouble!(rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
@@ -2207,7 +2229,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2238,10 +2260,10 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuInput.CopyFromCPU(matrix.AsSpan());
+                gpuInput.View.CopyFromCPU(matrix.AsSpan());
 
-                var viewInput = gpuInput.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewOutput = gpuOutput.View.As2DDenseX<Stride2D.DenseX>(new Index2D(cols, rows));
+                var viewInput = gpuInput.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewOutput = gpuOutput.ViewAs2DView<Stride2D.DenseX>(new Index2D(cols, rows));
 
                 _matrixTransposeKernelDouble!(new Index2D(rows, cols), viewInput, viewOutput);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2251,7 +2273,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                gpuOutput.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2287,12 +2309,12 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuA.CopyFromCPU(a.AsSpan());
-                gpuB.CopyFromCPU(b.AsSpan());
+                gpuA.View.CopyFromCPU(a.AsSpan());
+                gpuB.View.CopyFromCPU(b.AsSpan());
 
-                var viewA = gpuA.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewB = gpuB.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewResult = gpuResult.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewA = gpuA.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewB = gpuB.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewResult = gpuResult.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
                 _matrixAddKernelDouble!(new Index2D(rows, cols), viewA, viewB, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2302,7 +2324,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2335,8 +2357,8 @@ public class GpuEngine : IEngine, IDisposable
             {
                 gpuMatrix.CopyFromCPU(matrix.AsSpan());
 
-                var viewMatrix = gpuMatrix.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewResult = gpuResult.View.As2DDenseX<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewMatrix = gpuMatrix.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewResult = gpuResult.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
                 _matrixMultiplyScalarKernelDouble!(new Index2D(rows, cols), viewMatrix, scalar, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2346,7 +2368,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2430,8 +2452,8 @@ public class GpuEngine : IEngine, IDisposable
             try
             {
                 // Zero-copy transfer (Phase B: US-GPU-003)
-                gpuA.CopyFromCPU(a.AsSpan());
-                gpuB.CopyFromCPU(b.AsSpan());
+                gpuA.View.CopyFromCPU(a.AsSpan());
+                gpuB.View.CopyFromCPU(b.AsSpan());
 
                 // Execute pre-compiled kernel (Phase B: US-GPU-001, US-GPU-013)
                 _batchMatMulKernelFloat!(new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
@@ -2443,7 +2465,7 @@ public class GpuEngine : IEngine, IDisposable
                 }
 
                 // Zero-copy result transfer
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2512,8 +2534,8 @@ public class GpuEngine : IEngine, IDisposable
             try
             {
                 // Zero-copy transfer (Phase B: US-GPU-003)
-                gpuA.CopyFromCPU(a.AsSpan());
-                gpuB.CopyFromCPU(b.AsSpan());
+                gpuA.View.CopyFromCPU(a.AsSpan());
+                gpuB.View.CopyFromCPU(b.AsSpan());
 
                 // Execute pre-compiled kernel (Phase B: US-GPU-001, US-GPU-013)
                 _batchMatMulKernelDouble!(new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
@@ -2525,7 +2547,7 @@ public class GpuEngine : IEngine, IDisposable
                 }
 
                 // Zero-copy result transfer
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2586,8 +2608,8 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuA.CopyFromCPU(a.AsSpan());
-                gpuB.CopyFromCPU(b.AsSpan());
+                gpuA.View.CopyFromCPU(a.AsSpan());
+                gpuB.View.CopyFromCPU(b.AsSpan());
 
                 _tensorAddKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2597,7 +2619,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2627,8 +2649,8 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuA.CopyFromCPU(a.AsSpan());
-                gpuB.CopyFromCPU(b.AsSpan());
+                gpuA.View.CopyFromCPU(a.AsSpan());
+                gpuB.View.CopyFromCPU(b.AsSpan());
 
                 _tensorAddKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2638,7 +2660,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2687,8 +2709,8 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuA.CopyFromCPU(a.AsSpan());
-                gpuB.CopyFromCPU(b.AsSpan());
+                gpuA.View.CopyFromCPU(a.AsSpan());
+                gpuB.View.CopyFromCPU(b.AsSpan());
 
                 _tensorSubtractKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2698,7 +2720,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2728,8 +2750,8 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuA.CopyFromCPU(a.AsSpan());
-                gpuB.CopyFromCPU(b.AsSpan());
+                gpuA.View.CopyFromCPU(a.AsSpan());
+                gpuB.View.CopyFromCPU(b.AsSpan());
 
                 _tensorSubtractKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2739,7 +2761,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2788,8 +2810,8 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuA.CopyFromCPU(a.AsSpan());
-                gpuB.CopyFromCPU(b.AsSpan());
+                gpuA.View.CopyFromCPU(a.AsSpan());
+                gpuB.View.CopyFromCPU(b.AsSpan());
 
                 _tensorMultiplyKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2799,7 +2821,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2829,8 +2851,8 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuA.CopyFromCPU(a.AsSpan());
-                gpuB.CopyFromCPU(b.AsSpan());
+                gpuA.View.CopyFromCPU(a.AsSpan());
+                gpuB.View.CopyFromCPU(b.AsSpan());
 
                 _tensorMultiplyKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2840,7 +2862,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2896,7 +2918,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2932,7 +2954,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -2980,8 +3002,8 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuA.CopyFromCPU(a.AsSpan());
-                gpuB.CopyFromCPU(b.AsSpan());
+                gpuA.View.CopyFromCPU(a.AsSpan());
+                gpuB.View.CopyFromCPU(b.AsSpan());
 
                 _tensorDivideKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2991,7 +3013,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -3021,8 +3043,8 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuA.CopyFromCPU(a.AsSpan());
-                gpuB.CopyFromCPU(b.AsSpan());
+                gpuA.View.CopyFromCPU(a.AsSpan());
+                gpuB.View.CopyFromCPU(b.AsSpan());
 
                 _tensorDivideKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -3032,7 +3054,7 @@ public class GpuEngine : IEngine, IDisposable
                     _accelerator!.Synchronize();
                 }
 
-                gpuResult.CopyToCPU(result.AsWritableSpan());
+                gpuResult.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -3122,18 +3144,17 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuInput.CopyFromCPU(input.AsSpan());
+                gpuInput.View.CopyFromCPU(input.AsSpan());
 
-                _maxPool2DKernelFloat!(outputSize, gpuInput.View, gpuOutput.View,
-                    batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
-                    // Thread-safe kernel execution (Phase B: US-GPU-019)
-                    lock (_gpuLock)
-                    {
+                // Thread-safe kernel execution (Phase B: US-GPU-019)
+                lock (_gpuLock)
+                {
+                    _maxPool2DKernelFloat!(outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
                     _accelerator!.Synchronize();
-                    }
+                }
 
-                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                gpuOutput.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -3177,18 +3198,17 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuInput.CopyFromCPU(input.AsSpan());
+                gpuInput.View.CopyFromCPU(input.AsSpan());
 
-                _maxPool2DKernelDouble!(outputSize, gpuInput.View, gpuOutput.View,
-                    batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
-                    // Thread-safe kernel execution (Phase B: US-GPU-019)
-                    lock (_gpuLock)
-                    {
+                // Thread-safe kernel execution (Phase B: US-GPU-019)
+                lock (_gpuLock)
+                {
+                    _maxPool2DKernelDouble!(outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
                     _accelerator!.Synchronize();
-                    }
+                }
 
-                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                gpuOutput.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -3251,18 +3271,17 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuInput.CopyFromCPU(input.AsSpan());
+                gpuInput.View.CopyFromCPU(input.AsSpan());
 
-                _avgPool2DKernelFloat!(outputSize, gpuInput.View, gpuOutput.View,
-                    batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
-                    // Thread-safe kernel execution (Phase B: US-GPU-019)
-                    lock (_gpuLock)
-                    {
+                // Thread-safe kernel execution (Phase B: US-GPU-019)
+                lock (_gpuLock)
+                {
+                    _avgPool2DKernelFloat!(outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
                     _accelerator!.Synchronize();
-                    }
+                }
 
-                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                gpuOutput.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -3306,18 +3325,17 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuInput.CopyFromCPU(input.AsSpan());
+                gpuInput.View.CopyFromCPU(input.AsSpan());
 
-                _avgPool2DKernelDouble!(outputSize, gpuInput.View, gpuOutput.View,
-                    batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
-                    // Thread-safe kernel execution (Phase B: US-GPU-019)
-                    lock (_gpuLock)
-                    {
+                // Thread-safe kernel execution (Phase B: US-GPU-019)
+                lock (_gpuLock)
+                {
+                    _avgPool2DKernelDouble!(outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
                     _accelerator!.Synchronize();
-                    }
+                }
 
-                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                gpuOutput.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -3389,20 +3407,19 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuInput.CopyFromCPU(input.AsSpan());
-                gpuKernel.CopyFromCPU(kernel.AsSpan());
+                gpuInput.View.CopyFromCPU(input.AsSpan());
+                gpuKernel.View.CopyFromCPU(kernel.AsSpan());
 
-                _conv2DKernelFloat!(outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View,
-                    batch, inChannels, height, width, outChannels,
-                    outputHeight, outputWidth, kernelHeight, kernelWidth, stride, padding, dilation);
-                    // Thread-safe kernel execution (Phase B: US-GPU-019)
-                    lock (_gpuLock)
-                    {
+                // Thread-safe kernel execution (Phase B: US-GPU-019)
+                lock (_gpuLock)
+                {
+                    _conv2DKernelFloat!(outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View,
+                        batch, inChannels, height, width, outChannels,
                         outputHeight, outputWidth, kernelHeight, kernelWidth, stride, padding, dilation);
                     _accelerator!.Synchronize();
-                    }
+                }
 
-                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                gpuOutput.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -3454,20 +3471,19 @@ public class GpuEngine : IEngine, IDisposable
 
             try
             {
-                gpuInput.CopyFromCPU(input.AsSpan());
-                gpuKernel.CopyFromCPU(kernel.AsSpan());
+                gpuInput.View.CopyFromCPU(input.AsSpan());
+                gpuKernel.View.CopyFromCPU(kernel.AsSpan());
 
-                _conv2DKernelDouble!(outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View,
-                    batch, inChannels, height, width, outChannels,
-                    outputHeight, outputWidth, kernelHeight, kernelWidth, stride, padding, dilation);
-                    // Thread-safe kernel execution (Phase B: US-GPU-019)
-                    lock (_gpuLock)
-                    {
+                // Thread-safe kernel execution (Phase B: US-GPU-019)
+                lock (_gpuLock)
+                {
+                    _conv2DKernelDouble!(outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View,
+                        batch, inChannels, height, width, outChannels,
                         outputHeight, outputWidth, kernelHeight, kernelWidth, stride, padding, dilation);
                     _accelerator!.Synchronize();
-                    }
+                }
 
-                gpuOutput.CopyToCPU(result.AsWritableSpan());
+                gpuOutput.View.CopyToCPU(result.AsWritableSpan());
                 return result;
             }
             finally
@@ -3489,7 +3505,6 @@ public class GpuEngine : IEngine, IDisposable
     /// <summary>
     /// Disposes GPU resources.
     /// </summary>
-    #endregion
 
     #region GPU Health Monitoring and Recovery (Phase B: US-GPU-020)
 
@@ -3510,7 +3525,7 @@ public class GpuEngine : IEngine, IDisposable
             // If we've exceeded maximum recovery attempts, permanently disable GPU
             if (_consecutiveFailures >= MaxRecoveryAttempts)
             {
-                RecordGpuFailure(ex);
+                RecordGpuFailure(exception);
                 return true;
             }
 

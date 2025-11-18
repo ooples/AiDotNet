@@ -87,7 +87,7 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         IFullModel<T, TInput, TOutput> model,
         AdagradOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new AdagradOptimizerOptions<T, TInput, TOutput>();
 
@@ -232,8 +232,10 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
 
         // Calculate adaptive learning rates: lr / (sqrt(accSqGrad) + eps)
         var sqrtAccSqGrad = (Vector<T>)Engine.Sqrt(_accumulatedSquaredGradients!);
-        var denominator = (Vector<T>)Engine.Add(sqrtAccSqGrad, epsilon);
-        var adaptiveLearningRates = (Vector<T>)Engine.Divide(CurrentLearningRate, denominator);
+        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, sqrtAccSqGrad.Length));
+        var denominator = (Vector<T>)Engine.Add(sqrtAccSqGrad, epsilonVec);
+        var currentLrVec = new Vector<T>(Enumerable.Repeat(CurrentLearningRate, sqrtAccSqGrad.Length));
+        var adaptiveLearningRates = (Vector<T>)Engine.Divide(currentLrVec, denominator);
 
         // Calculate updates: adaptiveLr * gradient
         var updates = (Vector<T>)Engine.Multiply(adaptiveLearningRates, gradient);
@@ -277,8 +279,10 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
 
         // Calculate adaptive learning rates: lr / (sqrt(accSqGrad) + eps)
         var sqrtAccSqGrad = (Vector<T>)Engine.Sqrt(_accumulatedSquaredGradients);
-        var denominator = (Vector<T>)Engine.Add(sqrtAccSqGrad, epsilon);
-        var adaptiveLearningRates = (Vector<T>)Engine.Divide(CurrentLearningRate, denominator);
+        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, sqrtAccSqGrad.Length));
+        var denominator = (Vector<T>)Engine.Add(sqrtAccSqGrad, epsilonVec);
+        var currentLrVec = new Vector<T>(Enumerable.Repeat(CurrentLearningRate, sqrtAccSqGrad.Length));
+        var adaptiveLearningRates = (Vector<T>)Engine.Divide(currentLrVec, denominator);
 
         // Calculate updates: adaptiveLr * gradient
         var updates = (Vector<T>)Engine.Multiply(adaptiveLearningRates, gradient);

@@ -61,7 +61,7 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
         IFullModel<T, TInput, TOutput> model,
         DFPOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new DFPOptimizerOptions<T, TInput, TOutput>();
         _previousGradient = Vector<T>.Empty();

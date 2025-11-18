@@ -63,7 +63,7 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         IFitnessCalculator<T, TInput, TOutput>? fitnessCalculator = null,
         IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _tabuOptions = options ?? new TabuSearchOptions<T, TInput, TOutput>();
 

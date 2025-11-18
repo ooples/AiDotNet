@@ -63,7 +63,6 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
-    private IEngine _engine;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -115,10 +114,9 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// position that the model can learn to recognize.
     /// </para>
     /// </remarks>
-    public PositionalEncodingLayer(int maxSequenceLength, int embeddingSize, IEngine? engine = null)
+    public PositionalEncodingLayer(int maxSequenceLength, int embeddingSize)
         : base([maxSequenceLength, embeddingSize], [maxSequenceLength, embeddingSize])
     {
-        _engine = engine ?? CpuEngine.Instance;
         this.maxSequenceLength = maxSequenceLength;
         this.embeddingSize = embeddingSize;
         encodings = new Tensor<T>([maxSequenceLength, embeddingSize]);

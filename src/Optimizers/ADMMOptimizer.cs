@@ -57,7 +57,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         IFullModel<T, TInput, TOutput> model,
         ADMMOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new ADMMOptimizerOptions<T, TInput, TOutput>();
         _regularization = _options.Regularization;

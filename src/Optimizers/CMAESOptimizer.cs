@@ -74,7 +74,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         IFullModel<T, TInput, TOutput> model,
         CMAESOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = (CMAESOptimizerOptions<T, TInput, TOutput>)Options;
         _population = Matrix<T>.Empty();
@@ -201,8 +201,8 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
             // === Vectorized Population Generation using IEngine (Phase B: US-GPU-015) ===
             // population[i] = mean + sigma * sample
             var sample = GenerateMultivariateNormalSample(dimensions);
-            var scaledSample = (Vector<T>)Engine.Multiply(sample, _sigma);
-            var individual = (Vector<T>)Engine.Add(_mean, scaledSample);
+            var scaledSample = (Vector<T>)AiDotNetEngine.Current.Multiply(sample, _sigma);
+            var individual = (Vector<T>)AiDotNetEngine.Current.Add(_mean, scaledSample);
 
             for (int j = 0; j < dimensions; j++)
             {

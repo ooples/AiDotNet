@@ -72,7 +72,7 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         IFullModel<T, TInput, TOutput> model,
         NadamOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new NadamOptimizerOptions<T, TInput, TOutput>();
 
@@ -209,7 +209,8 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
         // Update parameters: update = (lr * mHatNesterov) / (sqrt(vHat) + epsilon)
         var sqrtVHat = (Vector<T>)Engine.Sqrt(vHat);
-        var denominator = (Vector<T>)Engine.Add(sqrtVHat, epsilon);
+        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, sqrtVHat.Length));
+        var denominator = (Vector<T>)Engine.Add(sqrtVHat, epsilonVec);
         var lrTimesMHatNesterov = (Vector<T>)Engine.Multiply(mHatNesterov, CurrentLearningRate);
         var update = (Vector<T>)Engine.Divide(lrTimesMHatNesterov, denominator);
 
@@ -284,7 +285,8 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
         // Update parameters: update = (lr * mHatNesterov) / (sqrt(vHat) + epsilon)
         var sqrtVHat = (Vector<T>)Engine.Sqrt(vHat);
-        var denominator = (Vector<T>)Engine.Add(sqrtVHat, epsilon);
+        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, sqrtVHat.Length));
+        var denominator = (Vector<T>)Engine.Add(sqrtVHat, epsilonVec);
         var lrTimesMHatNesterov = (Vector<T>)Engine.Multiply(mHatNesterov, CurrentLearningRate);
         var update = (Vector<T>)Engine.Divide(lrTimesMHatNesterov, denominator);
 

@@ -116,7 +116,7 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         IFullModel<T, TInput, TOutput> model,
         PowellOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new PowellOptimizerOptions<T, TInput, TOutput>();
         _adaptiveStepSize = NumOps.Zero;
@@ -353,8 +353,8 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         // newCoefficients = parameters + step * direction
 
         var parameters = solution.GetParameters();
-        var scaledDirection = (Vector<T>)Engine.Multiply(direction, step);
-        var newCoefficients = (Vector<T>)Engine.Add(parameters, scaledDirection);
+        var scaledDirection = (Vector<T>)AiDotNetEngine.Current.Multiply(direction, step);
+        var newCoefficients = (Vector<T>)AiDotNetEngine.Current.Add(parameters, scaledDirection);
 
         return solution.WithParameters(newCoefficients);
     }
@@ -392,9 +392,9 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         var oldParameters = oldPoint.GetParameters();
 
         // Calculate the direction vector: new - old
-        var direction = (Vector<T>)Engine.Subtract(parameters, oldParameters);
+        var direction = (Vector<T>)AiDotNetEngine.Current.Subtract(parameters, oldParameters);
         // Extrapolate: new + direction = new + (new - old)
-        var extrapolatedCoefficients = (Vector<T>)Engine.Add(parameters, direction);
+        var extrapolatedCoefficients = (Vector<T>)AiDotNetEngine.Current.Add(parameters, direction);
 
         // Use the newPoint as a template to create a new model with the extrapolated coefficients
         return newPoint.WithParameters(extrapolatedCoefficients);

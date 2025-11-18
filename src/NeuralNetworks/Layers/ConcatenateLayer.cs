@@ -34,7 +34,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class ConcatenateLayer<T> : LayerBase<T>
 {
-    private IEngine _engine;
     private readonly int _axis;
     private Tensor<T>[]? _lastInputs;
     private Tensor<T>? _lastOutput;
@@ -91,10 +90,9 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// The default activation is the "identity" function, which doesn't change the values at all.
     /// </para>
     /// </remarks>
-    public ConcatenateLayer(int[][] inputShapes, int axis, IActivationFunction<T>? activationFunction = null, IEngine? engine = null)
+    public ConcatenateLayer(int[][] inputShapes, int axis, IActivationFunction<T>? activationFunction = null)
         : base(inputShapes, CalculateOutputShape(inputShapes, axis), activationFunction ?? new IdentityActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         _axis = axis;
         ValidateInputShapes(inputShapes);
     }
@@ -125,10 +123,9 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// complex activation patterns that consider the relationships between different outputs.
     /// </para>
     /// </remarks>
-    public ConcatenateLayer(int[][] inputShapes, int axis, IVectorActivationFunction<T>? vectorActivationFunction = null, IEngine? engine = null)
+    public ConcatenateLayer(int[][] inputShapes, int axis, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base(inputShapes, CalculateOutputShape(inputShapes, axis), vectorActivationFunction ?? new IdentityActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         _axis = axis;
         ValidateInputShapes(inputShapes);
     }

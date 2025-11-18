@@ -40,7 +40,6 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
-    private IEngine _engine;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -98,7 +97,6 @@ public class BidirectionalLayer<T> : LayerBase<T>
         IEngine? engine = null)
         : base(innerLayer.GetInputShape(), CalculateOutputShape(innerLayer.GetOutputShape(), mergeMode), activationFunction ?? new ReLUActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         _forwardLayer = innerLayer;
         _backwardLayer = innerLayer.Clone();
         _mergeMode = mergeMode;
@@ -135,7 +133,6 @@ public class BidirectionalLayer<T> : LayerBase<T>
         IEngine? engine = null)
         : base(innerLayer.GetInputShape(), CalculateOutputShape(innerLayer.GetOutputShape(), mergeMode), vectorActivationFunction ?? new IdentityActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         _forwardLayer = innerLayer;
         _backwardLayer = innerLayer.Clone();
         _mergeMode = mergeMode;

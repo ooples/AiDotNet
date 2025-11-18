@@ -67,7 +67,7 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         IFullModel<T, TInput, TOutput> model,
         LBFGSOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new LBFGSOptimizerOptions<T, TInput, TOutput>();
         _s = [];

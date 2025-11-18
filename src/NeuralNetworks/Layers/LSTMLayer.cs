@@ -500,7 +500,6 @@ public class LSTMLayer<T> : LayerBase<T>
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
-    private IEngine _engine;
 
     /// <summary>
     /// Gets a dictionary containing the gradients for all trainable parameters after a backward pass.
@@ -578,7 +577,6 @@ public class LSTMLayer<T> : LayerBase<T>
         IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, hiddenSize), activation ?? new TanhActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         _inputSize = inputSize;
         _hiddenSize = hiddenSize;
         _useVectorActivation = false;
@@ -644,7 +642,6 @@ public class LSTMLayer<T> : LayerBase<T>
         IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, hiddenSize), activation ?? new TanhActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         _inputSize = inputSize;
         _hiddenSize = hiddenSize;
         _useVectorActivation = true;

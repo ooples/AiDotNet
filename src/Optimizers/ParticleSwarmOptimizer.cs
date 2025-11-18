@@ -65,7 +65,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         IFullModel<T, TInput, TOutput> model,
         ParticleSwarmOptimizationOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _random = new Random();
         _psoOptions = options ?? new ParticleSwarmOptimizationOptions<T, TInput, TOutput>();
@@ -150,7 +150,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
 
                 // === Vectorized Position Update using IEngine (Phase B: US-GPU-015) ===
                 // position = position + velocity
-                var newPosition = (Vector<T>)Engine.Add(position, velocity);
+                var newPosition = (Vector<T>)AiDotNetEngine.Current.Add(position, velocity);
 
                 // Update the particle model with new position
                 swarm[i] = swarm[i].WithParameters(newPosition);
@@ -210,8 +210,8 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         var socialWeight = NumOps.FromDouble(_currentSocialWeight);
 
         // Vectorized position differences
-        var personalDiff = (Vector<T>)Engine.Subtract(personalBest, position);
-        var globalDiff = (Vector<T>)Engine.Subtract(globalBest, position);
+        var personalDiff = (Vector<T>)AiDotNetEngine.Current.Subtract(personalBest, position);
+        var globalDiff = (Vector<T>)AiDotNetEngine.Current.Subtract(globalBest, position);
 
         // Element-wise updates with random factors (can't fully vectorize due to per-element randomness)
         for (int i = 0; i < velocity.Length; i++)

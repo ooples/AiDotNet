@@ -153,7 +153,6 @@ public class PoolingLayer<T> : LayerBase<T>
     /// - GPU: Massive parallelism for 20-100x speedup on large feature maps
     /// </para>
     /// </remarks>
-    private readonly IEngine _engine;
 
     /// <summary>
     /// The indices of the maximum values for max pooling operations.
@@ -194,14 +193,13 @@ public class PoolingLayer<T> : LayerBase<T>
     /// stride 2 would produce a 14�14 output.
     /// </para>
     /// </remarks>
-    public PoolingLayer(int inputDepth, int inputHeight, int inputWidth, int poolSize, int stride, PoolingType type = PoolingType.Max, IEngine? engine = null)
+    public PoolingLayer(int inputDepth, int inputHeight, int inputWidth, int poolSize, int stride, PoolingType type = PoolingType.Max)
         : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
                CalculateOutputShape(inputDepth, CalculateOutputDimension(inputHeight, poolSize, stride), CalculateOutputDimension(inputWidth, poolSize, stride)))
     {
         PoolSize = poolSize;
         Stride = stride;
         Type = type;
-        _engine = engine ?? EngineFactory.GetEngine();
     }
 
     /// <summary>
@@ -278,7 +276,7 @@ public class PoolingLayer<T> : LayerBase<T>
         if (Type == PoolingType.Max)
         {
             // Use GPU-accelerated MaxPool2D
-            output = (Tensor<T>)_engine.MaxPool2D(input, PoolSize, Stride, padding: 0);
+            output = (Tensor<T>)Engine.MaxPool2D(input, PoolSize, Stride, padding: 0);
 
             // Note: MaxPool2D implementation handles maxIndices internally for gradient computation
             // For backward pass compatibility, we initialize _maxIndices with the output shape
@@ -287,7 +285,7 @@ public class PoolingLayer<T> : LayerBase<T>
         else if (Type == PoolingType.Average)
         {
             // Use GPU-accelerated AvgPool2D
-            output = (Tensor<T>)_engine.AvgPool2D(input, PoolSize, Stride, padding: 0);
+            output = (Tensor<T>)Engine.AvgPool2D(input, PoolSize, Stride, padding: 0);
             _maxIndices = new Tensor<int>(output.Shape); // Not used for average pooling
         }
         else

@@ -55,7 +55,7 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         IFullModel<T, TInput, TOutput> model,
         AMSGradOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new AMSGradOptimizerOptions<T, TInput, TOutput>();
 
@@ -203,7 +203,8 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
 
         // Compute update: update = (lr * mHat) / (sqrt(vHat) + epsilon)
         var sqrtVHat = (Vector<T>)Engine.Sqrt(_vHat);
-        var denominator = (Vector<T>)Engine.Add(sqrtVHat, epsilon);
+        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, sqrtVHat.Length));
+        var denominator = (Vector<T>)Engine.Add(sqrtVHat, epsilonVec);
         var lrTimesMHat = (Vector<T>)Engine.Multiply(mHat, CurrentLearningRate);
         var update = (Vector<T>)Engine.Divide(lrTimesMHat, denominator);
 

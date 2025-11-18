@@ -49,7 +49,7 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
         IFullModel<T, TInput, TOutput> model,
         MiniBatchGradientDescentOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new MiniBatchGradientDescentOptions<T, TInput, TOutput>();
 

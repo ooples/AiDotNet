@@ -121,7 +121,7 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
         IFullModel<T, TInput, TOutput> model,
         RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _t = 0;
         _squaredGradient = Vector<T>.Empty();
@@ -244,7 +244,8 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
 
         // Compute update: update = learningRate * gradient / (sqrt(sqGrad) + epsilon)
         var sqGradSqrt = (Vector<T>)Engine.Sqrt(_squaredGradient);
-        var denominator = (Vector<T>)Engine.Add(sqGradSqrt, epsilon);
+        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, sqGradSqrt.Length));
+        var denominator = (Vector<T>)Engine.Add(sqGradSqrt, epsilonVec);
         var gradScaled = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
         var update = (Vector<T>)Engine.Divide(gradScaled, denominator);
 
@@ -308,7 +309,8 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
 
         // Compute update: update = learningRate * gradient / (sqrt(sqGrad) + epsilon)
         var sqGradSqrt = (Vector<T>)Engine.Sqrt(_squaredGradient);
-        var denominator = (Vector<T>)Engine.Add(sqGradSqrt, epsilon);
+        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, sqGradSqrt.Length));
+        var denominator = (Vector<T>)Engine.Add(sqGradSqrt, epsilonVec);
         var gradScaled = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
         var update = (Vector<T>)Engine.Divide(gradScaled, denominator);
 

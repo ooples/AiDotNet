@@ -28,7 +28,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class CroppingLayer<T> : LayerBase<T>
 {
-    private IEngine _engine;
 
     /// <summary>
     /// The amount to crop from the top of each dimension.
@@ -173,7 +172,6 @@ public class CroppingLayer<T> : LayerBase<T>
         IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, cropTop, cropBottom, cropLeft, cropRight), scalarActivation ?? new IdentityActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         _cropTop = cropTop;
         _cropBottom = cropBottom;
         _cropLeft = cropLeft;
@@ -219,7 +217,6 @@ public class CroppingLayer<T> : LayerBase<T>
         IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, cropTop, cropBottom, cropLeft, cropRight), vectorActivation ?? new IdentityActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         _cropTop = cropTop;
         _cropBottom = cropBottom;
         _cropLeft = cropLeft;

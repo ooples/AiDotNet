@@ -189,7 +189,6 @@ public class GRULayer<T> : LayerBase<T>
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
-    private IEngine _engine;
 
     /// <summary>
     /// The activation function applied to the candidate hidden state.
@@ -355,7 +354,6 @@ public class GRULayer<T> : LayerBase<T>
                     IEngine? engine = null)
         : base([inputSize], [hiddenSize], activation ?? new TanhActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         _inputSize = inputSize;
         _hiddenSize = hiddenSize;
         _returnSequences = returnSequences;
@@ -409,7 +407,6 @@ public class GRULayer<T> : LayerBase<T>
                     IEngine? engine = null)
         : base([inputSize], [hiddenSize], vectorActivation ?? new TanhActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         _inputSize = inputSize;
         _hiddenSize = hiddenSize;
         _returnSequences = returnSequences;

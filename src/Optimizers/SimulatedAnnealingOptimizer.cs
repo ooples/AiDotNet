@@ -117,7 +117,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
         IFullModel<T, TInput, TOutput> model,
         SimulatedAnnealingOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _random = new Random();
         _saOptions = options ?? new SimulatedAnnealingOptions<T, TInput, TOutput>();

@@ -54,7 +54,7 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
         IFullModel<T, TInput, TOutput> model,
         ConjugateGradientOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new ConjugateGradientOptimizerOptions<T, TInput, TOutput>();
         _previousGradient = Vector<T>.Empty();

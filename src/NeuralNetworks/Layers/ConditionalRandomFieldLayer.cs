@@ -34,7 +34,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class ConditionalRandomFieldLayer<T> : LayerBase<T>
 {
-    private IEngine _engine;
     private Matrix<T> _transitionMatrix;
     private Vector<T> _startScores;
     private Vector<T> _endScores;
@@ -103,10 +102,9 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// These values start as small random numbers and are refined during training.
     /// </para>
     /// </remarks>
-    public ConditionalRandomFieldLayer(int numClasses, int sequenceLength, IActivationFunction<T>? scalarActivation = null, IEngine? engine = null)
+    public ConditionalRandomFieldLayer(int numClasses, int sequenceLength, IActivationFunction<T>? scalarActivation = null)
         : base([sequenceLength, numClasses], [sequenceLength, numClasses], scalarActivation ?? new IdentityActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         _numClasses = numClasses;
         _sequenceLength = sequenceLength;
         _transitionMatrix = new Matrix<T>(_numClasses, _numClasses);
@@ -141,10 +139,9 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// complex activation patterns that consider the relationships between different inputs.
     /// </para>
     /// </remarks>
-    public ConditionalRandomFieldLayer(int numClasses, int sequenceLength, IVectorActivationFunction<T>? vectorActivation = null, IEngine? engine = null)
+    public ConditionalRandomFieldLayer(int numClasses, int sequenceLength, IVectorActivationFunction<T>? vectorActivation = null)
         : base([sequenceLength, numClasses], [sequenceLength, numClasses], vectorActivation ?? new IdentityActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         _numClasses = numClasses;
         _sequenceLength = sequenceLength;
         _transitionMatrix = new Matrix<T>(_numClasses, _numClasses);
@@ -582,11 +579,11 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
 
         // === Vectorized Parameter Updates using IEngine (Phase B: US-GPU-015) ===
         // Update start and end scores (vectorized)
-        var scaledStartGrad = (Vector<T>)_engine.Multiply(_startScoresGradient, learningRate);
-        _startScores = (Vector<T>)_engine.Subtract(_startScores, scaledStartGrad);
+        var scaledStartGrad = (Vector<T>)Engine.Multiply(_startScoresGradient, learningRate);
+        _startScores = (Vector<T>)Engine.Subtract(_startScores, scaledStartGrad);
 
-        var scaledEndGrad = (Vector<T>)_engine.Multiply(_endScoresGradient, learningRate);
-        _endScores = (Vector<T>)_engine.Subtract(_endScores, scaledEndGrad);
+        var scaledEndGrad = (Vector<T>)Engine.Multiply(_endScoresGradient, learningRate);
+        _endScores = (Vector<T>)Engine.Subtract(_endScores, scaledEndGrad);
 
         // Update transition matrix (row-wise vectorization)
         for (int i = 0; i < _numClasses; i++)
@@ -601,8 +598,8 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
             }
 
             // Vectorized: row = row - learningRate * gradRow
-            var scaledGrad = (Vector<T>)_engine.Multiply(gradRow, learningRate);
-            var updatedRow = (Vector<T>)_engine.Subtract(transRow, scaledGrad);
+            var scaledGrad = (Vector<T>)Engine.Multiply(gradRow, learningRate);
+            var updatedRow = (Vector<T>)Engine.Subtract(transRow, scaledGrad);
 
             // Store back
             for (int j = 0; j < _numClasses; j++)

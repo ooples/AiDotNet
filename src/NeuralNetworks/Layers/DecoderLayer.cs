@@ -22,7 +22,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 public class DecoderLayer<T> : LayerBase<T>
 {
-    private IEngine _engine;
 
     /// <summary>
     /// The self-attention mechanism of the decoder layer.
@@ -92,18 +91,17 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <param name="feedForwardSize">The size of the feed-forward network.</param>
     /// <param name="activation">The scalar activation function to use. If null, ReLUActivation is used.</param>
     /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
-    public DecoderLayer(int inputSize, int attentionSize, int feedForwardSize, IActivationFunction<T>? activation = null, IEngine? engine = null)
+    public DecoderLayer(int inputSize, int attentionSize, int feedForwardSize, IActivationFunction<T>? activation = null)
         : base([inputSize], [inputSize], activation ?? new ReLUActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
-        _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, activation, _engine);
-        _crossAttention = new AttentionLayer<T>(inputSize, attentionSize, activation, _engine);
-        _feedForward = new FeedForwardLayer<T>(inputSize, feedForwardSize, activation, _engine);
+        _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
+        _crossAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
+        _feedForward = new FeedForwardLayer<T>(inputSize, feedForwardSize, activation);
         InputSize = inputSize;
 
-        _norm1 = new LayerNormalizationLayer<T>(inputSize, engine: _engine);
-        _norm2 = new LayerNormalizationLayer<T>(inputSize, engine: _engine);
-        _norm3 = new LayerNormalizationLayer<T>(inputSize, engine: _engine);
+        _norm1 = new LayerNormalizationLayer<T>(inputSize);
+        _norm2 = new LayerNormalizationLayer<T>(inputSize);
+        _norm3 = new LayerNormalizationLayer<T>(inputSize);
     }
 
     /// <summary>
@@ -114,18 +112,17 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <param name="feedForwardSize">The size of the feed-forward network.</param>
     /// <param name="activation">The vector activation function to use. If null, ReLUActivation is used.</param>
     /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
-    public DecoderLayer(int inputSize, int attentionSize, int feedForwardSize, IVectorActivationFunction<T>? activation = null, IEngine? engine = null)
+    public DecoderLayer(int inputSize, int attentionSize, int feedForwardSize, IVectorActivationFunction<T>? activation = null)
         : base([inputSize], [inputSize], activation ?? new ReLUActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
-        _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, activation, _engine);
-        _crossAttention = new AttentionLayer<T>(inputSize, attentionSize, activation, _engine);
-        _feedForward = new FeedForwardLayer<T>(inputSize, feedForwardSize, activation, _engine);
+        _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
+        _crossAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
+        _feedForward = new FeedForwardLayer<T>(inputSize, feedForwardSize, activation);
         InputSize = inputSize;
 
-        _norm1 = new LayerNormalizationLayer<T>(inputSize, engine: _engine);
-        _norm2 = new LayerNormalizationLayer<T>(inputSize, engine: _engine);
-        _norm3 = new LayerNormalizationLayer<T>(inputSize, engine: _engine);
+        _norm1 = new LayerNormalizationLayer<T>(inputSize);
+        _norm2 = new LayerNormalizationLayer<T>(inputSize);
+        _norm3 = new LayerNormalizationLayer<T>(inputSize);
     }
 
     /// <summary>

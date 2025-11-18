@@ -160,7 +160,6 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
-    private IEngine _engine;
 
     /// <summary>
     /// Indicates whether this layer supports training.
@@ -182,10 +181,9 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - headCount: How many different "perspectives" or "experts" will analyze the data
     /// </para>
     /// </remarks>
-    public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IActivationFunction<T>? activationFunction = null, IEngine? engine = null)
+    public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IActivationFunction<T>? activationFunction = null)
         : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], activationFunction ?? new IdentityActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
 
         // Initialize auxiliary loss fields first so compiler knows they're set
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
@@ -212,10 +210,9 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="embeddingDimension">The dimension of each element in the sequence.</param>
     /// <param name="headCount">The number of attention heads to use.</param>
     /// <param name="vectorActivationFunction">The vector activation function to apply (defaults to identity function if null).</param>
-    public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IVectorActivationFunction<T>? vectorActivationFunction = null, IEngine? engine = null)
+    public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], vectorActivationFunction ?? new IdentityActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
 
         // Initialize auxiliary loss fields first so compiler knows they're set
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);

@@ -518,7 +518,7 @@ public class CpuEngine : IEngine
 
         for (int i = 0; i < a.Length; i++)
         {
-            result._data[i] = numOps.Add(a._data[i], b._data[i]);
+            result[i] = numOps.Add(a[i], b[i]);
         }
 
         return result;
@@ -540,7 +540,7 @@ public class CpuEngine : IEngine
 
         for (int i = 0; i < a.Length; i++)
         {
-            result._data[i] = numOps.Subtract(a._data[i], b._data[i]);
+            result[i] = numOps.Subtract(a[i], b[i]);
         }
 
         return result;
@@ -562,7 +562,7 @@ public class CpuEngine : IEngine
 
         for (int i = 0; i < a.Length; i++)
         {
-            result._data[i] = numOps.Multiply(a._data[i], b._data[i]);
+            result[i] = numOps.Multiply(a[i], b[i]);
         }
 
         return result;
@@ -578,7 +578,7 @@ public class CpuEngine : IEngine
 
         for (int i = 0; i < tensor.Length; i++)
         {
-            result._data[i] = numOps.Multiply(tensor._data[i], scalar);
+            result[i] = numOps.Multiply(tensor[i], scalar);
         }
 
         return result;
@@ -601,12 +601,12 @@ public class CpuEngine : IEngine
         for (int i = 0; i < a.Length; i++)
         {
             // Check for division by zero
-            if (numOps.Equals(b._data[i], numOps.Zero))
+            if (numOps.Equals(b[i], numOps.Zero))
             {
                 throw new DivideByZeroException($"Division by zero at index {i}");
             }
 
-            result._data[i] = numOps.Divide(a._data[i], b._data[i]);
+            result[i] = numOps.Divide(a[i], b[i]);
         }
 
         return result;
@@ -675,7 +675,7 @@ public class CpuEngine : IEngine
                 {
                     for (int ow = 0; ow < outputWidth; ow++)
                     {
-                        T maxValue = numOps.NegativeInfinity;
+                        T maxValue = numOps.FromDouble(double.NegativeInfinity);
 
                         for (int kh = 0; kh < poolSize; kh++)
                         {
@@ -765,7 +765,7 @@ public class CpuEngine : IEngine
                         // Calculate average
                         if (count > 0)
                         {
-                            var countValue = numOps.FromInt(count);
+                            var countValue = numOps.FromDouble(count);
                             result[b, c, oh, ow] = numOps.Divide(sum, countValue);
                         }
                         else

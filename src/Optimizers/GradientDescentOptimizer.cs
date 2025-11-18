@@ -48,7 +48,7 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         IFullModel<T, TInput, TOutput> model,
         GradientDescentOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>(), engine)
+        : base(model, options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>())
     {
         _gdOptions = options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>();
         _regularization = _gdOptions.Regularization ?? CreateRegularization(_gdOptions);

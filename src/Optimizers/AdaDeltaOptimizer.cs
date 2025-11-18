@@ -118,7 +118,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         IFullModel<T, TInput, TOutput> model,
         AdaDeltaOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new AdaDeltaOptimizerOptions<T, TInput, TOutput>();
 
@@ -301,10 +301,11 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         _accumulatedSquaredGradients = (Vector<T>)Engine.Add(rhoTimesAccSqGrad, oneMinusRhoTimesGradSq);
 
         // Compute RMS of accumulated squared updates and gradients
-        var accSqUpdPlusEps = (Vector<T>)Engine.Add(_accumulatedSquaredUpdates, epsilon);
+        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, _accumulatedSquaredUpdates.Length));
+        var accSqUpdPlusEps = (Vector<T>)Engine.Add(_accumulatedSquaredUpdates, epsilonVec);
         var rmsUpdate = (Vector<T>)Engine.Sqrt(accSqUpdPlusEps);
 
-        var accSqGradPlusEps = (Vector<T>)Engine.Add(_accumulatedSquaredGradients, epsilon);
+        var accSqGradPlusEps = (Vector<T>)Engine.Add(_accumulatedSquaredGradients, epsilonVec);
         var rmsGrad = (Vector<T>)Engine.Sqrt(accSqGradPlusEps);
 
         // Compute update: update = (RMS[Δ] / RMS[g]) * gradient

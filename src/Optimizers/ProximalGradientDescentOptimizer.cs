@@ -123,7 +123,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         IFullModel<T, TInput, TOutput> model,
         ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>();
         _regularization = _options.Regularization ?? new NoRegularization<T, TInput, TOutput>();

@@ -127,7 +127,6 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
-    private IEngine _engine;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -185,10 +184,9 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// The layer starts with carefully initialized weights to help training proceed smoothly.
     /// </para>
     /// </remarks>
-    public RecurrentLayer(int inputSize, int hiddenSize, IActivationFunction<T>? activationFunction = null, IEngine? engine = null)
+    public RecurrentLayer(int inputSize, int hiddenSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [hiddenSize], activationFunction ?? new TanhActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         _inputWeights = new Matrix<T>(hiddenSize, inputSize);
         _hiddenWeights = new Matrix<T>(hiddenSize, hiddenSize);
         _biases = new Vector<T>(hiddenSize);
@@ -223,10 +221,9 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// across the hidden state. Most RNN implementations use the scalar version with tanh activation.
     /// </para>
     /// </remarks>
-    public RecurrentLayer(int inputSize, int hiddenSize, IVectorActivationFunction<T>? vectorActivationFunction = null, IEngine? engine = null)
+    public RecurrentLayer(int inputSize, int hiddenSize, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([inputSize], [hiddenSize], vectorActivationFunction ?? new TanhActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         _inputWeights = new Matrix<T>(hiddenSize, inputSize);
         _hiddenWeights = new Matrix<T>(hiddenSize, hiddenSize);
         _biases = new Vector<T>(hiddenSize);

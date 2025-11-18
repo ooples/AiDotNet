@@ -72,7 +72,7 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         IFullModel<T, TInput, TOutput> model,
         MomentumOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        : base(model, options ?? new())
     {
         _options = options ?? new MomentumOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();

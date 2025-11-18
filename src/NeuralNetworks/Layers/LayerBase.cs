@@ -26,6 +26,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public abstract class LayerBase<T> : ILayer<T>, IDiagnosticsProvider<T>
 {
     /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Gets the element-wise activation function for this layer, if specified.
     /// </summary>
     /// <remarks>

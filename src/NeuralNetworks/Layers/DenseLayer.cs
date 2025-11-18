@@ -301,12 +301,10 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
-    private IEngine _engine;
 
-    public DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null, IEngine? engine = null)
+    public DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         L1Strength = NumOps.FromDouble(0.01);
         L2Strength = NumOps.FromDouble(0.01);
@@ -344,10 +342,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// output vector at once.
     /// </para>
     /// </remarks>
-    public DenseLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? vectorActivation = null, IEngine? engine = null)
+    public DenseLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? vectorActivation = null)
         : base([inputSize], [outputSize], vectorActivation ?? new ReLUActivation<T>())
     {
-        _engine = engine ?? CpuEngine.Instance;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         L1Strength = NumOps.FromDouble(0.01);
         L2Strength = NumOps.FromDouble(0.01);
