@@ -541,7 +541,10 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // output is guaranteed to be non-null because _numRoutingIterations is validated to be >= 1
-        _lastOutput = output!;
+        if (output == null)
+            throw new InvalidOperationException("Output tensor was not initialized during forward pass.");
+
+        _lastOutput = output;
         _lastCouplingCoefficients = couplingCoefficients;
 
         return _lastOutput;

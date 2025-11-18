@@ -57,7 +57,7 @@ public class GpuEngine : IEngine, IDisposable
 
     // GPU recovery tracking (Phase B: US-GPU-020)
     private volatile int _consecutiveFailures = 0;
-    private volatile DateTime _lastFailureTime = DateTime.MinValue;
+    private long _lastFailureTimeTicks = DateTime.MinValue.Ticks;
     private const int MaxRecoveryAttempts = 3;
     private static readonly TimeSpan RecoveryBackoffPeriod = TimeSpan.FromSeconds(30);
 
@@ -3503,7 +3503,7 @@ public class GpuEngine : IEngine, IDisposable
         lock (_recoveryLock)
         {
             _consecutiveFailures++;
-            _lastFailureTime = DateTime.UtcNow;
+            Interlocked.Exchange(ref _lastFailureTimeTicks, DateTime.UtcNow.Ticks);
 
             Console.WriteLine($"[GpuEngine] GPU failure #{_consecutiveFailures}: {exception.Message}");
 
@@ -3533,7 +3533,8 @@ public class GpuEngine : IEngine, IDisposable
                 return false;
 
             // Check if we're in backoff period
-            var timeSinceFailure = DateTime.UtcNow - _lastFailureTime;
+            var lastFailureTicks = Interlocked.Read(ref _lastFailureTimeTicks);
+            var timeSinceFailure = DateTime.UtcNow - new DateTime(lastFailureTicks);
             if (timeSinceFailure < RecoveryBackoffPeriod)
             {
                 // Still in backoff period - don't attempt recovery yet
@@ -3559,7 +3560,7 @@ public class GpuEngine : IEngine, IDisposable
 
                 // Recovery successful!
                 _consecutiveFailures = 0;
-                _lastFailureTime = DateTime.MinValue;
+                Interlocked.Exchange(ref _lastFailureTimeTicks, DateTime.MinValue.Ticks);
                 Console.WriteLine("[GpuEngine] GPU recovery successful! GPU operations re-enabled.");
                 return true;
             }
@@ -3585,11 +3586,14 @@ public class GpuEngine : IEngine, IDisposable
         diagnostics.AppendLine("GPU Health Diagnostics:");
         diagnostics.AppendLine($"  Healthy: {_gpuHealthy}");
         diagnostics.AppendLine($"  Consecutive Failures: {_consecutiveFailures}/{MaxRecoveryAttempts}");
-        diagnostics.AppendLine($"  Last Failure: {(_lastFailureTime == DateTime.MinValue ? "Never" : _lastFailureTime.ToString("yyyy-MM-dd HH:mm:ss UTC"))}");
 
-        if (_lastFailureTime != DateTime.MinValue)
+        var lastFailureTicks = Interlocked.Read(ref _lastFailureTimeTicks);
+        var lastFailureTime = new DateTime(lastFailureTicks);
+        diagnostics.AppendLine($"  Last Failure: {(lastFailureTicks == DateTime.MinValue.Ticks ? "Never" : lastFailureTime.ToString("yyyy-MM-dd HH:mm:ss UTC"))}");
+
+        if (lastFailureTicks != DateTime.MinValue.Ticks)
         {
-            var timeSinceFailure = DateTime.UtcNow - _lastFailureTime;
+            var timeSinceFailure = DateTime.UtcNow - lastFailureTime;
             diagnostics.AppendLine($"  Time Since Failure: {timeSinceFailure.TotalSeconds:F1}s");
 
             if (timeSinceFailure < RecoveryBackoffPeriod)
