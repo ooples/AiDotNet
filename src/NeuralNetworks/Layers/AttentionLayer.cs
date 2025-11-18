@@ -143,6 +143,11 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _dWq;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+    private IEngine _engine;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <remarks>
@@ -173,9 +178,10 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This is useful when you want to treat each attention score separately.
     /// </para>
     /// </remarks>
-    public AttentionLayer(int inputSize, int attentionSize, IActivationFunction<T>? activation = null)
+    public AttentionLayer(int inputSize, int attentionSize, IActivationFunction<T>? activation = null, IEngine? engine = null)
         : base([inputSize], [attentionSize], activation ?? new SoftmaxActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastAttentionEntropy = NumOps.Zero;
 
@@ -203,9 +209,10 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This can be more efficient and allows for more complex interactions between attention scores.
     /// </para>
     /// </remarks>
-    public AttentionLayer(int inputSize, int attentionSize, IVectorActivationFunction<T>? activation = null)
+    public AttentionLayer(int inputSize, int attentionSize, IVectorActivationFunction<T>? activation = null, IEngine? engine = null)
         : base([inputSize], [attentionSize], activation ?? new SoftmaxActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastAttentionEntropy = NumOps.Zero;
 
