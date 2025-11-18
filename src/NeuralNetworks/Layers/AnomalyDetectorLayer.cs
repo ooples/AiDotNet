@@ -132,6 +132,11 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     private double _smoothedAnomalyScore;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+    private IEngine _engine;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -180,12 +185,14 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public AnomalyDetectorLayer(
-        int inputSize, 
-        double anomalyThreshold, 
-        int historyCapacity = 100, 
-        double smoothingFactor = 0.1)
+        int inputSize,
+        double anomalyThreshold,
+        int historyCapacity = 100,
+        double smoothingFactor = 0.1,
+        IEngine? engine = null)
         : base([inputSize], [1])
     {
+        _engine = engine ?? CpuEngine.Instance;
         _anomalyThreshold = anomalyThreshold;
         _historyCapacity = historyCapacity;
         _smoothingFactor = smoothingFactor;
