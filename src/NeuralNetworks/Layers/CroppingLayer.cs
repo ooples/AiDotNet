@@ -28,6 +28,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class CroppingLayer<T> : LayerBase<T>
 {
+    private IEngine _engine;
+
     /// <summary>
     /// The amount to crop from the top of each dimension.
     /// </summary>
@@ -142,6 +144,7 @@ public class CroppingLayer<T> : LayerBase<T>
     /// <param name="cropLeft">The amount to crop from the left of each dimension.</param>
     /// <param name="cropRight">The amount to crop from the right of each dimension.</param>
     /// <param name="scalarActivation">The activation function to apply. Defaults to Identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a cropping layer with the specified cropping parameters and activation function.
@@ -166,9 +169,11 @@ public class CroppingLayer<T> : LayerBase<T>
         int[] cropBottom,
         int[] cropLeft,
         int[] cropRight,
-        IActivationFunction<T>? scalarActivation = null)
+        IActivationFunction<T>? scalarActivation = null,
+        IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, cropTop, cropBottom, cropLeft, cropRight), scalarActivation ?? new IdentityActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         _cropTop = cropTop;
         _cropBottom = cropBottom;
         _cropLeft = cropLeft;
@@ -185,6 +190,7 @@ public class CroppingLayer<T> : LayerBase<T>
     /// <param name="cropLeft">The amount to crop from the left of each dimension.</param>
     /// <param name="cropRight">The amount to crop from the right of each dimension.</param>
     /// <param name="vectorActivation">The vector activation function to apply. Defaults to Identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a cropping layer with the specified cropping parameters and a vector activation function.
@@ -209,9 +215,11 @@ public class CroppingLayer<T> : LayerBase<T>
         int[] cropBottom,
         int[] cropLeft,
         int[] cropRight,
-        IVectorActivationFunction<T>? vectorActivation = null)
+        IVectorActivationFunction<T>? vectorActivation = null,
+        IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, cropTop, cropBottom, cropLeft, cropRight), vectorActivation ?? new IdentityActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         _cropTop = cropTop;
         _cropBottom = cropBottom;
         _cropLeft = cropLeft;
