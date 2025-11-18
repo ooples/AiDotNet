@@ -95,12 +95,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// </summary>
     /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The simulated annealing options, or null to use default options.</param>
-    /// <param name="predictionOptions">The prediction statistics options, or null to use default options.</param>
-    /// <param name="modelOptions">The model statistics options, or null to use default options.</param>
-    /// <param name="modelEvaluator">The model evaluator, or null to use the default evaluator.</param>
-    /// <param name="fitDetector">The fit detector, or null to use the default detector.</param>
-    /// <param name="fitnessCalculator">The fitness calculator, or null to use the default calculator.</param>
-    /// <param name="modelCache">The model cache, or null to use the default cache.</param>
+    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new Simulated Annealing optimizer with the specified options and components.
@@ -120,8 +115,9 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// </remarks>
     public SimulatedAnnealingOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        SimulatedAnnealingOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        SimulatedAnnealingOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
+        : base(model, options ?? new(), engine)
     {
         _random = new Random();
         _saOptions = options ?? new SimulatedAnnealingOptions<T, TInput, TOutput>();
