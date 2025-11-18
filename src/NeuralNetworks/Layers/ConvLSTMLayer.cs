@@ -65,6 +65,11 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     private readonly SigmoidActivation<T> _sigmoidActivation = new();
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+    private IEngine _engine;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -123,9 +128,10 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// looking for 32 different types of weather patterns.
     /// </para>
     /// </remarks>
-    public ConvLSTMLayer(int[] inputShape, int kernelSize, int filters, int padding = 1, int strides = 1, IActivationFunction<T>? activationFunction = null)
+    public ConvLSTMLayer(int[] inputShape, int kernelSize, int filters, int padding = 1, int strides = 1, IActivationFunction<T>? activationFunction = null, IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, kernelSize, filters, padding, strides), activationFunction ?? new TanhActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         _kernelSize = kernelSize;
         _filters = filters;
         _padding = padding;
@@ -192,9 +198,10 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// speed is important, or if you have a specific vector activation function you want to use.
     /// </para>
     /// </remarks>
-    public ConvLSTMLayer(int[] inputShape, int kernelSize, int filters, int padding = 1, int strides = 1, IVectorActivationFunction<T>? vectorActivationFunction = null)
+    public ConvLSTMLayer(int[] inputShape, int kernelSize, int filters, int padding = 1, int strides = 1, IVectorActivationFunction<T>? vectorActivationFunction = null, IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, kernelSize, filters, padding, strides), vectorActivationFunction ?? new TanhActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         _kernelSize = kernelSize;
         _filters = filters;
         _padding = padding;
