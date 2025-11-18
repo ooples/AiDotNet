@@ -234,10 +234,23 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
             _lastMean[i] = sample.Mean();
             _lastStd[i] = NumOps.Sqrt(NumOps.Add(sample.Variance(), _epsilon));
 
+            // === Vectorized Normalization and Scale/Shift using IEngine (Phase B: US-GPU-015) ===
+            var normalizedRow = new Vector<T>(featureSize);
             for (int j = 0; j < featureSize; j++)
             {
-                _lastNormalized[i, j] = NumOps.Divide(NumOps.Subtract(input[i, j], _lastMean[i]), _lastStd[i]);
-                output[i, j] = NumOps.Add(NumOps.Multiply(_lastNormalized[i, j], _gamma[j]), _beta[j]);
+                // normalized = (input - mean) / std
+                normalizedRow[j] = NumOps.Divide(NumOps.Subtract(input[i, j], _lastMean[i]), _lastStd[i]);
+                _lastNormalized[i, j] = normalizedRow[j];
+            }
+
+            // Vectorized: scaled = normalized * gamma
+            var scaled = (Vector<T>)_engine.Multiply(normalizedRow, _gamma);
+            // Vectorized: output = scaled + beta
+            var outputRow = (Vector<T>)_engine.Add(scaled, _beta);
+
+            for (int j = 0; j < featureSize; j++)
+            {
+                output[i, j] = outputRow[j];
             }
         }
 

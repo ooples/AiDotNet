@@ -283,12 +283,24 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             _lastNormalized = Normalize(input, _runningMean, _runningVariance);
         }
 
-        // Scale and shift
+        // === Vectorized Scale and Shift using IEngine (Phase B: US-GPU-015) ===
+        // output = normalized * gamma + beta (per feature, broadcast across batch)
         for (int i = 0; i < batchSize; i++)
         {
+            var normalizedRow = new Vector<T>(featureSize);
             for (int j = 0; j < featureSize; j++)
             {
-                output[i, j] = NumOps.Add(NumOps.Multiply(_lastNormalized[i, j], _gamma[j]), _beta[j]);
+                normalizedRow[j] = _lastNormalized[i, j];
+            }
+
+            // Vectorized: scaled = normalized * gamma
+            var scaled = (Vector<T>)_engine.Multiply(normalizedRow, _gamma);
+            // Vectorized: output = scaled + beta
+            var outputRow = (Vector<T>)_engine.Add(scaled, _beta);
+
+            for (int j = 0; j < featureSize; j++)
+            {
+                output[i, j] = outputRow[j];
             }
         }
 
