@@ -114,8 +114,9 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// </remarks>
     public PowellOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        PowellOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        PowellOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
+        : base(model, options ?? new(), engine)
     {
         _options = options ?? new PowellOptimizerOptions<T, TInput, TOutput>();
         _adaptiveStepSize = NumOps.Zero;
