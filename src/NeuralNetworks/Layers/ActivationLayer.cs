@@ -39,6 +39,11 @@ public class ActivationLayer<T> : LayerBase<T>
     private readonly bool _useVectorActivation;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+    private IEngine _engine;
+
+    /// <summary>
     /// Indicates whether this layer has trainable parameters.
     /// <para>
     /// Always returns false because activation layers don't have parameters to train.
@@ -107,9 +112,10 @@ public class ActivationLayer<T> : LayerBase<T>
     /// - For simple data: [batchSize, features]
     /// </para>
     /// </remarks>
-    public ActivationLayer(int[] inputShape, IActivationFunction<T> activationFunction)
+    public ActivationLayer(int[] inputShape, IActivationFunction<T> activationFunction, IEngine? engine = null)
         : base(inputShape, inputShape, activationFunction)
     {
+        _engine = engine ?? CpuEngine.Instance;
         _useVectorActivation = false;
     }
 
@@ -155,9 +161,10 @@ public class ActivationLayer<T> : LayerBase<T>
     /// processing each value independently.
     /// </para>
     /// </remarks>
-    public ActivationLayer(int[] inputShape, IVectorActivationFunction<T> vectorActivationFunction)
+    public ActivationLayer(int[] inputShape, IVectorActivationFunction<T> vectorActivationFunction, IEngine? engine = null)
         : base(inputShape, inputShape, vectorActivationFunction)
     {
+        _engine = engine ?? CpuEngine.Instance;
         _useVectorActivation = true;
     }
 
