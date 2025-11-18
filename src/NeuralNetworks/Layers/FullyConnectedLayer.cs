@@ -159,22 +159,27 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// used to update the biases during training.
     /// </para>
     /// <para><b>For Beginners:</b> This stores information about how to adjust each bias value.
-    /// 
+    ///
     /// During training:
     /// - The network calculates how each bias contributed to errors
     /// - These gradients show how to adjust the "threshold" of each neuron
     /// - They work just like weight gradients, but for bias values
-    /// 
+    ///
     /// For example:
     /// - If a neuron activates too easily, its bias gradient will be positive
     ///   (suggesting to decrease the bias)
     /// - If a neuron doesn't activate enough, its bias gradient will be negative
     ///   (suggesting to increase the bias)
-    /// 
+    ///
     /// Each output neuron has its own bias gradient that guides its adjustment.
     /// </para>
     /// </remarks>
     private Vector<T>? _biasesGradient;
+
+    /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+    private readonly IEngine _engine;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -235,9 +240,10 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// values that help training converge effectively.
     /// </para>
     /// </remarks>
-    public FullyConnectedLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
+    public FullyConnectedLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null, IEngine? engine = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         _weights = new Matrix<T>(outputSize, inputSize);
         _biases = new Vector<T>(outputSize);
 
@@ -278,9 +284,10 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// which is perfect for classification tasks where outputs represent class probabilities.
     /// </para>
     /// </remarks>
-    public FullyConnectedLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? vectorActivationFunction = null)
+    public FullyConnectedLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? vectorActivationFunction = null, IEngine? engine = null)
         : base([inputSize], [outputSize], vectorActivationFunction ?? new ReLUActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         _weights = new Matrix<T>(outputSize, inputSize);
         _biases = new Vector<T>(outputSize);
 
@@ -464,7 +471,8 @@ public class FullyConnectedLayer<T> : LayerBase<T>
 
             var delta = ApplyActivationDerivative(lastOutputVector, outputGradientVector);
             weightsGradient = weightsGradient.Add(Matrix<T>.OuterProduct(delta, inputVector));
-            biasesGradient = biasesGradient.Add(delta);
+            // === Vectorized Bias Gradient Accumulation using IEngine (Phase B: US-GPU-015) ===
+            biasesGradient = (Vector<T>)_engine.Add(biasesGradient, delta);
 
             var inputGradientVector = _weights.Transpose().Multiply(delta);
             for (int j = 0; j < inputSize; j++)
