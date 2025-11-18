@@ -140,6 +140,11 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     private Vector<T>? _betaGradient;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+    private IEngine _engine;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training mode.
     /// </summary>
     /// <remarks>
@@ -205,9 +210,10 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// - Running statistics (mean and variance) initialized to 0.0 and 1.0
     /// </para>
     /// </remarks>
-    public BatchNormalizationLayer(int featureSize, double epsilon = 1e-5, double momentum = 0.9)
+    public BatchNormalizationLayer(int featureSize, double epsilon = 1e-5, double momentum = 0.9, IEngine? engine = null)
         : base([featureSize], [featureSize])
     {
+        _engine = engine ?? CpuEngine.Instance;
         _epsilon = NumOps.FromDouble(epsilon);
         _momentum = NumOps.FromDouble(momentum);
         _gamma = Vector<T>.CreateDefault(featureSize, NumOps.One);
