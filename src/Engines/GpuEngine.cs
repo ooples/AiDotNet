@@ -8,14 +8,14 @@ namespace AiDotNet.Engines;
 /// <summary>
 /// Delegate for Conv2D GPU kernel with float precision (18 parameters exceeds Action limit).
 /// </summary>
-internal delegate void Conv2DKernelFloat(Index1D index, ArrayView<float> input, ArrayView<float> kernel, ArrayView<float> output,
+internal delegate void Conv2DKernelFloat(AcceleratorStream stream, Index1D index, ArrayView<float> input, ArrayView<float> kernel, ArrayView<float> output,
     int batch, int inChannels, int height, int width, int outChannels,
     int outputHeight, int outputWidth, int kernelHeight, int kernelWidth, int stride, int padding, int dilation);
 
 /// <summary>
 /// Delegate for Conv2D GPU kernel with double precision (18 parameters exceeds Action limit).
 /// </summary>
-internal delegate void Conv2DKernelDouble(Index1D index, ArrayView<double> input, ArrayView<double> kernel, ArrayView<double> output,
+internal delegate void Conv2DKernelDouble(AcceleratorStream stream, Index1D index, ArrayView<double> input, ArrayView<double> kernel, ArrayView<double> output,
     int batch, int inChannels, int height, int width, int outChannels,
     int outputHeight, int outputWidth, int kernelHeight, int kernelWidth, int stride, int padding, int dilation);
 
@@ -151,25 +151,25 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, double, ArrayView2D<double, Stride2D.DenseX>>? _matrixMultiplyScalarKernelDouble;
 
     // Kernel cache for tensor operations - float (Phase B: Epic 3)
-    private readonly Action<AcceleratorStream, Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>? _batchMatMulKernelFloat;
+    private readonly Action<AcceleratorStream, Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int>? _batchMatMulKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorAddKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorSubtractKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorMultiplyKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float, ArrayView<float>>? _tensorMultiplyScalarKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorDivideKernelFloat;
-    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>? _maxPool2DKernelFloat;
-    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>? _avgPool2DKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int>? _maxPool2DKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int>? _avgPool2DKernelFloat;
     private readonly Conv2DKernelFloat? _conv2DKernelFloat;
 
     // Kernel cache for tensor operations - double (Phase B: Epic 3)
-    private readonly Action<AcceleratorStream, Index3D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _batchMatMulKernelDouble;
+    private readonly Action<AcceleratorStream, Index3D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int>? _batchMatMulKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorAddKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorSubtractKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorMultiplyKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, double, ArrayView<double>>? _tensorMultiplyScalarKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorDivideKernelDouble;
-    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>? _maxPool2DKernelDouble;
-    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>? _avgPool2DKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int>? _maxPool2DKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int>? _avgPool2DKernelDouble;
     private readonly Conv2DKernelDouble? _conv2DKernelDouble;
 
     /// <inheritdoc/>
@@ -447,7 +447,7 @@ public class GpuEngine : IEngine, IDisposable
 
                 // Pre-compile kernels for tensor operations - float (Phase B: Epic 3)
                 _batchMatMulKernelFloat = _accelerator.LoadAutoGroupedKernel<
-                    Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>(
+                    Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int>(
                     (index, a, b, result, m, k, n) =>
                     {
                         int batch = index.X;
@@ -471,7 +471,7 @@ public class GpuEngine : IEngine, IDisposable
 
                 // Pre-compile kernels for tensor operations - double (Phase B: Epic 3)
                 _batchMatMulKernelDouble = _accelerator.LoadAutoGroupedKernel<
-                    Index3D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>(
+                    Index3D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int>(
                     (index, a, b, result, m, k, n) =>
                     {
                         int batch = index.X;
@@ -568,7 +568,7 @@ public class GpuEngine : IEngine, IDisposable
                     });
 
                 _avgPool2DKernelFloat = _accelerator.LoadAutoGroupedKernel<
-                    Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>(
+                    Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int>(
                     (index, input, output, batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding) =>
                     {
                         // Convert flat index to 4D coordinates
@@ -603,7 +603,7 @@ public class GpuEngine : IEngine, IDisposable
 
                 // Pre-compile pooling kernels - double (Phase B: Epic 3, US-GPU-012)
                 _maxPool2DKernelDouble = _accelerator.LoadAutoGroupedKernel<
-                    Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>(
+                    Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int>(
                     (index, input, output, batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding) =>
                     {
                         // Convert flat index to 4D coordinates
@@ -636,7 +636,7 @@ public class GpuEngine : IEngine, IDisposable
                     });
 
                 _avgPool2DKernelDouble = _accelerator.LoadAutoGroupedKernel<
-                    Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>(
+                    Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int>(
                     (index, input, output, batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding) =>
                     {
                         // Convert flat index to 4D coordinates
