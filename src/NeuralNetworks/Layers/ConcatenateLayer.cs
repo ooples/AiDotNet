@@ -34,6 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class ConcatenateLayer<T> : LayerBase<T>
 {
+    private IEngine _engine;
     private readonly int _axis;
     private Tensor<T>[]? _lastInputs;
     private Tensor<T>? _lastOutput;
@@ -69,6 +70,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// <param name="inputShapes">The shapes of the input tensors to be concatenated.</param>
     /// <param name="axis">The axis along which to concatenate the inputs.</param>
     /// <param name="activationFunction">The activation function to apply after concatenation. Defaults to identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <exception cref="ArgumentException">Thrown when fewer than two input shapes are provided or when input shapes have different ranks.</exception>
     /// <remarks>
     /// <para>
@@ -89,9 +91,10 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// The default activation is the "identity" function, which doesn't change the values at all.
     /// </para>
     /// </remarks>
-    public ConcatenateLayer(int[][] inputShapes, int axis, IActivationFunction<T>? activationFunction = null)
+    public ConcatenateLayer(int[][] inputShapes, int axis, IActivationFunction<T>? activationFunction = null, IEngine? engine = null)
         : base(inputShapes, CalculateOutputShape(inputShapes, axis), activationFunction ?? new IdentityActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         _axis = axis;
         ValidateInputShapes(inputShapes);
     }
@@ -102,6 +105,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// <param name="inputShapes">The shapes of the input tensors to be concatenated.</param>
     /// <param name="axis">The axis along which to concatenate the inputs.</param>
     /// <param name="vectorActivationFunction">The vector activation function to apply after concatenation. Defaults to identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <exception cref="ArgumentException">Thrown when fewer than two input shapes are provided or when input shapes have different ranks.</exception>
     /// <remarks>
     /// <para>
@@ -121,9 +125,10 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// complex activation patterns that consider the relationships between different outputs.
     /// </para>
     /// </remarks>
-    public ConcatenateLayer(int[][] inputShapes, int axis, IVectorActivationFunction<T>? vectorActivationFunction = null)
+    public ConcatenateLayer(int[][] inputShapes, int axis, IVectorActivationFunction<T>? vectorActivationFunction = null, IEngine? engine = null)
         : base(inputShapes, CalculateOutputShape(inputShapes, axis), vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         _axis = axis;
         ValidateInputShapes(inputShapes);
     }
