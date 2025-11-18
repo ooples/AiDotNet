@@ -187,6 +187,11 @@ public class GRULayer<T> : LayerBase<T>
     private readonly bool _returnSequences;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+    private IEngine _engine;
+
+    /// <summary>
     /// The activation function applied to the candidate hidden state.
     /// </summary>
     /// <remarks>
@@ -343,12 +348,14 @@ public class GRULayer<T> : LayerBase<T>
     /// and you want a 200-dimensional memory, you would use inputSize=100 and hiddenSize=200.
     /// </para>
     /// </remarks>
-    public GRULayer(int inputSize, int hiddenSize, 
+    public GRULayer(int inputSize, int hiddenSize,
                     bool returnSequences = false,
-                    IActivationFunction<T>? activation = null, 
-                    IActivationFunction<T>? recurrentActivation = null)
+                    IActivationFunction<T>? activation = null,
+                    IActivationFunction<T>? recurrentActivation = null,
+                    IEngine? engine = null)
         : base([inputSize], [hiddenSize], activation ?? new TanhActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         _inputSize = inputSize;
         _hiddenSize = hiddenSize;
         _returnSequences = returnSequences;
@@ -395,12 +402,14 @@ public class GRULayer<T> : LayerBase<T>
     /// features interact with each other, rather than treating each feature independently.
     /// </para>
     /// </remarks>
-    public GRULayer(int inputSize, int hiddenSize, 
+    public GRULayer(int inputSize, int hiddenSize,
                     bool returnSequences = false,
-                    IVectorActivationFunction<T>? vectorActivation = null, 
-                    IVectorActivationFunction<T>? vectorRecurrentActivation = null)
+                    IVectorActivationFunction<T>? vectorActivation = null,
+                    IVectorActivationFunction<T>? vectorRecurrentActivation = null,
+                    IEngine? engine = null)
         : base([inputSize], [hiddenSize], vectorActivation ?? new TanhActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         _inputSize = inputSize;
         _hiddenSize = hiddenSize;
         _returnSequences = returnSequences;
