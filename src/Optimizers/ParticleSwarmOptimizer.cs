@@ -60,10 +60,12 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     /// </summary>
     /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The particle swarm optimization options, or null to use default options.</param>
+    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public ParticleSwarmOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        ParticleSwarmOptimizationOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        ParticleSwarmOptimizationOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
+        : base(model, options ?? new(), engine)
     {
         _random = new Random();
         _psoOptions = options ?? new ParticleSwarmOptimizationOptions<T, TInput, TOutput>();
@@ -145,15 +147,13 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
                 
                 // Update velocity
                 UpdateVelocity(velocity, position, personalBestVector, globalBestVector);
-                
-                // Update position
-                for (int j = 0; j < velocity.Length; j++)
-                {
-                    position[j] = NumOps.Add(position[j], velocity[j]);
-                }
-                
+
+                // === Vectorized Position Update using IEngine (Phase B: US-GPU-015) ===
+                // position = position + velocity
+                var newPosition = (Vector<T>)Engine.Add(position, velocity);
+
                 // Update the particle model with new position
-                swarm[i] = swarm[i].WithParameters(position);
+                swarm[i] = swarm[i].WithParameters(newPosition);
                 
                 // Evaluate the updated particle
                 var stepData = EvaluateSolution(swarm[i], inputData);
@@ -202,10 +202,18 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     /// <param name="globalBest">The global best position vector of the swarm.</param>
     private void UpdateVelocity(Vector<T> velocity, Vector<T> position, Vector<T> personalBest, Vector<T> globalBest)
     {
+        // === Partially Vectorized Velocity Update using IEngine (Phase B: US-GPU-015) ===
+        // velocity = inertia * velocity + cognitive * (personalBest - position) + social * (globalBest - position)
+
         var inertia = NumOps.FromDouble(_currentInertia);
         var cognitiveWeight = NumOps.FromDouble(_currentCognitiveWeight);
         var socialWeight = NumOps.FromDouble(_currentSocialWeight);
 
+        // Vectorized position differences
+        var personalDiff = (Vector<T>)Engine.Subtract(personalBest, position);
+        var globalDiff = (Vector<T>)Engine.Subtract(globalBest, position);
+
+        // Element-wise updates with random factors (can't fully vectorize due to per-element randomness)
         for (int i = 0; i < velocity.Length; i++)
         {
             var cognitive = NumOps.Multiply(cognitiveWeight, NumOps.FromDouble(_random.NextDouble()));
@@ -214,8 +222,8 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
             velocity[i] = NumOps.Add(
                 NumOps.Multiply(inertia, velocity[i]),
                 NumOps.Add(
-                    NumOps.Multiply(cognitive, NumOps.Subtract(personalBest[i], position[i])),
-                    NumOps.Multiply(social, NumOps.Subtract(globalBest[i], position[i]))
+                    NumOps.Multiply(cognitive, personalDiff[i]),
+                    NumOps.Multiply(social, globalDiff[i])
                 )
             );
         }
