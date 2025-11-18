@@ -131,6 +131,11 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+    private IEngine _engine;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -189,9 +194,10 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Larger dimensions can capture more information but require more computation and memory.
     /// </para>
     /// </remarks>
-    public EmbeddingLayer(int vocabularySize, int embeddingDimension)
+    public EmbeddingLayer(int vocabularySize, int embeddingDimension, IEngine? engine = null)
         : base([1], [embeddingDimension])
     {
+        _engine = engine ?? CpuEngine.Instance;
         AuxiliaryLossWeight = NumOps.FromDouble(0.0001);
         _lastEmbeddingRegularizationLoss = NumOps.Zero;
 
