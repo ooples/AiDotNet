@@ -45,7 +45,9 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// Initializes a new instance of the ADMMOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the ADMM optimizer.</param>
+    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the ADMM optimizer with its initial configuration.
     /// You can customize various aspects of how it solves the optimization problem, or use default settings.
@@ -53,8 +55,9 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     public ADMMOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        ADMMOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        ADMMOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
+        : base(model, options ?? new(), engine)
     {
         _options = options ?? new ADMMOptimizerOptions<T, TInput, TOutput>();
         _regularization = _options.Regularization;
@@ -145,7 +148,9 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     private IFullModel<T, TInput, TOutput> UpdateX(IFullModel<T, TInput, TOutput> currentSolution, TInput X, TOutput y)
     {
+        // === Partially Vectorized X Update using IEngine (Phase B: US-GPU-015) ===
         // Solve (X^T X + rho I)x = X^T y + rho(z - u)
+
         var matrix = ConversionsHelper.ConvertToMatrix<T, TInput>(X);
         var XTranspose = matrix.Transpose();
         var XTX = XTranspose.Multiply(matrix);
@@ -153,9 +158,13 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var leftSide = XTX.Add(rhoI);
 
         var XTy = XTranspose.Multiply(ConversionsHelper.ConvertToVector<T, TOutput>(y));
-        var zMinusU = _z.Subtract(_u);
-        var rhoZMinusU = zMinusU.Multiply(NumOps.FromDouble(_options.Rho));
+
+        // Vectorized right-hand side computation
+        var zMinusU = (Vector<T>)Engine.Subtract(_z, _u);
+        var rho = NumOps.FromDouble(_options.Rho);
+        var rhoZMinusU = (Vector<T>)Engine.Multiply(zMinusU, rho);
         var rightSide = XTy.Add(rhoZMinusU);
+
         var newCoefficients = MatrixSolutionHelper.SolveLinearSystem(leftSide, rightSide, _options.DecompositionType);
 
         return currentSolution.WithParameters(newCoefficients);
@@ -172,8 +181,12 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     private void UpdateZ(Vector<T> x)
     {
-        var xPlusU = x.Add(_u);
-        var scaledXPlusU = xPlusU.Multiply(NumOps.FromDouble(1.0 / _options.Rho));
+        // === Vectorized Z Update using IEngine (Phase B: US-GPU-015) ===
+        // z = regularize((x + u) / rho)
+
+        var xPlusU = (Vector<T>)Engine.Add(x, _u);
+        var invRho = NumOps.FromDouble(1.0 / _options.Rho);
+        var scaledXPlusU = (Vector<T>)Engine.Multiply(xPlusU, invRho);
         _z = _regularization.Regularize(scaledXPlusU);
     }
 
@@ -188,7 +201,11 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     private void UpdateU(Vector<T> x)
     {
-        _u = _u.Add(x.Subtract(_z));
+        // === Vectorized U Update using IEngine (Phase B: US-GPU-015) ===
+        // u = u + (x - z)
+
+        var xMinusZ = (Vector<T>)Engine.Subtract(x, _z);
+        _u = (Vector<T>)Engine.Add(_u, xMinusZ);
     }
 
     /// <summary>
