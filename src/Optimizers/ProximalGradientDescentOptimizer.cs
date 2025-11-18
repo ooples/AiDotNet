@@ -101,6 +101,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// </summary>
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">The proximal gradient descent optimization options, or null to use default options.</param>
+    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new proximal gradient descent optimizer with the specified options and components.
@@ -120,8 +121,9 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// </remarks>
     public ProximalGradientDescentOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
+        : base(model, options ?? new(), engine)
     {
         _options = options ?? new ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>();
         _regularization = _options.Regularization ?? new NoRegularization<T, TInput, TOutput>();
@@ -235,43 +237,41 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// The step size is determined by the current learning rate.
     /// </para>
     /// <para><b>For Beginners:</b> This method takes one step down the hill while respecting the guardrails.
-    /// 
+    ///
     /// The process has two parts:
     /// 1. Take a step downhill:
     ///    - Look at the gradient to see which way is most downhill
     ///    - Move in that direction by an amount controlled by the learning rate
-    /// 
+    ///
     /// 2. Apply the guardrails:
     ///    - The regularization takes the solution after the gradient step
     ///    - It adjusts the solution to make it satisfy the desired properties
     ///    - For example, it might reduce any extremely large values
-    /// 
+    ///
     /// This combination of steps helps find solutions that both minimize the error and have good properties.
     /// </para>
     /// </remarks>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        // === Vectorized Proximal GD Update using IEngine (Phase B: US-GPU-015) ===
+        // params_new = params - stepSize * gradient
+        // Then apply proximal operator (regularization)
+
         var stepSize = CurrentLearningRate;
         var parameters = currentSolution.GetParameters();
 
         // Save pre-update parameters for reverse updates
-        if (_previousParameters == null || _previousParameters.Length != parameters.Length)
-        {
-            _previousParameters = new Vector<T>(parameters.Length);
-        }
+        _previousParameters = new Vector<T>(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {
             _previousParameters[i] = parameters[i];
         }
 
-        var newCoefficients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            var gradientStep = NumOps.Multiply(gradient[i], stepSize);
-            newCoefficients[i] = NumOps.Subtract(parameters[i], gradientStep);
-        }
+        // Vectorized gradient descent step
+        var gradientStep = (Vector<T>)Engine.Multiply(gradient, stepSize);
+        var newCoefficients = (Vector<T>)Engine.Subtract(parameters, gradientStep);
 
-        // Apply regularization
+        // Apply proximal operator (regularization)
         newCoefficients = _regularization.Regularize(newCoefficients);
 
         return currentSolution.WithParameters(newCoefficients);
