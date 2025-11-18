@@ -437,6 +437,11 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastFeedForwardOutput;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+    private IEngine _engine;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -487,31 +492,33 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// transformer paper and work well for many language tasks.
     /// </para>
     /// </remarks>
-    public TransformerDecoderLayer(int embeddingSize = 512, 
-        int numHeads = 8, 
-        int feedForwardDim = 2048, 
+    public TransformerDecoderLayer(int embeddingSize = 512,
+        int numHeads = 8,
+        int feedForwardDim = 2048,
         int sequenceLength = 512,
-        IActivationFunction<T>? ffnActivation = null)
+        IActivationFunction<T>? ffnActivation = null,
+        IEngine? engine = null)
         : base([embeddingSize], [embeddingSize])
     {
+        _engine = engine ?? CpuEngine.Instance;
         _embeddingSize = embeddingSize;
         _numHeads = numHeads;
         _feedForwardDim = feedForwardDim;
         _sequenceLength = sequenceLength;
 
         var activation = ffnActivation ?? new GELUActivation<T>();
-         
+
         // Self-attention layer (no activation)
-        _selfAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation);
-        _norm1 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _selfAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation, _engine);
+        _norm1 = new LayerNormalizationLayer<T>(_embeddingSize, engine: _engine);
 
         // Cross-attention layer (no activation)
-        _crossAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation);
-        _norm2 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _crossAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation, _engine);
+        _norm2 = new LayerNormalizationLayer<T>(_embeddingSize, engine: _engine);
 
         // Feed-forward layer (with activation)
-        _feedForward = new FeedForwardLayer<T>(_embeddingSize, _feedForwardDim, activation);
-        _norm3 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _feedForward = new FeedForwardLayer<T>(_embeddingSize, _feedForwardDim, activation, _engine);
+        _norm3 = new LayerNormalizationLayer<T>(_embeddingSize, engine: _engine);
 
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
@@ -542,13 +549,15 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// how different features relate to each other, rather than treating each feature independently.
     /// </para>
     /// </remarks>
-    public TransformerDecoderLayer(int embeddingSize = 512, 
-        int numHeads = 8, 
-        int feedForwardDim = 2048, 
+    public TransformerDecoderLayer(int embeddingSize = 512,
+        int numHeads = 8,
+        int feedForwardDim = 2048,
         int sequenceLength = 512,
-        IVectorActivationFunction<T>? ffnVectorActivation = null)
+        IVectorActivationFunction<T>? ffnVectorActivation = null,
+        IEngine? engine = null)
         : base([embeddingSize], [embeddingSize])
     {
+        _engine = engine ?? CpuEngine.Instance;
         _embeddingSize = embeddingSize;
         _numHeads = numHeads;
         _feedForwardDim = feedForwardDim;
@@ -557,16 +566,16 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var activation = ffnVectorActivation ?? new GELUActivation<T>();
 
         // Self-attention layer (no activation)
-        _selfAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation);
-        _norm1 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _selfAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation, _engine);
+        _norm1 = new LayerNormalizationLayer<T>(_embeddingSize, engine: _engine);
 
         // Cross-attention layer (no activation)
-        _crossAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation);
-        _norm2 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _crossAttention = new MultiHeadAttentionLayer<T>(_sequenceLength, _embeddingSize, _numHeads, activation, _engine);
+        _norm2 = new LayerNormalizationLayer<T>(_embeddingSize, engine: _engine);
 
         // Feed-forward layer (with vector activation)
-        _feedForward = new FeedForwardLayer<T>(_embeddingSize, _feedForwardDim, activation);
-        _norm3 = new LayerNormalizationLayer<T>(_embeddingSize);
+        _feedForward = new FeedForwardLayer<T>(_embeddingSize, _feedForwardDim, activation, _engine);
+        _norm3 = new LayerNormalizationLayer<T>(_embeddingSize, engine: _engine);
 
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
