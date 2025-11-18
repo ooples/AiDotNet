@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.NeuralNetworks.Layers.Graph;
 
 /// <summary>
 /// Represents a Graph Convolutional Network (GCN) layer for processing graph-structured data.
@@ -23,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -67,6 +67,16 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Gets the number of input features per node.
+    /// </summary>
+    public int InputFeatures { get; private set; }
+
+    /// <summary>
+    /// Gets the number of output features per node.
+    /// </summary>
+    public int OutputFeatures { get; private set; }
 
     /// <summary>
     /// Stores the last computed graph smoothness loss for diagnostic purposes.
@@ -274,6 +284,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
+        InputFeatures = inputFeatures;
+        OutputFeatures = outputFeatures;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastGraphSmoothnessLoss = NumOps.Zero;
 
@@ -310,6 +322,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([inputFeatures], [outputFeatures], vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        InputFeatures = inputFeatures;
+        OutputFeatures = outputFeatures;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastGraphSmoothnessLoss = NumOps.Zero;
 
@@ -442,6 +456,28 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             _edgesExtracted = true;
         }
+    }
+
+    /// <summary>
+    /// Gets the adjacency matrix currently being used by this layer.
+    /// </summary>
+    /// <returns>The adjacency matrix tensor, or null if not set.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves the adjacency matrix that was set using SetAdjacencyMatrix.
+    /// It may return null if the adjacency matrix has not been set yet.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method lets you check what graph structure the layer is using.
+    ///
+    /// This can be useful for:
+    /// - Verifying the correct graph was loaded
+    /// - Debugging graph connectivity issues
+    /// - Visualizing the graph structure
+    /// </para>
+    /// </remarks>
+    public Tensor<T>? GetAdjacencyMatrix()
+    {
+        return _adjacencyMatrix;
     }
 
     /// <summary>
