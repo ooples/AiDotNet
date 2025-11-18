@@ -225,160 +225,160 @@ public class GpuEngine : IEngine, IDisposable
                 // Pre-compile all kernels for float operations (Phase B: US-GPU-001)
                 Console.WriteLine("[GpuEngine] Pre-compiling GPU kernels...");
 
-                _addKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _addKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
                     (index, a, b, result) => result[index] = a[index] + b[index]);
 
-                _subtractKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _subtractKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
                     (index, a, b, result) => result[index] = a[index] - b[index]);
 
-                _multiplyKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _multiplyKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
                     (index, a, b, result) => result[index] = a[index] * b[index]);
 
-                _multiplyScalarKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _multiplyScalarKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, float, ArrayView<float>>(
                     (index, vec, scalar, result) => result[index] = vec[index] * scalar);
 
-                _divideKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _divideKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
                     (index, a, b, result) => result[index] = a[index] / b[index]);
 
-                _divideScalarKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _divideScalarKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, float, ArrayView<float>>(
                     (index, vec, scalar, result) => result[index] = vec[index] / scalar);
 
-                _sqrtKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _sqrtKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
                     (index, vec, result) => result[index] = XMath.Sqrt(vec[index]));
 
-                _powerKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _powerKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, float, ArrayView<float>>(
                     (index, vec, exp, result) => result[index] = XMath.Pow(vec[index], exp));
 
-                _maxKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _maxKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
                     (index, a, b, result) => result[index] = XMath.Max(a[index], b[index]));
 
-                _minKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _minKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
                     (index, a, b, result) => result[index] = XMath.Min(a[index], b[index]));
 
-                _absKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _absKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
                     (index, vec, result) => result[index] = XMath.Abs(vec[index]));
 
-                _expKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _expKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
                     (index, vec, result) => result[index] = XMath.Exp(vec[index]));
 
-                _logKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _logKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
                     (index, vec, result) => result[index] = XMath.Log(vec[index]));
 
-                _signKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _signKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
                     (index, vec, result) => result[index] = vec[index] > 0 ? 1.0f : (vec[index] < 0 ? -1.0f : 0.0f));
 
                 Console.WriteLine("[GpuEngine] Float kernels pre-compiled");
 
                 // Pre-compile kernels for double operations (Phase B: US-GPU-005)
-                _addKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _addKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
                     (index, a, b, result) => result[index] = a[index] + b[index]);
-                _subtractKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _subtractKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
                     (index, a, b, result) => result[index] = a[index] - b[index]);
-                _multiplyKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _multiplyKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
                     (index, a, b, result) => result[index] = a[index] * b[index]);
-                _multiplyScalarKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _multiplyScalarKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, double, ArrayView<double>>(
                     (index, vec, scalar, result) => result[index] = vec[index] * scalar);
-                _divideKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _divideKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
                     (index, a, b, result) => result[index] = a[index] / b[index]);
-                _divideScalarKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _divideScalarKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, double, ArrayView<double>>(
                     (index, vec, scalar, result) => result[index] = vec[index] / scalar);
-                _sqrtKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _sqrtKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
                     (index, vec, result) => result[index] = XMath.Sqrt(vec[index]));
-                _powerKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _powerKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, double, ArrayView<double>>(
                     (index, vec, exp, result) => result[index] = XMath.Pow(vec[index], exp));
 
-                _maxKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _maxKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
                     (index, a, b, result) => result[index] = XMath.Max(a[index], b[index]));
 
-                _minKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _minKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
                     (index, a, b, result) => result[index] = XMath.Min(a[index], b[index]));
 
-                _absKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _absKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
                     (index, vec, result) => result[index] = XMath.Abs(vec[index]));
 
-                _expKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _expKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
                     (index, vec, result) => result[index] = XMath.Exp(vec[index]));
 
-                _logKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _logKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
                     (index, vec, result) => result[index] = XMath.Log(vec[index]));
 
-                _signKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _signKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
                     (index, vec, result) => result[index] = vec[index] > 0 ? 1.0 : (vec[index] < 0 ? -1.0 : 0.0));
 
                 Console.WriteLine("[GpuEngine] Double kernels pre-compiled");
 
                 // Pre-compile kernels for int operations (Phase B: US-GPU-005)
-                _addKernelInt = _accelerator.LoadAutoGroupedStreamKernel<
+                _addKernelInt = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>(
                     (index, a, b, result) => result[index] = a[index] + b[index]);
-                _subtractKernelInt = _accelerator.LoadAutoGroupedStreamKernel<
+                _subtractKernelInt = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>(
                     (index, a, b, result) => result[index] = a[index] - b[index]);
-                _multiplyKernelInt = _accelerator.LoadAutoGroupedStreamKernel<
+                _multiplyKernelInt = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>(
                     (index, a, b, result) => result[index] = a[index] * b[index]);
-                _multiplyScalarKernelInt = _accelerator.LoadAutoGroupedStreamKernel<
+                _multiplyScalarKernelInt = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<int>, int, ArrayView<int>>(
                     (index, vec, scalar, result) => result[index] = vec[index] * scalar);
-                _divideKernelInt = _accelerator.LoadAutoGroupedStreamKernel<
+                _divideKernelInt = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>(
                     (index, a, b, result) => result[index] = a[index] / b[index]);
-                _divideScalarKernelInt = _accelerator.LoadAutoGroupedStreamKernel<
+                _divideScalarKernelInt = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<int>, int, ArrayView<int>>(
                     (index, vec, scalar, result) => result[index] = vec[index] / scalar);
                 Console.WriteLine("[GpuEngine] Int kernels pre-compiled");
 
                 // Pre-compile kernels for long operations (Phase B: US-GPU-005)
-                _addKernelLong = _accelerator.LoadAutoGroupedStreamKernel<
+                _addKernelLong = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>(
                     (index, a, b, result) => result[index] = a[index] + b[index]);
-                _subtractKernelLong = _accelerator.LoadAutoGroupedStreamKernel<
+                _subtractKernelLong = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>(
                     (index, a, b, result) => result[index] = a[index] - b[index]);
-                _multiplyKernelLong = _accelerator.LoadAutoGroupedStreamKernel<
+                _multiplyKernelLong = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>(
                     (index, a, b, result) => result[index] = a[index] * b[index]);
-                _multiplyScalarKernelLong = _accelerator.LoadAutoGroupedStreamKernel<
+                _multiplyScalarKernelLong = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<long>, long, ArrayView<long>>(
                     (index, vec, scalar, result) => result[index] = vec[index] * scalar);
-                _divideKernelLong = _accelerator.LoadAutoGroupedStreamKernel<
+                _divideKernelLong = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>(
                     (index, a, b, result) => result[index] = a[index] / b[index]);
-                _divideScalarKernelLong = _accelerator.LoadAutoGroupedStreamKernel<
+                _divideScalarKernelLong = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<long>, long, ArrayView<long>>(
                     (index, vec, scalar, result) => result[index] = vec[index] / scalar);
                 Console.WriteLine("[GpuEngine] Long kernels pre-compiled");
 
                 // Pre-compile kernels for matrix operations - float (Phase B: Epic 2)
-                _matrixMultiplyKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _matrixMultiplyKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, int>(
                     (index, a, b, result, k) =>
                     {
@@ -388,7 +388,7 @@ public class GpuEngine : IEngine, IDisposable
                         result[index] = sum;
                     });
 
-                _matrixVectorMultiplyKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _matrixVectorMultiplyKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, ArrayView<float>, int, int>(
                     (index, matrix, vector, result, rows, cols) =>
                     {
@@ -398,21 +398,21 @@ public class GpuEngine : IEngine, IDisposable
                         result[index] = sum;
                     });
 
-                _matrixTransposeKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _matrixTransposeKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>>(
                     (index, input, output) => output[index.Y, index.X] = input[index]);
 
-                _matrixAddKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _matrixAddKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>>(
                     (index, a, b, result) => result[index] = a[index] + b[index]);
 
-                _matrixMultiplyScalarKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _matrixMultiplyScalarKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView2D<float, Stride2D.DenseX>, float, ArrayView2D<float, Stride2D.DenseX>>(
                     (index, matrix, scalar, result) => result[index] = matrix[index] * scalar);
                 Console.WriteLine("[GpuEngine] Float matrix kernels pre-compiled");
 
                 // Pre-compile kernels for matrix operations - double (Phase B: Epic 2)
-                _matrixMultiplyKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _matrixMultiplyKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, int>(
                     (index, a, b, result, k) =>
                     {
@@ -422,7 +422,7 @@ public class GpuEngine : IEngine, IDisposable
                         result[index] = sum;
                     });
 
-                _matrixVectorMultiplyKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _matrixVectorMultiplyKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, ArrayView<double>, int, int>(
                     (index, matrix, vector, result, rows, cols) =>
                     {
@@ -432,21 +432,21 @@ public class GpuEngine : IEngine, IDisposable
                         result[index] = sum;
                     });
 
-                _matrixTransposeKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _matrixTransposeKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>(
                     (index, input, output) => output[index.Y, index.X] = input[index]);
 
-                _matrixAddKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _matrixAddKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>(
                     (index, a, b, result) => result[index] = a[index] + b[index]);
 
-                _matrixMultiplyScalarKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _matrixMultiplyScalarKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView2D<double, Stride2D.DenseX>, double, ArrayView2D<double, Stride2D.DenseX>>(
                     (index, matrix, scalar, result) => result[index] = matrix[index] * scalar);
                 Console.WriteLine("[GpuEngine] Double matrix kernels pre-compiled");
 
                 // Pre-compile kernels for tensor operations - float (Phase B: Epic 3)
-                _batchMatMulKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _batchMatMulKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>(
                     (index, a, b, result, m, k, n) =>
                     {
@@ -470,7 +470,7 @@ public class GpuEngine : IEngine, IDisposable
                     });
 
                 // Pre-compile kernels for tensor operations - double (Phase B: Epic 3)
-                _batchMatMulKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _batchMatMulKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index3D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>(
                     (index, a, b, result, m, k, n) =>
                     {
@@ -492,49 +492,49 @@ public class GpuEngine : IEngine, IDisposable
                     });
 
                 // Pre-compile tensor element-wise kernels - float (Phase B: Epic 3, US-GPU-014)
-                _tensorAddKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _tensorAddKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
                     (index, a, b, result) => result[index] = a[index] + b[index]);
 
-                _tensorSubtractKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _tensorSubtractKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
                     (index, a, b, result) => result[index] = a[index] - b[index]);
 
-                _tensorMultiplyKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _tensorMultiplyKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
                     (index, a, b, result) => result[index] = a[index] * b[index]);
 
-                _tensorMultiplyScalarKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _tensorMultiplyScalarKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, float, ArrayView<float>>(
                     (index, tensor, scalar, result) => result[index] = tensor[index] * scalar);
 
-                _tensorDivideKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _tensorDivideKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
                     (index, a, b, result) => result[index] = a[index] / b[index]);
 
                 // Pre-compile tensor element-wise kernels - double (Phase B: Epic 3, US-GPU-014)
-                _tensorAddKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _tensorAddKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
                     (index, a, b, result) => result[index] = a[index] + b[index]);
 
-                _tensorSubtractKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _tensorSubtractKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
                     (index, a, b, result) => result[index] = a[index] - b[index]);
 
-                _tensorMultiplyKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _tensorMultiplyKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
                     (index, a, b, result) => result[index] = a[index] * b[index]);
 
-                _tensorMultiplyScalarKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _tensorMultiplyScalarKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, double, ArrayView<double>>(
                     (index, tensor, scalar, result) => result[index] = tensor[index] * scalar);
 
-                _tensorDivideKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _tensorDivideKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
                     (index, a, b, result) => result[index] = a[index] / b[index]);
 
                 // Pre-compile pooling kernels - float (Phase B: Epic 3, US-GPU-012)
-                _maxPool2DKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _maxPool2DKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>(
                     (index, input, output, batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding) =>
                     {
@@ -567,7 +567,7 @@ public class GpuEngine : IEngine, IDisposable
                         output[index] = maxVal;
                     });
 
-                _avgPool2DKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _avgPool2DKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>(
                     (index, input, output, batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding) =>
                     {
@@ -602,7 +602,7 @@ public class GpuEngine : IEngine, IDisposable
                     });
 
                 // Pre-compile pooling kernels - double (Phase B: Epic 3, US-GPU-012)
-                _maxPool2DKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _maxPool2DKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>(
                     (index, input, output, batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding) =>
                     {
@@ -635,7 +635,7 @@ public class GpuEngine : IEngine, IDisposable
                         output[index] = maxVal;
                     });
 
-                _avgPool2DKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _avgPool2DKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>(
                     (index, input, output, batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding) =>
                     {
@@ -670,7 +670,7 @@ public class GpuEngine : IEngine, IDisposable
                     });
 
                 // Pre-compile Conv2D kernels - float (Phase B: Epic 3, US-GPU-011)
-                _conv2DKernelFloat = _accelerator.LoadAutoGroupedStreamKernel<
+                _conv2DKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>,
                     int, int, int, int, int, int, int, int, int, int, int, int, int, int>(
                     (index, input, kernel, output, batch, inChannels, height, width, outChannels,
@@ -711,7 +711,7 @@ public class GpuEngine : IEngine, IDisposable
                     });
 
                 // Pre-compile Conv2D kernels - double (Phase B: Epic 3, US-GPU-011)
-                _conv2DKernelDouble = _accelerator.LoadAutoGroupedStreamKernel<
+                _conv2DKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>,
                     int, int, int, int, int, int, int, int, int, int, int, int, int, int>(
                     (index, input, kernel, output, batch, inChannels, height, width, outChannels,
@@ -1912,9 +1912,9 @@ public class GpuEngine : IEngine, IDisposable
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
                 // Create 2D views
-                var viewA = gpuA.ViewAs2DView<Stride2D.DenseX>(new Index2D(m, k));
-                var viewB = gpuB.ViewAs2DView<Stride2D.DenseX>(new Index2D(k, n));
-                var viewResult = gpuResult.ViewAs2DView<Stride2D.DenseX>(new Index2D(m, n));
+                var viewA = gpuA.As2DView<Stride2D.DenseX>(new Index2D(m, k));
+                var viewB = gpuB.As2DView<Stride2D.DenseX>(new Index2D(k, n));
+                var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(m, n));
 
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
@@ -1976,7 +1976,7 @@ public class GpuEngine : IEngine, IDisposable
                 gpuMatrix.CopyFromCPU(matrix.AsSpan());
                 gpuVector.View.CopyFromCPU(vector.AsSpan());
 
-                var viewMatrix = gpuMatrix.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 _matrixVectorMultiplyKernelFloat!(rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
@@ -2018,8 +2018,8 @@ public class GpuEngine : IEngine, IDisposable
             {
                 gpuInput.View.CopyFromCPU(matrix.AsSpan());
 
-                var viewInput = gpuInput.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewOutput = gpuOutput.ViewAs2DView<Stride2D.DenseX>(new Index2D(cols, rows));
+                var viewInput = gpuInput.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewOutput = gpuOutput.As2DView<Stride2D.DenseX>(new Index2D(cols, rows));
 
                 _matrixTransposeKernelFloat!(new Index2D(rows, cols), viewInput, viewOutput);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2068,9 +2068,9 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                var viewA = gpuA.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewB = gpuB.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewResult = gpuResult.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewA = gpuA.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewB = gpuB.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
                 _matrixAddKernelFloat!(new Index2D(rows, cols), viewA, viewB, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2113,8 +2113,8 @@ public class GpuEngine : IEngine, IDisposable
             {
                 gpuMatrix.CopyFromCPU(matrix.AsSpan());
 
-                var viewMatrix = gpuMatrix.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewResult = gpuResult.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
                 _matrixMultiplyScalarKernelFloat!(new Index2D(rows, cols), viewMatrix, scalar, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2167,9 +2167,9 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                var viewA = gpuA.ViewAs2DView<Stride2D.DenseX>(new Index2D(m, k));
-                var viewB = gpuB.ViewAs2DView<Stride2D.DenseX>(new Index2D(k, n));
-                var viewResult = gpuResult.ViewAs2DView<Stride2D.DenseX>(new Index2D(m, n));
+                var viewA = gpuA.As2DView<Stride2D.DenseX>(new Index2D(m, k));
+                var viewB = gpuB.As2DView<Stride2D.DenseX>(new Index2D(k, n));
+                var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(m, n));
 
                 _matrixMultiplyKernelDouble!(new Index2D(m, n), viewA, viewB, viewResult, k);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2220,7 +2220,7 @@ public class GpuEngine : IEngine, IDisposable
                 gpuMatrix.CopyFromCPU(matrix.AsSpan());
                 gpuVector.View.CopyFromCPU(vector.AsSpan());
 
-                var viewMatrix = gpuMatrix.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 _matrixVectorMultiplyKernelDouble!(rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
@@ -2262,8 +2262,8 @@ public class GpuEngine : IEngine, IDisposable
             {
                 gpuInput.View.CopyFromCPU(matrix.AsSpan());
 
-                var viewInput = gpuInput.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewOutput = gpuOutput.ViewAs2DView<Stride2D.DenseX>(new Index2D(cols, rows));
+                var viewInput = gpuInput.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewOutput = gpuOutput.As2DView<Stride2D.DenseX>(new Index2D(cols, rows));
 
                 _matrixTransposeKernelDouble!(new Index2D(rows, cols), viewInput, viewOutput);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2312,9 +2312,9 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                var viewA = gpuA.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewB = gpuB.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewResult = gpuResult.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewA = gpuA.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewB = gpuB.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
                 _matrixAddKernelDouble!(new Index2D(rows, cols), viewA, viewB, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2357,8 +2357,8 @@ public class GpuEngine : IEngine, IDisposable
             {
                 gpuMatrix.CopyFromCPU(matrix.AsSpan());
 
-                var viewMatrix = gpuMatrix.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewResult = gpuResult.ViewAs2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
                 _matrixMultiplyScalarKernelDouble!(new Index2D(rows, cols), viewMatrix, scalar, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
