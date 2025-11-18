@@ -44,13 +44,7 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// </summary>
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the Coordinate Descent algorithm.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
+    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This constructor sets up the Coordinate Descent optimizer with its initial configuration.
     /// You can customize various aspects of how it works, or use default settings.
@@ -58,8 +52,9 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// </remarks>
     public CoordinateDescentOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        CoordinateDescentOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        CoordinateDescentOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
+        : base(model, options ?? new(), engine)
     {
         _options = options ?? new CoordinateDescentOptimizerOptions<T, TInput, TOutput>();
         _learningRates = Vector<T>.Empty();
@@ -223,25 +218,42 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// </remarks>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
+        // === Vectorized Adaptive Parameter Update using IEngine (Phase B: US-GPU-015) ===
+        // All learning rates and momentums updated in parallel
+
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
         var improvement = NumOps.Subtract(currentStepData.FitnessScore, previousStepData.FitnessScore);
 
+        if (NumOps.GreaterThan(improvement, NumOps.Zero))
+        {
+            // Improvement: increase learning rates and momentums
+            var lrIncreaseFactor = NumOps.Add(NumOps.One, NumOps.FromDouble(_options.LearningRateIncreaseRate));
+            var momentumIncreaseFactor = NumOps.Add(NumOps.One, NumOps.FromDouble(_options.MomentumIncreaseRate));
+
+            _learningRates = (Vector<T>)Engine.Multiply(_learningRates, lrIncreaseFactor);
+            _momentums = (Vector<T>)Engine.Multiply(_momentums, momentumIncreaseFactor);
+        }
+        else
+        {
+            // No improvement: decrease learning rates and momentums
+            var lrDecreaseFactor = NumOps.Subtract(NumOps.One, NumOps.FromDouble(_options.LearningRateDecreaseRate));
+            var momentumDecreaseFactor = NumOps.Subtract(NumOps.One, NumOps.FromDouble(_options.MomentumDecreaseRate));
+
+            _learningRates = (Vector<T>)Engine.Multiply(_learningRates, lrDecreaseFactor);
+            _momentums = (Vector<T>)Engine.Multiply(_momentums, momentumDecreaseFactor);
+        }
+
+        // Clamp values to configured ranges (per-element still needed for now)
+        var minLr = NumOps.FromDouble(_options.MinLearningRate);
+        var maxLr = NumOps.FromDouble(_options.MaxLearningRate);
+        var minMom = NumOps.FromDouble(_options.MinMomentum);
+        var maxMom = NumOps.FromDouble(_options.MaxMomentum);
+
         for (int i = 0; i < _learningRates.Length; i++)
         {
-            if (NumOps.GreaterThan(improvement, NumOps.Zero))
-            {
-                _learningRates[i] = NumOps.Multiply(_learningRates[i], NumOps.Add(NumOps.One, NumOps.FromDouble(_options.LearningRateIncreaseRate)));
-                _momentums[i] = NumOps.Multiply(_momentums[i], NumOps.Add(NumOps.One, NumOps.FromDouble(_options.MomentumIncreaseRate)));
-            }
-            else
-            {
-                _learningRates[i] = NumOps.Multiply(_learningRates[i], NumOps.Subtract(NumOps.One, NumOps.FromDouble(_options.LearningRateDecreaseRate)));
-                _momentums[i] = NumOps.Multiply(_momentums[i], NumOps.Subtract(NumOps.One, NumOps.FromDouble(_options.MomentumDecreaseRate)));
-            }
-
-            _learningRates[i] = MathHelper.Clamp(_learningRates[i], NumOps.FromDouble(_options.MinLearningRate), NumOps.FromDouble(_options.MaxLearningRate));
-            _momentums[i] = MathHelper.Clamp(_momentums[i], NumOps.FromDouble(_options.MinMomentum), NumOps.FromDouble(_options.MaxMomentum));
+            _learningRates[i] = MathHelper.Clamp(_learningRates[i], minLr, maxLr);
+            _momentums[i] = MathHelper.Clamp(_momentums[i], minMom, maxMom);
         }
     }
 
