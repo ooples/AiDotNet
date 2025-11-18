@@ -38,6 +38,11 @@ public class BidirectionalLayer<T> : LayerBase<T>
     private Tensor<T>? _lastBackwardOutput;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+    private IEngine _engine;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -87,11 +92,13 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public BidirectionalLayer(
-        LayerBase<T> innerLayer, 
-        bool mergeMode = true, 
-        IActivationFunction<T>? activationFunction = null)
+        LayerBase<T> innerLayer,
+        bool mergeMode = true,
+        IActivationFunction<T>? activationFunction = null,
+        IEngine? engine = null)
         : base(innerLayer.GetInputShape(), CalculateOutputShape(innerLayer.GetOutputShape(), mergeMode), activationFunction ?? new ReLUActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         _forwardLayer = innerLayer;
         _backwardLayer = innerLayer.Clone();
         _mergeMode = mergeMode;
@@ -122,11 +129,13 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public BidirectionalLayer(
-        LayerBase<T> innerLayer, 
-        bool mergeMode = true, 
-        IVectorActivationFunction<T>? vectorActivationFunction = null)
+        LayerBase<T> innerLayer,
+        bool mergeMode = true,
+        IVectorActivationFunction<T>? vectorActivationFunction = null,
+        IEngine? engine = null)
         : base(innerLayer.GetInputShape(), CalculateOutputShape(innerLayer.GetOutputShape(), mergeMode), vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        _engine = engine ?? CpuEngine.Instance;
         _forwardLayer = innerLayer;
         _backwardLayer = innerLayer.Clone();
         _mergeMode = mergeMode;
