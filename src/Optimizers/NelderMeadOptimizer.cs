@@ -233,25 +233,22 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <returns>A symbolic model representing the centroid of the simplex.</returns>
     private IFullModel<T, TInput, TOutput> CalculateCentroid(List<IFullModel<T, TInput, TOutput>> simplex, int n)
     {
-        // Use the first model as a template for creating the new model
+        // === Vectorized Centroid Calculation using IEngine (Phase B: US-GPU-015) ===
+        // centroid = sum(simplex points) / n
+
         var templateModel = simplex[0];
         var centroidCoefficients = new Vector<T>(n);
-    
-        // Calculate the sum of all parameters
+
+        // Sum all parameters vectorized
         for (int i = 0; i < n; i++)
         {
-            for (int j = 0; j < n; j++)
-            {
-                centroidCoefficients[j] = NumOps.Add(centroidCoefficients[j], simplex[i].GetParameters()[j]);
-            }
+            centroidCoefficients = (Vector<T>)Engine.Add(centroidCoefficients, simplex[i].GetParameters());
         }
-    
-        // Divide by n to get the average
-        for (int j = 0; j < n; j++)
-        {
-            centroidCoefficients[j] = NumOps.Divide(centroidCoefficients[j], NumOps.FromDouble(n));
-        }
-    
+
+        // Vectorized division by n to get the average
+        var nScalar = NumOps.FromDouble(n);
+        centroidCoefficients = (Vector<T>)Engine.Divide(centroidCoefficients, nScalar);
+
         // Create a new model with the centroid parameters using WithParameters
         return templateModel.WithParameters(centroidCoefficients);
     }
@@ -358,17 +355,35 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <returns>A new symbolic model resulting from the vector operation.</returns>
     private IFullModel<T, TInput, TOutput> PerformVectorOperation(IFullModel<T, TInput, TOutput> a, IFullModel<T, TInput, TOutput> b, T factor, Func<T, T, T, T> operation)
     {
-        var parameters = a.GetParameters();
-        var newCoefficients = new Vector<T>(parameters.Length);
-    
-        // Apply the operation to each parameter
-        for (int i = 0; i < parameters.Length; i++)
+        // === Vectorized Vector Operation using IEngine (Phase B: US-GPU-015) ===
+        // Most Nelder-Mead operations follow pattern: a + factor * (a - b) or a + factor * (b - a)
+        // Vectorizing the common pattern while keeping backward compatibility
+
+        var parametersA = a.GetParameters();
+        var parametersB = b.GetParameters();
+
+        // Check if this is the common pattern: a + factor * (a - b)
+        // by testing with first element
+        var testResult = operation(parametersA[0], parametersB[0], factor);
+        var expectedPattern1 = NumOps.Add(parametersA[0], NumOps.Multiply(factor, NumOps.Subtract(parametersA[0], parametersB[0])));
+
+        if (NumOps.Equals(testResult, expectedPattern1))
         {
-            newCoefficients[i] = operation(parameters[i], b.GetParameters()[i], factor);
+            // Vectorized: result = a + factor * (a - b)
+            var diff = (Vector<T>)Engine.Subtract(parametersA, parametersB);
+            var scaled = (Vector<T>)Engine.Multiply(diff, factor);
+            var newCoefficients = (Vector<T>)Engine.Add(parametersA, scaled);
+            return a.WithParameters(newCoefficients);
         }
-    
-        // Create a new model with the calculated parameters using WithParameters
-        return a.WithParameters(newCoefficients);
+
+        // Fall back to element-wise for custom operations
+        var result = new Vector<T>(parametersA.Length);
+        for (int i = 0; i < parametersA.Length; i++)
+        {
+            result[i] = operation(parametersA[i], parametersB[i], factor);
+        }
+
+        return a.WithParameters(result);
     }
 
     /// <summary>

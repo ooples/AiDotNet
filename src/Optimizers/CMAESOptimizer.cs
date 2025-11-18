@@ -198,10 +198,15 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
 
         for (int i = 0; i < _options.PopulationSize; i++)
         {
+            // === Vectorized Population Generation using IEngine (Phase B: US-GPU-015) ===
+            // population[i] = mean + sigma * sample
             var sample = GenerateMultivariateNormalSample(dimensions);
+            var scaledSample = (Vector<T>)Engine.Multiply(sample, _sigma);
+            var individual = (Vector<T>)Engine.Add(_mean, scaledSample);
+
             for (int j = 0; j < dimensions; j++)
             {
-                population[i, j] = NumOps.Add(_mean[j], NumOps.Multiply(_sigma, sample[j]));
+                population[i, j] = individual[j];
             }
         }
 
