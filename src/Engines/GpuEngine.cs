@@ -89,87 +89,87 @@ public class GpuEngine : IEngine, IDisposable
     private readonly GpuMemoryPool<long>? _memoryPoolLong;
 
     // Kernel cache for float operations (Phase B: US-GPU-001)
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _addKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _subtractKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _multiplyKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _multiplyScalarKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _divideKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _divideScalarKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>>? _sqrtKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _powerKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _maxKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _minKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>>? _absKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>>? _expKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>>? _logKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>>? _signKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _addKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _subtractKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _multiplyKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float, ArrayView<float>>? _multiplyScalarKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _divideKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float, ArrayView<float>>? _divideScalarKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _sqrtKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float, ArrayView<float>>? _powerKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _maxKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _minKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _absKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _expKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _logKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _signKernelFloat;
 
     // Kernel cache for double operations (Phase B: US-GPU-005)
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _addKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _subtractKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _multiplyKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, double, ArrayView<double>>? _multiplyScalarKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _divideKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, double, ArrayView<double>>? _divideScalarKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>>? _sqrtKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, double, ArrayView<double>>? _powerKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _maxKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _minKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>>? _absKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>>? _expKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>>? _logKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>>? _signKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _addKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _subtractKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _multiplyKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, double, ArrayView<double>>? _multiplyScalarKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _divideKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, double, ArrayView<double>>? _divideScalarKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _sqrtKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, double, ArrayView<double>>? _powerKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _maxKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _minKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _absKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _expKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _logKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _signKernelDouble;
 
     // Kernel cache for int operations (Phase B: US-GPU-005)
-    private readonly Action<Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>? _addKernelInt;
-    private readonly Action<Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>? _subtractKernelInt;
-    private readonly Action<Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>? _multiplyKernelInt;
-    private readonly Action<Index1D, ArrayView<int>, int, ArrayView<int>>? _multiplyScalarKernelInt;
-    private readonly Action<Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>? _divideKernelInt;
-    private readonly Action<Index1D, ArrayView<int>, int, ArrayView<int>>? _divideScalarKernelInt;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>? _addKernelInt;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>? _subtractKernelInt;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>? _multiplyKernelInt;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<int>, int, ArrayView<int>>? _multiplyScalarKernelInt;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<int>, ArrayView<int>, ArrayView<int>>? _divideKernelInt;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<int>, int, ArrayView<int>>? _divideScalarKernelInt;
 
     // Kernel cache for long operations (Phase B: US-GPU-005)
-    private readonly Action<Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>? _addKernelLong;
-    private readonly Action<Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>? _subtractKernelLong;
-    private readonly Action<Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>? _multiplyKernelLong;
-    private readonly Action<Index1D, ArrayView<long>, long, ArrayView<long>>? _multiplyScalarKernelLong;
-    private readonly Action<Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>? _divideKernelLong;
-    private readonly Action<Index1D, ArrayView<long>, long, ArrayView<long>>? _divideScalarKernelLong;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>? _addKernelLong;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>? _subtractKernelLong;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>? _multiplyKernelLong;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<long>, long, ArrayView<long>>? _multiplyScalarKernelLong;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<long>, ArrayView<long>, ArrayView<long>>? _divideKernelLong;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<long>, long, ArrayView<long>>? _divideScalarKernelLong;
 
     // Kernel cache for matrix operations - float (Phase B: Epic 2)
-    private readonly Action<Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, int>? _matrixMultiplyKernelFloat;
-    private readonly Action<Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, ArrayView<float>, int, int>? _matrixVectorMultiplyKernelFloat;
-    private readonly Action<Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>>? _matrixTransposeKernelFloat;
-    private readonly Action<Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>>? _matrixAddKernelFloat;
-    private readonly Action<Index2D, ArrayView2D<float, Stride2D.DenseX>, float, ArrayView2D<float, Stride2D.DenseX>>? _matrixMultiplyScalarKernelFloat;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, int>? _matrixMultiplyKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, ArrayView<float>, int, int>? _matrixVectorMultiplyKernelFloat;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>>? _matrixTransposeKernelFloat;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>>? _matrixAddKernelFloat;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView2D<float, Stride2D.DenseX>, float, ArrayView2D<float, Stride2D.DenseX>>? _matrixMultiplyScalarKernelFloat;
 
     // Kernel cache for matrix operations - double (Phase B: Epic 2)
-    private readonly Action<Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, int>? _matrixMultiplyKernelDouble;
-    private readonly Action<Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, ArrayView<double>, int, int>? _matrixVectorMultiplyKernelDouble;
-    private readonly Action<Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>? _matrixTransposeKernelDouble;
-    private readonly Action<Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>? _matrixAddKernelDouble;
-    private readonly Action<Index2D, ArrayView2D<double, Stride2D.DenseX>, double, ArrayView2D<double, Stride2D.DenseX>>? _matrixMultiplyScalarKernelDouble;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, int>? _matrixMultiplyKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, ArrayView<double>, int, int>? _matrixVectorMultiplyKernelDouble;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>? _matrixTransposeKernelDouble;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>? _matrixAddKernelDouble;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, double, ArrayView2D<double, Stride2D.DenseX>>? _matrixMultiplyScalarKernelDouble;
 
     // Kernel cache for tensor operations - float (Phase B: Epic 3)
-    private readonly Action<Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>? _batchMatMulKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorAddKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorSubtractKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorMultiplyKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _tensorMultiplyScalarKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorDivideKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>? _maxPool2DKernelFloat;
-    private readonly Action<Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>? _avgPool2DKernelFloat;
+    private readonly Action<AcceleratorStream, Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>? _batchMatMulKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorAddKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorSubtractKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorMultiplyKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float, ArrayView<float>>? _tensorMultiplyScalarKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _tensorDivideKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>? _maxPool2DKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>? _avgPool2DKernelFloat;
     private readonly Conv2DKernelFloat? _conv2DKernelFloat;
 
     // Kernel cache for tensor operations - double (Phase B: Epic 3)
-    private readonly Action<Index3D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _batchMatMulKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorAddKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorSubtractKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorMultiplyKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, double, ArrayView<double>>? _tensorMultiplyScalarKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorDivideKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>? _maxPool2DKernelDouble;
-    private readonly Action<Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>? _avgPool2DKernelDouble;
+    private readonly Action<AcceleratorStream, Index3D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _batchMatMulKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorAddKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorSubtractKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorMultiplyKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, double, ArrayView<double>>? _tensorMultiplyScalarKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorDivideKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>? _maxPool2DKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int>? _avgPool2DKernelDouble;
     private readonly Conv2DKernelDouble? _conv2DKernelDouble;
 
     /// <inheritdoc/>
@@ -1023,7 +1023,7 @@ public class GpuEngine : IEngine, IDisposable
             lock (_gpuLock)
             {
                 // Use pre-compiled cached kernel (Phase B: US-GPU-001)
-                _addKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _addKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
 
@@ -1073,11 +1073,11 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.CopyFromCPU(a.AsSpan());
             gpuB.View.CopyFromCPU(b.AsSpan());
-            _subtractKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _subtractKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _subtractKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _subtractKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1105,11 +1105,11 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.CopyFromCPU(a.AsSpan());
             gpuB.View.CopyFromCPU(b.AsSpan());
-            _multiplyKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _multiplyKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _multiplyKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _multiplyKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1132,11 +1132,11 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             gpuVector.View.CopyFromCPU(vector.AsSpan());
-            _multiplyScalarKernelFloat!(vector.Length, gpuVector.View, scalar, gpuResult.View);
+            _multiplyScalarKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _multiplyScalarKernelFloat!(vector.Length, gpuVector.View, scalar, gpuResult.View);
+                _multiplyScalarKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
                 _accelerator!.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1163,11 +1163,11 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.CopyFromCPU(a.AsSpan());
             gpuB.View.CopyFromCPU(b.AsSpan());
-            _divideKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _divideKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _divideKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _divideKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1190,11 +1190,11 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             gpuVector.View.CopyFromCPU(vector.AsSpan());
-            _divideScalarKernelFloat!(vector.Length, gpuVector.View, scalar, gpuResult.View);
+            _divideScalarKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _divideScalarKernelFloat!(vector.Length, gpuVector.View, scalar, gpuResult.View);
+                _divideScalarKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
                 _accelerator!.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1216,11 +1216,11 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             gpuVector.View.CopyFromCPU(vector.AsSpan());
-            _sqrtKernelFloat!(vector.Length, gpuVector.View, gpuResult.View);
+            _sqrtKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _sqrtKernelFloat!(vector.Length, gpuVector.View, gpuResult.View);
+                _sqrtKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1245,7 +1245,7 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _powerKernelFloat!(vector.Length, gpuVector.View, exponent, gpuResult.View);
+                _powerKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, exponent, gpuResult.View);
                 _accelerator!.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1276,7 +1276,7 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _maxKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _maxKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
 
@@ -1314,7 +1314,7 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _minKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _minKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
 
@@ -1347,7 +1347,7 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _absKernelFloat!(vector.Length, gpuVector.View, gpuResult.View);
+                _absKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
 
@@ -1379,7 +1379,7 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _expKernelFloat!(vector.Length, gpuVector.View, gpuResult.View);
+                _expKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
 
@@ -1411,7 +1411,7 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _logKernelFloat!(vector.Length, gpuVector.View, gpuResult.View);
+                _logKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
 
@@ -1443,7 +1443,7 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _signKernelFloat!(vector.Length, gpuVector.View, gpuResult.View);
+                _signKernelFloat!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
 
@@ -1481,11 +1481,11 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.CopyFromCPU(a.AsSpan());
             gpuB.View.CopyFromCPU(b.AsSpan());
-            _addKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _addKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _addKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _addKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1517,7 +1517,7 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _maxKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _maxKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
 
@@ -1555,7 +1555,7 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _minKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _minKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
 
@@ -1588,7 +1588,7 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _absKernelDouble!(vector.Length, gpuVector.View, gpuResult.View);
+                _absKernelDouble!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
 
@@ -1620,7 +1620,7 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _expKernelDouble!(vector.Length, gpuVector.View, gpuResult.View);
+                _expKernelDouble!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
 
@@ -1652,7 +1652,7 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _logKernelDouble!(vector.Length, gpuVector.View, gpuResult.View);
+                _logKernelDouble!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
 
@@ -1684,7 +1684,7 @@ public class GpuEngine : IEngine, IDisposable
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _signKernelDouble!(vector.Length, gpuVector.View, gpuResult.View);
+                _signKernelDouble!(_accelerator.DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
 
@@ -1718,11 +1718,11 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.CopyFromCPU(a.AsSpan());
             gpuB.View.CopyFromCPU(b.AsSpan());
-            _addKernelInt!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _addKernelInt!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _addKernelInt!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _addKernelInt!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1751,11 +1751,11 @@ public class GpuEngine : IEngine, IDisposable
         {
             gpuA.View.CopyFromCPU(a.AsSpan());
             gpuB.View.CopyFromCPU(b.AsSpan());
-            _addKernelLong!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+            _addKernelLong!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
             // Thread-safe kernel execution (Phase B: US-GPU-019)
             lock (_gpuLock)
             {
-                _addKernelLong!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _addKernelLong!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 _accelerator!.Synchronize();
             }
             gpuResult.View.CopyToCPU(result.AsWritableSpan());
@@ -1920,7 +1920,7 @@ public class GpuEngine : IEngine, IDisposable
                 lock (_gpuLock)
                 {
                     // Execute pre-compiled kernel (Phase B: US-GPU-001, US-GPU-007)
-                    _matrixMultiplyKernelFloat!(new Index2D(m, n), viewA, viewB, viewResult, k);
+                    _matrixMultiplyKernelFloat!(_accelerator.DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
                     _accelerator!.Synchronize();
                 }
 
@@ -1977,11 +1977,11 @@ public class GpuEngine : IEngine, IDisposable
                 gpuVector.View.CopyFromCPU(vector.AsSpan());
 
                 var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                _matrixVectorMultiplyKernelFloat!(rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
+                _matrixVectorMultiplyKernelFloat!(_accelerator.DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixVectorMultiplyKernelFloat!(rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
+                    _matrixVectorMultiplyKernelFloat!(_accelerator.DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
                     _accelerator!.Synchronize();
                 }
 
@@ -2021,11 +2021,11 @@ public class GpuEngine : IEngine, IDisposable
                 var viewInput = gpuInput.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 var viewOutput = gpuOutput.As2DView<Stride2D.DenseX>(new Index2D(cols, rows));
 
-                _matrixTransposeKernelFloat!(new Index2D(rows, cols), viewInput, viewOutput);
+                _matrixTransposeKernelFloat!(_accelerator.DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixTransposeKernelFloat!(new Index2D(rows, cols), viewInput, viewOutput);
+                    _matrixTransposeKernelFloat!(_accelerator.DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
                     _accelerator!.Synchronize();
                 }
 
@@ -2072,11 +2072,11 @@ public class GpuEngine : IEngine, IDisposable
                 var viewB = gpuB.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
-                _matrixAddKernelFloat!(new Index2D(rows, cols), viewA, viewB, viewResult);
+                _matrixAddKernelFloat!(_accelerator.DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixAddKernelFloat!(new Index2D(rows, cols), viewA, viewB, viewResult);
+                    _matrixAddKernelFloat!(_accelerator.DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
                     _accelerator!.Synchronize();
                 }
 
@@ -2116,11 +2116,11 @@ public class GpuEngine : IEngine, IDisposable
                 var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
-                _matrixMultiplyScalarKernelFloat!(new Index2D(rows, cols), viewMatrix, scalar, viewResult);
+                _matrixMultiplyScalarKernelFloat!(_accelerator.DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixMultiplyScalarKernelFloat!(new Index2D(rows, cols), viewMatrix, scalar, viewResult);
+                    _matrixMultiplyScalarKernelFloat!(_accelerator.DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
                     _accelerator!.Synchronize();
                 }
 
@@ -2171,11 +2171,11 @@ public class GpuEngine : IEngine, IDisposable
                 var viewB = gpuB.As2DView<Stride2D.DenseX>(new Index2D(k, n));
                 var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(m, n));
 
-                _matrixMultiplyKernelDouble!(new Index2D(m, n), viewA, viewB, viewResult, k);
+                _matrixMultiplyKernelDouble!(_accelerator.DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixMultiplyKernelDouble!(new Index2D(m, n), viewA, viewB, viewResult, k);
+                    _matrixMultiplyKernelDouble!(_accelerator.DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
                     _accelerator!.Synchronize();
                 }
 
@@ -2221,11 +2221,11 @@ public class GpuEngine : IEngine, IDisposable
                 gpuVector.View.CopyFromCPU(vector.AsSpan());
 
                 var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                _matrixVectorMultiplyKernelDouble!(rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
+                _matrixVectorMultiplyKernelDouble!(_accelerator.DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixVectorMultiplyKernelDouble!(rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
+                    _matrixVectorMultiplyKernelDouble!(_accelerator.DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
                     _accelerator!.Synchronize();
                 }
 
@@ -2265,11 +2265,11 @@ public class GpuEngine : IEngine, IDisposable
                 var viewInput = gpuInput.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 var viewOutput = gpuOutput.As2DView<Stride2D.DenseX>(new Index2D(cols, rows));
 
-                _matrixTransposeKernelDouble!(new Index2D(rows, cols), viewInput, viewOutput);
+                _matrixTransposeKernelDouble!(_accelerator.DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixTransposeKernelDouble!(new Index2D(rows, cols), viewInput, viewOutput);
+                    _matrixTransposeKernelDouble!(_accelerator.DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
                     _accelerator!.Synchronize();
                 }
 
@@ -2316,11 +2316,11 @@ public class GpuEngine : IEngine, IDisposable
                 var viewB = gpuB.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
-                _matrixAddKernelDouble!(new Index2D(rows, cols), viewA, viewB, viewResult);
+                _matrixAddKernelDouble!(_accelerator.DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixAddKernelDouble!(new Index2D(rows, cols), viewA, viewB, viewResult);
+                    _matrixAddKernelDouble!(_accelerator.DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
                     _accelerator!.Synchronize();
                 }
 
@@ -2360,11 +2360,11 @@ public class GpuEngine : IEngine, IDisposable
                 var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
                 var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
 
-                _matrixMultiplyScalarKernelDouble!(new Index2D(rows, cols), viewMatrix, scalar, viewResult);
+                _matrixMultiplyScalarKernelDouble!(_accelerator.DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _matrixMultiplyScalarKernelDouble!(new Index2D(rows, cols), viewMatrix, scalar, viewResult);
+                    _matrixMultiplyScalarKernelDouble!(_accelerator.DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
                     _accelerator!.Synchronize();
                 }
 
@@ -2456,11 +2456,11 @@ public class GpuEngine : IEngine, IDisposable
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
                 // Execute pre-compiled kernel (Phase B: US-GPU-001, US-GPU-013)
-                _batchMatMulKernelFloat!(new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
+                _batchMatMulKernelFloat!(_accelerator.DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _batchMatMulKernelFloat!(new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
+                    _batchMatMulKernelFloat!(_accelerator.DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
                     _accelerator!.Synchronize();
                 }
 
@@ -2538,11 +2538,11 @@ public class GpuEngine : IEngine, IDisposable
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
                 // Execute pre-compiled kernel (Phase B: US-GPU-001, US-GPU-013)
-                _batchMatMulKernelDouble!(new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
+                _batchMatMulKernelDouble!(_accelerator.DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _batchMatMulKernelDouble!(new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
+                    _batchMatMulKernelDouble!(_accelerator.DefaultStream, new Index3D(batchSize, m, n), gpuA.View, gpuB.View, gpuResult.View, m, k, n);
                     _accelerator!.Synchronize();
                 }
 
@@ -2611,11 +2611,11 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorAddKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorAddKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorAddKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _tensorAddKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                     _accelerator!.Synchronize();
                 }
 
@@ -2652,11 +2652,11 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorAddKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorAddKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorAddKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _tensorAddKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                     _accelerator!.Synchronize();
                 }
 
@@ -2712,11 +2712,11 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorSubtractKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorSubtractKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorSubtractKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _tensorSubtractKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                     _accelerator!.Synchronize();
                 }
 
@@ -2753,11 +2753,11 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorSubtractKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorSubtractKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorSubtractKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _tensorSubtractKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                     _accelerator!.Synchronize();
                 }
 
@@ -2813,11 +2813,11 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorMultiplyKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorMultiplyKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorMultiplyKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _tensorMultiplyKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                     _accelerator!.Synchronize();
                 }
 
@@ -2854,11 +2854,11 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorMultiplyKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorMultiplyKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorMultiplyKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _tensorMultiplyKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                     _accelerator!.Synchronize();
                 }
 
@@ -2910,11 +2910,11 @@ public class GpuEngine : IEngine, IDisposable
             {
                 gpuTensor.CopyFromCPU(tensor.AsSpan());
 
-                _tensorMultiplyScalarKernelFloat!(tensor.Length, gpuTensor.View, scalar, gpuResult.View);
+                _tensorMultiplyScalarKernelFloat!(_accelerator.DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorMultiplyScalarKernelFloat!(tensor.Length, gpuTensor.View, scalar, gpuResult.View);
+                    _tensorMultiplyScalarKernelFloat!(_accelerator.DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
                     _accelerator!.Synchronize();
                 }
 
@@ -2946,11 +2946,11 @@ public class GpuEngine : IEngine, IDisposable
             {
                 gpuTensor.CopyFromCPU(tensor.AsSpan());
 
-                _tensorMultiplyScalarKernelDouble!(tensor.Length, gpuTensor.View, scalar, gpuResult.View);
+                _tensorMultiplyScalarKernelDouble!(_accelerator.DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorMultiplyScalarKernelDouble!(tensor.Length, gpuTensor.View, scalar, gpuResult.View);
+                    _tensorMultiplyScalarKernelDouble!(_accelerator.DefaultStream, tensor.Length, gpuTensor.View, scalar, gpuResult.View);
                     _accelerator!.Synchronize();
                 }
 
@@ -3005,11 +3005,11 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorDivideKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorDivideKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorDivideKernelFloat!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _tensorDivideKernelFloat!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                     _accelerator!.Synchronize();
                 }
 
@@ -3046,11 +3046,11 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                _tensorDivideKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                _tensorDivideKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _tensorDivideKernelDouble!(a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                    _tensorDivideKernelDouble!(_accelerator.DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
                     _accelerator!.Synchronize();
                 }
 

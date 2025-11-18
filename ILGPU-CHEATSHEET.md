@@ -384,12 +384,38 @@ public class GpuDenseLayer<T> : GpuLayerBase<T> where T : unmanaged { }
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| CS0029 | LoadAutoGroupedKernel delegate signature | Add `AcceleratorStream` as first parameter |
 | CS0315 | Type doesn't satisfy constraint | Add `where T : unmanaged` |
 | CS0311 | Generic argument doesn't match | Check stride/constraint types |
 | CS1593 | Delegate signature mismatch | Match kernel parameter types |
 | CS7036 | Missing required arguments | Add missing kernel parameters |
-| CS1061: LoadAutoGroupedStreamKernel | Method doesn't exist in ILGPU 1.5.3 | Use `LoadAutoGroupedKernel` + default stream |
+| CS1061: LoadAutoGroupedStreamKernel | Method doesn't exist in ILGPU 1.5.3 | Use `LoadAutoGroupedKernel` instead |
 | CS1061: ViewAs2DView | Method doesn't exist | Use `As2DView<TStride>` instead |
+
+### CS0029: LoadAutoGroupedKernel Delegate Signature Mismatch
+
+**❌ WRONG:**
+```csharp
+private readonly Action<Index1D, ArrayView<float>, ArrayView<float>>? _myKernel;
+
+_myKernel = _accelerator.LoadAutoGroupedKernel<Index1D, ArrayView<float>, ArrayView<float>>(MyKernelMethod);
+// ERROR CS0029: Cannot implicitly convert
+// Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>
+// to Action<Index1D, ArrayView<float>, ArrayView<float>>
+```
+
+**✅ CORRECT:**
+```csharp
+private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _myKernel;
+
+_myKernel = _accelerator.LoadAutoGroupedKernel<Index1D, ArrayView<float>, ArrayView<float>>(MyKernelMethod);
+// ✓ OK - delegate signature matches
+
+// Then invoke with default stream:
+_myKernel(_accelerator.DefaultStream, dataLength, inputView, outputView);
+```
+
+**Key Point**: `LoadAutoGroupedKernel` requires `AcceleratorStream` as the FIRST parameter in the delegate signature.
 
 ---
 
