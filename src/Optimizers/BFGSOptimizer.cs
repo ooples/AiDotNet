@@ -107,6 +107,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
             _iteration++;
+            parameters = currentSolution.GetParameters();
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
             var newSolution = UpdateSolution(currentSolution, gradient, inputData);
 
