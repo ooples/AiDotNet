@@ -2430,7 +2430,17 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (InvalidOperationException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix scalar multiply (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixMultiplyScalar(matrix, scalar);
+        }
+        catch (ArgumentException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix scalar multiply (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixMultiplyScalar(matrix, scalar);
+        }
+        catch (OutOfMemoryException ex)
         {
             Console.WriteLine($"[GpuEngine] GPU matrix scalar multiply (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.MatrixMultiplyScalar(matrix, scalar);
