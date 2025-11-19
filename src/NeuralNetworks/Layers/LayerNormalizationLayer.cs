@@ -127,10 +127,6 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     private Vector<T>? _betaGradient;
 
     /// <summary>
-    /// The computation engine (CPU or GPU) for vectorized operations.
-    /// </summary>
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
