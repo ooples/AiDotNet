@@ -182,7 +182,11 @@ public class GpuRecoveryTests
 
                 results.Add(vecResult != null && matResult != null);
             }
-            catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException or not null)
+            catch (Exception ex) when (ex is InvalidOperationException
+                                       or OutOfMemoryException
+                                       or ArgumentException
+                                       or DllNotFoundException
+                                       or PlatformNotSupportedException)
             {
                 results.Add(false);
             }
@@ -302,7 +306,11 @@ public class GpuRecoveryTests
                     Assert.NotNull(diagnostics);
                 }
             }
-            catch (Exception ex) when (ex is not null)
+            catch (Exception ex) when (ex is InvalidOperationException
+                                       or ArgumentException
+                                       or OutOfMemoryException
+                                       or DllNotFoundException
+                                       or PlatformNotSupportedException)
             {
                 exceptions.Add(ex);
             }
