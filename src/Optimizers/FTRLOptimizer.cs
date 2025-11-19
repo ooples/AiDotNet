@@ -214,8 +214,9 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             // L1 proximal operator: sparse solution via thresholding
             if (NumOps.GreaterThan(absZ[i], lambda1))
             {
-                var lambda1MinusZ = NumOps.Subtract(lambda1, _z[i]);
-                var numeratorValue = NumOps.Multiply(lambda1MinusZ, signZ[i]);
+                // FTRL proximal: numerator = sign(z) * (lambda1 - |z|)
+                var lambda1MinusAbsZ = NumOps.Subtract(lambda1, absZ[i]);
+                var numeratorValue = NumOps.Multiply(lambda1MinusAbsZ, signZ[i]);
                 var denominatorValue = NumOps.Add(lambda2Factor, sqrtNOverAlpha[i]);
                 newCoefficients[i] = NumOps.Divide(numeratorValue, denominatorValue);
             }
