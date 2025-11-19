@@ -688,7 +688,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
                 {
                     for (int l = 0; l < KernelSize; l++)
                         {
-                        _kernels[i, j, k, l] = NumOps.Multiply(scale, NumOps.FromDouble(Random.NextDouble() * 2 - 1));
+                        _kernels[i, j, k, l] = NumOps.Multiply(scale, NumOps.FromDouble(_random.NextDouble() * 2 - 1));
                     }
                 }
             }
