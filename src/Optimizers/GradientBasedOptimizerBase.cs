@@ -115,13 +115,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     /// <param name="model">The model to optimize (can be null if set later).</param>
     /// <param name="options">Options for the gradient-based optimizer.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
     protected GradientBasedOptimizerBase(
         IFullModel<T, TInput, TOutput>? model,
         GradientBasedOptimizerOptions<T, TInput, TOutput> options) :
