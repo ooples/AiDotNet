@@ -437,10 +437,6 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastFeedForwardOutput;
 
     /// <summary>
-    /// The computation engine (CPU or GPU) for vectorized operations.
-    /// </summary>
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
