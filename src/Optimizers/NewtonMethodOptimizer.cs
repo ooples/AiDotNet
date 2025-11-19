@@ -272,11 +272,12 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction)
     {
         // === Vectorized Solution Update using IEngine (Phase B: US-GPU-015) ===
-        // newCoefficients = parameters - learningRate * direction
+        // newCoefficients = parameters + learningRate * direction
+        // Note: direction is already negated (-H^{-1} * g), so adding moves downhill
 
         var parameters = currentSolution.GetParameters();
         var scaledDirection = (Vector<T>)Engine.Multiply(direction, CurrentLearningRate);
-        var newCoefficients = (Vector<T>)Engine.Subtract(parameters, scaledDirection);
+        var newCoefficients = (Vector<T>)Engine.Add(parameters, scaledDirection);
 
         return currentSolution.WithParameters(newCoefficients);
     }
