@@ -1,6 +1,7 @@
 using ILGPU;
 using ILGPU.Runtime;
 using System.Collections.Concurrent;
+using System.Linq;
 
 namespace AiDotNet.Engines;
 
@@ -138,11 +139,11 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
     private int GetBucketSize(int requestedSize)
     {
         // Find smallest bucket that fits the requested size
-        foreach (var bucketSize in _bucketSizes)
-        {
-            if (requestedSize <= bucketSize)
-                return bucketSize;
-        }
+        var suitableBuckets = _bucketSizes.Where(size => requestedSize <= size);
+        var firstSuitable = suitableBuckets.FirstOrDefault();
+
+        if (firstSuitable != default)
+            return firstSuitable;
 
         // Requested size exceeds largest bucket - round up to nearest bucket multiple
         int largestBucket = _bucketSizes[_bucketSizes.Length - 1];
@@ -172,14 +173,12 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
         var stats = new System.Text.StringBuilder();
         stats.AppendLine("GPU Memory Pool Statistics:");
 
-        foreach (var bucketSize in _bucketSizes)
+        foreach (var bucketSize in _bucketSizes.Where(size => _pools.ContainsKey(size)))
         {
-            if (_pools.TryGetValue(bucketSize, out var pool))
-            {
-                int count = pool.Count;
-                long totalBytes = (long)count * bucketSize * System.Runtime.InteropServices.Marshal.SizeOf<T>();
-                stats.AppendLine($"  Bucket {bucketSize:N0}: {count} buffers ({totalBytes / 1024.0 / 1024.0:F2} MB)");
-            }
+            var pool = _pools[bucketSize];
+            int count = pool.Count;
+            long totalBytes = (long)count * bucketSize * System.Runtime.InteropServices.Marshal.SizeOf<T>();
+            stats.AppendLine($"  Bucket {bucketSize:N0}: {count} buffers ({totalBytes / 1024.0 / 1024.0:F2} MB)");
         }
 
         return stats.ToString();
