@@ -80,8 +80,12 @@ public class GpuStressTests
 
         // Assert
         Assert.NotNull(lastResult);
-        Assert.Equal(256, lastResult!.Rows);
-        Assert.Equal(256, lastResult.Columns);
+
+        if (lastResult != null)
+        {
+            Assert.Equal(256, lastResult.Rows);
+            Assert.Equal(256, lastResult.Columns);
+        }
 
         // Memory growth should be minimal (< 10MB for 10K iterations)
         // GPU memory pooling should prevent unbounded growth
