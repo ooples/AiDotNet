@@ -498,10 +498,6 @@ public class LSTMLayer<T> : LayerBase<T>
     private readonly bool _useVectorActivation;
 
     /// <summary>
-    /// The computation engine (CPU or GPU) for vectorized operations.
-    /// </summary>
-
-    /// <summary>
     /// Gets a dictionary containing the gradients for all trainable parameters after a backward pass.
     /// </summary>
     /// <remarks>
