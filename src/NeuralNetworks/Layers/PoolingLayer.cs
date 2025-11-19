@@ -278,9 +278,48 @@ public class PoolingLayer<T> : LayerBase<T>
             // Use GPU-accelerated MaxPool2D
             output = (Tensor<T>)Engine.MaxPool2D(input, PoolSize, Stride, padding: 0);
 
-            // Note: MaxPool2D implementation handles maxIndices internally for gradient computation
-            // For backward pass compatibility, we initialize _maxIndices with the output shape
+            // Compute max indices for backward pass
+            // We need to find which position in each pooling window had the maximum value
             _maxIndices = new Tensor<int>(output.Shape);
+            int batchSize = input.Shape[0];
+            int channels = input.Shape[1];
+            int outputHeight = output.Shape[2];
+            int outputWidth = output.Shape[3];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int h = 0; h < outputHeight; h++)
+                    {
+                        for (int w = 0; w < outputWidth; w++)
+                        {
+                            int hStart = h * Stride;
+                            int wStart = w * Stride;
+
+                            // Initialize with negative infinity to find maximum
+                            T maxVal = NumOps.FromDouble(double.NegativeInfinity);
+                            int maxIdx = 0;
+
+                            // Find the position within the pooling window that has the max value
+                            for (int ph = 0; ph < PoolSize; ph++)
+                            {
+                                for (int pw = 0; pw < PoolSize; pw++)
+                                {
+                                    T val = input[b, c, hStart + ph, wStart + pw];
+                                    if (NumOps.GreaterThan(val, maxVal))
+                                    {
+                                        maxVal = val;
+                                        maxIdx = ph * PoolSize + pw;
+                                    }
+                                }
+                            }
+
+                            _maxIndices[b, c, h, w] = maxIdx;
+                        }
+                    }
+                }
+            }
         }
         else if (Type == PoolingType.Average)
         {
