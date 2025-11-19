@@ -535,7 +535,7 @@ public class GpuEngine : IEngine, IDisposable
 
                 // Pre-compile pooling kernels - float (Phase B: Epic 3, US-GPU-012)
                 _maxPool2DKernelFloat = _accelerator.LoadAutoGroupedKernel<
-                    Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int>(
+                    Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int>(
                     (index, input, output, batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding) =>
                     {
                         // Convert flat index to 4D coordinates
