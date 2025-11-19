@@ -44,11 +44,9 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </remarks>
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">The Newton's Method-specific optimization options.</param>
-    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public NewtonMethodOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        NewtonMethodOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        NewtonMethodOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
         _options = options ?? new NewtonMethodOptimizerOptions<T, TInput, TOutput>();
