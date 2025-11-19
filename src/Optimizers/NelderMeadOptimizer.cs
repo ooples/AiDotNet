@@ -365,11 +365,22 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         var parametersB = b.GetParameters();
 
         // Check if this is the common pattern: a + factor * (a - b)
-        // by testing with first element
-        var testResult = operation(parametersA[0], parametersB[0], factor);
-        var expectedPattern1 = NumOps.Add(parametersA[0], NumOps.Multiply(factor, NumOps.Subtract(parametersA[0], parametersB[0])));
+        // Validate across the whole vector to avoid degenerate mis-detections
+        bool matchesPattern1 = parametersA.Length > 0;
+        for (int i = 0; i < parametersA.Length && matchesPattern1; i++)
+        {
+            var testResult = operation(parametersA[i], parametersB[i], factor);
+            var expectedPattern1 = NumOps.Add(
+                parametersA[i],
+                NumOps.Multiply(factor, NumOps.Subtract(parametersA[i], parametersB[i])));
 
-        if (NumOps.Equals(testResult, expectedPattern1))
+            if (!NumOps.Equals(testResult, expectedPattern1))
+            {
+                matchesPattern1 = false;
+            }
+        }
+
+        if (matchesPattern1)
         {
             // Vectorized: result = a + factor * (a - b)
             var diff = (Vector<T>)Engine.Subtract(parametersA, parametersB);
