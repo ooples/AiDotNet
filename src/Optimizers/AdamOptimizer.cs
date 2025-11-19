@@ -623,6 +623,9 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             {
                 _v[i] = NumOps.FromDouble(reader.ReadDouble());
             }
+
+            // Initialize adaptive parameters from deserialized options
+            InitializeAdaptiveParameters();
         }
     }
 
