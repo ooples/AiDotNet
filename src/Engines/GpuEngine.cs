@@ -1097,7 +1097,7 @@ public class GpuEngine : IEngine, IDisposable
             RecordGpuFailure(ex);
             return _cpuFallback.Add(a, b);
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             // GPU operation failed - fallback to CPU (Phase B: US-GPU-006)
             Console.WriteLine($"[GpuEngine] GPU operation failed: {ex.Message}. Falling back to CPU.");
@@ -1998,7 +1998,7 @@ public class GpuEngine : IEngine, IDisposable
             RecordGpuFailure(ex);
             return _cpuFallback.MatrixMultiply(a, b);
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU matrix multiply failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.MatrixMultiply(a, b);
@@ -2048,7 +2048,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU matrix-vector multiply failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.MatrixVectorMultiply(matrix, vector);
@@ -2091,7 +2091,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU matrix transpose failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.MatrixTranspose(matrix);
@@ -2143,7 +2143,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU matrix add failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.MatrixAdd(a, b);
@@ -2186,7 +2186,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU matrix scalar multiply failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.MatrixMultiplyScalar(matrix, scalar);
@@ -2242,7 +2242,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU matrix multiply (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.MatrixMultiply(a, b);
@@ -2292,7 +2292,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU matrix-vector multiply (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.MatrixVectorMultiply(matrix, vector);
@@ -2335,7 +2335,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU matrix transpose (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.MatrixTranspose(matrix);
@@ -2387,7 +2387,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU matrix add (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.MatrixAdd(a, b);
@@ -2548,7 +2548,7 @@ public class GpuEngine : IEngine, IDisposable
             RecordGpuFailure(ex);
             return _cpuFallback.BatchMatMul(a, b);
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU batch matmul failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.BatchMatMul(a, b);
@@ -2630,7 +2630,7 @@ public class GpuEngine : IEngine, IDisposable
             RecordGpuFailure(ex);
             return _cpuFallback.BatchMatMul(a, b);
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU batch matmul (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.BatchMatMul(a, b);
@@ -2692,7 +2692,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU tensor add failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.TensorAdd(a, b);
@@ -2733,7 +2733,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU tensor add (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.TensorAdd(a, b);
@@ -2793,7 +2793,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU tensor subtract failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.TensorSubtract(a, b);
@@ -2834,7 +2834,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU tensor subtract (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.TensorSubtract(a, b);
@@ -2894,7 +2894,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU tensor multiply failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.TensorMultiply(a, b);
@@ -2935,7 +2935,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU tensor multiply (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.TensorMultiply(a, b);
@@ -2990,7 +2990,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU tensor scalar multiply failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.TensorMultiplyScalar(tensor, scalar);
@@ -3026,7 +3026,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU tensor scalar multiply (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.TensorMultiplyScalar(tensor, scalar);
@@ -3086,7 +3086,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU tensor divide failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.TensorDivide(a, b);
@@ -3127,7 +3127,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuResult);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU tensor divide (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.TensorDivide(a, b);
@@ -3226,7 +3226,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU max pool 2D failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.MaxPool2D(input, poolSize, stride, padding);
@@ -3280,7 +3280,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU max pool 2D (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.MaxPool2D(input, poolSize, stride, padding);
@@ -3353,7 +3353,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU avg pool 2D failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.AvgPool2D(input, poolSize, stride, padding);
@@ -3407,7 +3407,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU avg pool 2D (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.AvgPool2D(input, poolSize, stride, padding);
@@ -3494,7 +3494,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU Conv2D failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.Conv2D(input, kernel, stride, padding, dilation);
@@ -3560,7 +3560,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is not null)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             Console.WriteLine($"[GpuEngine] GPU Conv2D (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.Conv2D(input, kernel, stride, padding, dilation);
@@ -3646,7 +3646,7 @@ public class GpuEngine : IEngine, IDisposable
                 Console.WriteLine("[GpuEngine] GPU recovery successful! GPU operations re-enabled.");
                 return true;
             }
-            catch (Exception ex) when (ex is not null)
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
             {
                 Console.WriteLine($"[GpuEngine] GPU recovery failed: {ex.Message}");
                 RecordGpuFailure(ex);
