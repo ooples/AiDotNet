@@ -234,20 +234,22 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     private IFullModel<T, TInput, TOutput> CalculateCentroid(List<IFullModel<T, TInput, TOutput>> simplex, int n)
     {
         // === Vectorized Centroid Calculation using IEngine (Phase B: US-GPU-015) ===
-        // centroid = sum(simplex points) / n
+        // centroid = sum(simplex points excluding worst) / (simplex.Count - 1)
 
         var templateModel = simplex[0];
-        var centroidCoefficients = new Vector<T>(n);
+        var templateParams = templateModel.GetParameters();
+        var centroidCoefficients = new Vector<T>(templateParams.Length);
 
-        // Sum all parameters vectorized
-        for (int i = 0; i < n; i++)
+        // Sum all parameters vectorized (exclude worst point: last simplex entry)
+        int pointCount = simplex.Count - 1;
+        for (int i = 0; i < pointCount; i++)
         {
             centroidCoefficients = (Vector<T>)Engine.Add(centroidCoefficients, simplex[i].GetParameters());
         }
 
-        // Vectorized division by n to get the average
-        var nScalar = NumOps.FromDouble(n);
-        centroidCoefficients = (Vector<T>)Engine.Divide(centroidCoefficients, nScalar);
+        // Vectorized division by number of points to get the average
+        var pointCountScalar = NumOps.FromDouble(pointCount);
+        centroidCoefficients = (Vector<T>)Engine.Divide(centroidCoefficients, pointCountScalar);
 
         // Create a new model with the centroid parameters using WithParameters
         return templateModel.WithParameters(centroidCoefficients);
