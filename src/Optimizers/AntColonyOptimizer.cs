@@ -337,9 +337,15 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     {
         // === Partially Vectorized Pheromone Update using IEngine (Phase B: US-GPU-015) ===
 
-        // Vectorized evaporation: pheromones *= (1 - evaporationRate)
+        // Evaporation: Apply (1 - evaporationRate) to each element in-place
         var evaporationFactor = NumOps.Subtract(NumOps.One, _currentPheromoneEvaporationRate);
-        pheromones = pheromones.Multiply(evaporationFactor);
+        for (int i = 0; i < pheromones.Rows; i++)
+        {
+            for (int j = 0; j < pheromones.Columns; j++)
+            {
+                pheromones[i, j] = NumOps.Multiply(pheromones[i, j], evaporationFactor);
+            }
+        }
 
         // Deposit - partially vectorized
         for (int k = 0; k < solutions.Count; k++)
