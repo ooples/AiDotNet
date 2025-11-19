@@ -49,10 +49,6 @@ public class AddLayer<T> : LayerBase<T>
     private Tensor<T>? _lastOutput;
 
     /// <summary>
-    /// The computation engine (CPU or GPU) for vectorized operations.
-    /// </summary>
-
-    /// <summary>
     /// Indicates whether this layer has trainable parameters.
     /// </summary>
     /// <value>Always returns false because addition layers don't have parameters to train.</value>
