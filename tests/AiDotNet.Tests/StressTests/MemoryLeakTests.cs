@@ -62,10 +62,6 @@ public class MemoryLeakTests
         var memorySnapshots = new List<MemorySnapshot>();
 
         // Act - Sample memory every 500 iterations
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
         for (int i = 0; i < LeakDetectionIterations; i++)
         {
             var result = (Matrix<float>)engine.MatrixMultiply(matrixA, matrixB);
@@ -73,9 +69,6 @@ public class MemoryLeakTests
 
             if (i % SamplingInterval == 0)
             {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-
                 memorySnapshots.Add(new MemorySnapshot
                 {
                     Iteration = i,
@@ -123,10 +116,6 @@ public class MemoryLeakTests
         var memorySnapshots = new List<MemorySnapshot>();
 
         // Act - Sample memory periodically
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
         for (int i = 0; i < LeakDetectionIterations; i++)
         {
             var result = (Tensor<float>)engine.Conv2D(input, kernels, 1, 1, 1);
@@ -134,9 +123,6 @@ public class MemoryLeakTests
 
             if (i % SamplingInterval == 0)
             {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-
                 memorySnapshots.Add(new MemorySnapshot
                 {
                     Iteration = i,
@@ -232,12 +218,6 @@ public class MemoryLeakTests
             // Simulate gradient update: params = params - 0.01 * gradient
             var scaledGrad = (Vector<float>)engine.Multiply(gradient, 0.01f);
             parameters = (Vector<float>)engine.Subtract(parameters, scaledGrad);
-
-            if (i % 500 == 0 && i > 0)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            }
         }
 
         var finalMemory = GC.GetTotalMemory(forceFullCollection: true);
@@ -263,10 +243,6 @@ public class MemoryLeakTests
         }
 
         var memorySnapshots = new List<long>();
-
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
 
         // Act - Mix different operation types
         for (int i = 0; i < LeakDetectionIterations; i++)
@@ -303,8 +279,6 @@ public class MemoryLeakTests
 
             if (i % SamplingInterval == 0)
             {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
                 memorySnapshots.Add(GC.GetTotalMemory(false));
             }
         }
@@ -360,19 +334,9 @@ public class MemoryLeakTests
             {
                 engine = null; // Release reference
             }
-
-            if (i % 10 == 0)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            }
         }
 
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
-        var finalMemory = GC.GetTotalMemory(false);
+        var finalMemory = GC.GetTotalMemory(forceFullCollection: true);
         var memoryGrowth = finalMemory - initialMemory;
 
         // Assert - Multiple engine creation/disposal should not leak
@@ -407,12 +371,6 @@ public class MemoryLeakTests
             Assert.NotNull(result);
 
             // Tensors go out of scope - should be collected
-
-            if (i % 500 == 0 && i > 0)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            }
         }
 
         var finalMemory = GC.GetTotalMemory(forceFullCollection: true);
