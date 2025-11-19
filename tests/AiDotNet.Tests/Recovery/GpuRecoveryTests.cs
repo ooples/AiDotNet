@@ -108,12 +108,16 @@ public class GpuRecoveryTests
         // Assert - Should not throw, should fall back to CPU
         Assert.Null(caughtException);
         Assert.NotNull(result);
-        Assert.Equal(100, result!.Length);
 
-        // Verify result is correct (from CPU fallback)
-        for (int i = 0; i < result.Length; i++)
+        if (result != null)
         {
-            Assert.Equal(vector1[i] + vector2[i], result[i], precision: 5);
+            Assert.Equal(100, result.Length);
+
+            // Verify result is correct (from CPU fallback)
+            for (int i = 0; i < result.Length; i++)
+            {
+                Assert.Equal(vector1[i] + vector2[i], result[i], precision: 5);
+            }
         }
     }
 
