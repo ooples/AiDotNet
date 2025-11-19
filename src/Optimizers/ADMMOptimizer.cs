@@ -110,6 +110,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
             // ADMM steps
             currentSolution = UpdateX(currentSolution, inputData.XTrain, inputData.YTrain);
+            parameters = currentSolution.GetParameters();
             UpdateZ(parameters);
             UpdateU(parameters);
 
