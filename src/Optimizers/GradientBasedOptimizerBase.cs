@@ -87,19 +87,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected MixedPrecisionContext? _mixedPrecisionContext;
 
     /// <summary>
-    /// The execution engine for vectorized operations (CPU or GPU).
-    /// </summary>
-    /// <remarks>
-    /// <para><b>Phase B: US-GPU-015 - Optimizer Vectorization</b></para>
-    /// <para>
-    /// This engine provides hardware-accelerated vector operations for gradient updates.
-    /// Using IEngine for operations like Add, Subtract, Multiply enables:
-    /// - CPU: SIMD vectorization for 2-4x speedup
-    /// - GPU: Massive parallelism for 10-100x speedup on large models
-    /// </para>
-    /// </remarks>
-
-    /// <summary>
     /// Gets whether mixed-precision training is enabled for this optimizer.
     /// </summary>
     public bool IsMixedPrecisionEnabled => _mixedPrecisionContext != null;
