@@ -72,13 +72,6 @@ public class GpuStressTests
         for (int i = 0; i < LongRunIterations; i++)
         {
             lastResult = (Matrix<float>)engine.MatrixMultiply(matrixA, matrixB);
-
-            // Force GC every 1000 iterations to measure managed memory
-            if (i % 1000 == 0 && i > 0)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            }
         }
 
         stopwatch.Stop();
@@ -181,12 +174,6 @@ public class GpuStressTests
             timings.Add(sw.ElapsedMilliseconds);
 
             Assert.NotNull(result);
-
-            if (i % 100 == 0 && i > 0)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            }
         }
 
         var finalMemory = GC.GetTotalMemory(forceFullCollection: true);
@@ -237,12 +224,6 @@ public class GpuStressTests
                 var avgResult = (Tensor<float>)engine.AvgPool2D(input, poolSize: 2, stride: 2, padding: 0);
                 Assert.NotNull(avgResult);
             }
-
-            if (i % 100 == 0 && i > 0)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            }
         }
 
         var finalMemory = GC.GetTotalMemory(forceFullCollection: true);
@@ -286,12 +267,6 @@ public class GpuStressTests
             layer.ResetState();
             var output = layer.Forward(input);
             Assert.NotNull(output);
-
-            if (i % 100 == 0 && i > 0)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            }
         }
 
         var finalMemory = GC.GetTotalMemory(forceFullCollection: true);
@@ -341,12 +316,6 @@ public class GpuStressTests
             var out4 = pool2.Forward(out3);
 
             Assert.NotNull(out4);
-
-            if (i % 10 == 0 && i > 0)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            }
         }
 
         stopwatch.Stop();
@@ -393,12 +362,6 @@ public class GpuStressTests
                 var result = (Matrix<float>)engine.MatrixMultiply(matrixA, matrixB);
                 Assert.NotNull(result);
             }
-
-            if (iteration % 10 == 0 && iteration > 0)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            }
         }
 
         var finalMemory = GC.GetTotalMemory(forceFullCollection: true);
@@ -437,12 +400,6 @@ public class GpuStressTests
             Assert.NotNull(result);
 
             // Matrices/vectors go out of scope - should be collected
-
-            if (i % 100 == 0 && i > 0)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            }
         }
 
         var finalMemory = GC.GetTotalMemory(forceFullCollection: true);
