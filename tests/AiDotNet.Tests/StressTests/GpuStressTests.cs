@@ -266,29 +266,40 @@ public class GpuStressTests
             return; // GPU not available
         }
 
-        var layer = new ConvolutionalLayer<float>(
-            inputDepth: 32, outputDepth: 64, kernelSize: 3,
-            inputHeight: 28, inputWidth: 28, stride: 1, padding: 1,
-            activation: null);
-
-        var input = CreateRandomTensor(new[] { 4, 32, 28, 28 });
-
-        var initialMemory = GC.GetTotalMemory(forceFullCollection: true);
-
-        // Act
-        for (int i = 0; i < MediumRunIterations; i++)
+        var previousEngine = AiDotNetEngine.Current;
+        try
         {
-            layer.ResetState();
-            var output = layer.Forward(input);
-            Assert.NotNull(output);
+            AiDotNetEngine.Current = engine; // Wire GPU context for layers
+
+            var layer = new ConvolutionalLayer<float>(
+                inputDepth: 32, outputDepth: 64, kernelSize: 3,
+                inputHeight: 28, inputWidth: 28, stride: 1, padding: 1,
+                activation: null);
+
+            var input = CreateRandomTensor(new[] { 4, 32, 28, 28 });
+
+            var initialMemory = GC.GetTotalMemory(forceFullCollection: true);
+
+            // Act
+            for (int i = 0; i < MediumRunIterations; i++)
+            {
+                layer.ResetState();
+                var output = layer.Forward(input);
+                Assert.NotNull(output);
+            }
+
+            var finalMemory = GC.GetTotalMemory(forceFullCollection: true);
+            var memoryGrowth = finalMemory - initialMemory;
+
+            // Assert
+            Assert.True(memoryGrowth < 10_000_000,
+                $"Memory leaked: {memoryGrowth / 1_000_000.0:F2}MB growth");
         }
-
-        var finalMemory = GC.GetTotalMemory(forceFullCollection: true);
-        var memoryGrowth = finalMemory - initialMemory;
-
-        // Assert
-        Assert.True(memoryGrowth < 10_000_000,
-            $"Memory leaked: {memoryGrowth / 1_000_000.0:F2}MB growth");
+        finally
+        {
+            AiDotNetEngine.Current = previousEngine; // Restore previous engine
+            engine?.Dispose();
+        }
     }
 
     [Fact(DisplayName = "GPU Stress: Full CNN Pipeline 100 Iterations")]
@@ -305,44 +316,55 @@ public class GpuStressTests
             return; // GPU not available
         }
 
-        // Build a small CNN: Conv -> ReLU -> Pool -> Conv -> ReLU -> Pool
-        var conv1 = new ConvolutionalLayer<float>(3, 16, 3, 32, 32, 1, 1, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
-        var pool1 = new PoolingLayer<float>(16, 32, 32, 2, 2, PoolingType.Max);
-        var conv2 = new ConvolutionalLayer<float>(16, 32, 3, 16, 16, 1, 1, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
-        var pool2 = new PoolingLayer<float>(32, 16, 16, 2, 2, PoolingType.Max);
-
-        var input = CreateRandomTensor(new[] { 2, 3, 32, 32 }); // RGB images
-
-        var initialMemory = GC.GetTotalMemory(forceFullCollection: true);
-        var stopwatch = Stopwatch.StartNew();
-
-        // Act - Full forward pass pipeline
-        for (int i = 0; i < ShortRunIterations; i++)
+        var previousEngine = AiDotNetEngine.Current;
+        try
         {
-            conv1.ResetState();
-            pool1.ResetState();
-            conv2.ResetState();
-            pool2.ResetState();
+            AiDotNetEngine.Current = engine; // Wire GPU context for layers
 
-            var out1 = conv1.Forward(input);
-            var out2 = pool1.Forward(out1);
-            var out3 = conv2.Forward(out2);
-            var out4 = pool2.Forward(out3);
+            // Build a small CNN: Conv -> ReLU -> Pool -> Conv -> ReLU -> Pool
+            var conv1 = new ConvolutionalLayer<float>(3, 16, 3, 32, 32, 1, 1, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
+            var pool1 = new PoolingLayer<float>(16, 32, 32, 2, 2, PoolingType.Max);
+            var conv2 = new ConvolutionalLayer<float>(16, 32, 3, 16, 16, 1, 1, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
+            var pool2 = new PoolingLayer<float>(32, 16, 16, 2, 2, PoolingType.Max);
 
-            Assert.NotNull(out4);
+            var input = CreateRandomTensor(new[] { 2, 3, 32, 32 }); // RGB images
+
+            var initialMemory = GC.GetTotalMemory(forceFullCollection: true);
+            var stopwatch = Stopwatch.StartNew();
+
+            // Act - Full forward pass pipeline
+            for (int i = 0; i < ShortRunIterations; i++)
+            {
+                conv1.ResetState();
+                pool1.ResetState();
+                conv2.ResetState();
+                pool2.ResetState();
+
+                var out1 = conv1.Forward(input);
+                var out2 = pool1.Forward(out1);
+                var out3 = conv2.Forward(out2);
+                var out4 = pool2.Forward(out3);
+
+                Assert.NotNull(out4);
+            }
+
+            stopwatch.Stop();
+            var finalMemory = GC.GetTotalMemory(forceFullCollection: true);
+            var memoryGrowth = finalMemory - initialMemory;
+
+            // Assert
+            Assert.True(memoryGrowth < 30_000_000,
+                $"Memory leaked: {memoryGrowth / 1_000_000.0:F2}MB growth over {ShortRunIterations} full pipeline iterations");
+
+            var avgTime = stopwatch.ElapsedMilliseconds / (double)ShortRunIterations;
+            Assert.True(avgTime < 100.0,
+                $"Pipeline too slow: {avgTime:F2}ms per iteration (expected < 100ms)");
         }
-
-        stopwatch.Stop();
-        var finalMemory = GC.GetTotalMemory(forceFullCollection: true);
-        var memoryGrowth = finalMemory - initialMemory;
-
-        // Assert
-        Assert.True(memoryGrowth < 30_000_000,
-            $"Memory leaked: {memoryGrowth / 1_000_000.0:F2}MB growth over {ShortRunIterations} full pipeline iterations");
-
-        var avgTime = stopwatch.ElapsedMilliseconds / (double)ShortRunIterations;
-        Assert.True(avgTime < 100.0,
-            $"Pipeline too slow: {avgTime:F2}ms per iteration (expected < 100ms)");
+        finally
+        {
+            AiDotNetEngine.Current = previousEngine; // Restore previous engine
+            engine?.Dispose();
+        }
     }
 
     #endregion
