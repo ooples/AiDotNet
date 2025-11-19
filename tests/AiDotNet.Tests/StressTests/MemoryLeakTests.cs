@@ -300,11 +300,10 @@ public class MemoryLeakTests
     public void GpuEngine_MultipleCreateDispose_NoResourceLeak()
     {
         // Skip if GPU not available
-        GpuEngine? testEngine = null;
         try
         {
-            testEngine = new GpuEngine();
-            testEngine = null; // Allow GC
+            using var testEngine = new GpuEngine();
+            // GPU is available, proceed with test
         }
         catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
@@ -329,10 +328,6 @@ public class MemoryLeakTests
             catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException or not null)
             {
                 // GPU might fail - that's ok for this test
-            }
-            finally
-            {
-                engine = null; // Release reference
             }
         }
 
