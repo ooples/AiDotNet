@@ -29,11 +29,17 @@ namespace AiDotNet.Tests.StressTests;
 /// - GC collections should remain bounded
 /// - No unbounded resource accumulation
 ///
+/// <para><b>IMPORTANT: Test Isolation</b></para>
+/// These tests use process-wide GC metrics (GC.GetTotalMemory, GC.CollectionCount) which can be
+/// affected by parallel test execution. For reliable results, run these tests in isolation or
+/// disable parallel execution. Tests are marked with [Trait("Category", "Stress")] for filtering.
+///
 /// <para><b>Running Memory Leak Tests:</b></para>
 /// <code>
 /// dotnet test --filter "FullyQualifiedName~MemoryLeakTests"
 /// </code>
 /// </remarks>
+[Trait("Category", "Stress")]
 public class MemoryLeakTests
 {
     private const int LeakDetectionIterations = 5_000;
@@ -325,9 +331,17 @@ public class MemoryLeakTests
                 var result = (Matrix<float>)engine.MatrixMultiply(matrix, matrix);
                 Assert.NotNull(result);
             }
-            catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException or not null)
+            catch (Exception ex) when (ex is InvalidOperationException
+                                       or OutOfMemoryException
+                                       or ArgumentException
+                                       or DllNotFoundException
+                                       or PlatformNotSupportedException)
             {
                 // GPU might fail - that's ok for this test
+            }
+            finally
+            {
+                engine?.Dispose();
             }
         }
 
