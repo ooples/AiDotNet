@@ -244,13 +244,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Apply update: parameters = parameters - update
         var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
 
-        // Update parameters in the model (need to copy back)
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            parameters[i] = updatedParams[i];
-        }
-
-        return currentSolution;
+        return currentSolution.WithParameters(updatedParams);
     }
 
     /// <summary>
