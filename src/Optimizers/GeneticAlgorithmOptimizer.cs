@@ -56,14 +56,12 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
     /// </remarks>
     /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The options for configuring the genetic algorithm.</param>
-    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public GeneticAlgorithmOptimizer(
         IFullModel<T, TInput, TOutput>? model,
         GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null,
         GeneticBase<T, TInput, TOutput>? geneticAlgorithm = null,
         IFitnessCalculator<T, TInput, TOutput>? fitnessCalculator = null,
-        IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null,
-        IEngine? engine = null)
+        IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null)
         : base(model, options ?? new())
     {
         _geneticOptions = options ?? new GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>();

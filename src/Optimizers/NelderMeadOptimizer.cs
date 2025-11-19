@@ -67,8 +67,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <param name="options">The Nelder-Mead-specific optimization options.</param>
     public NelderMeadOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        NelderMeadOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        NelderMeadOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
         _options = options ?? new NelderMeadOptimizerOptions<T, TInput, TOutput>();
