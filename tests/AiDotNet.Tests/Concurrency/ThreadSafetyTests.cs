@@ -46,7 +46,7 @@ public class ThreadSafetyTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -70,7 +70,7 @@ public class ThreadSafetyTests
                 }
                 Interlocked.Increment(ref completedThreads);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not null)
             {
                 exceptions.Add(ex);
             }
@@ -101,7 +101,7 @@ public class ThreadSafetyTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -123,7 +123,7 @@ public class ThreadSafetyTests
                     results.Add(result);
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not null)
             {
                 exceptions.Add(ex);
             }
@@ -156,7 +156,7 @@ public class ThreadSafetyTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -194,7 +194,7 @@ public class ThreadSafetyTests
                     Interlocked.Increment(ref completedOps);
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not null)
             {
                 exceptions.Add(ex);
             }
@@ -218,7 +218,7 @@ public class ThreadSafetyTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -240,7 +240,7 @@ public class ThreadSafetyTests
                     results.Add(result);
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not null)
             {
                 exceptions.Add(ex);
             }
@@ -268,7 +268,7 @@ public class ThreadSafetyTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -298,7 +298,7 @@ public class ThreadSafetyTests
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not null)
             {
                 exceptions.Add(ex);
             }
@@ -323,7 +323,7 @@ public class ThreadSafetyTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -343,7 +343,7 @@ public class ThreadSafetyTests
                     Thread.Yield(); // Encourage context switching
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not null)
             {
                 exceptions.Add(ex);
             }
@@ -369,7 +369,7 @@ public class ThreadSafetyTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }

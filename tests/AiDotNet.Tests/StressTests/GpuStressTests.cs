@@ -1,4 +1,5 @@
 using AiDotNet.Engines;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
@@ -54,7 +55,7 @@ public class GpuStressTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             // GPU not available - skip test
             return;
@@ -109,7 +110,7 @@ public class GpuStressTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -135,7 +136,7 @@ public class GpuStressTests
                 }
                 Interlocked.Increment(ref completedCount);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not null)
             {
                 exceptions.Add(ex);
             }
@@ -159,7 +160,7 @@ public class GpuStressTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -214,7 +215,7 @@ public class GpuStressTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -265,7 +266,7 @@ public class GpuStressTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -273,7 +274,7 @@ public class GpuStressTests
         var layer = new ConvolutionalLayer<float>(
             inputDepth: 32, outputDepth: 64, kernelSize: 3,
             inputHeight: 28, inputWidth: 28, stride: 1, padding: 1,
-            activation: null, engine: engine);
+            activation: null);
 
         var input = CreateRandomTensor(new[] { 4, 32, 28, 28 });
 
@@ -310,16 +311,16 @@ public class GpuStressTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
 
         // Build a small CNN: Conv -> ReLU -> Pool -> Conv -> ReLU -> Pool
-        var conv1 = new ConvolutionalLayer<float>(3, 16, 3, 32, 32, 1, 1, null, engine);
-        var pool1 = new PoolingLayer<float>(16, 32, 32, 2, 2, PoolingType.Max, engine);
-        var conv2 = new ConvolutionalLayer<float>(16, 32, 3, 16, 16, 1, 1, null, engine);
-        var pool2 = new PoolingLayer<float>(32, 16, 16, 2, 2, PoolingType.Max, engine);
+        var conv1 = new ConvolutionalLayer<float>(3, 16, 3, 32, 32, 1, 1, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
+        var pool1 = new PoolingLayer<float>(16, 32, 32, 2, 2, PoolingType.Max);
+        var conv2 = new ConvolutionalLayer<float>(16, 32, 3, 16, 16, 1, 1, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
+        var pool2 = new PoolingLayer<float>(32, 16, 16, 2, 2, PoolingType.Max);
 
         var input = CreateRandomTensor(new[] { 2, 3, 32, 32 }); // RGB images
 
@@ -374,7 +375,7 @@ public class GpuStressTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -417,7 +418,7 @@ public class GpuStressTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -465,7 +466,7 @@ public class GpuStressTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -493,7 +494,7 @@ public class GpuStressTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }

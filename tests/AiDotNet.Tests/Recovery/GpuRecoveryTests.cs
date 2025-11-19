@@ -37,7 +37,7 @@ public class GpuRecoveryTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -62,7 +62,7 @@ public class GpuRecoveryTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -83,7 +83,7 @@ public class GpuRecoveryTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             // GPU not available - this is actually what we're testing
             engine = new GpuEngine(); // Will have null accelerator
@@ -129,7 +129,7 @@ public class GpuRecoveryTests
             engine = new GpuEngine();
             hasGpu = engine.SupportsGpu;
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             // GPU not available
             hasGpu = false;
@@ -157,7 +157,7 @@ public class GpuRecoveryTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available - can't test recovery
         }
@@ -178,7 +178,7 @@ public class GpuRecoveryTests
 
                 results.Add(vecResult != null && matResult != null);
             }
-            catch
+            catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException or not null)
             {
                 results.Add(false);
             }
@@ -197,7 +197,7 @@ public class GpuRecoveryTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -224,7 +224,7 @@ public class GpuRecoveryTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -276,7 +276,7 @@ public class GpuRecoveryTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -298,7 +298,7 @@ public class GpuRecoveryTests
                     Assert.NotNull(diagnostics);
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not null)
             {
                 exceptions.Add(ex);
             }

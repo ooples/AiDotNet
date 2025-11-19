@@ -1,4 +1,5 @@
 using AiDotNet.Engines;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -76,7 +77,7 @@ public class GpuAccelerationBenchmarks
         {
             _gpuEngine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             // GPU not available - benchmarks will skip GPU tests
             _gpuEngine = null;
@@ -112,25 +113,25 @@ public class GpuAccelerationBenchmarks
         _convLayer_CPU = new ConvolutionalLayer<float>(
             inputDepth: 64, outputDepth: 128, kernelSize: 3,
             inputHeight: 56, inputWidth: 56, stride: 1, padding: 1,
-            activation: null, engine: _cpuEngine);
+            activation: null);
 
         if (_gpuEngine != null)
         {
             _convLayer_GPU = new ConvolutionalLayer<float>(
                 inputDepth: 64, outputDepth: 128, kernelSize: 3,
                 inputHeight: 56, inputWidth: 56, stride: 1, padding: 1,
-                activation: null, engine: _gpuEngine);
+                activation: null);
         }
 
         _poolLayer_CPU = new PoolingLayer<float>(
             inputDepth: 128, inputHeight: 28, inputWidth: 28,
-            poolSize: 2, stride: 2, type: PoolingType.Max, engine: _cpuEngine);
+            poolSize: 2, stride: 2, type: PoolingType.Max);
 
         if (_gpuEngine != null)
         {
             _poolLayer_GPU = new PoolingLayer<float>(
                 inputDepth: 128, inputHeight: 28, inputWidth: 28,
-                poolSize: 2, stride: 2, type: PoolingType.Max, engine: _gpuEngine);
+                poolSize: 2, stride: 2, type: PoolingType.Max);
         }
 
         // ═══════════════════════════════════════════════════════════════════════════════

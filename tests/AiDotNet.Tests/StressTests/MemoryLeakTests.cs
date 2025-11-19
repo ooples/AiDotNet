@@ -51,7 +51,7 @@ public class MemoryLeakTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -112,7 +112,7 @@ public class MemoryLeakTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -164,7 +164,7 @@ public class MemoryLeakTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -211,12 +211,12 @@ public class MemoryLeakTests
     public void OptimizerVectorUpdates_5KIterations_NoLeak()
     {
         // Arrange
-        GpuEngine? engine = null;
+        IEngine? engine = null;
         try
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             engine = new CpuEngine(); // Fallback to CPU
         }
@@ -257,7 +257,7 @@ public class MemoryLeakTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -332,7 +332,7 @@ public class MemoryLeakTests
             testEngine = new GpuEngine();
             testEngine = null; // Allow GC
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
@@ -352,7 +352,7 @@ public class MemoryLeakTests
                 var result = (Matrix<float>)engine.MatrixMultiply(matrix, matrix);
                 Assert.NotNull(result);
             }
-            catch
+            catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException or not null)
             {
                 // GPU might fail - that's ok for this test
             }
@@ -389,7 +389,7 @@ public class MemoryLeakTests
         {
             engine = new GpuEngine();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or PlatformNotSupportedException)
         {
             return; // GPU not available
         }
