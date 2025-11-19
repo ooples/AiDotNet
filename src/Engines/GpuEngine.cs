@@ -3149,7 +3149,7 @@ public class GpuEngine : IEngine, IDisposable
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _maxPool2DKernelFloat!(outputSize, gpuInput.View, gpuOutput.View,
+                    (_maxPool2DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
@@ -3203,7 +3203,7 @@ public class GpuEngine : IEngine, IDisposable
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _maxPool2DKernelDouble!(outputSize, gpuInput.View, gpuOutput.View,
+                    (_maxPool2DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
@@ -3276,7 +3276,7 @@ public class GpuEngine : IEngine, IDisposable
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _avgPool2DKernelFloat!(outputSize, gpuInput.View, gpuOutput.View,
+                    (_avgPool2DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
@@ -3330,7 +3330,7 @@ public class GpuEngine : IEngine, IDisposable
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _avgPool2DKernelDouble!(outputSize, gpuInput.View, gpuOutput.View,
+                    (_avgPool2DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, outputSize, gpuInput.View, gpuOutput.View,
                         batch, channels, height, width, outputHeight, outputWidth, poolSize, stride, padding);
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
                 }
@@ -3413,7 +3413,7 @@ public class GpuEngine : IEngine, IDisposable
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _conv2DKernelFloat!(outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View,
+                    (_conv2DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View,
                         batch, inChannels, height, width, outChannels,
                         outputHeight, outputWidth, kernelHeight, kernelWidth, stride, padding, dilation);
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
@@ -3477,7 +3477,7 @@ public class GpuEngine : IEngine, IDisposable
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
                 {
-                    _conv2DKernelDouble!(outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View,
+                    (_conv2DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, outputSize, gpuInput.View, gpuKernel.View, gpuOutput.View,
                         batch, inChannels, height, width, outChannels,
                         outputHeight, outputWidth, kernelHeight, kernelWidth, stride, padding, dilation);
                     (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
