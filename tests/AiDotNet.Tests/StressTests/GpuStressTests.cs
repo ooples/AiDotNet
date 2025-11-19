@@ -190,7 +190,13 @@ public class GpuStressTests
         // Assert - Check performance stability
         var firstQuartileAvg = timings.Take(MediumRunIterations / 4).Average();
         var lastQuartileAvg = timings.Skip(3 * MediumRunIterations / 4).Average();
-        var performanceDrift = Math.Abs(lastQuartileAvg - firstQuartileAvg) / firstQuartileAvg;
+
+        // Guard against zero division on very fast hardware
+        double performanceDrift = 0;
+        if (firstQuartileAvg > 0)
+        {
+            performanceDrift = Math.Abs(lastQuartileAvg - firstQuartileAvg) / firstQuartileAvg;
+        }
 
         // Performance should not degrade by more than 20%
         Assert.True(performanceDrift < 0.20,
