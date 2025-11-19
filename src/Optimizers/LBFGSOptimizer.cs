@@ -206,6 +206,12 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         // s = new_solution - old_solution
         // y = current_gradient - previous_gradient
 
+        // Skip first iteration when previousGradient is empty
+        if (previousGradient.Length == 0)
+        {
+            return;
+        }
+
         var s = (Vector<T>)Engine.Subtract(newSolution, oldSolution);
         var y = (Vector<T>)Engine.Subtract(gradient, previousGradient);
 
