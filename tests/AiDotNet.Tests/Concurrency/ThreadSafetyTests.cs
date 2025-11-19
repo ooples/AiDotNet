@@ -383,7 +383,7 @@ public class ThreadSafetyTests
         ).ToArray();
 
         // Use a CancellationToken to detect deadlocks (timeout after 30 seconds)
-        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
         // Act - Very high concurrency with mixed operations
         try
