@@ -133,7 +133,11 @@ public class GpuStressTests
                 }
                 Interlocked.Increment(ref completedCount);
             }
-            catch (Exception ex) when (ex is not null)
+            catch (Exception ex) when (ex is InvalidOperationException
+                                       or ArgumentException
+                                       or OutOfMemoryException
+                                       or DllNotFoundException
+                                       or PlatformNotSupportedException)
             {
                 exceptions.Add(ex);
             }
