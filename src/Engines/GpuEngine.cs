@@ -1912,9 +1912,9 @@ public class GpuEngine : IEngine, IDisposable
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
                 // Create 2D views
-                var viewA = gpuA.As2DView<Stride2D.DenseX>(new Index2D(m, k));
-                var viewB = gpuB.As2DView<Stride2D.DenseX>(new Index2D(k, n));
-                var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(m, n));
+                var viewA = gpuA.View.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
+                var viewB = gpuB.View.As2DView<Stride2D.DenseX>(new Index2D(k, n), new Stride2D.DenseX(n));
+                var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
 
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
@@ -1976,7 +1976,7 @@ public class GpuEngine : IEngine, IDisposable
                 gpuMatrix.CopyFromCPU(matrix.AsSpan());
                 gpuVector.View.CopyFromCPU(vector.AsSpan());
 
-                var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewMatrix = gpuMatrix.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
                 (_matrixVectorMultiplyKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
@@ -2018,8 +2018,8 @@ public class GpuEngine : IEngine, IDisposable
             {
                 gpuInput.View.CopyFromCPU(matrix.AsSpan());
 
-                var viewInput = gpuInput.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewOutput = gpuOutput.As2DView<Stride2D.DenseX>(new Index2D(cols, rows));
+                var viewInput = gpuInput.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
+                var viewOutput = gpuOutput.View.As2DView<Stride2D.DenseX>(new Index2D(cols, rows), new Stride2D.DenseX(rows));
 
                 (_matrixTransposeKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2068,9 +2068,9 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                var viewA = gpuA.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewB = gpuB.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewA = gpuA.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
+                var viewB = gpuB.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
+                var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
 
                 (_matrixAddKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2113,8 +2113,8 @@ public class GpuEngine : IEngine, IDisposable
             {
                 gpuMatrix.CopyFromCPU(matrix.AsSpan());
 
-                var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewMatrix = gpuMatrix.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
+                var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
 
                 (_matrixMultiplyScalarKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2167,9 +2167,9 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                var viewA = gpuA.As2DView<Stride2D.DenseX>(new Index2D(m, k));
-                var viewB = gpuB.As2DView<Stride2D.DenseX>(new Index2D(k, n));
-                var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(m, n));
+                var viewA = gpuA.View.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
+                var viewB = gpuB.View.As2DView<Stride2D.DenseX>(new Index2D(k, n), new Stride2D.DenseX(n));
+                var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
 
                 (_matrixMultiplyKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(m, n), viewA, viewB, viewResult, k);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2220,7 +2220,7 @@ public class GpuEngine : IEngine, IDisposable
                 gpuMatrix.CopyFromCPU(matrix.AsSpan());
                 gpuVector.View.CopyFromCPU(vector.AsSpan());
 
-                var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewMatrix = gpuMatrix.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
                 (_matrixVectorMultiplyKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, rows, viewMatrix, gpuVector.View, gpuResult.View, rows, cols);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
                 lock (_gpuLock)
@@ -2262,8 +2262,8 @@ public class GpuEngine : IEngine, IDisposable
             {
                 gpuInput.View.CopyFromCPU(matrix.AsSpan());
 
-                var viewInput = gpuInput.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewOutput = gpuOutput.As2DView<Stride2D.DenseX>(new Index2D(cols, rows));
+                var viewInput = gpuInput.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
+                var viewOutput = gpuOutput.View.As2DView<Stride2D.DenseX>(new Index2D(cols, rows), new Stride2D.DenseX(rows));
 
                 (_matrixTransposeKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewInput, viewOutput);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2312,9 +2312,9 @@ public class GpuEngine : IEngine, IDisposable
                 gpuA.View.CopyFromCPU(a.AsSpan());
                 gpuB.View.CopyFromCPU(b.AsSpan());
 
-                var viewA = gpuA.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewB = gpuB.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewA = gpuA.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
+                var viewB = gpuB.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
+                var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
 
                 (_matrixAddKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewA, viewB, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
@@ -2357,8 +2357,8 @@ public class GpuEngine : IEngine, IDisposable
             {
                 gpuMatrix.CopyFromCPU(matrix.AsSpan());
 
-                var viewMatrix = gpuMatrix.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
-                var viewResult = gpuResult.As2DView<Stride2D.DenseX>(new Index2D(rows, cols));
+                var viewMatrix = gpuMatrix.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
+                var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
 
                 (_matrixMultiplyScalarKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(rows, cols), viewMatrix, scalar, viewResult);
                 // Thread-safe kernel execution (Phase B: US-GPU-019)
