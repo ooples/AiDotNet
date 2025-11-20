@@ -312,15 +312,16 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             T alpha = LineSearch(y, theta, searchDir, prevLogLikelihood);
             
             // Update parameters
-            Vector<T> newTheta = new Vector<T>(q);
+            // VECTORIZED: Compute new theta using Engine operations
+            var alphaScaled = (Vector<T>)Engine.Multiply(searchDir, alpha);
+            Vector<T> newTheta = (Vector<T>)Engine.Add(theta, alphaScaled);
+
+            // Apply invertibility constraints element-wise
             for (int i = 0; i < q; i++)
             {
-                newTheta[i] = NumOps.Add(theta[i], NumOps.Multiply(alpha, searchDir[i]));
-                
-                // Ensure invertibility constraint
                 if (NumOps.GreaterThan(NumOps.Abs(newTheta[i]), NumOps.FromDouble(0.99)))
                 {
-                    T sign = NumOps.GreaterThan(newTheta[i], NumOps.Zero) ? 
+                    T sign = NumOps.GreaterThan(newTheta[i], NumOps.Zero) ?
                         NumOps.FromDouble(0.99) : NumOps.FromDouble(-0.99);
                     newTheta[i] = sign;
                 }
@@ -547,13 +548,13 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < maxBacktracks; i++)
         {
             // Try the current step size
-            Vector<T> newTheta = new Vector<T>(q);
+            // VECTORIZED: Compute new theta using Engine operations
+            var alphaScaledLS = (Vector<T>)Engine.Multiply(searchDir, alpha);
+            Vector<T> newTheta = (Vector<T>)Engine.Add(theta, alphaScaledLS);
+
+            // Apply invertibility constraints element-wise
             for (int j = 0; j < q; j++)
             {
-                newTheta[j] = NumOps.Add(theta[j], 
-                    NumOps.Multiply(alpha, searchDir[j]));
-            
-                // Ensure invertibility constraint
                 if (NumOps.GreaterThan(NumOps.Abs(newTheta[j]), NumOps.FromDouble(0.99)))
                 {
                     T sign = NumOps.GreaterThan(newTheta[j], NumOps.Zero) ? 
