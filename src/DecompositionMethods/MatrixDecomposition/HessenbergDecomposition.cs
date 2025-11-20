@@ -276,15 +276,20 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
             var w = matrix.Multiply(v);
             if (j > 0)
             {
-                w = w.Subtract(v.Multiply(H[j - 1, j]));
+                // VECTORIZED: Subtract projection using Engine operations
+                var projection = (Vector<T>)Engine.Multiply(v, H[j - 1, j]);
+                w = (Vector<T>)Engine.Subtract(w, projection);
             }
 
             H[j, j] = w.DotProduct(v);
-            w = w.Subtract(v.Multiply(H[j, j]));
+            // VECTORIZED: Subtract projection using Engine operations
+            var proj2 = (Vector<T>)Engine.Multiply(v, H[j, j]);
+            w = (Vector<T>)Engine.Subtract(w, proj2);
             if (j < n - 1)
             {
                 H[j, j + 1] = H[j + 1, j] = w.Norm();
-                v = w.Divide(H[j, j + 1]);
+                // VECTORIZED: Normalize using Engine division
+                v = (Vector<T>)Engine.Divide(w, H[j, j + 1]);
             }
         }
 
