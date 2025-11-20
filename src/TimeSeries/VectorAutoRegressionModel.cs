@@ -120,13 +120,12 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         Vector<T> prediction = new Vector<T>(_varOptions.OutputDimension);
         Vector<T> laggedValues = input.GetRow(input.Rows - 1);
 
+        // Vectorized prediction using Engine.DotProduct for each output dimension
         for (int i = 0; i < _varOptions.OutputDimension; i++)
         {
-            prediction[i] = _intercepts[i];
-            for (int j = 0; j < _varOptions.OutputDimension * _varOptions.Lag; j++)
-            {
-                prediction[i] = NumOps.Add(prediction[i], NumOps.Multiply(_coefficients[i, j], laggedValues[j]));
-            }
+            var coeffRow = _coefficients.GetRow(i);
+            T dotProductResult = Engine.DotProduct(coeffRow, laggedValues);
+            prediction[i] = NumOps.Add(_intercepts[i], dotProductResult);
         }
 
         return prediction;
@@ -341,12 +340,12 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     /// This method finds the best coefficients for a linear regression model using
     /// the Ordinary Least Squares (OLS) approach.
     /// 
-    /// It solves the equation: ß = (X'X)?¹X'y, where:
+    /// It solves the equation: ï¿½ = (X'X)?ï¿½X'y, where:
     /// - X is the input matrix (lagged data in this case)
     /// - y is the target vector (current values of a variable)
-    /// - ß is the vector of coefficients we're solving for
+    /// - ï¿½ is the vector of coefficients we're solving for
     /// - X' is the transpose of X
-    /// - (X'X)?¹ is the inverse of X'X
+    /// - (X'X)?ï¿½ is the inverse of X'X
     /// 
     /// The result is a set of coefficients that minimize the sum of squared errors
     /// between the model's predictions and the actual values.
@@ -915,7 +914,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         int p = _varOptions.Lag;
         int kp = k * p;
     
-        // Create matrix of size (k*p × k*p)
+        // Create matrix of size (k*p ï¿½ k*p)
         Matrix<T> companion = new Matrix<T>(kp, kp);
     
         // Fill in the coefficient blocks
