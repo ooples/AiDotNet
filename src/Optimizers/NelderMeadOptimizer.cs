@@ -272,7 +272,16 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <returns>A new point that is the reflection of the worst point through the centroid.</returns>
     private IFullModel<T, TInput, TOutput> Reflect(IFullModel<T, TInput, TOutput> worst, IFullModel<T, TInput, TOutput> centroid)
     {
-        return PerformVectorOperation(centroid, worst, _alpha, (a, b, c) => NumOps.Add(a, NumOps.Multiply(c, NumOps.Subtract(a, b))));
+        // Vectorized: result = centroid + alpha * (centroid - worst)
+        var centroidParams = centroid.GetParameters();
+        var worstParams = worst.GetParameters();
+        var alphaVec = AiDotNetEngine.Current.Fill<T>(centroidParams.Length, _alpha);
+        
+        var diff = (Vector<T>)AiDotNetEngine.Current.Subtract(centroidParams, worstParams);
+        var scaled = (Vector<T>)AiDotNetEngine.Current.Multiply(diff, alphaVec);
+        var result = (Vector<T>)AiDotNetEngine.Current.Add(centroidParams, scaled);
+        
+        return centroid.WithParameters(result);
     }
 
     /// <summary>
@@ -312,7 +321,16 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <returns>A new point that is a contraction of the worst point towards the centroid.</returns>
     private IFullModel<T, TInput, TOutput> Contract(IFullModel<T, TInput, TOutput> worst, IFullModel<T, TInput, TOutput> centroid)
     {
-        return PerformVectorOperation(centroid, worst, _beta, (a, b, c) => NumOps.Add(a, NumOps.Multiply(c, NumOps.Subtract(b, a))));
+        // Vectorized: result = centroid + beta * (worst - centroid)
+        var centroidParams = centroid.GetParameters();
+        var worstParams = worst.GetParameters();
+        var betaVec = AiDotNetEngine.Current.Fill<T>(centroidParams.Length, _beta);
+        
+        var diff = (Vector<T>)AiDotNetEngine.Current.Subtract(worstParams, centroidParams);
+        var scaled = (Vector<T>)AiDotNetEngine.Current.Multiply(diff, betaVec);
+        var result = (Vector<T>)AiDotNetEngine.Current.Add(centroidParams, scaled);
+        
+        return centroid.WithParameters(result);
     }
 
     /// <summary>
@@ -331,9 +349,18 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     private void Shrink(List<IFullModel<T, TInput, TOutput>> simplex)
     {
         var best = simplex[0];
+        var bestParams = best.GetParameters();
+        var deltaVec = AiDotNetEngine.Current.Fill<T>(bestParams.Length, _delta);
+        
         for (int i = 1; i < simplex.Count; i++)
         {
-            simplex[i] = PerformVectorOperation(best, simplex[i], _delta, (a, b, c) => NumOps.Add(a, NumOps.Multiply(c, NumOps.Subtract(b, a))));
+            // Vectorized: result = best + delta * (simplex[i] - best)
+            var currentParams = simplex[i].GetParameters();
+            var diff = (Vector<T>)AiDotNetEngine.Current.Subtract(currentParams, bestParams);
+            var scaled = (Vector<T>)AiDotNetEngine.Current.Multiply(diff, deltaVec);
+            var result = (Vector<T>)AiDotNetEngine.Current.Add(bestParams, scaled);
+            
+            simplex[i] = best.WithParameters(result);
         }
     }
 
