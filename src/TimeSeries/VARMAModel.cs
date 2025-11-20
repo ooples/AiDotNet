@@ -106,7 +106,7 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
         Vector<T> arPrediction = base.Predict(input);
         Vector<T> maPrediction = PredictMA();
 
-        return arPrediction.Add(maPrediction);
+        return (Vector<T>)Engine.Add(arPrediction, maPrediction);
     }
 
     /// <summary>
@@ -249,11 +249,11 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
         
         Vector<T> laggedResidualVector = new Vector<T>(laggedResidualData.ToArray());
 
-        // VECTORIZED: Use dot product to compute MA prediction for each output
+        // VECTORIZED: Use Engine.DotProduct to compute MA prediction for each output
         for (int i = 0; i < m; i++)
         {
             Vector<T> maCoeffsRow = _maCoefficients.GetRow(i);
-            maPrediction[i] = maCoeffsRow.DotProduct(laggedResidualVector);
+            maPrediction[i] = Engine.DotProduct(maCoeffsRow, laggedResidualVector);
         }
 
         return maPrediction;
@@ -288,7 +288,8 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     private Matrix<T> CalculateResiduals(Matrix<T> x, Vector<T> y)
     {
         Vector<T> predictions = base.Predict(x);
-        return Matrix<T>.FromColumns(y.Subtract(predictions));
+        Vector<T> residuals = (Vector<T>)Engine.Subtract(y, predictions);
+        return Matrix<T>.FromColumns(residuals);
     }
 
     /// <summary>
