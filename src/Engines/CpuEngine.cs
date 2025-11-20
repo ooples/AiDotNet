@@ -310,6 +310,25 @@ public class CpuEngine : IEngine
         return numOps.Divide(sum, length);
     }
 /// <inheritdoc/>    public Vector<T> Fill<T>(int length, T value)    {        if (length < 0) throw new ArgumentException("Length must be non-negative.", nameof(length));        var result = new Vector<T>(length);        for (int i = 0; i < length; i++)        {            result[i] = value;        }        return result;    }    /// <inheritdoc/>    public Vector<T> FillZero<T>(int length)    {        if (length < 0) throw new ArgumentException("Length must be non-negative.", nameof(length));        return new Vector<T>(length); // Vector constructor already initializes to zero    }    /// <inheritdoc/>    public Vector<T> GenerateDropoutMask<T>(int length, T dropoutRate, T scale, int? seed = null)    {        if (length < 0) throw new ArgumentException("Length must be non-negative.", nameof(length));        var random = seed.HasValue ? new Random(seed.Value) : new Random();        var numOps = MathHelper.GetNumericOperations<T>();        double dropoutRateDouble = Convert.ToDouble(dropoutRate);        var mask = new Vector<T>(length);        for (int i = 0; i < length; i++)        {            mask[i] = random.NextDouble() > dropoutRateDouble ? scale : numOps.Zero;        }        return mask;    }    /// <inheritdoc/>    public void CopyVectorToTensor<T>(Vector<T> source, Tensor<T> destination)    {        if (source == null) throw new ArgumentNullException(nameof(source));        if (destination == null) throw new ArgumentNullException(nameof(destination));        if (source.Length != destination.Length)        {            throw new ArgumentException(                $"Vector length ({source.Length}) must equal tensor total elements ({destination.Length}).");        }        for (int i = 0; i < source.Length; i++)        {            destination[i] = source[i];        }    }
+    /// <inheritdoc/>
+    public Vector<T> GenerateGaussianNoise<T>(int length, T mean, T standardDeviation, int? seed = null)
+    {
+        if (length < 0) throw new ArgumentException("Length must be non-negative.", nameof(length));
+        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var noise = new Vector<T>(length);
+        for (int i = 0; i < length; i++)
+        {
+            // Box-Muller transform to generate Gaussian random numbers
+            T u1 = numOps.FromDouble(random.NextDouble());
+            T u2 = numOps.FromDouble(random.NextDouble());
+            T z = numOps.Multiply(
+                numOps.Sqrt(numOps.Multiply(numOps.FromDouble(-2.0), numOps.Log(u1))),
+                numOps.FromDouble(Math.Cos(2.0 * Math.PI * Convert.ToDouble(u2))));
+            noise[i] = numOps.Add(mean, numOps.Multiply(standardDeviation, z));
+        }
+        return noise;
+    }
 
     #endregion
 
