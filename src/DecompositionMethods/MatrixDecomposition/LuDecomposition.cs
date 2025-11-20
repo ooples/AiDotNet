@@ -545,11 +545,22 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
         var y = new Vector<T>(L.Rows);
         for (int i = 0; i < L.Rows; i++)
         {
+            // VECTORIZED: Use dot product for sum computation
             T sum = NumOps.Zero;
-            for (int j = 0; j < i; j++)
+            if (i > 0)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(L[i, j], y[j]));
+                var rowSlice = new T[i];
+                var ySlice = new T[i];
+                for (int k = 0; k < i; k++)
+                {
+                    rowSlice[k] = L[i, k];
+                    ySlice[k] = y[k];
+                }
+                var rowVec = new Vector<T>(rowSlice);
+                var yVec = new Vector<T>(ySlice);
+                sum = rowVec.DotProduct(yVec);
             }
+
             T rhs = NumOps.Subtract(b[i], sum);
             T diag = L[i, i];
             if (NumOps.Equals(diag, NumOps.Zero))
@@ -585,10 +596,21 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
         var x = new Vector<T>(U.Columns);
         for (int i = U.Columns - 1; i >= 0; i--)
         {
+            // VECTORIZED: Use dot product for sum computation
             T sum = NumOps.Zero;
-            for (int j = i + 1; j < U.Columns; j++)
+            if (i < U.Columns - 1)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(U[i, j], x[j]));
+                int remaining = U.Columns - i - 1;
+                var rowSlice = new T[remaining];
+                var xSlice = new T[remaining];
+                for (int k = 0; k < remaining; k++)
+                {
+                    rowSlice[k] = U[i, i + 1 + k];
+                    xSlice[k] = x[i + 1 + k];
+                }
+                var rowVec = new Vector<T>(rowSlice);
+                var xVec = new Vector<T>(xSlice);
+                sum = rowVec.DotProduct(xVec);
             }
 
             x[i] = NumOps.Divide(NumOps.Subtract(y[i], sum), U[i, i]);

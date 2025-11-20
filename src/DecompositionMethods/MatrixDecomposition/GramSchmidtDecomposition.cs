@@ -218,11 +218,14 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
     /// It works by:
     /// 1. Starting with the last equation (bottom row) and solving for the last variable
     /// 2. Moving upward, substituting known values to solve for each variable
-    /// 
+    ///
     /// For example, in a 3x3 system:
     /// - First solve for x3 from the last equation
     /// - Then solve for x2 using the known value of x3
     /// - Finally solve for x1 using the known values of x2 and x3
+    ///
+    /// This implementation uses vectorization to compute the sum of known terms
+    /// efficiently using DotProduct instead of a scalar loop.
     /// </remarks>
     private Vector<T> BackSubstitution(Matrix<T> R, Vector<T> y)
     {
@@ -232,14 +235,24 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
         // Start from the bottom row and work upward
         for (int i = n - 1; i >= 0; i--)
         {
-            // Calculate the sum of known terms
-            var sum = NumOps.Zero;
-            for (int j = i + 1; j < n; j++)
+            // Calculate the sum of known terms using vectorized dot product
+            T sum;
+            if (i + 1 < n)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(R[i, j], x[j]));
+                // Get the row segment R[i, i+1:n] and the solution segment x[i+1:n]
+                var rowSegment = R.GetRowSegment(i, i + 1, n - i - 1);
+                var xSegment = x.GetRange(i + 1, n - i - 1);
+
+                // Compute dot product: sum = R[i, i+1:n] · x[i+1:n]
+                sum = rowSegment.DotProduct(xSegment);
             }
-            
-            // Solve for the current variable
+            else
+            {
+                // Last row, no terms to sum
+                sum = NumOps.Zero;
+            }
+
+            // Solve for the current variable: x[i] = (y[i] - sum) / R[i, i]
             x[i] = NumOps.Divide(NumOps.Subtract(y[i], sum), R[i, i]);
         }
 

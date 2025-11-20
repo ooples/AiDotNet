@@ -229,13 +229,13 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     {
         T sumOfSquares = NumOps.Zero;
 
+        // VECTORIZED: Process each row as a vector for SIMD optimization
         for (int i = 0; i < matrix.Rows; i++)
         {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                T element = matrix[i, j];
-                sumOfSquares = NumOps.Add(sumOfSquares, NumOps.Multiply(element, element));
-            }
+            Vector<T> row = matrix.GetRow(i);
+            // Dot product of row with itself gives sum of squares for that row
+            T rowSumOfSquares = row.DotProduct(row);
+            sumOfSquares = NumOps.Add(sumOfSquares, rowSumOfSquares);
         }
 
         return NumOps.Sqrt(sumOfSquares);
