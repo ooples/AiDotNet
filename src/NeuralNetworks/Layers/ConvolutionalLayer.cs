@@ -840,38 +840,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             }
         }
 
-        // Update kernels and biases using SIMD-optimized operations
-        // Extract arrays from Tensor/Vector
-        var kernelsArray = _kernels.ToArray();
-        var kernelGradientsArray = kernelGradients.ToArray();
-        var biasesArray = _biases.ToArray();
-        var biasGradientsArray = biasGradients.ToArray();
-
-        // Create learning rate vectors
-        T learningRate = NumOps.FromDouble(0.01);
-        var lrKernels = new Vector<T>(Enumerable.Repeat(learningRate, kernelsArray.Length).ToArray());
-        var lrBiases = new Vector<T>(Enumerable.Repeat(learningRate, biasesArray.Length).ToArray());
-
-        // Convert arrays to vectors for TensorPrimitivesHelper
-        var kernelsVector = new Vector<T>(kernelsArray);
-        var biasesVector = new Vector<T>(biasesArray);
-        var kernelGradientsVector = new Vector<T>(kernelGradientsArray);
-        var biasGradientsVector = new Vector<T>(biasGradientsArray);
-
-        // Multiply gradients by learning rate: lr * gradient (SIMD-optimized for float)
-        var kernelUpdate = TensorPrimitivesHelper<T>.Multiply(lrKernels, kernelGradientsVector);
-        var biasUpdate = TensorPrimitivesHelper<T>.Multiply(lrBiases, biasGradientsVector);
-
-        // Subtract updates from parameters: param -= lr * gradient (SIMD-optimized for float)
-        var updatedKernels = TensorPrimitivesHelper<T>.Subtract(kernelsVector, kernelUpdate);
-        var updatedBiases = TensorPrimitivesHelper<T>.Subtract(biasesVector, biasUpdate);
-
-        // Write back to Tensor/Vector using vectorized operations
-        var updatedKernelsArray = updatedKernels.ToArray();
-        Array.Copy(updatedKernelsArray, 0, kernelsArray, 0, updatedKernelsArray.Length);  // Vectorized copy
-
-        // For Vector, just reassign directly
-        _biases = updatedBiases;
+        // Store gradients for UpdateParameters to consume (separation of concerns)
+        _kernelsGradient = kernelGradients;
+        _biasesGradient = biasGradients;
 
         return inputGradient;
     }

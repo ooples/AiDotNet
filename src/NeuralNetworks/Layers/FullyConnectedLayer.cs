@@ -177,10 +177,6 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     private Vector<T>? _biasesGradient;
 
     /// <summary>
-    /// The computation engine (CPU or GPU) for vectorized operations.
-    /// </summary>
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -329,7 +325,8 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             var rowData = new T[_weights.Columns];
             for (int j = 0; j < _weights.Columns; j++)
             {
-                rowData[j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble()), scale);
+                // Xavier/Glorot uniform: sample in [-scale, scale]
+                rowData[j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() * 2.0 - 1.0), scale);
             }
             var rowVector = new Vector<T>(rowData);
             for (int j = 0; j < _weights.Columns; j++)

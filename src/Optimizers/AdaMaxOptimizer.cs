@@ -272,9 +272,13 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
         // Compute bias-corrected learning rate
         T alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
 
-        // Update parameters: params = params - (alpha * m) / u
+        // Update parameters: params = params - (alpha * m) / (u + epsilon)
+        // Add epsilon to prevent 0/0 division when gradients are always zero
+        T epsilon = NumOps.FromDouble(1e-8);
+        var epsilonVec = Vector<T>.CreateDefault(_u.Length, epsilon);
+        var uSafe = (Vector<T>)Engine.Add(_u, epsilonVec);
         var alphaMScaled = (Vector<T>)Engine.Multiply(_m, alpha);
-        var update = (Vector<T>)Engine.Divide(alphaMScaled, _u);
+        var update = (Vector<T>)Engine.Divide(alphaMScaled, uSafe);
         var newCoefficients = (Vector<T>)Engine.Subtract(parameters, update);
 
         return currentSolution.WithParameters(newCoefficients);
@@ -324,9 +328,13 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
         // Compute bias-corrected learning rate
         T alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
 
-        // Update parameters: params = params - (alpha * m) / u
+        // Update parameters: params = params - (alpha * m) / (u + epsilon)
+        // Add epsilon to prevent 0/0 division when gradients are always zero
+        T epsilon = NumOps.FromDouble(1e-8);
+        var epsilonVec = Vector<T>.CreateDefault(_u.Length, epsilon);
+        var uSafe = (Vector<T>)Engine.Add(_u, epsilonVec);
         var alphaMScaled = (Vector<T>)Engine.Multiply(_m, alpha);
-        var update = (Vector<T>)Engine.Divide(alphaMScaled, _u);
+        var update = (Vector<T>)Engine.Divide(alphaMScaled, uSafe);
         var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
 
         return updatedParams;
@@ -374,9 +382,12 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
         T alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
         var alphaVec = Vector<T>.CreateDefault(updatedParameters.Length, alpha);
 
-        // Recalculate the update that was applied: update = (alpha * m) / u
+        // Recalculate the update that was applied: update = (alpha * m) / (u + epsilon)
+        T epsilon = NumOps.FromDouble(1e-8);
+        var epsilonVec = Vector<T>.CreateDefault(_u.Length, epsilon);
+        var uSafe = (Vector<T>)Engine.Add(_u, epsilonVec);
         var alphaTimes_m = (Vector<T>)Engine.Multiply(alphaVec, _m);
-        var update = (Vector<T>)Engine.Divide(alphaTimes_m, _u);
+        var update = (Vector<T>)Engine.Divide(alphaTimes_m, uSafe);
 
         // Reverse: original = updated + update
         return (Vector<T>)Engine.Add(updatedParameters, update);

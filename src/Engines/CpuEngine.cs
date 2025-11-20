@@ -620,7 +620,8 @@ public class CpuEngine : IEngine
                 {
                     for (int ow = 0; ow < outputWidth; ow++)
                     {
-                        T maxValue = numOps.FromDouble(double.NegativeInfinity);
+                        // Use MinValue for type-safe initialization (works for all numeric types)
+                        T maxValue = numOps.MinValue;
 
                         for (int kh = 0; kh < poolSize; kh++)
                         {

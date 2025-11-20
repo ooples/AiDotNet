@@ -166,9 +166,14 @@ public interface IEngine
     /// <typeparam name="T">The numeric type of the vector.</typeparam>
     /// <param name="vector">The input vector.</param>
     /// <returns>A new vector containing the logarithms.</returns>
-    /// <exception cref="ArgumentException">Thrown when any element is <= 0.</exception>
     /// <remarks>
     /// <para><b>Phase B: US-GPU-015</b> - Required for natural gradient optimizers.</para>
+    /// <para>
+    /// <b>Note:</b> For elements <= 0, the behavior is:
+    /// - Zero input produces NegativeInfinity
+    /// - Negative input produces NaN
+    /// - No exception is thrown (silent NaN propagation)
+    /// </para>
     /// </remarks>
     Vector<T> Log<T>(Vector<T> vector);
 
