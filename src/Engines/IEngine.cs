@@ -247,7 +247,42 @@ public interface IEngine
     /// </para>
     /// </remarks>
     T Mean<T>(Vector<T> vector);
-/// <summary>    /// Creates a vector filled with a constant value.    /// </summary>    /// <typeparam name="T">The numeric type of the vector.</typeparam>    /// <param name="length">The length of the vector to create.</param>    /// <param name="value">The value to fill all elements with.</param>    /// <returns>A new vector with all elements set to the specified value.</returns>    Vector<T> Fill<T>(int length, T value);    /// <summary>    /// Creates a vector filled with zeros.    /// </summary>    /// <typeparam name="T">The numeric type of the vector.</typeparam>    /// <param name="length">The length of the vector to create.</param>    /// <returns>A new vector with all elements set to zero.</returns>    Vector<T> FillZero<T>(int length);    /// <summary>    /// Generates a dropout mask where each element is either zero or a scale value.    /// </summary>    /// <typeparam name="T">The numeric type of the vector.</typeparam>    /// <param name="length">The length of the mask vector to create.</param>    /// <param name="dropoutRate">Probability of dropping each element (0 to 1).</param>    /// <param name="scale">Scale value for kept elements.</param>    /// <param name="seed">Random seed for reproducibility (optional).</param>    /// <returns>A new vector containing the dropout mask.</returns>    Vector<T> GenerateDropoutMask<T>(int length, T dropoutRate, T scale, int? seed = null);    /// <summary>    /// Copies elements from a vector to a tensor.    /// </summary>    /// <typeparam name="T">The numeric type.</typeparam>    /// <param name="source">The source vector.</param>    /// <param name="destination">The destination tensor.</param>    void CopyVectorToTensor<T>(Vector<T> source, Tensor<T> destination);
+
+    /// <summary>
+    /// Creates a vector filled with a constant value.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="length">The length of the vector to create.</param>
+    /// <param name="value">The value to fill all elements with.</param>
+    /// <returns>A new vector with all elements set to the specified value.</returns>
+    Vector<T> Fill<T>(int length, T value);
+
+    /// <summary>
+    /// Creates a vector filled with zeros.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="length">The length of the vector to create.</param>
+    /// <returns>A new vector with all elements set to zero.</returns>
+    Vector<T> FillZero<T>(int length);
+
+    /// <summary>
+    /// Generates a dropout mask where each element is either zero or a scale value.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="length">The length of the mask vector to create.</param>
+    /// <param name="dropoutRate">Probability of dropping each element (0 to 1).</param>
+    /// <param name="scale">Scale value for kept elements.</param>
+    /// <param name="seed">Random seed for reproducibility (optional).</param>
+    /// <returns>A new vector containing the dropout mask.</returns>
+    Vector<T> GenerateDropoutMask<T>(int length, T dropoutRate, T scale, int? seed = null);
+
+    /// <summary>
+    /// Copies elements from a vector to a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="source">The source vector.</param>
+    /// <param name="destination">The destination tensor.</param>
+    void CopyVectorToTensor<T>(Vector<T> source, Tensor<T> destination);
     /// <summary>
     /// Generates Gaussian random noise using the Box-Muller transform.
     /// </summary>
