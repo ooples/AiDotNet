@@ -239,7 +239,8 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private bool CheckConvergence(Vector<T> gradAR, Vector<T> prevGradAR)
     {
-        T diffAR = gradAR.Subtract(prevGradAR).Norm();
+        var diffARVec = (Vector<T>)Engine.Subtract(gradAR, prevGradAR);
+        T diffAR = diffARVec.Norm();
         return NumOps.LessThan(diffAR, NumOps.FromDouble(_tolerance));
     }
 
@@ -316,7 +317,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
             ? _arCoefficients.Slice(0, availableHistory)
             : _arCoefficients;
 
-        return coeffSlice.DotProduct(pastVector);
+        return Engine.DotProduct(coeffSlice, pastVector);
     }
 
     /// <summary>
