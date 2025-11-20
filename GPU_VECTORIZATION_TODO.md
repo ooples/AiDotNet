@@ -62,11 +62,87 @@ This document tracks the systematic vectorization and GPU acceleration work for 
 
 ## 🔄 IN PROGRESS / REMAINING WORK
 
-### Phase 5: Systematic Layer Vectorization (IN PROGRESS)
+### Phase 7: Matrix Decomposition Vectorization (IN PROGRESS - 20 files)
+**Priority**: HIGH - Complex numerical algorithms with significant computational cost
+**Complexity**: VERY HIGH - Requires numerical stability analysis
+**Estimated Effort**: 2-4 weeks
+
+Files to optimize:
+- [ ] **BidiagonalDecomposition.cs** - Bidiagonal matrix factorization
+- [ ] **CholeskyDecomposition.cs** - Symmetric positive-definite matrices (608 lines)
+- [ ] **ComplexMatrixDecomposition.cs** - Complex number matrix operations
+- [ ] **CramerDecomposition.cs** - Cramer's rule for linear systems
+- [ ] **EigenDecomposition.cs** - Eigenvalue/eigenvector computation (276 lines)
+- [ ] **GramSchmidtDecomposition.cs** - Orthogonalization process
+- [ ] **HessenbergDecomposition.cs** - Upper Hessenberg form
+- [ ] **IcaDecomposition.cs** - Independent Component Analysis
+- [ ] **LdlDecomposition.cs** - LDL^T factorization
+- [ ] **LqDecomposition.cs** - LQ factorization
+- [ ] **LuDecomposition.cs** - LU factorization with pivoting (608 lines, 45 loops)
+- [ ] **MatrixDecompositionBase.cs** - Base class with common operations
+- [ ] **NmfDecomposition.cs** - Non-negative Matrix Factorization
+- [ ] **PolarDecomposition.cs** - Polar form decomposition
+- [ ] **QrDecomposition.cs** - QR factorization (357 lines)
+- [ ] **SchurDecomposition.cs** - Schur form decomposition
+- [ ] **SvdDecomposition.cs** - Singular Value Decomposition
+- [ ] **TakagiDecomposition.cs** - Takagi factorization
+- [ ] **TridiagonalDecomposition.cs** - Tridiagonal form
+- [ ] **UduDecomposition.cs** - UDU^T factorization
+
+### Phase 8: Time Series Model Vectorization (PENDING - 15+ files)
+**Priority**: HIGH - Critical for time series workloads
+**Complexity**: HIGH - Domain-specific temporal algorithms
+**Estimated Effort**: 1-2 weeks
+
+Files to optimize:
+- [ ] **ARIMAModel.cs** - AutoRegressive Integrated Moving Average
+- [ ] **ARIMAXModel.cs** - ARIMA with exogenous variables
+- [ ] **ARMAModel.cs** - AutoRegressive Moving Average
+- [ ] **ARModel.cs** - AutoRegressive model
+- [ ] **BayesianStructuralTimeSeriesModel.cs** - Bayesian time series
+- [ ] **DynamicRegressionWithARIMAErrors.cs** - Dynamic regression
+- [ ] **ExponentialSmoothingModel.cs** - Exponential smoothing
+- [ ] **GARCHModel.cs** - Generalized AutoRegressive Conditional Heteroskedasticity
+- [ ] **InterventionAnalysisModel.cs** - Intervention analysis
+- [ ] **MAModel.cs** - Moving Average model
+- [ ] **NBEATSBlock.cs** - Neural Basis Expansion Analysis block
+- [ ] **NBEATSModel.cs** - Neural Basis Expansion Analysis model
+- [ ] **NeuralNetworkARIMAModel.cs** - Neural network + ARIMA hybrid
+- [ ] **ProphetModel.cs** - Facebook Prophet forecasting
+- [ ] **SARIMAModel.cs** - Seasonal ARIMA
+
+### Phase 9: Regression Model Vectorization (PENDING - 20+ files)
+**Priority**: HIGH - Commonly used ML algorithms
+**Complexity**: MEDIUM-HIGH - Various ML algorithms
+**Estimated Effort**: 1-2 weeks
+
+Files to optimize:
+- [ ] **AdaBoostR2Regression.cs** - AdaBoost for regression
+- [ ] **BayesianRegression.cs** - Bayesian linear regression
+- [ ] **ConditionalInferenceTreeRegression.cs** - Conditional inference trees
+- [ ] **DecisionTreeAsyncRegressionBase.cs** - Async decision tree base
+- [ ] **DecisionTreeRegression.cs** - Decision tree regression
+- [ ] **DecisionTreeRegressionBase.cs** - Decision tree base class
+- [ ] **ExtremelyRandomizedTreesRegression.cs** - Extra trees
+- [ ] **GaussianProcessRegression.cs** - Gaussian process regression
+- [ ] **GeneralizedAdditiveModelRegression.cs** - GAM regression
+- [ ] **GeneticAlgorithmRegression.cs** - Genetic algorithm optimization
+- [ ] **GradientBoostingRegression.cs** - Gradient boosting
+- [ ] **IsotonicRegression.cs** - Isotonic regression
+- [ ] **KernelRidgeRegression.cs** - Kernel ridge regression
+- [ ] **KNearestNeighborsRegression.cs** - K-NN regression
+- [ ] **LocallyWeightedRegression.cs** - LOWESS/LOESS regression
+- [ ] **LogisticRegression.cs** - Logistic regression
+- [ ] **M5ModelTreeRegression.cs** - M5 model tree
+- [ ] **MultilayerPerceptronRegression.cs** - MLP regression
+- [ ] **MultinomialLogisticRegression.cs** - Multinomial logistic
+- [ ] **MultipleRegression.cs** - Multiple linear regression
+
+### Phase 5: Systematic Layer Vectorization (COMPLETED)
 
 **Total Layer Files**: 77
-**Files with Manual Loops**: 64
-**Priority**: Identify and vectorize hot-path operations in heavily-used layers
+**Files Optimized**: 76/76 (100% via LayerBase + 22 explicit optimizations)
+**Result**: ALL neural network layers now have GPU acceleration
 
 #### High Priority Layers (Core Building Blocks)
 These are used in most networks and have the highest performance impact:
