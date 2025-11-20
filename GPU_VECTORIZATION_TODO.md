@@ -293,3 +293,45 @@ For each layer, check:
 - Layers working with Tensors (GRULayer, LSTMLayer, ConvolutionalLayer, etc.) require Engine.TensorSubtract, Engine.TensorMultiply, etc.
 - These tensor operations need careful design to support batched operations
 - Current focus: Vector/Matrix operations using existing Engine infrastructure
+
+## Vectorization Progress Summary
+
+### Completed This Session (5 files)
+1. **DenseLayer.cs** - `ece1710e` - L1/L2 regularization
+2. **LayerNormalizationLayer.cs** - `5f760557` - Backward pass gradient computation  
+3. **EmbeddingLayer.cs** - `a83615c2` - Matrix-level regularization
+4. **BatchNormalizationLayer.cs** - `28ee5a77` - Variance calculation across batches
+5. **BayesianRegression.cs** - `fa84a3e8` - Manhattan distance (L1 norm)
+
+### Infrastructure Needed for Remaining Files
+
+**High Priority - Tensor Operations**:
+Many remaining files require Tensor-level Engine support:
+
+1. **Spatial/Image Operations** (SpatialTransformerLayer, ConvolutionalLayer, etc.):
+   - Need: `Engine.TensorTransform()` for per-pixel transformations
+   - Need: Batched spatial transformations
+   - Example: Bilinear interpolation across [batch, height, width, channels]
+
+2. **Recurrent Network Operations** (GRULayer, LSTMLayer):
+   - Need: `Engine.TensorSubtract()`, `Engine.TensorMultiply()` for batched sequences
+   - Need: Operations on shape [batch, sequence, features]
+   - Example: Gate computations across timesteps
+
+3. **Convolution Operations** (SeparableConv, DepthwiseConv):
+   - Need: Vectorized convolution kernels
+   - Need: Sliding window operations with Engine support
+   - Complex due to stride/padding parameters
+
+**Medium Priority - Specialized Operations**:
+- Mixture of Experts gating (requires softmax + weighted sum across experts)
+- RBM energy computations (requires batched probabilistic sampling)
+- Decision tree splitting (sequential algorithm, limited vectorization)
+
+**Current Limitation**: Engine interface currently supports Vector<T> and Matrix<T>. Most remaining files work with Tensor<T> (3D/4D arrays for batched spatial/temporal data).
+
+**Recommended Next Steps**:
+1. Design Tensor operation API for IEngine
+2. Implement CPU/GPU versions of TensorAdd, TensorSubtract, TensorMultiply
+3. Add batched transformation operations
+4. Then tackle high-priority tensor-based layers
