@@ -585,16 +585,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Compute L2 regularization on embedding weights: (1/2) * Σ||embedding||²
-        T sumSquaredNorms = NumOps.Zero;
-
-        for (int i = 0; i < _embeddingMatrix.Rows; i++)
-        {
-            for (int j = 0; j < _embeddingMatrix.Columns; j++)
-            {
-                T value = _embeddingMatrix[i, j];
-                sumSquaredNorms = NumOps.Add(sumSquaredNorms, NumOps.Multiply(value, value));
-            }
-        }
+        T sumSquaredNorms = Engine.MatrixSumOfSquares(_embeddingMatrix);
 
         // Average over all embedding values and scale by 0.5 (standard L2 regularization)
         int totalElements = _embeddingMatrix.Rows * _embeddingMatrix.Columns;
@@ -648,12 +639,8 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         for (int i = 0; i < _embeddingMatrix.Rows; i++)
         {
-            T rowSumSquared = NumOps.Zero;
-            for (int j = 0; j < _embeddingMatrix.Columns; j++)
-            {
-                T value = _embeddingMatrix[i, j];
-                rowSumSquared = NumOps.Add(rowSumSquared, NumOps.Multiply(value, value));
-            }
+            var row = _embeddingMatrix.GetRow(i);
+            T rowSumSquared = Engine.DotProduct(row, row);
             T magnitude = NumOps.Sqrt(rowSumSquared);
             sumMagnitudes = NumOps.Add(sumMagnitudes, magnitude);
             count++;
