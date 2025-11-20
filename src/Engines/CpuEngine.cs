@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
+using TensorPrimitives = System.Numerics.Tensors.TensorPrimitives;
 
 namespace AiDotNet.Engines;
 
@@ -590,7 +591,7 @@ public class CpuEngine : IEngine
             {
                 var rowData = new float[bFloat.Length];
                 // SIMD vectorized: multiply vector b by scalar a[i]
-                System.Numerics.Tensors.TensorPrimitives.Multiply(bFloat, aFloat[i], rowData);
+                TensorPrimitives.Multiply(bFloat, aFloat[i], rowData);
 
                 // Copy result to matrix
                 for (int j = 0; j < bFloat.Length; j++)
