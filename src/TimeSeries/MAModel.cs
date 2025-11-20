@@ -7,8 +7,8 @@ namespace AiDotNet.TimeSeries;
 /// <remarks>
 /// <para>
 /// MA models predict future values based on past prediction errors (residuals). 
-/// The model is defined as: Yt = µ + et + ?1et-1 + ?2et-2 + ... + ?qet-q
-/// where Yt is the value at time t, µ is the mean, et is the error term at time t,
+/// The model is defined as: Yt = ï¿½ + et + ?1et-1 + ?2et-2 + ... + ?qet-q
+/// where Yt is the value at time t, ï¿½ is the mean, et is the error term at time t,
 /// and ?i are the MA coefficients.
 /// </para>
 /// 
@@ -397,7 +397,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         {
             variance = NumOps.Divide(variance, NumOps.FromDouble(n));
             
-            // log-likelihood = -n/2 * log(2p) - n/2 * log(variance) - 1/(2*variance) * sum(errors²)
+            // log-likelihood = -n/2 * log(2p) - n/2 * log(variance) - 1/(2*variance) * sum(errorsï¿½)
             // We ignore the constant terms and return negative log-likelihood
             T logVariance = NumOps.Log(variance);
             T scaledVariance = NumOps.Multiply(NumOps.FromDouble(n), logVariance);
@@ -523,28 +523,17 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         T c = NumOps.FromDouble(0.1); // Armijo parameter
         T rho = NumOps.FromDouble(0.5); // Reduction factor
     
-        // Calculate directional derivative
-        T directionalDerivative = NumOps.Zero;
+        // VECTORIZED: Calculate directional derivative using dot product
         Vector<T> gradient = new Vector<T>(q);
         CalculateGradient(y, theta, gradient);
-    
-        for (int i = 0; i < q; i++)
-        {
-            directionalDerivative = NumOps.Add(directionalDerivative, 
-                NumOps.Multiply(gradient[i], searchDir[i]));
-        }
-    
+        T directionalDerivative = gradient.DotProduct(searchDir);
+
         // If directional derivative is non-negative, use steepest descent direction
         if (!NumOps.LessThan(directionalDerivative, NumOps.Zero))
         {
-            // Calculate dot product of gradient with itself (properly this time)
-            T gradientDotProduct = NumOps.Zero;
-            for (int i = 0; i < q; i++)
-            {
-                gradientDotProduct = NumOps.Add(gradientDotProduct, 
-                    NumOps.Multiply(gradient[i], gradient[i]));
-            }
-        
+            // VECTORIZED: Calculate gradient norm squared using dot product
+            T gradientDotProduct = gradient.DotProduct(gradient);
+
             for (int i = 0; i < q; i++)
             {
                 searchDir[i] = NumOps.Negate(gradient[i]);
@@ -632,33 +621,22 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             y[i] = NumOps.Subtract(newGradient[i], oldGradient[i]);
         }
         
-        // Calculate ? = 1 / (y^T * s)
-        T dotProduct = NumOps.Zero;
-        for (int i = 0; i < q; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(y[i], s[i]));
-        }
-        
+        // VECTORIZED: Calculate ? = 1 / (y^T * s) using dot product
+        T dotProduct = y.DotProduct(s);
+
         // Skip update if dot product is too small (numerical stability)
         if (NumOps.LessThan(NumOps.Abs(dotProduct), NumOps.FromDouble(1e-10)))
         {
             return;
         }
-        
+
         T rho = NumOps.Divide(NumOps.One, dotProduct);
-        
+
         // BFGS update formula:
         // H_{k+1} = (I - ?*s*y^T) * H_k * (I - ?*y*s^T) + ?*s*s^T
-        
-        // Calculate H_k * y
-        Vector<T> Hy = new Vector<T>(q);
-        for (int i = 0; i < q; i++)
-        {
-            for (int j = 0; j < q; j++)
-            {
-                Hy[i] = NumOps.Add(Hy[i], NumOps.Multiply(hessianApprox[i, j], y[j]));
-            }
-        }
+
+        // VECTORIZED: Calculate H_k * y using matrix-vector multiplication
+        Vector<T> Hy = hessianApprox.Multiply(y);
         
         // Calculate intermediate terms
         Matrix<T> term1 = new Matrix<T>(q, q);
@@ -851,8 +829,8 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// get adjusted based on recent prediction errors. The input parameter is typically
     /// not used in pure MA models since predictions depend only on past errors.
     /// 
-    /// For example, if the average temperature is 70°F but we've been consistently
-    /// underestimating by 2°F recently, the model might predict 72°F for tomorrow.
+    /// For example, if the average temperature is 70ï¿½F but we've been consistently
+    /// underestimating by 2ï¿½F recently, the model might predict 72ï¿½F for tomorrow.
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
@@ -864,14 +842,13 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         
         // Start with the mean as the baseline prediction
         T prediction = _mean;
-        
-        // Add MA component - influence of recent errors
-        for (int i = 0; i < _maCoefficients.Length; i++)
+
+        // VECTORIZED: Add MA component using dot product
+        if (_maCoefficients.Length > 0)
         {
-            prediction = NumOps.Add(prediction, 
-                NumOps.Multiply(_maCoefficients[i], _recentErrors[i]));
+            prediction = NumOps.Add(prediction, _maCoefficients.DotProduct(_recentErrors));
         }
-        
+
         return prediction;
     }
 
@@ -916,14 +893,13 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         {
             // Start with the mean
             T prediction = _mean;
-            
-            // Add MA component
-            for (int i = 0; i < _maCoefficients.Length; i++)
+
+            // VECTORIZED: Add MA component using dot product
+            if (_maCoefficients.Length > 0)
             {
-                prediction = NumOps.Add(prediction, 
-                    NumOps.Multiply(_maCoefficients[i], workingErrors[i]));
+                prediction = NumOps.Add(prediction, _maCoefficients.DotProduct(workingErrors));
             }
-            
+
             predictions[t] = prediction;
             
             // Shift the working errors vector and add a zero error for the newly predicted value
