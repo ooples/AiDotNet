@@ -234,12 +234,14 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
             {
                 var q = Q.GetColumn(j);
                 T proj = v.DotProduct(q);
-                // VECTORIZED: Use vector operations for subtraction
-                v = v.Subtract(q.Multiply(proj));
+                // VECTORIZED: Use Engine operations for subtraction
+                var projection = (Vector<T>)Engine.Multiply(q, proj);
+                v = (Vector<T>)Engine.Subtract(v, projection);
             }
 
             T norm = NumOps.Sqrt(v.DotProduct(v));
-            Vector<T> qCol = v.Divide(norm);
+            // VECTORIZED: Normalize using Engine division
+            Vector<T> qCol = (Vector<T>)Engine.Divide(v, norm);
             for (int j = 0; j < n; j++)
             {
                 Q[j, i] = qCol[j];
