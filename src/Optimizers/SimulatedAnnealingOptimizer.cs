@@ -468,12 +468,16 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     private IFullModel<T, TInput, TOutput> GenerateNeighborSolution(IFullModel<T, TInput, TOutput> currentSolution)
     {
         var parameters = currentSolution.GetParameters();
-        var newCoefficients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < newCoefficients.Length; i++)
+
+        // Generate random perturbations vectorized using Engine
+        var perturbations = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
         {
-            var perturbation = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * _saOptions.NeighborGenerationRange);
-            newCoefficients[i] = NumOps.Add(parameters[i], perturbation);
+            perturbations[i] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * _saOptions.NeighborGenerationRange);
         }
+
+        // Add perturbations to parameters using vectorized Engine operation
+        var newCoefficients = (Vector<T>)Engine.Add(parameters, perturbations);
 
         return currentSolution.WithParameters(newCoefficients);
     }
