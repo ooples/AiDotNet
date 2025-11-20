@@ -123,15 +123,28 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
                 // Calculate projection coefficient using dot product
                 R[i, j] = Q.GetColumn(i).DotProduct(matrix.GetColumn(j));
 
-                // VECTORIZED: Subtract the projection using vector operations
-                v = v.Subtract(Q.GetColumn(i).Multiply(R[i, j]));
+                // VECTORIZED: Subtract the projection using Engine operations
+
+
+                var qCol = Q.GetColumn(i);
+
+
+                var projection = (Vector<T>)Engine.Multiply(qCol, R[i, j]);
+
+
+                v = (Vector<T>)Engine.Subtract(v, projection);
             }
 
             // Calculate the norm (length) of the resulting vector
             R[j, j] = v.Norm();
             
-            // Normalize the vector and store it as a column in Q
-            Q.SetColumn(j, v.Divide(R[j, j]));
+            // Normalize the vector and store it as a column in Q using Engine division
+
+            
+            var normalized = (Vector<T>)Engine.Divide(v, R[j, j]);
+
+            
+            Q.SetColumn(j, normalized);
         }
 
         return (Q, R);
@@ -170,15 +183,28 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
                 // Calculate projection coefficient using dot product
                 R[j, i] = Q.GetColumn(j).DotProduct(v);
 
-                // VECTORIZED: Immediately update v using vector operations
-                v = v.Subtract(Q.GetColumn(j).Multiply(R[j, i]));
+                // VECTORIZED: Immediately update v using Engine operations
+
+
+                var qColJ = Q.GetColumn(j);
+
+
+                var projectionJ = (Vector<T>)Engine.Multiply(qColJ, R[j, i]);
+
+
+                v = (Vector<T>)Engine.Subtract(v, projectionJ);
             }
 
             // Calculate the norm (length) of the resulting vector
             R[i, i] = v.Norm();
             
-            // Normalize the vector and store it as a column in Q
-            Q.SetColumn(i, v.Divide(R[i, i]));
+            // Normalize the vector and store it as a column in Q using Engine division
+
+            
+            var normalizedI = (Vector<T>)Engine.Divide(v, R[i, i]);
+
+            
+            Q.SetColumn(i, normalizedI);
         }
 
         return (Q, R);
