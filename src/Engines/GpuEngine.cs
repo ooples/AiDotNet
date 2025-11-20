@@ -2648,6 +2648,41 @@ public class GpuEngine : IEngine, IDisposable
         return _cpuFallback.MatrixSumOfSquares(matrix);
     }
 
+    public void SwapColumns<T>(Matrix<T> matrix, int col1, int col2)
+    {
+        _cpuFallback.SwapColumns(matrix, col1, col2);
+    }
+
+    public void SwapRows<T>(Matrix<T> matrix, int row1, int row2)
+    {
+        _cpuFallback.SwapRows(matrix, row1, row2);
+    }
+
+    public Matrix<T> OuterProduct<T>(Vector<T> a, Vector<T> b)
+    {
+        return _cpuFallback.OuterProduct(a, b);
+    }
+
+    public Vector<T> GetColumn<T>(Matrix<T> matrix, int columnIndex)
+    {
+        return _cpuFallback.GetColumn(matrix, columnIndex);
+    }
+
+    public Vector<T> GetRow<T>(Matrix<T> matrix, int rowIndex)
+    {
+        return _cpuFallback.GetRow(matrix, rowIndex);
+    }
+
+    public void SetColumn<T>(Matrix<T> matrix, int columnIndex, Vector<T> values)
+    {
+        _cpuFallback.SetColumn(matrix, columnIndex, values);
+    }
+
+    public void SetRow<T>(Matrix<T> matrix, int rowIndex, Vector<T> values)
+    {
+        _cpuFallback.SetRow(matrix, rowIndex, values);
+    }
+
     // GPU implementations for float matrices
 
     private Matrix<float> MatrixMultiplyGpu(Matrix<float> a, Matrix<float> b)

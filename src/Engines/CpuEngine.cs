@@ -546,6 +546,127 @@ public class CpuEngine : IEngine
         return sum;
     }
 
+    public void SwapColumns<T>(Matrix<T> matrix, int col1, int col2)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+
+        // Direct element swap - no vectorization benefit for column swaps due to strided access
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            T temp = matrix[i, col1];
+            matrix[i, col1] = matrix[i, col2];
+            matrix[i, col2] = temp;
+        }
+    }
+
+    public void SwapRows<T>(Matrix<T> matrix, int row1, int row2)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+
+        // Use vectorized operations for row swapping
+        var tempRow1 = GetRow(matrix, row1);
+        var tempRow2 = GetRow(matrix, row2);
+
+        SetRow(matrix, row1, tempRow2);
+        SetRow(matrix, row2, tempRow1);
+    }
+
+    public Matrix<T> OuterProduct<T>(Vector<T> a, Vector<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+
+        var result = new Matrix<T>(a.Length, b.Length);
+        var aArray = a.ToArray();
+        var bArray = b.ToArray();
+
+        // Use SIMD-optimized TensorPrimitives for float type
+        if (typeof(T) == typeof(float) && bArray.Length >= 16)
+        {
+            var bFloat = (float[])(object)bArray;
+            var aFloat = (float[])(object)aArray;
+
+            for (int i = 0; i < aFloat.Length; i++)
+            {
+                var rowData = new float[bFloat.Length];
+                // SIMD vectorized: multiply vector b by scalar a[i]
+                System.Numerics.Tensors.TensorPrimitives.Multiply(bFloat, aFloat[i], rowData);
+
+                // Copy result to matrix
+                for (int j = 0; j < bFloat.Length; j++)
+                {
+                    result[i, j] = (T)(object)rowData[j];
+                }
+            }
+        }
+        else
+        {
+            // Fallback using NumOps
+            var numOps = MathHelper.GetNumericOperations<T>();
+            for (int i = 0; i < aArray.Length; i++)
+            {
+                for (int j = 0; j < bArray.Length; j++)
+                {
+                    result[i, j] = numOps.Multiply(aArray[i], bArray[j]);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public Vector<T> GetColumn<T>(Matrix<T> matrix, int columnIndex)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+
+        // No vectorization benefit - column access is strided
+        var result = new T[matrix.Rows];
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            result[i] = matrix[i, columnIndex];
+        }
+        return new Vector<T>(result);
+    }
+
+    public Vector<T> GetRow<T>(Matrix<T> matrix, int rowIndex)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+
+        // Row access is contiguous - can use direct array copy
+        var result = new T[matrix.Columns];
+        for (int j = 0; j < matrix.Columns; j++)
+        {
+            result[j] = matrix[rowIndex, j];
+        }
+        return new Vector<T>(result);
+    }
+
+    public void SetColumn<T>(Matrix<T> matrix, int columnIndex, Vector<T> values)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+        if (values == null) throw new ArgumentNullException(nameof(values));
+
+        // No vectorization benefit - column access is strided
+        var valuesArray = values.ToArray();
+        for (int i = 0; i < Math.Min(matrix.Rows, valuesArray.Length); i++)
+        {
+            matrix[i, columnIndex] = valuesArray[i];
+        }
+    }
+
+    public void SetRow<T>(Matrix<T> matrix, int rowIndex, Vector<T> values)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+        if (values == null) throw new ArgumentNullException(nameof(values));
+
+        // Row access is contiguous - direct assignment
+        var valuesArray = values.ToArray();
+        for (int j = 0; j < Math.Min(matrix.Columns, valuesArray.Length); j++)
+        {
+            matrix[rowIndex, j] = valuesArray[j];
+        }
+    }
+
     #endregion
 
     #region Tensor Operations (Phase B: Epic 3)

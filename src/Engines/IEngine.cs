@@ -576,6 +576,90 @@ public interface IEngine
     /// </remarks>
     T MatrixSumOfSquares<T>(Matrix<T> matrix);
 
+    /// <summary>
+    /// Swaps two columns in a matrix in-place using vectorized operations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of matrix elements.</typeparam>
+    /// <param name="matrix">The matrix to modify.</param>
+    /// <param name="col1">The first column index.</param>
+    /// <param name="col2">The second column index.</param>
+    /// <remarks>
+    /// GPU-accelerated column swapping for matrix decompositions.
+    /// </remarks>
+    void SwapColumns<T>(Matrix<T> matrix, int col1, int col2);
+
+    /// <summary>
+    /// Swaps two rows in a matrix in-place using vectorized operations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of matrix elements.</typeparam>
+    /// <param name="matrix">The matrix to modify.</param>
+    /// <param name="row1">The first row index.</param>
+    /// <param name="row2">The second row index.</param>
+    /// <remarks>
+    /// GPU-accelerated row swapping for matrix decompositions.
+    /// </remarks>
+    void SwapRows<T>(Matrix<T> matrix, int row1, int row2);
+
+    /// <summary>
+    /// Computes the outer product of two vectors: result[i,j] = a[i] * b[j].
+    /// </summary>
+    /// <typeparam name="T">The numeric type of vector elements.</typeparam>
+    /// <param name="a">The first vector (length M).</param>
+    /// <param name="b">The second vector (length N).</param>
+    /// <returns>An M×N matrix containing the outer product.</returns>
+    /// <remarks>
+    /// GPU-accelerated outer product for SVD and other decompositions.
+    /// </remarks>
+    Matrix<T> OuterProduct<T>(Vector<T> a, Vector<T> b);
+
+    /// <summary>
+    /// Extracts a column from a matrix as a vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of matrix elements.</typeparam>
+    /// <param name="matrix">The source matrix.</param>
+    /// <param name="columnIndex">The column index to extract.</param>
+    /// <returns>A vector containing the column values.</returns>
+    /// <remarks>
+    /// GPU-accelerated column extraction.
+    /// </remarks>
+    Vector<T> GetColumn<T>(Matrix<T> matrix, int columnIndex);
+
+    /// <summary>
+    /// Extracts a row from a matrix as a vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of matrix elements.</typeparam>
+    /// <param name="matrix">The source matrix.</param>
+    /// <param name="rowIndex">The row index to extract.</param>
+    /// <returns>A vector containing the row values.</returns>
+    /// <remarks>
+    /// GPU-accelerated row extraction.
+    /// </remarks>
+    Vector<T> GetRow<T>(Matrix<T> matrix, int rowIndex);
+
+    /// <summary>
+    /// Sets a column in a matrix from a vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of matrix elements.</typeparam>
+    /// <param name="matrix">The target matrix.</param>
+    /// <param name="columnIndex">The column index to set.</param>
+    /// <param name="values">The vector of values to set.</param>
+    /// <remarks>
+    /// GPU-accelerated column setting.
+    /// </remarks>
+    void SetColumn<T>(Matrix<T> matrix, int columnIndex, Vector<T> values);
+
+    /// <summary>
+    /// Sets a row in a matrix from a vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of matrix elements.</typeparam>
+    /// <param name="matrix">The target matrix.</param>
+    /// <param name="rowIndex">The row index to set.</param>
+    /// <param name="values">The vector of values to set.</param>
+    /// <remarks>
+    /// GPU-accelerated row setting.
+    /// </remarks>
+    void SetRow<T>(Matrix<T> matrix, int rowIndex, Vector<T> values);
+
     #endregion
 
     #region Tensor Operations (Phase B: Epic 3)
