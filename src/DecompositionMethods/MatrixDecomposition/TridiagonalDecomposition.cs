@@ -199,7 +199,9 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
         v[0] = NumOps.One;
         Vector<T> w = A.Multiply(v);
         T alpha = w.DotProduct(v);
-        w = w.Subtract(v.Multiply(alpha));
+        // VECTORIZED: Subtract projection using Engine operations
+        var proj1 = (Vector<T>)Engine.Multiply(v, alpha);
+        w = (Vector<T>)Engine.Subtract(w, proj1);
         T beta = w.Norm();
 
         QMatrix.SetColumn(0, v);
@@ -212,12 +214,16 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
                 break; // Early termination if beta becomes zero
             }
 
-            v = w.Divide(beta);
+            // VECTORIZED: Normalize using Engine division
+            v = (Vector<T>)Engine.Divide(w, beta);
             QMatrix.SetColumn(j, v);
 
-            w = A.Multiply(v).Subtract(v.Multiply(beta));
+            // VECTORIZED: Subtract projection using Engine operations
+            var proj2 = (Vector<T>)Engine.Multiply(v, beta);
+            w = (Vector<T>)Engine.Subtract(A.Multiply(v), proj2);
             alpha = w.DotProduct(v);
-            w = w.Subtract(v.Multiply(alpha));
+            var proj3 = (Vector<T>)Engine.Multiply(v, alpha);
+            w = (Vector<T>)Engine.Subtract(w, proj3);
 
             if (j < n - 1)
             {
