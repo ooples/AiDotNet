@@ -288,8 +288,8 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
 
         v[0] = NumOps.Add(v[0], NumOps.Multiply(NumOps.SignOrZero(x), alpha));
 
-        // VECTORIZED: Use dot product for norm calculation
-        T beta = NumOps.Sqrt(NumOps.Multiply(NumOps.FromDouble(2), v.DotProduct(v)));
+        // VECTORIZED: Use dot product for norm calculation (||v||)
+        T beta = NumOps.Sqrt(v.DotProduct(v));
 
         if (NumOps.Equals(beta, NumOps.Zero)) return Matrix<T>.CreateIdentity(n);
 

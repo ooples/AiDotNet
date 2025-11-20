@@ -727,23 +727,20 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
-        // Validate input
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
         if (input.Length < _arOrder)
         {
-            throw new ArgumentException($"Input vector must contain at least {_arOrder} elements for an AR({_arOrder}) model.", nameof(input));
+            throw new ArgumentException(
+                $"Input vector must contain at least {_arOrder} elements for an AR({_arOrder}) model.",
+                nameof(input));
         }
-    
-        // Create a matrix with a single row
-        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            singleRowMatrix[0, i] = input[i];
-        }
-    
-        // Use the existing Predict method
-        Vector<T> predictions = Predict(singleRowMatrix);
-    
-        // Return the single prediction
-        return predictions[0];
+
+        // Interpret the input as the complete history up to the current time
+        // and predict the next value using the vectorized helper
+        return Predict(input, input.Length);
     }
 }

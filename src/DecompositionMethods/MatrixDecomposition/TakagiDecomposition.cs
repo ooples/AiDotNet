@@ -92,14 +92,14 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         var S = new Matrix<T>(rows, rows);
         var U = new Matrix<Complex<T>>(rows, rows);
 
-        // VECTORIZED: Process each row of eigenvectors as a vector operation
+        // VECTORIZED: Process each column of eigenvectors as a vector operation
         for (int i = 0; i < rows; i++)
         {
             S[i, i] = NumOps.Sqrt(NumOps.Abs(eigenValues[i]));
 
-            Vector<T> eigenVectorRow = eigenVectors.GetRow(i);
-            Vector<Complex<T>> complexRow = new Vector<Complex<T>>(eigenVectorRow.Select(val => new Complex<T>(val, NumOps.Zero)));
-            U.SetRow(i, complexRow);
+            Vector<T> eigenVector = eigenVectors.GetColumn(i);
+            Vector<Complex<T>> complexVector = new Vector<Complex<T>>(eigenVector.Select(val => new Complex<T>(val, NumOps.Zero)));
+            U.SetColumn(i, complexVector);
         }
 
         return (S, U);
@@ -355,14 +355,14 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         var S = new Matrix<T>(rows, rows);
         var U = new Matrix<Complex<T>>(rows, rows);
 
-        // VECTORIZED: Process each row of eigenvectors as a vector operation
+        // VECTORIZED: Process each column of eigenvectors as a vector operation
         for (int i = 0; i < rows; i++)
         {
             S[i, i] = NumOps.Sqrt(NumOps.Abs(eigenValues[i]));
 
-            Vector<T> eigenVectorRow = eigenVectors.GetRow(i);
-            Vector<Complex<T>> complexRow = new Vector<Complex<T>>(eigenVectorRow.Select(val => new Complex<T>(val, NumOps.Zero)));
-            U.SetRow(i, complexRow);
+            Vector<T> eigenVector = eigenVectors.GetColumn(i);
+            Vector<Complex<T>> complexVector = new Vector<Complex<T>>(eigenVector.Select(val => new Complex<T>(val, NumOps.Zero)));
+            U.SetColumn(i, complexVector);
         }
 
         return (S, U);

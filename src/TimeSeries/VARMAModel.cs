@@ -222,13 +222,38 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     private Vector<T> PredictMA()
     {
         Vector<T> maPrediction = new Vector<T>(_varmaOptions.OutputDimension);
-        Vector<T> lastResiduals = _residuals.GetRow(_residuals.Rows - 1);
+        
+        // Build flattened residual vector matching the training feature layout
+        // (concatenate the last MaLag residual rows in the same order as PrepareLaggedResiduals)
+        int m = _varmaOptions.OutputDimension;
+        int p = _varmaOptions.MaLag;
+        int availableLags = Math.Min(p, _residuals.Rows);
+        
+        List<T> laggedResidualData = new List<T>(m * p);
+        for (int j = 0; j < p; j++)
+        {
+            if (j < availableLags)
+            {
+                Vector<T> laggedRow = _residuals.GetRow(_residuals.Rows - 1 - j);
+                laggedResidualData.AddRange(laggedRow);
+            }
+            else
+            {
+                // Pad with zeros if fewer than MaLag residuals available
+                for (int k = 0; k < m; k++)
+                {
+                    laggedResidualData.Add(NumOps.Zero);
+                }
+            }
+        }
+        
+        Vector<T> laggedResidualVector = new Vector<T>(laggedResidualData.ToArray());
 
         // VECTORIZED: Use dot product to compute MA prediction for each output
-        for (int i = 0; i < _varmaOptions.OutputDimension; i++)
+        for (int i = 0; i < m; i++)
         {
             Vector<T> maCoeffsRow = _maCoefficients.GetRow(i);
-            maPrediction[i] = maCoeffsRow.DotProduct(lastResiduals);
+            maPrediction[i] = maCoeffsRow.DotProduct(laggedResidualVector);
         }
 
         return maPrediction;
