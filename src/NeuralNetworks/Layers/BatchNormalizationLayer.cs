@@ -658,13 +658,13 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         int featureSize = input.Shape[1];
         var variance = new Vector<T>(featureSize);
 
+        // Vectorized variance calculation across batch dimension
         for (int i = 0; i < batchSize; i++)
         {
-            for (int j = 0; j < featureSize; j++)
-            {
-                T diff = NumOps.Subtract(input[i, j], mean[j]);
-                variance[j] = NumOps.Add(variance[j], NumOps.Multiply(diff, diff));
-            }
+            var row = input.GetRow(i);
+            var diff = (Vector<T>)Engine.Subtract(row, mean);
+            var squaredDiff = (Vector<T>)Engine.Multiply(diff, diff);
+            variance = (Vector<T>)Engine.Add(variance, squaredDiff);
         }
 
         return variance.Divide(NumOps.FromDouble(batchSize));
