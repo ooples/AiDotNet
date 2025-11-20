@@ -85,8 +85,7 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// </remarks>
     public AdagradOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        AdagradOptimizerOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
+        AdagradOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
         _options = options ?? new AdagradOptimizerOptions<T, TInput, TOutput>();
