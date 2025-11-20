@@ -265,7 +265,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void NormalizeSeasonal()
     {
-        T seasonalMean = _seasonal.Sum();
+        T seasonalMean = Engine.Sum(_seasonal);
         seasonalMean = NumOps.Divide(seasonalMean, NumOps.FromDouble(_seasonal.Length));
         _seasonal = _seasonal.Transform(s => NumOps.Subtract(s, seasonalMean));
         _trend = _trend.Transform(t => NumOps.Add(t, seasonalMean));
@@ -302,7 +302,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         if (effectiveWindow > 0)
         {
             Vector<T> initialWindow = data.Slice(0, effectiveWindow);
-            windowSum = initialWindow.Sum();
+            windowSum = Engine.Sum(initialWindow);
         }
 
         // Calculate moving average
@@ -315,7 +315,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
                 int end = Math.Min(n, i + effectiveWindow / 2 + 1);
                 // VECTORIZED: Use Vector slice and sum
                 Vector<T> windowSlice = data.Slice(start, end);
-                T sum = windowSlice.Sum();
+                T sum = Engine.Sum(windowSlice);
                 result[i] = NumOps.Divide(sum, NumOps.FromDouble(end - start));
             }
             else
@@ -1385,7 +1385,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         }
 
         // VECTORIZED: Calculate denominator using dot product
-        denominator = deviations.DotProduct(deviations);
+        denominator = Engine.DotProduct(deviations, deviations);
     
         if (NumOps.LessThanOrEquals(denominator, NumOps.Zero))
         {

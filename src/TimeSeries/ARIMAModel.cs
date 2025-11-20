@@ -111,8 +111,8 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     private T EstimateConstant(Vector<T> y, Vector<T> arCoefficients, Vector<T> maCoefficients)
     {
         T mean = y.Average();
-        // VECTORIZED: Use Vector.Sum() for AR coefficient summation
-        T arSum = arCoefficients.Sum();
+        // VECTORIZED: Use Engine.Sum() for AR coefficient summation
+        T arSum = Engine.Sum(arCoefficients);
 
         return NumOps.Multiply(mean, NumOps.Subtract(NumOps.One, arSum));
     }
@@ -148,13 +148,13 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
             // VECTORIZED: Add AR component using dot product
             if (_arCoefficients.Length > 0)
             {
-                prediction = NumOps.Add(prediction, _arCoefficients.DotProduct(lastObservedValues));
+                prediction = NumOps.Add(prediction, Engine.DotProduct(_arCoefficients, lastObservedValues));
             }
 
             // VECTORIZED: Add MA component using dot product
             if (_maCoefficients.Length > 0)
             {
-                prediction = NumOps.Add(prediction, _maCoefficients.DotProduct(lastErrors));
+                prediction = NumOps.Add(prediction, Engine.DotProduct(_maCoefficients, lastErrors));
             }
 
             predictions[i] = prediction;
