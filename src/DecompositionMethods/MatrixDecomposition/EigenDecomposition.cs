@@ -194,20 +194,22 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
 
         for (int iter = 0; iter < 100; iter++)
         {
-            // Find the largest off-diagonal element
+            // VECTORIZED: Find the largest off-diagonal element using row operations
             T maxOffDiagonal = NumOps.Zero;
             int p = 0, q = 0;
 
             for (int i = 0; i < n - 1; i++)
             {
-                for (int j = i + 1; j < n; j++)
+                // VECTORIZED: Extract upper triangular portion of row and find max
+                Vector<T> rowSegment = A.GetRow(i).Skip(i + 1).Take(n - i - 1).ToVector();
+                for (int k = 0; k < rowSegment.Length; k++)
                 {
-                    T absValue = NumOps.Abs(A[i, j]);
+                    T absValue = NumOps.Abs(rowSegment[k]);
                     if (NumOps.GreaterThan(absValue, maxOffDiagonal))
                     {
                         maxOffDiagonal = absValue;
                         p = i;
-                        q = j;
+                        q = i + 1 + k;
                     }
                 }
             }
