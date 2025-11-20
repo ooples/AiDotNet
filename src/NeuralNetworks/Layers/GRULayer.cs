@@ -528,8 +528,19 @@ public class GRULayer<T> : LayerBase<T>
             var z = ApplyActivation(xt.Multiply(_Wz).Add(currentHiddenState.Multiply(_Uz)).Add(_bz), true);
             var r = ApplyActivation(xt.Multiply(_Wr).Add(currentHiddenState.Multiply(_Ur)).Add(_br), true);
             var h_candidate = ApplyActivation(xt.Multiply(_Wh).Add(r.ElementwiseMultiply(currentHiddenState.Multiply(_Uh))).Add(_bh), false);
+            // Vectorized: compute (1 - z) using Tensor operations
+
+            var ones = new Tensor<T>(z.Shape);
+
+            ones.Fill(NumOps.One);
+
+            var oneMinusZ = ones.Subtract(z);
+
+
             var h = z.ElementwiseMultiply(currentHiddenState).Add(
-                z.Transform((x, _) => NumOps.Subtract(NumOps.One, x)).ElementwiseMultiply(h_candidate)
+
+                oneMinusZ.ElementwiseMultiply(h_candidate)
+
             );
     
             currentHiddenState = h;
@@ -695,9 +706,12 @@ public class GRULayer<T> : LayerBase<T>
         {
             // Handle single timestep case (simple backward pass)
             var dh = outputGradient;
-            var dh_candidate = dh.ElementwiseMultiply(
-                _lastZ.Transform((x, _) => NumOps.Subtract(NumOps.One, x))
-            );
+            // Vectorized: compute (1 - _lastZ) using Tensor operations
+            var ones1 = new Tensor<T>(_lastZ.Shape);
+            ones1.Fill(NumOps.One);
+            var oneMinusLastZ = ones1.Subtract(_lastZ);
+
+            var dh_candidate = dh.ElementwiseMultiply(oneMinusLastZ);
             var dz = dh.ElementwiseMultiply(_lastHiddenState.Subtract(_lastH));
 
             var dr = ApplyActivationDerivative(_lastH, isRecurrent: false)
@@ -810,8 +824,13 @@ public class GRULayer<T> : LayerBase<T>
                     var r = ComputeGate(xt, currentH, _Wr, _Ur, _br, true);
                     var h_candidate = ComputeGate(xt, r.ElementwiseMultiply(currentH), _Wh, _Uh, _bh, false);
 
+                    // Vectorized: compute (1 - z) using Tensor operations
+                    var ones2 = new Tensor<T>(z.Shape);
+                    ones2.Fill(NumOps.One);
+                    var oneMinusZ2 = ones2.Subtract(z);
+
                     var newH = z.ElementwiseMultiply(currentH).Add(
-                        z.Transform((x, _) => NumOps.Subtract(NumOps.One, x)).ElementwiseMultiply(h_candidate)
+                        oneMinusZ2.ElementwiseMultiply(h_candidate)
                     );
 
                     currentH = newH;
@@ -843,9 +862,12 @@ public class GRULayer<T> : LayerBase<T>
                 var h_prev = t > 0 ? timeStepHidden[t - 1] : new Tensor<T>([batchSize, _hiddenSize]);
 
                 // Calculate gradients for this timestep
-                var dh_candidate = dh.ElementwiseMultiply(
-                    z.Transform((x, _) => NumOps.Subtract(NumOps.One, x))
-                );
+                // Vectorized: compute (1 - z) using Tensor operations
+                var ones3 = new Tensor<T>(z.Shape);
+                ones3.Fill(NumOps.One);
+                var oneMinusZ3 = ones3.Subtract(z);
+
+                var dh_candidate = dh.ElementwiseMultiply(oneMinusZ3);
                 var dz = dh.ElementwiseMultiply(h_prev.Subtract(h_candidate));
 
                 var dr = ApplyActivationDerivative(h_candidate, isRecurrent: false)
