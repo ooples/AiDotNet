@@ -281,7 +281,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// For example, if yesterday's temperature was high, today's might also be high.
     /// 
     /// The prediction is calculated as:
-    /// prediction = (coefficient1 × value1) + (coefficient2 × value2) + ... + (coefficientp × valuep)
+    /// prediction = (coefficient1 ï¿½ value1) + (coefficient2 ï¿½ value2) + ... + (coefficientp ï¿½ valuep)
     /// 
     /// Where:
     /// - coefficientn is the importance of each past value
@@ -292,13 +292,26 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private T Predict(Vector<T> y, int t)
     {
-        T prediction = NumOps.Zero;
-        for (int i = 0; i < _arOrder && t - i - 1 >= 0; i++)
+        // VECTORIZED: Use dot product for AR prediction
+        int availableHistory = Math.Min(_arOrder, t);
+        if (availableHistory == 0)
         {
-            prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], y[t - i - 1]));
+            return NumOps.Zero;
         }
 
-        return prediction;
+        // Build vector of past values
+        T[] pastValues = new T[availableHistory];
+        for (int i = 0; i < availableHistory; i++)
+        {
+            pastValues[i] = y[t - i - 1];
+        }
+
+        Vector<T> pastVector = new Vector<T>(pastValues);
+        Vector<T> coeffSlice = availableHistory < _arOrder
+            ? _arCoefficients.Slice(0, availableHistory)
+            : _arCoefficients;
+
+        return coeffSlice.DotProduct(pastVector);
     }
 
     /// <summary>
