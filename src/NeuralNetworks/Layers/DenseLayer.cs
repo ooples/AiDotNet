@@ -443,8 +443,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (Regularization == RegularizationType.L1 || Regularization == RegularizationType.L1L2)
         {
             var weightsVec = _weights.ToRowVector();
-            var absWeights = weightsVec.Transform(NumOps.Abs);
-            T l1Loss = absWeights.Sum();
+            var absWeights = (Vector<T>)Engine.Abs(weightsVec);
+            T l1Loss = Engine.Sum(absWeights);
             l1Loss = NumOps.Multiply(L1Strength, l1Loss);
             regularizationLoss = NumOps.Add(regularizationLoss, l1Loss);
         }
@@ -453,8 +453,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (Regularization == RegularizationType.L2 || Regularization == RegularizationType.L1L2)
         {
             var weightsVec = _weights.ToRowVector();
-            var squaredWeights = weightsVec.Transform(x => NumOps.Multiply(x, x));
-            T l2Loss = squaredWeights.Sum();
+            T l2Loss = Engine.DotProduct(weightsVec, weightsVec);  // weightsVec · weightsVec = Σ(w²)
             // L2 regularization is typically 0.5 * lambda * Σ(w²)
             l2Loss = NumOps.Multiply(L2Strength, l2Loss);
             l2Loss = NumOps.Multiply(NumOps.FromDouble(0.5), l2Loss);
