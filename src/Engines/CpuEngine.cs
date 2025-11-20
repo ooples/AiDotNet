@@ -259,6 +259,59 @@ public class CpuEngine : IEngine
         return result;
     }
 
+    #region Reduction Operations
+
+    /// <inheritdoc/>
+    public T Sum<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T sum = numOps.Zero;
+
+        for (int i = 0; i < vector.Length; i++)
+        {
+            sum = numOps.Add(sum, vector[i]);
+        }
+
+        return sum;
+    }
+
+    /// <inheritdoc/>
+    public T DotProduct<T>(Vector<T> a, Vector<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Length != b.Length)
+        {
+            throw new ArgumentException($"Vectors must have the same length for dot product. Got lengths {a.Length} and {b.Length}.");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T result = numOps.Zero;
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            result = numOps.Add(result, numOps.Multiply(a[i], b[i]));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public T Mean<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        if (vector.Length == 0) throw new ArgumentException("Cannot compute mean of empty vector.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T sum = Sum(vector);
+        T length = numOps.FromDouble(vector.Length);
+        return numOps.Divide(sum, length);
+    }
+
+    #endregion
+
     #region Matrix Operations (Phase B: Epic 2)
 
     /// <inheritdoc/>

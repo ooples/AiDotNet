@@ -1105,6 +1105,34 @@ public class GpuEngine : IEngine, IDisposable
         return _cpuFallback.Sign(vector);
     }
 
+    #region Reduction Operations
+
+    /// <inheritdoc/>
+    public T Sum<T>(Vector<T> vector)
+    {
+        // Reduction operations - use CPU fallback for now
+        // TODO: Implement GPU reduction kernels with warp-level primitives
+        return _cpuFallback.Sum(vector);
+    }
+
+    /// <inheritdoc/>
+    public T DotProduct<T>(Vector<T> a, Vector<T> b)
+    {
+        // Reduction operations - use CPU fallback for now
+        // TODO: Implement GPU dot product with parallel reduction
+        return _cpuFallback.DotProduct(a, b);
+    }
+
+    /// <inheritdoc/>
+    public T Mean<T>(Vector<T> vector)
+    {
+        // Reduction operations - use CPU fallback for now
+        // TODO: Implement GPU mean with parallel reduction
+        return _cpuFallback.Mean(vector);
+    }
+
+    #endregion
+
     #region Activation Functions
 
     /// <inheritdoc/>

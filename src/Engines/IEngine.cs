@@ -190,6 +190,66 @@ public interface IEngine
 
     #endregion
 
+    #region Reduction Operations
+
+    /// <summary>
+    /// Computes the sum of all elements in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>The sum of all elements.</returns>
+    /// <remarks>
+    /// <para>
+    /// Reduction operation that sums all elements: result = v[0] + v[1] + ... + v[n-1].
+    /// Critical for computing totals, norms, and other aggregate statistics.
+    /// CPU implementation uses parallel reduction for large vectors.
+    /// GPU implementation uses warp-level reduction primitives for maximum efficiency.
+    /// </para>
+    /// </remarks>
+    T Sum<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the dot product (inner product) of two vectors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vectors.</typeparam>
+    /// <param name="a">The first vector.</param>
+    /// <param name="b">The second vector.</param>
+    /// <returns>The dot product of the two vectors.</returns>
+    /// <exception cref="ArgumentException">Thrown when vectors have different lengths.</exception>
+    /// <remarks>
+    /// <para>
+    /// Computes result = sum(a[i] * b[i]) for all i.
+    /// Fundamental operation in linear algebra used for:
+    /// - Computing similarities and distances
+    /// - Matrix-vector products (each row dot product with vector)
+    /// - Neural network forward/backward passes
+    /// - ARIMA/time series predictions
+    /// </para>
+    /// <para>
+    /// CPU implementation uses SIMD and parallel reduction.
+    /// GPU implementation uses warp-level primitives for maximum throughput.
+    /// This is one of the most performance-critical operations in deep learning.
+    /// </para>
+    /// </remarks>
+    T DotProduct<T>(Vector<T> a, Vector<T> b);
+
+    /// <summary>
+    /// Computes the mean (average) of all elements in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>The mean of all elements.</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes result = sum(v[i]) / length.
+    /// Equivalent to Sum(vector) divided by vector length, but may use optimized implementations.
+    /// Used extensively in statistics, normalization, and time series analysis.
+    /// </para>
+    /// </remarks>
+    T Mean<T>(Vector<T> vector);
+
+    #endregion
+
     #region Activation Functions
 
     /// <summary>
