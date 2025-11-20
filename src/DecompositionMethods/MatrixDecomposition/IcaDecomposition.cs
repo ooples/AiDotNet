@@ -258,11 +258,11 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
         Matrix<T> C = XT.Multiply(X);
         T scale = NumOps.FromDouble(1.0 / m);
 
-        // VECTORIZED: Scale entire matrix using vector operations row by row
+        // VECTORIZED: Scale entire matrix using Engine operations row by row
         for (int i = 0; i < C.Rows; i++)
         {
             Vector<T> row = C.GetRow(i);
-            Vector<T> scaledRow = row.Multiply(scale);
+            Vector<T> scaledRow = (Vector<T>)Engine.Multiply(row, scale);
             for (int j = 0; j < C.Columns; j++)
             {
                 C[i, j] = scaledRow[j];
@@ -401,14 +401,17 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
                 {
                     Vector<T> wj = W.GetRow(j);
                     T projection = w.DotProduct(wj);
-                    w = w.Subtract(wj.Multiply(projection));
+                    // VECTORIZED: Subtract projection using Engine operations
+                    var proj = (Vector<T>)Engine.Multiply(wj, projection);
+                    w = (Vector<T>)Engine.Subtract(w, proj);
                 }
 
                 // Normalize w
                 T norm = w.Norm();
                 if (!NumOps.Equals(norm, NumOps.Zero))
                 {
-                    w = w.Divide(norm);
+                    // VECTORIZED: Normalize using Engine division
+                    w = (Vector<T>)Engine.Divide(w, norm);
                 }
 
                 // Check for convergence
@@ -471,14 +474,17 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
             {
                 Vector<T> u = result.GetRow(j);
                 T projection = v.DotProduct(u);
-                v = v.Subtract(u.Multiply(projection));
+                // VECTORIZED: Subtract projection using Engine operations
+                var proj = (Vector<T>)Engine.Multiply(u, projection);
+                v = (Vector<T>)Engine.Subtract(v, proj);
             }
 
             // Normalize
             T norm = v.Norm();
             if (!NumOps.Equals(norm, NumOps.Zero))
             {
-                v = v.Divide(norm);
+                // VECTORIZED: Normalize using Engine division
+                v = (Vector<T>)Engine.Divide(v, norm);
             }
 
             for (int k = 0; k < cols; k++)
