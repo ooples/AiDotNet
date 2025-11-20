@@ -345,11 +345,23 @@ public class QrDecomposition<T> : MatrixDecompositionBase<T>
         var x = new Vector<T>(R.Columns);
         for (int i = R.Columns - 1; i >= 0; i--)
         {
+            // VECTORIZED: Use dot product for sum computation
             T sum = NumOps.Zero;
-            for (int j = i + 1; j < R.Columns; j++)
+            if (i < R.Columns - 1)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(R[i, j], x[j]));
+                int remaining = R.Columns - i - 1;
+                var rowSlice = new T[remaining];
+                var xSlice = new T[remaining];
+                for (int k = 0; k < remaining; k++)
+                {
+                    rowSlice[k] = R[i, i + 1 + k];
+                    xSlice[k] = x[i + 1 + k];
+                }
+                var rowVec = new Vector<T>(rowSlice);
+                var xVec = new Vector<T>(xSlice);
+                sum = rowVec.DotProduct(xVec);
             }
+
             x[i] = NumOps.Divide(NumOps.Subtract(y[i], sum), R[i, i]);
         }
 
