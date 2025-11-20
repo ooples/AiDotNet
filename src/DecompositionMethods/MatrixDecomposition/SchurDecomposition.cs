@@ -293,8 +293,8 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
 
         if (NumOps.Equals(beta, NumOps.Zero)) return Matrix<T>.CreateIdentity(n);
 
-        // VECTORIZED: Use outer product to construct Householder reflection matrix
-        v = v.Divide(beta);
+        // VECTORIZED: Use Engine division for normalization
+        v = (Vector<T>)Engine.Divide(v, beta);
         return Matrix<T>.CreateIdentity(n).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
     }
 

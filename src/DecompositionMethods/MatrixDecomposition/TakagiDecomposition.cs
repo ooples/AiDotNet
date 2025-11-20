@@ -439,7 +439,9 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
 
         // Initialize with random vector
         var v = Vector<T>.CreateRandom(n);
-        var _vectors = new List<Vector<T>> { v.Divide(v.Norm()) };
+        // VECTORIZED: Normalize using Engine division
+        var normalized = (Vector<T>)Engine.Divide(v, v.Norm());
+        var _vectors = new List<Vector<T>> { normalized };
         var _alphaCoefficients = new List<T>();
         var _betaCoefficients = new List<T>();
 
