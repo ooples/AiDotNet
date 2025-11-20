@@ -322,10 +322,26 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     private T Predict(Vector<T> y, int t)
     {
         T prediction = NumOps.Zero;
-        for (int i = 0; i < _arOrder && t - i - 1 >= 0; i++)
+
+        // VECTORIZED: AR component using dot product
+        int availableARHistory = Math.Min(_arOrder, t);
+        if (availableARHistory > 0)
         {
-            prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], y[t - i - 1]));
+            T[] arPastValues = new T[availableARHistory];
+            for (int i = 0; i < availableARHistory; i++)
+            {
+                arPastValues[i] = y[t - i - 1];
+            }
+
+            Vector<T> arPastVector = new Vector<T>(arPastValues);
+            Vector<T> arCoeffSlice = availableARHistory < _arOrder
+                ? _arCoefficients.Slice(0, availableARHistory)
+                : _arCoefficients;
+
+            prediction = arCoeffSlice.DotProduct(arPastVector);
         }
+
+        // MA component (recursive - keep as is for correctness)
         for (int i = 0; i < _maOrder && t - i - 1 >= 0; i++)
         {
             T residual = NumOps.Subtract(y[t - i - 1], Predict(y, t - i - 1));
