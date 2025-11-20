@@ -435,7 +435,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _versioningConfig,
             _abTestingConfig,
             _telemetryConfig,
-            _exportConfig);
+            _exportConfig,
+            _gpuAccelerationConfig);
 
         // Create PredictionModelResult with meta-learning constructor
         var result = new PredictionModelResult<T, TInput, TOutput>(
@@ -672,7 +673,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _versioningConfig,
             _abTestingConfig,
             _telemetryConfig,
-            _exportConfig);
+            _exportConfig,
+            _gpuAccelerationConfig);
 
         // Return PredictionModelResult with CV results and agent data
         var finalResult = new PredictionModelResult<T, TInput, TOutput>(
@@ -849,7 +851,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _versioningConfig,
             _abTestingConfig,
             _telemetryConfig,
-            _exportConfig);
+            _exportConfig,
+            _gpuAccelerationConfig);
 
         // Return standard PredictionModelResult
         var result = new PredictionModelResult<T, TInput, TOutput>(

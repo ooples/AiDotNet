@@ -56,7 +56,9 @@ public class ComplexMatrixDecomposition<T> : MatrixDecompositionBase<Complex<T>>
         for (int i = 0; i < realMatrix.Rows; i++)
         {
             Vector<T> realRow = realMatrix.GetRow(i);
-            Vector<Complex<T>> complexRow = new Vector<Complex<T>>(realRow.Select(val => new Complex<T>(val, ops.Zero)));
+            // Convert to array first to avoid nested Select operations for better performance
+            Complex<T>[] complexArray = realRow.Select(val => new Complex<T>(val, ops.Zero)).ToArray();
+            Vector<Complex<T>> complexRow = new Vector<Complex<T>>(complexArray);
             complexMatrix.SetRow(i, complexRow);
         }
 
