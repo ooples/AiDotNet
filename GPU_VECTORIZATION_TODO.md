@@ -276,3 +276,20 @@ For each layer, check:
 - Vectorized entropy calculations using Engine.Log/Multiply/Max
 - Optimized embedding lookups with Matrix.GetRow()
 - Centralized activation dispatch via ActivationHelper
+
+## Neural Network Layers (Phase C)
+
+### Completed Files (3/56)
+1. **DenseLayer.cs** - `ece1710e` - Regularization (L1/L2) using Engine.Abs, Engine.Sum, Engine.DotProduct  
+2. **LayerNormalizationLayer.cs** - `5f760557` - Backward pass gradient accumulation using Engine.Multiply, Engine.Sum
+3. **EmbeddingLayer.cs** - `a83615c2` - Regularization using Engine.MatrixSumOfSquares, Engine.DotProduct
+
+### Remaining Work
+- 53 layer files still contain NumOps operations
+- Many require Tensor-level Engine support (not yet implemented)
+- Priority: Layers with Vector/Matrix operations that can use existing Engine methods
+
+### Notes
+- Layers working with Tensors (GRULayer, LSTMLayer, ConvolutionalLayer, etc.) require Engine.TensorSubtract, Engine.TensorMultiply, etc.
+- These tensor operations need careful design to support batched operations
+- Current focus: Vector/Matrix operations using existing Engine infrastructure
