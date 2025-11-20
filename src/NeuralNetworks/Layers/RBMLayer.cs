@@ -603,9 +603,14 @@ public class RBMLayer<T> : LayerBase<T>
         Vector<T> hiddenProbs = new Vector<T>(_hiddenUnits);
         for (int j = 0; j < _hiddenUnits; j++)
         {
-            hiddenProbs[j] = ScalarActivation != null
-                ? ScalarActivation.Activate(activations[j])
-                : VectorActivation!.Activate(new Vector<T>([activations[j]]))[0];
+            if (ScalarActivation is not null)
+            {
+                hiddenProbs[j] = ScalarActivation.Activate(activations[j]);
+            }
+            else if (VectorActivation is not null)
+            {
+                hiddenProbs[j] = VectorActivation.Activate(new Vector<T>([activations[j]]))[0];
+            }
         }
 
         return hiddenProbs;
@@ -645,9 +650,14 @@ public class RBMLayer<T> : LayerBase<T>
         Vector<T> visibleProbs = new Vector<T>(_visibleUnits);
         for (int i = 0; i < _visibleUnits; i++)
         {
-            visibleProbs[i] = ScalarActivation != null
-                ? ScalarActivation.Activate(activations[i])
-                : VectorActivation!.Activate(new Vector<T>([activations[i]]))[0];
+            if (ScalarActivation is not null)
+            {
+                visibleProbs[i] = ScalarActivation.Activate(activations[i]);
+            }
+            else if (VectorActivation is not null)
+            {
+                visibleProbs[i] = VectorActivation.Activate(new Vector<T>([activations[i]]))[0];
+            }
         }
 
         return visibleProbs;
