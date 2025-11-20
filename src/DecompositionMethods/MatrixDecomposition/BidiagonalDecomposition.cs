@@ -372,39 +372,39 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
 
         if (isLeft)
         {
-            for (int j2 = 0; j2 < M.Columns; j2++)
-            {
-                T temp1 = M[i, j2];
-                T temp2 = M[k, j2];
-                M[i, j2] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
-                M[k, j2] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp1), NumOps.Multiply(c, temp2));
-            }
+            // VECTORIZED: Apply rotation to rows using vector operations
+            Vector<T> rowI = M.GetRow(i);
+            Vector<T> rowK = M.GetRow(k);
+            Vector<T> newRowI = rowI.Multiply(c).Add(rowK.Multiply(s));
+            Vector<T> newRowK = rowI.Multiply(NumOps.Negate(s)).Add(rowK.Multiply(c));
+            M.SetRow(i, newRowI);
+            M.SetRow(k, newRowK);
 
-            for (int i2 = 0; i2 < Q.Rows; i2++)
-            {
-                T temp1 = Q[i2, i];
-                T temp2 = Q[i2, k];
-                Q[i2, i] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
-                Q[i2, k] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp1), NumOps.Multiply(c, temp2));
-            }
+            // VECTORIZED: Update Q columns using vector operations
+            Vector<T> colI = Q.GetColumn(i);
+            Vector<T> colK = Q.GetColumn(k);
+            Vector<T> newColI = colI.Multiply(c).Add(colK.Multiply(s));
+            Vector<T> newColK = colI.Multiply(NumOps.Negate(s)).Add(colK.Multiply(c));
+            Q.SetColumn(i, newColI);
+            Q.SetColumn(k, newColK);
         }
         else
         {
-            for (int i2 = 0; i2 < M.Rows; i2++)
-            {
-                T temp1 = M[i2, j];
-                T temp2 = M[i2, l];
-                M[i2, j] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
-                M[i2, l] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp1), NumOps.Multiply(c, temp2));
-            }
+            // VECTORIZED: Apply rotation to columns using vector operations
+            Vector<T> colJ = M.GetColumn(j);
+            Vector<T> colL = M.GetColumn(l);
+            Vector<T> newColJ = colJ.Multiply(c).Add(colL.Multiply(s));
+            Vector<T> newColL = colJ.Multiply(NumOps.Negate(s)).Add(colL.Multiply(c));
+            M.SetColumn(j, newColJ);
+            M.SetColumn(l, newColL);
 
-            for (int j2 = 0; j2 < Q.Columns; j2++)
-            {
-                T temp1 = Q[j, j2];
-                T temp2 = Q[l, j2];
-                Q[j, j2] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
-                Q[l, j2] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp1), NumOps.Multiply(c, temp2));
-            }
+            // VECTORIZED: Update Q rows using vector operations
+            Vector<T> rowJ = Q.GetRow(j);
+            Vector<T> rowL = Q.GetRow(l);
+            Vector<T> newRowJ = rowJ.Multiply(c).Add(rowL.Multiply(s));
+            Vector<T> newRowL = rowJ.Multiply(NumOps.Negate(s)).Add(rowL.Multiply(c));
+            Q.SetRow(j, newRowJ);
+            Q.SetRow(l, newRowL);
         }
     }
 
