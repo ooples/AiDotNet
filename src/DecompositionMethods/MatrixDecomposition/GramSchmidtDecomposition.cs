@@ -117,13 +117,13 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
             // Get the j-th column of the original matrix
             var v = matrix.GetColumn(j);
 
-            // Subtract projections onto previous orthogonal vectors
+            // VECTORIZED: Subtract projections onto previous orthogonal vectors
             for (int i = 0; i < j; i++)
             {
-                // Calculate projection coefficient (dot product)
+                // Calculate projection coefficient using dot product
                 R[i, j] = Q.GetColumn(i).DotProduct(matrix.GetColumn(j));
-                
-                // Subtract the projection from v
+
+                // VECTORIZED: Subtract the projection using vector operations
                 v = v.Subtract(Q.GetColumn(i).Multiply(R[i, j]));
             }
 
@@ -164,13 +164,13 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
             // Get the i-th column of the original matrix
             var v = matrix.GetColumn(i);
 
-            // Subtract projections onto previous orthogonal vectors
+            // VECTORIZED: Subtract projections onto previous orthogonal vectors
             for (int j = 0; j < i; j++)
             {
-                // Calculate projection coefficient (dot product)
+                // Calculate projection coefficient using dot product
                 R[j, i] = Q.GetColumn(j).DotProduct(v);
-                
-                // Immediately update v by subtracting the projection
+
+                // VECTORIZED: Immediately update v using vector operations
                 v = v.Subtract(Q.GetColumn(j).Multiply(R[j, i]));
             }
 
@@ -235,7 +235,7 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
         // Start from the bottom row and work upward
         for (int i = n - 1; i >= 0; i--)
         {
-            // Calculate the sum of known terms using vectorized dot product
+            // VECTORIZED: Calculate the sum of known terms using dot product
             T sum;
             if (i + 1 < n)
             {
@@ -243,7 +243,7 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
                 var rowSegment = R.GetRowSegment(i, i + 1, n - i - 1);
                 var xSegment = x.GetRange(i + 1, n - i - 1);
 
-                // Compute dot product: sum = R[i, i+1:n] · x[i+1:n]
+                // VECTORIZED: Compute dot product: sum = R[i, i+1:n] · x[i+1:n]
                 sum = rowSegment.DotProduct(xSegment);
             }
             else
