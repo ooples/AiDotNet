@@ -345,27 +345,20 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
             T std3 = NumOps.Multiply(_lastStd[i], NumOps.Multiply(_lastStd[i], _lastStd[i]));
             T dvarianceCoeff = NumOps.Multiply(NumOps.FromDouble(-0.5), NumOps.Divide(NumOps.One, std3));
 
-            for (int j = 0; j < featureSize; j++)
-            {
-                dvariance = NumOps.Add(dvariance, NumOps.Multiply(dxhat[j], NumOps.Multiply(inputMinusMean[j], dvarianceCoeff)));
-            }
+            var dxhatScaled = (Vector<T>)Engine.Multiply(dxhat, dvarianceCoeff);
+            var dxhatTimesInput = (Vector<T>)Engine.Multiply(dxhatScaled, inputMinusMean);
+            dvariance = Engine.Sum(dxhatTimesInput);
 
             // Scalar calculation for dmean (first part)
             T dmean = NumOps.Zero;
             T dmeanCoeff = NumOps.Divide(NumOps.FromDouble(-1.0), _lastStd[i]);
 
-            for (int j = 0; j < featureSize; j++)
-            {
-                dmean = NumOps.Add(dmean, NumOps.Multiply(dxhat[j], dmeanCoeff));
-            }
+            T dxhatSum = Engine.Sum(dxhat);
+            dmean = NumOps.Multiply(dxhatSum, dmeanCoeff);
 
             // === Vectorized Sum Calculation (Phase B: US-GPU-015) ===
             // sumDiff = sum(input - mean)
-            T sumDiff = NumOps.Zero;
-            for (int j = 0; j < featureSize; j++)
-            {
-                sumDiff = NumOps.Add(sumDiff, inputMinusMean[j]);
-            }
+            T sumDiff = Engine.Sum(inputMinusMean);
 
             dmean = NumOps.Add(dmean, NumOps.Multiply(NumOps.Multiply(dvariance, NumOps.FromDouble(-2.0 / featureSize)), sumDiff));
 
