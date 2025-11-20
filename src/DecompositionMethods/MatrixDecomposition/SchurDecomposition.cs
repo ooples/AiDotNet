@@ -282,14 +282,18 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
         };
         if (n == 3) v[2] = z ?? NumOps.Zero;
 
+        // VECTORIZED: Use dot product to compute norm
         T alpha = NumOps.Sqrt(v.DotProduct(v));
         if (NumOps.Equals(alpha, NumOps.Zero)) return Matrix<T>.CreateIdentity(n);
 
         v[0] = NumOps.Add(v[0], NumOps.Multiply(NumOps.SignOrZero(x), alpha));
+
+        // VECTORIZED: Use dot product for norm calculation
         T beta = NumOps.Sqrt(NumOps.Multiply(NumOps.FromDouble(2), v.DotProduct(v)));
 
         if (NumOps.Equals(beta, NumOps.Zero)) return Matrix<T>.CreateIdentity(n);
 
+        // VECTORIZED: Use outer product to construct Householder reflection matrix
         v = v.Divide(beta);
         return Matrix<T>.CreateIdentity(n).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
     }
