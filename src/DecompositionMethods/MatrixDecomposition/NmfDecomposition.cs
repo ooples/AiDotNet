@@ -250,18 +250,9 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     private T ComputeReconstructionError(Matrix<T> V, Matrix<T> basisMatrix, Matrix<T> activationMatrix)
     {
         Matrix<T> WH = basisMatrix.Multiply(activationMatrix);
-        T sumSquaredError = NumOps.Zero;
-
-        for (int i = 0; i < V.Rows; i++)
-        {
-            for (int j = 0; j < V.Columns; j++)
-            {
-                T diff = NumOps.Subtract(V[i, j], WH[i, j]);
-                sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(diff, diff));
-            }
-        }
-
-        return NumOps.Sqrt(sumSquaredError);
+        // VECTORIZED: Use the inherited FrobeniusNorm method from base class
+        Matrix<T> difference = V.Subtract(WH);
+        return FrobeniusNorm(difference);
     }
 
     /// <summary>
@@ -368,10 +359,21 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         Vector<T> x = new Vector<T>(n);
         for (int i = n - 1; i >= 0; i--)
         {
+            // VECTORIZED: Use dot product for sum computation
             T sum = NumOps.Zero;
-            for (int j = i + 1; j < n; j++)
+            if (i < n - 1)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(augmented[i, j], x[j]));
+                int remaining = n - i - 1;
+                var rowSlice = new T[remaining];
+                var xSlice = new T[remaining];
+                for (int k = 0; k < remaining; k++)
+                {
+                    rowSlice[k] = augmented[i, i + 1 + k];
+                    xSlice[k] = x[i + 1 + k];
+                }
+                var rowVec = new Vector<T>(rowSlice);
+                var xVec = new Vector<T>(xSlice);
+                sum = rowVec.DotProduct(xVec);
             }
 
             if (!NumOps.Equals(augmented[i, i], NumOps.Zero))
