@@ -213,20 +213,22 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         var personalDiff = (Vector<T>)AiDotNetEngine.Current.Subtract(personalBest, position);
         var globalDiff = (Vector<T>)AiDotNetEngine.Current.Subtract(globalBest, position);
 
-        // Element-wise updates with random factors (can't fully vectorize due to per-element randomness)
+        // Vectorized velocity update with random factors
+        // Generate random vectors for cognitive and social components
+        var cognitiveRandom = new Vector<T>(velocity.Length);
+        var socialRandom = new Vector<T>(velocity.Length);
         for (int i = 0; i < velocity.Length; i++)
         {
-            var cognitive = NumOps.Multiply(cognitiveWeight, NumOps.FromDouble(_random.NextDouble()));
-            var social = NumOps.Multiply(socialWeight, NumOps.FromDouble(_random.NextDouble()));
-
-            velocity[i] = NumOps.Add(
-                NumOps.Multiply(inertia, velocity[i]),
-                NumOps.Add(
-                    NumOps.Multiply(cognitive, personalDiff[i]),
-                    NumOps.Multiply(social, globalDiff[i])
-                )
-            );
+            cognitiveRandom[i] = NumOps.Multiply(cognitiveWeight, NumOps.FromDouble(_random.NextDouble()));
+            socialRandom[i] = NumOps.Multiply(socialWeight, NumOps.FromDouble(_random.NextDouble()));
         }
+
+        // Vectorized computation: velocity = inertia*velocity + cognitive*personalDiff + social*globalDiff
+        var inertiaVel = (Vector<T>)AiDotNetEngine.Current.Multiply(velocity, AiDotNetEngine.Current.Fill<T>(velocity.Length, inertia));
+        var cognitiveTerm = (Vector<T>)AiDotNetEngine.Current.Multiply(personalDiff, cognitiveRandom);
+        var socialTerm = (Vector<T>)AiDotNetEngine.Current.Multiply(globalDiff, socialRandom);
+        var cogSocSum = (Vector<T>)AiDotNetEngine.Current.Add(cognitiveTerm, socialTerm);
+        velocity = (Vector<T>)AiDotNetEngine.Current.Add(inertiaVel, cogSocSum);
     }
 
     /// <summary>
