@@ -238,17 +238,20 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
         {
             v[i] = NumOps.FromDouble(rand.NextDouble());
         }
-        v = v.Divide(v.Norm());
+        // VECTORIZED: Normalize using Engine division
+        v = (Vector<T>)Engine.Divide(v, v.Norm());
 
         for (int j = 0; j < Math.Min(m, n); j++)
         {
             u = A.Multiply(v).Subtract(B.GetColumn(j - 1).Multiply(B[j - 1, j]));
             T alpha = u.Norm();
-            u = u.Divide(alpha);
+            // VECTORIZED: Normalize using Engine division
+            u = (Vector<T>)Engine.Divide(u, alpha);
 
             v = A.Transpose().Multiply(u).Subtract(B.GetRow(j).Multiply(alpha));
             T beta = v.Norm();
-            v = v.Divide(beta);
+            // VECTORIZED: Normalize using Engine division
+            v = (Vector<T>)Engine.Divide(v, beta);
 
             B[j, j] = alpha;
             if (j < n - 1) B[j, j + 1] = beta;
@@ -338,7 +341,8 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
         Vector<T> v = x.Clone();
         v[0] = NumOps.Add(v[0], NumOps.Multiply(NumOps.SignOrZero(x[0]), norm));
 
-        return v.Divide(v.Norm());
+        // VECTORIZED: Normalize using Engine division
+        return (Vector<T>)Engine.Divide(v, v.Norm());
     }
 
     /// <summary>
