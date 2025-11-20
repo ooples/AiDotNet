@@ -234,16 +234,15 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
             {
                 var q = Q.GetColumn(j);
                 T proj = v.DotProduct(q);
-                for (int k = 0; k < n; k++)
-                {
-                    v[k] = NumOps.Subtract(v[k], NumOps.Multiply(proj, q[k]));
-                }
+                // VECTORIZED: Use vector operations for subtraction
+                v = v.Subtract(q.Multiply(proj));
             }
 
             T norm = NumOps.Sqrt(v.DotProduct(v));
+            Vector<T> qCol = v.Divide(norm);
             for (int j = 0; j < n; j++)
             {
-                Q[j, i] = NumOps.Divide(v[j], norm);
+                Q[j, i] = qCol[j];
             }
 
             for (int j = 0; j <= i; j++)
@@ -321,12 +320,12 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
     /// <remarks>
     /// <b>For Beginners:</b> Forward substitution is a method to solve equations when the matrix
     /// is lower triangular (has non-zero values only on and below the diagonal).
-    /// 
+    ///
     /// The process works by:
     /// 1. Solving for the first variable directly (since there are no other variables in the first equation)
     /// 2. Using that value to solve for the second variable
     /// 3. Continuing this pattern for all variables
-    /// 
+    ///
     /// This is much faster than general matrix inversion because we can solve for each
     /// variable one at a time, working from top to bottom.
     /// </remarks>
@@ -337,10 +336,20 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
 
         for (int i = 0; i < n; i++)
         {
+            // VECTORIZED: Use dot product for sum computation
             T sum = NumOps.Zero;
-            for (int j = 0; j < i; j++)
+            if (i > 0)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(L[i, j], y[j]));
+                var rowSlice = new T[i];
+                var ySlice = new T[i];
+                for (int k = 0; k < i; k++)
+                {
+                    rowSlice[k] = L[i, k];
+                    ySlice[k] = y[k];
+                }
+                var rowVec = new Vector<T>(rowSlice);
+                var yVec = new Vector<T>(ySlice);
+                sum = rowVec.DotProduct(yVec);
             }
 
             y[i] = NumOps.Divide(NumOps.Subtract(b[i], sum), L[i, i]);
