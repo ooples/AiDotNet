@@ -260,8 +260,10 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private bool CheckConvergence(Vector<T> gradAR, Vector<T> gradMA, Vector<T> prevGradAR, Vector<T> prevGradMA)
     {
-        T diffAR = gradAR.Subtract(prevGradAR).Norm();
-        T diffMA = gradMA.Subtract(prevGradMA).Norm();
+        var diffARVec = (Vector<T>)Engine.Subtract(gradAR, prevGradAR);
+        T diffAR = diffARVec.Norm();
+        var diffMAVec = (Vector<T>)Engine.Subtract(gradMA, prevGradMA);
+        T diffMA = diffMAVec.Norm();
 
         return NumOps.LessThan(diffAR, NumOps.FromDouble(_tolerance)) && NumOps.LessThan(diffMA, NumOps.FromDouble(_tolerance));
     }
@@ -338,7 +340,7 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
                 ? _arCoefficients.Slice(0, availableARHistory)
                 : _arCoefficients;
 
-            prediction = arCoeffSlice.DotProduct(arPastVector);
+            prediction = Engine.DotProduct(arCoeffSlice, arPastVector);
         }
 
         // MA component (recursive - keep as is for correctness)
@@ -728,15 +730,18 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
             Vector<T> residuals = CalculateResiduals(y);
             (Vector<T> gradAR, Vector<T> gradMA) = CalculateGradients(y, residuals);
 
-            // Update coefficients using gradient descent
-            for (int i = 0; i < _arOrder; i++)
-            {
-                _arCoefficients[i] = NumOps.Subtract(_arCoefficients[i], NumOps.Multiply(NumOps.FromDouble(_learningRate), gradAR[i]));
-            }
-            for (int i = 0; i < _maOrder; i++)
-            {
-                _maCoefficients[i] = NumOps.Subtract(_maCoefficients[i], NumOps.Multiply(NumOps.FromDouble(_learningRate), gradMA[i]));
-            }
+            // Update coefficients using gradient descent - vectorized with Engine operations
+            var lrScalarAR = NumOps.FromDouble(_learningRate);
+            var lrVecAR = new Vector<T>(_arOrder);
+            for (int i = 0; i < _arOrder; i++) lrVecAR[i] = lrScalarAR;
+            var gradScaledAR = (Vector<T>)Engine.Multiply(gradAR, lrVecAR);
+            _arCoefficients = (Vector<T>)Engine.Subtract(_arCoefficients, gradScaledAR);
+
+            var lrScalarMA = NumOps.FromDouble(_learningRate);
+            var lrVecMA = new Vector<T>(_maOrder);
+            for (int i = 0; i < _maOrder; i++) lrVecMA[i] = lrScalarMA;
+            var gradScaledMA = (Vector<T>)Engine.Multiply(gradMA, lrVecMA);
+            _maCoefficients = (Vector<T>)Engine.Subtract(_maCoefficients, gradScaledMA);
 
             // Check for convergence
             if (CheckConvergence(gradAR, gradMA, prevGradAR, prevGradMA))
