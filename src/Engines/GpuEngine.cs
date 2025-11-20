@@ -2591,6 +2591,30 @@ public class GpuEngine : IEngine, IDisposable
         return _cpuFallback.MatrixMultiplyScalar(matrix, scalar);
     }
 
+    public Matrix<T> MatrixSubtract<T>(Matrix<T> a, Matrix<T> b)
+    {
+        if (a.Rows * a.Columns < _thresholds.VectorSubtract)
+        {
+            return _cpuFallback.MatrixSubtract(a, b);
+        }
+
+        // GPU kernel implementation for matrix subtraction pending
+        // Using CPU fallback which is already vectorized using Vector operations
+        return _cpuFallback.MatrixSubtract(a, b);
+    }
+
+    public T MatrixSumOfSquares<T>(Matrix<T> matrix)
+    {
+        if (matrix.Rows * matrix.Columns < _thresholds.MatrixMultiply)
+        {
+            return _cpuFallback.MatrixSumOfSquares(matrix);
+        }
+
+        // GPU kernel implementation for reduction operation pending
+        // Using CPU fallback which is already vectorized using DotProduct on rows
+        return _cpuFallback.MatrixSumOfSquares(matrix);
+    }
+
     // GPU implementations for float matrices
 
     private Matrix<float> MatrixMultiplyGpu(Matrix<float> a, Matrix<float> b)

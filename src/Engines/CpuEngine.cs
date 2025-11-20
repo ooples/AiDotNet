@@ -439,6 +439,45 @@ public class CpuEngine : IEngine
         return result;
     }
 
+    public Matrix<T> MatrixSubtract<T>(Matrix<T> a, Matrix<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Rows != b.Rows || a.Columns != b.Columns)
+            throw new ArgumentException("Matrix dimensions must match for subtraction");
+
+        var result = new Matrix<T>(a.Rows, a.Columns);
+
+        // VECTORIZED: Use existing Vector Subtract operation on each row
+        for (int i = 0; i < a.Rows; i++)
+        {
+            var rowA = a.GetRow(i);
+            var rowB = b.GetRow(i);
+            var diffRow = Subtract(rowA, rowB); // Reuse vectorized Vector Subtract
+            result.SetRow(i, diffRow);
+        }
+
+        return result;
+    }
+
+    public T MatrixSumOfSquares<T>(Matrix<T> matrix)
+    {
+        if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T sum = numOps.Zero;
+
+        // VECTORIZED: Use existing DotProduct operation on each row
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            var row = matrix.GetRow(i);
+            T rowSumSquares = DotProduct(row, row); // row · row = sum of squares for row
+            sum = numOps.Add(sum, rowSumSquares);
+        }
+
+        return sum;
+    }
+
     #endregion
 
     #region Tensor Operations (Phase B: Epic 3)

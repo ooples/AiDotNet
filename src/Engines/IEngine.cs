@@ -502,6 +502,34 @@ public interface IEngine
     /// </remarks>
     Matrix<T> MatrixMultiplyScalar<T>(Matrix<T> matrix, T scalar);
 
+    /// <summary>
+    /// Subtracts matrix b from matrix a element-wise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of matrix elements.</typeparam>
+    /// <param name="a">The first matrix.</param>
+    /// <param name="b">The second matrix.</param>
+    /// <returns>A new matrix containing the element-wise difference (a - b).</returns>
+    /// <exception cref="ArgumentException">Thrown when matrix dimensions don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-010: Matrix Element-Wise Operations</b></para>
+    /// </remarks>
+    Matrix<T> MatrixSubtract<T>(Matrix<T> a, Matrix<T> b);
+
+    /// <summary>
+    /// Computes the sum of squared elements of a matrix (used for Frobenius norm computation).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of matrix elements.</typeparam>
+    /// <param name="matrix">The input matrix.</param>
+    /// <returns>The sum of all squared elements: sum_{i,j} matrix[i,j]^2</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-010: Matrix Element-Wise Operations</b></para>
+    /// <para>
+    /// This is used to compute the squared Frobenius norm: ||A||_F^2 = sum_{i,j} A_{ij}^2
+    /// To get the actual Frobenius norm, take sqrt of the result.
+    /// </para>
+    /// </remarks>
+    T MatrixSumOfSquares<T>(Matrix<T> matrix);
+
     #endregion
 
     #region Tensor Operations (Phase B: Epic 3)
