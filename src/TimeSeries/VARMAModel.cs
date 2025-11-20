@@ -143,15 +143,14 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
         // Prepare lagged residuals
         Matrix<T> laggedResiduals = PrepareLaggedResiduals();
 
-        // Estimate MA coefficients using OLS for each equation
+        // VECTORIZED: Estimate MA coefficients using OLS for each equation
         for (int i = 0; i < m; i++)
         {
             Vector<T> yi = _residuals.GetColumn(i).Slice(_varmaOptions.MaLag, n - _varmaOptions.MaLag);
             Vector<T> coeffs = SolveOLS(laggedResiduals, yi);
-            for (int j = 0; j < m * _varmaOptions.MaLag; j++)
-            {
-                _maCoefficients[i, j] = coeffs[j];
-            }
+
+            // VECTORIZED: Use SetRow to copy coefficients vector to matrix row
+            _maCoefficients.SetRow(i, coeffs);
         }
     }
 
@@ -184,15 +183,16 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
         int m = _residuals.Columns;
         Matrix<T> laggedResiduals = new Matrix<T>(n - _varmaOptions.MaLag, m * _varmaOptions.MaLag);
 
+        // VECTORIZED: Construct lagged residuals using row operations
         for (int i = _varmaOptions.MaLag; i < n; i++)
         {
+            List<T> rowData = new List<T>();
             for (int j = 0; j < _varmaOptions.MaLag; j++)
             {
-                for (int k = 0; k < m; k++)
-                {
-                    laggedResiduals[i - _varmaOptions.MaLag, j * m + k] = _residuals[i - j - 1, k];
-                }
+                Vector<T> laggedRow = _residuals.GetRow(i - j - 1);
+                rowData.AddRange(laggedRow);
             }
+            laggedResiduals.SetRow(i - _varmaOptions.MaLag, new Vector<T>(rowData));
         }
 
         return laggedResiduals;
@@ -224,12 +224,11 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
         Vector<T> maPrediction = new Vector<T>(_varmaOptions.OutputDimension);
         Vector<T> lastResiduals = _residuals.GetRow(_residuals.Rows - 1);
 
+        // VECTORIZED: Use dot product to compute MA prediction for each output
         for (int i = 0; i < _varmaOptions.OutputDimension; i++)
         {
-            for (int j = 0; j < _varmaOptions.OutputDimension * _varmaOptions.MaLag; j++)
-            {
-                maPrediction[i] = NumOps.Add(maPrediction[i], NumOps.Multiply(_maCoefficients[i, j], lastResiduals[j]));
-            }
+            Vector<T> maCoeffsRow = _maCoefficients.GetRow(i);
+            maPrediction[i] = maCoeffsRow.DotProduct(lastResiduals);
         }
 
         return maPrediction;
@@ -279,12 +278,12 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// This method finds the best coefficients for a linear regression model using
     /// the Ordinary Least Squares (OLS) approach.
     /// 
-    /// It solves the equation: ß = (X'X)?¹X'y, where:
+    /// It solves the equation: ï¿½ = (X'X)?ï¿½X'y, where:
     /// - X is the input matrix (lagged residuals in this case)
     /// - y is the target vector (current residuals)
-    /// - ß is the vector of coefficients we're solving for
+    /// - ï¿½ is the vector of coefficients we're solving for
     /// - X' is the transpose of X
-    /// - (X'X)?¹ is the inverse of X'X
+    /// - (X'X)?ï¿½ is the inverse of X'X
     /// 
     /// The result is a set of coefficients that minimize the sum of squared errors
     /// between the model's predictions and the actual values.
@@ -330,12 +329,17 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
         // Serialize VARMAModelOptions
         writer.Write(_varmaOptions.MaLag);
 
-        // Serialize _maCoefficients
+        // VECTORIZED: Serialize _maCoefficients using row operations
         writer.Write(_maCoefficients.Rows);
         writer.Write(_maCoefficients.Columns);
         for (int i = 0; i < _maCoefficients.Rows; i++)
-            for (int j = 0; j < _maCoefficients.Columns; j++)
-                writer.Write(Convert.ToDouble(_maCoefficients[i, j]));
+        {
+            Vector<T> row = _maCoefficients.GetRow(i);
+            foreach (var val in row)
+            {
+                writer.Write(Convert.ToDouble(val));
+            }
+        }
     }
 
     /// <summary>
@@ -370,13 +374,19 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
         // Deserialize VARMAModelOptions
         _varmaOptions.MaLag = reader.ReadInt32();
 
-        // Deserialize _maCoefficients
+        // VECTORIZED: Deserialize _maCoefficients using row operations
         int maCoeffRows = reader.ReadInt32();
         int maCoeffCols = reader.ReadInt32();
         _maCoefficients = new Matrix<T>(maCoeffRows, maCoeffCols);
         for (int i = 0; i < maCoeffRows; i++)
+        {
+            T[] rowData = new T[maCoeffCols];
             for (int j = 0; j < maCoeffCols; j++)
-                _maCoefficients[i, j] = NumOps.FromDouble(reader.ReadDouble());
+            {
+                rowData[j] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            _maCoefficients.SetRow(i, new Vector<T>(rowData));
+        }
     }
 }
     
