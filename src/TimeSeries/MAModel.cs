@@ -150,11 +150,10 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         _mean = StatisticsHelper<T>.CalculateMean(y);
 
         // Step 2: Center the time series (subtract mean)
-        Vector<T> centeredY = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            centeredY[i] = NumOps.Subtract(y[i], _mean);
-        }
+        // VECTORIZED: Use Engine.Subtract with scalar broadcasting
+        var meanVec = new Vector<T>(y.Length);
+        for (int i = 0; i < meanVec.Length; i++) meanVec[i] = _mean;
+        Vector<T> centeredY = (Vector<T>)Engine.Subtract(y, meanVec);
 
         // Step 3: Estimate MA coefficients
         _maCoefficients = EstimateMACoefficients(centeredY, _maOptions.MAOrder);
@@ -475,11 +474,10 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     {
         // Solve the system H * d = -g for the search direction d
         // where H is the Hessian approximation and g is the gradient
-        Vector<T> negGradient = new Vector<T>(gradient.Length);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            negGradient[i] = NumOps.Negate(gradient[i]);
-        }
+        // VECTORIZED: Use Engine.Multiply to negate vector
+        var negOneVec = new Vector<T>(gradient.Length);
+        for (int i = 0; i < negOneVec.Length; i++) negOneVec[i] = NumOps.FromDouble(-1.0);
+        Vector<T> negGradient = (Vector<T>)Engine.Multiply(gradient, negOneVec);
         
         try
         {
@@ -524,16 +522,16 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         T c = NumOps.FromDouble(0.1); // Armijo parameter
         T rho = NumOps.FromDouble(0.5); // Reduction factor
     
-        // VECTORIZED: Calculate directional derivative using dot product
+        // VECTORIZED: Calculate directional derivative using Engine.DotProduct
         Vector<T> gradient = new Vector<T>(q);
         CalculateGradient(y, theta, gradient);
-        T directionalDerivative = gradient.DotProduct(searchDir);
+        T directionalDerivative = Engine.DotProduct(gradient, searchDir);
 
         // If directional derivative is non-negative, use steepest descent direction
         if (!NumOps.LessThan(directionalDerivative, NumOps.Zero))
         {
-            // VECTORIZED: Calculate gradient norm squared using dot product
-            T gradientDotProduct = gradient.DotProduct(gradient);
+            // VECTORIZED: Calculate gradient norm squared using Engine.DotProduct
+            T gradientDotProduct = Engine.DotProduct(gradient, gradient);
 
             for (int i = 0; i < q; i++)
             {
