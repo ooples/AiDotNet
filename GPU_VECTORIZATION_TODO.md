@@ -91,7 +91,7 @@ Files to optimize:
 
 ### Phase 8: Time Series Model Vectorization (IN PROGRESS - 23 files total)
 **Priority**: HIGH - Critical for time series workloads
-**Status**: 10/23 files completed (43%)
+**Status**: 14/23 files completed (61%)
 
 #### Infrastructure Additions (COMPLETED)
 - [x] **IEngine.Sum()** - Vector reduction operation for GPU acceleration
@@ -100,7 +100,7 @@ Files to optimize:
 - [x] CpuEngine implementations using NumOps loops (Phase A)
 - [x] GpuEngine fallback to CPU (GPU kernels planned for Phase B)
 
-#### Completed Files (10/23)
+#### Completed Files (14/23)
 - [x] **STLDecomposition.cs** - Vectorized 8 sections (commit: 0b566957)
 - [x] **TBATSModel.cs** - Vectorized Durbin-Levinson, autocorrelations (commit: e109c003)
 - [x] **ARIMAModel.cs** - Engine.Sum() and Engine.DotProduct() (commit: 231371bc)
@@ -111,21 +111,21 @@ Files to optimize:
 - [x] **ARIMAXModel.cs** - Engine.DotProduct(), Engine.Subtract(), Engine.Sum() (commit: 3d9c6a88)
 - [x] **ARMAModel.cs** - Engine operations for gradient descent, convergence (commit: 52fa2cac)
 - [x] **ARModel.cs** - Engine operations for convergence and prediction (commit: 5aa29f69)
+- [x] **VectorAutoRegressionModel.cs** - Engine.DotProduct() for prediction (commit: cb4f6150)
+- [x] **NBEATSModel.cs** - Engine operations for forecast accumulation (commit: 2c161d08)
+- [x] **VARMAModel.cs** - Engine operations for prediction and residuals (commit: 5f68525b)
+- [x] **MAModel.cs** - Engine.DotProduct() for optimization and prediction (commit: 712ee2ca)
 
-#### Remaining Files (13/23)
+#### Remaining Files (9/23)
 - [ ] **BayesianStructuralTimeSeriesModel.cs** - ~20 loops (Very High Priority)
 - [ ] **DynamicRegressionWithARIMAErrors.cs** - ~15 loops (High Priority)
 - [ ] **InterventionAnalysisModel.cs** - ~10 loops (High Priority)
-- [ ] **MAModel.cs** - ~15 loops (High Priority)
 - [ ] **NBEATSBlock.cs** - ~10 loops (High Priority)
-- [ ] **NBEATSModel.cs** - ~5 loops (High Priority)
 - [ ] **NeuralNetworkARIMAModel.cs** - ~10 loops (High Priority)
 - [ ] **ProphetModel.cs** - ~15 loops (High Priority)
 - [ ] **SpectralAnalysisModel.cs** - ~10 loops (Medium Priority)
 - [ ] **StateSpaceModel.cs** - ~15 loops (High Priority)
 - [ ] **TransferFunctionModel.cs** - ~10 loops (High Priority)
-- [ ] **VARMAModel.cs** - ~10 loops (High Priority)
-- [ ] **VectorAutoRegressionModel.cs** - ~10 loops (High Priority)
 
 ### Phase 9: Regression Model Vectorization (PENDING - 20+ files)
 **Priority**: HIGH - Commonly used ML algorithms
