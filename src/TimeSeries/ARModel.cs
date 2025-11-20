@@ -201,12 +201,17 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     {
         Vector<T> gradAR = new Vector<T>(_arOrder);
 
+        // VECTORIZED: Process lagged y values as vectors for each timestep
         for (int t = _arOrder; t < y.Length; t++)
         {
+            var laggedY = new Vector<T>(_arOrder);
             for (int i = 0; i < _arOrder; i++)
             {
-                gradAR[i] = NumOps.Add(gradAR[i], NumOps.Multiply(residuals[t], y[t - i - 1]));
+                laggedY[i] = y[t - i - 1];
             }
+
+            var contribution = (Vector<T>)Engine.Multiply(laggedY, residuals[t]);
+            gradAR = (Vector<T>)Engine.Add(gradAR, contribution);
         }
 
         return gradAR;
@@ -683,11 +688,10 @@ public class ARModel<T> : TimeSeriesModelBase<T>
             Vector<T> residuals = CalculateResiduals(y);
             Vector<T> gradAR = CalculateGradients(y, residuals);
 
-            // Update coefficients using gradient descent
-            for (int i = 0; i < _arOrder; i++)
-            {
-                _arCoefficients[i] = NumOps.Subtract(_arCoefficients[i], NumOps.Multiply(NumOps.FromDouble(_learningRate), gradAR[i]));
-            }
+            // VECTORIZED: Update coefficients using gradient descent with Engine operations
+            var learningRateT = NumOps.FromDouble(_learningRate);
+            var update = (Vector<T>)Engine.Multiply(gradAR, learningRateT);
+            _arCoefficients = (Vector<T>)Engine.Subtract(_arCoefficients, update);
 
             // Check for convergence
             if (CheckConvergence(gradAR, prevGradAR))
