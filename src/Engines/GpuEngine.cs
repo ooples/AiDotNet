@@ -1130,6 +1130,7 @@ public class GpuEngine : IEngine, IDisposable
         // TODO: Implement GPU mean with parallel reduction
         return _cpuFallback.Mean(vector);
     }
+/// <inheritdoc/>    public Vector<T> Fill<T>(int length, T value)    {        // TODO: Implement GPU fill with parallel kernel        return _cpuFallback.Fill(length, value);    }    /// <inheritdoc/>    public Vector<T> FillZero<T>(int length)    {        // TODO: Implement GPU zero-fill with memset kernel        return _cpuFallback.FillZero(length);    }    /// <inheritdoc/>    public Vector<T> GenerateDropoutMask<T>(int length, T dropoutRate, T scale, int? seed = null)    {        // TODO: Implement GPU dropout mask generation with cuRAND        return _cpuFallback.GenerateDropoutMask(length, dropoutRate, scale, seed);    }    /// <inheritdoc/>    public void CopyVectorToTensor<T>(Vector<T> source, Tensor<T> destination)    {        // TODO: Implement GPU memory copy with optimized kernels        _cpuFallback.CopyVectorToTensor(source, destination);    }
 
     #endregion
 
