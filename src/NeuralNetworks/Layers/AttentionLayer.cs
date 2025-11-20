@@ -786,12 +786,9 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var logWeights = Engine.Log(clampedWeights);
         var pLogP = (Vector<T>)Engine.Multiply(clampedWeights, logWeights);
 
-        // Sum all terms: Σ(p * log(p))
-        T entropy = NumOps.Zero;
-        for (int i = 0; i < pLogP.Length; i++)
-        {
-            entropy = NumOps.Subtract(entropy, pLogP[i]);
-        }
+        // Sum all terms: Σ(p * log(p)) (vectorized)
+        T sumPLogP = Engine.Sum(pLogP);
+        T entropy = NumOps.Negate(sumPLogP);
 
         // Average entropy over all attention weights
         entropy = NumOps.Divide(entropy, NumOps.FromDouble(_lastAttentionWeights.Length));
