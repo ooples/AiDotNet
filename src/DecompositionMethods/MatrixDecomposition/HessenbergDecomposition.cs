@@ -185,9 +185,17 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
                 if (!NumOps.Equals(H[i, k], NumOps.Zero))
                 {
                     T factor = NumOps.Divide(H[i, k], H[k + 1, k]);
+
+                    // VECTORIZED: Use vector operations for row elimination
+                    Vector<T> rowI = H.GetRow(i);
+                    Vector<T> rowK1 = H.GetRow(k + 1);
+                    Vector<T> rowISegment = new Vector<T>(rowI.Skip(k));
+                    Vector<T> rowK1Segment = new Vector<T>(rowK1.Skip(k));
+                    Vector<T> newSegment = rowISegment.Subtract(rowK1Segment.Multiply(factor));
+
                     for (int j = k; j < n; j++)
                     {
-                        H[i, j] = NumOps.Subtract(H[i, j], NumOps.Multiply(factor, H[k + 1, j]));
+                        H[i, j] = newSegment[j - k];
                     }
                     H[i, k] = NumOps.Zero;
                 }
@@ -303,26 +311,36 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
         var n = A.Rows;
         var y = new Vector<T>(n);
 
-        // Forward substitution
+        // VECTORIZED: Forward substitution using dot product
         for (int i = 0; i < n; i++)
         {
-            var sum = NumOps.Zero;
-            for (int j = Math.Max(0, i - 1); j < i; j++)
+            T sum = NumOps.Zero;
+            if (i > 0)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(HessenbergMatrix[i, j], y[j]));
+                int start = Math.Max(0, i - 1);
+                int len = i - start;
+                if (len > 0)
+                {
+                    var rowSegment = new Vector<T>(HessenbergMatrix.GetRow(i).Skip(start).Take(len));
+                    var ySegment = new Vector<T>(y.Skip(start).Take(len));
+                    sum = rowSegment.DotProduct(ySegment);
+                }
             }
 
             y[i] = NumOps.Divide(NumOps.Subtract(b[i], sum), HessenbergMatrix[i, i]);
         }
 
-        // Backward substitution
+        // VECTORIZED: Backward substitution using dot product
         var x = new Vector<T>(n);
         for (int i = n - 1; i >= 0; i--)
         {
-            var sum = NumOps.Zero;
-            for (int j = i + 1; j < n; j++)
+            T sum = NumOps.Zero;
+            if (i < n - 1)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(HessenbergMatrix[i, j], x[j]));
+                int len = n - i - 1;
+                var rowSegment = new Vector<T>(HessenbergMatrix.GetRow(i).Skip(i + 1));
+                var xSegment = new Vector<T>(x.Skip(i + 1));
+                sum = rowSegment.DotProduct(xSegment);
             }
 
             x[i] = NumOps.Subtract(y[i], sum);
