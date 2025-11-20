@@ -251,21 +251,24 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
                 "AMSGrad optimizer state is not initialized. ReverseUpdate must be called after UpdateParameters.");
         }
 
-        var original = new T[updatedParameters.Length];
+        // === Vectorized Reverse AMSGrad Update using IEngine (Phase B: US-GPU-015) ===
+        // Recalculate bias-corrected first moment: mHat = m / (1 - beta1^t)
+        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
+        var biasCorrection1Vec = Vector<T>.CreateDefault(_m.Length, biasCorrection1);
+        var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1Vec);
 
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            // Recalculate bias-corrected first moment
-            var mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+        // Recalculate the update: update = (lr * mHat) / (sqrt(vHat) + epsilon)
+        var currentLrVec = Vector<T>.CreateDefault(_m.Length, CurrentLearningRate);
+        var lrTimesMHat = (Vector<T>)Engine.Multiply(currentLrVec, mHat);
 
-            // Recalculate the update that was applied
-            var update = NumOps.Divide(NumOps.Multiply(CurrentLearningRate, mHat), NumOps.Add(NumOps.Sqrt(_vHat[i]), NumOps.FromDouble(_options.Epsilon)));
+        var vHatSqrt = (Vector<T>)Engine.Sqrt(_vHat);
+        var epsilonVec = Vector<T>.CreateDefault(_vHat.Length, NumOps.FromDouble(_options.Epsilon));
+        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
 
-            // Reverse: original = updated + update
-            original[i] = NumOps.Add(updatedParameters[i], update);
-        }
+        var update = (Vector<T>)Engine.Divide(lrTimesMHat, denominator);
 
-        return new Vector<T>(original);
+        // Reverse: original = updated + update
+        return (Vector<T>)Engine.Add(updatedParameters, update);
     }
 
     /// <summary>

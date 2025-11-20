@@ -227,6 +227,15 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _logKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _signKernelFloat;
 
+    // Activation function kernels (Phase B: US-GPU-004 - GPU Acceleration)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _tanhKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _sigmoidKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _reluKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _geluKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _mishKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _swishKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, float, ArrayView<float>>? _eluKernelFloat;
+
     // Kernel cache for double operations (Phase B: US-GPU-005)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _addKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _subtractKernelDouble;
@@ -403,6 +412,53 @@ public class GpuEngine : IEngine, IDisposable
                 _signKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
                     (index, vec, result) => result[index] = vec[index] > 0 ? 1.0f : (vec[index] < 0 ? -1.0f : 0.0f));
+
+                // Activation function kernels (Phase B: US-GPU-004)
+                _tanhKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, input, result) => result[index] = XMath.Tanh(input[index]));
+
+                _sigmoidKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, input, result) => result[index] = 1.0f / (1.0f + XMath.Exp(-input[index])));
+
+                _reluKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, input, result) => result[index] = XMath.Max(0.0f, input[index]));
+
+                _geluKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, input, result) => {
+                        float x = input[index];
+                        float sqrt2OverPi = 0.7978845608028654f;
+                        float x_cubed = x * x * x;
+                        float inner = x + 0.044715f * x_cubed;
+                        float tanh_arg = sqrt2OverPi * inner;
+                        float tanh_val = XMath.Tanh(tanh_arg);
+                        result[index] = 0.5f * x * (1.0f + tanh_val);
+                    });
+
+                _mishKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, input, result) => {
+                        float x = input[index];
+                        float softplus = XMath.Log(1.0f + XMath.Exp(x));
+                        result[index] = x * XMath.Tanh(softplus);
+                    });
+
+                _swishKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, input, result) => {
+                        float x = input[index];
+                        result[index] = x / (1.0f + XMath.Exp(-x));
+                    });
+
+                _eluKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, float, ArrayView<float>>(
+                    (index, input, alpha, result) => {
+                        float x = input[index];
+                        result[index] = x > 0.0f ? x : alpha * (XMath.Exp(x) - 1.0f);
+                    });
 
                 Console.WriteLine("[GpuEngine] Float kernels pre-compiled");
 
@@ -1049,6 +1105,251 @@ public class GpuEngine : IEngine, IDisposable
         return _cpuFallback.Sign(vector);
     }
 
+    #region Activation Functions
+
+    /// <inheritdoc/>
+    public Vector<T> Tanh<T>(Vector<T> vector)
+    {
+        if (vector.Length < _thresholds.VectorSqrt)
+            return _cpuFallback.Tanh(vector);
+
+        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        {
+            var vectorFloat = (Vector<float>)(object)vector;
+            var resultFloat = TanhGpu(vectorFloat);
+            return (Vector<T>)(object)resultFloat;
+        }
+
+        return _cpuFallback.Tanh(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Sigmoid<T>(Vector<T> vector)
+    {
+        if (vector.Length < _thresholds.VectorSqrt)
+            return _cpuFallback.Sigmoid(vector);
+
+        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        {
+            var vectorFloat = (Vector<float>)(object)vector;
+            var resultFloat = SigmoidGpu(vectorFloat);
+            return (Vector<T>)(object)resultFloat;
+        }
+
+        return _cpuFallback.Sigmoid(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> ReLU<T>(Vector<T> vector)
+    {
+        if (vector.Length < _thresholds.VectorSqrt)
+            return _cpuFallback.ReLU(vector);
+
+        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        {
+            var vectorFloat = (Vector<float>)(object)vector;
+            var resultFloat = ReLUGpu(vectorFloat);
+            return (Vector<T>)(object)resultFloat;
+        }
+
+        return _cpuFallback.ReLU(vector);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Tanh<T>(Tensor<T> tensor)
+    {
+        if (tensor.Length < _thresholds.MatrixMultiply)
+            return _cpuFallback.Tanh(tensor);
+
+        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        {
+            // Convert tensor to flat vector, process on GPU, convert back
+            var flatVector = tensor.ToVector();
+            var flatVectorFloat = (Vector<float>)(object)flatVector;
+            var resultVectorFloat = TanhGpu(flatVectorFloat);
+            var resultVector = (Vector<T>)(object)resultVectorFloat;
+            return new Tensor<T>(tensor.Shape, resultVector);
+        }
+
+        return _cpuFallback.Tanh(tensor);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Sigmoid<T>(Tensor<T> tensor)
+    {
+        if (tensor.Length < _thresholds.MatrixMultiply)
+            return _cpuFallback.Sigmoid(tensor);
+
+        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        {
+            var flatVector = tensor.ToVector();
+            var flatVectorFloat = (Vector<float>)(object)flatVector;
+            var resultVectorFloat = SigmoidGpu(flatVectorFloat);
+            var resultVector = (Vector<T>)(object)resultVectorFloat;
+            return new Tensor<T>(tensor.Shape, resultVector);
+        }
+
+        return _cpuFallback.Sigmoid(tensor);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReLU<T>(Tensor<T> tensor)
+    {
+        if (tensor.Length < _thresholds.MatrixMultiply)
+            return _cpuFallback.ReLU(tensor);
+
+        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        {
+            var flatVector = tensor.ToVector();
+            var flatVectorFloat = (Vector<float>)(object)flatVector;
+            var resultVectorFloat = ReLUGpu(flatVectorFloat);
+            var resultVector = (Vector<T>)(object)resultVectorFloat;
+            return new Tensor<T>(tensor.Shape, resultVector);
+        }
+
+        return _cpuFallback.ReLU(tensor);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> GELU<T>(Vector<T> vector)
+    {
+        if (vector.Length < _thresholds.VectorSqrt)
+            return _cpuFallback.GELU(vector);
+
+        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        {
+            var vectorFloat = (Vector<float>)(object)vector;
+            var resultFloat = GELUGpu(vectorFloat);
+            return (Vector<T>)(object)resultFloat;
+        }
+
+        return _cpuFallback.GELU(vector);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GELU<T>(Tensor<T> tensor)
+    {
+        if (tensor.Length < _thresholds.MatrixMultiply)
+            return _cpuFallback.GELU(tensor);
+
+        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        {
+            var flatVector = tensor.ToVector();
+            var flatVectorFloat = (Vector<float>)(object)flatVector;
+            var resultVectorFloat = GELUGpu(flatVectorFloat);
+            var resultVector = (Vector<T>)(object)resultVectorFloat;
+            return new Tensor<T>(tensor.Shape, resultVector);
+        }
+
+        return _cpuFallback.GELU(tensor);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Mish<T>(Vector<T> vector)
+    {
+        if (vector.Length < _thresholds.VectorSqrt)
+            return _cpuFallback.Mish(vector);
+
+        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        {
+            var vectorFloat = (Vector<float>)(object)vector;
+            var resultFloat = MishGpu(vectorFloat);
+            return (Vector<T>)(object)resultFloat;
+        }
+
+        return _cpuFallback.Mish(vector);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Mish<T>(Tensor<T> tensor)
+    {
+        if (tensor.Length < _thresholds.MatrixMultiply)
+            return _cpuFallback.Mish(tensor);
+
+        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        {
+            var flatVector = tensor.ToVector();
+            var flatVectorFloat = (Vector<float>)(object)flatVector;
+            var resultVectorFloat = MishGpu(flatVectorFloat);
+            var resultVector = (Vector<T>)(object)resultVectorFloat;
+            return new Tensor<T>(tensor.Shape, resultVector);
+        }
+
+        return _cpuFallback.Mish(tensor);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Swish<T>(Vector<T> vector)
+    {
+        if (vector.Length < _thresholds.VectorSqrt)
+            return _cpuFallback.Swish(vector);
+
+        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        {
+            var vectorFloat = (Vector<float>)(object)vector;
+            var resultFloat = SwishGpu(vectorFloat);
+            return (Vector<T>)(object)resultFloat;
+        }
+
+        return _cpuFallback.Swish(vector);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Swish<T>(Tensor<T> tensor)
+    {
+        if (tensor.Length < _thresholds.MatrixMultiply)
+            return _cpuFallback.Swish(tensor);
+
+        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        {
+            var flatVector = tensor.ToVector();
+            var flatVectorFloat = (Vector<float>)(object)flatVector;
+            var resultVectorFloat = SwishGpu(flatVectorFloat);
+            var resultVector = (Vector<T>)(object)resultVectorFloat;
+            return new Tensor<T>(tensor.Shape, resultVector);
+        }
+
+        return _cpuFallback.Swish(tensor);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> ELU<T>(Vector<T> vector, double alpha = 1.0)
+    {
+        if (vector.Length < _thresholds.VectorSqrt)
+            return _cpuFallback.ELU(vector, alpha);
+
+        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        {
+            var vectorFloat = (Vector<float>)(object)vector;
+            var alphaFloat = (float)alpha;
+            var resultFloat = ELUGpu(vectorFloat, alphaFloat);
+            return (Vector<T>)(object)resultFloat;
+        }
+
+        return _cpuFallback.ELU(vector, alpha);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ELU<T>(Tensor<T> tensor, double alpha = 1.0)
+    {
+        if (tensor.Length < _thresholds.MatrixMultiply)
+            return _cpuFallback.ELU(tensor, alpha);
+
+        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        {
+            var flatVector = tensor.ToVector();
+            var flatVectorFloat = (Vector<float>)(object)flatVector;
+            var alphaFloat = (float)alpha;
+            var resultVectorFloat = ELUGpu(flatVectorFloat, alphaFloat);
+            var resultVector = (Vector<T>)(object)resultVectorFloat;
+            return new Tensor<T>(tensor.Shape, resultVector);
+        }
+
+        return _cpuFallback.ELU(tensor, alpha);
+    }
+
+    #endregion
+
     #region GPU Kernels (Float Implementation)
 
     // Note: These are simple, unoptimized kernels for the prototype.
@@ -1511,6 +1812,333 @@ public class GpuEngine : IEngine, IDisposable
         finally
         {
             _memoryPoolFloat.Return(gpuVector);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    // Activation function GPU implementations (Phase B: US-GPU-004)
+    private Vector<float> TanhGpu(Vector<float> input)
+    {
+        var result = new Vector<float>(input.Length);
+        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            // Zero-copy: Use span instead of ToArray()
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+            // Thread-safe kernel execution
+            lock (_gpuLock)
+            {
+                (_tanhKernelFloat ?? throw new InvalidOperationException("Tanh kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length,
+                    gpuInput.View,
+                    gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            // Zero-copy: Write directly to result
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+
+            return result;
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Tanh(input);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Tanh(input);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU operation failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Tanh(input);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuInput);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private Vector<float> SigmoidGpu(Vector<float> input)
+    {
+        var result = new Vector<float>(input.Length);
+        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+            lock (_gpuLock)
+            {
+                (_sigmoidKernelFloat ?? throw new InvalidOperationException("Sigmoid kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length,
+                    gpuInput.View,
+                    gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+
+            return result;
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Sigmoid(input);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Sigmoid(input);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU operation failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Sigmoid(input);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuInput);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private Vector<float> ReLUGpu(Vector<float> input)
+    {
+        var result = new Vector<float>(input.Length);
+        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+            lock (_gpuLock)
+            {
+                (_reluKernelFloat ?? throw new InvalidOperationException("ReLU kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length,
+                    gpuInput.View,
+                    gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+
+            return result;
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.ReLU(input);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.ReLU(input);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU operation failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.ReLU(input);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuInput);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private Vector<float> GELUGpu(Vector<float> input)
+    {
+        var result = new Vector<float>(input.Length);
+        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+            lock (_gpuLock)
+            {
+                (_geluKernelFloat ?? throw new InvalidOperationException("GELU kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length,
+                    gpuInput.View,
+                    gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+
+            return result;
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.GELU(input);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.GELU(input);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU operation failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.GELU(input);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuInput);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private Vector<float> MishGpu(Vector<float> input)
+    {
+        var result = new Vector<float>(input.Length);
+        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+            lock (_gpuLock)
+            {
+                (_mishKernelFloat ?? throw new InvalidOperationException("Mish kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length,
+                    gpuInput.View,
+                    gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+
+            return result;
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Mish(input);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Mish(input);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU operation failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Mish(input);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuInput);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private Vector<float> SwishGpu(Vector<float> input)
+    {
+        var result = new Vector<float>(input.Length);
+        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+            lock (_gpuLock)
+            {
+                (_swishKernelFloat ?? throw new InvalidOperationException("Swish kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length,
+                    gpuInput.View,
+                    gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+
+            return result;
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Swish(input);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Swish(input);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU operation failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Swish(input);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuInput);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private Vector<float> ELUGpu(Vector<float> input, float alpha)
+    {
+        var result = new Vector<float>(input.Length);
+        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+            lock (_gpuLock)
+            {
+                (_eluKernelFloat ?? throw new InvalidOperationException("ELU kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length,
+                    gpuInput.View,
+                    alpha,
+                    gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+
+            return result;
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.ELU(input, alpha);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.ELU(input, alpha);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU operation failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.ELU(input, alpha);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuInput);
             _memoryPoolFloat.Return(gpuResult);
         }
     }

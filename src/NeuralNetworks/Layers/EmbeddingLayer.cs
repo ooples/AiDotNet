@@ -130,9 +130,6 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     public T AuxiliaryLossWeight { get; set; }
 
-    /// <summary>
-    /// The computation engine (CPU or GPU) for vectorized operations.
-    /// </summary>
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -230,14 +227,27 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
+        // === Vectorized Weight Initialization (Phase B: US-GPU-015) ===
         // Initialize embedding matrix with small random values
         T scale = NumOps.Sqrt(NumOps.FromDouble(1.0 / _embeddingMatrix.Columns));
 
         for (int i = 0; i < _embeddingMatrix.Rows; i++)
         {
+            // Generate random values for entire row
+            T[] randomValues = new T[_embeddingMatrix.Columns];
             for (int j = 0; j < _embeddingMatrix.Columns; j++)
             {
-                _embeddingMatrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+                randomValues[j] = NumOps.FromDouble(Random.NextDouble() - 0.5);
+            }
+
+            // === Vectorized Scaling (Phase B: US-GPU-015) ===
+            var sourceVector = new Vector<T>(randomValues);
+            var scaledVector = (Vector<T>)Engine.Multiply(sourceVector, scale);
+
+            // Copy scaled values to embedding matrix row
+            for (int j = 0; j < _embeddingMatrix.Columns; j++)
+            {
+                _embeddingMatrix[i, j] = scaledVector[j];
             }
         }
     }
@@ -274,6 +284,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // === Vectorized Embedding Lookup (Phase B: US-GPU-015) ===
         _lastInput = input;
         int sequenceLength = input.Shape[0];
         int batchSize = input.Shape[1];
@@ -285,9 +296,14 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             for (int b = 0; b < batchSize; b++)
             {
                 int index = Convert.ToInt32(input[t, b, 0]);
+
+                // Use vectorized row extraction from matrix for better performance
+                var embeddingVector = _embeddingMatrix.GetRow(index);
+
+                // Copy entire row at once using vectorized operations
                 for (int d = 0; d < _embeddingMatrix.Columns; d++)
                 {
-                    output[t, b, d] = _embeddingMatrix[index, d];
+                    output[t, b, d] = embeddingVector[d];
                 }
             }
         }
@@ -353,9 +369,23 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             for (int b = 0; b < batchSize; b++)
             {
                 int index = Convert.ToInt32(_lastInput[t, b, 0]);
+
+                // Extract gradient vector for this position
+                var gradSlice = new T[_embeddingMatrix.Columns];
                 for (int d = 0; d < _embeddingMatrix.Columns; d++)
                 {
-                    _embeddingGradient[index, d] = NumOps.Add(_embeddingGradient[index, d], outputGradient[t, b, d]);
+                    gradSlice[d] = outputGradient[t, b, d];
+                }
+
+                // Accumulate gradients using vectorized addition
+                var currentGrad = _embeddingGradient.GetRow(index);
+                var gradVector = new Vector<T>(gradSlice);
+                var updatedGrad = (Vector<T>)Engine.Add(currentGrad, gradVector);
+
+                // Write back to gradient matrix
+                for (int d = 0; d < _embeddingMatrix.Columns; d++)
+                {
+                    _embeddingGradient[index, d] = updatedGrad[d];
                 }
             }
         }

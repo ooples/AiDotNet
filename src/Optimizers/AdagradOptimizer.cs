@@ -232,9 +232,9 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
 
         // Calculate adaptive learning rates: lr / (sqrt(accSqGrad) + eps)
         var sqrtAccSqGrad = (Vector<T>)Engine.Sqrt(_accumulatedSquaredGradients!);
-        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, sqrtAccSqGrad.Length));
+        var epsilonVec = Vector<T>.CreateDefault(sqrtAccSqGrad.Length, epsilon);
         var denominator = (Vector<T>)Engine.Add(sqrtAccSqGrad, epsilonVec);
-        var currentLrVec = new Vector<T>(Enumerable.Repeat(CurrentLearningRate, sqrtAccSqGrad.Length));
+        var currentLrVec = Vector<T>.CreateDefault(sqrtAccSqGrad.Length, CurrentLearningRate);
         var adaptiveLearningRates = (Vector<T>)Engine.Divide(currentLrVec, denominator);
 
         // Calculate updates: adaptiveLr * gradient
@@ -279,9 +279,9 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
 
         // Calculate adaptive learning rates: lr / (sqrt(accSqGrad) + eps)
         var sqrtAccSqGrad = (Vector<T>)Engine.Sqrt(_accumulatedSquaredGradients);
-        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, sqrtAccSqGrad.Length));
+        var epsilonVec = Vector<T>.CreateDefault(sqrtAccSqGrad.Length, epsilon);
         var denominator = (Vector<T>)Engine.Add(sqrtAccSqGrad, epsilonVec);
-        var currentLrVec = new Vector<T>(Enumerable.Repeat(CurrentLearningRate, sqrtAccSqGrad.Length));
+        var currentLrVec = Vector<T>.CreateDefault(sqrtAccSqGrad.Length, CurrentLearningRate);
         var adaptiveLearningRates = (Vector<T>)Engine.Divide(currentLrVec, denominator);
 
         // Calculate updates: adaptiveLr * gradient
@@ -534,21 +534,18 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
             return base.ReverseUpdate(updatedParameters, appliedGradients);
         }
 
-        // Reverse Adagrad update: params_old = params_new + adaptiveLearningRate * gradient
-        var original = new T[updatedParameters.Length];
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            // Recalculate the adaptive learning rate that was used
-            T denominator = NumOps.Add(NumOps.Sqrt(_accumulatedSquaredGradients[i]), NumOps.FromDouble(_options.Epsilon));
-            T adaptiveLearningRate = NumOps.Divide(CurrentLearningRate, denominator);
+        // === Vectorized Reverse Adagrad Update using IEngine (Phase B: US-GPU-015) ===
+        // Recalculate the adaptive learning rates that were used
+        var sqrtAccSqGrad = (Vector<T>)Engine.Sqrt(_accumulatedSquaredGradients);
+        var epsilonVec = Vector<T>.CreateDefault(sqrtAccSqGrad.Length, NumOps.FromDouble(_options.Epsilon));
+        var denominator = (Vector<T>)Engine.Add(sqrtAccSqGrad, epsilonVec);
+        var currentLrVec = Vector<T>.CreateDefault(sqrtAccSqGrad.Length, CurrentLearningRate);
+        var adaptiveLearningRates = (Vector<T>)Engine.Divide(currentLrVec, denominator);
 
-            // Calculate the update that was applied
-            T update = NumOps.Multiply(adaptiveLearningRate, appliedGradients[i]);
+        // Calculate the updates that were applied: adaptiveLr * gradient
+        var updates = (Vector<T>)Engine.Multiply(adaptiveLearningRates, appliedGradients);
 
-            // Reverse: params_old = params_new + update
-            original[i] = NumOps.Add(updatedParameters[i], update);
-        }
-
-        return new Vector<T>(original);
+        // Reverse: params_old = params_new + updates
+        return (Vector<T>)Engine.Add(updatedParameters, updates);
     }
 }

@@ -171,12 +171,8 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         var parameters = currentSolution.GetParameters();
 
-        // Save pre-update parameters for reverse updates
-        _previousParameters = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _previousParameters[i] = parameters[i];
-        }
+        // Save pre-update parameters for reverse updates (vectorized copy)
+        _previousParameters = new Vector<T>(parameters);
 
         var alpha = NumOps.FromDouble(_options.Alpha);
         var lambda1 = NumOps.FromDouble(_options.Lambda1);
@@ -268,15 +264,9 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         }
 
         // FTRL's complex proximal gradient descent with L1 thresholding makes exact reversal impossible.
-        // Return the pre-update parameters that were saved in UpdateSolution.
+        // Return the pre-update parameters that were saved in UpdateSolution (vectorized copy).
         // This is the best we can do for FTRL due to the irreversible L1 thresholding.
-        var original = new T[updatedParameters.Length];
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            original[i] = _previousParameters[i];
-        }
-
-        return new Vector<T>(original);
+        return new Vector<T>(_previousParameters);
     }
 
     /// <summary>

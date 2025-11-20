@@ -246,15 +246,14 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
 
         // Clamp values to configured ranges (per-element still needed for now)
         var minLr = NumOps.FromDouble(_options.MinLearningRate);
+        // === Vectorized Parameter Clamping (Phase B: US-GPU-015) ===
         var maxLr = NumOps.FromDouble(_options.MaxLearningRate);
         var minMom = NumOps.FromDouble(_options.MinMomentum);
         var maxMom = NumOps.FromDouble(_options.MaxMomentum);
 
-        for (int i = 0; i < _learningRates.Length; i++)
-        {
-            _learningRates[i] = MathHelper.Clamp(_learningRates[i], minLr, maxLr);
-            _momentums[i] = MathHelper.Clamp(_momentums[i], minMom, maxMom);
-        }
+        // Clamp all learning rates and momentums at once using Transform
+        _learningRates = _learningRates.Transform(lr => MathHelper.Clamp(lr, minLr, maxLr));
+        _momentums = _momentums.Transform(mom => MathHelper.Clamp(mom, minMom, maxMom));
     }
 
     /// <summary>

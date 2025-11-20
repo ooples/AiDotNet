@@ -369,21 +369,17 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
                 "AdaMax optimizer state is not initialized. ReverseUpdate must be called after UpdateParameters.");
         }
 
-        var original = new T[updatedParameters.Length];
+        // === Vectorized Reverse AdaMax Update using IEngine (Phase B: US-GPU-015) ===
+        // Recalculate the bias-corrected learning rate (same for all elements)
+        T alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+        var alphaVec = Vector<T>.CreateDefault(updatedParameters.Length, alpha);
 
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            // Recalculate the learning rate
-            var alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+        // Recalculate the update that was applied: update = (alpha * m) / u
+        var alphaTimes_m = (Vector<T>)Engine.Multiply(alphaVec, _m);
+        var update = (Vector<T>)Engine.Divide(alphaTimes_m, _u);
 
-            // Recalculate the update that was applied
-            var update = NumOps.Divide(NumOps.Multiply(alpha, _m[i]), _u[i]);
-
-            // Reverse: original = updated + update
-            original[i] = NumOps.Add(updatedParameters[i], update);
-        }
-
-        return new Vector<T>(original);
+        // Reverse: original = updated + update
+        return (Vector<T>)Engine.Add(updatedParameters, update);
     }
 
     /// <summary>

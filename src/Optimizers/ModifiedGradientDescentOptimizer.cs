@@ -114,26 +114,17 @@ public class ModifiedGradientDescentOptimizer<T>
     /// </summary>
     private Matrix<T> ComputeIdentityMinusOuterProduct(Vector<T> input)
     {
+        // === Vectorized Identity Matrix and Outer Product (Phase B: US-GPU-015) ===
         int dim = input.Length;
-        var result = new Matrix<T>(dim, dim);
 
-        // Start with identity matrix
-        for (int i = 0; i < dim; i++)
-        {
-            result[i, i] = _numOps.One;
-        }
+        // Create identity matrix using vectorized method
+        var identity = Matrix<T>.CreateIdentity(dim);
 
-        // Subtract outer product: x_t*x_t^T
-        for (int i = 0; i < dim; i++)
-        {
-            for (int j = 0; j < dim; j++)
-            {
-                T outerProduct = _numOps.Multiply(input[i], input[j]);
-                result[i, j] = _numOps.Subtract(result[i, j], outerProduct);
-            }
-        }
+        // Compute outer product: x_t*x_t^T using Matrix.OuterProduct
+        var outerProduct = Matrix<T>.OuterProduct(input, input);
 
-        return result;
+        // Subtract: I - x*x^T
+        return identity.Subtract(outerProduct);
     }
 
     /// <summary>
@@ -141,17 +132,8 @@ public class ModifiedGradientDescentOptimizer<T>
     /// </summary>
     private Matrix<T> ComputeOuterProduct(Vector<T> a, Vector<T> b)
     {
-        var result = new Matrix<T>(a.Length, b.Length);
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            for (int j = 0; j < b.Length; j++)
-            {
-                result[i, j] = _numOps.Multiply(a[i], b[j]);
-            }
-        }
-
-        return result;
+        // === Vectorized Outer Product (Phase B: US-GPU-015) ===
+        return Matrix<T>.OuterProduct(a, b);
     }
 
     /// <summary>

@@ -343,56 +343,48 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 "Lion optimizer state is not initialized. ReverseUpdate must be called after UpdateParameters.");
         }
 
-        var original = new T[updatedParameters.Length];
+        // === Vectorized Reverse Lion Update using IEngine (Phase B: US-GPU-015) ===
         var weightDecay = NumOps.FromDouble(_options.WeightDecay);
+        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, _currentBeta2);
+        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
 
-        for (int i = 0; i < updatedParameters.Length; i++)
+        // Work backwards from current _m to get the old _m:
+        // _m[i] = beta2 * m_old[i] + (1 - beta2) * gradient[i]
+        // m_old[i] = (_m[i] - (1 - beta2) * gradient[i]) / beta2
+        var oneMinusBeta2Vec = Vector<T>.CreateDefault(appliedGradients.Length, oneMinusBeta2);
+        var beta2Vec = Vector<T>.CreateDefault(appliedGradients.Length, _currentBeta2);
+        var oneMinusBeta2TimesGrad = (Vector<T>)Engine.Multiply(appliedGradients, oneMinusBeta2Vec);
+        var mMinusOneMinusBeta2TimesGrad = (Vector<T>)Engine.Subtract(_m, oneMinusBeta2TimesGrad);
+        var mOld = (Vector<T>)Engine.Divide(mMinusOneMinusBeta2TimesGrad, beta2Vec);
+
+        // Recalculate the interpolation: c_t = beta1 * m_{t-1} + (1 - beta1) * g_t
+        var beta1Vec = Vector<T>.CreateDefault(appliedGradients.Length, _currentBeta1);
+        var oneMinusBeta1Vec = Vector<T>.CreateDefault(appliedGradients.Length, oneMinusBeta1);
+        var beta1TimesMOld = (Vector<T>)Engine.Multiply(mOld, beta1Vec);
+        var oneMinusBeta1TimesGrad = (Vector<T>)Engine.Multiply(appliedGradients, oneMinusBeta1Vec);
+        var interpolated = (Vector<T>)Engine.Add(beta1TimesMOld, oneMinusBeta1TimesGrad);
+
+        // Recalculate the sign using vectorized sign operation
+        var signValue = (Vector<T>)Engine.Sign(interpolated);
+
+        // Reverse the update: params_old = (params_new + lr * sign) / (1 - lr * wd)
+        var currentLrVec = Vector<T>.CreateDefault(signValue.Length, _currentLearningRate);
+        var lrTimesSign = (Vector<T>)Engine.Multiply(currentLrVec, signValue);
+        var numerator = (Vector<T>)Engine.Add(updatedParameters, lrTimesSign);
+
+        Vector<T> original;
+        if (!NumOps.Equals(weightDecay, NumOps.Zero))
         {
-            // Recalculate the interpolation that was used
-            // Note: _m[i] was already updated to beta2 * m_{t-1} + (1 - beta2) * g_t in UpdateParameters
-            // We need to use the OLD momentum value for interpolation, which we can approximate from current _m
-            // Actually, we need to recalculate based on what was stored BEFORE the update
-            // For Lion, the interpolation uses the PREVIOUS _m value before it was updated
-            // Since _m was updated AFTER the interpolation, we need to reverse that too
-
-            // Work backwards from current _m to get the old _m:
-            // _m[i] = beta2 * m_old[i] + (1 - beta2) * gradient[i]
-            // m_old[i] = (_m[i] - (1 - beta2) * gradient[i]) / beta2
-            var mOld = NumOps.Divide(
-                NumOps.Subtract(_m[i], NumOps.Multiply(appliedGradients[i], NumOps.Subtract(NumOps.One, _currentBeta2))),
-                _currentBeta2
-            );
-
-            // Recalculate the interpolation: c_t = beta1 * m_{t-1} + (1 - beta1) * g_t
-            var interpolated = NumOps.Add(
-                NumOps.Multiply(mOld, _currentBeta1),
-                NumOps.Multiply(appliedGradients[i], NumOps.Subtract(NumOps.One, _currentBeta1))
-            );
-
-            // Recalculate the sign
-            var signValue = NumOps.GreaterThan(interpolated, NumOps.Zero) ? NumOps.One :
-                           (NumOps.LessThan(interpolated, NumOps.Zero) ? NumOps.Negate(NumOps.One) : NumOps.Zero);
-
-            // Reverse the update
-            // Forward: params_new = params_old - lr * (sign + wd * params_old)
-            // Forward: params_new = params_old * (1 - lr * wd) - lr * sign
-            // Reverse: params_old = (params_new + lr * sign) / (1 - lr * wd)
-
-            var lrTimesSign = NumOps.Multiply(_currentLearningRate, signValue);
-            var numerator = NumOps.Add(updatedParameters[i], lrTimesSign);
-
-            if (!NumOps.Equals(weightDecay, NumOps.Zero))
-            {
-                var denominator = NumOps.Subtract(NumOps.One, NumOps.Multiply(_currentLearningRate, weightDecay));
-                original[i] = NumOps.Divide(numerator, denominator);
-            }
-            else
-            {
-                original[i] = numerator;
-            }
+            var denominator = NumOps.Subtract(NumOps.One, NumOps.Multiply(_currentLearningRate, weightDecay));
+            var denominatorVec = Vector<T>.CreateDefault(numerator.Length, denominator);
+            original = (Vector<T>)Engine.Divide(numerator, denominatorVec);
+        }
+        else
+        {
+            original = numerator;
         }
 
-        return new Vector<T>(original);
+        return original;
     }
 
     /// <summary>

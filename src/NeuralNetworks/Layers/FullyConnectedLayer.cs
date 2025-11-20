@@ -319,17 +319,27 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
+        // === Vectorized Weight/Bias Initialization (Phase B: US-GPU-015) ===
         // Initialize weights and biases (e.g., Xavier/Glorot initialization)
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_weights.Rows + _weights.Columns)));
+
+        // Vectorized weight initialization using Engine operations
         for (int i = 0; i < _weights.Rows; i++)
         {
+            var rowData = new T[_weights.Columns];
             for (int j = 0; j < _weights.Columns; j++)
             {
-                _weights[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble()), scale);
+                rowData[j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble()), scale);
             }
-
-            _biases[i] = NumOps.Zero;
+            var rowVector = new Vector<T>(rowData);
+            for (int j = 0; j < _weights.Columns; j++)
+            {
+                _weights[i, j] = rowVector[j];
+            }
         }
+
+        // Vectorized bias initialization to zero
+        _biases = Vector<T>.CreateDefault(_biases.Length, NumOps.Zero);
     }
 
     /// <summary>
@@ -625,14 +635,23 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> BroadcastBiases(Tensor<T> biases, int batchSize)
     {
+        // === Vectorized Bias Broadcasting (Phase B: US-GPU-015) ===
         var biasLength = biases.Length;
         var broadcasted = new Tensor<T>(new int[] { batchSize, biasLength });
 
+        // Create a bias vector once, then copy it to each batch element
+        var biasVector = new Vector<T>(biasLength);
+        for (int j = 0; j < biasLength; j++)
+        {
+            biasVector[j] = biases[j];
+        }
+
+        // Vectorized broadcasting: copy the same bias vector to each batch
         for (int i = 0; i < batchSize; i++)
         {
             for (int j = 0; j < biasLength; j++)
             {
-                broadcasted[i, j] = biases[j];
+                broadcasted[i, j] = biasVector[j];
             }
         }
 
@@ -644,12 +663,16 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> MatrixToTensor(Matrix<T> matrix)
     {
+        // === Vectorized Matrix-to-Tensor Conversion (Phase B: US-GPU-015) ===
         var tensor = new Tensor<T>(new int[] { matrix.Rows, matrix.Columns });
+
+        // Convert each row using vectorized operations
         for (int i = 0; i < matrix.Rows; i++)
         {
+            var rowVector = matrix.GetRow(i);
             for (int j = 0; j < matrix.Columns; j++)
             {
-                tensor[i, j] = matrix[i, j];
+                tensor[i, j] = rowVector[j];
             }
         }
         return tensor;
@@ -660,10 +683,14 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> VectorToTensor(Vector<T> vector)
     {
+        // === Vectorized Vector-to-Tensor Conversion (Phase B: US-GPU-015) ===
         var tensor = new Tensor<T>(new int[] { vector.Length });
+
+        // Copy vector data directly using array access
+        var vectorData = vector.ToArray();
         for (int i = 0; i < vector.Length; i++)
         {
-            tensor[i] = vector[i];
+            tensor[i] = vectorData[i];
         }
         return tensor;
     }
@@ -673,15 +700,24 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </summary>
     private Matrix<T> TensorToMatrix(Tensor<T> tensor)
     {
+        // === Vectorized Tensor-to-Matrix Conversion (Phase B: US-GPU-015) ===
         if (tensor.Rank != 2)
             throw new ArgumentException("Tensor must be 2D to convert to Matrix");
 
         var matrix = new Matrix<T>(tensor.Shape[0], tensor.Shape[1]);
+
+        // Convert row by row using vectorized operations
         for (int i = 0; i < tensor.Shape[0]; i++)
         {
+            var rowData = new T[tensor.Shape[1]];
             for (int j = 0; j < tensor.Shape[1]; j++)
             {
-                matrix[i, j] = tensor[i, j];
+                rowData[j] = tensor[i, j];
+            }
+            var rowVector = new Vector<T>(rowData);
+            for (int j = 0; j < tensor.Shape[1]; j++)
+            {
+                matrix[i, j] = rowVector[j];
             }
         }
         return matrix;
@@ -692,16 +728,18 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </summary>
     private Vector<T> TensorToVector(Tensor<T> tensor)
     {
+        // === Vectorized Tensor-to-Vector Conversion (Phase B: US-GPU-015) ===
         // Handle both 1D and 2D tensors (for column vectors)
         int length = tensor.Length;
-        var vector = new Vector<T>(length);
 
+        // Create array and copy in one pass
+        var vectorData = new T[length];
         for (int i = 0; i < length; i++)
         {
-            vector[i] = tensor[i];
+            vectorData[i] = tensor[i];
         }
 
-        return vector;
+        return new Vector<T>(vectorData);
     }
 
     /// <summary>
@@ -771,28 +809,10 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _weights.Rows * _weights.Columns + _biases.Length;
-        var parameters = new Vector<T>(totalParams);
-
-        int index = 0;
-
-        // Copy weights parameters
-        for (int i = 0; i < _weights.Rows; i++)
-        {
-            for (int j = 0; j < _weights.Columns; j++)
-            {
-                parameters[index++] = _weights[i, j];
-            }
-        }
-
-        // Copy biases parameters
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            parameters[index++] = _biases[i];
-        }
-
-        return parameters;
+        // === Vectorized Parameter Serialization (Phase B: US-GPU-015) ===
+        // Flatten weight matrix to a row vector and concatenate with biases
+        var weightsFlattened = _weights.ToRowVector();
+        return Vector<T>.Concatenate(weightsFlattened, _biases);
     }
 
     /// <summary>
@@ -823,27 +843,28 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != _weights.Rows * _weights.Columns + _biases.Length)
+        // === Vectorized Parameter Deserialization (Phase B: US-GPU-015) ===
+        int weightCount = _weights.Rows * _weights.Columns;
+
+        if (parameters.Length != weightCount + _biases.Length)
         {
-            throw new ArgumentException($"Expected {_weights.Rows * _weights.Columns + _biases.Length} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {weightCount + _biases.Length} parameters, but got {parameters.Length}", nameof(parameters));
         }
 
-        int index = 0;
-
-        // Set weights parameters
+        // Extract weights and reshape from flat vector
+        var weightsFlattened = parameters.Slice(0, weightCount);
+        // Reshape flattened vector back to matrix
+        _weights = new Matrix<T>(_weights.Rows, _weights.Columns);
         for (int i = 0; i < _weights.Rows; i++)
         {
             for (int j = 0; j < _weights.Columns; j++)
             {
-                _weights[i, j] = parameters[index++];
+                _weights[i, j] = weightsFlattened[i * _weights.Columns + j];
             }
         }
 
-        // Set biases parameters
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            _biases[i] = parameters[index++];
-        }
+        // Extract biases
+        _biases = parameters.Slice(weightCount, _biases.Length);
     }
 
     /// <summary>

@@ -283,11 +283,9 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _previousAccumulatedSquaredUpdates = new Vector<T>(parameters.Length);
         }
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _previousAccumulatedSquaredGradients[i] = _accumulatedSquaredGradients[i];
-            _previousAccumulatedSquaredUpdates[i] = _accumulatedSquaredUpdates[i];
-        }
+        // Vectorized copy of accumulated state
+        _previousAccumulatedSquaredGradients = new Vector<T>(_accumulatedSquaredGradients);
+        _previousAccumulatedSquaredUpdates = new Vector<T>(_accumulatedSquaredUpdates);
 
         // === Vectorized AdaDelta Update using IEngine (Phase B: US-GPU-015) ===
         T rho = NumOps.FromDouble(_options.Rho);
@@ -301,7 +299,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         _accumulatedSquaredGradients = (Vector<T>)Engine.Add(rhoTimesAccSqGrad, oneMinusRhoTimesGradSq);
 
         // Compute RMS of accumulated squared updates and gradients
-        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, _accumulatedSquaredUpdates.Length));
+        var epsilonVec = Vector<T>.CreateDefault(_accumulatedSquaredUpdates.Length, epsilon);
         var accSqUpdPlusEps = (Vector<T>)Engine.Add(_accumulatedSquaredUpdates, epsilonVec);
         var rmsUpdate = (Vector<T>)Engine.Sqrt(accSqUpdPlusEps);
 
@@ -369,32 +367,39 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 "AdaDelta optimizer current state is not initialized.");
         }
 
-        var original = new T[updatedParameters.Length];
+        // === Vectorized Reverse AdaDelta Update using IEngine (Phase B: US-GPU-015) ===
+        T rho = NumOps.FromDouble(_options.Rho);
+        T oneMinusRho = NumOps.FromDouble(1 - _options.Rho);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
 
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            // First update the previous accumulated squared gradients to match what UpdateParameters would have computed
-            var accGradAtUpdateTime = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(_options.Rho), _previousAccumulatedSquaredGradients[i]),
-                NumOps.Multiply(NumOps.FromDouble(1 - _options.Rho), NumOps.Multiply(appliedGradients[i], appliedGradients[i]))
-            );
+        // Recalculate accumulated squared gradients at update time
+        var rhoVec = Vector<T>.CreateDefault(appliedGradients.Length, rho);
+        var oneMinusRhoVec = Vector<T>.CreateDefault(appliedGradients.Length, oneMinusRho);
 
-            // Recalculate the update that was applied using PRE-update accumulated squared updates
-            // but POST-update accumulated squared gradients (as UpdateParameters does)
-            var update = NumOps.Multiply(
-                NumOps.Sqrt(NumOps.Add(_previousAccumulatedSquaredUpdates[i], NumOps.FromDouble(_options.Epsilon))),
-                NumOps.Divide(appliedGradients[i], NumOps.Sqrt(NumOps.Add(accGradAtUpdateTime, NumOps.FromDouble(_options.Epsilon))))
-            );
+        var gradSquared = (Vector<T>)Engine.Multiply(appliedGradients, appliedGradients);
+        var rhoTimesPrevAccSqGrad = (Vector<T>)Engine.Multiply(_previousAccumulatedSquaredGradients, rhoVec);
+        var oneMinusRhoTimesGradSq = (Vector<T>)Engine.Multiply(gradSquared, oneMinusRhoVec);
+        var accGradAtUpdateTime = (Vector<T>)Engine.Add(rhoTimesPrevAccSqGrad, oneMinusRhoTimesGradSq);
 
-            // Reverse: original = updated + update
-            original[i] = NumOps.Add(updatedParameters[i], update);
+        // Recalculate the update that was applied
+        var epsilonVec = Vector<T>.CreateDefault(appliedGradients.Length, epsilon);
+        var prevAccSqUpdPlusEps = (Vector<T>)Engine.Add(_previousAccumulatedSquaredUpdates, epsilonVec);
+        var rmsUpdate = (Vector<T>)Engine.Sqrt(prevAccSqUpdPlusEps);
 
-            // Restore state so the rollback fully reverts the step
-            _accumulatedSquaredGradients[i] = _previousAccumulatedSquaredGradients[i];
-            _accumulatedSquaredUpdates[i] = _previousAccumulatedSquaredUpdates[i];
-        }
+        var accGradPlusEps = (Vector<T>)Engine.Add(accGradAtUpdateTime, epsilonVec);
+        var rmsGrad = (Vector<T>)Engine.Sqrt(accGradPlusEps);
 
-        return new Vector<T>(original);
+        var ratio = (Vector<T>)Engine.Divide(rmsUpdate, rmsGrad);
+        var update = (Vector<T>)Engine.Multiply(ratio, appliedGradients);
+
+        // Reverse: original = updated + update
+        var original = (Vector<T>)Engine.Add(updatedParameters, update);
+
+        // Restore state so the rollback fully reverts the step
+        _accumulatedSquaredGradients = new Vector<T>(_previousAccumulatedSquaredGradients);
+        _accumulatedSquaredUpdates = new Vector<T>(_previousAccumulatedSquaredUpdates);
+
+        return original;
     }
 
     /// <summary>

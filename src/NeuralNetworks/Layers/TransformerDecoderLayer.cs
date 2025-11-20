@@ -839,6 +839,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // === Vectorized Parameter Concatenation (Phase B: US-GPU-015) ===
         // Collect parameters from all sublayers
         var selfAttentionParams = _selfAttention.GetParameters();
         var norm1Params = _norm1.GetParameters();
@@ -846,46 +847,17 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var norm2Params = _norm2.GetParameters();
         var feedForwardParams = _feedForward.GetParameters();
         var norm3Params = _norm3.GetParameters();
-    
-        // Calculate total parameter count
-        int totalParamCount = selfAttentionParams.Length + 
-                              norm1Params.Length + 
-                              crossAttentionParams.Length + 
-                              norm2Params.Length + 
-                              feedForwardParams.Length + 
-                              norm3Params.Length;
-    
-        // Create a vector to hold all parameters
-        var parameters = new Vector<T>(totalParamCount);
-    
-        // Copy all parameters into the combined vector
-        int currentIndex = 0;
-    
-        // Copy self-attention parameters
-        for (int i = 0; i < selfAttentionParams.Length; i++)
-            parameters[currentIndex++] = selfAttentionParams[i];
-    
-        // Copy norm1 parameters
-        for (int i = 0; i < norm1Params.Length; i++)
-            parameters[currentIndex++] = norm1Params[i];
-    
-        // Copy cross-attention parameters
-        for (int i = 0; i < crossAttentionParams.Length; i++)
-            parameters[currentIndex++] = crossAttentionParams[i];
-    
-        // Copy norm2 parameters
-        for (int i = 0; i < norm2Params.Length; i++)
-            parameters[currentIndex++] = norm2Params[i];
-    
-        // Copy feed-forward parameters
-        for (int i = 0; i < feedForwardParams.Length; i++)
-            parameters[currentIndex++] = feedForwardParams[i];
-    
-        // Copy norm3 parameters
-        for (int i = 0; i < norm3Params.Length; i++)
-            parameters[currentIndex++] = norm3Params[i];
-    
-        return parameters;
+
+        // Concatenate all parameter vectors efficiently
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(
+                Vector<T>.Concatenate(
+                    Vector<T>.Concatenate(
+                        Vector<T>.Concatenate(selfAttentionParams, norm1Params),
+                        crossAttentionParams),
+                    norm2Params),
+                feedForwardParams),
+            norm3Params);
     }
 
     /// <summary>

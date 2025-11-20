@@ -289,15 +289,9 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
                 "NAG optimizer velocity is not initialized. ReverseUpdate must be called after UpdateParameters.");
         }
 
-        var original = new T[updatedParameters.Length];
-
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            // Reverse the update: original = updated + velocity
-            original[i] = NumOps.Add(updatedParameters[i], _velocity[i]);
-        }
-
-        return new Vector<T>(original);
+        // === Vectorized Reverse NAG Update (Phase B: US-GPU-015) ===
+        // Reverse the update: original = updated + velocity
+        return (Vector<T>)Engine.Add(updatedParameters, _velocity);
     }
 
     /// <summary>

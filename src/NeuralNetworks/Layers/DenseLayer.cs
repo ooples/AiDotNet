@@ -383,19 +383,23 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Initialize weights and biases (e.g., using Xavier/Glorot initialization)
-        var random = new Random();
+        // === Vectorized Xavier/Glorot Initialization (Phase B: US-GPU-015) ===
+        // Initialize weights with random values scaled by Xavier initialization
+        // Initialize biases to zero using vectorized operation
+
         var scale = Math.Sqrt(2.0 / (InputShape[0] + OutputShape[0]));
 
+        // Initialize weights (still requires loop for individual random values)
         for (int i = 0; i < _weights.Rows; i++)
         {
             for (int j = 0; j < _weights.Columns; j++)
             {
                 _weights[i, j] = NumOps.FromDouble(Random.NextDouble() * scale - scale / 2);
             }
-
-            _biases[i] = NumOps.Zero; // Initialize biases to zero
         }
+
+        // Vectorized bias initialization - set all biases to zero at once
+        _biases = Vector<T>.CreateDefault(_biases.Length, NumOps.Zero);
     }
 
     /// <summary>
@@ -439,34 +443,22 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         T regularizationLoss = NumOps.Zero;
 
-        // Compute L1 regularization: Σ|w|
+        // === Vectorized L1 Regularization: Σ|w| (Phase B: US-GPU-015) ===
         if (Regularization == RegularizationType.L1 || Regularization == RegularizationType.L1L2)
         {
-            T l1Loss = NumOps.Zero;
-            for (int i = 0; i < _weights.Rows; i++)
-            {
-                for (int j = 0; j < _weights.Columns; j++)
-                {
-                    T absWeight = NumOps.Abs(_weights[i, j]);
-                    l1Loss = NumOps.Add(l1Loss, absWeight);
-                }
-            }
+            var weightsVec = _weights.ToRowVector();
+            var absWeights = weightsVec.Transform(NumOps.Abs);
+            T l1Loss = absWeights.Sum();
             l1Loss = NumOps.Multiply(L1Strength, l1Loss);
             regularizationLoss = NumOps.Add(regularizationLoss, l1Loss);
         }
 
-        // Compute L2 regularization: Σ(w²)
+        // === Vectorized L2 Regularization: Σ(w²) (Phase B: US-GPU-015) ===
         if (Regularization == RegularizationType.L2 || Regularization == RegularizationType.L1L2)
         {
-            T l2Loss = NumOps.Zero;
-            for (int i = 0; i < _weights.Rows; i++)
-            {
-                for (int j = 0; j < _weights.Columns; j++)
-                {
-                    T squaredWeight = NumOps.Multiply(_weights[i, j], _weights[i, j]);
-                    l2Loss = NumOps.Add(l2Loss, squaredWeight);
-                }
-            }
+            var weightsVec = _weights.ToRowVector();
+            var squaredWeights = weightsVec.Transform(x => NumOps.Multiply(x, x));
+            T l2Loss = squaredWeights.Sum();
             // L2 regularization is typically 0.5 * lambda * Σ(w²)
             l2Loss = NumOps.Multiply(L2Strength, l2Loss);
             l2Loss = NumOps.Multiply(NumOps.FromDouble(0.5), l2Loss);
@@ -617,7 +609,10 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         if (UsingVectorActivation)
         {
-            return VectorActivation!.Activate(output);
+            // Use centralized ActivationHelper for optimized activation dispatch
+            if (VectorActivation == null)
+                throw new InvalidOperationException("VectorActivation is null when UsingVectorActivation is true");
+            return ActivationHelper.ApplyActivation(VectorActivation, output, Engine);
         }
         else
         {
@@ -672,15 +667,19 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         Tensor<T> activationGradient;
         if (UsingVectorActivation)
         {
-            activationGradient = VectorActivation!.Derivative(outputGradient);
+            if (VectorActivation == null)
+                throw new InvalidOperationException("VectorActivation is null when UsingVectorActivation is true");
+            activationGradient = VectorActivation.Derivative(outputGradient);
         }
         else
         {
+            if (ScalarActivation == null)
+                throw new InvalidOperationException("ScalarActivation is null when UsingVectorActivation is false");
             // Apply scalar activation derivative element-wise
             activationGradient = new Tensor<T>(outputGradient.Shape);
             for (int i = 0; i < outputGradient.Length; i++)
             {
-                activationGradient[i] = ScalarActivation!.Derivative(outputGradient[i]);
+                activationGradient[i] = ScalarActivation.Derivative(outputGradient[i]);
             }
         }
 
@@ -756,10 +755,17 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Extract gradients
-        _weightsGradient = TensorToMatrix(weights.Gradient!);
-        _biasesGradient = TensorToVector(biases.Gradient!);
+        if (weights.Gradient == null)
+            throw new InvalidOperationException("Weights gradient is null after backward pass");
+        if (biases.Gradient == null)
+            throw new InvalidOperationException("Biases gradient is null after backward pass");
+        if (input.Gradient == null)
+            throw new InvalidOperationException("Input gradient is null after backward pass");
 
-        return input.Gradient!.Reshape(_lastInput.Shape);
+        _weightsGradient = TensorToMatrix(weights.Gradient);
+        _biasesGradient = TensorToVector(biases.Gradient);
+
+        return input.Gradient.Reshape(_lastInput.Shape);
     }
 
     /// <summary>
@@ -869,12 +875,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private Tensor<T> VectorToTensor(Vector<T> vector)
     {
-        var tensor = new Tensor<T>(new int[] { vector.Length });
-        for (int i = 0; i < vector.Length; i++)
-        {
-            tensor[i] = vector[i];
-        }
-        return tensor;
+        // Use Tensor.FromVector for efficient conversion
+        return Tensor<T>.FromVector(vector);
     }
 
     /// <summary>
@@ -969,28 +971,10 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _weights.Rows * _weights.Columns + _biases.Length;
-        var parameters = new Vector<T>(totalParams);
-    
-        int index = 0;
-    
-        // Copy weight parameters
-        for (int i = 0; i < _weights.Rows; i++)
-        {
-            for (int j = 0; j < _weights.Columns; j++)
-            {
-                parameters[index++] = _weights[i, j];
-            }
-        }
-    
-        // Copy bias parameters
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            parameters[index++] = _biases[i];
-        }
-    
-        return parameters;
+        // === Vectorized Parameter Extraction (Phase B: US-GPU-015) ===
+        // Convert weight matrix to vector and concatenate with biases
+        var weightsVec = _weights.ToRowVector();
+        return Vector<T>.Concatenate(weightsVec, _biases);
     }
 
     /// <summary>

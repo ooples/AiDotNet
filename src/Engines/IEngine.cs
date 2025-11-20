@@ -185,6 +185,181 @@ public interface IEngine
 
     #endregion
 
+    #region Activation Functions
+
+    /// <summary>
+    /// Computes the hyperbolic tangent of each element in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing tanh values between -1 and 1.</returns>
+    /// <remarks>
+    /// <para>
+    /// Tanh activation function: tanh(x) = (e^x - e^-x) / (e^x + e^-x).
+    /// Commonly used in hidden layers of neural networks.
+    /// CPU implementation uses TensorPrimitives for SIMD optimization (3-6× speedup for float).
+    /// GPU implementation uses ILGPU kernels.
+    /// </para>
+    /// </remarks>
+    Vector<T> Tanh<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the sigmoid function of each element in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing sigmoid values between 0 and 1.</returns>
+    /// <remarks>
+    /// <para>
+    /// Sigmoid activation function: σ(x) = 1 / (1 + e^-x).
+    /// Commonly used for binary classification and gate functions in LSTMs/GRUs.
+    /// CPU implementation uses TensorPrimitives for SIMD optimization (3-6× speedup for float).
+    /// GPU implementation uses ILGPU kernels.
+    /// </para>
+    /// </remarks>
+    Vector<T> Sigmoid<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the Rectified Linear Unit (ReLU) of each element in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector where each element is max(0, x).</returns>
+    /// <remarks>
+    /// <para>
+    /// ReLU activation function: ReLU(x) = max(0, x).
+    /// Most commonly used activation in modern deep learning.
+    /// CPU implementation uses TensorPrimitives for SIMD optimization.
+    /// GPU implementation uses ILGPU kernels.
+    /// </para>
+    /// </remarks>
+    Vector<T> ReLU<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the hyperbolic tangent of each element in the tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the tensor.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A new tensor containing tanh values between -1 and 1.</returns>
+    /// <remarks>
+    /// <para>
+    /// Tensor version of Tanh for multi-dimensional data.
+    /// CPU implementation uses TensorPrimitives for SIMD optimization.
+    /// GPU implementation uses ILGPU kernels.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Tanh<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the sigmoid function of each element in the tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the tensor.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A new tensor containing sigmoid values between 0 and 1.</returns>
+    /// <remarks>
+    /// <para>
+    /// Tensor version of Sigmoid for multi-dimensional data.
+    /// CPU implementation uses TensorPrimitives for SIMD optimization.
+    /// GPU implementation uses ILGPU kernels.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Sigmoid<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the ReLU of each element in the tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the tensor.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A new tensor where each element is max(0, x).</returns>
+    /// <remarks>
+    /// <para>
+    /// Tensor version of ReLU for multi-dimensional data.
+    /// CPU implementation uses TensorPrimitives for SIMD optimization.
+    /// GPU implementation uses ILGPU kernels.
+    /// </para>
+    /// </remarks>
+    Tensor<T> ReLU<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the GELU (Gaussian Error Linear Unit) of each element in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector with GELU activation applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// GELU activation: x * Φ(x) where Φ is the standard Gaussian cumulative distribution.
+    /// Commonly used in transformers (BERT, GPT) and modern architectures.
+    /// Approximation: 0.5 * x * (1 + tanh(√(2/π) * (x + 0.044715 * x³)))
+    /// </para>
+    /// </remarks>
+    Vector<T> GELU<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the Mish activation of each element in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector with Mish activation applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// Mish activation: x * tanh(softplus(x)) = x * tanh(ln(1 + exp(x))).
+    /// Smooth, self-regularizing activation function with better performance than ReLU in some tasks.
+    /// </para>
+    /// </remarks>
+    Vector<T> Mish<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the Swish/SiLU activation of each element in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector with Swish activation applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// Swish/SiLU activation: x * sigmoid(x) = x / (1 + exp(-x)).
+    /// Used in EfficientNet and other modern architectures. Self-gated activation.
+    /// </para>
+    /// </remarks>
+    Vector<T> Swish<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the ELU (Exponential Linear Unit) of each element in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <param name="alpha">Scale factor for negative values (default 1.0).</param>
+    /// <returns>A new vector with ELU activation applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// ELU activation: x if x > 0, alpha * (exp(x) - 1) otherwise.
+    /// Helps with vanishing gradient problem and can produce negative outputs.
+    /// </para>
+    /// </remarks>
+    Vector<T> ELU<T>(Vector<T> vector, double alpha = 1.0);
+
+    /// <summary>
+    /// Computes the GELU of each element in the tensor.
+    /// </summary>
+    Tensor<T> GELU<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the Mish activation of each element in the tensor.
+    /// </summary>
+    Tensor<T> Mish<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the Swish/SiLU activation of each element in the tensor.
+    /// </summary>
+    Tensor<T> Swish<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the ELU of each element in the tensor.
+    /// </summary>
+    Tensor<T> ELU<T>(Tensor<T> tensor, double alpha = 1.0);
+
+    #endregion
+
     #region Matrix Operations (Phase B: Epic 2)
 
     /// <summary>

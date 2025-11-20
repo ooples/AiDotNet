@@ -879,6 +879,13 @@ public abstract class LayerBase<T> : ILayer<T>, IDiagnosticsProvider<T>
     /// </remarks>
     protected Tensor<T> ApplyActivation(Tensor<T> input)
     {
+        // Use centralized ActivationHelper for optimized activation dispatch
+        if (VectorActivation != null)
+        {
+            return ActivationHelper.ApplyActivation(VectorActivation, input, Engine);
+        }
+
+        // Fall back to vector-based activation for scalar activations
         Vector<T> inputVector = input.ToVector();
         Vector<T> outputVector = ApplyActivation(inputVector);
 
@@ -910,7 +917,8 @@ public abstract class LayerBase<T> : ILayer<T>, IDiagnosticsProvider<T>
     {
         if (VectorActivation != null)
         {
-            return VectorActivation.Activate(input);
+            // Use centralized ActivationHelper for optimized activation dispatch
+            return ActivationHelper.ApplyActivation(VectorActivation, input, Engine);
         }
         else if (ScalarActivation != null)
         {

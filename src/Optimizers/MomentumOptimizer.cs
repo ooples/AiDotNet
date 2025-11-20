@@ -472,15 +472,10 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             return base.ReverseUpdate(updatedParameters, appliedGradients);
         }
 
+        // === Vectorized Reverse Momentum Update (Phase B: US-GPU-015) ===
         // Reverse momentum update: params_old = params_new + velocity_new
         // The velocity was applied as: params_new = params_old - velocity
         // So: params_old = params_new + velocity
-        var original = new T[updatedParameters.Length];
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            original[i] = NumOps.Add(updatedParameters[i], _velocity[i]);
-        }
-
-        return new Vector<T>(original);
+        return (Vector<T>)Engine.Add(updatedParameters, _velocity);
     }
 }

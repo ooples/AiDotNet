@@ -686,12 +686,8 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> VectorToTensor(Vector<T> vector)
     {
-        var tensor = new Tensor<T>(new int[] { vector.Length });
-        for (int i = 0; i < vector.Length; i++)
-        {
-            tensor[i] = vector[i];
-        }
-        return tensor;
+        // Use Tensor.FromVector for efficient conversion
+        return Tensor<T>.FromVector(vector);
     }
 
     /// <summary>

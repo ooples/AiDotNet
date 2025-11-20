@@ -260,12 +260,8 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         var stepSize = CurrentLearningRate;
         var parameters = currentSolution.GetParameters();
 
-        // Save pre-update parameters for reverse updates
-        _previousParameters = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _previousParameters[i] = parameters[i];
-        }
+        // Save pre-update parameters for reverse updates (vectorized copy)
+        _previousParameters = new Vector<T>(parameters);
 
         // Vectorized gradient descent step
         var gradientStep = (Vector<T>)Engine.Multiply(gradient, stepSize);
@@ -314,16 +310,11 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
                 "Proximal GD optimizer state is not initialized. ReverseUpdate must be called after UpdateSolution.");
         }
 
+        // === Vectorized Reverse PGD Update (Phase B: US-GPU-015) ===
         // PGD's proximal operator (regularization) cannot be inverted.
         // Return the pre-update parameters that were saved in UpdateSolution.
         // This is the best we can do since the proximal operator is irreversible.
-        var original = new T[updatedParameters.Length];
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            original[i] = _previousParameters[i];
-        }
-
-        return new Vector<T>(original);
+        return new Vector<T>(_previousParameters);
     }
 
     /// <summary>

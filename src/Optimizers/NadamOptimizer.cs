@@ -339,36 +339,47 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 "Nadam optimizer previous state is not available. ReverseUpdate must be called after UpdateParameters.");
         }
 
-        var original = new T[updatedParameters.Length];
-        var beta1 = NumOps.FromDouble(_options.Beta1);
-        var beta2 = NumOps.FromDouble(_options.Beta2);
-        var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        // === Vectorized Reverse Nadam Update (Phase B: US-GPU-015) ===
+        T beta1 = NumOps.FromDouble(_options.Beta1);
+        T beta2 = NumOps.FromDouble(_options.Beta2);
+        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
+        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
 
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            // CRITICAL: Use UPDATED moments (current _m and _v), not previous moments
-            // UpdateParameters computed the update using moments AFTER they were updated with the gradient
-            var mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
-            var vHat = NumOps.Divide(_v[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t)));
+        // CRITICAL: Use UPDATED moments (current _m and _v), not previous moments
+        // Bias-corrected moments
+        var biasCorr1Vec = Vector<T>.CreateDefault(_m.Length, biasCorrection1);
+        var biasCorr2Vec = Vector<T>.CreateDefault(_v.Length, biasCorrection2);
+        var mHat = (Vector<T>)Engine.Divide(_m, biasCorr1Vec);
+        var vHat = (Vector<T>)Engine.Divide(_v, biasCorr2Vec);
 
-            // Recalculate the Nesterov momentum term using updated moments
-            var mHatNesterov = NumOps.Add(NumOps.Multiply(beta1, mHat), NumOps.Multiply(NumOps.Divide(oneMinusBeta1, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t))), appliedGradients[i]));
+        // Recalculate the Nesterov momentum term
+        var beta1Vec = Vector<T>.CreateDefault(_m.Length, beta1);
+        var beta1_mHat = (Vector<T>)Engine.Multiply(beta1Vec, mHat);
+        var gradCoeff = NumOps.Divide(oneMinusBeta1, biasCorrection1);
+        var gradCoeffVec = Vector<T>.CreateDefault(appliedGradients.Length, gradCoeff);
+        var gradTerm = (Vector<T>)Engine.Multiply(gradCoeffVec, appliedGradients);
+        var mHatNesterov = (Vector<T>)Engine.Add(beta1_mHat, gradTerm);
 
-            // Recalculate the update that was applied
-            var update = NumOps.Divide(NumOps.Multiply(CurrentLearningRate, mHatNesterov), NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon)));
+        // Recalculate the update that was applied
+        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
+        var epsilonVec = Vector<T>.CreateDefault(vHatSqrt.Length, NumOps.FromDouble(_options.Epsilon));
+        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
+        var currentLrVec = Vector<T>.CreateDefault(mHatNesterov.Length, CurrentLearningRate);
+        var numerator = (Vector<T>)Engine.Multiply(currentLrVec, mHatNesterov);
+        var update = (Vector<T>)Engine.Divide(numerator, denominator);
 
-            // Reverse: original = updated + update
-            original[i] = NumOps.Add(updatedParameters[i], update);
+        // Reverse: original = updated + update
+        var original = (Vector<T>)Engine.Add(updatedParameters, update);
 
-            // Restore state so the rollback fully reverts the step
-            _m[i] = _previousM[i];
-            _v[i] = _previousV[i];
-        }
+        // Restore state so the rollback fully reverts the step
+        _m = new Vector<T>(_previousM);
+        _v = new Vector<T>(_previousV);
 
         // Restore time step to complete the rollback
         _t = _previousT;
 
-        return new Vector<T>(original);
+        return original;
     }
 
     /// <summary>

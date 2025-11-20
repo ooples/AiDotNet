@@ -593,19 +593,29 @@ public class GRULayer<T> : LayerBase<T>
         if (isRecurrent)
         {
             if (_vectorRecurrentActivation != null)
-                return _vectorRecurrentActivation.Activate(input);
+            {
+                // Use centralized ActivationHelper for optimized activation dispatch
+                return ActivationHelper.ApplyActivation(_vectorRecurrentActivation, input, Engine);
+            }
             else if (_recurrentActivation != null)
+            {
                 return input.Transform((x, _) => _recurrentActivation.Activate(x));
+            }
         }
         else
         {
             if (_vectorActivation != null)
-                return _vectorActivation.Activate(input);
+            {
+                // Use centralized ActivationHelper for optimized activation dispatch
+                return ActivationHelper.ApplyActivation(_vectorActivation, input, Engine);
+            }
             else if (_activation != null)
+            {
                 return input.Transform((x, _) => _activation.Activate(x));
+            }
         }
 
-        throw new InvalidOperationException("No activation function specified.");
+        throw new InvalidOperationException("No activation function specified");
     }
 
     /// <summary>

@@ -243,10 +243,8 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         InitializeMatrix(_valueWeights, scale);
         InitializeMatrix(_outputWeights, scale);
 
-        for (int i = 0; i < _outputBias.Length; i++)
-        {
-            _outputBias[i] = NumOps.Zero;
-        }
+        // === Vectorized Zero-Fill Bias (Phase B: US-GPU-015) ===
+        _outputBias = Vector<T>.CreateDefault(_outputBias.Length, NumOps.Zero);
     }
 
     /// <summary>
@@ -374,18 +372,28 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private T ComputeCosineSimilarity(Tensor<T> a, Tensor<T> b)
     {
+        // === Vectorized Cosine Similarity (Phase B: US-GPU-015) ===
         var vecA = a.ToVector();
         var vecB = b.ToVector();
 
+        // Element-wise multiply for dot product
+        var dotVec = (Vector<T>)Engine.Multiply(vecA, vecB);
         T dotProduct = NumOps.Zero;
+        for (int i = 0; i < dotVec.Length; i++)
+        {
+            dotProduct = NumOps.Add(dotProduct, dotVec[i]);
+        }
+
+        // Element-wise multiply for norms
+        var normAVec = (Vector<T>)Engine.Multiply(vecA, vecA);
+        var normBVec = (Vector<T>)Engine.Multiply(vecB, vecB);
+
         T normA = NumOps.Zero;
         T normB = NumOps.Zero;
-
-        for (int i = 0; i < vecA.Length; i++)
+        for (int i = 0; i < normAVec.Length; i++)
         {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(vecA[i], vecB[i]));
-            normA = NumOps.Add(normA, NumOps.Multiply(vecA[i], vecA[i]));
-            normB = NumOps.Add(normB, NumOps.Multiply(vecB[i], vecB[i]));
+            normA = NumOps.Add(normA, normAVec[i]);
+            normB = NumOps.Add(normB, normBVec[i]);
         }
 
         normA = NumOps.Sqrt(normA);

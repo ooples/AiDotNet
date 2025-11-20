@@ -232,11 +232,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Compute update: update = learningRate * mHat / (sqrt(vHat) + epsilon)
         var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
         // Create epsilon vector for addition
-        var epsilonVec = new Vector<T>(vHatSqrt.Length);
-        for (int i = 0; i < epsilonVec.Length; i++)
-        {
-            epsilonVec[i] = epsilon;
-        }
+        var epsilonVec = Vector<T>.CreateDefault(vHatSqrt.Length, epsilon);
         var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
         var updateDiv = (Vector<T>)Engine.Divide(mHat, denominator);
         var update = (Vector<T>)Engine.Multiply(updateDiv, _currentLearningRate);
@@ -277,12 +273,9 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             _previousV = new Vector<T>(parameters.Length);
         }
 
-        // Copy _m and _v to _previousM and _previousV
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _previousM[i] = _m[i];
-            _previousV[i] = _v[i];
-        }
+        // Copy _m and _v to _previousM and _previousV (vectorized copy)
+        _previousM = new Vector<T>(_m);
+        _previousV = new Vector<T>(_v);
         _previousT = _t;
 
         _t++;
@@ -318,11 +311,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Compute update: update = mHat / (sqrt(vHat) + epsilon)
         var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
         // Create epsilon vector for addition
-        var epsilonVec = new Vector<T>(vHatSqrt.Length);
-        for (int i = 0; i < epsilonVec.Length; i++)
-        {
-            epsilonVec[i] = epsilon;
-        }
+        var epsilonVec = Vector<T>.CreateDefault(vHatSqrt.Length, epsilon);
         var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
         var update = (Vector<T>)Engine.Divide(mHat, denominator);
 
@@ -462,36 +451,43 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             return base.ReverseUpdate(updatedParameters, appliedGradients);
         }
 
-        var original = new T[updatedParameters.Length];
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            // First update the previous moments to match what UpdateParameters would have computed
-            var mAtUpdateTime = NumOps.Add(
-                NumOps.Multiply(_previousM[i], NumOps.FromDouble(_options.Beta1)),
-                NumOps.Multiply(appliedGradients[i], NumOps.FromDouble(1 - _options.Beta1))
-            );
+        // === Vectorized Reverse Adam Update using IEngine (Phase B: US-GPU-015) ===
+        // Recompute the moments that were used during the update
+        var beta1Vec = Vector<T>.CreateDefault(_previousM.Length, NumOps.FromDouble(_options.Beta1));
+        var oneMinusBeta1Vec = Vector<T>.CreateDefault(_previousM.Length, NumOps.FromDouble(1 - _options.Beta1));
+        var beta2Vec = Vector<T>.CreateDefault(_previousV.Length, NumOps.FromDouble(_options.Beta2));
+        var oneMinusBeta2Vec = Vector<T>.CreateDefault(_previousV.Length, NumOps.FromDouble(1 - _options.Beta2));
 
-            var vAtUpdateTime = NumOps.Add(
-                NumOps.Multiply(_previousV[i], NumOps.FromDouble(_options.Beta2)),
-                NumOps.Multiply(NumOps.Multiply(appliedGradients[i], appliedGradients[i]), NumOps.FromDouble(1 - _options.Beta2))
-            );
+        var mAtUpdateTime = (Vector<T>)Engine.Add(
+            (Vector<T>)Engine.Multiply(_previousM, beta1Vec),
+            (Vector<T>)Engine.Multiply(appliedGradients, oneMinusBeta1Vec)
+        );
 
-            // Compute bias-corrected moments using the timestep that was active during update
-            T mHat = NumOps.Divide(mAtUpdateTime, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _previousT + 1)));
-            T vHat = NumOps.Divide(vAtUpdateTime, NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _previousT + 1)));
+        var gradSquared = (Vector<T>)Engine.Multiply(appliedGradients, appliedGradients);
+        var vAtUpdateTime = (Vector<T>)Engine.Add(
+            (Vector<T>)Engine.Multiply(_previousV, beta2Vec),
+            (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2Vec)
+        );
 
-            // Compute the update that was applied using _currentLearningRate (not initial)
-            T update = NumOps.Divide(
-                mHat,
-                NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon))
-            );
-            T scaledUpdate = NumOps.Multiply(update, _currentLearningRate);
+        // Compute bias-corrected moments
+        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _previousT + 1));
+        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _previousT + 1));
+        var biasCorrection1Vec = Vector<T>.CreateDefault(mAtUpdateTime.Length, biasCorrection1);
+        var biasCorrection2Vec = Vector<T>.CreateDefault(vAtUpdateTime.Length, biasCorrection2);
 
-            // Reverse: params_old = params_new + update
-            original[i] = NumOps.Add(updatedParameters[i], scaledUpdate);
-        }
+        var mHat = (Vector<T>)Engine.Divide(mAtUpdateTime, biasCorrection1Vec);
+        var vHat = (Vector<T>)Engine.Divide(vAtUpdateTime, biasCorrection2Vec);
 
-        return new Vector<T>(original);
+        // Compute the update that was applied
+        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
+        var epsilonVec = Vector<T>.CreateDefault(vHatSqrt.Length, NumOps.FromDouble(_options.Epsilon));
+        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
+        var update = (Vector<T>)Engine.Divide(mHat, denominator);
+        var currentLrVec = Vector<T>.CreateDefault(update.Length, _currentLearningRate);
+        var scaledUpdate = (Vector<T>)Engine.Multiply(update, currentLrVec);
+
+        // Reverse: params_old = params_new + scaled_update
+        return (Vector<T>)Engine.Add(updatedParameters, scaledUpdate);
     }
 
     /// <summary>

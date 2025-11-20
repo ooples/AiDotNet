@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -639,12 +641,9 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private Tensor<T> CreateScalarTensor(T value, int[] shape)
     {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = value;
-        }
-        return tensor;
+        // === Vectorized Tensor Fill (Phase B: US-GPU-015) ===
+        var filledVector = Vector<T>.CreateDefault(shape.Aggregate(1, (a, b) => a * b), value);
+        return Tensor<T>.FromVector(filledVector).Reshape(shape);
     }
 
     /// <summary>
@@ -691,25 +690,22 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        // === Vectorized Parameter Updates (Phase B: US-GPU-015) ===
         int startIndex = 0;
-    
-        // Update Wq
-        for (int i = 0; i < _Wq.Length; i++)
-        {
-            _Wq[i] = parameters[startIndex++];
-        }
-    
-        // Update Wk
-        for (int i = 0; i < _Wk.Length; i++)
-        {
-            _Wk[i] = parameters[startIndex++];
-        }
-    
-        // Update Wv
-        for (int i = 0; i < _Wv.Length; i++)
-        {
-            _Wv[i] = parameters[startIndex++];
-        }
+
+        // Update Wq - slice and copy
+        var wqParams = parameters.Slice(startIndex, _Wq.Length);
+        _Wq = Tensor<T>.FromVector(wqParams).Reshape(_Wq.Shape);
+        startIndex += _Wq.Length;
+
+        // Update Wk - slice and copy
+        var wkParams = parameters.Slice(startIndex, _Wk.Length);
+        _Wk = Tensor<T>.FromVector(wkParams).Reshape(_Wk.Shape);
+        startIndex += _Wk.Length;
+
+        // Update Wv - slice and copy
+        var wvParams = parameters.Slice(startIndex, _Wv.Length);
+        _Wv = Tensor<T>.FromVector(wvParams).Reshape(_Wv.Shape);
     }
 
     /// <summary>
@@ -730,29 +726,13 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        int totalParams = ParameterCount;
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
+        // === Vectorized Parameter Extraction (Phase B: US-GPU-015) ===
+        // Flatten each tensor to vector and concatenate
+        var wqVec = _Wq.ToVector();
+        var wkVec = _Wk.ToVector();
+        var wvVec = _Wv.ToVector();
 
-        // Get Wq parameters
-        for (int i = 0; i < _Wq.Length; i++)
-        {
-            parameters[index++] = _Wq[i];
-        }
-
-        // Get Wk parameters
-        for (int i = 0; i < _Wk.Length; i++)
-        {
-            parameters[index++] = _Wk[i];
-        }
-
-        // Get Wv parameters
-        for (int i = 0; i < _Wv.Length; i++)
-        {
-            parameters[index++] = _Wv[i];
-        }
-
-        return parameters;
+        return Vector<T>.Concatenate(Vector<T>.Concatenate(wqVec, wkVec), wvVec);
     }
 
     /// <summary>
@@ -793,21 +773,24 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Compute entropy of attention weights: H = -Σ(p * log(p))
-        T entropy = NumOps.Zero;
+        // Use vectorized operations for better performance
         T epsilon = NumOps.FromDouble(1e-10); // Small value to prevent log(0)
 
-        for (int i = 0; i < _lastAttentionWeights.Length; i++)
-        {
-            T p = _lastAttentionWeights[i];
+        var weightsVec = _lastAttentionWeights.ToVector();
 
-            // Clamp to prevent numerical issues
-            if (NumOps.GreaterThan(p, epsilon))
-            {
-                // H = -Σ(p * log(p))
-                T logP = NumOps.Log(p);
-                T term = NumOps.Multiply(p, logP);
-                entropy = NumOps.Subtract(entropy, term);
-            }
+        // Clamp weights to prevent log(0) - add epsilon
+        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, weightsVec.Length).ToArray());
+        var clampedWeights = (Vector<T>)Engine.Max(weightsVec, epsilonVec);
+
+        // Compute p * log(p) using vectorized operations
+        var logWeights = Engine.Log(clampedWeights);
+        var pLogP = (Vector<T>)Engine.Multiply(clampedWeights, logWeights);
+
+        // Sum all terms: Σ(p * log(p))
+        T entropy = NumOps.Zero;
+        for (int i = 0; i < pLogP.Length; i++)
+        {
+            entropy = NumOps.Subtract(entropy, pLogP[i]);
         }
 
         // Average entropy over all attention weights
@@ -859,12 +842,14 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastAttentionWeights != null)
         {
             // Calculate max attention weight (indicates peakiness)
+            // Use vectorized max reduction for better performance
+            var weightsVec = _lastAttentionWeights.ToVector();
             T maxWeight = NumOps.Zero;
-            for (int i = 0; i < _lastAttentionWeights.Length; i++)
+            for (int i = 0; i < weightsVec.Length; i++)
             {
-                if (NumOps.GreaterThan(_lastAttentionWeights[i], maxWeight))
+                if (NumOps.GreaterThan(weightsVec[i], maxWeight))
                 {
-                    maxWeight = _lastAttentionWeights[i];
+                    maxWeight = weightsVec[i];
                 }
             }
             diagnostics["MaxAttentionWeight"] = maxWeight?.ToString() ?? "0";
