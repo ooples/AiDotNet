@@ -43,6 +43,11 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     protected INumericOperations<T> NumOps { get; private set; }
 
     /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Gets the configuration options for the non-linear regression model.
     /// </summary>
     /// <value>

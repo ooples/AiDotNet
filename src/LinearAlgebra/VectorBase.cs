@@ -26,6 +26,11 @@ public abstract class VectorBase<T>
     protected static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Creates a new vector with the specified length.
     /// </summary>
     /// <param name="length">The number of elements in the vector.</param>

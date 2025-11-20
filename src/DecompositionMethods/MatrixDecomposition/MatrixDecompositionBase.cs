@@ -34,6 +34,11 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     protected readonly INumericOperations<T> NumOps;
 
     /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// The original matrix that was decomposed.
     /// </summary>
     /// <remarks>

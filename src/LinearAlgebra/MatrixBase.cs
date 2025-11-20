@@ -33,6 +33,11 @@ public abstract class MatrixBase<T>
     protected static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Creates a new matrix with the specified dimensions.
     /// </summary>
     /// <param name="rows">Number of rows in the matrix.</param>

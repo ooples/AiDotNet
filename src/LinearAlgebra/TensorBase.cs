@@ -32,6 +32,11 @@ public abstract class TensorBase<T>
     protected static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Gets the shape (dimensions) of the tensor.
     /// </summary>
     public int[] Shape { get; }

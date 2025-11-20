@@ -201,7 +201,7 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
             for (int i = 0; i < n - 1; i++)
             {
                 // VECTORIZED: Extract upper triangular portion of row and find max
-                Vector<T> rowSegment = A.GetRow(i).Skip(i + 1).Take(n - i - 1).ToVector();
+                Vector<T> rowSegment = new Vector<T>(A.GetRow(i).Skip(i + 1).Take(n - i - 1));
                 for (int k = 0; k < rowSegment.Length; k++)
                 {
                     T absValue = NumOps.Abs(rowSegment[k]);

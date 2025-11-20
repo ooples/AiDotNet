@@ -240,7 +240,7 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         // VECTORIZED: Diagonal scaling using vector division
-        y = y.Divide(D);
+        y = y.ElementwiseDivide(D);
 
         // Backward substitution
         Vector<T> x = new Vector<T>(b.Length);
