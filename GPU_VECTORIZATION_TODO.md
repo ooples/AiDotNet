@@ -91,16 +91,18 @@ Files to optimize:
 
 ### Phase 8: Time Series Model Vectorization (IN PROGRESS - 23 files total)
 **Priority**: HIGH - Critical for time series workloads
-**Status**: 14/23 files completed (61%)
+**Status**: 19/23 files completed (83%)
 
 #### Infrastructure Additions (COMPLETED)
 - [x] **IEngine.Sum()** - Vector reduction operation for GPU acceleration
 - [x] **IEngine.DotProduct()** - Vector inner product for GPU acceleration
 - [x] **IEngine.Mean()** - Vector average operation for GPU acceleration
-- [x] CpuEngine implementations using NumOps loops (Phase A)
-- [x] GpuEngine fallback to CPU (GPU kernels planned for Phase B)
+- [x] **IEngine.MatrixSubtract()** - Matrix element-wise subtraction for GPU acceleration
+- [x] **IEngine.MatrixSumOfSquares()** - Matrix sum of squared elements (Frobenius norm) for GPU acceleration
+- [x] CpuEngine implementations using vectorized Vector operations
+- [x] GpuEngine fallback to CPU with thresholds
 
-#### Completed Files (14/23)
+#### Completed Files (19/23)
 - [x] **STLDecomposition.cs** - Vectorized 8 sections (commit: 0b566957)
 - [x] **TBATSModel.cs** - Vectorized Durbin-Levinson, autocorrelations (commit: e109c003)
 - [x] **ARIMAModel.cs** - Engine.Sum() and Engine.DotProduct() (commit: 231371bc)
@@ -115,17 +117,17 @@ Files to optimize:
 - [x] **NBEATSModel.cs** - Engine operations for forecast accumulation (commit: 2c161d08)
 - [x] **VARMAModel.cs** - Engine operations for prediction and residuals (commit: 5f68525b)
 - [x] **MAModel.cs** - Engine.DotProduct() for optimization and prediction (commit: 712ee2ca)
+- [x] **StateSpaceModel.cs** - Engine.MatrixSubtract and Engine.MatrixSumOfSquares for Frobenius norm (commit: 96b71332)
+- [x] **BayesianStructuralTimeSeriesModel.cs** - Engine.Multiply, Engine.Subtract, Engine.DotProduct for parameter updates (commit: 46165dfd)
+- [x] **InterventionAnalysisModel.cs** - Engine.Subtract for residuals (commit: 60a2cb72)
+- [x] **TransferFunctionModel.cs** - Engine.Subtract for residuals (commit: adfcfeb2)
+- [x] **NeuralNetworkARIMAModel.cs** - Engine.Subtract for residuals (commit: e36ddcef)
 
-#### Remaining Files (9/23)
-- [ ] **BayesianStructuralTimeSeriesModel.cs** - ~20 loops (Very High Priority)
+#### Remaining Files (4/23)
 - [ ] **DynamicRegressionWithARIMAErrors.cs** - ~15 loops (High Priority)
-- [ ] **InterventionAnalysisModel.cs** - ~10 loops (High Priority)
 - [ ] **NBEATSBlock.cs** - ~10 loops (High Priority)
-- [ ] **NeuralNetworkARIMAModel.cs** - ~10 loops (High Priority)
 - [ ] **ProphetModel.cs** - ~15 loops (High Priority)
 - [ ] **SpectralAnalysisModel.cs** - ~10 loops (Medium Priority)
-- [ ] **StateSpaceModel.cs** - ~15 loops (High Priority)
-- [ ] **TransferFunctionModel.cs** - ~10 loops (High Priority)
 
 ### Phase 9: Regression Model Vectorization (PENDING - 20+ files)
 **Priority**: HIGH - Commonly used ML algorithms
