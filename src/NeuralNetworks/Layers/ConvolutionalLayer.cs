@@ -1038,12 +1038,11 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             }
         }
 
-        // Update biases
-        for (int o = 0; o < OutputDepth; o++)
-        {
-            T update = NumOps.Multiply(learningRate, _biases[o]);
-            _biases[o] = NumOps.Subtract(_biases[o], update);
-        }
+        // Update biases - vectorized
+        var lrVec = new Vector<T>(OutputDepth);
+        lrVec.Fill(learningRate);
+        var biasUpdates = (Vector<T>)Engine.Multiply(_biases, lrVec);
+        _biases = (Vector<T>)Engine.Subtract(_biases, biasUpdates);
     }
 
     /// <summary>
