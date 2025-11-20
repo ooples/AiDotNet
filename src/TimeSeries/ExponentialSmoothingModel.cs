@@ -426,11 +426,16 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         }
 
         // Normalize seasonal factors
-        T seasonalSum = seasonalFactors.Sum();
-        for (int i = 0; i < Options.SeasonalPeriod; i++)
-        {
-            seasonalFactors[i] = NumOps.Divide(NumOps.Multiply(seasonalFactors[i], NumOps.FromDouble(Options.SeasonalPeriod)), seasonalSum);
-        }
+        T seasonalSum = Engine.Sum(seasonalFactors);
+        // VECTORIZED: Normalize seasonal factors using Engine operations
+        var periodScalar = NumOps.FromDouble(Options.SeasonalPeriod);
+        var periodVec = new Vector<T>(Options.SeasonalPeriod);
+        for (int i = 0; i < Options.SeasonalPeriod; i++) periodVec[i] = periodScalar;
+        seasonalFactors = (Vector<T>)Engine.Multiply(seasonalFactors, periodVec);
+        
+        var sumVec = new Vector<T>(Options.SeasonalPeriod);
+        for (int i = 0; i < Options.SeasonalPeriod; i++) sumVec[i] = seasonalSum;
+        seasonalFactors = (Vector<T>)Engine.Divide(seasonalFactors, sumVec);
 
         return seasonalFactors;
     }
