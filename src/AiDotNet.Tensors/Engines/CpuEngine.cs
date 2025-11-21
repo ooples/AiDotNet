@@ -713,6 +713,30 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    public void Exp(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<ExpOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Exp(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<ExpOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Log(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<LogOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Log(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<LogOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
     public Vector<T> Sinh<T>(Vector<T> vector)
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));

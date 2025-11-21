@@ -489,6 +489,15 @@ public class GpuEngine : IEngine, IDisposable
                     Index1D, ArrayView<float>, ArrayView<float>>(
                     (index, input, result) => result[index] = XMath.Cos(input[index]));
 
+                // Exponential function kernels (Phase SIMD)
+                _expKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, input, result) => result[index] = XMath.Exp(input[index]));
+
+                _logKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, input, result) => result[index] = XMath.Log(input[index]));
+
                 Console.WriteLine("[GpuEngine] Float kernels pre-compiled");
 
                 // Pre-compile kernels for double operations (Phase B: US-GPU-005)
@@ -2684,6 +2693,190 @@ public class GpuEngine : IEngine, IDisposable
         {
             Console.WriteLine($"[GpuEngine] GPU operation failed: {ex.Message}. Falling back to CPU.");
             TensorPrimitivesCore.InvokeSpanIntoSpan<CosOperatorDouble>(input, destination);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuInput);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private void ExpGpuFloat(ReadOnlySpan<float> input, Span<float> destination)
+    {
+        if (input.Length != destination.Length)
+            throw new ArgumentException("Input and destination lengths must match");
+
+        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input);
+
+            lock (_gpuLock)
+            {
+                (_expKernelFloat ?? throw new InvalidOperationException("Exp kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length,
+                    gpuInput.View,
+                    gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            gpuResult.View.BaseView.CopyToCPU(destination);
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted: {ex.Message}. Falling back to CPU.");
+            TensorPrimitivesCore.InvokeSpanIntoSpan<ExpOperatorFloat>(input, destination);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            TensorPrimitivesCore.InvokeSpanIntoSpan<ExpOperatorFloat>(input, destination);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU operation failed: {ex.Message}. Falling back to CPU.");
+            TensorPrimitivesCore.InvokeSpanIntoSpan<ExpOperatorFloat>(input, destination);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuInput);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private void LogGpuFloat(ReadOnlySpan<float> input, Span<float> destination)
+    {
+        if (input.Length != destination.Length)
+            throw new ArgumentException("Input and destination lengths must match");
+
+        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input);
+
+            lock (_gpuLock)
+            {
+                (_logKernelFloat ?? throw new InvalidOperationException("Log kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length,
+                    gpuInput.View,
+                    gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            gpuResult.View.BaseView.CopyToCPU(destination);
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted: {ex.Message}. Falling back to CPU.");
+            TensorPrimitivesCore.InvokeSpanIntoSpan<LogOperatorFloat>(input, destination);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            TensorPrimitivesCore.InvokeSpanIntoSpan<LogOperatorFloat>(input, destination);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU operation failed: {ex.Message}. Falling back to CPU.");
+            TensorPrimitivesCore.InvokeSpanIntoSpan<LogOperatorFloat>(input, destination);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuInput);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private void ExpGpuDouble(ReadOnlySpan<double> input, Span<double> destination)
+    {
+        if (input.Length != destination.Length)
+            throw new ArgumentException("Input and destination lengths must match");
+
+        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input);
+
+            lock (_gpuLock)
+            {
+                (_expKernelDouble ?? throw new InvalidOperationException("Exp kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length,
+                    gpuInput.View,
+                    gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            gpuResult.View.BaseView.CopyToCPU(destination);
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted: {ex.Message}. Falling back to CPU.");
+            TensorPrimitivesCore.InvokeSpanIntoSpan<ExpOperatorDouble>(input, destination);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            TensorPrimitivesCore.InvokeSpanIntoSpan<ExpOperatorDouble>(input, destination);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU operation failed: {ex.Message}. Falling back to CPU.");
+            TensorPrimitivesCore.InvokeSpanIntoSpan<ExpOperatorDouble>(input, destination);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuInput);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private void LogGpuDouble(ReadOnlySpan<double> input, Span<double> destination)
+    {
+        if (input.Length != destination.Length)
+            throw new ArgumentException("Input and destination lengths must match");
+
+        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input);
+
+            lock (_gpuLock)
+            {
+                (_logKernelDouble ?? throw new InvalidOperationException("Log kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length,
+                    gpuInput.View,
+                    gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            gpuResult.View.BaseView.CopyToCPU(destination);
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted: {ex.Message}. Falling back to CPU.");
+            TensorPrimitivesCore.InvokeSpanIntoSpan<LogOperatorDouble>(input, destination);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            TensorPrimitivesCore.InvokeSpanIntoSpan<LogOperatorDouble>(input, destination);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU operation failed: {ex.Message}. Falling back to CPU.");
+            TensorPrimitivesCore.InvokeSpanIntoSpan<LogOperatorDouble>(input, destination);
         }
         finally
         {
@@ -5511,6 +5704,78 @@ public class GpuEngine : IEngine, IDisposable
         else
         {
             TensorPrimitivesCore.InvokeSpanIntoSpan<CosOperatorDouble>(x, destination);
+        }
+    }
+
+    public void Exp(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        if (x.Length < _thresholds.VectorSqrt)
+        {
+            TensorPrimitivesCore.InvokeSpanIntoSpan<ExpOperatorFloat>(x, destination);
+            return;
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            ExpGpuFloat(x, destination);
+        }
+        else
+        {
+            TensorPrimitivesCore.InvokeSpanIntoSpan<ExpOperatorFloat>(x, destination);
+        }
+    }
+
+    public void Exp(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        if (x.Length < _thresholds.VectorSqrt)
+        {
+            TensorPrimitivesCore.InvokeSpanIntoSpan<ExpOperatorDouble>(x, destination);
+            return;
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            ExpGpuDouble(x, destination);
+        }
+        else
+        {
+            TensorPrimitivesCore.InvokeSpanIntoSpan<ExpOperatorDouble>(x, destination);
+        }
+    }
+
+    public void Log(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        if (x.Length < _thresholds.VectorSqrt)
+        {
+            TensorPrimitivesCore.InvokeSpanIntoSpan<LogOperatorFloat>(x, destination);
+            return;
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            LogGpuFloat(x, destination);
+        }
+        else
+        {
+            TensorPrimitivesCore.InvokeSpanIntoSpan<LogOperatorFloat>(x, destination);
+        }
+    }
+
+    public void Log(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        if (x.Length < _thresholds.VectorSqrt)
+        {
+            TensorPrimitivesCore.InvokeSpanIntoSpan<LogOperatorDouble>(x, destination);
+            return;
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            LogGpuDouble(x, destination);
+        }
+        else
+        {
+            TensorPrimitivesCore.InvokeSpanIntoSpan<LogOperatorDouble>(x, destination);
         }
     }
 
