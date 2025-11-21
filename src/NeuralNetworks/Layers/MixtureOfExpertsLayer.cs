@@ -1342,20 +1342,24 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 }
             }
 
-            // Compute exp(logit - max) and sum
-            T expSum = NumOps.Zero;
-            var expValues = new T[numExperts];
+            // Vectorized: Compute exp(logit - max) and sum
+            var logitRow = new Vector<T>(numExperts);
             for (int i = 0; i < numExperts; i++)
             {
-                var exp = NumOps.Exp(NumOps.Subtract(logits[b, i], maxLogit));
-                expValues[i] = exp;
-                expSum = NumOps.Add(expSum, exp);
+                logitRow[i] = logits[b, i];
             }
 
-            // Normalize to get probabilities
+            var maxVec = Engine.Fill(numExperts, maxLogit);
+            var shiftedLogits = Engine.Subtract(logitRow, maxVec);
+            var expValues = Engine.Exp(shiftedLogits);
+            T expSum = Engine.Sum(expValues);
+
+            // Vectorized: Normalize to get probabilities
+            var expSumVec = Engine.Fill(numExperts, expSum);
+            var softmaxRow = Engine.Divide(expValues, expSumVec);
             for (int i = 0; i < numExperts; i++)
             {
-                softmax[b, i] = NumOps.Divide(expValues[i], expSum);
+                softmax[b, i] = softmaxRow[i];
             }
         }
 
@@ -1497,13 +1501,25 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                     // Add remaining dimensions handling here based on your tensor implementation
                 }
 
-                // Simplified version: weight entire expert output for this batch item
+                // Vectorized: weight entire expert output for this batch item
                 if (expertOutput.Shape.Length == 2)
                 {
-                    for (int j = 0; j < expertOutput.Shape[1]; j++)
+                    int outputDim = expertOutput.Shape[1];
+                    var expertRow = new Vector<T>(outputDim);
+                    var combinedRow = new Vector<T>(outputDim);
+
+                    for (int j = 0; j < outputDim; j++)
                     {
-                        var weightedValue = NumOps.Multiply(expertOutput[b, j], weight);
-                        combined[b, j] = NumOps.Add(combined[b, j], weightedValue);
+                        expertRow[j] = expertOutput[b, j];
+                        combinedRow[j] = combined[b, j];
+                    }
+
+                    var weightedOutput = Engine.Multiply(expertRow, weight);
+                    var newCombinedRow = Engine.Add(combinedRow, weightedOutput);
+
+                    for (int j = 0; j < outputDim; j++)
+                    {
+                        combined[b, j] = newCombinedRow[j];
                     }
                 }
             }
@@ -1660,9 +1676,19 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             if (outputGradient.Shape.Length == 2)
             {
-                for (int j = 0; j < outputGradient.Shape[1]; j++)
+                int outputDim = outputGradient.Shape[1];
+                var gradientRow = new Vector<T>(outputDim);
+
+                for (int j = 0; j < outputDim; j++)
                 {
-                    weightedGradient[b, j] = NumOps.Multiply(outputGradient[b, j], weight);
+                    gradientRow[j] = outputGradient[b, j];
+                }
+
+                var weightedRow = Engine.Multiply(gradientRow, weight);
+
+                for (int j = 0; j < outputDim; j++)
+                {
+                    weightedGradient[b, j] = weightedRow[j];
                 }
             }
         }

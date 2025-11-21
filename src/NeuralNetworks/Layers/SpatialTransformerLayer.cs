@@ -467,11 +467,26 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeMatrix(Matrix<T> matrix, T scale)
     {
+        // VECTORIZED: Generate all random values at once, then scale via vector operation
+        int totalElements = matrix.Rows * matrix.Columns;
+        var randomVec = new Vector<T>(totalElements);
+
+        // Fill with random values in range [-0.5, 0.5]
+        for (int idx = 0; idx < totalElements; idx++)
+        {
+            randomVec[idx] = NumOps.FromDouble(Random.NextDouble() - 0.5);
+        }
+
+        // Vectorized multiply by scale
+        var scaledVec = Engine.Multiply(randomVec, scale);
+
+        // Copy back to matrix
+        int index = 0;
         for (int i = 0; i < matrix.Rows; i++)
         {
             for (int j = 0; j < matrix.Columns; j++)
             {
-                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+                matrix[i, j] = scaledVec[index++];
             }
         }
     }

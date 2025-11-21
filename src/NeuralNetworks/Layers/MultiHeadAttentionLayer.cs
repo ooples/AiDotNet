@@ -254,11 +254,22 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="scale">The scaling factor for the random values.</param>
     private void InitializeMatrix(Matrix<T> matrix, T scale)
     {
+        // === Vectorized Matrix Initialization (Phase B: US-GPU-015) ===
+        int totalElements = matrix.Rows * matrix.Columns;
+        var randomValues = new T[totalElements];
+
+        for (int i = 0; i < totalElements; i++)
+        {
+            randomValues[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+        }
+
+        var randomVector = new Vector<T>(randomValues);
+        int index = 0;
         for (int i = 0; i < matrix.Rows; i++)
         {
             for (int j = 0; j < matrix.Columns; j++)
             {
-                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+                matrix[i, j] = randomVector[index++];
             }
         }
     }
@@ -376,28 +387,16 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var vecA = a.ToVector();
         var vecB = b.ToVector();
 
-        // Element-wise multiply for dot product
+        // Use Engine.Multiply for element-wise multiplication and Engine.Sum for reduction
         var dotVec = (Vector<T>)Engine.Multiply(vecA, vecB);
-        T dotProduct = NumOps.Zero;
-        for (int i = 0; i < dotVec.Length; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, dotVec[i]);
-        }
+        T dotProduct = Engine.Sum(dotVec);
 
-        // Element-wise multiply for norms
+        // Compute norms using vectorized operations
         var normAVec = (Vector<T>)Engine.Multiply(vecA, vecA);
         var normBVec = (Vector<T>)Engine.Multiply(vecB, vecB);
 
-        T normA = NumOps.Zero;
-        T normB = NumOps.Zero;
-        for (int i = 0; i < normAVec.Length; i++)
-        {
-            normA = NumOps.Add(normA, normAVec[i]);
-            normB = NumOps.Add(normB, normBVec[i]);
-        }
-
-        normA = NumOps.Sqrt(normA);
-        normB = NumOps.Sqrt(normB);
+        T normA = NumOps.Sqrt(Engine.Sum(normAVec));
+        T normB = NumOps.Sqrt(Engine.Sum(normBVec));
 
         T denominator = NumOps.Multiply(normA, normB);
         if (NumOps.Equals(denominator, NumOps.Zero))
