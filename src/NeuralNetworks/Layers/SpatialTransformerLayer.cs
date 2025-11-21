@@ -437,10 +437,8 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         InitializeMatrix(_localizationWeights1, scale);
         InitializeMatrix(_localizationWeights2, scale);
 
-        for (int i = 0; i < _localizationBias1.Length; i++)
-        {
-            _localizationBias1[i] = NumOps.Zero;
-        }
+        // VECTORIZED: Initialize bias vector to zero using Engine.FillZero
+        _localizationBias1 = Engine.FillZero<T>(_localizationBias1.Length);
 
         // Initialize the localization bias2 to represent identity transformation
         _localizationBias2[0] = NumOps.One;
@@ -626,14 +624,30 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T> GenerateOutputGrid()
     {
-        // Generate a grid of (x, y) coordinates for the output
+        // VECTORIZED: Generate a grid of (x, y) coordinates for the output
         var grid = new Tensor<T>([_outputHeight, _outputWidth, 2]);
+
+        // Pre-compute normalized coordinates for x and y dimensions
+        var xCoords = new T[_outputWidth];
+        var yCoords = new T[_outputHeight];
+
+        for (int j = 0; j < _outputWidth; j++)
+        {
+            xCoords[j] = NumOps.FromDouble((double)j / (_outputWidth - 1) * 2 - 1);
+        }
+
+        for (int i = 0; i < _outputHeight; i++)
+        {
+            yCoords[i] = NumOps.FromDouble((double)i / (_outputHeight - 1) * 2 - 1);
+        }
+
+        // VECTORIZED: Set grid values using pre-computed coordinates
         for (int i = 0; i < _outputHeight; i++)
         {
             for (int j = 0; j < _outputWidth; j++)
             {
-                grid[i, j, 0] = NumOps.FromDouble((double)j / (_outputWidth - 1) * 2 - 1);
-                grid[i, j, 1] = NumOps.FromDouble((double)i / (_outputHeight - 1) * 2 - 1);
+                grid[i, j, 0] = xCoords[j];
+                grid[i, j, 1] = yCoords[i];
             }
         }
 
