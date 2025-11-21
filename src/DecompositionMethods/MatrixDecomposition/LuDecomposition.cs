@@ -156,28 +156,24 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
                 }
             }
 
-            // Swap rows if necessary
+            // VECTORIZED: Use Engine.SwapRows for efficient row swapping
             if (pivotRow != k)
             {
-                for (int j = 0; j < n; j++)
-                {
-                    T temp = A[k, j];
-                    A[k, j] = A[pivotRow, j];
-                    A[pivotRow, j] = temp;
-                }
-
+                Engine.SwapRows(A, k, pivotRow);
                 (P[pivotRow], P[k]) = (P[k], P[pivotRow]);
             }
 
-            // Perform elimination
+            // VECTORIZED: Perform elimination using Engine operations
             for (int i = k + 1; i < n; i++)
             {
                 T factor = NumOps.Divide(A[i, k], A[k, k]);
                 L[i, k] = factor;
-                for (int j = k; j < n; j++)
-                {
-                    A[i, j] = NumOps.Subtract(A[i, j], NumOps.Multiply(factor, A[k, j]));
-                }
+                // VECTORIZED: A[i,:] = A[i,:] - factor * A[k,:]
+                var rowK = Engine.GetRow(A, k);
+                var rowI = Engine.GetRow(A, i);
+                var scaled = (Vector<T>)Engine.Multiply(rowK, factor);
+                var updated = (Vector<T>)Engine.Subtract(rowI, scaled);
+                Engine.SetRow(A, i, updated);
             }
         }
 
@@ -243,36 +239,31 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
                 }
             }
 
+            // VECTORIZED: Use Engine.SwapRows for efficient row swapping
             if (pivotRow != k)
             {
-                for (int j = 0; j < n; j++)
-                {
-                    T temp = A[k, j];
-                    A[k, j] = A[pivotRow, j];
-                    A[pivotRow, j] = temp;
-                }
+                Engine.SwapRows(A, k, pivotRow);
                 (P[pivotRow], P[k]) = (P[k], P[pivotRow]);
             }
 
+            // VECTORIZED: Use Engine.SwapColumns for efficient column swapping
             if (pivotCol != k)
             {
-                for (int i = 0; i < n; i++)
-                {
-                    T temp = A[i, k];
-                    A[i, k] = A[i, pivotCol];
-                    A[i, pivotCol] = temp;
-                }
+                Engine.SwapColumns(A, k, pivotCol);
                 (Q[pivotCol], Q[k]) = (Q[k], Q[pivotCol]);
             }
 
+            // VECTORIZED: Use Engine operations for row updates
             for (int i = k + 1; i < n; i++)
             {
                 T factor = NumOps.Divide(A[i, k], A[k, k]);
                 L[i, k] = factor;
-                for (int j = k; j < n; j++)
-                {
-                    A[i, j] = NumOps.Subtract(A[i, j], NumOps.Multiply(factor, A[k, j]));
-                }
+                // VECTORIZED: A[i,:] = A[i,:] - factor * A[k,:]
+                var rowK = Engine.GetRow(A, k);
+                var rowI = Engine.GetRow(A, i);
+                var scaled = (Vector<T>)Engine.Multiply(rowK, factor);
+                var updated = (Vector<T>)Engine.Subtract(rowI, scaled);
+                Engine.SetRow(A, i, updated);
             }
         }
 
