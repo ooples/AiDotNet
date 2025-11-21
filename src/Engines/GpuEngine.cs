@@ -274,6 +274,11 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>>? _matrixTransposeKernelFloat;
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>, ArrayView2D<float, Stride2D.DenseX>>? _matrixAddKernelFloat;
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<float, Stride2D.DenseX>, float, ArrayView2D<float, Stride2D.DenseX>>? _matrixMultiplyScalarKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _swapRowsKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, int, int>? _swapColumnsKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, int, int>? _getColumnKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, int, int>? _setColumnKernelFloat;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView<float>, ArrayView<float>, ArrayView2D<float, Stride2D.DenseX>, int, int>? _outerProductKernelFloat;
 
     // Kernel cache for matrix operations - double (Phase B: Epic 2)
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, int>? _matrixMultiplyKernelDouble;
@@ -281,6 +286,11 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>? _matrixTransposeKernelDouble;
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>, ArrayView2D<double, Stride2D.DenseX>>? _matrixAddKernelDouble;
     private readonly Action<AcceleratorStream, Index2D, ArrayView2D<double, Stride2D.DenseX>, double, ArrayView2D<double, Stride2D.DenseX>>? _matrixMultiplyScalarKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _swapRowsKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, int, int>? _swapColumnsKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, int, int>? _getColumnKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, int, int>? _setColumnKernelDouble;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView<double>, ArrayView<double>, ArrayView2D<double, Stride2D.DenseX>, int, int>? _outerProductKernelDouble;
 
     // Kernel cache for tensor operations - float (Phase B: Epic 3)
     private readonly Action<AcceleratorStream, Index3D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int>? _batchMatMulKernelFloat;
@@ -588,6 +598,46 @@ public class GpuEngine : IEngine, IDisposable
                 _matrixMultiplyScalarKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView2D<float, Stride2D.DenseX>, float, ArrayView2D<float, Stride2D.DenseX>>(
                     (index, matrix, scalar, result) => result[index] = matrix[index] * scalar);
+
+                // Swap rows kernel (Phase B: Matrix operations)
+                _swapRowsKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>>(
+                    (index, row1, row2) => {
+                        float temp = row1[index];
+                        row1[index] = row2[index];
+                        row2[index] = temp;
+                    });
+
+                // Swap columns kernel (Phase B: Matrix operations)
+                _swapColumnsKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, int, int>(
+                    (index, matrix, tempCol, col1, col2) => {
+                        // Each thread handles one row
+                        float temp = matrix[index, col1];
+                        matrix[index, col1] = matrix[index, col2];
+                        matrix[index, col2] = temp;
+                    });
+
+                // Get column kernel (Phase B: Matrix operations)
+                _getColumnKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, int, int>(
+                    (index, matrix, result, col, rows) => {
+                        result[index] = matrix[index, col];
+                    });
+
+                // Set column kernel (Phase B: Matrix operations)
+                _setColumnKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView2D<float, Stride2D.DenseX>, ArrayView<float>, int, int>(
+                    (index, matrix, values, col, rows) => {
+                        matrix[index, col] = values[index];
+                    });
+
+                // Outer product kernel (Phase B: Matrix operations)
+                _outerProductKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index2D, ArrayView<float>, ArrayView<float>, ArrayView2D<float, Stride2D.DenseX>, int, int>(
+                    (index, a, b, result, aLen, bLen) => {
+                        result[index] = a[index.X] * b[index.Y];
+                    });
                 Console.WriteLine("[GpuEngine] Float matrix kernels pre-compiled");
 
                 // Pre-compile kernels for matrix operations - double (Phase B: Epic 2)
@@ -622,6 +672,46 @@ public class GpuEngine : IEngine, IDisposable
                 _matrixMultiplyScalarKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index2D, ArrayView2D<double, Stride2D.DenseX>, double, ArrayView2D<double, Stride2D.DenseX>>(
                     (index, matrix, scalar, result) => result[index] = matrix[index] * scalar);
+
+                // Swap rows kernel (Phase B: Matrix operations)
+                _swapRowsKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>>(
+                    (index, row1, row2) => {
+                        double temp = row1[index];
+                        row1[index] = row2[index];
+                        row2[index] = temp;
+                    });
+
+                // Swap columns kernel (Phase B: Matrix operations)
+                _swapColumnsKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, int, int>(
+                    (index, matrix, tempCol, col1, col2) => {
+                        // Each thread handles one row
+                        double temp = matrix[index, col1];
+                        matrix[index, col1] = matrix[index, col2];
+                        matrix[index, col2] = temp;
+                    });
+
+                // Get column kernel (Phase B: Matrix operations)
+                _getColumnKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, int, int>(
+                    (index, matrix, result, col, rows) => {
+                        result[index] = matrix[index, col];
+                    });
+
+                // Set column kernel (Phase B: Matrix operations)
+                _setColumnKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView2D<double, Stride2D.DenseX>, ArrayView<double>, int, int>(
+                    (index, matrix, values, col, rows) => {
+                        matrix[index, col] = values[index];
+                    });
+
+                // Outer product kernel (Phase B: Matrix operations)
+                _outerProductKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index2D, ArrayView<double>, ArrayView<double>, ArrayView2D<double, Stride2D.DenseX>, int, int>(
+                    (index, a, b, result, aLen, bLen) => {
+                        result[index] = a[index.X] * b[index.Y];
+                    });
                 Console.WriteLine("[GpuEngine] Double matrix kernels pre-compiled");
 
                 // Pre-compile kernels for tensor operations - float (Phase B: Epic 3)
@@ -2675,23 +2765,119 @@ public class GpuEngine : IEngine, IDisposable
 
     private void SwapColumnsGpu(Matrix<float> matrix, int col1, int col2)
     {
-        // Column swapping requires strided access - use direct element swap
-        for (int i = 0; i < matrix.Rows; i++)
+        try
         {
-            float temp = matrix[i, col1];
-            matrix[i, col1] = matrix[i, col2];
-            matrix[i, col2] = temp;
+            int rows = matrix.Rows, cols = matrix.Columns;
+            
+            // Rent GPU memory for the matrix
+            var gpuMatrix = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(rows * cols);
+            var gpuTemp = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(rows);
+            
+            try
+            {
+                // Copy matrix to GPU
+                gpuMatrix.View.BaseView.CopyFromCPU(matrix.AsSpan());
+                
+                // Create 2D view
+                var view2D = gpuMatrix.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
+                
+                // Execute swap columns kernel
+                lock (_gpuLock)
+                {
+                    (_swapColumnsKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))
+                        ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, rows, view2D, gpuTemp.View, col1, col2);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+                
+                // Copy result back
+                gpuMatrix.View.BaseView.CopyToCPU(matrix.AsWritableSpan());
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuMatrix);
+                _memoryPoolFloat.Return(gpuTemp);
+            }
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted for swap columns: {ex.Message}. Falling back to CPU.");
+            // CPU fallback
+            for (int i = 0; i < matrix.Rows; i++)
+            {
+                float temp = matrix[i, col1];
+                matrix[i, col1] = matrix[i, col2];
+                matrix[i, col2] = temp;
+            }
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            // CPU fallback
+            for (int i = 0; i < matrix.Rows; i++)
+            {
+                float temp = matrix[i, col1];
+                matrix[i, col1] = matrix[i, col2];
+                matrix[i, col2] = temp;
+            }
         }
     }
 
     private void SwapColumnsGpuDouble(Matrix<double> matrix, int col1, int col2)
     {
-        // Column swapping requires strided access - use direct element swap
-        for (int i = 0; i < matrix.Rows; i++)
+        try
         {
-            double temp = matrix[i, col1];
-            matrix[i, col1] = matrix[i, col2];
-            matrix[i, col2] = temp;
+            int rows = matrix.Rows, cols = matrix.Columns;
+            
+            // Rent GPU memory for the matrix
+            var gpuMatrix = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(rows * cols);
+            var gpuTemp = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(rows);
+            
+            try
+            {
+                // Copy matrix to GPU
+                gpuMatrix.View.BaseView.CopyFromCPU(matrix.AsSpan());
+                
+                // Create 2D view
+                var view2D = gpuMatrix.View.As2DView<Stride2D.DenseX>(new Index2D(rows, cols), new Stride2D.DenseX(cols));
+                
+                // Execute swap columns kernel
+                lock (_gpuLock)
+                {
+                    (_swapColumnsKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))
+                        ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, rows, view2D, gpuTemp.View, col1, col2);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+                
+                // Copy result back
+                gpuMatrix.View.BaseView.CopyToCPU(matrix.AsWritableSpan());
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuMatrix);
+                _memoryPoolDouble.Return(gpuTemp);
+            }
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted for swap columns: {ex.Message}. Falling back to CPU.");
+            // CPU fallback
+            for (int i = 0; i < matrix.Rows; i++)
+            {
+                double temp = matrix[i, col1];
+                matrix[i, col1] = matrix[i, col2];
+                matrix[i, col2] = temp;
+            }
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            // CPU fallback
+            for (int i = 0; i < matrix.Rows; i++)
+            {
+                double temp = matrix[i, col1];
+                matrix[i, col1] = matrix[i, col2];
+                matrix[i, col2] = temp;
+            }
         }
     }
 
@@ -2722,28 +2908,118 @@ public class GpuEngine : IEngine, IDisposable
 
     private void SwapRowsGpu(Matrix<float> matrix, int row1, int row2)
     {
-        // Use zero-copy span access for efficient row swapping
-        var span1 = matrix.GetRowSpan(row1);
-        var span2 = matrix.GetRowSpan(row2);
-        var tempRow = new float[matrix.Columns];
-
-        // Use Span.CopyTo for efficient memory operations
-        span1.CopyTo(tempRow);
-        span2.CopyTo(span1);
-        tempRow.AsSpan().CopyTo(span2);
+        try
+        {
+            int cols = matrix.Columns;
+            
+            // Rent GPU memory for the two rows
+            var gpuRow1 = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(cols);
+            var gpuRow2 = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(cols);
+            
+            try
+            {
+                // Copy rows to GPU
+                gpuRow1.View.BaseView.CopyFromCPU(matrix.GetRowSpan(row1));
+                gpuRow2.View.BaseView.CopyFromCPU(matrix.GetRowSpan(row2));
+                
+                // Execute swap kernel
+                lock (_gpuLock)
+                {
+                    (_swapRowsKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))
+                        ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, cols, gpuRow1.View, gpuRow2.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+                
+                // Copy swapped rows back (row1 gets gpuRow2, row2 gets gpuRow1)
+                gpuRow2.View.BaseView.CopyToCPU(matrix.GetRowSpan(row1));
+                gpuRow1.View.BaseView.CopyToCPU(matrix.GetRowSpan(row2));
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuRow1);
+                _memoryPoolFloat.Return(gpuRow2);
+            }
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted for swap rows: {ex.Message}. Falling back to CPU.");
+            // CPU fallback
+            var span1 = matrix.GetRowSpan(row1);
+            var span2 = matrix.GetRowSpan(row2);
+            var tempRow = new float[matrix.Columns];
+            span1.CopyTo(tempRow);
+            span2.CopyTo(span1);
+            tempRow.AsSpan().CopyTo(span2);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            // CPU fallback
+            var span1 = matrix.GetRowSpan(row1);
+            var span2 = matrix.GetRowSpan(row2);
+            var tempRow = new float[matrix.Columns];
+            span1.CopyTo(tempRow);
+            span2.CopyTo(span1);
+            tempRow.AsSpan().CopyTo(span2);
+        }
     }
 
     private void SwapRowsGpuDouble(Matrix<double> matrix, int row1, int row2)
     {
-        // Use zero-copy span access for efficient row swapping
-        var span1 = matrix.GetRowSpan(row1);
-        var span2 = matrix.GetRowSpan(row2);
-        var tempRow = new double[matrix.Columns];
-
-        // Use Span.CopyTo for efficient memory operations
-        span1.CopyTo(tempRow);
-        span2.CopyTo(span1);
-        tempRow.AsSpan().CopyTo(span2);
+        try
+        {
+            int cols = matrix.Columns;
+            
+            // Rent GPU memory for the two rows
+            var gpuRow1 = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(cols);
+            var gpuRow2 = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(cols);
+            
+            try
+            {
+                // Copy rows to GPU
+                gpuRow1.View.BaseView.CopyFromCPU(matrix.GetRowSpan(row1));
+                gpuRow2.View.BaseView.CopyFromCPU(matrix.GetRowSpan(row2));
+                
+                // Execute swap kernel
+                lock (_gpuLock)
+                {
+                    (_swapRowsKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))
+                        ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, cols, gpuRow1.View, gpuRow2.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+                
+                // Copy swapped rows back (row1 gets gpuRow2, row2 gets gpuRow1)
+                gpuRow2.View.BaseView.CopyToCPU(matrix.GetRowSpan(row1));
+                gpuRow1.View.BaseView.CopyToCPU(matrix.GetRowSpan(row2));
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuRow1);
+                _memoryPoolDouble.Return(gpuRow2);
+            }
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted for swap rows: {ex.Message}. Falling back to CPU.");
+            // CPU fallback
+            var span1 = matrix.GetRowSpan(row1);
+            var span2 = matrix.GetRowSpan(row2);
+            var tempRow = new double[matrix.Columns];
+            span1.CopyTo(tempRow);
+            span2.CopyTo(span1);
+            tempRow.AsSpan().CopyTo(span2);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            // CPU fallback
+            var span1 = matrix.GetRowSpan(row1);
+            var span2 = matrix.GetRowSpan(row2);
+            var tempRow = new double[matrix.Columns];
+            span1.CopyTo(tempRow);
+            span2.CopyTo(span1);
+            tempRow.AsSpan().CopyTo(span2);
+        }
     }
 
     public Matrix<T> OuterProduct<T>(Vector<T> a, Vector<T> b)
@@ -2773,33 +3049,106 @@ public class GpuEngine : IEngine, IDisposable
 
     private Matrix<float> OuterProductGpu(Vector<float> a, Vector<float> b)
     {
-        var result = new Matrix<float>(a.Length, b.Length);
-        var bArray = b.ToArray();
-
-        // Use TensorPrimitives for SIMD multiplication
-        for (int i = 0; i < a.Length; i++)
+        try
         {
-            var rowSpan = result.GetRowSpan(i);
-            System.Numerics.Tensors.TensorPrimitives.Multiply(bArray, a[i], rowSpan);
+            var result = new Matrix<float>(a.Length, b.Length);
+            int m = a.Length, n = b.Length;
+            
+            // Rent GPU memory
+            var gpuA = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m);
+            var gpuB = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(n);
+            var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
+            
+            try
+            {
+                // Copy vectors to GPU
+                gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+                gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+                
+                // Create 2D view for result
+                var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
+                
+                // Execute outer product kernel
+                lock (_gpuLock)
+                {
+                    (_outerProductKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))
+                        ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(m, n), gpuA.View, gpuB.View, viewResult, m, n);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+                
+                // Copy result back
+                gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuA);
+                _memoryPoolFloat.Return(gpuB);
+                _memoryPoolFloat.Return(gpuResult);
+            }
         }
-
-        return result;
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted for outer product: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.OuterProduct(a, b);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.OuterProduct(a, b);
+        }
     }
 
     private Matrix<double> OuterProductGpuDouble(Vector<double> a, Vector<double> b)
     {
-        var result = new Matrix<double>(a.Length, b.Length);
-
-        // Fallback to element-wise for double (TensorPrimitives float-only)
-        for (int i = 0; i < a.Length; i++)
+        try
         {
-            for (int j = 0; j < b.Length; j++)
+            var result = new Matrix<double>(a.Length, b.Length);
+            int m = a.Length, n = b.Length;
+            
+            // Rent GPU memory
+            var gpuA = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m);
+            var gpuB = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(n);
+            var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
+            
+            try
             {
-                result[i, j] = a[i] * b[j];
+                // Copy vectors to GPU
+                gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+                gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+                
+                // Create 2D view for result
+                var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
+                
+                // Execute outer product kernel
+                lock (_gpuLock)
+                {
+                    (_outerProductKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))
+                        ((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, new Index2D(m, n), gpuA.View, gpuB.View, viewResult, m, n);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+                
+                // Copy result back
+                gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuA);
+                _memoryPoolDouble.Return(gpuB);
+                _memoryPoolDouble.Return(gpuResult);
             }
         }
-
-        return result;
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted for outer product: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.OuterProduct(a, b);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.OuterProduct(a, b);
+        }
     }
 
     public Vector<T> GetColumn<T>(Matrix<T> matrix, int columnIndex)
