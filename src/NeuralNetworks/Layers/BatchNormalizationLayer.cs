@@ -611,11 +611,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         // Sum across batch dimension for each feature
         for (int i = 0; i < batchSize; i++)
         {
-            var row = new Vector<T>(featureSize);
-            for (int j = 0; j < featureSize; j++)
-            {
-                row[j] = input[i, j];
-            }
+            var row = input.GetRow(i);
             mean = (Vector<T>)Engine.Add(mean, row);
         }
 
@@ -711,11 +707,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         // normalized = (input - mean) * invStd
         for (int i = 0; i < batchSize; i++)
         {
-            var row = new Vector<T>(featureSize);
-            for (int j = 0; j < featureSize; j++)
-            {
-                row[j] = input[i, j];
-            }
+            var row = input.GetRow(i);
 
             // Vectorized: centered = row - mean
             var centered = (Vector<T>)Engine.Subtract(row, mean);

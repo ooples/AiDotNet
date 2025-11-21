@@ -383,26 +383,12 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private T ComputeCosineSimilarity(Tensor<T> a, Tensor<T> b)
     {
-        // === Vectorized Cosine Similarity (Phase B: US-GPU-015) ===
+        // Convert tensors to vectors
         var vecA = a.ToVector();
         var vecB = b.ToVector();
 
-        // Use Engine.Multiply for element-wise multiplication and Engine.Sum for reduction
-        var dotVec = (Vector<T>)Engine.Multiply(vecA, vecB);
-        T dotProduct = Engine.Sum(dotVec);
-
-        // Compute norms using vectorized operations
-        var normAVec = (Vector<T>)Engine.Multiply(vecA, vecA);
-        var normBVec = (Vector<T>)Engine.Multiply(vecB, vecB);
-
-        T normA = NumOps.Sqrt(Engine.Sum(normAVec));
-        T normB = NumOps.Sqrt(Engine.Sum(normBVec));
-
-        T denominator = NumOps.Multiply(normA, normB);
-        if (NumOps.Equals(denominator, NumOps.Zero))
-            return NumOps.Zero;
-
-        return NumOps.Divide(dotProduct, denominator);
+        // Use Engine.CosineSimilarity for hardware-accelerated computation
+        return Engine.CosineSimilarity(vecA, vecB);
     }
 
     /// <summary>

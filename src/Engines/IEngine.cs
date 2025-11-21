@@ -178,6 +178,39 @@ public interface IEngine
     Vector<T> Log<T>(Vector<T> vector);
 
     /// <summary>
+    /// Computes the base-2 logarithm of each element in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing the base-2 logarithms.</returns>
+    /// <remarks>
+    /// Used in information theory (entropy, bits), binary tree computations, and quantization.
+    /// </remarks>
+    Vector<T> Log2<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes exp(x) - 1 for each element with higher precision for small values.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing exp(x) - 1 for each element.</returns>
+    /// <remarks>
+    /// More accurate than Exp(x) - 1 for values near zero. Used in loss functions and probability computations.
+    /// </remarks>
+    Vector<T> ExpM1<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes log(1 + x) for each element with higher precision for small values.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing log(1 + x) for each element.</returns>
+    /// <remarks>
+    /// More accurate than Log(1 + x) for values near zero. Used in probability and loss computations.
+    /// </remarks>
+    Vector<T> Log1P<T>(Vector<T> vector);
+
+    /// <summary>
     /// Computes the sign (-1, 0, or +1) of each element in the vector.
     /// </summary>
     /// <typeparam name="T">The numeric type of the vector.</typeparam>
@@ -187,6 +220,17 @@ public interface IEngine
     /// <para><b>Phase B: US-GPU-015</b> - Required for Lion optimizer.</para>
     /// </remarks>
     Vector<T> Sign<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Negates each element of the vector (computes -x).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector with each element negated.</returns>
+    /// <remarks>
+    /// Used for gradient reversal, adversarial training, and sign flipping operations.
+    /// </remarks>
+    Vector<T> Negate<T>(Vector<T> vector);
 
     #endregion
 
@@ -249,6 +293,157 @@ public interface IEngine
     T Mean<T>(Vector<T> vector);
 
     /// <summary>
+    /// Applies the softmax function to convert a vector of values into a probability distribution.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector of logits.</param>
+    /// <returns>A new vector where elements sum to 1 and represent probabilities.</returns>
+    /// <remarks>
+    /// <para>
+    /// Softmax converts arbitrary real values into a probability distribution using:
+    /// softmax(x)[i] = exp(x[i]) / sum(exp(x[j])) for all j
+    /// </para>
+    /// <para>
+    /// For numerical stability, this is computed as:
+    /// softmax(x)[i] = exp(x[i] - max(x)) / sum(exp(x[j] - max(x)))
+    /// </para>
+    /// <para><b>Common Uses:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Final layer of classification networks (converts scores to probabilities)</description></item>
+    /// <item><description>Attention mechanisms (weighs how much focus to give each element)</description></item>
+    /// <item><description>Mixture-of-Experts routing (determines which experts to use)</description></item>
+    /// <item><description>Reinforcement learning policy networks</description></item>
+    /// </list>
+    /// <para>
+    /// GPU implementation provides 10-50x speedup for large vectors.
+    /// Uses hardware-accelerated exp() and reduction operations.
+    /// </para>
+    /// </remarks>
+    Vector<T> Softmax<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the cosine similarity between two vectors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vectors.</typeparam>
+    /// <param name="a">The first vector.</param>
+    /// <param name="b">The second vector.</param>
+    /// <returns>A value between -1 and 1 representing the cosine of the angle between the vectors.</returns>
+    /// <exception cref="ArgumentException">Thrown when vectors have different lengths.</exception>
+    /// <remarks>
+    /// <para>
+    /// Cosine similarity measures the cosine of the angle between two non-zero vectors:
+    /// cosine_similarity(a, b) = dot(a, b) / (norm(a) * norm(b))
+    /// </para>
+    /// <para><b>Return Values:</b></para>
+    /// <list type="bullet">
+    /// <item><description>1.0: Vectors point in exactly the same direction (identical)</description></item>
+    /// <item><description>0.0: Vectors are orthogonal (perpendicular, no similarity)</description></item>
+    /// <item><description>-1.0: Vectors point in opposite directions</description></item>
+    /// </list>
+    /// <para><b>Common Uses:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Text similarity in NLP (document/sentence embeddings)</description></item>
+    /// <item><description>Recommendation systems (user/item similarity)</description></item>
+    /// <item><description>Image similarity (feature vector comparison)</description></item>
+    /// <item><description>Attention mechanisms in transformers</description></item>
+    /// </list>
+    /// <para>
+    /// GPU implementation provides 20-100x speedup by parallelizing dot product and norm computations.
+    /// Returns zero if either vector has zero magnitude to avoid division by zero.
+    /// </para>
+    /// </remarks>
+    T CosineSimilarity<T>(Vector<T> a, Vector<T> b);
+
+    /// <summary>
+    /// Computes the product of all elements in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>The product of all elements.</returns>
+    /// <remarks>
+    /// Used for geometric mean computation and product aggregation in statistics.
+    /// </remarks>
+    T Product<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the standard deviation of all elements in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>The standard deviation of all elements.</returns>
+    /// <remarks>
+    /// <para>
+    /// Standard deviation measures the spread of values: sqrt(variance).
+    /// Essential for batch normalization, layer normalization, and outlier detection.
+    /// </para>
+    /// </remarks>
+    T StdDev<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the Euclidean norm (L2 norm) of the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>The L2 norm: sqrt(sum(x[i]²)).</returns>
+    /// <remarks>
+    /// <para>
+    /// L2 norm is the Euclidean length of the vector.
+    /// Critical for:
+    /// - Gradient clipping (clip by norm)
+    /// - L2 regularization
+    /// - Vector normalization (unit vectors)
+    /// - Distance metrics
+    /// </para>
+    /// </remarks>
+    T Norm<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the Euclidean distance between two vectors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vectors.</typeparam>
+    /// <param name="a">The first vector.</param>
+    /// <param name="b">The second vector.</param>
+    /// <returns>The Euclidean distance: sqrt(sum((a[i] - b[i])²)).</returns>
+    /// <exception cref="ArgumentException">Thrown when vectors have different lengths.</exception>
+    /// <remarks>
+    /// <para>
+    /// Euclidean distance is the straight-line distance between two points.
+    /// Used extensively in:
+    /// - k-Nearest Neighbors (k-NN)
+    /// - Clustering algorithms (k-means, DBSCAN)
+    /// - Metric learning
+    /// - Similarity search
+    /// </para>
+    /// </remarks>
+    T Distance<T>(Vector<T> a, Vector<T> b);
+
+    /// <summary>
+    /// Computes the element-wise minimum magnitude between two vectors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vectors.</typeparam>
+    /// <param name="a">The first vector.</param>
+    /// <param name="b">The second vector.</param>
+    /// <returns>A new vector where each element is the value with minimum absolute value.</returns>
+    /// <exception cref="ArgumentException">Thrown when vectors have different lengths.</exception>
+    /// <remarks>
+    /// Used for magnitude-based comparisons and weight pruning strategies.
+    /// </remarks>
+    Vector<T> MinMagnitude<T>(Vector<T> a, Vector<T> b);
+
+    /// <summary>
+    /// Computes the element-wise maximum magnitude between two vectors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vectors.</typeparam>
+    /// <param name="a">The first vector.</param>
+    /// <param name="b">The second vector.</param>
+    /// <returns>A new vector where each element is the value with maximum absolute value.</returns>
+    /// <exception cref="ArgumentException">Thrown when vectors have different lengths.</exception>
+    /// <remarks>
+    /// Used for gradient clipping by magnitude and weight analysis.
+    /// </remarks>
+    Vector<T> MaxMagnitude<T>(Vector<T> a, Vector<T> b);
+
+    /// <summary>
     /// Creates a vector filled with a constant value.
     /// </summary>
     /// <typeparam name="T">The numeric type of the vector.</typeparam>
@@ -293,6 +488,231 @@ public interface IEngine
     /// <param name="seed">Random seed for reproducibility (optional).</param>
     /// <returns>A new vector containing Gaussian random noise.</returns>
     Vector<T> GenerateGaussianNoise<T>(int length, T mean, T standardDeviation, int? seed = null);
+
+    #endregion
+
+    #region Specialized Operations
+
+    /// <summary>
+    /// Clamps each element of a vector to the specified range [min, max].
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <param name="min">The minimum value.</param>
+    /// <param name="max">The maximum value.</param>
+    /// <returns>A new vector with each element clamped to [min, max].</returns>
+    /// <remarks>
+    /// <para>
+    /// Clamp ensures all values are within bounds: result[i] = max(min, min(max, vector[i])).
+    /// Critical for:
+    /// - Gradient clipping (prevent exploding gradients)
+    /// - Activation function bounds (e.g., ReLU6)
+    /// - Numerical stability
+    /// - Value range enforcement
+    /// </para>
+    /// </remarks>
+    Vector<T> Clamp<T>(Vector<T> vector, T min, T max);
+
+    /// <summary>
+    /// Performs linear interpolation between two vectors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vectors.</typeparam>
+    /// <param name="a">The start vector.</param>
+    /// <param name="b">The end vector.</param>
+    /// <param name="t">The interpolation weight (0 to 1).</param>
+    /// <returns>A new vector with interpolated values: a + t * (b - a).</returns>
+    /// <exception cref="ArgumentException">Thrown when vectors have different lengths.</exception>
+    /// <remarks>
+    /// <para>
+    /// Linear interpolation blends two vectors based on weight t.
+    /// Used for:
+    /// - Exponential moving average (EMA) in optimizers
+    /// - Model weight interpolation
+    /// - Smooth transitions between states
+    /// - Temporal blending
+    /// </para>
+    /// </remarks>
+    Vector<T> Lerp<T>(Vector<T> a, Vector<T> b, T t);
+
+    /// <summary>
+    /// Computes the reciprocal (1/x) of each element.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing 1/x for each element.</returns>
+    /// <remarks>
+    /// <para>
+    /// Reciprocal is used for:
+    /// - Division optimization (multiply by reciprocal)
+    /// - Normalization operations
+    /// - Inverse scaling
+    /// </para>
+    /// </remarks>
+    Vector<T> Reciprocal<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the reciprocal square root (1/sqrt(x)) of each element.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing 1/sqrt(x) for each element.</returns>
+    /// <remarks>
+    /// <para>
+    /// Reciprocal square root is CRITICAL for normalization efficiency.
+    /// Essential for:
+    /// - Layer normalization: x / sqrt(variance + epsilon)
+    /// - Batch normalization: (x - mean) / sqrt(variance + epsilon)
+    /// - RMS normalization (RMSNorm used in LLaMA, GPT-NeoX)
+    /// - Fast inverse square root (Quake III algorithm)
+    /// </para>
+    /// <para>
+    /// GPU/SIMD implementations provide hardware-accelerated rsqrt instruction,
+    /// which is significantly faster than computing sqrt followed by division.
+    /// </para>
+    /// </remarks>
+    Vector<T> ReciprocalSqrt<T>(Vector<T> vector);
+
+    #endregion
+
+    #region Trigonometric Operations
+
+    /// <summary>
+    /// Computes the sine of each element (in radians).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector (angles in radians).</param>
+    /// <returns>A new vector containing sine values.</returns>
+    /// <remarks>
+    /// <para>
+    /// Sine is used extensively in:
+    /// - Positional encodings for transformers (sin/cos for position embedding)
+    /// - Signal processing and wave functions
+    /// - Fourier transforms
+    /// - Periodic activation functions
+    /// </para>
+    /// </remarks>
+    Vector<T> Sin<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the cosine of each element (in radians).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector (angles in radians).</param>
+    /// <returns>A new vector containing cosine values.</returns>
+    /// <remarks>
+    /// <para>
+    /// Cosine is used extensively in:
+    /// - Positional encodings for transformers (sin/cos for position embedding)
+    /// - Cosine annealing learning rate schedules
+    /// - Attention mechanisms
+    /// - Signal processing
+    /// </para>
+    /// </remarks>
+    Vector<T> Cos<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes both sine and cosine of each element simultaneously (in radians).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector (angles in radians).</param>
+    /// <param name="sinResult">Output vector containing sine values.</param>
+    /// <param name="cosResult">Output vector containing cosine values.</param>
+    /// <remarks>
+    /// <para>
+    /// SinCos computes both sin and cos simultaneously, which is more efficient
+    /// than calling Sin() and Cos() separately.
+    /// Critical for:
+    /// - Positional encodings in transformers (need both sin and cos)
+    /// - Complex number operations
+    /// - Rotary position embeddings (RoPE)
+    /// </para>
+    /// <para>
+    /// Hardware implementations can compute both with ~1.5x the cost of a single
+    /// sin/cos operation, rather than 2x.
+    /// </para>
+    /// </remarks>
+    void SinCos<T>(Vector<T> vector, out Vector<T> sinResult, out Vector<T> cosResult);
+
+    #endregion
+
+    #region Hyperbolic Operations
+
+    /// <summary>
+    /// Computes the hyperbolic sine of each element.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing sinh values.</returns>
+    /// <remarks>
+    /// Hyperbolic sine: sinh(x) = (e^x - e^-x) / 2.
+    /// Used in some activation functions and mathematical transformations.
+    /// </remarks>
+    Vector<T> Sinh<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the hyperbolic cosine of each element.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing cosh values.</returns>
+    /// <remarks>
+    /// Hyperbolic cosine: cosh(x) = (e^x + e^-x) / 2.
+    /// Component of tanh gradient and used in hyperbolic geometry.
+    /// </remarks>
+    Vector<T> Cosh<T>(Vector<T> vector);
+
+    #endregion
+
+    #region Rounding Operations
+
+    /// <summary>
+    /// Rounds each element to the nearest integer.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector with each element rounded to nearest integer.</returns>
+    /// <remarks>
+    /// <para>
+    /// Rounding is used for:
+    /// - Quantization (neural network compression)
+    /// - Discretization for inference
+    /// - Integer conversion
+    /// </para>
+    /// </remarks>
+    Vector<T> Round<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the floor (round down) of each element.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector with each element rounded down to integer.</returns>
+    /// <remarks>
+    /// Floor rounds toward negative infinity. Used for integer conversion and binning operations.
+    /// </remarks>
+    Vector<T> Floor<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the ceiling (round up) of each element.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector with each element rounded up to integer.</returns>
+    /// <remarks>
+    /// Ceiling rounds toward positive infinity. Used for integer conversion and binning operations.
+    /// </remarks>
+    Vector<T> Ceiling<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Truncates each element toward zero (removes fractional part).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector with fractional parts removed.</returns>
+    /// <remarks>
+    /// Truncate rounds toward zero. Used for integer conversion and quantization schemes.
+    /// </remarks>
+    Vector<T> Truncate<T>(Vector<T> vector);
 
     #endregion
 

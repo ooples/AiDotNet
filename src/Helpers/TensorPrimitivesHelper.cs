@@ -533,5 +533,113 @@ public static class TensorPrimitivesHelper<T>
         return new Vector<T>(result);
     }
 
+    /// <summary>
+    /// Computes base-2 logarithm element-wise: log2(x).
+    /// </summary>
+    public static Vector<T> Log2(Vector<T> x)
+    {
+        var xArray = x.ToArray();
+        var result = new T[xArray.Length];
+
+        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        {
+            var xFloat = (float[])(object)xArray;
+            var resultFloat = (float[])(object)result;
+            TensorPrimitives.Log2(xFloat, resultFloat);
+        }
+        else
+        {
+            // log2(x) = log(x) / log(2)
+            T log2 = NumOps.Log(NumOps.FromDouble(2.0));
+            for (int i = 0; i < xArray.Length; i++)
+                result[i] = NumOps.Divide(NumOps.Log(xArray[i]), log2);
+        }
+
+        return new Vector<T>(result);
+    }
+
+    /// <summary>
+    /// Computes softmax: exp(x - max) / sum(exp(x - max)).
+    /// </summary>
+    public static Vector<T> Softmax(Vector<T> x)
+    {
+        var xArray = x.ToArray();
+        var result = new T[xArray.Length];
+
+        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        {
+            var xFloat = (float[])(object)xArray;
+            var resultFloat = (float[])(object)result;
+            TensorPrimitives.SoftMax(xFloat, resultFloat);
+        }
+        else
+        {
+            // Find max for numerical stability
+            T max = xArray[0];
+            for (int i = 1; i < xArray.Length; i++)
+                if (NumOps.GreaterThan(xArray[i], max))
+                    max = xArray[i];
+
+            // Compute exp(x - max)
+            T sum = NumOps.Zero;
+            for (int i = 0; i < xArray.Length; i++)
+            {
+                T shifted = NumOps.Subtract(xArray[i], max);
+                result[i] = NumOps.Exp(shifted);
+                sum = NumOps.Add(sum, result[i]);
+            }
+
+            // Normalize
+            for (int i = 0; i < xArray.Length; i++)
+                result[i] = NumOps.Divide(result[i], sum);
+        }
+
+        return new Vector<T>(result);
+    }
+
+    /// <summary>
+    /// Computes cosine similarity: dot(a, b) / (norm(a) * norm(b)).
+    /// </summary>
+    public static T CosineSimilarity(Vector<T> a, Vector<T> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        var aArray = a.ToArray();
+        var bArray = b.ToArray();
+
+        if (aArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        {
+            var aFloat = (float[])(object)aArray;
+            var bFloat = (float[])(object)bArray;
+            float result = TensorPrimitives.CosineSimilarity(aFloat, bFloat);
+            return (T)(object)result;
+        }
+        else
+        {
+            // Compute dot product
+            T dotProduct = NumOps.Zero;
+            for (int i = 0; i < aArray.Length; i++)
+                dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(aArray[i], bArray[i]));
+
+            // Compute norms
+            T normA = NumOps.Zero;
+            T normB = NumOps.Zero;
+            for (int i = 0; i < aArray.Length; i++)
+            {
+                normA = NumOps.Add(normA, NumOps.Multiply(aArray[i], aArray[i]));
+                normB = NumOps.Add(normB, NumOps.Multiply(bArray[i], bArray[i]));
+            }
+            normA = NumOps.Sqrt(normA);
+            normB = NumOps.Sqrt(normB);
+
+            T denominator = NumOps.Multiply(normA, normB);
+            if (NumOps.Equals(denominator, NumOps.Zero))
+                return NumOps.Zero;
+
+            return NumOps.Divide(dotProduct, denominator);
+        }
+    }
+
     #endregion
 }

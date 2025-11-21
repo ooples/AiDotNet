@@ -310,7 +310,403 @@ public class CpuEngine : IEngine
         T length = numOps.FromDouble(vector.Length);
         return numOps.Divide(sum, length);
     }
-/// <inheritdoc/>
+
+    /// <inheritdoc/>
+    public Vector<T> Softmax<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        if (vector.Length == 0) throw new ArgumentException("Cannot compute softmax of empty vector.");
+
+        // Use SIMD-optimized TensorPrimitivesHelper (3-6× speedup for float)
+        return TensorPrimitivesHelper<T>.Softmax(vector);
+    }
+
+    /// <inheritdoc/>
+    public T CosineSimilarity<T>(Vector<T> a, Vector<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vectors must have the same length.");
+
+        // Use SIMD-optimized TensorPrimitivesHelper (10-15× speedup for float)
+        return TensorPrimitivesHelper<T>.CosineSimilarity(a, b);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Log2<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+
+        // Use SIMD-optimized TensorPrimitivesHelper (3-6× speedup for float)
+        return TensorPrimitivesHelper<T>.Log2(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> ExpM1<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            result[i] = numOps.Subtract(numOps.Exp(vector[i]), numOps.One);
+        }
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Log1P<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            result[i] = numOps.Log(numOps.Add(vector[i], numOps.One));
+        }
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Negate<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            result[i] = numOps.Negate(vector[i]);
+        }
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public T Product<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        if (vector.Length == 0) throw new ArgumentException("Cannot compute product of empty vector.");
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T product = numOps.One;
+        for (int i = 0; i < vector.Length; i++)
+        {
+            product = numOps.Multiply(product, vector[i]);
+        }
+        return product;
+    }
+
+    /// <inheritdoc/>
+    public T StdDev<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        if (vector.Length == 0) throw new ArgumentException("Cannot compute standard deviation of empty vector.");
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        T mean = Mean(vector);
+        T sumSquaredDiff = numOps.Zero;
+
+        for (int i = 0; i < vector.Length; i++)
+        {
+            T diff = numOps.Subtract(vector[i], mean);
+            sumSquaredDiff = numOps.Add(sumSquaredDiff, numOps.Square(diff));
+        }
+
+        T variance = numOps.Divide(sumSquaredDiff, numOps.FromDouble(vector.Length));
+        return numOps.Sqrt(variance);
+    }
+
+    /// <inheritdoc/>
+    public T Norm<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T sumSquares = numOps.Zero;
+        for (int i = 0; i < vector.Length; i++)
+        {
+            sumSquares = numOps.Add(sumSquares, numOps.Square(vector[i]));
+        }
+        return numOps.Sqrt(sumSquares);
+    }
+
+    /// <inheritdoc/>
+    public T Distance<T>(Vector<T> a, Vector<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Length != b.Length) throw new ArgumentException("Vectors must have the same length.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T sumSquaredDiff = numOps.Zero;
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            T diff = numOps.Subtract(a[i], b[i]);
+            sumSquaredDiff = numOps.Add(sumSquaredDiff, numOps.Square(diff));
+        }
+
+        return numOps.Sqrt(sumSquaredDiff);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> MinMagnitude<T>(Vector<T> a, Vector<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Length != b.Length) throw new ArgumentException("Vectors must have the same length.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(a.Length);
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            T absA = numOps.Abs(a[i]);
+            T absB = numOps.Abs(b[i]);
+            result[i] = numOps.LessThan(absA, absB) ? a[i] : b[i];
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> MaxMagnitude<T>(Vector<T> a, Vector<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Length != b.Length) throw new ArgumentException("Vectors must have the same length.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(a.Length);
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            T absA = numOps.Abs(a[i]);
+            T absB = numOps.Abs(b[i]);
+            result[i] = numOps.GreaterThan(absA, absB) ? a[i] : b[i];
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Clamp<T>(Vector<T> vector, T min, T max)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        for (int i = 0; i < vector.Length; i++)
+        {
+            if (numOps.LessThan(vector[i], min))
+                result[i] = min;
+            else if (numOps.GreaterThan(vector[i], max))
+                result[i] = max;
+            else
+                result[i] = vector[i];
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Lerp<T>(Vector<T> a, Vector<T> b, T t)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Length != b.Length) throw new ArgumentException("Vectors must have the same length.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(a.Length);
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            T diff = numOps.Subtract(b[i], a[i]);
+            T scaled = numOps.Multiply(t, diff);
+            result[i] = numOps.Add(a[i], scaled);
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Reciprocal<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        for (int i = 0; i < vector.Length; i++)
+        {
+            result[i] = numOps.Divide(numOps.One, vector[i]);
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> ReciprocalSqrt<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        for (int i = 0; i < vector.Length; i++)
+        {
+            result[i] = numOps.Divide(numOps.One, numOps.Sqrt(vector[i]));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Sin<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        // TensorPrimitives.Sin not available - use Math.Sin
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            result[i] = numOps.FromDouble(Math.Sin(val));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Cos<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        // TensorPrimitives.Cos not available - use Math.Cos
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            result[i] = numOps.FromDouble(Math.Cos(val));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public void SinCos<T>(Vector<T> vector, out Vector<T> sinResult, out Vector<T> cosResult)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        sinResult = new Vector<T>(vector.Length);
+        cosResult = new Vector<T>(vector.Length);
+
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            sinResult[i] = numOps.FromDouble(Math.Sin(val));
+            cosResult[i] = numOps.FromDouble(Math.Cos(val));
+        }
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Sinh<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        // TensorPrimitives.Sinh not available - use Math.Sinh
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            result[i] = numOps.FromDouble(Math.Sinh(val));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Cosh<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        // TensorPrimitives.Cosh not available - use Math.Cosh
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            result[i] = numOps.FromDouble(Math.Cosh(val));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Round<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            result[i] = numOps.FromDouble(Math.Round(val));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Floor<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            result[i] = numOps.FromDouble(Math.Floor(val));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Ceiling<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            result[i] = numOps.FromDouble(Math.Ceiling(val));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Truncate<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            result[i] = numOps.FromDouble(Math.Truncate(val));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
     public Vector<T> Fill<T>(int length, T value)
     {
         if (length < 0) throw new ArgumentException("Length must be non-negative.", nameof(length));

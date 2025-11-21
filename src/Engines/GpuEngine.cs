@@ -1220,7 +1220,193 @@ public class GpuEngine : IEngine, IDisposable
         // TODO: Implement GPU mean with parallel reduction
         return _cpuFallback.Mean(vector);
     }
-/// <inheritdoc/>
+
+    /// <inheritdoc/>
+    public Vector<T> Softmax<T>(Vector<T> vector)
+    {
+        // TODO: Implement GPU softmax with parallel exp and reduction kernels
+        // For now, use CPU fallback
+        return _cpuFallback.Softmax(vector);
+    }
+
+    /// <inheritdoc/>
+    public T CosineSimilarity<T>(Vector<T> a, Vector<T> b)
+    {
+        // TODO: Implement GPU cosine similarity with parallel dot product and norm
+        // For now, use CPU fallback
+        return _cpuFallback.CosineSimilarity(a, b);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Log2<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Log2
+        return _cpuFallback.Log2(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> ExpM1<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for ExpM1
+        return _cpuFallback.ExpM1(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Log1P<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Log1P
+        return _cpuFallback.Log1P(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Negate<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Negate (element-wise negation)
+        return _cpuFallback.Negate(vector);
+    }
+
+    /// <inheritdoc/>
+    public T Product<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel reduction kernel for Product
+        return _cpuFallback.Product(vector);
+    }
+
+    /// <inheritdoc/>
+    public T StdDev<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel reduction kernel for StdDev (mean + variance + sqrt)
+        return _cpuFallback.StdDev(vector);
+    }
+
+    /// <inheritdoc/>
+    public T Norm<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel reduction kernel for L2 Norm (sum of squares + sqrt)
+        // PRIORITY: Critical for gradient clipping and normalization
+        return _cpuFallback.Norm(vector);
+    }
+
+    /// <inheritdoc/>
+    public T Distance<T>(Vector<T> a, Vector<T> b)
+    {
+        // TODO-GPU: Implement parallel reduction kernel for Euclidean distance
+        return _cpuFallback.Distance(a, b);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> MinMagnitude<T>(Vector<T> a, Vector<T> b)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for element-wise MinMagnitude
+        return _cpuFallback.MinMagnitude(a, b);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> MaxMagnitude<T>(Vector<T> a, Vector<T> b)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for element-wise MaxMagnitude
+        return _cpuFallback.MaxMagnitude(a, b);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Clamp<T>(Vector<T> vector, T min, T max)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Clamp
+        // PRIORITY: Critical for gradient clipping in every optimizer
+        return _cpuFallback.Clamp(vector, min, max);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Lerp<T>(Vector<T> a, Vector<T> b, T t)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Lerp (linear interpolation)
+        // PRIORITY: Used in EMA for optimizer momentum
+        return _cpuFallback.Lerp(a, b, t);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Reciprocal<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Reciprocal (1/x)
+        return _cpuFallback.Reciprocal(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> ReciprocalSqrt<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for ReciprocalSqrt (1/sqrt(x))
+        // PRIORITY: CRITICAL for layer norm, batch norm, RMSNorm - used in every normalization layer
+        // Hardware rsqrt instruction provides significant speedup
+        return _cpuFallback.ReciprocalSqrt(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Sin<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Sin
+        // PRIORITY: Used in transformer positional encodings
+        return _cpuFallback.Sin(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Cos<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Cos
+        // PRIORITY: Used in transformer positional encodings
+        return _cpuFallback.Cos(vector);
+    }
+
+    /// <inheritdoc/>
+    public void SinCos<T>(Vector<T> vector, out Vector<T> sinResult, out Vector<T> cosResult)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for SinCos (compute both simultaneously)
+        // PRIORITY: Positional encodings in transformers (RoPE, Sinusoidal)
+        _cpuFallback.SinCos(vector, out sinResult, out cosResult);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Sinh<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Sinh
+        return _cpuFallback.Sinh(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Cosh<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Cosh
+        return _cpuFallback.Cosh(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Round<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Round
+        return _cpuFallback.Round(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Floor<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Floor
+        return _cpuFallback.Floor(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Ceiling<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Ceiling
+        return _cpuFallback.Ceiling(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Truncate<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Truncate
+        return _cpuFallback.Truncate(vector);
+    }
+
+    /// <inheritdoc/>
     public Vector<T> Fill<T>(int length, T value)
     {
         // TODO: Implement GPU fill with parallel kernel
