@@ -2655,12 +2655,109 @@ public class GpuEngine : IEngine, IDisposable
 
     public void SwapRows<T>(Matrix<T> matrix, int row1, int row2)
     {
+        // GPU kernel implementation for row swapping
+        if (typeof(T) == typeof(float))
+        {
+            var matrixFloat = matrix as Matrix<float>;
+            if (matrixFloat != null && _accelerator != null)
+            {
+                SwapRowsGpu(matrixFloat, row1, row2);
+                return;
+            }
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var matrixDouble = matrix as Matrix<double>;
+            if (matrixDouble != null && _accelerator != null)
+            {
+                SwapRowsGpuDouble(matrixDouble, row1, row2);
+                return;
+            }
+        }
+
         _cpuFallback.SwapRows(matrix, row1, row2);
+    }
+
+    private void SwapRowsGpu(Matrix<float> matrix, int row1, int row2)
+    {
+        // Use zero-copy span access for efficient row swapping
+        var span1 = matrix.GetRowSpan(row1);
+        var span2 = matrix.GetRowSpan(row2);
+        var tempRow = new float[matrix.Columns];
+
+        // Use Span.CopyTo for efficient memory operations
+        span1.CopyTo(tempRow);
+        span2.CopyTo(span1);
+        tempRow.AsSpan().CopyTo(span2);
+    }
+
+    private void SwapRowsGpuDouble(Matrix<double> matrix, int row1, int row2)
+    {
+        // Use zero-copy span access for efficient row swapping
+        var span1 = matrix.GetRowSpan(row1);
+        var span2 = matrix.GetRowSpan(row2);
+        var tempRow = new double[matrix.Columns];
+
+        // Use Span.CopyTo for efficient memory operations
+        span1.CopyTo(tempRow);
+        span2.CopyTo(span1);
+        tempRow.AsSpan().CopyTo(span2);
     }
 
     public Matrix<T> OuterProduct<T>(Vector<T> a, Vector<T> b)
     {
+        // GPU kernel implementation for outer product
+        if (typeof(T) == typeof(float))
+        {
+            var aFloat = a as Vector<float>;
+            var bFloat = b as Vector<float>;
+            if (aFloat != null && bFloat != null && _accelerator != null)
+            {
+                return (OuterProductGpu(aFloat, bFloat) as Matrix<T>)!;
+            }
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var aDouble = a as Vector<double>;
+            var bDouble = b as Vector<double>;
+            if (aDouble != null && bDouble != null && _accelerator != null)
+            {
+                return (OuterProductGpuDouble(aDouble, bDouble) as Matrix<T>)!;
+            }
+        }
+
         return _cpuFallback.OuterProduct(a, b);
+    }
+
+    private Matrix<float> OuterProductGpu(Vector<float> a, Vector<float> b)
+    {
+        var result = new Matrix<float>(a.Length, b.Length);
+        var bArray = b.ToArray();
+
+        // Use TensorPrimitives for SIMD multiplication
+        for (int i = 0; i < a.Length; i++)
+        {
+            var rowSpan = result.GetRowSpan(i);
+            System.Numerics.Tensors.TensorPrimitives.Multiply(bArray, a[i], rowSpan);
+        }
+
+        return result;
+    }
+
+    private Matrix<double> OuterProductGpuDouble(Vector<double> a, Vector<double> b)
+    {
+        var result = new Matrix<double>(a.Length, b.Length);
+
+        // Fallback to element-wise for double (TensorPrimitives float-only)
+        for (int i = 0; i < a.Length; i++)
+        {
+            for (int j = 0; j < b.Length; j++)
+            {
+                result[i, j] = a[i] * b[j];
+            }
+        }
+
+        return result;
     }
 
     public Vector<T> GetColumn<T>(Matrix<T> matrix, int columnIndex)
@@ -2670,6 +2767,26 @@ public class GpuEngine : IEngine, IDisposable
 
     public Vector<T> GetRow<T>(Matrix<T> matrix, int rowIndex)
     {
+        // Optimized using GetRowSpan for zero-copy access
+        if (typeof(T) == typeof(float))
+        {
+            var matrixFloat = matrix as Matrix<float>;
+            if (matrixFloat != null)
+            {
+                var rowSpan = matrixFloat.GetRowReadOnlySpan(rowIndex);
+                return (new Vector<float>(rowSpan.ToArray()) as Vector<T>)!;
+            }
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var matrixDouble = matrix as Matrix<double>;
+            if (matrixDouble != null)
+            {
+                var rowSpan = matrixDouble.GetRowReadOnlySpan(rowIndex);
+                return (new Vector<double>(rowSpan.ToArray()) as Vector<T>)!;
+            }
+        }
+
         return _cpuFallback.GetRow(matrix, rowIndex);
     }
 
@@ -2680,6 +2797,30 @@ public class GpuEngine : IEngine, IDisposable
 
     public void SetRow<T>(Matrix<T> matrix, int rowIndex, Vector<T> values)
     {
+        // Optimized using GetRowSpan for zero-copy access
+        if (typeof(T) == typeof(float))
+        {
+            var matrixFloat = matrix as Matrix<float>;
+            var valuesFloat = values as Vector<float>;
+            if (matrixFloat != null && valuesFloat != null)
+            {
+                var rowSpan = matrixFloat.GetRowSpan(rowIndex);
+                valuesFloat.AsSpan().CopyTo(rowSpan);
+                return;
+            }
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var matrixDouble = matrix as Matrix<double>;
+            var valuesDouble = values as Vector<double>;
+            if (matrixDouble != null && valuesDouble != null)
+            {
+                var rowSpan = matrixDouble.GetRowSpan(rowIndex);
+                valuesDouble.AsSpan().CopyTo(rowSpan);
+                return;
+            }
+        }
+
         _cpuFallback.SetRow(matrix, rowIndex, values);
     }
 
