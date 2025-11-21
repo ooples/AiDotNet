@@ -1098,28 +1098,23 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             probabilityMass[i] = probMass;
         }
 
-        // Normalize to get fractions
-        T totalTokens = NumOps.Zero;
-        T totalProbMass = NumOps.Zero;
+        // VECTORIZED: Normalize to get fractions using Vector.Sum
+        var tokenCountVec = new Vector<T>(tokenCounts);
+        var probMassVec = new Vector<T>(probabilityMass);
 
-        for (int i = 0; i < numExperts; i++)
-        {
-            totalTokens = NumOps.Add(totalTokens, tokenCounts[i]);
-            totalProbMass = NumOps.Add(totalProbMass, probabilityMass[i]);
-        }
+        T totalTokens = tokenCountVec.Sum();
+        T totalProbMass = probMassVec.Sum();
 
-        // Compute load balancing loss: numExperts * sum(token_frac_i * prob_frac_i)
-        T loss = NumOps.Zero;
+        // VECTORIZED: Compute load balancing loss using vector operations
+        T safeTokenTotal = NumOps.GreaterThan(totalTokens, NumOps.Zero) ? totalTokens : NumOps.One;
+        T safeProbTotal = NumOps.GreaterThan(totalProbMass, NumOps.Zero) ? totalProbMass : NumOps.One;
 
-        for (int i = 0; i < numExperts; i++)
-        {
-            T tokenFraction = NumOps.Divide(tokenCounts[i],
-                NumOps.GreaterThan(totalTokens, NumOps.Zero) ? totalTokens : NumOps.One);
-            T probFraction = NumOps.Divide(probabilityMass[i],
-                NumOps.GreaterThan(totalProbMass, NumOps.Zero) ? totalProbMass : NumOps.One);
+        var tokenFractions = (Vector<T>)Engine.Divide(tokenCountVec, safeTokenTotal);
+        var probFractions = (Vector<T>)Engine.Divide(probMassVec, safeProbTotal);
 
-            loss = NumOps.Add(loss, NumOps.Multiply(tokenFraction, probFraction));
-        }
+        // Element-wise multiply and sum
+        var products = (Vector<T>)Engine.Multiply(tokenFractions, probFractions);
+        T loss = products.Sum();
 
         loss = NumOps.Multiply(NumOps.FromDouble(numExperts), loss);
 
