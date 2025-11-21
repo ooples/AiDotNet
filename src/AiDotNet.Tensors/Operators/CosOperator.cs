@@ -33,7 +33,8 @@ public readonly struct CosOperatorDouble : IUnaryOperator<double, double>
 {
     // Constants for range reduction and polynomial approximation
     private const double TwoOverPi = 0.6366197723675814; // 2/π
-    private const double PiOver2 = 1.5707963267948966;
+    private const double PiOver2 = 1.5707963267948966;   // π/2
+    private const double Pi = 3.1415926535897932;        // π
 
     // Polynomial coefficients for cosine approximation in [-π/2, π/2]
     // These are minimax polynomial coefficients for cos(x) ≈ 1 - x²/2 + x⁴/24 - ...
@@ -53,14 +54,18 @@ public readonly struct CosOperatorDouble : IUnaryOperator<double, double>
     /// Computes cos(x) for a Vector128 of doubles (2 values) using polynomial approximation.
     /// </summary>
     /// <remarks>
-    /// Uses Horner's method for efficient polynomial evaluation:
-    /// cos(x) ≈ 1 + x² * (C1 + x² * (C2 + x² * (C3 + x² * C4)))
-    /// Accurate for x in [-π, π]. For larger ranges, range reduction should be applied.
+    /// Uses range reduction to bring x into [-π, π], then applies Horner's method for
+    /// efficient polynomial evaluation. Accurate for all input ranges.
     /// </remarks>
     public Vector128<double> Invoke(Vector128<double> x)
     {
+        // Range reduction: bring x into [-π, π]
+        Vector128<double> oneOverPi = Vector128.Create(1.0 / Pi);
+        Vector128<double> n = Vector128.Floor(x * oneOverPi + Vector128.Create(0.5));
+        Vector128<double> xReduced = x - n * Vector128.Create(Pi);
+
         // Compute x² for polynomial evaluation
-        Vector128<double> x2 = x * x;
+        Vector128<double> x2 = xReduced * xReduced;
 
         // Evaluate polynomial using Horner's method
         Vector128<double> p = Vector128.Create(C4);
@@ -69,20 +74,30 @@ public readonly struct CosOperatorDouble : IUnaryOperator<double, double>
         p = Vector128.Create(C1) + x2 * p;
 
         // cos(x) ≈ 1 + x² * p
-        return Vector128<double>.One + x2 * p;
+        Vector128<double> result = Vector128<double>.One + x2 * p;
+
+        // Apply sign correction: if n is odd, negate result
+        Vector128<double> nMod2 = n - Vector128.Create(2.0) * Vector128.Floor(n * Vector128.Create(0.5));
+        Vector128<double> signMask = Vector128.Equals(nMod2, Vector128.Create(1.0));
+        return Vector128.ConditionalSelect(signMask, -result, result);
     }
 
     /// <summary>
     /// Computes cos(x) for a Vector256 of doubles (4 values) using polynomial approximation.
     /// </summary>
     /// <remarks>
-    /// Uses Horner's method for efficient polynomial evaluation.
-    /// Accurate for x in [-π, π]. For larger ranges, range reduction should be applied.
+    /// Uses range reduction to bring x into [-π, π], then applies Horner's method for
+    /// efficient polynomial evaluation. Accurate for all input ranges.
     /// </remarks>
     public Vector256<double> Invoke(Vector256<double> x)
     {
+        // Range reduction: bring x into [-π, π]
+        Vector256<double> oneOverPi = Vector256.Create(1.0 / Pi);
+        Vector256<double> n = Vector256.Floor(x * oneOverPi + Vector256.Create(0.5));
+        Vector256<double> xReduced = x - n * Vector256.Create(Pi);
+
         // Compute x² for polynomial evaluation
-        Vector256<double> x2 = x * x;
+        Vector256<double> x2 = xReduced * xReduced;
 
         // Evaluate polynomial using Horner's method
         Vector256<double> p = Vector256.Create(C4);
@@ -91,20 +106,30 @@ public readonly struct CosOperatorDouble : IUnaryOperator<double, double>
         p = Vector256.Create(C1) + x2 * p;
 
         // cos(x) ≈ 1 + x² * p
-        return Vector256<double>.One + x2 * p;
+        Vector256<double> result = Vector256<double>.One + x2 * p;
+
+        // Apply sign correction: if n is odd, negate result
+        Vector256<double> nMod2 = n - Vector256.Create(2.0) * Vector256.Floor(n * Vector256.Create(0.5));
+        Vector256<double> signMask = Vector256.Equals(nMod2, Vector256.Create(1.0));
+        return Vector256.ConditionalSelect(signMask, -result, result);
     }
 
     /// <summary>
     /// Computes cos(x) for a Vector512 of doubles (8 values) using polynomial approximation.
     /// </summary>
     /// <remarks>
-    /// Uses Horner's method for efficient polynomial evaluation.
-    /// Accurate for x in [-π, π]. For larger ranges, range reduction should be applied.
+    /// Uses range reduction to bring x into [-π, π], then applies Horner's method for
+    /// efficient polynomial evaluation. Accurate for all input ranges.
     /// </remarks>
     public Vector512<double> Invoke(Vector512<double> x)
     {
+        // Range reduction: bring x into [-π, π]
+        Vector512<double> oneOverPi = Vector512.Create(1.0 / Pi);
+        Vector512<double> n = Vector512.Floor(x * oneOverPi + Vector512.Create(0.5));
+        Vector512<double> xReduced = x - n * Vector512.Create(Pi);
+
         // Compute x² for polynomial evaluation
-        Vector512<double> x2 = x * x;
+        Vector512<double> x2 = xReduced * xReduced;
 
         // Evaluate polynomial using Horner's method
         Vector512<double> p = Vector512.Create(C4);
@@ -113,7 +138,12 @@ public readonly struct CosOperatorDouble : IUnaryOperator<double, double>
         p = Vector512.Create(C1) + x2 * p;
 
         // cos(x) ≈ 1 + x² * p
-        return Vector512<double>.One + x2 * p;
+        Vector512<double> result = Vector512<double>.One + x2 * p;
+
+        // Apply sign correction: if n is odd, negate result
+        Vector512<double> nMod2 = n - Vector512.Create(2.0) * Vector512.Floor(n * Vector512.Create(0.5));
+        Vector512<double> signMask = Vector512.Equals(nMod2, Vector512.Create(1.0));
+        return Vector512.ConditionalSelect(signMask, -result, result);
     }
 #endif
 }
@@ -132,6 +162,9 @@ public readonly struct CosOperatorDouble : IUnaryOperator<double, double>
 /// </remarks>
 public readonly struct CosOperatorFloat : IUnaryOperator<float, float>
 {
+    // Constants for range reduction
+    private const float Pi = 3.14159265f;  // π
+
     // Polynomial coefficients for cosine approximation (single precision)
     private const float C0 = 1.0f;
     private const float C1 = -0.5f; // -1/2
@@ -148,13 +181,18 @@ public readonly struct CosOperatorFloat : IUnaryOperator<float, float>
     /// Computes cos(x) for a Vector128 of floats (4 values) using polynomial approximation.
     /// </summary>
     /// <remarks>
-    /// Uses Horner's method for efficient polynomial evaluation.
-    /// Accurate for x in [-π, π]. For larger ranges, range reduction should be applied.
+    /// Uses range reduction to bring x into [-π, π], then applies Horner's method.
+    /// Accurate for all input ranges.
     /// </remarks>
     public Vector128<float> Invoke(Vector128<float> x)
     {
+        // Range reduction: bring x into [-π, π]
+        Vector128<float> oneOverPi = Vector128.Create(1.0f / Pi);
+        Vector128<float> n = Vector128.Floor(x * oneOverPi + Vector128.Create(0.5f));
+        Vector128<float> xReduced = x - n * Vector128.Create(Pi);
+
         // Compute x² for polynomial evaluation
-        Vector128<float> x2 = x * x;
+        Vector128<float> x2 = xReduced * xReduced;
 
         // Evaluate polynomial using Horner's method (3-term for float precision)
         Vector128<float> p = Vector128.Create(C3);
@@ -162,20 +200,30 @@ public readonly struct CosOperatorFloat : IUnaryOperator<float, float>
         p = Vector128.Create(C1) + x2 * p;
 
         // cos(x) ≈ 1 + x² * p
-        return Vector128<float>.One + x2 * p;
+        Vector128<float> result = Vector128<float>.One + x2 * p;
+
+        // Apply sign correction: if n is odd, negate result
+        Vector128<float> nMod2 = n - Vector128.Create(2.0f) * Vector128.Floor(n * Vector128.Create(0.5f));
+        Vector128<float> signMask = Vector128.Equals(nMod2, Vector128.Create(1.0f));
+        return Vector128.ConditionalSelect(signMask, -result, result);
     }
 
     /// <summary>
     /// Computes cos(x) for a Vector256 of floats (8 values) using polynomial approximation.
     /// </summary>
     /// <remarks>
-    /// Uses Horner's method for efficient polynomial evaluation.
-    /// Accurate for x in [-π, π]. For larger ranges, range reduction should be applied.
+    /// Uses range reduction to bring x into [-π, π], then applies Horner's method.
+    /// Accurate for all input ranges.
     /// </remarks>
     public Vector256<float> Invoke(Vector256<float> x)
     {
+        // Range reduction: bring x into [-π, π]
+        Vector256<float> oneOverPi = Vector256.Create(1.0f / Pi);
+        Vector256<float> n = Vector256.Floor(x * oneOverPi + Vector256.Create(0.5f));
+        Vector256<float> xReduced = x - n * Vector256.Create(Pi);
+
         // Compute x² for polynomial evaluation
-        Vector256<float> x2 = x * x;
+        Vector256<float> x2 = xReduced * xReduced;
 
         // Evaluate polynomial using Horner's method (3-term for float precision)
         Vector256<float> p = Vector256.Create(C3);
@@ -183,20 +231,30 @@ public readonly struct CosOperatorFloat : IUnaryOperator<float, float>
         p = Vector256.Create(C1) + x2 * p;
 
         // cos(x) ≈ 1 + x² * p
-        return Vector256<float>.One + x2 * p;
+        Vector256<float> result = Vector256<float>.One + x2 * p;
+
+        // Apply sign correction: if n is odd, negate result
+        Vector256<float> nMod2 = n - Vector256.Create(2.0f) * Vector256.Floor(n * Vector256.Create(0.5f));
+        Vector256<float> signMask = Vector256.Equals(nMod2, Vector256.Create(1.0f));
+        return Vector256.ConditionalSelect(signMask, -result, result);
     }
 
     /// <summary>
     /// Computes cos(x) for a Vector512 of floats (16 values) using polynomial approximation.
     /// </summary>
     /// <remarks>
-    /// Uses Horner's method for efficient polynomial evaluation.
-    /// Accurate for x in [-π, π]. For larger ranges, range reduction should be applied.
+    /// Uses range reduction to bring x into [-π, π], then applies Horner's method.
+    /// Accurate for all input ranges.
     /// </remarks>
     public Vector512<float> Invoke(Vector512<float> x)
     {
+        // Range reduction: bring x into [-π, π]
+        Vector512<float> oneOverPi = Vector512.Create(1.0f / Pi);
+        Vector512<float> n = Vector512.Floor(x * oneOverPi + Vector512.Create(0.5f));
+        Vector512<float> xReduced = x - n * Vector512.Create(Pi);
+
         // Compute x² for polynomial evaluation
-        Vector512<float> x2 = x * x;
+        Vector512<float> x2 = xReduced * xReduced;
 
         // Evaluate polynomial using Horner's method (3-term for float precision)
         Vector512<float> p = Vector512.Create(C3);
@@ -204,7 +262,12 @@ public readonly struct CosOperatorFloat : IUnaryOperator<float, float>
         p = Vector512.Create(C1) + x2 * p;
 
         // cos(x) ≈ 1 + x² * p
-        return Vector512<float>.One + x2 * p;
+        Vector512<float> result = Vector512<float>.One + x2 * p;
+
+        // Apply sign correction: if n is odd, negate result
+        Vector512<float> nMod2 = n - Vector512.Create(2.0f) * Vector512.Floor(n * Vector512.Create(0.5f));
+        Vector512<float> signMask = Vector512.Equals(nMod2, Vector512.Create(1.0f));
+        return Vector512.ConditionalSelect(signMask, -result, result);
     }
 #endif
 }
