@@ -51,48 +51,75 @@ public readonly struct SinOperatorDouble : IUnaryOperator<double, double>
     /// <summary>
     /// Computes sin(x) for a Vector128 of doubles (2 values) using polynomial approximation.
     /// </summary>
+    /// <remarks>
+    /// Uses Horner's method for efficient polynomial evaluation:
+    /// sin(x) ≈ x * (1 + x² * (C1 + x² * (C2 + x² * (C3 + x² * C4))))
+    /// Accurate for x in [-π, π]. For larger ranges, range reduction should be applied.
+    /// </remarks>
     public Vector128<double> Invoke(Vector128<double> x)
     {
-        // For simplicity in Phase 1, use scalar fallback
-        // Full SIMD implementation with range reduction can be added in Phase 2
-        return Vector128.Create(
-            Invoke(x.GetElement(0)),
-            Invoke(x.GetElement(1))
-        );
+        // Compute x² for polynomial evaluation
+        Vector128<double> x2 = x * x;
+
+        // Evaluate polynomial using Horner's method
+        // p = C4
+        Vector128<double> p = Vector128.Create(C4);
+
+        // p = C3 + x² * C4
+        p = Vector128.Create(C3) + x2 * p;
+
+        // p = C2 + x² * (C3 + x² * C4)
+        p = Vector128.Create(C2) + x2 * p;
+
+        // p = C1 + x² * (C2 + x² * (C3 + x² * C4))
+        p = Vector128.Create(C1) + x2 * p;
+
+        // sin(x) ≈ x * (1 + x² * p)
+        return x * (Vector128<double>.One + x2 * p);
     }
 
     /// <summary>
     /// Computes sin(x) for a Vector256 of doubles (4 values) using polynomial approximation.
     /// </summary>
+    /// <remarks>
+    /// Uses Horner's method for efficient polynomial evaluation.
+    /// Accurate for x in [-π, π]. For larger ranges, range reduction should be applied.
+    /// </remarks>
     public Vector256<double> Invoke(Vector256<double> x)
     {
-        // For simplicity in Phase 1, use scalar fallback
-        // Full SIMD implementation with range reduction can be added in Phase 2
-        return Vector256.Create(
-            Invoke(x.GetElement(0)),
-            Invoke(x.GetElement(1)),
-            Invoke(x.GetElement(2)),
-            Invoke(x.GetElement(3))
-        );
+        // Compute x² for polynomial evaluation
+        Vector256<double> x2 = x * x;
+
+        // Evaluate polynomial using Horner's method
+        Vector256<double> p = Vector256.Create(C4);
+        p = Vector256.Create(C3) + x2 * p;
+        p = Vector256.Create(C2) + x2 * p;
+        p = Vector256.Create(C1) + x2 * p;
+
+        // sin(x) ≈ x * (1 + x² * p)
+        return x * (Vector256<double>.One + x2 * p);
     }
 
     /// <summary>
     /// Computes sin(x) for a Vector512 of doubles (8 values) using polynomial approximation.
     /// </summary>
+    /// <remarks>
+    /// Uses Horner's method for efficient polynomial evaluation.
+    /// Accurate for x in [-π, π]. For larger ranges, range reduction should be applied.
+    /// </remarks>
     public Vector512<double> Invoke(Vector512<double> x)
     {
-        // For simplicity in Phase 1, use scalar fallback
-        // Full SIMD implementation with range reduction can be added in Phase 2
-        return Vector512.Create(
-            Invoke(x.GetElement(0)),
-            Invoke(x.GetElement(1)),
-            Invoke(x.GetElement(2)),
-            Invoke(x.GetElement(3)),
-            Invoke(x.GetElement(4)),
-            Invoke(x.GetElement(5)),
-            Invoke(x.GetElement(6)),
-            Invoke(x.GetElement(7))
-        );
+        // Compute x² for polynomial evaluation
+        Vector512<double> x2 = x * x;
+
+        // Evaluate polynomial using Horner's method
+        Vector512<double> p = Vector512.Create(C4);
+        p = Vector512.Create(C3) + x2 * p;
+        p = Vector512.Create(C2) + x2 * p;
+        p = Vector512.Create(C1) + x2 * p;
+
+        // sin(x) ≈ x * (1 + x² * p)
+        return x * (Vector512<double>.One + x2 * p);
     }
 #endif
 }
@@ -125,59 +152,64 @@ public readonly struct SinOperatorFloat : IUnaryOperator<float, float>
     /// <summary>
     /// Computes sin(x) for a Vector128 of floats (4 values) using polynomial approximation.
     /// </summary>
+    /// <remarks>
+    /// Uses Horner's method for efficient polynomial evaluation.
+    /// Accurate for x in [-π, π]. For larger ranges, range reduction should be applied.
+    /// </remarks>
     public Vector128<float> Invoke(Vector128<float> x)
     {
-        // For simplicity in Phase 1, use scalar fallback
-        return Vector128.Create(
-            Invoke(x.GetElement(0)),
-            Invoke(x.GetElement(1)),
-            Invoke(x.GetElement(2)),
-            Invoke(x.GetElement(3))
-        );
+        // Compute x² for polynomial evaluation
+        Vector128<float> x2 = x * x;
+
+        // Evaluate polynomial using Horner's method (3-term for float precision)
+        Vector128<float> p = Vector128.Create(C3);
+        p = Vector128.Create(C2) + x2 * p;
+        p = Vector128.Create(C1) + x2 * p;
+
+        // sin(x) ≈ x * (1 + x² * p)
+        return x * (Vector128<float>.One + x2 * p);
     }
 
     /// <summary>
     /// Computes sin(x) for a Vector256 of floats (8 values) using polynomial approximation.
     /// </summary>
+    /// <remarks>
+    /// Uses Horner's method for efficient polynomial evaluation.
+    /// Accurate for x in [-π, π]. For larger ranges, range reduction should be applied.
+    /// </remarks>
     public Vector256<float> Invoke(Vector256<float> x)
     {
-        // For simplicity in Phase 1, use scalar fallback
-        return Vector256.Create(
-            Invoke(x.GetElement(0)),
-            Invoke(x.GetElement(1)),
-            Invoke(x.GetElement(2)),
-            Invoke(x.GetElement(3)),
-            Invoke(x.GetElement(4)),
-            Invoke(x.GetElement(5)),
-            Invoke(x.GetElement(6)),
-            Invoke(x.GetElement(7))
-        );
+        // Compute x² for polynomial evaluation
+        Vector256<float> x2 = x * x;
+
+        // Evaluate polynomial using Horner's method (3-term for float precision)
+        Vector256<float> p = Vector256.Create(C3);
+        p = Vector256.Create(C2) + x2 * p;
+        p = Vector256.Create(C1) + x2 * p;
+
+        // sin(x) ≈ x * (1 + x² * p)
+        return x * (Vector256<float>.One + x2 * p);
     }
 
     /// <summary>
     /// Computes sin(x) for a Vector512 of floats (16 values) using polynomial approximation.
     /// </summary>
+    /// <remarks>
+    /// Uses Horner's method for efficient polynomial evaluation.
+    /// Accurate for x in [-π, π]. For larger ranges, range reduction should be applied.
+    /// </remarks>
     public Vector512<float> Invoke(Vector512<float> x)
     {
-        // For simplicity in Phase 1, use scalar fallback
-        return Vector512.Create(
-            Invoke(x.GetElement(0)),
-            Invoke(x.GetElement(1)),
-            Invoke(x.GetElement(2)),
-            Invoke(x.GetElement(3)),
-            Invoke(x.GetElement(4)),
-            Invoke(x.GetElement(5)),
-            Invoke(x.GetElement(6)),
-            Invoke(x.GetElement(7)),
-            Invoke(x.GetElement(8)),
-            Invoke(x.GetElement(9)),
-            Invoke(x.GetElement(10)),
-            Invoke(x.GetElement(11)),
-            Invoke(x.GetElement(12)),
-            Invoke(x.GetElement(13)),
-            Invoke(x.GetElement(14)),
-            Invoke(x.GetElement(15))
-        );
+        // Compute x² for polynomial evaluation
+        Vector512<float> x2 = x * x;
+
+        // Evaluate polynomial using Horner's method (3-term for float precision)
+        Vector512<float> p = Vector512.Create(C3);
+        p = Vector512.Create(C2) + x2 * p;
+        p = Vector512.Create(C1) + x2 * p;
+
+        // sin(x) ≈ x * (1 + x² * p)
+        return x * (Vector512<float>.One + x2 * p);
     }
 #endif
 }
