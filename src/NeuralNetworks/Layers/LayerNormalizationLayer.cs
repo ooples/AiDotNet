@@ -220,7 +220,11 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
         for (int i = 0; i < batchSize; i++)
         {
             // === Vectorized Extract Row (Phase B: US-GPU-015) ===
-            var sample = input.GetRow(i);
+            var sample = new Vector<T>(featureSize);
+            for (int j = 0; j < featureSize; j++)
+            {
+                sample[j] = input[i, j];
+            }
 
             _lastMean[i] = sample.Mean();
             _lastStd[i] = NumOps.Sqrt(NumOps.Add(sample.Variance(), _epsilon));

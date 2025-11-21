@@ -1332,17 +1332,31 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         for (int b = 0; b < batchSize; b++)
         {
-            // Extract logits for this batch item into a vector
+            // Find max for numerical stability
+            T maxLogit = logits[b, 0];
+            for (int i = 1; i < numExperts; i++)
+            {
+                if (NumOps.GreaterThan(logits[b, i], maxLogit))
+                {
+                    maxLogit = logits[b, i];
+                }
+            }
+
+            // Vectorized: Compute exp(logit - max) and sum
             var logitRow = new Vector<T>(numExperts);
             for (int i = 0; i < numExperts; i++)
             {
                 logitRow[i] = logits[b, i];
             }
 
-            // Use Engine.Softmax for hardware-accelerated softmax computation
-            var softmaxRow = Engine.Softmax(logitRow);
+            var maxVec = Engine.Fill(numExperts, maxLogit);
+            var shiftedLogits = Engine.Subtract(logitRow, maxVec);
+            var expValues = Engine.Exp(shiftedLogits);
+            T expSum = Engine.Sum(expValues);
 
-            // Write softmax results back to the tensor
+            // Vectorized: Normalize to get probabilities
+            var expSumVec = Engine.Fill(numExperts, expSum);
+            var softmaxRow = Engine.Divide(expValues, expSumVec);
             for (int i = 0; i < numExperts; i++)
             {
                 softmax[b, i] = softmaxRow[i];
