@@ -86,6 +86,10 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
     /// </remarks>
     public MemoryBuffer1D<T, Stride1D.Dense> Rent(int size)
     {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(GpuMemoryPool<T>),
+                "Cannot rent from a disposed memory pool.");
+
         if (size <= 0)
             throw new ArgumentException("Size must be positive", nameof(size));
 
@@ -115,6 +119,10 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
     /// </remarks>
     public void Return(MemoryBuffer1D<T, Stride1D.Dense> buffer)
     {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(GpuMemoryPool<T>),
+                "Cannot return to a disposed memory pool.");
+
         if (buffer == null)
             return;
 
