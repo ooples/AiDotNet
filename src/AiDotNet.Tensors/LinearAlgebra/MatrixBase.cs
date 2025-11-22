@@ -430,6 +430,11 @@ public abstract class MatrixBase<T>
     /// </remarks>
     public Matrix<T> SubMatrix(int startRow, int endRow, List<int> columnIndices)
     {
+        if (columnIndices is null)
+        {
+            throw new ArgumentNullException(nameof(columnIndices), "Column indices list cannot be null.");
+        }
+
         if (startRow < 0 || endRow > Rows || startRow >= endRow)
         {
             throw new ArgumentException("Invalid row indices");

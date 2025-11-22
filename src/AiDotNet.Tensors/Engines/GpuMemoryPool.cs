@@ -117,8 +117,9 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
         // Try to rent from pool
         if (_pools.TryGetValue(bucketSize, out var pool) && pool.TryTake(out var buffer))
         {
-            // Clear buffer before reuse (optional, but prevents data leaks)
-            // Note: Clearing is expensive, consider making this configurable
+            // Buffer is reused as-is for performance
+            // Note: If data privacy is a concern, consider clearing buffers before reuse
+            // by calling buffer.MemSetToZero() (expensive operation)
             return buffer;
         }
 
@@ -193,6 +194,10 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
     /// </summary>
     public void Clear()
     {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(GpuMemoryPool<T>),
+                "Cannot clear a disposed memory pool.");
+
         foreach (var pool in _pools.Values)
         {
             while (pool.TryTake(out var buffer))
@@ -208,6 +213,10 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
     /// <returns>A string describing pool usage.</returns>
     public string GetStatistics()
     {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(GpuMemoryPool<T>),
+                "Cannot get statistics from a disposed memory pool.");
+
         var stats = new System.Text.StringBuilder();
         stats.AppendLine("GPU Memory Pool Statistics:");
 

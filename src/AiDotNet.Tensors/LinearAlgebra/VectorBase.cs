@@ -238,10 +238,10 @@ public abstract class VectorBase<T>
     /// </remarks>
     public VectorBase<T> GetSubVector(int startIndex, int length)
     {
-        if (startIndex < 0 || startIndex >= this.Length)
-            throw new ArgumentOutOfRangeException(nameof(startIndex));
+        if (startIndex < 0 || startIndex > this.Length)
+            throw new ArgumentOutOfRangeException(nameof(startIndex), "Start index must be between 0 and the vector length (inclusive).");
         if (length < 0 || startIndex + length > this.Length)
-            throw new ArgumentOutOfRangeException(nameof(length));
+            throw new ArgumentOutOfRangeException(nameof(length), "Length must be non-negative and the range must not exceed the vector bounds.");
 
         VectorBase<T> subVector = CreateInstance(length);
         for (int i = 0; i < length; i++)
@@ -364,7 +364,7 @@ public abstract class VectorBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> The L2 norm is the "length" or "magnitude" of a vector in a mathematical sense.
     /// It's calculated by taking the square root of the sum of squares of all elements.
-    /// For example, the L2 norm of [3,4] is v(3ÃƒÂ¯Ã‚Â¿Ã‚Â½+4ÃƒÂ¯Ã‚Â¿Ã‚Â½) = v(9+16) = v25 = 5.
+    /// For example, the L2 norm of [3,4] is sqrt(3^2 + 4^2) = sqrt(9 + 16) = sqrt(25) = 5.
     /// This is commonly used in machine learning to measure the "size" of vectors or the distance between points.</para>
     /// </remarks>
     public virtual T L2Norm()

@@ -472,6 +472,11 @@ public static class MathHelper
     /// For reproducible results, pass in a seeded Random instance. Otherwise, a new unseeded
     /// Random will be created on each call, which breaks reproducibility.
     /// </para>
+    /// <para><b>Type Requirements:</b> This method requires that type T can be converted to and from
+    /// double via <see cref="Convert.ToDouble"/> and <see cref="INumericOperations{T}.FromDouble"/>.
+    /// This works for all built-in numeric types (int, float, double, decimal, etc.) but may not
+    /// work for custom numeric types that don't support double conversion.
+    /// </para>
     /// </remarks>
     public static T GetNormalRandom<T>(T mean, T stdDev, Random? random = null)
     {
