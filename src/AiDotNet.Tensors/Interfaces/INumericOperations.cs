@@ -113,12 +113,12 @@ public interface INumericOperations<T>
     /// <summary>
     /// Converts a value of type T to a 32-bit integer.
     /// </summary>
+    /// <param name="value">The value to convert.</param>
+    /// <returns>The value converted to a 32-bit integer.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> This converts the current number type to a whole number (integer).
     /// If the original number has a decimal part, it will be truncated (removed).
     /// </remarks>
-    /// <param name="value">The value to convert.</param>
-    /// <returns>The value converted to a 32-bit integer.</returns>
     int ToInt32(T value);
 
     /// <summary>
