@@ -311,7 +311,9 @@ public class AddLayer<T> : LayerBase<T>
         }
         else if (ScalarActivation != null)
         {
-            gradientWithActivation = _lastOutput.Transform((x, i) => NumOps.Multiply(ScalarActivation.Derivative(x), outputGradient[i]));
+            // Vectorized: compute activation derivatives and multiply
+            var derivatives = _lastOutput.Transform((x, i) => ScalarActivation.Derivative(x));
+            gradientWithActivation = derivatives.Multiply(outputGradient);
         }
         else
         {

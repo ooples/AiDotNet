@@ -482,6 +482,12 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Validate input tensor is 2D (batch_size x features)
+        if (input.Shape.Length != 2)
+            throw new ArgumentException(
+                $"Input tensor must be 2D (batch_size x features). Got {input.Shape.Length}D tensor with shape [{string.Join(", ", input.Shape)}].",
+                nameof(input));
+
         // Cache input for backward pass
         _lastInput = input;
 
@@ -1098,28 +1104,23 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             probabilityMass[i] = probMass;
         }
 
-        // Normalize to get fractions
-        T totalTokens = NumOps.Zero;
-        T totalProbMass = NumOps.Zero;
+        // VECTORIZED: Normalize to get fractions using Vector.Sum
+        var tokenCountVec = new Vector<T>(tokenCounts);
+        var probMassVec = new Vector<T>(probabilityMass);
 
-        for (int i = 0; i < numExperts; i++)
-        {
-            totalTokens = NumOps.Add(totalTokens, tokenCounts[i]);
-            totalProbMass = NumOps.Add(totalProbMass, probabilityMass[i]);
-        }
+        T totalTokens = tokenCountVec.Sum();
+        T totalProbMass = probMassVec.Sum();
 
-        // Compute load balancing loss: numExperts * sum(token_frac_i * prob_frac_i)
-        T loss = NumOps.Zero;
+        // VECTORIZED: Compute load balancing loss using vector operations
+        T safeTokenTotal = NumOps.GreaterThan(totalTokens, NumOps.Zero) ? totalTokens : NumOps.One;
+        T safeProbTotal = NumOps.GreaterThan(totalProbMass, NumOps.Zero) ? totalProbMass : NumOps.One;
 
-        for (int i = 0; i < numExperts; i++)
-        {
-            T tokenFraction = NumOps.Divide(tokenCounts[i],
-                NumOps.GreaterThan(totalTokens, NumOps.Zero) ? totalTokens : NumOps.One);
-            T probFraction = NumOps.Divide(probabilityMass[i],
-                NumOps.GreaterThan(totalProbMass, NumOps.Zero) ? totalProbMass : NumOps.One);
+        var tokenFractions = (Vector<T>)Engine.Divide(tokenCountVec, safeTokenTotal);
+        var probFractions = (Vector<T>)Engine.Divide(probMassVec, safeProbTotal);
 
-            loss = NumOps.Add(loss, NumOps.Multiply(tokenFraction, probFraction));
-        }
+        // Element-wise multiply and sum
+        var products = (Vector<T>)Engine.Multiply(tokenFractions, probFractions);
+        T loss = products.Sum();
 
         loss = NumOps.Multiply(NumOps.FromDouble(numExperts), loss);
 
@@ -1347,20 +1348,24 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 }
             }
 
-            // Compute exp(logit - max) and sum
-            T expSum = NumOps.Zero;
-            var expValues = new T[numExperts];
+            // Vectorized: Compute exp(logit - max) and sum
+            var logitRow = new Vector<T>(numExperts);
             for (int i = 0; i < numExperts; i++)
             {
-                var exp = NumOps.Exp(NumOps.Subtract(logits[b, i], maxLogit));
-                expValues[i] = exp;
-                expSum = NumOps.Add(expSum, exp);
+                logitRow[i] = logits[b, i];
             }
 
-            // Normalize to get probabilities
+            var maxVec = Engine.Fill(numExperts, maxLogit);
+            var shiftedLogits = Engine.Subtract(logitRow, maxVec);
+            var expValues = Engine.Exp(shiftedLogits);
+            T expSum = Engine.Sum(expValues);
+
+            // Vectorized: Normalize to get probabilities
+            var expSumVec = Engine.Fill(numExperts, expSum);
+            var softmaxRow = Engine.Divide(expValues, expSumVec);
             for (int i = 0; i < numExperts; i++)
             {
-                softmax[b, i] = NumOps.Divide(expValues[i], expSum);
+                softmax[b, i] = softmaxRow[i];
             }
         }
 
@@ -1502,13 +1507,25 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                     // Add remaining dimensions handling here based on your tensor implementation
                 }
 
-                // Simplified version: weight entire expert output for this batch item
+                // Vectorized: weight entire expert output for this batch item
                 if (expertOutput.Shape.Length == 2)
                 {
-                    for (int j = 0; j < expertOutput.Shape[1]; j++)
+                    int outputDim = expertOutput.Shape[1];
+                    var expertRow = new Vector<T>(outputDim);
+                    var combinedRow = new Vector<T>(outputDim);
+
+                    for (int j = 0; j < outputDim; j++)
                     {
-                        var weightedValue = NumOps.Multiply(expertOutput[b, j], weight);
-                        combined[b, j] = NumOps.Add(combined[b, j], weightedValue);
+                        expertRow[j] = expertOutput[b, j];
+                        combinedRow[j] = combined[b, j];
+                    }
+
+                    var weightedOutput = Engine.Multiply(expertRow, weight);
+                    var newCombinedRow = Engine.Add(combinedRow, weightedOutput);
+
+                    for (int j = 0; j < outputDim; j++)
+                    {
+                        combined[b, j] = newCombinedRow[j];
                     }
                 }
             }
@@ -1665,9 +1682,19 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             if (outputGradient.Shape.Length == 2)
             {
-                for (int j = 0; j < outputGradient.Shape[1]; j++)
+                int outputDim = outputGradient.Shape[1];
+                var gradientRow = new Vector<T>(outputDim);
+
+                for (int j = 0; j < outputDim; j++)
                 {
-                    weightedGradient[b, j] = NumOps.Multiply(outputGradient[b, j], weight);
+                    gradientRow[j] = outputGradient[b, j];
+                }
+
+                var weightedRow = Engine.Multiply(gradientRow, weight);
+
+                for (int j = 0; j < outputDim; j++)
+                {
+                    weightedGradient[b, j] = weightedRow[j];
                 }
             }
         }

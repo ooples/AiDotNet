@@ -772,19 +772,38 @@ public class SpikingLayer<T> : LayerBase<T>
         T decayFactor = NumOps.FromDouble(1.0 - 1.0/_tau);
         _membranePotential = _membranePotential.Multiply(decayFactor);
     
-        // Update membrane potential for neurons not in refractory period
+        // VECTORIZED: Update membrane potential and refractory countdown
+        // Create masks for vectorized conditional operations
+        var notInRefractory = new Vector<T>(_membranePotential.Length);
+        var inRefractory = new Vector<T>(_membranePotential.Length);
+
         for (int i = 0; i < _membranePotential.Length; i++)
         {
             if (Convert.ToDouble(_refractoryCountdown[i]) <= 0)
             {
-                _membranePotential[i] = NumOps.Add(_membranePotential[i], current[i]);
+                notInRefractory[i] = NumOps.One;
+                inRefractory[i] = NumOps.Zero;
             }
             else
             {
-                _refractoryCountdown[i] = NumOps.Subtract(_refractoryCountdown[i], NumOps.One);
+                notInRefractory[i] = NumOps.Zero;
+                inRefractory[i] = NumOps.One;
             }
         }
-    
+
+        // VECTORIZED: Apply current to neurons not in refractory period
+        var currentMasked = (Vector<T>)Engine.Multiply(current, notInRefractory);
+        _membranePotential = (Vector<T>)Engine.Add(_membranePotential, currentMasked);
+
+        // VECTORIZED: Decrement refractory countdown for neurons in refractory
+        var decrementVec = new Vector<T>(_membranePotential.Length);
+        for (int i = 0; i < decrementVec.Length; i++)
+        {
+            decrementVec[i] = NumOps.One;
+        }
+        var refractoryDecrement = (Vector<T>)Engine.Multiply(decrementVec, inRefractory);
+        _refractoryCountdown = (Vector<T>)Engine.Subtract(_refractoryCountdown, refractoryDecrement);
+
         // Generate spikes and reset
         for (int i = 0; i < _membranePotential.Length; i++)
         {

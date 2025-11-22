@@ -22,6 +22,11 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     protected readonly INumericOperations<T> NumOps;
 
     /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// The original time series data to be decomposed.
     /// </summary>
     public Vector<T> TimeSeries { get; }

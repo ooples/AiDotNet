@@ -57,6 +57,7 @@
 	  <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 	  <PackageReference Include="Pinecone.Client" Version="4.0.2" />
 	  <PackageReference Include="StackExchange.Redis" Version="2.9.32" />
+	  <PackageReference Include="System.Numerics.Tensors" Version="10.0.0" />
 	  <PackageReference Include="System.ValueTuple" Version="4.6.1" />
 	</ItemGroup>
 
@@ -79,6 +80,13 @@
 	  <Compile Remove="AiDotNet.Serving\**\*.cs" />
 	  <EmbeddedResource Remove="AiDotNet.Serving\**\*" />
 	  <None Remove="AiDotNet.Serving\**\*" />
+	</ItemGroup>
+
+	<!-- Exclude the AiDotNet.Tensors project files from this project -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Tensors\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Tensors\**\*" />
+	  <None Remove="AiDotNet.Tensors\**\*" />
 	</ItemGroup>
 
 </Project>

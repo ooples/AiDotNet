@@ -417,12 +417,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     private void ComputeResiduals(Matrix<T> x, Vector<T> y)
     {
         _fitted = Predict(x);
-        _residuals = new Vector<T>(y.Length);
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            _residuals[i] = NumOps.Subtract(y[i], _fitted[i]);
-        }
+        _residuals = (Vector<T>)Engine.Subtract(y, _fitted);
     }
 
     /// <summary>

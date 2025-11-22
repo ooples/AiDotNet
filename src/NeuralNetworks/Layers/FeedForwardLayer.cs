@@ -182,6 +182,10 @@ public class FeedForwardLayer<T> : LayerBase<T>
     private Tensor<T> BiasesGradient { get; set; }
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>

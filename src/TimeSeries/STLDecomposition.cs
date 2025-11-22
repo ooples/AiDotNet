@@ -265,7 +265,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void NormalizeSeasonal()
     {
-        T seasonalMean = _seasonal.Sum();
+        T seasonalMean = Engine.Sum(_seasonal);
         seasonalMean = NumOps.Divide(seasonalMean, NumOps.FromDouble(_seasonal.Length));
         _seasonal = _seasonal.Transform(s => NumOps.Subtract(s, seasonalMean));
         _trend = _trend.Transform(t => NumOps.Add(t, seasonalMean));
@@ -298,9 +298,11 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         int effectiveWindow = Math.Min(windowSize, n);
 
         // Initialize the first window
-        for (int i = 0; i < effectiveWindow; i++)
+        // VECTORIZED: Use Vector slice and sum
+        if (effectiveWindow > 0)
         {
-                        windowSum = NumOps.Add(windowSum, data[i]);
+            Vector<T> initialWindow = data.Slice(0, effectiveWindow);
+            windowSum = Engine.Sum(initialWindow);
         }
 
         // Calculate moving average
@@ -311,11 +313,9 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
                 // Edge case: use available data points
                 int start = Math.Max(0, i - effectiveWindow / 2);
                 int end = Math.Min(n, i + effectiveWindow / 2 + 1);
-                T sum = NumOps.Zero;
-                for (int j = start; j < end; j++)
-                {
-                    sum = NumOps.Add(sum, data[j]);
-                }
+                // VECTORIZED: Use Vector slice and sum
+                Vector<T> windowSlice = data.Slice(start, end);
+                T sum = Engine.Sum(windowSlice);
                 result[i] = NumOps.Divide(sum, NumOps.FromDouble(end - start));
             }
             else
@@ -355,7 +355,8 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> SubtractVectors(Vector<T> a, Vector<T> b)
     {
-        return new Vector<T>(a.Zip(b, (x, y) => NumOps.Subtract(x, y)));
+        // VECTORIZED: Use Engine subtraction
+        return (Vector<T>)Engine.Subtract(a, b);
     }
 
     /// <summary>
@@ -442,8 +443,9 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> CalculateResiduals(Vector<T> y, Vector<T> trend, Vector<T> seasonal)
     {
-        return new Vector<T>(y.Zip(trend, (a, b) => NumOps.Subtract(a, b))
-                 .Zip(seasonal, (a, b) => NumOps.Subtract(a, b)));
+        // VECTORIZED: Use Engine operations for residual calculation
+        var yMinusTrend = (Vector<T>)Engine.Subtract(y, trend);
+        return (Vector<T>)Engine.Subtract(yMinusTrend, seasonal);
     }
 
     /// <summary>
@@ -507,7 +509,8 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> ApplyRobustnessWeights(Vector<T> y, Vector<T> weights)
     {
-        return new Vector<T>(y.Zip(weights, (a, b) => NumOps.Multiply(a, b)));
+        // VECTORIZED: Use Engine multiplication
+        return (Vector<T>)Engine.Multiply(y, weights);
     }
 
     /// <summary>
@@ -1107,12 +1110,9 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     {
         if (_seasonal == null || _residual == null)
             return NumOps.Zero;
-        
-        Vector<T> seasonalPlusResidual = new Vector<T>(_seasonal.Length);
-        for (int i = 0; i < _seasonal.Length; i++)
-        {
-            seasonalPlusResidual[i] = NumOps.Add(_seasonal[i], _residual[i]);
-        }
+
+        // VECTORIZED: Use Engine addition for seasonal + residual
+        Vector<T> seasonalPlusResidual = (Vector<T>)Engine.Add(_seasonal, _residual);
     
         T varSeasonal = StatisticsHelper<T>.CalculateVariance(_seasonal);
         T varSeasonalPlusResidual = StatisticsHelper<T>.CalculateVariance(seasonalPlusResidual);
@@ -1153,12 +1153,16 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     {
         if (_trend == null || _residual == null)
             return NumOps.Zero;
-        
-        Vector<T> detrended = new Vector<T>(_trend.Length);
-        for (int i = 0; i < _trend.Length; i++)
+
+        // VECTORIZED: Use Engine addition for seasonal + residual
+        Vector<T> detrended;
+        if (_seasonal != null)
         {
-            T seasonalValue = _seasonal != null ? _seasonal[i] : NumOps.Zero;
-            detrended[i] = NumOps.Add(seasonalValue, _residual[i]);
+            detrended = (Vector<T>)Engine.Add(_seasonal, _residual);
+        }
+        else
+        {
+            detrended = _residual;
         }
     
         T varDetrended = StatisticsHelper<T>.CalculateVariance(detrended);
@@ -1283,11 +1287,9 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         }
     
         // Check that the sum of components equals original series
-        Vector<T> reconstructed = new Vector<T>(_trend.Length);
-        for (int i = 0; i < _trend.Length; i++)
-        {
-            reconstructed[i] = NumOps.Add(_trend[i], NumOps.Add(_seasonal[i], _residual[i]));
-        }
+        // VECTORIZED: Use Engine operations to reconstruct series
+        var trendPlusSeasonal = (Vector<T>)Engine.Add(_trend, _seasonal);
+        Vector<T> reconstructed = (Vector<T>)Engine.Add(trendPlusSeasonal, _residual);
     
         T maxError = NumOps.Zero;
         for (int i = 0; i < originalSeries.Length; i++)
@@ -1370,19 +1372,20 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         T mean = _seasonal.Average();
         T numerator = NumOps.Zero;
         T denominator = NumOps.Zero;
-    
+
+        // VECTORIZED: Calculate deviations using Engine operations
+        var meanVec = new Vector<T>(n);
+        for (int idx = 0; idx < n; idx++) meanVec[idx] = mean;
+        var deviations = (Vector<T>)Engine.Subtract(_seasonal, meanVec);
+
+        // Calculate numerator with lagged products
         for (int i = 0; i < n - lag; i++)
         {
-            T dev1 = NumOps.Subtract(_seasonal[i], mean);
-            T dev2 = NumOps.Subtract(_seasonal[i + lag], mean);
-            numerator = NumOps.Add(numerator, NumOps.Multiply(dev1, dev2));
+            numerator = NumOps.Add(numerator, NumOps.Multiply(deviations[i], deviations[i + lag]));
         }
-    
-        for (int i = 0; i < n; i++)
-        {
-            T dev = NumOps.Subtract(_seasonal[i], mean);
-            denominator = NumOps.Add(denominator, NumOps.Square(dev));
-        }
+
+        // VECTORIZED: Calculate denominator using dot product
+        denominator = Engine.DotProduct(deviations, deviations);
     
         if (NumOps.LessThanOrEquals(denominator, NumOps.Zero))
         {

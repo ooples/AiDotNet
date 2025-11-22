@@ -92,13 +92,14 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         var S = new Matrix<T>(rows, rows);
         var U = new Matrix<Complex<T>>(rows, rows);
 
+        // VECTORIZED: Process each column of eigenvectors as a vector operation
         for (int i = 0; i < rows; i++)
         {
             S[i, i] = NumOps.Sqrt(NumOps.Abs(eigenValues[i]));
-            for (int j = 0; j < rows; j++)
-            {
-                U[i, j] = new Complex<T>(eigenVectors[i, j], NumOps.Zero);
-            }
+
+            Vector<T> eigenVector = eigenVectors.GetColumn(i);
+            Vector<Complex<T>> complexVector = new Vector<Complex<T>>(eigenVector.Select(val => new Complex<T>(val, NumOps.Zero)));
+            U.SetColumn(i, complexVector);
         }
 
         return (S, U);
@@ -354,13 +355,14 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         var S = new Matrix<T>(rows, rows);
         var U = new Matrix<Complex<T>>(rows, rows);
 
+        // VECTORIZED: Process each column of eigenvectors as a vector operation
         for (int i = 0; i < rows; i++)
         {
             S[i, i] = NumOps.Sqrt(NumOps.Abs(eigenValues[i]));
-            for (int j = 0; j < rows; j++)
-            {
-                U[i, j] = new Complex<T>(eigenVectors[i, j], NumOps.Zero);
-            }
+
+            Vector<T> eigenVector = eigenVectors.GetColumn(i);
+            Vector<Complex<T>> complexVector = new Vector<Complex<T>>(eigenVector.Select(val => new Complex<T>(val, NumOps.Zero)));
+            U.SetColumn(i, complexVector);
         }
 
         return (S, U);
@@ -408,14 +410,9 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
                 U[j, i] = new Complex<T>(v[j], NumOps.Zero);
             }
 
-            // Deflate the matrix
-            for (int j = 0; j < n; j++)
-            {
-                for (int k = 0; k < n; k++)
-                {
-                    matrix[j, k] = NumOps.Subtract(matrix[j, k], NumOps.Multiply(NumOps.Multiply(v[j], v[k]), lambda));
-                }
-            }
+            // VECTORIZED: Deflate the matrix using outer product
+            Matrix<T> deflation = v.OuterProduct(v).Multiply(lambda);
+            matrix = matrix.Subtract(deflation);
         }
 
         return (S, U);
@@ -442,7 +439,9 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
 
         // Initialize with random vector
         var v = Vector<T>.CreateRandom(n);
-        var _vectors = new List<Vector<T>> { v.Divide(v.Norm()) };
+        // VECTORIZED: Normalize using Engine division
+        var normalized = (Vector<T>)Engine.Divide(v, v.Norm());
+        var _vectors = new List<Vector<T>> { normalized };
         var _alphaCoefficients = new List<T>();
         var _betaCoefficients = new List<T>();
 
@@ -545,11 +544,9 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public override Vector<T> Solve(Vector<T> bVector)
     {
-        var bComplex = new Vector<Complex<T>>(bVector.Length);
-        for (int i = 0; i < bVector.Length; i++)
-        {
-            bComplex[i] = new Complex<T>(bVector[i], NumOps.Zero);
-        }
+        // VECTORIZED: Convert to complex vector using Select
+        var bComplex = new Vector<Complex<T>>(bVector.Select(val => new Complex<T>(val, NumOps.Zero)));
+
         var yVector = UnitaryMatrix.ForwardSubstitution(bComplex);
 
         var result = SigmaMatrix.ToComplexMatrix().BackwardSubstitution(yVector);

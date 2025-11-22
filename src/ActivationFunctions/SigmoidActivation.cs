@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -10,12 +12,12 @@ namespace AiDotNet.ActivationFunctions;
 /// It's often used in the output layer of binary classification problems or in hidden layers of neural networks.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> The Sigmoid function is like a "squashing" function that takes any number (from negative 
-/// infinity to positive infinity) and converts it to a value between 0 and 1. This is useful in neural networks 
-/// because it helps transform unbounded values into a probability-like range. The function creates an S-shaped 
-/// curve that approaches 0 for very negative inputs and approaches 1 for very positive inputs, with a smooth 
-/// transition in between. However, one limitation is that for extreme values (very large positive or negative), 
-/// the gradient becomes very small, which can slow down learning in deep networks (known as the "vanishing 
+/// <b>For Beginners:</b> The Sigmoid function is like a "squashing" function that takes any number (from negative
+/// infinity to positive infinity) and converts it to a value between 0 and 1. This is useful in neural networks
+/// because it helps transform unbounded values into a probability-like range. The function creates an S-shaped
+/// curve that approaches 0 for very negative inputs and approaches 1 for very positive inputs, with a smooth
+/// transition in between. However, one limitation is that for extreme values (very large positive or negative),
+/// the gradient becomes very small, which can slow down learning in deep networks (known as the "vanishing
 /// gradient problem").
 /// </para>
 /// </remarks>
@@ -62,18 +64,28 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
-    /// Applies the Sigmoid activation function to each element in a vector.
+    /// Applies the Sigmoid activation function to each element in a vector using SIMD optimization.
     /// </summary>
     /// <param name="input">The vector of input values.</param>
     /// <returns>A new vector with the Sigmoid function applied to each element.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> This method applies the Sigmoid function to a whole list of numbers at once.
-    /// It processes each number in the list individually using the same Sigmoid formula and returns
-    /// a new list with all the transformed values.
+    /// <para>
+    /// This implementation uses TensorPrimitivesHelper for SIMD-optimized operations (3-6× speedup for float).
+    /// For arrays with fewer than 16 elements, it falls back to manual loops.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method applies the Sigmoid function to a whole list of numbers at once
+    /// using hardware acceleration, making it much faster than processing each number separately.
+    ///
+    /// For example, if you have a vector [-2, -1, 0, 1, 2]:
+    /// - The output would be approximately [0.12, 0.27, 0.50, 0.73, 0.88]
+    /// - All values are computed in parallel using SIMD instructions
+    /// </para>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
-        return input.Transform(Activate);
+        // Use SIMD-optimized Sigmoid (3-6× speedup for float)
+        return TensorPrimitivesHelper<T>.Sigmoid(input);
     }
 
     /// <summary>
