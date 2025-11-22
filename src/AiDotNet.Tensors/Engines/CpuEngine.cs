@@ -737,6 +737,30 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    public void ExpM1(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<ExpM1OperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void ExpM1(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<ExpM1OperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Log1P(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Log1POperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Log1P(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Log1POperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
     public void Tan(ReadOnlySpan<float> x, Span<float> destination)
     {
         TensorPrimitivesCore.InvokeSpanIntoSpan<TanOperatorFloat>(x, destination);
@@ -1074,11 +1098,15 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Vector<T>(vector.Length);
 
-        // Math.Asinh not available in all frameworks - use conversion
+        // Use asinh(x) = log(x + sqrt(x^2 + 1))
         for (int i = 0; i < vector.Length; i++)
         {
             double val = Convert.ToDouble(vector[i]);
+#if NET5_0_OR_GREATER
             result[i] = numOps.FromDouble(Math.Asinh(val));
+#else
+            result[i] = numOps.FromDouble(Math.Log(val + Math.Sqrt(val * val + 1.0)));
+#endif
         }
 
         return result;
@@ -1091,11 +1119,15 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Vector<T>(vector.Length);
 
-        // Math.Acosh not available in all frameworks - use conversion
+        // Use acosh(x) = log(x + sqrt(x^2 - 1))
         for (int i = 0; i < vector.Length; i++)
         {
             double val = Convert.ToDouble(vector[i]);
+#if NET5_0_OR_GREATER
             result[i] = numOps.FromDouble(Math.Acosh(val));
+#else
+            result[i] = numOps.FromDouble(Math.Log(val + Math.Sqrt(val * val - 1.0)));
+#endif
         }
 
         return result;
@@ -1108,11 +1140,15 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Vector<T>(vector.Length);
 
-        // Math.Atanh not available in all frameworks - use conversion
+        // Use atanh(x) = 0.5 * log((1 + x) / (1 - x))
         for (int i = 0; i < vector.Length; i++)
         {
             double val = Convert.ToDouble(vector[i]);
+#if NET5_0_OR_GREATER
             result[i] = numOps.FromDouble(Math.Atanh(val));
+#else
+            result[i] = numOps.FromDouble(0.5 * Math.Log((1.0 + val) / (1.0 - val)));
+#endif
         }
 
         return result;
