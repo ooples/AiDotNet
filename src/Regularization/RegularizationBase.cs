@@ -53,7 +53,12 @@ public abstract class RegularizationBase<T, TInput, TOutput> : IRegularization<T
     /// </para>
     /// </remarks>
     protected readonly INumericOperations<T> NumOps;
-    
+
+    /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Configuration options for the regularization technique.
     /// </summary>

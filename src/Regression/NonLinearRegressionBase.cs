@@ -43,6 +43,11 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     protected INumericOperations<T> NumOps { get; private set; }
 
     /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Gets the configuration options for the non-linear regression model.
     /// </summary>
     /// <value>
@@ -394,7 +399,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
                 return x1.DotProduct(x2);
 
             case KernelType.RBF:
-                T squaredDistance = x1.Subtract(x2).Transform(v => NumOps.Square(v)).Sum();
+                // VECTORIZED: Use Engine operations for element-wise subtract and sum
+                var diff = (Vector<T>)Engine.Subtract(x1, x2);
+                T squaredDistance = diff.Transform(v => NumOps.Square(v)).Sum();
                 return NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(-Options.Gamma), squaredDistance));
 
             case KernelType.Polynomial:
@@ -410,7 +417,10 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
                 );
 
             case KernelType.Laplacian:
-                T l1Distance = x1.Subtract(x2).Transform(v => NumOps.Abs(v)).Sum();
+                // VECTORIZED: Use Engine operations for element-wise subtract and abs
+                var diffLap = (Vector<T>)Engine.Subtract(x1, x2);
+                var absDiff = (Vector<T>)Engine.Abs(diffLap);
+                T l1Distance = absDiff.Sum();
                 return NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(-Options.Gamma), l1Distance));
 
             default:

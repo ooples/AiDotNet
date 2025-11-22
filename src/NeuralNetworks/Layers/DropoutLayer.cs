@@ -244,24 +244,22 @@ public class DropoutLayer<T> : LayerBase<T>
         if (!IsTrainingMode)
             return input;
 
-        _dropoutMask = new Tensor<T>(input.Shape);
-        var output = new Tensor<T>(input.Shape);
-
+        // Generate dropout mask vectorized
+        var maskData = new T[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            if (Random.NextDouble() > Convert.ToDouble(_dropoutRate))
-            {
-                _dropoutMask[i] = _scale;
-                output[i] = NumOps.Multiply(input[i], _scale);
-            }
-            else
-            {
-                _dropoutMask[i] = NumOps.Zero;
-                output[i] = NumOps.Zero;
-            }
+            maskData[i] = Random.NextDouble() > Convert.ToDouble(_dropoutRate) ? _scale : NumOps.Zero;
         }
 
-        return output;
+        // Convert to tensors and apply mask using vectorized Engine operations
+        _dropoutMask = new Tensor<T>(input.Shape, new Vector<T>(maskData));
+
+        // Use Engine.Multiply for vectorized element-wise multiplication
+        var inputVec = input.ToVector();
+        var maskVec = _dropoutMask.ToVector();
+        var outputVec = (Vector<T>)Engine.Multiply(inputVec, maskVec);
+
+        return new Tensor<T>(input.Shape, outputVec);
     }
 
     /// <summary>
@@ -316,12 +314,11 @@ public class DropoutLayer<T> : LayerBase<T>
         if (!IsTrainingMode)
             return outputGradient;
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-
-        for (int i = 0; i < outputGradient.Length; i++)
-        {
-            inputGradient[i] = NumOps.Multiply(outputGradient[i], _dropoutMask[i]);
-        }
+        // === Vectorized Element-wise Multiplication (Phase B: US-GPU-015) ===
+        var outGradVec = outputGradient.ToVector();
+        var maskVec = _dropoutMask.ToVector();
+        var resultVec = (Vector<T>)Engine.Multiply(outGradVec, maskVec);
+        var inputGradient = Tensor<T>.FromVector(resultVec).Reshape(_lastInput.Shape);
 
         return inputGradient;
     }

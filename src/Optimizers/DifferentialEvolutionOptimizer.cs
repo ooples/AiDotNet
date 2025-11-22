@@ -70,6 +70,7 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     /// </summary>
     /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The options for configuring the Differential Evolution algorithm.</param>
+    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This constructor sets up the Differential Evolution optimizer with its initial configuration.
     /// You can customize various aspects of how it works, or use default settings.
@@ -77,7 +78,8 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     /// </remarks>
     public DifferentialEvolutionOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        DifferentialEvolutionOptions<T, TInput, TOutput>? options = null)
+        DifferentialEvolutionOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
         : base(model, options ?? new())
     {
         _deOptions = options ?? new DifferentialEvolutionOptions<T, TInput, TOutput>();
@@ -212,18 +214,22 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
         var cParams = population[c].GetParameters();
         var currentParams = currentModel.GetParameters();
 
+        // === Partially Vectorized Differential Evolution Mutation using IEngine (Phase B: US-GPU-015) ===
+        // Vectorized differential mutation: mutant = a + F * (b - c)
+        var bMinusC = (Vector<T>)Engine.Subtract(bParams, cParams);
+        var scaledDiff = (Vector<T>)Engine.Multiply(bMinusC, _currentMutationRate);
+        var mutant = (Vector<T>)Engine.Add(aParams, scaledDiff);
+
         var trialParams = new Vector<T>(dimensions);
         int R = Random.Next(dimensions);
         var currentCrossOverRate = Convert.ToDouble(_currentCrossoverRate);
-        var currentMutationRate = Convert.ToDouble(_currentMutationRate);
 
+        // Crossover (element-wise due to random per-element decisions)
         for (int i = 0; i < dimensions; i++)
         {
             if (Random.NextDouble() < currentCrossOverRate || i == R)
             {
-                trialParams[i] = NumOps.Add(aParams[i],
-                    NumOps.Multiply(NumOps.FromDouble(currentMutationRate),
-                        NumOps.Subtract(bParams[i], cParams[i])));
+                trialParams[i] = mutant[i];
             }
             else
             {

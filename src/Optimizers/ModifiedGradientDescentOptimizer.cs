@@ -19,14 +19,17 @@ public class ModifiedGradientDescentOptimizer<T>
 {
     private readonly T _learningRate;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+    private readonly IEngine _engine;
 
     /// <summary>
     /// Creates a modified gradient descent optimizer.
     /// </summary>
     /// <param name="learningRate">Learning rate η</param>
-    public ModifiedGradientDescentOptimizer(T learningRate)
+    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
+    public ModifiedGradientDescentOptimizer(T learningRate, IEngine? engine = null)
     {
         _learningRate = learningRate;
+        _engine = engine ?? new CpuEngine();
     }
 
     /// <summary>
@@ -78,35 +81,29 @@ public class ModifiedGradientDescentOptimizer<T>
     /// <returns>Updated parameters w_{t+1}</returns>
     public Vector<T> UpdateVector(Vector<T> currentParameters, Vector<T> input, Vector<T> outputGradient)
     {
+        // === Vectorized Modified GD Update using IEngine (Phase B: US-GPU-015) ===
+        // w_{t+1} = w_t - x_t*dot(w_t,x_t) - η*gradient
+
         if (currentParameters.Length != input.Length)
             throw new ArgumentException($"Parameter length ({currentParameters.Length}) must match input length ({input.Length})");
 
         if (currentParameters.Length != outputGradient.Length)
             throw new ArgumentException($"Parameter length ({currentParameters.Length}) must match gradient length ({outputGradient.Length})");
 
-        var updated = new Vector<T>(currentParameters.Length);
+        // Compute dot(w_t, x_t) using vector dot product
+        T dotProduct = currentParameters.DotProduct(input);
 
-        // Compute dot(w_t, x_t) = x_t^T * w_t
-        T dotProduct = _numOps.Zero;
-        for (int i = 0; i < currentParameters.Length; i++)
-        {
-            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(currentParameters[i], input[i]));
-        }
+        // Projection term: x_t * dot(w_t,x_t)
+        var projectionComponent = (Vector<T>)_engine.Multiply(input, dotProduct);
 
-        // Apply modified update rule: w_{t+1} = w_t - x_t*dot(w_t,x_t) - η*gradient
-        for (int i = 0; i < currentParameters.Length; i++)
-        {
-            // Projection term: w_t - x_t*dot(w_t,x_t)
-            // This is the vector equivalent of W_t * (I - x_t*x_t^T)
-            T projectionComponent = _numOps.Multiply(input[i], dotProduct);
-            T projectedParam = _numOps.Subtract(currentParameters[i], projectionComponent);
+        // Projected parameters: w_t - x_t*dot(w_t,x_t)
+        var projectedParam = (Vector<T>)_engine.Subtract(currentParameters, projectionComponent);
 
-            // Gradient term: -η * gradient
-            T gradComponent = _numOps.Multiply(outputGradient[i], _learningRate);
+        // Gradient term: η * gradient
+        var gradComponent = (Vector<T>)_engine.Multiply(outputGradient, _learningRate);
 
-            // Final update: w_{t+1} = (w_t - x_t*dot(w_t,x_t)) - η*gradient
-            updated[i] = _numOps.Subtract(projectedParam, gradComponent);
-        }
+        // Final update: w_{t+1} = (w_t - x_t*dot(w_t,x_t)) - η*gradient
+        var updated = (Vector<T>)_engine.Subtract(projectedParam, gradComponent);
 
         return updated;
     }
@@ -117,26 +114,17 @@ public class ModifiedGradientDescentOptimizer<T>
     /// </summary>
     private Matrix<T> ComputeIdentityMinusOuterProduct(Vector<T> input)
     {
+        // === Vectorized Identity Matrix and Outer Product (Phase B: US-GPU-015) ===
         int dim = input.Length;
-        var result = new Matrix<T>(dim, dim);
 
-        // Start with identity matrix
-        for (int i = 0; i < dim; i++)
-        {
-            result[i, i] = _numOps.One;
-        }
+        // Create identity matrix using vectorized method
+        var identity = Matrix<T>.CreateIdentity(dim);
 
-        // Subtract outer product: x_t*x_t^T
-        for (int i = 0; i < dim; i++)
-        {
-            for (int j = 0; j < dim; j++)
-            {
-                T outerProduct = _numOps.Multiply(input[i], input[j]);
-                result[i, j] = _numOps.Subtract(result[i, j], outerProduct);
-            }
-        }
+        // Compute outer product: x_t*x_t^T using Matrix.OuterProduct
+        var outerProduct = Matrix<T>.OuterProduct(input, input);
 
-        return result;
+        // Subtract: I - x*x^T
+        return identity.Subtract(outerProduct);
     }
 
     /// <summary>
@@ -144,17 +132,8 @@ public class ModifiedGradientDescentOptimizer<T>
     /// </summary>
     private Matrix<T> ComputeOuterProduct(Vector<T> a, Vector<T> b)
     {
-        var result = new Matrix<T>(a.Length, b.Length);
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            for (int j = 0; j < b.Length; j++)
-            {
-                result[i, j] = _numOps.Multiply(a[i], b[j]);
-            }
-        }
-
-        return result;
+        // === Vectorized Outer Product (Phase B: US-GPU-015) ===
+        return Matrix<T>.OuterProduct(a, b);
     }
 
     /// <summary>

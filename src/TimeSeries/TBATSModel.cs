@@ -538,22 +538,21 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         // Calculate seasonal indices
         for (int i = 0; i < period; i++)
         {
-            T sum = NumOps.Zero;
-            int count = 0;
+            List<T> values = new List<T>();
             for (int j = i; j < n; j += period)
             {
-                sum = NumOps.Add(sum, y[j]);
-                count++;
+                values.Add(y[j]);
             }
-            seasonal[i] = NumOps.Divide(sum, NumOps.FromDouble(count));
+            Vector<T> valuesVec = new Vector<T>(values.ToArray());
+            seasonal[i] = StatisticsHelper<T>.CalculateMean(valuesVec);
         }
 
         // Normalize seasonal component
         T seasonalMean = StatisticsHelper<T>.CalculateMean(seasonal);
-        for (int i = 0; i < period; i++)
-        {
-            seasonal[i] = NumOps.Divide(seasonal[i], seasonalMean);
-        }
+        // VECTORIZED: Use Engine division for normalization
+        var meanVec = new Vector<T>(period);
+        for (int idx = 0; idx < period; idx++) meanVec[idx] = seasonalMean;
+        seasonal = (Vector<T>)Engine.Divide(seasonal, meanVec);
 
         return seasonal;
     }
@@ -700,9 +699,11 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
                 NumOps.Multiply(NumOps.FromDouble(0.99), _trend[t - 1])
             );
 
+            // VECTORIZED: Resize vectors by copying and appending
             Vector<T> newLevelVector = new Vector<T>(_level.Length + 1);
             Vector<T> newTrendVector = new Vector<T>(_trend.Length + 1);
 
+            // Copy existing values
             for (int i = 0; i < _level.Length; i++)
             {
                 newLevelVector[i] = _level[i];
@@ -806,9 +807,22 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
             alpha = NumOps.Divide(alpha, v);
 
             phi[k - 1] = alpha;
-            for (int j = 1; j < k; j++)
+
+            // VECTORIZED: Update phi coefficients using Engine operations
+            if (k > 1)
             {
-                phi[j - 1] = NumOps.Subtract(prevPhi[j - 1], NumOps.Multiply(alpha, prevPhi[k - j - 1]));
+                var prevPhiSlice = prevPhi.Slice(0, k - 1);
+                var prevPhiReversed = new Vector<T>(k - 1);
+                for (int idx = 0; idx < k - 1; idx++)
+                {
+                    prevPhiReversed[idx] = prevPhi[k - 2 - idx];
+                }
+                var alphaScaled = (Vector<T>)Engine.Multiply(prevPhiReversed, alpha);
+                var phiSlice = (Vector<T>)Engine.Subtract(prevPhiSlice, alphaScaled);
+                for (int j = 0; j < k - 1; j++)
+                {
+                    phi[j] = phiSlice[j];
+                }
             }
 
             v = NumOps.Multiply(v, NumOps.Subtract(NumOps.One, NumOps.Multiply(alpha, alpha)));
@@ -901,16 +915,20 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         T mean = StatisticsHelper<T>.CalculateMean(y);
         T variance = StatisticsHelper<T>.CalculateVariance(y);
 
+        // VECTORIZED: Calculate mean-centered values using Engine operations
+        var meanVec = new Vector<T>(y.Length);
+        for (int idx = 0; idx < y.Length; idx++) meanVec[idx] = mean;
+        var centered = (Vector<T>)Engine.Subtract(y, meanVec);
+
         for (int lag = 0; lag <= maxLag; lag++)
         {
             T sum = NumOps.Zero;
             int n = y.Length - lag;
 
+            // VECTORIZED: Compute lagged products
             for (int t = 0; t < n; t++)
             {
-                T diff1 = NumOps.Subtract(y[t], mean);
-                T diff2 = NumOps.Subtract(y[t + lag], mean);
-                sum = NumOps.Add(sum, NumOps.Multiply(diff1, diff2));
+                sum = NumOps.Add(sum, NumOps.Multiply(centered[t], centered[t + lag]));
             }
 
             autocorrelations[lag] = NumOps.Divide(sum, NumOps.Multiply(NumOps.FromDouble(n), variance));

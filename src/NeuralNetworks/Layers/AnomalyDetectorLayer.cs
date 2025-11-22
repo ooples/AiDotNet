@@ -132,6 +132,10 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     private double _smoothedAnomalyScore;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -180,10 +184,11 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public AnomalyDetectorLayer(
-        int inputSize, 
-        double anomalyThreshold, 
-        int historyCapacity = 100, 
-        double smoothingFactor = 0.1)
+        int inputSize,
+        double anomalyThreshold,
+        int historyCapacity = 100,
+        double smoothingFactor = 0.1,
+        IEngine? engine = null)
         : base([inputSize], [1])
     {
         _anomalyThreshold = anomalyThreshold;
@@ -226,14 +231,10 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         // Get actual and predicted values
         // The first half of the input is assumed to be the actual state
         // The second half is assumed to be the predicted state
-        var actual = new Vector<T>(halfSize);
-        var predicted = new Vector<T>(halfSize);
-        
-        for (int i = 0; i < halfSize; i++)
-        {
-            actual[i] = inputVector[i];
-            predicted[i] = inputVector[i + halfSize];
-        }
+
+        // === Vectorized Vector Slicing (Phase B: US-GPU-015) ===
+        var actual = inputVector.Slice(0, halfSize);
+        var predicted = inputVector.Slice(halfSize, halfSize);
         
         // Calculate the anomaly score
         double anomalyScore = CalculateAnomalyScore(actual, predicted);
@@ -492,14 +493,9 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         // Since this layer doesn't have trainable parameters, we just propagate the gradient
         // back to the input. For anomaly detection, this is primarily a pass-through operation.
 
-        // Create an input gradient of the same size as the input
-        var inputGradient = new Vector<T>(InputShape[0]);
-
-        // Set all gradients to zero since we don't directly optimize for anomaly detection
-        for (int i = 0; i < inputGradient.Length; i++)
-        {
-            inputGradient[i] = NumOps.Zero;
-        }
+        // === Vectorized Zero-Fill Gradient (Phase B: US-GPU-015) ===
+        // Create an input gradient filled with zeros since we don't directly optimize for anomaly detection
+        var inputGradient = Vector<T>.CreateDefault(InputShape[0], NumOps.Zero);
 
         return Tensor<T>.FromVector(inputGradient);
     }
@@ -518,13 +514,10 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
+        // === Vectorized Zero-Fill Gradient (Phase B: US-GPU-015) ===
         // AnomalyDetectorLayer has no trainable parameters and is typically used for monitoring.
         // Return zero gradients to match manual implementation.
-        var inputGradient = new Vector<T>(InputShape[0]);
-        for (int i = 0; i < inputGradient.Length; i++)
-        {
-            inputGradient[i] = NumOps.Zero;
-        }
+        var inputGradient = Vector<T>.CreateDefault(InputShape[0], NumOps.Zero);
         return Tensor<T>.FromVector(inputGradient);
     }
 

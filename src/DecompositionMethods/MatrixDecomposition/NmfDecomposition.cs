@@ -164,15 +164,20 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
             Matrix<T> WTW = WT.Multiply(tempW);
             Matrix<T> WTWH = WTW.Multiply(tempH);
 
+            // VECTORIZED: Process each row as a vector using Engine operations
+            var epsilonVec = new Vector<T>(n);
+            for (int idx = 0; idx < n; idx++) epsilonVec[idx] = epsilon;
+
             for (int i = 0; i < k; i++)
             {
-                for (int j = 0; j < n; j++)
-                {
-                    T numerator = WTV[i, j];
-                    T denominator = NumOps.Add(WTWH[i, j], epsilon);
-                    T ratio = NumOps.Divide(numerator, denominator);
-                    tempH[i, j] = NumOps.Multiply(tempH[i, j], ratio);
-                }
+                Vector<T> numerator = WTV.GetRow(i);
+                Vector<T> wtwhRow = WTWH.GetRow(i);
+                Vector<T> tempHRow = tempH.GetRow(i);
+
+                var denominator = (Vector<T>)Engine.Add(wtwhRow, epsilonVec);
+                var ratio = (Vector<T>)Engine.Divide(numerator, denominator);
+                var updated = (Vector<T>)Engine.Multiply(tempHRow, ratio);
+                tempH.SetRow(i, updated);
             }
 
             // Update W: W = W .* (V * H^T) ./ (W * H * H^T + epsilon)
@@ -181,15 +186,20 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
             Matrix<T> WH = tempW.Multiply(tempH);
             Matrix<T> WHHT = WH.Multiply(HT);
 
+            // VECTORIZED: Process each row as a vector using Engine operations
+            var epsilonVecW = new Vector<T>(k);
+            for (int idx = 0; idx < k; idx++) epsilonVecW[idx] = epsilon;
+
             for (int i = 0; i < m; i++)
             {
-                for (int j = 0; j < k; j++)
-                {
-                    T numerator = VHT[i, j];
-                    T denominator = NumOps.Add(WHHT[i, j], epsilon);
-                    T ratio = NumOps.Divide(numerator, denominator);
-                    tempW[i, j] = NumOps.Multiply(tempW[i, j], ratio);
-                }
+                Vector<T> numerator = VHT.GetRow(i);
+                Vector<T> whhtRow = WHHT.GetRow(i);
+                Vector<T> tempWRow = tempW.GetRow(i);
+
+                var denominator = (Vector<T>)Engine.Add(whhtRow, epsilonVecW);
+                var ratio = (Vector<T>)Engine.Divide(numerator, denominator);
+                var updated = (Vector<T>)Engine.Multiply(tempWRow, ratio);
+                tempW.SetRow(i, updated);
             }
 
             // Check for convergence
@@ -250,18 +260,9 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     private T ComputeReconstructionError(Matrix<T> V, Matrix<T> basisMatrix, Matrix<T> activationMatrix)
     {
         Matrix<T> WH = basisMatrix.Multiply(activationMatrix);
-        T sumSquaredError = NumOps.Zero;
-
-        for (int i = 0; i < V.Rows; i++)
-        {
-            for (int j = 0; j < V.Columns; j++)
-            {
-                T diff = NumOps.Subtract(V[i, j], WH[i, j]);
-                sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(diff, diff));
-            }
-        }
-
-        return NumOps.Sqrt(sumSquaredError);
+        // VECTORIZED: Use the inherited FrobeniusNorm method from base class
+        Matrix<T> difference = V.Subtract(WH);
+        return FrobeniusNorm(difference);
     }
 
     /// <summary>
@@ -368,10 +369,21 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         Vector<T> x = new Vector<T>(n);
         for (int i = n - 1; i >= 0; i--)
         {
+            // VECTORIZED: Use dot product for sum computation
             T sum = NumOps.Zero;
-            for (int j = i + 1; j < n; j++)
+            if (i < n - 1)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(augmented[i, j], x[j]));
+                int remaining = n - i - 1;
+                var rowSlice = new T[remaining];
+                var xSlice = new T[remaining];
+                for (int k = 0; k < remaining; k++)
+                {
+                    rowSlice[k] = augmented[i, i + 1 + k];
+                    xSlice[k] = x[i + 1 + k];
+                }
+                var rowVec = new Vector<T>(rowSlice);
+                var xVec = new Vector<T>(xSlice);
+                sum = rowVec.DotProduct(xVec);
             }
 
             if (!NumOps.Equals(augmented[i, i], NumOps.Zero))

@@ -216,10 +216,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
 
             // Apply shrinkage to prevent overfitting
             T shrinkageFactor = NumOps.FromDouble(0.95); // You might want to make this configurable
-            for (int i = 0; i < _regression.Length; i++)
-            {
-                _regression[i] = NumOps.Multiply(olsCoefficients[i], shrinkageFactor);
-            }
+            _regression = (Vector<T>)Engine.Multiply(olsCoefficients, shrinkageFactor);
         }
         catch (Exception)
         {
@@ -236,10 +233,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
 
             // Apply shrinkage to prevent overfitting
             T shrinkageFactor = NumOps.FromDouble(0.95); // You might want to make this configurable
-            for (int i = 0; i < _regression.Length; i++)
-            {
-                _regression[i] = NumOps.Multiply(ridgeCoefficients[i], shrinkageFactor);
-            }
+            _regression = (Vector<T>)Engine.Multiply(ridgeCoefficients, shrinkageFactor);
         }
     }
 
@@ -290,12 +284,12 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
             index += seasonalComponent.Length;
         }
 
-        // Regression component
+        // Regression component - store coefficients (not products)
         if (_bayesianOptions.IncludeRegression && _regression != null)
         {
             for (int i = 0; i < _regression.Length; i++)
             {
-                predictedState[index + i] = NumOps.Multiply(x[i], _regression[i]);
+                predictedState[index + i] = _regression[i];
             }
         }
 
@@ -739,12 +733,11 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
             T seasonalVariance = NumOps.Zero;
             for (int t = 1; t < n; t++)
             {
-                Vector<T> prevState = smoothedStates.GetRow(t - 1);
-                Vector<T> currState = smoothedStates.GetRow(t);
-                for (int i = 0; i < seasonalComponent.Length; i++)
-                {
-                    seasonalVariance = NumOps.Add(seasonalVariance, NumOps.Square(NumOps.Subtract(currState[seasonalIndex + i], prevState[seasonalIndex + i])));
-                }
+                Vector<T> prevSeasonalSlice = smoothedStates.GetRow(t - 1).Slice(seasonalIndex, seasonalComponent.Length);
+                Vector<T> currSeasonalSlice = smoothedStates.GetRow(t).Slice(seasonalIndex, seasonalComponent.Length);
+                var diff = (Vector<T>)Engine.Subtract(currSeasonalSlice, prevSeasonalSlice);
+                T sumSquares = Engine.DotProduct(diff, diff);
+                seasonalVariance = NumOps.Add(seasonalVariance, sumSquares);
             }
             seasonalVariance = NumOps.Divide(seasonalVariance, NumOps.FromDouble((n - 1) * seasonalComponent.Length));
             for (int i = 0; i < seasonalComponent.Length; i++)
