@@ -62,6 +62,25 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
         _accelerator = accelerator ?? throw new ArgumentNullException(nameof(accelerator));
         _bucketSizes = bucketSizes ?? throw new ArgumentNullException(nameof(bucketSizes));
 
+        if (_bucketSizes.Length == 0)
+        {
+            throw new ArgumentException("Bucket sizes array cannot be empty.", nameof(bucketSizes));
+        }
+
+        // Validate all bucket sizes are positive and in ascending order
+        for (int i = 0; i < _bucketSizes.Length; i++)
+        {
+            if (_bucketSizes[i] <= 0)
+            {
+                throw new ArgumentException($"Bucket size at index {i} must be positive, but was {_bucketSizes[i]}.", nameof(bucketSizes));
+            }
+
+            if (i > 0 && _bucketSizes[i] <= _bucketSizes[i - 1])
+            {
+                throw new ArgumentException($"Bucket sizes must be in ascending order. Size at index {i} ({_bucketSizes[i]}) is not greater than size at index {i - 1} ({_bucketSizes[i - 1]}).", nameof(bucketSizes));
+            }
+        }
+
         // Initialize concurrent bags for each bucket
         _pools = new ConcurrentDictionary<int, ConcurrentBag<MemoryBuffer1D<T, Stride1D.Dense>>>();
         foreach (var size in _bucketSizes)
@@ -156,7 +175,17 @@ public class GpuMemoryPool<T> : IDisposable where T : unmanaged
 
         // Requested size exceeds largest bucket - round up to nearest bucket multiple
         int largestBucket = _bucketSizes[_bucketSizes.Length - 1];
-        return ((requestedSize / largestBucket) + 1) * largestBucket;
+
+        // Check for integer overflow: if requestedSize is too large, this could overflow
+        long multiplier = ((long)requestedSize / largestBucket) + 1;
+        long result = multiplier * largestBucket;
+
+        if (result > int.MaxValue)
+        {
+            throw new ArgumentException($"Requested size {requestedSize} exceeds maximum supported buffer size.", nameof(requestedSize));
+        }
+
+        return (int)result;
     }
 
     /// <summary>
