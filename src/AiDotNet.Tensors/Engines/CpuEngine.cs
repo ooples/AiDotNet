@@ -1635,6 +1635,9 @@ public class CpuEngine : IEngine
     public Vector<T> GetColumn<T>(Matrix<T> matrix, int columnIndex)
     {
         if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+        if (columnIndex < 0 || columnIndex >= matrix.Columns)
+            throw new ArgumentOutOfRangeException(nameof(columnIndex),
+                $"Column index {columnIndex} is out of range. Valid range is 0 to {matrix.Columns - 1}.");
 
         // No vectorization benefit - column access is strided
         var result = new T[matrix.Rows];
@@ -1648,6 +1651,9 @@ public class CpuEngine : IEngine
     public Vector<T> GetRow<T>(Matrix<T> matrix, int rowIndex)
     {
         if (matrix == null) throw new ArgumentNullException(nameof(matrix));
+        if (rowIndex < 0 || rowIndex >= matrix.Rows)
+            throw new ArgumentOutOfRangeException(nameof(rowIndex),
+                $"Row index {rowIndex} is out of range. Valid range is 0 to {matrix.Rows - 1}.");
 
         // Row access is contiguous - can use direct array copy
         var result = new T[matrix.Columns];
@@ -1662,10 +1668,17 @@ public class CpuEngine : IEngine
     {
         if (matrix == null) throw new ArgumentNullException(nameof(matrix));
         if (values == null) throw new ArgumentNullException(nameof(values));
+        if (columnIndex < 0 || columnIndex >= matrix.Columns)
+            throw new ArgumentOutOfRangeException(nameof(columnIndex),
+                $"Column index {columnIndex} is out of range. Valid range is 0 to {matrix.Columns - 1}.");
+        if (values.Length != matrix.Rows)
+            throw new ArgumentException(
+                $"Values vector length ({values.Length}) must match matrix rows ({matrix.Rows}).",
+                nameof(values));
 
         // No vectorization benefit - column access is strided
         var valuesArray = values.ToArray();
-        for (int i = 0; i < Math.Min(matrix.Rows, valuesArray.Length); i++)
+        for (int i = 0; i < matrix.Rows; i++)
         {
             matrix[i, columnIndex] = valuesArray[i];
         }
@@ -1675,10 +1688,17 @@ public class CpuEngine : IEngine
     {
         if (matrix == null) throw new ArgumentNullException(nameof(matrix));
         if (values == null) throw new ArgumentNullException(nameof(values));
+        if (rowIndex < 0 || rowIndex >= matrix.Rows)
+            throw new ArgumentOutOfRangeException(nameof(rowIndex),
+                $"Row index {rowIndex} is out of range. Valid range is 0 to {matrix.Rows - 1}.");
+        if (values.Length != matrix.Columns)
+            throw new ArgumentException(
+                $"Values vector length ({values.Length}) must match matrix columns ({matrix.Columns}).",
+                nameof(values));
 
         // Row access is contiguous - direct assignment
         var valuesArray = values.ToArray();
-        for (int j = 0; j < Math.Min(matrix.Columns, valuesArray.Length); j++)
+        for (int j = 0; j < matrix.Columns; j++)
         {
             matrix[rowIndex, j] = valuesArray[j];
         }
