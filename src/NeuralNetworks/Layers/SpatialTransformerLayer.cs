@@ -646,14 +646,29 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var xCoords = new T[_outputWidth];
         var yCoords = new T[_outputHeight];
 
+        // Guard against division by zero when dimension is 1
         for (int j = 0; j < _outputWidth; j++)
         {
-            xCoords[j] = NumOps.FromDouble((double)j / (_outputWidth - 1) * 2 - 1);
+            if (_outputWidth == 1)
+            {
+                xCoords[j] = NumOps.Zero; // Single pixel at center
+            }
+            else
+            {
+                xCoords[j] = NumOps.FromDouble((double)j / (_outputWidth - 1) * 2 - 1);
+            }
         }
 
         for (int i = 0; i < _outputHeight; i++)
         {
-            yCoords[i] = NumOps.FromDouble((double)i / (_outputHeight - 1) * 2 - 1);
+            if (_outputHeight == 1)
+            {
+                yCoords[i] = NumOps.Zero; // Single pixel at center
+            }
+            else
+            {
+                yCoords[i] = NumOps.FromDouble((double)i / (_outputHeight - 1) * 2 - 1);
+            }
         }
 
         // VECTORIZED: Set grid values using pre-computed coordinates
