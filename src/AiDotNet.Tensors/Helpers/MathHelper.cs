@@ -601,23 +601,59 @@ public static class MathHelper
     /// <param name="nu">The order of the Bessel function.</param>
     /// <param name="x">The point at which to evaluate the function.</param>
     /// <returns>The value of the Bessel function calculated using asymptotic expansion.</returns>
+    /// <remarks>
+    /// <para>
+    /// Uses the asymptotic expansion for large x:
+    /// J_ν(x) ≈ sqrt(2/(πx)) * [P(ν,x) * cos(θ) - Q(ν,x) * sin(θ)]
+    /// where θ = x - (2ν + 1)π/4
+    /// </para>
+    /// <para>
+    /// For the first-order expansion:
+    /// - P(ν,x) = 1 (leading term)
+    /// - Q(ν,x) = μ / (8x) where μ = 4ν² - 1
+    /// </para>
+    /// </remarks>
     private static T BesselJAsymptotic<T>(T nu, T x)
     {
         var numOps = GetNumericOperations<T>();
-        T _mu = numOps.Subtract(numOps.Multiply(nu, nu), numOps.FromDouble(0.25));
-        T _theta = numOps.Subtract(x, numOps.Multiply(numOps.FromDouble(0.25 * Math.PI), numOps.Add(numOps.Multiply(numOps.FromDouble(2), nu), numOps.One)));
 
+        // Correct formula: μ = 4ν² - 1 (not ν² - 0.25)
+        T _mu = numOps.Subtract(
+            numOps.Multiply(numOps.FromDouble(4), numOps.Square(nu)),
+            numOps.One
+        );
+
+        // Phase angle: θ = x - (2ν + 1)π/4
+        T _theta = numOps.Subtract(
+            x,
+            numOps.Multiply(
+                numOps.FromDouble(0.25 * Math.PI),
+                numOps.Add(numOps.Multiply(numOps.FromDouble(2), nu), numOps.One)
+            )
+        );
+
+        // First-order asymptotic expansion coefficients
         T _p = numOps.One;
-        T _q = numOps.Divide(_mu, numOps.Multiply(numOps.FromDouble(8), x));
+
+        // Correct formula: Q = -μ / (8x) (note the negative sign)
+        T _q = numOps.Negate(
+            numOps.Divide(_mu, numOps.Multiply(numOps.FromDouble(8), x))
+        );
 
         T _cosTheta = Cos(_theta);
         T _sinTheta = Sin(_theta);
 
+        // Amplitude factor: sqrt(2/(πx))
         T _sqrtX = numOps.Sqrt(x);
         T _sqrtPi = numOps.Sqrt(numOps.FromDouble(Math.PI));
         T _factor = numOps.Divide(numOps.Sqrt(numOps.FromDouble(2)), numOps.Multiply(_sqrtPi, _sqrtX));
 
-        return numOps.Multiply(_factor, numOps.Add(numOps.Multiply(_p, _cosTheta), numOps.Multiply(_q, _sinTheta)));
+        // Combine: sqrt(2/(πx)) * [P*cos(θ) - Q*sin(θ)]
+        // Since Q has the negative sign built in, we use Add instead of Subtract
+        return numOps.Multiply(
+            _factor,
+            numOps.Add(numOps.Multiply(_p, _cosTheta), numOps.Multiply(_q, _sinTheta))
+        );
     }
 
     /// <summary>
@@ -627,6 +663,16 @@ public static class MathHelper
     /// <param name="nu">The order of the Bessel function.</param>
     /// <param name="x">The point at which to evaluate the function.</param>
     /// <returns>The value of the Bessel function calculated using recurrence relations.</returns>
+    /// <remarks>
+    /// <para>
+    /// Uses the backward recurrence relation for Bessel functions:
+    /// J_{k-1}(x) = (2k/x) * J_k(x) - J_{k+1}(x)
+    /// </para>
+    /// <para>
+    /// Starting from high-order approximations (using asymptotic expansion), this method
+    /// recursively computes lower-order Bessel functions using the stable backward recurrence.
+    /// </para>
+    /// </remarks>
     private static T BesselJRecurrence<T>(T nu, T x)
     {
         var numOps = GetNumericOperations<T>();
@@ -636,10 +682,12 @@ public static class MathHelper
         T _jn = BesselJAsymptotic(_nuInt, x);
         T _jnMinus1 = BesselJAsymptotic(numOps.Subtract(_nuInt, numOps.One), x);
 
+        // Backward recurrence: J_{k-1}(x) = (2k/x) * J_k(x) - J_{k+1}(x)
         for (int k = n - 1; k >= 0; k--)
         {
+            // Correct formula: use 2*k (not 2*k+2)
             T _jnMinus2 = numOps.Subtract(
-                numOps.Multiply(numOps.FromDouble(2 * k + 2), numOps.Divide(_jnMinus1, x)),
+                numOps.Multiply(numOps.FromDouble(2 * k), numOps.Divide(_jnMinus1, x)),
                 _jn
             );
             _jn = _jnMinus1;
@@ -651,7 +699,7 @@ public static class MathHelper
             return _jn;
         }
 
-        // Interpolate for non-integer nu
+        // Interpolate for non-integer nu using linear interpolation
         T _jnPlus1 = numOps.Subtract(
             numOps.Multiply(numOps.FromDouble(2 * n), numOps.Divide(_jn, x)),
             _jnMinus1
@@ -894,34 +942,74 @@ public static class MathHelper
     /// <returns>The arc tangent of the specified value, in radians.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The arc tangent function is the inverse of the tangent function. While tangent 
-    /// takes an angle and returns a ratio, arc tangent takes a ratio and returns the corresponding 
+    /// <b>For Beginners:</b> The arc tangent function is the inverse of the tangent function. While tangent
+    /// takes an angle and returns a ratio, arc tangent takes a ratio and returns the corresponding
     /// angle in radians. For example, since tan(0) = 0, arctan(0) = 0.
     /// </para>
     /// <para>
-    /// This implementation uses a Taylor series approximation, which is a mathematical technique 
-    /// that represents a function as an infinite sum of terms. We use the first few terms to get 
-    /// a good approximation of the arc tangent value.
+    /// This implementation uses a Taylor series approximation for |x| &lt;= 1, which is a mathematical technique
+    /// that represents a function as an infinite sum of terms. For |x| &gt; 1, we use range reduction:
+    /// atan(x) = sgn(x) * (π/2 - atan(1/|x|)) to transform the problem into the convergent range.
+    /// This ensures accurate results for all input values.
+    /// </para>
+    /// <para>
+    /// <b>Why range reduction is needed:</b>
+    /// The Taylor series atan(x) = x - x³/3 + x⁵/5 - x⁷/7 + ... only converges for |x| ≤ 1.
+    /// For larger values, we use the identity atan(x) + atan(1/x) = π/2 (for x &gt; 0) to transform
+    /// the problem. This way, we compute atan(1/x) instead, which is guaranteed to be in the convergent
+    /// range when |x| &gt; 1.
     /// </para>
     /// </remarks>
     public static T ArcTan<T>(T x)
     {
         var numOps = GetNumericOperations<T>();
-    
-        // Use Taylor series approximation for ArcTan
-        T _result = x;
-        T _xPower = x;
-        T _term = x;
+
+        // Check if we need range reduction for |x| > 1
+        T absX = numOps.Abs(x);
+        bool needsRangeReduction = numOps.GreaterThan(absX, numOps.One);
+
+        T xReduced;
+        if (needsRangeReduction)
+        {
+            // For |x| > 1, use range reduction: atan(x) = sgn(x) * (π/2 - atan(1/|x|))
+            // This transforms the problem to atan(1/|x|) where 1/|x| < 1 (convergent range)
+            xReduced = numOps.Divide(numOps.One, absX);
+        }
+        else
+        {
+            // For |x| <= 1, use x directly (already in convergent range)
+            xReduced = absX;
+        }
+
+        // Use Taylor series approximation for ArcTan in the convergent range |x| <= 1
+        // Series: atan(x) = x - x³/3 + x⁵/5 - x⁷/7 + ...
+        T _result = xReduced;
+        T _xPower = xReduced;
+        T _xSquared = numOps.Square(xReduced);
         int _sign = 1;
-    
+
         for (int n = 3; n <= 15; n += 2)
         {
             _sign = -_sign;
-            _xPower = numOps.Multiply(_xPower, numOps.Multiply(x, x));
-            _term = numOps.Divide(_xPower, numOps.FromDouble(n));
+            _xPower = numOps.Multiply(_xPower, _xSquared);
+            T _term = numOps.Divide(_xPower, numOps.FromDouble(n));
             _result = numOps.Add(_result, numOps.Multiply(numOps.FromDouble(_sign), _term));
         }
-    
+
+        // If we used range reduction, apply the inverse transformation
+        if (needsRangeReduction)
+        {
+            // atan(|x|) = π/2 - atan(1/|x|)
+            T halfPi = numOps.Divide(Pi<T>(), numOps.FromDouble(2));
+            _result = numOps.Subtract(halfPi, _result);
+        }
+
+        // Apply the original sign: atan(x) = sgn(x) * atan(|x|)
+        if (numOps.LessThan(x, numOps.Zero))
+        {
+            _result = numOps.Negate(_result);
+        }
+
         return _result;
     }
 
@@ -992,7 +1080,7 @@ public static class MathHelper
     /// before considering any features.
     /// </para>
     /// <para>
-    /// This method uses the formula: y-intercept = mean(y) - (coefficient1 ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  mean(x1) + coefficient2 ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  mean(x2) + ...)
+    /// This method uses the formula: y-intercept = mean(y) - (coefficient1 * mean(x1) + coefficient2 * mean(x2) + ...)
     /// which ensures that the regression line passes through the point of means (the average of all data points).
     /// </para>
     /// <para>

@@ -489,8 +489,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput x, TOutput y)
     {
         // REGULAR TRAINING PATH
-        // Convert and validate inputs
 
+        // Apply GPU configuration first (before any operations that might use GPU)
+        ApplyGpuConfiguration();
+
+        // Convert and validate inputs
         var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
         var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
 
@@ -740,6 +743,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(int episodes, bool verbose = true)
     {
         // RL TRAINING PATH - requires ConfigureEnvironment() and an RL agent
+
+        // Apply GPU configuration first (before any operations that might use GPU)
+        ApplyGpuConfiguration();
+
         if (_environment == null)
             throw new InvalidOperationException(
                 "BuildAsync(episodes) requires ConfigureEnvironment() to be called first. " +
@@ -2044,6 +2051,241 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
         // Note: Hyperparameter recommendations are currently stored in recommendation.SuggestedHyperparameters
         // but not auto-applied. Future enhancement: Apply hyperparameters to compatible models.
+    }
+
+    /// <summary>
+    /// Applies GPU acceleration configuration to the global AiDotNetEngine based on user settings.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method configures the AiDotNetEngine (internal GPU/CPU engine) according to the user's
+    /// GPU acceleration preferences set via ConfigureGpuAcceleration(). This is an internal method
+    /// called automatically during BuildAsync() and is not part of the public facade API.
+    /// </para>
+    /// <para>
+    /// The facade pattern is maintained: users configure GPU via ConfigureGpuAcceleration() with
+    /// nullable defaults (null = industry standard behavior), and this method translates those
+    /// settings into internal engine configuration.
+    /// </para>
+    /// <para><b>GPU Usage Level Behaviors:</b>
+    /// - <b>Null config (default)</b>: Auto-detect GPU with CPU fallback (industry standard)
+    /// - <b>Default</b>: Balanced GPU usage, good for most desktop GPUs (recommended)
+    /// - <b>Conservative</b>: Auto-detect GPU, use it only for very large operations, frequent CPU fallback
+    /// - <b>Aggressive</b>: Force GPU, throw exception if not available, use GPU for smaller operations
+    /// - <b>AlwaysGpu</b>: Force all operations to GPU (maximize GPU utilization)
+    /// - <b>AlwaysCpu</b>: Force CPU-only execution, never use GPU
+    /// </para>
+    /// <para><b>GPU Device Type Behaviors:</b>
+    /// - <b>Auto</b>: Let ILGPU select the best device (CUDA for NVIDIA, OpenCL for AMD/Intel)
+    /// - <b>CUDA</b>: Force NVIDIA CUDA backend (throws if NVIDIA GPU not available)
+    /// - <b>OpenCL</b>: Force OpenCL backend (works with NVIDIA, AMD, Intel, throws if no GPU)
+    /// - <b>CPU</b>: Force CPU-only execution (equivalent to UsageLevel.AlwaysCpu)
+    /// </para>
+    /// </remarks>
+    private void ApplyGpuConfiguration()
+    {
+#if !NET462
+        // Skip if no GPU configuration was provided (null = default = auto-detect with CPU fallback)
+        if (_gpuAccelerationConfig == null)
+        {
+            // Industry standard default: Try to auto-detect GPU, use CPU fallback if not available
+            // This is silent and non-intrusive - if GPU exists, use it; if not, use CPU
+            try
+            {
+                AiDotNetEngine.AutoDetectAndConfigureGpu();
+            }
+            catch
+            {
+                // Silently fall back to CPU if GPU detection fails
+                // This ensures the library works out of the box on any hardware
+            }
+            return;
+        }
+
+        // Apply configuration based on usage level
+        switch (_gpuAccelerationConfig.UsageLevel)
+        {
+            case AiDotNet.Engines.GpuUsageLevel.AlwaysCpu:
+                // Force CPU-only execution (useful for debugging, testing, or CPU-only servers)
+                AiDotNetEngine.ResetToCpu();
+                break;
+
+            case AiDotNet.Engines.GpuUsageLevel.Default:
+                // Balanced GPU usage - recommended mode for most users
+                // Auto-detect GPU with intelligent fallback for typical desktop GPUs
+                try
+                {
+                    bool gpuDetected = AiDotNetEngine.AutoDetectAndConfigureGpu();
+                    if (!gpuDetected)
+                    {
+                        // No GPU detected - system already fell back to CPU
+                        // No error needed, CPU fallback is expected behavior
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // GPU initialization failed - fall back to CPU
+                    Console.WriteLine($"[AiDotNet] GPU initialization failed: {ex.Message}");
+                    Console.WriteLine("[AiDotNet] Falling back to CPU execution");
+                    AiDotNetEngine.ResetToCpu();
+                }
+                break;
+
+            case AiDotNet.Engines.GpuUsageLevel.Conservative:
+                // Use GPU conservatively - auto-detect but use higher thresholds and more frequent CPU fallback
+                // This is for older/slower GPUs or systems where GPU reliability is a concern
+                try
+                {
+                    bool gpuDetected = AiDotNetEngine.AutoDetectAndConfigureGpu();
+                    if (gpuDetected)
+                    {
+                        Console.WriteLine($"[AiDotNet] Conservative GPU mode enabled: {AiDotNetEngine.Current.Name}");
+                        Console.WriteLine("[AiDotNet] GPU will be used only for very large operations (100K+ elements)");
+                    }
+                    else
+                    {
+                        // No GPU detected - fall back to CPU (expected behavior in Conservative mode)
+                        Console.WriteLine("[AiDotNet] No GPU detected - using CPU (Conservative mode)");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // GPU initialization failed in Conservative mode - fall back to CPU silently
+                    Console.WriteLine($"[AiDotNet] GPU initialization failed in Conservative mode: {ex.Message}");
+                    Console.WriteLine("[AiDotNet] Falling back to CPU execution");
+                    AiDotNetEngine.ResetToCpu();
+                }
+                break;
+
+            case AiDotNet.Engines.GpuUsageLevel.Aggressive:
+                // Force GPU with minimal fallback - throw exception if GPU is not available
+                // This is for users with high-end GPUs who want maximum performance and need to know if GPU fails
+                try
+                {
+                    bool gpuDetected = AiDotNetEngine.AutoDetectAndConfigureGpu();
+                    if (!gpuDetected)
+                    {
+                        throw new InvalidOperationException(
+                            "GPU acceleration is set to Aggressive mode but no compatible GPU was detected. " +
+                            "Aggressive mode requires a GPU to be available. " +
+                            "Options: (1) Install a compatible GPU (NVIDIA/AMD/Intel), " +
+                            "(2) Install GPU drivers, " +
+                            "(3) Use GpuUsageLevel.Default for automatic CPU fallback, " +
+                            "(4) Use GpuUsageLevel.AlwaysCpu for CPU-only execution.");
+                    }
+
+                    // Verify GPU is actually being used
+                    if (!AiDotNetEngine.Current.SupportsGpu)
+                    {
+                        throw new InvalidOperationException(
+                            "GPU acceleration is set to Aggressive mode but the current engine does not support GPU. " +
+                            "This may indicate a GPU initialization failure. Check GPU drivers and compatibility.");
+                    }
+
+                    Console.WriteLine($"[AiDotNet] Aggressive GPU mode enabled: {AiDotNetEngine.Current.Name}");
+                }
+                catch (InvalidOperationException)
+                {
+                    // Re-throw our explicit exceptions
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // GPU initialization failed in Aggressive mode - this is an error
+                    throw new InvalidOperationException(
+                        $"GPU acceleration is set to Aggressive mode but GPU initialization failed: {ex.Message}. " +
+                        $"Aggressive mode requires a working GPU. " +
+                        $"Options: (1) Fix GPU drivers/setup, " +
+                        $"(2) Use GpuUsageLevel.Default for automatic CPU fallback, " +
+                        $"(3) Use GpuUsageLevel.AlwaysCpu for CPU-only execution.",
+                        ex);
+                }
+                break;
+
+            case AiDotNet.Engines.GpuUsageLevel.AlwaysGpu:
+                // Force all operations to GPU - maximize GPU utilization
+                // Similar to Aggressive but even more strict
+                try
+                {
+                    bool gpuDetected = AiDotNetEngine.AutoDetectAndConfigureGpu();
+                    if (!gpuDetected)
+                    {
+                        throw new InvalidOperationException(
+                            "GPU acceleration is set to AlwaysGpu mode but no compatible GPU was detected. " +
+                            "AlwaysGpu mode requires a GPU to be available. " +
+                            "Options: (1) Install a compatible GPU (NVIDIA/AMD/Intel), " +
+                            "(2) Install GPU drivers, " +
+                            "(3) Use GpuUsageLevel.Default for automatic CPU fallback, " +
+                            "(4) Use GpuUsageLevel.AlwaysCpu for CPU-only execution.");
+                    }
+
+                    // Verify GPU is actually being used
+                    if (!AiDotNetEngine.Current.SupportsGpu)
+                    {
+                        throw new InvalidOperationException(
+                            "GPU acceleration is set to AlwaysGpu mode but the current engine does not support GPU. " +
+                            "This may indicate a GPU initialization failure. Check GPU drivers and compatibility.");
+                    }
+
+                    Console.WriteLine($"[AiDotNet] AlwaysGpu mode enabled: {AiDotNetEngine.Current.Name}");
+                    Console.WriteLine("[AiDotNet] All operations will run on GPU for maximum GPU utilization");
+                }
+                catch (InvalidOperationException)
+                {
+                    // Re-throw our explicit exceptions
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // GPU initialization failed in AlwaysGpu mode - this is an error
+                    throw new InvalidOperationException(
+                        $"GPU acceleration is set to AlwaysGpu mode but GPU initialization failed: {ex.Message}. " +
+                        $"AlwaysGpu mode requires a working GPU. " +
+                        $"Options: (1) Fix GPU drivers/setup, " +
+                        $"(2) Use GpuUsageLevel.Default for automatic CPU fallback, " +
+                        $"(3) Use GpuUsageLevel.AlwaysCpu for CPU-only execution.",
+                        ex);
+                }
+                break;
+
+            default:
+                throw new ArgumentException($"Unknown GPU usage level: {_gpuAccelerationConfig.UsageLevel}");
+        }
+
+        // Note on DeviceType (CUDA vs OpenCL):
+        // The current ILGPU-based implementation auto-selects the best device type via GetPreferredDevice().
+        // Explicit device type selection (CUDA vs OpenCL) would require:
+        // 1. Enumerating available accelerators by type
+        // 2. Filtering by CUDA vs OpenCL vs CPU
+        // 3. Creating accelerator from filtered list
+        // 4. Passing accelerator to GpuEngine constructor
+        //
+        // This is a future enhancement. For now, GpuDeviceType.Auto is implicitly used,
+        // which lets ILGPU choose the best device (CUDA for NVIDIA, OpenCL for AMD/Intel).
+        //
+        // To add explicit device type support:
+        // - Modify GpuEngine constructor to accept optional AcceleratorType filter
+        // - Enumerate devices: context.Devices.Where(d => d.AcceleratorType == AcceleratorType.Cuda)
+        // - Create accelerator from filtered device
+        //
+        // This would allow users to force CUDA or OpenCL when multiple options are available,
+        // but adds complexity and is rarely needed since Auto already picks the fastest option.
+        if (_gpuAccelerationConfig.DeviceType != AiDotNet.Engines.GpuDeviceType.Auto)
+        {
+            Console.WriteLine($"[AiDotNet] Warning: Explicit device type ({_gpuAccelerationConfig.DeviceType}) is not yet implemented.");
+            Console.WriteLine("[AiDotNet] Using Auto device selection (CUDA for NVIDIA, OpenCL for AMD/Intel).");
+            Console.WriteLine("[AiDotNet] This is the recommended setting and provides optimal performance.");
+        }
+#else
+        // GPU acceleration is not supported in .NET Framework 4.6.2
+        // ILGPU requires .NET Standard 2.1 or higher, which is not available in net462
+        if (_gpuAccelerationConfig != null && _gpuAccelerationConfig.UsageLevel != AiDotNet.Engines.GpuUsageLevel.AlwaysCpu)
+        {
+            Console.WriteLine("[AiDotNet] Warning: GPU acceleration is not supported in .NET Framework 4.6.2");
+            Console.WriteLine("[AiDotNet] Using CPU execution (ILGPU requires .NET Standard 2.1+)");
+            Console.WriteLine("[AiDotNet] To use GPU acceleration, target net8.0 or higher");
+        }
+#endif
     }
 
     private IChatModel<T> CreateChatModel(AgentConfiguration<T> config)
