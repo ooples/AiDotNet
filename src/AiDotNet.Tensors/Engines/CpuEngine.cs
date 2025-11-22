@@ -2141,18 +2141,27 @@ public class CpuEngine : IEngine
 
     public Vector<T> Tanh<T>(Vector<T> vector)
     {
+        if (vector == null)
+            throw new ArgumentNullException(nameof(vector));
+
         // Use SIMD-optimized Tanh (3-6ÃƒÆ’Ã¢â‚¬â€ speedup for float)
         return TensorPrimitivesHelper<T>.Tanh(vector);
     }
 
     public Vector<T> Sigmoid<T>(Vector<T> vector)
     {
+        if (vector == null)
+            throw new ArgumentNullException(nameof(vector));
+
         // Use SIMD-optimized Sigmoid (3-6ÃƒÆ’Ã¢â‚¬â€ speedup for float)
         return TensorPrimitivesHelper<T>.Sigmoid(vector);
     }
 
     public Vector<T> ReLU<T>(Vector<T> vector)
     {
+        if (vector == null)
+            throw new ArgumentNullException(nameof(vector));
+
         // ReLU(x) = max(0, x)
         // TensorPrimitives doesn't have ReLU directly, but has Max
         // For now, use element-wise max with zero
@@ -2174,6 +2183,9 @@ public class CpuEngine : IEngine
 
     public Tensor<T> Tanh<T>(Tensor<T> tensor)
     {
+        if (tensor == null)
+            throw new ArgumentNullException(nameof(tensor));
+
         // Convert tensor to vector, apply SIMD-optimized Tanh, convert back
         var flatVector = tensor.ToVector();
         var resultVector = TensorPrimitivesHelper<T>.Tanh(flatVector);
@@ -2182,6 +2194,9 @@ public class CpuEngine : IEngine
 
     public Tensor<T> Sigmoid<T>(Tensor<T> tensor)
     {
+        if (tensor == null)
+            throw new ArgumentNullException(nameof(tensor));
+
         // Convert tensor to vector, apply SIMD-optimized Sigmoid, convert back
         var flatVector = tensor.ToVector();
         var resultVector = TensorPrimitivesHelper<T>.Sigmoid(flatVector);
@@ -2190,6 +2205,9 @@ public class CpuEngine : IEngine
 
     public Tensor<T> ReLU<T>(Tensor<T> tensor)
     {
+        if (tensor == null)
+            throw new ArgumentNullException(nameof(tensor));
+
         // ReLU(x) = max(0, x)
         var numOps = MathHelper.GetNumericOperations<T>();
         var inputArray = tensor.ToArray();
@@ -2208,26 +2226,41 @@ public class CpuEngine : IEngine
 
     public Vector<T> GELU<T>(Vector<T> vector)
     {
+        if (vector == null)
+            throw new ArgumentNullException(nameof(vector));
+
         return TensorPrimitivesHelper<T>.GELU(vector);
     }
 
     public Vector<T> Mish<T>(Vector<T> vector)
     {
+        if (vector == null)
+            throw new ArgumentNullException(nameof(vector));
+
         return TensorPrimitivesHelper<T>.Mish(vector);
     }
 
     public Vector<T> Swish<T>(Vector<T> vector)
     {
+        if (vector == null)
+            throw new ArgumentNullException(nameof(vector));
+
         return TensorPrimitivesHelper<T>.Swish(vector);
     }
 
     public Vector<T> ELU<T>(Vector<T> vector, double alpha = 1.0)
     {
+        if (vector == null)
+            throw new ArgumentNullException(nameof(vector));
+
         return TensorPrimitivesHelper<T>.ELU(vector, alpha);
     }
 
     public Tensor<T> GELU<T>(Tensor<T> tensor)
     {
+        if (tensor == null)
+            throw new ArgumentNullException(nameof(tensor));
+
         var flatVector = tensor.ToVector();
         var resultVector = TensorPrimitivesHelper<T>.GELU(flatVector);
         return new Tensor<T>(tensor.Shape, resultVector);
@@ -2235,6 +2268,9 @@ public class CpuEngine : IEngine
 
     public Tensor<T> Mish<T>(Tensor<T> tensor)
     {
+        if (tensor == null)
+            throw new ArgumentNullException(nameof(tensor));
+
         var flatVector = tensor.ToVector();
         var resultVector = TensorPrimitivesHelper<T>.Mish(flatVector);
         return new Tensor<T>(tensor.Shape, resultVector);
@@ -2242,6 +2278,9 @@ public class CpuEngine : IEngine
 
     public Tensor<T> Swish<T>(Tensor<T> tensor)
     {
+        if (tensor == null)
+            throw new ArgumentNullException(nameof(tensor));
+
         var flatVector = tensor.ToVector();
         var resultVector = TensorPrimitivesHelper<T>.Swish(flatVector);
         return new Tensor<T>(tensor.Shape, resultVector);
@@ -2249,6 +2288,9 @@ public class CpuEngine : IEngine
 
     public Tensor<T> ELU<T>(Tensor<T> tensor, double alpha = 1.0)
     {
+        if (tensor == null)
+            throw new ArgumentNullException(nameof(tensor));
+
         var flatVector = tensor.ToVector();
         var resultVector = TensorPrimitivesHelper<T>.ELU(flatVector, alpha);
         return new Tensor<T>(tensor.Shape, resultVector);
