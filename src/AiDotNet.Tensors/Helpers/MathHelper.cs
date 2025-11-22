@@ -191,8 +191,9 @@ public static class MathHelper
 
         x = numOps.Subtract(x, numOps.One);
         T t = numOps.Add(x, numOps.FromDouble(7.5));
-        T y = numOps.Exp(numOps.Multiply(numOps.Multiply(numOps.Add(x, numOps.FromDouble(0.5)), 
-            numOps.Log(t)), numOps.FromDouble(-1)));
+        T y = numOps.Exp(numOps.Subtract(
+            numOps.Multiply(numOps.Add(x, numOps.FromDouble(0.5)), numOps.Log(t)),
+            t));
 
         T sum = numOps.Zero;
         for (int i = 7; i >= 0; i--)
