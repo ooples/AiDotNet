@@ -476,6 +476,11 @@ public static class MathHelper
     public static T GetNormalRandom<T>(T mean, T stdDev, Random? random = null)
     {
         var numOps = GetNumericOperations<T>();
+
+        // Validate standard deviation is non-negative
+        if (numOps.LessThan(stdDev, numOps.Zero))
+            throw new ArgumentException("Standard deviation must be non-negative.", nameof(stdDev));
+
         var rng = random ?? new Random();
 
         // Box-Muller transform
@@ -665,8 +670,11 @@ public static class MathHelper
     /// </remarks>
     public static T Factorial<T>(int n)
     {
+        if (n < 0)
+            throw new ArgumentException("Factorial is not defined for negative numbers.", nameof(n));
+
         var ops = GetNumericOperations<T>();
-    
+
         if (n == 0 || n == 1)
             return ops.One;
 
