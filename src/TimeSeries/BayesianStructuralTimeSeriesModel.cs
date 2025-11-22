@@ -284,13 +284,12 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
             index += seasonalComponent.Length;
         }
 
-        // Regression component
+        // Regression component - store coefficients (not products)
         if (_bayesianOptions.IncludeRegression && _regression != null)
         {
-            var regressionProduct = (Vector<T>)Engine.Multiply(x, _regression);
-            for (int i = 0; i < regressionProduct.Length; i++)
+            for (int i = 0; i < _regression.Length; i++)
             {
-                predictedState[index + i] = regressionProduct[i];
+                predictedState[index + i] = _regression[i];
             }
         }
 
