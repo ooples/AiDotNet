@@ -336,6 +336,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(AiDotNet.Configuration.JitCompilationConfig? config = null)
     {
         _jitCompilationConfig = config ?? new AiDotNet.Configuration.JitCompilationConfig { Enabled = true };
+        return this;
+    }
+
+    /// <summary>
     /// Enables GPU acceleration for training and inference with optional configuration.
     /// </summary>
     /// <param name="config">GPU acceleration configuration (optional, uses defaults if null).</param>

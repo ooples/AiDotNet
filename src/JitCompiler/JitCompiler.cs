@@ -337,7 +337,7 @@ public class JitCompiler
         var irGraph = _irBuilder.BuildBackward(outputNode, inputs);
 
         // Check cache
-        var graphHash = irGraph.ComputeStructureHash() ^ 0xBAC4WARD;  // Differentiate backward from forward
+        var graphHash = irGraph.ComputeStructureHash() ^ 0xBAC4;  // Differentiate backward from forward
         if (_options.EnableCaching && _compiledGraphCache.TryGetValue(graphHash, out var cached))
         {
             return (Func<Tensor<T>[], Tensor<T>[]>)cached;
@@ -392,7 +392,7 @@ public class JitCompiler
         stats.OriginalOperationCount = irGraph.Operations.Count;
 
         // Check cache
-        var graphHash = irGraph.ComputeStructureHash() ^ 0xBAC4WARD;
+        var graphHash = irGraph.ComputeStructureHash() ^ 0xBAC4;
         stats.CacheHit = _options.EnableCaching && _compiledGraphCache.ContainsKey(graphHash);
 
         if (stats.CacheHit)
