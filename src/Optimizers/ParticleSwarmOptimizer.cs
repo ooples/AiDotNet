@@ -144,13 +144,13 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
                 var personalBestVector = personalBests[i].Solution.GetParameters();
                 var globalBestVector = globalBest.Solution.GetParameters();
                 var velocity = velocities[i];
-                
-                // Update velocity
-                UpdateVelocity(velocity, position, personalBestVector, globalBestVector);
+
+                // Update velocity and store the new velocity vector
+                velocities[i] = UpdateVelocity(velocity, position, personalBestVector, globalBestVector);
 
                 // === Vectorized Position Update using IEngine (Phase B: US-GPU-015) ===
                 // position = position + velocity
-                var newPosition = (Vector<T>)AiDotNetEngine.Current.Add(position, velocity);
+                var newPosition = (Vector<T>)Engine.Add(position, velocities[i]);
 
                 // Update the particle model with new position
                 swarm[i] = swarm[i].WithParameters(newPosition);
@@ -200,7 +200,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     /// <param name="position">The current position vector of the particle.</param>
     /// <param name="personalBest">The personal best position vector of the particle.</param>
     /// <param name="globalBest">The global best position vector of the swarm.</param>
-    private void UpdateVelocity(Vector<T> velocity, Vector<T> position, Vector<T> personalBest, Vector<T> globalBest)
+    private Vector<T> UpdateVelocity(Vector<T> velocity, Vector<T> position, Vector<T> personalBest, Vector<T> globalBest)
     {
         // === Partially Vectorized Velocity Update using IEngine (Phase B: US-GPU-015) ===
         // velocity = inertia * velocity + cognitive * (personalBest - position) + social * (globalBest - position)
@@ -210,8 +210,8 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         var socialWeight = NumOps.FromDouble(_currentSocialWeight);
 
         // Vectorized position differences
-        var personalDiff = (Vector<T>)AiDotNetEngine.Current.Subtract(personalBest, position);
-        var globalDiff = (Vector<T>)AiDotNetEngine.Current.Subtract(globalBest, position);
+        var personalDiff = (Vector<T>)Engine.Subtract(personalBest, position);
+        var globalDiff = (Vector<T>)Engine.Subtract(globalBest, position);
 
         // Vectorized velocity update with random factors
         // Generate random vectors for cognitive and social components
@@ -224,11 +224,11 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         }
 
         // Vectorized computation: velocity = inertia*velocity + cognitive*personalDiff + social*globalDiff
-        var inertiaVel = (Vector<T>)AiDotNetEngine.Current.Multiply(velocity, AiDotNetEngine.Current.Fill<T>(velocity.Length, inertia));
-        var cognitiveTerm = (Vector<T>)AiDotNetEngine.Current.Multiply(personalDiff, cognitiveRandom);
-        var socialTerm = (Vector<T>)AiDotNetEngine.Current.Multiply(globalDiff, socialRandom);
-        var cogSocSum = (Vector<T>)AiDotNetEngine.Current.Add(cognitiveTerm, socialTerm);
-        velocity = (Vector<T>)AiDotNetEngine.Current.Add(inertiaVel, cogSocSum);
+        var inertiaVel = (Vector<T>)Engine.Multiply(velocity, Engine.Fill<T>(velocity.Length, inertia));
+        var cognitiveTerm = (Vector<T>)Engine.Multiply(personalDiff, cognitiveRandom);
+        var socialTerm = (Vector<T>)Engine.Multiply(globalDiff, socialRandom);
+        var cogSocSum = (Vector<T>)Engine.Add(cognitiveTerm, socialTerm);
+        return (Vector<T>)Engine.Add(inertiaVel, cogSocSum);
     }
 
     /// <summary>
