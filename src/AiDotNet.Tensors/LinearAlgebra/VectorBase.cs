@@ -265,10 +265,9 @@ public abstract class VectorBase<T>
     /// </remarks>
     public virtual int IndexOf(T item)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < Length; i++)
         {
-            if (numOps.Equals(this[i], item))
+            if (_numOps.Equals(this[i], item))
             {
                 return i;
             }

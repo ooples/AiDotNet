@@ -75,9 +75,26 @@ public abstract class MatrixBase<T>
     /// </remarks>
     protected MatrixBase(IEnumerable<IEnumerable<T>> values)
     {
-        var valuesList = values.Select(v => v.ToArray()).ToList();
+        if (values is null)
+        {
+            throw new ArgumentNullException(nameof(values), "Values collection cannot be null.");
+        }
+
+        var valuesList = values.Select(v => v?.ToArray() ?? throw new ArgumentException("Row cannot be null.", nameof(values))).ToList();
+
+        if (valuesList.Count == 0)
+        {
+            throw new ArgumentException("Values collection cannot be empty.", nameof(values));
+        }
+
         this._rows = valuesList.Count;
-        this._cols = valuesList.First().Length;
+        this._cols = valuesList[0].Length;
+
+        if (_cols == 0)
+        {
+            throw new ArgumentException("All rows must have at least one column.", nameof(values));
+        }
+
         this._data = new T[_rows * _cols];
 
         for (int i = 0; i < _rows; i++)
@@ -105,8 +122,19 @@ public abstract class MatrixBase<T>
     /// </remarks>
     protected MatrixBase(T[,] data)
     {
+        if (data is null)
+        {
+            throw new ArgumentNullException(nameof(data), "Data array cannot be null.");
+        }
+
         this._rows = data.GetLength(0);
         this._cols = data.GetLength(1);
+
+        if (_rows == 0 || _cols == 0)
+        {
+            throw new ArgumentException("Data array cannot have zero rows or columns.", nameof(data));
+        }
+
         this._data = new T[_rows * _cols];
 
         for (int i = 0; i < _rows; i++)
