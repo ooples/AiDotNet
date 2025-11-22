@@ -1,7 +1,6 @@
 using System.Linq.Expressions;
 using System.Numerics;
 using System.Reflection;
-using System.Runtime.Intrinsics;
 using AiDotNet.JitCompiler.IR;
 
 namespace AiDotNet.JitCompiler.CodeGen;
