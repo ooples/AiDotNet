@@ -12,11 +12,11 @@ namespace System.Runtime.Intrinsics
 {
     /// <summary>
     /// Polyfill for Vector128&lt;T&gt; on .NET Framework.
-    /// Uses scalar fallback since true SIMD intrinsics aren't available in net462/net471.
+    /// Properly stores all vector lanes for correct scalar fallback behavior.
     /// </summary>
-    public readonly struct Vector128<T> where T : struct
+    public readonly struct Vector128<T>
     {
-        private readonly T _e0, _e1;
+        private readonly T[] _elements;
 
         public static int Count
         {
@@ -37,10 +37,14 @@ namespace System.Runtime.Intrinsics
             }
         }
 
-        internal Vector128(T e0, T e1)
+        internal Vector128(params T[] elements)
         {
-            _e0 = e0;
-            _e1 = e1;
+            _elements = new T[Count];
+            if (elements != null && elements.Length > 0)
+            {
+                int copyCount = Math.Min(elements.Length, Count);
+                Array.Copy(elements, _elements, copyCount);
+            }
         }
 
         public void CopyTo(Span<T> destination)
@@ -48,20 +52,24 @@ namespace System.Runtime.Intrinsics
             if (destination.Length < Count)
                 throw new ArgumentException("Destination too small");
 
-            // Fill with repeated values (scalar fallback behavior)
-            for (int i = 0; i < Count; i++)
+            if (_elements is null)
             {
-                destination[i] = i == 0 ? _e0 : _e1;
+                // Handle default(Vector128<T>) - zero-fill
+                destination.Slice(0, Count).Clear();
+                return;
             }
+
+            _elements.AsSpan(0, Count).CopyTo(destination);
         }
     }
 
     /// <summary>
     /// Polyfill for Vector256&lt;T&gt; on .NET Framework.
+    /// Properly stores all vector lanes for correct scalar fallback behavior.
     /// </summary>
-    public readonly struct Vector256<T> where T : struct
+    public readonly struct Vector256<T>
     {
-        private readonly T _e0, _e1, _e2, _e3;
+        private readonly T[] _elements;
 
         public static int Count
         {
@@ -82,12 +90,14 @@ namespace System.Runtime.Intrinsics
             }
         }
 
-        internal Vector256(T e0, T e1, T e2, T e3)
+        internal Vector256(params T[] elements)
         {
-            _e0 = e0;
-            _e1 = e1;
-            _e2 = e2;
-            _e3 = e3;
+            _elements = new T[Count];
+            if (elements != null && elements.Length > 0)
+            {
+                int copyCount = Math.Min(elements.Length, Count);
+                Array.Copy(elements, _elements, copyCount);
+            }
         }
 
         public void CopyTo(Span<T> destination)
@@ -95,21 +105,24 @@ namespace System.Runtime.Intrinsics
             if (destination.Length < Count)
                 throw new ArgumentException("Destination too small");
 
-            for (int i = 0; i < Count; i++)
+            if (_elements is null)
             {
-                destination[i] = i < Count / 4 ? _e0 :
-                                i < Count / 2 ? _e1 :
-                                i < 3 * Count / 4 ? _e2 : _e3;
+                // Handle default(Vector256<T>) - zero-fill
+                destination.Slice(0, Count).Clear();
+                return;
             }
+
+            _elements.AsSpan(0, Count).CopyTo(destination);
         }
     }
 
     /// <summary>
     /// Polyfill for Vector512&lt;T&gt; on .NET Framework.
+    /// Properly stores all vector lanes for correct scalar fallback behavior.
     /// </summary>
-    public readonly struct Vector512<T> where T : struct
+    public readonly struct Vector512<T>
     {
-        private readonly T _e0, _e1, _e2, _e3, _e4, _e5, _e6, _e7;
+        private readonly T[] _elements;
 
         public static int Count
         {
@@ -130,16 +143,14 @@ namespace System.Runtime.Intrinsics
             }
         }
 
-        internal Vector512(T e0, T e1, T e2, T e3, T e4, T e5, T e6, T e7)
+        internal Vector512(params T[] elements)
         {
-            _e0 = e0;
-            _e1 = e1;
-            _e2 = e2;
-            _e3 = e3;
-            _e4 = e4;
-            _e5 = e5;
-            _e6 = e6;
-            _e7 = e7;
+            _elements = new T[Count];
+            if (elements != null && elements.Length > 0)
+            {
+                int copyCount = Math.Min(elements.Length, Count);
+                Array.Copy(elements, _elements, copyCount);
+            }
         }
 
         public void CopyTo(Span<T> destination)
@@ -147,16 +158,14 @@ namespace System.Runtime.Intrinsics
             if (destination.Length < Count)
                 throw new ArgumentException("Destination too small");
 
-            for (int i = 0; i < Count; i++)
+            if (_elements is null)
             {
-                destination[i] = i < Count / 8 ? _e0 :
-                                i < 2 * Count / 8 ? _e1 :
-                                i < 3 * Count / 8 ? _e2 :
-                                i < 4 * Count / 8 ? _e3 :
-                                i < 5 * Count / 8 ? _e4 :
-                                i < 6 * Count / 8 ? _e5 :
-                                i < 7 * Count / 8 ? _e6 : _e7;
+                // Handle default(Vector512<T>) - zero-fill
+                destination.Slice(0, Count).Clear();
+                return;
             }
+
+            _elements.AsSpan(0, Count).CopyTo(destination);
         }
     }
 
@@ -171,29 +180,36 @@ namespace System.Runtime.Intrinsics
         /// </summary>
         public static bool IsHardwareAccelerated => Vector.IsHardwareAccelerated;
 
-        public static Vector128<T> Create<T>(T value) where T : struct
+        public static Vector128<T> Create<T>(T value)
         {
-            return new Vector128<T>(value, value);
+            var elements = new T[Vector128<T>.Count];
+            for (int i = 0; i < elements.Length; i++)
+            {
+                elements[i] = value;
+            }
+            return new Vector128<T>(elements);
         }
 
-        public static Vector128<T> Create<T>(T e0, T e1) where T : struct
+        public static Vector128<T> Create<T>(T e0, T e1)
         {
-            return new Vector128<T>(e0, e1);
+            return new Vector128<T>(new[] { e0, e1 });
         }
 
         public static Vector128<double> Create(double e0, double e1)
         {
-            return new Vector128<double>(e0, e1);
+            return new Vector128<double>(new[] { e0, e1 });
         }
 
         public static Vector128<float> Create(float e0, float e1, float e2, float e3)
         {
-            // In scalar fallback, we just store first two values
-            return new Vector128<float>(e0, e1);
+            return new Vector128<float>(new[] { e0, e1, e2, e3 });
         }
 
         public static T GetElement<T>(Vector128<T> vector, int index) where T : unmanaged
         {
+            if (index < 0 || index >= Vector128<T>.Count)
+                throw new ArgumentOutOfRangeException(nameof(index));
+
             Span<T> temp = stackalloc T[Vector128<T>.Count];
             vector.CopyTo(temp);
             return temp[index];
@@ -207,24 +223,31 @@ namespace System.Runtime.Intrinsics
     {
         public static bool IsHardwareAccelerated => Vector.IsHardwareAccelerated;
 
-        public static Vector256<T> Create<T>(T value) where T : struct
+        public static Vector256<T> Create<T>(T value)
         {
-            return new Vector256<T>(value, value, value, value);
+            var elements = new T[Vector256<T>.Count];
+            for (int i = 0; i < elements.Length; i++)
+            {
+                elements[i] = value;
+            }
+            return new Vector256<T>(elements);
         }
 
         public static Vector256<double> Create(double e0, double e1, double e2, double e3)
         {
-            return new Vector256<double>(e0, e1, e2, e3);
+            return new Vector256<double>(new[] { e0, e1, e2, e3 });
         }
 
         public static Vector256<float> Create(float e0, float e1, float e2, float e3, float e4, float e5, float e6, float e7)
         {
-            // Scalar fallback stores first 4 values
-            return new Vector256<float>(e0, e1, e2, e3);
+            return new Vector256<float>(new[] { e0, e1, e2, e3, e4, e5, e6, e7 });
         }
 
         public static T GetElement<T>(Vector256<T> vector, int index) where T : unmanaged
         {
+            if (index < 0 || index >= Vector256<T>.Count)
+                throw new ArgumentOutOfRangeException(nameof(index));
+
             Span<T> temp = stackalloc T[Vector256<T>.Count];
             vector.CopyTo(temp);
             return temp[index];
@@ -238,25 +261,32 @@ namespace System.Runtime.Intrinsics
     {
         public static bool IsHardwareAccelerated => Vector.IsHardwareAccelerated;
 
-        public static Vector512<T> Create<T>(T value) where T : struct
+        public static Vector512<T> Create<T>(T value)
         {
-            return new Vector512<T>(value, value, value, value, value, value, value, value);
+            var elements = new T[Vector512<T>.Count];
+            for (int i = 0; i < elements.Length; i++)
+            {
+                elements[i] = value;
+            }
+            return new Vector512<T>(elements);
         }
 
         public static Vector512<double> Create(double e0, double e1, double e2, double e3, double e4, double e5, double e6, double e7)
         {
-            return new Vector512<double>(e0, e1, e2, e3, e4, e5, e6, e7);
+            return new Vector512<double>(new[] { e0, e1, e2, e3, e4, e5, e6, e7 });
         }
 
         public static Vector512<float> Create(float e0, float e1, float e2, float e3, float e4, float e5, float e6, float e7,
                                               float e8, float e9, float e10, float e11, float e12, float e13, float e14, float e15)
         {
-            // Scalar fallback stores first 8 values
-            return new Vector512<float>(e0, e1, e2, e3, e4, e5, e6, e7);
+            return new Vector512<float>(new[] { e0, e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15 });
         }
 
         public static T GetElement<T>(Vector512<T> vector, int index) where T : unmanaged
         {
+            if (index < 0 || index >= Vector512<T>.Count)
+                throw new ArgumentOutOfRangeException(nameof(index));
+
             Span<T> temp = stackalloc T[Vector512<T>.Count];
             vector.CopyTo(temp);
             return temp[index];
