@@ -415,6 +415,13 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         Vector<T> seasonalFactors = new Vector<T>(Options.SeasonalPeriod);
         int seasons = y.Length / Options.SeasonalPeriod;
 
+        if (seasons <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Cannot estimate initial seasonal factors: " +
+                $"time series length ({y.Length}) is shorter than one seasonal period ({Options.SeasonalPeriod}).");
+        }
+
         for (int i = 0; i < Options.SeasonalPeriod; i++)
         {
             T sum = NumOps.Zero;

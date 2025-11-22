@@ -115,7 +115,7 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public override Vector<T> Solve(Vector<T> b)
     {
-        var x = new Vector<T>(Vt.Rows);
+        var x = new Vector<T>(Vt.Columns);
         for (int i = 0; i < S.Length; i++)
         {
             if (!NumOps.Equals(S[i], NumOps.Zero))
