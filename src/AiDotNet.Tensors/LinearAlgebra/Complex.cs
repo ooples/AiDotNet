@@ -45,6 +45,11 @@ public readonly struct Complex<T>
     private readonly INumericOperations<T> _ops;
 
     /// <summary>
+    /// Gets numeric operations, initializing if needed for default instances.
+    /// </summary>
+    private INumericOperations<T> Ops => _ops ?? MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
     /// Gets the real part of the complex number.
     /// </summary>
     /// <remarks>
@@ -104,7 +109,7 @@ public readonly struct Complex<T>
     /// For example, the magnitude of 3 + 4i is sqrt(3ÃƒÂ¯Ã‚Â¿Ã‚Â½ + 4ÃƒÂ¯Ã‚Â¿Ã‚Â½) = sqrt(9 + 16) = sqrt(25) = 5.
     /// </para>
     /// </remarks>
-    public T Magnitude => _ops.Sqrt(_ops.Add(_ops.Square(Real), _ops.Square(Imaginary)));
+    public T Magnitude => Ops.Sqrt(Ops.Add(Ops.Square(Real), Ops.Square(Imaginary)));
 
     /// <summary>
     /// Gets the phase (or argument) of the complex number.
@@ -156,7 +161,7 @@ public readonly struct Complex<T>
     /// </para>
     /// </remarks>
     public static Complex<T> operator +(Complex<T> a, Complex<T> b)
-        => new(a._ops.Add(a.Real, b.Real), a._ops.Add(a.Imaginary, b.Imaginary));
+        => new(a.Ops.Add(a.Real, b.Real), a.Ops.Add(a.Imaginary, b.Imaginary));
 
     /// <summary>
     /// Subtracts one complex number from another.
@@ -179,7 +184,7 @@ public readonly struct Complex<T>
     /// </para>
     /// </remarks>
     public static Complex<T> operator -(Complex<T> a, Complex<T> b)
-        => new(a._ops.Subtract(a.Real, b.Real), a._ops.Subtract(a.Imaginary, b.Imaginary));
+        => new(a.Ops.Subtract(a.Real, b.Real), a.Ops.Subtract(a.Imaginary, b.Imaginary));
 
     /// <summary>
     /// Multiplies two complex numbers.
@@ -207,8 +212,8 @@ public readonly struct Complex<T>
     /// </remarks>
     public static Complex<T> operator *(Complex<T> a, Complex<T> b)
         => new(
-            a._ops.Subtract(a._ops.Multiply(a.Real, b.Real), a._ops.Multiply(a.Imaginary, b.Imaginary)),
-            a._ops.Add(a._ops.Multiply(a.Real, b.Imaginary), a._ops.Multiply(a.Imaginary, b.Real))
+            a.Ops.Subtract(a.Ops.Multiply(a.Real, b.Real), a.Ops.Multiply(a.Imaginary, b.Imaginary)),
+            a.Ops.Add(a.Ops.Multiply(a.Real, b.Imaginary), a.Ops.Multiply(a.Imaginary, b.Real))
         );
 
     /// <summary>
@@ -242,10 +247,10 @@ public readonly struct Complex<T>
     /// </remarks>
     public static Complex<T> operator /(Complex<T> a, Complex<T> b)
     {
-        T denominator = a._ops.Add(a._ops.Square(b.Real), a._ops.Square(b.Imaginary));
+        T denominator = a.Ops.Add(a.Ops.Square(b.Real), a.Ops.Square(b.Imaginary));
         return new Complex<T>(
-            a._ops.Divide(a._ops.Add(a._ops.Multiply(a.Real, b.Real), a._ops.Multiply(a.Imaginary, b.Imaginary)), denominator),
-            a._ops.Divide(a._ops.Subtract(a._ops.Multiply(a.Imaginary, b.Real), a._ops.Multiply(a.Real, b.Imaginary)), denominator)
+            a.Ops.Divide(a.Ops.Add(a.Ops.Multiply(a.Real, b.Real), a.Ops.Multiply(a.Imaginary, b.Imaginary)), denominator),
+            a.Ops.Divide(a.Ops.Subtract(a.Ops.Multiply(a.Imaginary, b.Real), a.Ops.Multiply(a.Real, b.Imaginary)), denominator)
         );
     }
 
@@ -337,7 +342,7 @@ public readonly struct Complex<T>
     /// </para>
     /// </remarks>
     public Complex<T> Conjugate()
-        => new(Real, _ops.Negate(Imaginary));
+        => new(Real, Ops.Negate(Imaginary));
 
     /// <summary>
     /// Returns a string representation of this complex number.
@@ -382,10 +387,10 @@ public readonly struct Complex<T>
     /// </remarks>
     public static Complex<T> FromPolarCoordinates(T magnitude, T phase)
     {
-        var _ops = MathHelper.GetNumericOperations<T>();
+        var ops = MathHelper.GetNumericOperations<T>();
         return new Complex<T>(
-            _ops.Multiply(magnitude, MathHelper.Cos(phase)),
-            _ops.Multiply(magnitude, MathHelper.Sin(phase))
+            ops.Multiply(magnitude, MathHelper.Cos(phase)),
+            ops.Multiply(magnitude, MathHelper.Sin(phase))
         );
     }
 }
