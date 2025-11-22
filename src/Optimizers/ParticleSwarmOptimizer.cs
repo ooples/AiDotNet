@@ -65,7 +65,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         IFullModel<T, TInput, TOutput> model,
         ParticleSwarmOptimizationOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new())
+        : base(model, options ?? new(), engine)
     {
         _random = new Random();
         _psoOptions = options ?? new ParticleSwarmOptimizationOptions<T, TInput, TOutput>();
