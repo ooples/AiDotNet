@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.JitCompiler.CodeGen;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.Optimizations;
+using IOptimizationPass = AiDotNet.JitCompiler.Optimizations.IOptimizationPass;
 
 namespace AiDotNet.JitCompiler;
 
