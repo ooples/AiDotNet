@@ -248,6 +248,13 @@ public readonly struct Complex<T>
     public static Complex<T> operator /(Complex<T> a, Complex<T> b)
     {
         T denominator = a.Ops.Add(a.Ops.Square(b.Real), a.Ops.Square(b.Imaginary));
+
+        // Check for division by zero (both real and imaginary parts are zero)
+        if (a.Ops.Equals(denominator, a.Ops.Zero))
+        {
+            throw new DivideByZeroException("Cannot divide by a complex number with both real and imaginary parts equal to zero.");
+        }
+
         return new Complex<T>(
             a.Ops.Divide(a.Ops.Add(a.Ops.Multiply(a.Real, b.Real), a.Ops.Multiply(a.Imaginary, b.Imaginary)), denominator),
             a.Ops.Divide(a.Ops.Subtract(a.Ops.Multiply(a.Imaginary, b.Real), a.Ops.Multiply(a.Real, b.Imaginary)), denominator)

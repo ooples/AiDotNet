@@ -34,16 +34,16 @@ public static class MathHelper
     /// This method returns the right "calculator" for your number type.
     /// </para>
     /// </remarks>
-    public static INumericOperations<T> GetNumericOperations<T>()
+    public static AiDotNet.Tensors.Interfaces.INumericOperations<T> GetNumericOperations<T>()
     {
         if (typeof(T) == typeof(double))
-            return (INumericOperations<T>)new DoubleOperations();
+            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new DoubleOperations();
         else if (typeof(T) == typeof(float))
-            return (INumericOperations<T>)new FloatOperations();
+            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new FloatOperations();
         else if (typeof(T) == typeof(Half))
-            return (INumericOperations<T>)new HalfOperations();
+            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new HalfOperations();
         else if (typeof(T) == typeof(decimal))
-            return (INumericOperations<T>)new DecimalOperations();
+            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new DecimalOperations();
         else if (typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Complex<>))
         {
             var innerType = typeof(T).GetGenericArguments()[0];
@@ -53,24 +53,24 @@ public static class MathHelper
             {
                 throw new InvalidOperationException($"Failed to create ComplexOperations instance for type {typeof(T)}");
             }
-            return (INumericOperations<T>)instance;
+            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)instance;
         }
         else if (typeof(T) == typeof(byte))
-            return (INumericOperations<T>)new ByteOperations();
+            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new ByteOperations();
         else if (typeof(T) == typeof(sbyte))
-            return (INumericOperations<T>)new SByteOperations();
+            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new SByteOperations();
         else if (typeof(T) == typeof(short))
-            return (INumericOperations<T>)new ShortOperations();
+            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new ShortOperations();
         else if (typeof(T) == typeof(ushort))
-            return (INumericOperations<T>)new UInt16Operations();
+            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new UInt16Operations();
         else if (typeof(T) == typeof(int))
-            return (INumericOperations<T>)new Int32Operations();
+            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new Int32Operations();
         else if (typeof(T) == typeof(uint))
-            return (INumericOperations<T>)new UInt32Operations();
+            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new UInt32Operations();
         else if (typeof(T) == typeof(long))
-            return (INumericOperations<T>)new Int64Operations();
+            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new Int64Operations();
         else if (typeof(T) == typeof(ulong))
-            return (INumericOperations<T>)new UInt64Operations();
+            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new UInt64Operations();
         else
             throw new NotSupportedException($"Numeric operations for type {typeof(T)} are not supported.");
     }
