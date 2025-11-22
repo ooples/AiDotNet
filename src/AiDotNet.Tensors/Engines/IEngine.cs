@@ -806,6 +806,78 @@ public interface IEngine
     void Log(System.ReadOnlySpan<double> x, System.Span<double> destination);
 
     /// <summary>
+    /// Computes exp(x) - 1 for each element in a span with numerical stability using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span.</param>
+    /// <param name="destination">The destination span to write exp(x) - 1 values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    /// <remarks>
+    /// <para>
+    /// More accurate than Exp(x) - 1 for values near zero. Used in loss functions and probability computations.
+    /// On .NET 5.0+, uses Math.ExpM1 for improved numerical stability.
+    /// </para>
+    /// <para>
+    /// Span-based overload for maximum performance when working with raw memory.
+    /// Automatically dispatches to AVX-512, AVX2, SSE, or scalar based on hardware support.
+    /// </para>
+    /// </remarks>
+    void ExpM1(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes exp(x) - 1 for each element in a span with numerical stability using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span.</param>
+    /// <param name="destination">The destination span to write exp(x) - 1 values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    /// <remarks>
+    /// <para>
+    /// More accurate than Exp(x) - 1 for values near zero. Used in loss functions and probability computations.
+    /// On .NET 5.0+, uses Math.ExpM1 for improved numerical stability.
+    /// </para>
+    /// <para>
+    /// Span-based overload for maximum performance when working with raw memory.
+    /// Automatically dispatches to AVX-512, AVX2, SSE, or scalar based on hardware support.
+    /// </para>
+    /// </remarks>
+    void ExpM1(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
+    /// <summary>
+    /// Computes log(1 + x) for each element in a span with numerical stability using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span.</param>
+    /// <param name="destination">The destination span to write log(1 + x) values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    /// <remarks>
+    /// <para>
+    /// More accurate than Log(1 + x) for values near zero. Used in probability and loss computations.
+    /// On .NET 5.0+, uses Math.Log1P for improved numerical stability.
+    /// </para>
+    /// <para>
+    /// Span-based overload for maximum performance when working with raw memory.
+    /// Automatically dispatches to AVX-512, AVX2, SSE, or scalar based on hardware support.
+    /// </para>
+    /// </remarks>
+    void Log1P(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes log(1 + x) for each element in a span with numerical stability using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span.</param>
+    /// <param name="destination">The destination span to write log(1 + x) values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    /// <remarks>
+    /// <para>
+    /// More accurate than Log(1 + x) for values near zero. Used in probability and loss computations.
+    /// On .NET 5.0+, uses Math.Log1P for improved numerical stability.
+    /// </para>
+    /// <para>
+    /// Span-based overload for maximum performance when working with raw memory.
+    /// Automatically dispatches to AVX-512, AVX2, SSE, or scalar based on hardware support.
+    /// </para>
+    /// </remarks>
+    void Log1P(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
+    /// <summary>
     /// Computes the tangent of each element in a span (in radians) using SIMD acceleration.
     /// </summary>
     /// <param name="x">The input span (angles in radians).</param>
