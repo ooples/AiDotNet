@@ -44,8 +44,17 @@ public static class MathHelper
             return (INumericOperations<T>)new HalfOperations();
         else if (typeof(T) == typeof(decimal))
             return (INumericOperations<T>)new DecimalOperations();
-        else if (typeof(T) == typeof(Complex<T>))
-            return (INumericOperations<T>)new ComplexOperations<T>();
+        else if (typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Complex<>))
+        {
+            var innerType = typeof(T).GetGenericArguments()[0];
+            var complexOpsType = typeof(ComplexOperations<>).MakeGenericType(innerType);
+            var instance = Activator.CreateInstance(complexOpsType);
+            if (instance is null)
+            {
+                throw new InvalidOperationException($"Failed to create ComplexOperations instance for type {typeof(T)}");
+            }
+            return (INumericOperations<T>)instance;
+        }
         else if (typeof(T) == typeof(byte))
             return (INumericOperations<T>)new ByteOperations();
         else if (typeof(T) == typeof(sbyte))
