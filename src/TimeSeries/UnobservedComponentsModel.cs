@@ -369,11 +369,9 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         {
             int start = Math.Max(0, i - windowSize + 1);
             int end = i + 1;
-            T sum = NumOps.Zero;
-            for (int j = start; j < end; j++)
-            {
-                sum = NumOps.Add(sum, data[j]);
-            }
+            // VECTORIZED: Use Engine.Sum() on slice instead of NumOps loop
+            var window = data.Slice(start, end - start);
+            T sum = Engine.Sum(window);
 
             result[i] = NumOps.Divide(sum, NumOps.FromDouble(end - start));
         }
@@ -423,13 +421,12 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
             seasonalIndices[i] = NumOps.Divide(sum, NumOps.FromDouble(count));
         }
 
-        // Normalize seasonal indices
-        T seasonalSum = seasonalIndices.Sum();
+        // VECTORIZED: Normalize seasonal indices using Engine operations
+        T seasonalSum = Engine.Sum(seasonalIndices);
         T seasonalAdjustment = NumOps.Divide(seasonalSum, NumOps.FromDouble(period));
-        for (int i = 0; i < period; i++)
-        {
-            seasonalIndices[i] = NumOps.Subtract(seasonalIndices[i], seasonalAdjustment);
-        }
+        var adjustment = new Vector<T>(period);
+        for (int i = 0; i < period; i++) adjustment[i] = seasonalAdjustment;
+        seasonalIndices = (Vector<T>)Engine.Subtract(seasonalIndices, adjustment);
 
         // Apply seasonal indices to the full series
         for (int i = 0; i < n; i++)
@@ -1447,14 +1444,10 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         Vector<T> irregularForecast = ForecastIrregular(horizon);
     
         // Combine components to produce the final forecast
-        for (int i = 0; i < horizon; i++)
-        {
-            forecast[i] = NumOps.Zero;
-            forecast[i] = NumOps.Add(forecast[i], trendForecast[i]);
-            forecast[i] = NumOps.Add(forecast[i], seasonalForecast[i]);
-            forecast[i] = NumOps.Add(forecast[i], cycleForecast[i]);
-            forecast[i] = NumOps.Add(forecast[i], irregularForecast[i]);
-        }
+        // VECTORIZED: Add forecast components using Engine operations
+        forecast = (Vector<T>)Engine.Add(trendForecast, seasonalForecast);
+        forecast = (Vector<T>)Engine.Add(forecast, cycleForecast);
+        forecast = (Vector<T>)Engine.Add(forecast, irregularForecast);
     
         return forecast;
     }

@@ -346,17 +346,11 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         {
             var (backcast, forecast) = _blocks[blockIdx].Forward(residual);
 
-            // Update residual for next block
-            for (int i = 0; i < residual.Length; i++)
-            {
-                residual[i] = _numOps.Subtract(residual[i], backcast[i]);
-            }
+            // Update residual for next block - vectorized with Engine.Subtract
+            residual = (Vector<T>)Engine.Subtract(residual, backcast);
 
-            // Accumulate forecast
-            for (int i = 0; i < aggregatedForecast.Length; i++)
-            {
-                aggregatedForecast[i] = _numOps.Add(aggregatedForecast[i], forecast[i]);
-            }
+            // Accumulate forecast - vectorized with Engine.Add
+            aggregatedForecast = (Vector<T>)Engine.Add(aggregatedForecast, forecast);
         }
 
         // Return the first forecast step
@@ -393,17 +387,11 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         {
             var (backcast, forecast) = _blocks[blockIdx].Forward(residual);
 
-            // Update residual for next block
-            for (int i = 0; i < residual.Length; i++)
-            {
-                residual[i] = _numOps.Subtract(residual[i], backcast[i]);
-            }
+            // Update residual for next block - vectorized with Engine.Subtract
+            residual = (Vector<T>)Engine.Subtract(residual, backcast);
 
-            // Accumulate forecast
-            for (int i = 0; i < aggregatedForecast.Length; i++)
-            {
-                aggregatedForecast[i] = _numOps.Add(aggregatedForecast[i], forecast[i]);
-            }
+            // Accumulate forecast - vectorized with Engine.Add
+            aggregatedForecast = (Vector<T>)Engine.Add(aggregatedForecast, forecast);
         }
 
         return aggregatedForecast;

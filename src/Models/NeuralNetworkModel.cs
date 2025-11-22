@@ -643,10 +643,10 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 
         // Use the configured loss function (custom or default) with null fallback
         var lossFunction = _defaultLossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(Architecture.TaskType);
-    
+
         // Calculate gradients based on the loss function
         Vector<T> error = lossFunction.CalculateDerivative(predicted, expected);
-    
+
         return error;
     }
 
@@ -679,8 +679,9 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     public ModelMetadata<T> GetModelMetadata()
     {
         int[] layerSizes = Architecture.GetLayerSizes();
+
         int outputDimension = Architecture.GetOutputShape()[0];
-        
+
         var metadata = new ModelMetadata<T>
         {
             FeatureCount = FeatureCount,
@@ -698,10 +699,11 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
                 { "SupportsTraining", Network.SupportsTraining }
             }
         };
-        
+
+
         metadata.SetProperty("OutputDimension", outputDimension);
         metadata.SetProperty("NumClasses", outputDimension);
-        
+
         return metadata;
     }
 

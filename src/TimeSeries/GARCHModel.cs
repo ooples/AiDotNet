@@ -419,14 +419,31 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
             Vector<T> gradientBeta = CalculateGradient(y, GradientType.Beta);
 
             // Update velocities (momentum)
-            velocityOmega = velocityOmega.Multiply(momentumFactor).Add(gradientOmega.Multiply(currentLearningRate));
-            velocityAlpha = velocityAlpha.Multiply(momentumFactor).Add(gradientAlpha.Multiply(currentLearningRate));
-            velocityBeta = velocityBeta.Multiply(momentumFactor).Add(gradientBeta.Multiply(currentLearningRate));
+            var momentumVecOmega = new Vector<T>(velocityOmega.Length);
+            for (int i = 0; i < momentumVecOmega.Length; i++) momentumVecOmega[i] = momentumFactor;
+            var lrVecOmega = new Vector<T>(gradientOmega.Length);
+            for (int i = 0; i < lrVecOmega.Length; i++) lrVecOmega[i] = currentLearningRate;
+            velocityOmega = (Vector<T>)Engine.Add((Vector<T>)Engine.Multiply(velocityOmega, momentumVecOmega),
+                                                  (Vector<T>)Engine.Multiply(gradientOmega, lrVecOmega));
+
+            var momentumVecAlpha = new Vector<T>(velocityAlpha.Length);
+            for (int i = 0; i < momentumVecAlpha.Length; i++) momentumVecAlpha[i] = momentumFactor;
+            var lrVecAlpha = new Vector<T>(gradientAlpha.Length);
+            for (int i = 0; i < lrVecAlpha.Length; i++) lrVecAlpha[i] = currentLearningRate;
+            velocityAlpha = (Vector<T>)Engine.Add((Vector<T>)Engine.Multiply(velocityAlpha, momentumVecAlpha),
+                                                  (Vector<T>)Engine.Multiply(gradientAlpha, lrVecAlpha));
+
+            var momentumVecBeta = new Vector<T>(velocityBeta.Length);
+            for (int i = 0; i < momentumVecBeta.Length; i++) momentumVecBeta[i] = momentumFactor;
+            var lrVecBeta = new Vector<T>(gradientBeta.Length);
+            for (int i = 0; i < lrVecBeta.Length; i++) lrVecBeta[i] = currentLearningRate;
+            velocityBeta = (Vector<T>)Engine.Add((Vector<T>)Engine.Multiply(velocityBeta, momentumVecBeta),
+                                                 (Vector<T>)Engine.Multiply(gradientBeta, lrVecBeta));
 
             // Update parameters
-            _omega = _omega.Subtract(velocityOmega);
-            _alpha = _alpha.Subtract(velocityAlpha);
-            _beta = _beta.Subtract(velocityBeta);
+            _omega = (Vector<T>)Engine.Subtract(_omega, velocityOmega);
+            _alpha = (Vector<T>)Engine.Subtract(_alpha, velocityAlpha);
+            _beta = (Vector<T>)Engine.Subtract(_beta, velocityBeta);
 
             // Ensure parameters stay within valid ranges
             ConstrainParameters();
@@ -689,12 +706,19 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         }
 
         // Ensure the sum of ARCH and GARCH coefficients is less than 1 for stationarity
-        T sum = NumOps.Add(_alpha.Sum(), _beta.Sum());
+        T alphaSum = Engine.Sum(_alpha);
+        T betaSum = Engine.Sum(_beta);
+        T sum = NumOps.Add(alphaSum, betaSum);
         if (NumOps.GreaterThan(sum, NumOps.One))
         {
             T scaleFactor = NumOps.Divide(NumOps.FromDouble(0.99), sum);
-            _alpha = _alpha.Multiply(scaleFactor);
-            _beta = _beta.Multiply(scaleFactor);
+            var scaleVecAlpha = new Vector<T>(_alpha.Length);
+            for (int i = 0; i < scaleVecAlpha.Length; i++) scaleVecAlpha[i] = scaleFactor;
+            _alpha = (Vector<T>)Engine.Multiply(_alpha, scaleVecAlpha);
+
+            var scaleVecBeta = new Vector<T>(_beta.Length);
+            for (int i = 0; i < scaleVecBeta.Length; i++) scaleVecBeta[i] = scaleFactor;
+            _beta = (Vector<T>)Engine.Multiply(_beta, scaleVecBeta);
         }
     }
 
@@ -1035,7 +1059,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
 
         // Step 2: Calculate residuals from the mean model
         Vector<T> meanPredictions = _meanModel.Predict(x);
-        _residuals = y.Subtract(meanPredictions);
+        _residuals = (Vector<T>)Engine.Subtract(y, meanPredictions);
 
         // Step 3: Initialize GARCH parameters
         InitializeParameters();

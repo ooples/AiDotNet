@@ -95,7 +95,7 @@ public class AddLayer<T> : LayerBase<T>
     /// // Create an AddLayer for combining two 28�28 feature maps with ReLU activation
     /// var addLayer = new AddLayer<float>(
     ///     new[] { new[] { 32, 28, 28, 64 }, new[] { 32, 28, 28, 64 } },
-    ///     new ReLU<float>()
+    ///     new ReLUActivation<float>()
     /// );
     /// ```
     /// 
@@ -311,7 +311,9 @@ public class AddLayer<T> : LayerBase<T>
         }
         else if (ScalarActivation != null)
         {
-            gradientWithActivation = _lastOutput.Transform((x, i) => NumOps.Multiply(ScalarActivation.Derivative(x), outputGradient[i]));
+            // Vectorized: compute activation derivatives and multiply
+            var derivatives = _lastOutput.Transform((x, i) => ScalarActivation.Derivative(x));
+            gradientWithActivation = derivatives.Multiply(outputGradient);
         }
         else
         {

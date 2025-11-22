@@ -80,7 +80,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Mathematical operations for the numeric type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps;
-    
+
+    /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Stores the input values for each layer during forward pass.
     /// </summary>
