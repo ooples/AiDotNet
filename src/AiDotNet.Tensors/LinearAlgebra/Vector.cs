@@ -682,6 +682,9 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <param name="size">The size of the vector to create.</param>
     /// <param name="index">The index at which to place the value 1.</param>
     /// <returns>A new standard basis vector.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when size is negative or when index is negative or greater than or equal to size.
+    /// </exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> A standard basis vector has a 1 at one position and 0s everywhere else.
     /// For example, CreateStandardBasis(3, 1) creates the vector [0,1,0]. These vectors are important in
@@ -689,6 +692,11 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// </remarks>
     public static Vector<T> CreateStandardBasis(int size, int index)
     {
+        if (size < 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be non-negative.");
+        if (index < 0 || index >= size)
+            throw new ArgumentOutOfRangeException(nameof(index), "Index must be within the bounds of the vector.");
+
         var vector = new Vector<T>(size)
         {
             [index] = _numOps.One
