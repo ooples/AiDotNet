@@ -350,8 +350,7 @@ public class GRULayer<T> : LayerBase<T>
     public GRULayer(int inputSize, int hiddenSize,
                     bool returnSequences = false,
                     IActivationFunction<T>? activation = null,
-                    IActivationFunction<T>? recurrentActivation = null,
-                    IEngine? engine = null)
+                    IActivationFunction<T>? recurrentActivation = null)
         : base([inputSize], [hiddenSize], activation ?? new TanhActivation<T>())
     {
         _inputSize = inputSize;
@@ -403,8 +402,7 @@ public class GRULayer<T> : LayerBase<T>
     public GRULayer(int inputSize, int hiddenSize,
                     bool returnSequences = false,
                     IVectorActivationFunction<T>? vectorActivation = null,
-                    IVectorActivationFunction<T>? vectorRecurrentActivation = null,
-                    IEngine? engine = null)
+                    IVectorActivationFunction<T>? vectorRecurrentActivation = null)
         : base([inputSize], [hiddenSize], vectorActivation ?? new TanhActivation<T>())
     {
         _inputSize = inputSize;
