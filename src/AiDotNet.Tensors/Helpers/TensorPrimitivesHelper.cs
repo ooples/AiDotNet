@@ -565,6 +565,9 @@ public static class TensorPrimitivesHelper<T>
     public static Vector<T> Softmax(Vector<T> x)
     {
         var xArray = x.ToArray();
+        if (xArray.Length == 0)
+            throw new ArgumentException("Vector cannot be empty", nameof(x));
+
         var result = new T[xArray.Length];
 
         if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))

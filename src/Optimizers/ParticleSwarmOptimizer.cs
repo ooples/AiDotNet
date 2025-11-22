@@ -60,12 +60,10 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     /// </summary>
     /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The particle swarm optimization options, or null to use default options.</param>
-    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public ParticleSwarmOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        ParticleSwarmOptimizationOptions<T, TInput, TOutput>? options = null,
-        IEngine? engine = null)
-        : base(model, options ?? new(), engine)
+        ParticleSwarmOptimizationOptions<T, TInput, TOutput>? options = null)
+        : base(model, options ?? new())
     {
         _random = new Random();
         _psoOptions = options ?? new ParticleSwarmOptimizationOptions<T, TInput, TOutput>();
