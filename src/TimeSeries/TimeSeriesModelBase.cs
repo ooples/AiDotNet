@@ -1798,6 +1798,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// </remarks>
     public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
+        // Validation: Ensure inputNodes is not null
+        if (inputNodes == null)
+        {
+            throw new ArgumentNullException(nameof(inputNodes), "Input nodes list cannot be null.");
+        }
+
         // Validation: Ensure model is trained
         if (!IsTrained)
         {
