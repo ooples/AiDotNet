@@ -133,7 +133,7 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     private void EstimateMACoefficients()
     {
         int n = _residuals.Rows;
-        int m = _residuals.Columns;
+        int m = _varmaOptions.OutputDimension;
 
         if (n <= _varmaOptions.MaLag)
         {
@@ -180,7 +180,7 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     private Matrix<T> PrepareLaggedResiduals()
     {
         int n = _residuals.Rows;
-        int m = _residuals.Columns;
+        int m = _varmaOptions.OutputDimension;
         Matrix<T> laggedResiduals = new Matrix<T>(n - _varmaOptions.MaLag, m * _varmaOptions.MaLag);
 
         // VECTORIZED: Construct lagged residuals using row operations
