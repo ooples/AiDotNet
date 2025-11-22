@@ -895,6 +895,9 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// </remarks>
     public Vector<T> RowWiseMax()
     {
+        if (Columns == 0)
+            throw new InvalidOperationException("Cannot compute row-wise maximum of a matrix with zero columns");
+
         Vector<T> result = new(Rows);
         for (int i = 0; i < Rows; i++)
         {
