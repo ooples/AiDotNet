@@ -1455,6 +1455,27 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
+    public Vector<T> Asinh<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Asinh
+        return _cpuFallback.Asinh(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Acosh<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Acosh
+        return _cpuFallback.Acosh(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Atanh<T>(Vector<T> vector)
+    {
+        // TODO-GPU: Implement parallel GPU kernel for Atanh
+        return _cpuFallback.Atanh(vector);
+    }
+
+    /// <inheritdoc/>
     public Vector<T> Round<T>(Vector<T> vector)
     {
         // TODO-GPU: Implement parallel GPU kernel for Round
@@ -6580,6 +6601,42 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
+    public void Asinh(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AsinhOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Asinh(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AsinhOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Acosh(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AcoshOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Acosh(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AcoshOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Atanh(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AtanhOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Atanh(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AtanhOperatorDouble>(x, destination);
+    }
+
     public void Exp(ReadOnlySpan<float> x, Span<float> destination)
     {
         if (x.Length < _thresholds.VectorSqrt)
@@ -6678,6 +6735,66 @@ public class GpuEngine : IEngine, IDisposable
     {
         // For now, use CPU fallback. Future GPU implementation can use custom kernel.
         TensorPrimitivesCore.InvokeSpanIntoSpan<Log1POperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Exp2<T>(Vector<T> vector)
+    {
+        return _cpuFallback.Exp2(vector);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Exp10<T>(Vector<T> vector)
+    {
+        return _cpuFallback.Exp10(vector);
+    }
+
+    /// <inheritdoc/>
+    public void Reciprocal(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<ReciprocalOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Reciprocal(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<ReciprocalOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Cbrt(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<CbrtOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Cbrt(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<CbrtOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Log2(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Log2OperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Log2(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Log2OperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Log10(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Log10OperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Log10(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Log10OperatorDouble>(x, destination);
     }
 
     #endregion

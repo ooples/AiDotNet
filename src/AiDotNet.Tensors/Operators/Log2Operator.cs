@@ -12,7 +12,11 @@ public readonly struct Log2OperatorDouble : IUnaryOperator<double, double>
     /// <summary>
     /// Computes log2(x) for a single double value.
     /// </summary>
+#if NET5_0_OR_GREATER
     public double Invoke(double x) => Math.Log2(x);
+#else
+    public double Invoke(double x) => Math.Log(x) / Math.Log(2.0);
+#endif
 
 #if NET5_0_OR_GREATER
     /// <summary>
@@ -76,7 +80,11 @@ public readonly struct Log2OperatorFloat : IUnaryOperator<float, float>
     /// <summary>
     /// Computes log2(x) for a single float value.
     /// </summary>
+#if NET5_0_OR_GREATER
     public float Invoke(float x) => MathF.Log2(x);
+#else
+    public float Invoke(float x) => (float)(Math.Log(x) / Math.Log(2.0));
+#endif
 
 #if NET5_0_OR_GREATER
     /// <summary>

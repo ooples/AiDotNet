@@ -12,7 +12,11 @@ public readonly struct CbrtOperatorDouble : IUnaryOperator<double, double>
     /// <summary>
     /// Computes cbrt(x) for a single double value.
     /// </summary>
+#if NET5_0_OR_GREATER
     public double Invoke(double x) => Math.Cbrt(x);
+#else
+    public double Invoke(double x) => Math.Pow(x, 1.0 / 3.0);
+#endif
 
 #if NET5_0_OR_GREATER
     /// <summary>
@@ -76,7 +80,11 @@ public readonly struct CbrtOperatorFloat : IUnaryOperator<float, float>
     /// <summary>
     /// Computes cbrt(x) for a single float value.
     /// </summary>
+#if NET5_0_OR_GREATER
     public float Invoke(float x) => MathF.Cbrt(x);
+#else
+    public float Invoke(float x) => (float)Math.Pow(x, 1.0 / 3.0);
+#endif
 
 #if NET5_0_OR_GREATER
     /// <summary>

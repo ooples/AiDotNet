@@ -38,7 +38,7 @@ public readonly struct AtanhOperatorDouble : IUnaryOperator<double, double>
             values[i] = Invoke(values[i]);
         }
 
-        return Vector128.Create(values);
+        return Vector128.Create(values[0], values[1]);
     }
 
     /// <summary>
@@ -55,7 +55,7 @@ public readonly struct AtanhOperatorDouble : IUnaryOperator<double, double>
             values[i] = Invoke(values[i]);
         }
 
-        return Vector256.Create(values);
+        return Vector256.Create(values[0], values[1], values[2], values[3]);
     }
 
     /// <summary>
@@ -72,7 +72,7 @@ public readonly struct AtanhOperatorDouble : IUnaryOperator<double, double>
             values[i] = Invoke(values[i]);
         }
 
-        return Vector512.Create(values);
+        return Vector512.Create(values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7]);
     }
 }
 
@@ -111,7 +111,7 @@ public readonly struct AtanhOperatorFloat : IUnaryOperator<float, float>
             values[i] = Invoke(values[i]);
         }
 
-        return Vector128.Create(values);
+        return Vector128.Create(values[0], values[1], values[2], values[3]);
     }
 
     /// <summary>
@@ -128,7 +128,7 @@ public readonly struct AtanhOperatorFloat : IUnaryOperator<float, float>
             values[i] = Invoke(values[i]);
         }
 
-        return Vector256.Create(values);
+        return Vector256.Create(values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7]);
     }
 
     /// <summary>
@@ -145,7 +145,7 @@ public readonly struct AtanhOperatorFloat : IUnaryOperator<float, float>
             values[i] = Invoke(values[i]);
         }
 
-        return Vector512.Create(values);
+        return Vector512.Create(values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8], values[9], values[10], values[11], values[12], values[13], values[14], values[15]);
     }
 #endif
 }

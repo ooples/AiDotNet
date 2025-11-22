@@ -43,7 +43,7 @@ public readonly struct ExpM1OperatorDouble : IUnaryOperator<double, double>
     /// </summary>
     /// <param name="x">Input value</param>
     /// <returns>exp(x) - 1 computed with numerical stability for small x</returns>
-#if NET5_0_OR_GREATER
+#if NET9_0_OR_GREATER
     public double Invoke(double x) => Math.ExpM1(x);
 #else
     public double Invoke(double x) => Math.Exp(x) - 1.0;
@@ -63,7 +63,11 @@ public readonly struct ExpM1OperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
+#if NET9_0_OR_GREATER
             values[i] = Math.ExpM1(values[i]);
+#else
+            values[i] = Math.Exp(values[i]) - 1.0;
+#endif
         }
 
         return Vector128.Create(values);
@@ -79,7 +83,11 @@ public readonly struct ExpM1OperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
+#if NET9_0_OR_GREATER
             values[i] = Math.ExpM1(values[i]);
+#else
+            values[i] = Math.Exp(values[i]) - 1.0;
+#endif
         }
 
         return Vector256.Create(values);
@@ -95,7 +103,11 @@ public readonly struct ExpM1OperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
+#if NET9_0_OR_GREATER
             values[i] = Math.ExpM1(values[i]);
+#else
+            values[i] = Math.Exp(values[i]) - 1.0;
+#endif
         }
 
         return Vector512.Create(values);
@@ -113,7 +125,7 @@ public readonly struct ExpM1OperatorFloat : IUnaryOperator<float, float>
     /// </summary>
     /// <param name="x">Input value</param>
     /// <returns>exp(x) - 1 computed with numerical stability for small x</returns>
-#if NET5_0_OR_GREATER
+#if NET9_0_OR_GREATER
     public float Invoke(float x) => MathF.ExpM1(x);
 #else
     public float Invoke(float x) => MathF.Exp(x) - 1.0f;
@@ -130,7 +142,11 @@ public readonly struct ExpM1OperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
+#if NET9_0_OR_GREATER
             values[i] = MathF.ExpM1(values[i]);
+#else
+            values[i] = MathF.Exp(values[i]) - 1.0f;
+#endif
         }
 
         return Vector128.Create(values);
@@ -146,7 +162,11 @@ public readonly struct ExpM1OperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
+#if NET9_0_OR_GREATER
             values[i] = MathF.ExpM1(values[i]);
+#else
+            values[i] = MathF.Exp(values[i]) - 1.0f;
+#endif
         }
 
         return Vector256.Create(values);
@@ -162,7 +182,11 @@ public readonly struct ExpM1OperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
+#if NET9_0_OR_GREATER
             values[i] = MathF.ExpM1(values[i]);
+#else
+            values[i] = MathF.Exp(values[i]) - 1.0f;
+#endif
         }
 
         return Vector512.Create(values);

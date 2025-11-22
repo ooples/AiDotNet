@@ -161,6 +161,30 @@ public interface IEngine
     Vector<T> Exp<T>(Vector<T> vector);
 
     /// <summary>
+    /// Computes 2^x (base-2 exponential) of each element in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing the base-2 exponentials.</returns>
+    /// <remarks>
+    /// Used in information theory (entropy calculations), binary computations, and scientific applications
+    /// that work with powers of 2 (common in signal processing and computer graphics).
+    /// </remarks>
+    Vector<T> Exp2<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes 10^x (base-10 exponential) of each element in the vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing the base-10 exponentials.</returns>
+    /// <remarks>
+    /// Used in scientific and engineering applications, decibel calculations (dB), and pH computations.
+    /// Common in physics, chemistry, and signal processing where base-10 is the standard scale.
+    /// </remarks>
+    Vector<T> Exp10<T>(Vector<T> vector);
+
+    /// <summary>
     /// Computes the natural logarithm of each element in the vector.
     /// </summary>
     /// <typeparam name="T">The numeric type of the vector.</typeparam>

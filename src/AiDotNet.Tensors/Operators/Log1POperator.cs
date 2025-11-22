@@ -44,7 +44,7 @@ public readonly struct Log1POperatorDouble : IUnaryOperator<double, double>
     /// </summary>
     /// <param name="x">Input value</param>
     /// <returns>log(1 + x) computed with numerical stability for small x</returns>
-#if NET5_0_OR_GREATER
+#if NET9_0_OR_GREATER
     public double Invoke(double x) => Math.Log1P(x);
 #else
     public double Invoke(double x) => Math.Log(1.0 + x);
@@ -64,7 +64,11 @@ public readonly struct Log1POperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
+#if NET9_0_OR_GREATER
             values[i] = Math.Log1P(values[i]);
+#else
+            values[i] = Math.Log(1.0 + values[i]);
+#endif
         }
 
         return Vector128.Create(values);
@@ -80,7 +84,11 @@ public readonly struct Log1POperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
+#if NET9_0_OR_GREATER
             values[i] = Math.Log1P(values[i]);
+#else
+            values[i] = Math.Log(1.0 + values[i]);
+#endif
         }
 
         return Vector256.Create(values);
@@ -96,7 +104,11 @@ public readonly struct Log1POperatorDouble : IUnaryOperator<double, double>
 
         for (int i = 0; i < values.Length; i++)
         {
+#if NET9_0_OR_GREATER
             values[i] = Math.Log1P(values[i]);
+#else
+            values[i] = Math.Log(1.0 + values[i]);
+#endif
         }
 
         return Vector512.Create(values);
@@ -114,7 +126,7 @@ public readonly struct Log1POperatorFloat : IUnaryOperator<float, float>
     /// </summary>
     /// <param name="x">Input value</param>
     /// <returns>log(1 + x) computed with numerical stability for small x</returns>
-#if NET5_0_OR_GREATER
+#if NET9_0_OR_GREATER
     public float Invoke(float x) => MathF.Log1P(x);
 #else
     public float Invoke(float x) => MathF.Log(1.0f + x);
@@ -131,7 +143,11 @@ public readonly struct Log1POperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
+#if NET9_0_OR_GREATER
             values[i] = MathF.Log1P(values[i]);
+#else
+            values[i] = MathF.Log(1.0f + values[i]);
+#endif
         }
 
         return Vector128.Create(values);
@@ -147,7 +163,11 @@ public readonly struct Log1POperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
+#if NET9_0_OR_GREATER
             values[i] = MathF.Log1P(values[i]);
+#else
+            values[i] = MathF.Log(1.0f + values[i]);
+#endif
         }
 
         return Vector256.Create(values);
@@ -163,7 +183,11 @@ public readonly struct Log1POperatorFloat : IUnaryOperator<float, float>
 
         for (int i = 0; i < values.Length; i++)
         {
+#if NET9_0_OR_GREATER
             values[i] = MathF.Log1P(values[i]);
+#else
+            values[i] = MathF.Log(1.0f + values[i]);
+#endif
         }
 
         return Vector512.Create(values);

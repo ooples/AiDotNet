@@ -236,6 +236,78 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    /// <inheritdoc/>
+    public Vector<T> Exp2<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+
+        // For float and double, use optimized span operations
+        if (typeof(T) == typeof(float) && vector is Vector<float> floatVec)
+        {
+            var result = new Vector<float>(floatVec.Length);
+            Exp2(floatVec.AsSpan(), result.AsWritableSpan());
+            if (result is Vector<T> typedResult)
+            {
+                return typedResult;
+            }
+        }
+        else if (typeof(T) == typeof(double) && vector is Vector<double> doubleVec)
+        {
+            var result = new Vector<double>(doubleVec.Length);
+            Exp2(doubleVec.AsSpan(), result.AsWritableSpan());
+            if (result is Vector<T> typedResult)
+            {
+                return typedResult;
+            }
+        }
+
+        // Generic fallback: 2^x
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var genericResult = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            genericResult[i] = numOps.FromDouble(Math.Pow(2.0, val));
+        }
+        return genericResult;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Exp10<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+
+        // For float and double, use optimized span operations
+        if (typeof(T) == typeof(float) && vector is Vector<float> floatVec)
+        {
+            var result = new Vector<float>(floatVec.Length);
+            Exp10(floatVec.AsSpan(), result.AsWritableSpan());
+            if (result is Vector<T> typedResult)
+            {
+                return typedResult;
+            }
+        }
+        else if (typeof(T) == typeof(double) && vector is Vector<double> doubleVec)
+        {
+            var result = new Vector<double>(doubleVec.Length);
+            Exp10(doubleVec.AsSpan(), result.AsWritableSpan());
+            if (result is Vector<T> typedResult)
+            {
+                return typedResult;
+            }
+        }
+
+        // Generic fallback: 10^x
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var genericResult = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            genericResult[i] = numOps.FromDouble(Math.Pow(10.0, val));
+        }
+        return genericResult;
+    }
+
     public Vector<T> Sign<T>(Vector<T> vector)
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
@@ -737,6 +809,30 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    public void Exp2(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Exp2OperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Exp2(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Exp2OperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Exp10(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Exp10OperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Exp10(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Exp10OperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
     public void ExpM1(ReadOnlySpan<float> x, Span<float> destination)
     {
         TensorPrimitivesCore.InvokeSpanIntoSpan<ExpM1OperatorFloat>(x, destination);
@@ -780,31 +876,35 @@ public class CpuEngine : IEngine
             throw new ArgumentNullException(nameof(vector));
         }
 
-        var numOps = NumericOperations<T>.Default;
-        var result = new Vector<T>(vector.Length);
-
-        if (typeof(T) == typeof(float))
+        // For float and double, use optimized span operations
+        if (typeof(T) == typeof(float) && vector is Vector<float> floatVec)
         {
-            ReadOnlySpan<float> fVector = (ReadOnlySpan<float>)(object)vector.Data;
-            Span<float> fResult = (Span<float>)(object)result.Data;
-            TensorPrimitivesCore.InvokeSpanIntoSpan<AsinOperatorFloat>(fVector, fResult);
-        }
-        else if (typeof(T) == typeof(double))
-        {
-            ReadOnlySpan<double> dVector = (ReadOnlySpan<double>)(object)vector.Data;
-            Span<double> dResult = (Span<double>)(object)result.Data;
-            TensorPrimitivesCore.InvokeSpanIntoSpan<AsinOperatorDouble>(dVector, dResult);
-        }
-        else
-        {
-            for (int i = 0; i < vector.Length; i++)
+            var result = new Vector<float>(floatVec.Length);
+            Asin(floatVec.AsSpan(), result.AsWritableSpan());
+            if (result is Vector<T> typedResult)
             {
-                double val = Convert.ToDouble(vector[i]);
-                result[i] = numOps.FromDouble(Math.Asin(val));
+                return typedResult;
+            }
+        }
+        else if (typeof(T) == typeof(double) && vector is Vector<double> doubleVec)
+        {
+            var result = new Vector<double>(doubleVec.Length);
+            Asin(doubleVec.AsSpan(), result.AsWritableSpan());
+            if (result is Vector<T> typedResult)
+            {
+                return typedResult;
             }
         }
 
-        return result;
+        // Generic fallback
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var genericResult = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            genericResult[i] = numOps.FromDouble(Math.Asin(val));
+        }
+        return genericResult;
     }
 
     /// <inheritdoc/>
@@ -827,31 +927,35 @@ public class CpuEngine : IEngine
             throw new ArgumentNullException(nameof(vector));
         }
 
-        var numOps = NumericOperations<T>.Default;
-        var result = new Vector<T>(vector.Length);
-
-        if (typeof(T) == typeof(float))
+        // For float and double, use optimized span operations
+        if (typeof(T) == typeof(float) && vector is Vector<float> floatVec)
         {
-            ReadOnlySpan<float> fVector = (ReadOnlySpan<float>)(object)vector.Data;
-            Span<float> fResult = (Span<float>)(object)result.Data;
-            TensorPrimitivesCore.InvokeSpanIntoSpan<AcosOperatorFloat>(fVector, fResult);
-        }
-        else if (typeof(T) == typeof(double))
-        {
-            ReadOnlySpan<double> dVector = (ReadOnlySpan<double>)(object)vector.Data;
-            Span<double> dResult = (Span<double>)(object)result.Data;
-            TensorPrimitivesCore.InvokeSpanIntoSpan<AcosOperatorDouble>(dVector, dResult);
-        }
-        else
-        {
-            for (int i = 0; i < vector.Length; i++)
+            var result = new Vector<float>(floatVec.Length);
+            Acos(floatVec.AsSpan(), result.AsWritableSpan());
+            if (result is Vector<T> typedResult)
             {
-                double val = Convert.ToDouble(vector[i]);
-                result[i] = numOps.FromDouble(Math.Acos(val));
+                return typedResult;
+            }
+        }
+        else if (typeof(T) == typeof(double) && vector is Vector<double> doubleVec)
+        {
+            var result = new Vector<double>(doubleVec.Length);
+            Acos(doubleVec.AsSpan(), result.AsWritableSpan());
+            if (result is Vector<T> typedResult)
+            {
+                return typedResult;
             }
         }
 
-        return result;
+        // Generic fallback
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var genericResult = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            genericResult[i] = numOps.FromDouble(Math.Acos(val));
+        }
+        return genericResult;
     }
 
     /// <inheritdoc/>
@@ -874,31 +978,35 @@ public class CpuEngine : IEngine
             throw new ArgumentNullException(nameof(vector));
         }
 
-        var numOps = NumericOperations<T>.Default;
-        var result = new Vector<T>(vector.Length);
-
-        if (typeof(T) == typeof(float))
+        // For float and double, use optimized span operations
+        if (typeof(T) == typeof(float) && vector is Vector<float> floatVec)
         {
-            ReadOnlySpan<float> fVector = (ReadOnlySpan<float>)(object)vector.Data;
-            Span<float> fResult = (Span<float>)(object)result.Data;
-            TensorPrimitivesCore.InvokeSpanIntoSpan<AtanOperatorFloat>(fVector, fResult);
-        }
-        else if (typeof(T) == typeof(double))
-        {
-            ReadOnlySpan<double> dVector = (ReadOnlySpan<double>)(object)vector.Data;
-            Span<double> dResult = (Span<double>)(object)result.Data;
-            TensorPrimitivesCore.InvokeSpanIntoSpan<AtanOperatorDouble>(dVector, dResult);
-        }
-        else
-        {
-            for (int i = 0; i < vector.Length; i++)
+            var result = new Vector<float>(floatVec.Length);
+            Atan(floatVec.AsSpan(), result.AsWritableSpan());
+            if (result is Vector<T> typedResult)
             {
-                double val = Convert.ToDouble(vector[i]);
-                result[i] = numOps.FromDouble(Math.Atan(val));
+                return typedResult;
+            }
+        }
+        else if (typeof(T) == typeof(double) && vector is Vector<double> doubleVec)
+        {
+            var result = new Vector<double>(doubleVec.Length);
+            Atan(doubleVec.AsSpan(), result.AsWritableSpan());
+            if (result is Vector<T> typedResult)
+            {
+                return typedResult;
             }
         }
 
-        return result;
+        // Generic fallback
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var genericResult = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            genericResult[i] = numOps.FromDouble(Math.Atan(val));
+        }
+        return genericResult;
     }
 
     /// <inheritdoc/>
