@@ -66,16 +66,20 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// </summary>
     /// <param name="other">The vector to divide by.</param>
     /// <returns>A new vector containing the results of dividing each element of this vector by the corresponding element in the other vector.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     /// <exception cref="ArgumentException">Thrown when vectors have different lengths.</exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This divides each element in your vector by the corresponding element 
+    /// <para><b>For Beginners:</b> This divides each element in your vector by the corresponding element
     /// in another vector. For example, [10, 20, 30] divided by [2, 4, 5] gives [5, 5, 6].</para>
     /// </remarks>
     public Vector<T> ElementwiseDivide(Vector<T> other)
     {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
         if (this.Length != other.Length)
         {
-            throw new ArgumentException("Vectors must have the same length for element-wise division.");
+            throw new ArgumentException("Vectors must have the same length for element-wise division.", nameof(other));
         }
 
         Vector<T> result = new Vector<T>(this.Length);
@@ -250,9 +254,11 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     public new Vector<T> GetSubVector(int startIndex, int length)
     {
         if (startIndex < 0 || startIndex >= this.Length)
-            throw new ArgumentOutOfRangeException(nameof(startIndex));
-        if (length < 0 || startIndex + length > this.Length)
-            throw new ArgumentOutOfRangeException(nameof(length));
+            throw new ArgumentOutOfRangeException(nameof(startIndex), "Start index must be within the bounds of the vector.");
+        if (length < 0)
+            throw new ArgumentOutOfRangeException(nameof(length), "Length cannot be negative.");
+        if (startIndex + length > this.Length)
+            throw new ArgumentOutOfRangeException(nameof(length), "The subvector would extend beyond the end of the vector.");
 
         Vector<T> subVector = new Vector<T>(length);
         for (int i = 0; i < length; i++)
@@ -369,6 +375,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// </summary>
     /// <param name="other">The vector to multiply with.</param>
     /// <returns>A new vector containing the element-wise product.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     /// <exception cref="ArgumentException">
     /// Thrown when the vectors have different lengths.
     /// </exception>
@@ -379,8 +386,11 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// </remarks>
     public Vector<T> ElementwiseMultiply(Vector<T> other)
     {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
         if (this.Length != other.Length)
-            throw new ArgumentException("Vectors must have the same length for element-wise multiplication.");
+            throw new ArgumentException("Vectors must have the same length for element-wise multiplication.", nameof(other));
 
         var result = new Vector<T>(this.Length);
         for (int i = 0; i < this.Length; i++)
@@ -420,24 +430,15 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <param name="length">The number of elements to extract.</param>
     /// <returns>A new vector containing the extracted elements.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// Thrown when startIndex is negative or the subvector would extend beyond the end of the vector.
+    /// Thrown when startIndex is negative, length is negative, or the subvector would extend beyond the end of the vector.
     /// </exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This is similar to GetSubVector but with slightly different
-    /// parameter validation. It lets you extract a portion of your vector as a new vector.</para>
+    /// <para><b>For Beginners:</b> This method delegates to GetSubVector and provides the same functionality.
+    /// It lets you extract a portion of your vector as a new vector.</para>
     /// </remarks>
     public Vector<T> Subvector(int startIndex, int length)
     {
-        if (startIndex < 0 || startIndex + length > Length)
-            throw new ArgumentOutOfRangeException(nameof(startIndex));
-
-        Vector<T> result = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-        {
-            result[i] = this[startIndex + i];
-        }
-
-        return result;
+        return GetSubVector(startIndex, length);
     }
 
     /// <summary>
@@ -488,20 +489,12 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// or when count is negative or would extend beyond the end of the vector.
     /// </exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This method creates a smaller vector from part of your original vector.
+    /// <para><b>For Beginners:</b> This method delegates to GetSubVector and provides the same functionality.
     /// For example, if you have a vector [1,2,3,4,5] and call GetRange(1,3), you'll get a new vector [2,3,4].</para>
     /// </remarks>
     public Vector<T> GetRange(int startIndex, int count)
     {
-        if (startIndex < 0 || startIndex >= Length)
-            throw new ArgumentOutOfRangeException(nameof(startIndex), "Start index is out of range.");
-        if (count < 0 || startIndex + count > Length)
-            throw new ArgumentOutOfRangeException(nameof(count), "Count is out of range.");
-
-        T[] newData = new T[count];
-        Array.Copy(_data, startIndex, newData, 0, count);
-
-        return new Vector<T>(newData);
+        return GetSubVector(startIndex, count);
     }
 
     /// <summary>
@@ -573,13 +566,17 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <param name="startIndex">The zero-based index at which to start extraction.</param>
     /// <param name="length">The number of elements to extract.</param>
     /// <returns>A new vector containing the extracted elements.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when startIndex is negative or beyond the vector's bounds,
+    /// or when length is negative or would extend beyond the end of the vector.
+    /// </exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This method is similar to GetRange but uses a different approach internally.
+    /// <para><b>For Beginners:</b> This method delegates to GetSubVector and provides the same functionality.
     /// It extracts a portion of your vector starting at a specific position and taking a certain number of elements.</para>
     /// </remarks>
     public Vector<T> GetSegment(int startIndex, int length)
     {
-        return new Vector<T>(this.Skip(startIndex).Take(length));
+        return GetSubVector(startIndex, length);
     }
 
     /// <summary>

@@ -98,7 +98,7 @@ public readonly struct Complex<T>
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> The magnitude is like the "size" of the complex number. It's calculated
-    /// using the Pythagorean theorem: sqrt(realÃƒÂ¯Ã‚Â¿Ã‚Â½ + imaginaryÃƒÂ¯Ã‚Â¿Ã‚Â½).
+    /// using the Pythagorean theorem: sqrt(real² + imaginary²).
     /// </para>
     /// <para>
     /// Think of a complex number as a point on a 2D graph, where the real part is the x-coordinate
@@ -106,7 +106,7 @@ public readonly struct Complex<T>
     /// from the origin (0,0) to that point.
     /// </para>
     /// <para>
-    /// For example, the magnitude of 3 + 4i is sqrt(3ÃƒÂ¯Ã‚Â¿Ã‚Â½ + 4ÃƒÂ¯Ã‚Â¿Ã‚Â½) = sqrt(9 + 16) = sqrt(25) = 5.
+    /// For example, the magnitude of 3 + 4i is sqrt(3² + 4²) = sqrt(9 + 16) = sqrt(25) = 5.
     /// </para>
     /// </remarks>
     public T Magnitude => Ops.Sqrt(Ops.Add(Ops.Square(Real), Ops.Square(Imaginary)));
@@ -194,7 +194,7 @@ public readonly struct Complex<T>
     /// <returns>A new complex number that is the product of the two complex numbers.</returns>
     /// <remarks>
     /// <para>
-    /// Multiplication of complex numbers follows the distributive property and the rule that iÃƒÂ¯Ã‚Â¿Ã‚Â½ = -1.
+    /// Multiplication of complex numbers follows the distributive property and the rule that i² = -1.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Multiplying complex numbers is a bit more involved than addition or subtraction.
@@ -207,7 +207,7 @@ public readonly struct Complex<T>
     /// </para>
     /// <para>
     /// This is similar to multiplying two binomials (a + b)(c + d), but with the special rule
-    /// that iÃƒÂ¯Ã‚Â¿Ã‚Â½ = -1, which is why the term bd becomes negative.
+    /// that i² = -1, which is why the term bd becomes negative.
     /// </para>
     /// </remarks>
     public static Complex<T> operator *(Complex<T> a, Complex<T> b)
@@ -237,12 +237,12 @@ public readonly struct Complex<T>
     /// 3. Then we can separate the real and imaginary parts of the result
     /// </para>
     /// <para>
-    /// For example, to calculate (3 + 2i) ÃƒÂ¯Ã‚Â¿Ã‚Â½ (1 + i):
+    /// For example, to calculate (3 + 2i) / (1 + i):
     /// - First, we multiply both top and bottom by the conjugate of (1 + i), which is (1 - i)
-    /// - This gives us: [(3 + 2i)(1 - i)] ÃƒÂ¯Ã‚Â¿Ã‚Â½ [(1 + i)(1 - i)]
-    /// - The denominator becomes (1ÃƒÂ¯Ã‚Â¿Ã‚Â½ + 1ÃƒÂ¯Ã‚Â¿Ã‚Â½) = 2
-    /// - The numerator becomes (3 + 2i)(1 - i) = 3 - 3i + 2i - 2iÃƒÂ¯Ã‚Â¿Ã‚Â½ = 3 - 3i + 2i + 2 = 5 - i
-    /// - So the result is (5 - i) ÃƒÂ¯Ã‚Â¿Ã‚Â½ 2 = 2.5 - 0.5i
+    /// - This gives us: [(3 + 2i)(1 - i)] / [(1 + i)(1 - i)]
+    /// - The denominator becomes (1² + 1²) = 2
+    /// - The numerator becomes (3 + 2i)(1 - i) = 3 - 3i + 2i - 2i² = 3 - 3i + 2i + 2 = 5 - i
+    /// - So the result is (5 - i) / 2 = 2.5 - 0.5i
     /// </para>
     /// </remarks>
     public static Complex<T> operator /(Complex<T> a, Complex<T> b)
@@ -354,13 +354,21 @@ public readonly struct Complex<T>
     /// <summary>
     /// Returns a string representation of this complex number.
     /// </summary>
-    /// <returns>A string that represents the complex number in the format "a + bi".</returns>
+    /// <returns>A string that represents the complex number in the format "a + bi" or "a - bi".</returns>
     /// <remarks>
     /// <b>For Beginners:</b> This method converts the complex number to a readable text format.
-    /// For example, a complex number with Real = 3 and Imaginary = 2 would be displayed as "3 + 2i".
+    /// For example, a complex number with Real = 3 and Imaginary = 2 would be displayed as "3 + 2i",
+    /// and a complex number with Real = 3 and Imaginary = -2 would be displayed as "3 - 2i".
     /// </remarks>
     public override string ToString()
-        => $"{Real} + {Imaginary}i";
+    {
+        double imaginaryValue = Convert.ToDouble(Imaginary);
+        if (imaginaryValue < 0)
+        {
+            return $"{Real} - {Ops.Negate(Imaginary)}i";
+        }
+        return $"{Real} + {Imaginary}i";
+    }
 
     /// <summary>
     /// Creates a complex number from polar coordinates (magnitude and phase).
@@ -387,8 +395,8 @@ public readonly struct Complex<T>
     /// </para>
     /// <para>
     /// For example, to create the complex number 3 + 4i using polar coordinates:
-    /// - First, calculate the magnitude: sqrt(3ÃƒÂ¯Ã‚Â¿Ã‚Â½ + 4ÃƒÂ¯Ã‚Â¿Ã‚Â½) = 5
-    /// - Then, calculate the phase: arctan(4/3) ÃƒÂ¯Ã‚Â¿Ã‚Â½ 0.9273 radians
+    /// - First, calculate the magnitude: sqrt(3² + 4²) = 5
+    /// - Then, calculate the phase: arctan(4/3) ≈ 0.9273 radians
     /// - Use FromPolarCoordinates(5, 0.9273)
     /// </para>
     /// </remarks>

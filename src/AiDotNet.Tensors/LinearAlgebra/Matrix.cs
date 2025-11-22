@@ -79,17 +79,17 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// <typeparam name="T2">Unused type parameter (maintained for compatibility).</typeparam>
     /// <param name="size">The size of the square identity matrix.</param>
     /// <returns>An identity matrix of the specified size.</returns>
-    /// <exception cref="ArgumentException">Thrown when size is less than or equal to 1.</exception>
+    /// <exception cref="ArgumentException">Thrown when size is less than 1.</exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> An identity matrix is a special square matrix where all elements are 0 except 
-    /// for the main diagonal (top-left to bottom-right), which contains 1s. It's similar to the number 1 in 
+    /// <para><b>For Beginners:</b> An identity matrix is a special square matrix where all elements are 0 except
+    /// for the main diagonal (top-left to bottom-right), which contains 1s. It's similar to the number 1 in
     /// multiplication - multiplying any matrix by an identity matrix gives you the original matrix.</para>
     /// </remarks>
     public static Matrix<T> CreateIdentityMatrix(int size)
     {
-        if (size <= 1)
+        if (size < 1)
         {
-            throw new ArgumentException($"{nameof(size)} has to be a minimum of 2", nameof(size));
+            throw new ArgumentException($"{nameof(size)} has to be a minimum of 1", nameof(size));
         }
 
         var identityMatrix = new Matrix<T>(size, size);
@@ -537,13 +537,27 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// </summary>
     /// <param name="matrices">The matrices to place on the diagonal.</param>
     /// <returns>A new block diagonal matrix.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when matrices is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when matrices is empty or contains null elements.</exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> A block diagonal matrix is a special matrix where smaller matrices are placed 
-    /// along the diagonal, with zeros everywhere else. It's like placing each input matrix in its own 
+    /// <para><b>For Beginners:</b> A block diagonal matrix is a special matrix where smaller matrices are placed
+    /// along the diagonal, with zeros everywhere else. It's like placing each input matrix in its own
     /// section of a larger matrix, with no overlap between them.</para>
     /// </remarks>
     public static Matrix<T> BlockDiagonal(params Matrix<T>[] matrices)
     {
+        if (matrices == null)
+            throw new ArgumentNullException(nameof(matrices));
+
+        if (matrices.Length == 0)
+            throw new ArgumentException("Matrices array cannot be empty", nameof(matrices));
+
+        for (int i = 0; i < matrices.Length; i++)
+        {
+            if (matrices[i] == null)
+                throw new ArgumentException($"Matrix at index {i} is null", nameof(matrices));
+        }
+
         int totalRows = matrices.Sum(m => m.Rows);
         int totalCols = matrices.Sum(m => m.Columns);
         Matrix<T> result = new(totalRows, totalCols);
@@ -595,15 +609,24 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     {
         if (vectors == null)
             throw new ArgumentNullException(nameof(vectors));
-        var vectorList = vectors.Select(v => v.ToList()).ToList();
+
+        var vectorList = new List<List<T>>();
+        foreach (var vector in vectors)
+        {
+            if (vector == null)
+                throw new ArgumentException("Vector collection contains null elements", nameof(vectors));
+            vectorList.Add(vector.ToList());
+        }
+
         if (vectorList.Count == 0)
-            throw new ArgumentException("Vector list cannot be empty");
+            throw new ArgumentException("Vector list cannot be empty", nameof(vectors));
+
         int rows = vectorList[0].Count;
         if (vectorList.Any(v => v.Count != rows))
-            throw new ArgumentException("All vectors must have the same length");
+            throw new ArgumentException("All vectors must have the same length", nameof(vectors));
 
         var matrix = new Matrix<T>(rows, vectorList.Count);
-    
+
         for (int j = 0; j < vectorList.Count; j++)
         {
             for (int i = 0; i < rows; i++)
@@ -865,15 +888,24 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     {
         if (vectors == null)
             throw new ArgumentNullException(nameof(vectors));
-        var vectorList = vectors.Select(v => v.ToList()).ToList();
+
+        var vectorList = new List<List<T>>();
+        foreach (var vector in vectors)
+        {
+            if (vector == null)
+                throw new ArgumentException("Vector collection contains null elements", nameof(vectors));
+            vectorList.Add(vector.ToList());
+        }
+
         if (vectorList.Count == 0)
-            throw new ArgumentException("Vector list cannot be empty");
+            throw new ArgumentException("Vector list cannot be empty", nameof(vectors));
+
         int cols = vectorList[0].Count;
         if (vectorList.Any(v => v.Count != cols))
-            throw new ArgumentException("All vectors must have the same length");
+            throw new ArgumentException("All vectors must have the same length", nameof(vectors));
 
         var matrix = new Matrix<T>(vectorList.Count, cols);
-    
+
         for (int i = 0; i < vectorList.Count; i++)
         {
             for (int j = 0; j < cols; j++)
@@ -979,20 +1011,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// </remarks>
     public Matrix<T> PointwiseDivide(Matrix<T> other)
     {
-        if (Rows != other.Rows || Columns != other.Columns)
-            throw new ArgumentException("Matrices must have the same dimensions for pointwise division.");
-
-        Matrix<T> result = new(Rows, Columns);
-
-        for (int i = 0; i < Rows; i++)
-        {
-            for (int j = 0; j < Columns; j++)
-            {
-                result[i, j] = _numOps.Divide(this[i, j], other[i, j]);
-            }
-        }
-
-        return result;
+        return Divide(other);
     }
 
     /// <summary>
