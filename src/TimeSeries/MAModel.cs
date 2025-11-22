@@ -597,14 +597,14 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// helps the algorithm understand the curvature of the landscape, allowing it to
     /// take more efficient steps toward the optimal solution.
     /// </remarks>
-    private void UpdateHessianApproximation(Vector<T> y, Matrix<T> hessianApprox, Vector<T> oldTheta, 
+    private void UpdateHessianApproximation(Vector<T> data, Matrix<T> hessianApprox, Vector<T> oldTheta,
                                             Vector<T> newTheta, Vector<T> oldGradient)
     {
         int q = oldTheta.Length;
-        
+
         // Calculate new gradient
         Vector<T> newGradient = new Vector<T>(q);
-        CalculateGradient(y, newTheta, newGradient);
+        CalculateGradient(data, newTheta, newGradient);
         
         // Calculate s = newTheta - oldTheta
         Vector<T> s = new Vector<T>(q);

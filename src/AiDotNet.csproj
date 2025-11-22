@@ -82,4 +82,11 @@
 	  <None Remove="AiDotNet.Serving\**\*" />
 	</ItemGroup>
 
+	<!-- Exclude the AiDotNet.Tensors project files from this project -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Tensors\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Tensors\**\*" />
+	  <None Remove="AiDotNet.Tensors\**\*" />
+	</ItemGroup>
+
 </Project>

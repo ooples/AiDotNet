@@ -138,7 +138,7 @@ public readonly struct Complex<T>
     /// - The phase of 0 - 1i is -p/2 radians (-90 degrees)
     /// </para>
     /// </remarks>
-    public T Phase => _ops.FromDouble(Math.Atan2(Convert.ToDouble(Imaginary), Convert.ToDouble(Real)));
+    public T Phase => Ops.FromDouble(Math.Atan2(Convert.ToDouble(Imaginary), Convert.ToDouble(Real)));
 
     /// <summary>
     /// Adds two complex numbers.
@@ -302,7 +302,7 @@ public readonly struct Complex<T>
     /// If both parts match exactly, the complex numbers are considered equal.
     /// </remarks>
     public bool Equals(Complex<T> other)
-        => _ops.Equals(Real, other.Real) && _ops.Equals(Imaginary, other.Imaginary);
+        => Ops.Equals(Real, other.Real) && Ops.Equals(Imaginary, other.Imaginary);
 
     /// <summary>
     /// Returns a hash code for this complex number.
