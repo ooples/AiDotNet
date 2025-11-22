@@ -466,7 +466,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
         // Add MA terms
         for (int i = 0; i < _maParameters.Length; i++)
         {
-            if (index - i - 1 >= 0 && _residuals != null)
+            if (index - i - 1 >= 0 && _residuals != null && _residuals.Length > index - i - 1)
             {
                 prediction = NumOps.Add(prediction, NumOps.Multiply(_maParameters[i], _residuals[index - i - 1]));
             }
