@@ -338,7 +338,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             }
             
             // Update BFGS approximation of the Hessian
-            UpdateHessianApproximation(hessianApprox, theta, newTheta, gradient);
+            UpdateHessianApproximation(y, hessianApprox, theta, newTheta, gradient);
             
             // Update for next iteration
             theta = newTheta;
@@ -597,14 +597,14 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// helps the algorithm understand the curvature of the landscape, allowing it to
     /// take more efficient steps toward the optimal solution.
     /// </remarks>
-    private void UpdateHessianApproximation(Matrix<T> hessianApprox, Vector<T> oldTheta, 
+    private void UpdateHessianApproximation(Vector<T> y, Matrix<T> hessianApprox, Vector<T> oldTheta, 
                                             Vector<T> newTheta, Vector<T> oldGradient)
     {
         int q = oldTheta.Length;
         
         // Calculate new gradient
         Vector<T> newGradient = new Vector<T>(q);
-        CalculateGradient(Vector<T>.Empty(), newTheta, newGradient);
+        CalculateGradient(y, newTheta, newGradient);
         
         // Calculate s = newTheta - oldTheta
         Vector<T> s = new Vector<T>(q);
