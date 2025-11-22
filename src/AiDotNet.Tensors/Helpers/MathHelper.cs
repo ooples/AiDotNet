@@ -996,7 +996,7 @@ public static class MathHelper
     /// these features.
     /// </para>
     /// </remarks>
-    public static T CalculateYIntercept<T>(Matrix<T> xMatrix, Vector<T> y, Vector<T> coefficients)
+    public static T CalculateYIntercept<T>(AiDotNet.Tensors.LinearAlgebra.Matrix<T> xMatrix, AiDotNet.Tensors.LinearAlgebra.Vector<T> y, AiDotNet.Tensors.LinearAlgebra.Vector<T> coefficients)
     {
         var _numOps = GetNumericOperations<T>();
 
@@ -1031,19 +1031,11 @@ public static class MathHelper
     /// This method works with any numeric type that implements INumericOperations.
     /// </para>
     /// </remarks>
-    private static T CalculateAverage<T>(Vector<T> vector)
+    private static T CalculateAverage<T>(AiDotNet.Tensors.LinearAlgebra.Vector<T> vector)
     {
         if (vector.Length == 0)
             throw new ArgumentException("Cannot calculate average of an empty vector.", nameof(vector));
 
-        var numOps = GetNumericOperations<T>();
-        T sum = numOps.Zero;
-
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sum = numOps.Add(sum, vector[i]);
-        }
-
-        return numOps.Divide(sum, numOps.FromDouble(vector.Length));
+        return vector.Mean();
     }
 }
