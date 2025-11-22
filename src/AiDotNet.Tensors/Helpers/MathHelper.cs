@@ -954,16 +954,17 @@ public static class MathHelper
 
         T _t = _numOps.Divide(_numOps.FromDouble(1), _numOps.Add(_numOps.FromDouble(1), _numOps.Multiply(_p, x)));
         T _y = _numOps.Subtract(_numOps.FromDouble(1), 
-            _numOps.Multiply(
-                _numOps.Exp(_numOps.Negate(_numOps.Square(x))),
-                _numOps.Add(_a1, 
-                    _numOps.Multiply(_t, 
-                        _numOps.Add(_a2, 
-                            _numOps.Multiply(_t, 
-                                _numOps.Add(_a3, 
-                                    _numOps.Multiply(_t, 
-                                        _numOps.Add(_a4, 
-                                            _numOps.Multiply(_a5, _t))))))))));
+            _numOps.Multiply(_t,
+                _numOps.Multiply(
+                    _numOps.Exp(_numOps.Negate(_numOps.Square(x))),
+                    _numOps.Add(_a1, 
+                        _numOps.Multiply(_t, 
+                            _numOps.Add(_a2, 
+                                _numOps.Multiply(_t, 
+                                    _numOps.Add(_a3, 
+                                        _numOps.Multiply(_t, 
+                                            _numOps.Add(_a4, 
+                                                _numOps.Multiply(_a5, _t)))))))))));
 
         return _numOps.Multiply(_sign, _y);
     }
