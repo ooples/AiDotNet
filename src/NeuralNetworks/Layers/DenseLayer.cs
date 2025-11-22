@@ -222,6 +222,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     private Tensor<T>? _lastInput;
+    private Tensor<T>? _lastOutput; // Pre-activation output for proper gradient computation
 
     /// <summary>
     /// Gets the total number of trainable parameters in the layer.
@@ -602,6 +603,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var flattenedInput = input.Reshape(batchSize, input.Shape[1]);
         var output = flattenedInput.Multiply(_weights.Transpose()).Add(_biases);
 
+        // Cache pre-activation output for proper gradient computation in backward pass
+        _lastOutput = output;
+
         if (UsingVectorActivation)
         {
             // Use centralized ActivationHelper for optimized activation dispatch
@@ -659,22 +663,39 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int batchSize = _lastInput.Shape[0];
 
+        if (_lastOutput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Apply chain rule: dL/dz = dL/dy ⊙ f'(z)
+        // where f'(z) is the activation derivative evaluated at pre-activation values
         Tensor<T> activationGradient;
         if (UsingVectorActivation)
         {
             if (VectorActivation == null)
                 throw new InvalidOperationException("VectorActivation is null when UsingVectorActivation is true");
-            activationGradient = VectorActivation.Derivative(outputGradient);
+
+            // Compute activation derivative at pre-activation values
+            var actDeriv = VectorActivation.Derivative(_lastOutput);
+
+            // Element-wise multiply with upstream gradient to apply chain rule
+            activationGradient = new Tensor<T>(outputGradient.Shape);
+            for (int i = 0; i < outputGradient.Length; i++)
+            {
+                activationGradient[i] = NumOps.Multiply(outputGradient[i], actDeriv[i]);
+            }
         }
         else
         {
             if (ScalarActivation == null)
                 throw new InvalidOperationException("ScalarActivation is null when UsingVectorActivation is false");
-            // Apply scalar activation derivative element-wise
+
+            // Apply scalar activation derivative element-wise with chain rule
             activationGradient = new Tensor<T>(outputGradient.Shape);
             for (int i = 0; i < outputGradient.Length; i++)
             {
-                activationGradient[i] = ScalarActivation.Derivative(outputGradient[i]);
+                // Compute derivative at pre-activation value and multiply with upstream gradient
+                var deriv = ScalarActivation.Derivative(_lastOutput[i]);
+                activationGradient[i] = NumOps.Multiply(outputGradient[i], deriv);
             }
         }
 
