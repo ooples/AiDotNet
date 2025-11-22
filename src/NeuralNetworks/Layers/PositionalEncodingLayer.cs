@@ -59,7 +59,11 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// and reused for all forward passes.
     /// </remarks>
     private Tensor<T> encodings;
-    
+
+    /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>

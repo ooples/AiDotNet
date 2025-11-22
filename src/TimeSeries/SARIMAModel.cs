@@ -366,18 +366,9 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
     private T EstimateConstant(Vector<T> y)
     {
         T mean = y.Average();
-        T arSum = NumOps.Zero;
-        T sarSum = NumOps.Zero;
-
-        for (int i = 0; i < _arCoefficients.Length; i++)
-        {
-            arSum = NumOps.Add(arSum, _arCoefficients[i]);
-        }
-
-        for (int i = 0; i < _sarCoefficients.Length; i++)
-        {
-            sarSum = NumOps.Add(sarSum, _sarCoefficients[i]);
-        }
+        // VECTORIZED: Use Engine.Sum() for coefficient summation
+        T arSum = Engine.Sum(_arCoefficients);
+        T sarSum = Engine.Sum(_sarCoefficients);
 
         return NumOps.Multiply(mean, NumOps.Subtract(NumOps.One, NumOps.Add(arSum, sarSum)));
     }
@@ -420,28 +411,36 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         {
             T prediction = _constant;
 
-            // Add non-seasonal AR component
-            for (int j = 0; j < _p; j++)
+            // VECTORIZED: Add non-seasonal AR component using dot product
+            if (_p > 0)
             {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[j], lastObservedValues[j]));
+                var arValues = lastObservedValues.Slice(0, _p);
+                prediction = NumOps.Add(prediction, Engine.DotProduct(_arCoefficients, arValues));
             }
 
-            // Add seasonal AR component
-            for (int j = 0; j < _P; j++)
+            // VECTORIZED: Add seasonal AR component
+            if (_P > 0)
             {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_sarCoefficients[j], lastObservedValues[(j + 1) * _m - 1]));
+                var sarValues = new Vector<T>(_P);
+                for (int j = 0; j < _P; j++)
+                    sarValues[j] = lastObservedValues[(j + 1) * _m - 1];
+                prediction = NumOps.Add(prediction, Engine.DotProduct(_sarCoefficients, sarValues));
             }
 
-            // Add non-seasonal MA component
-            for (int j = 0; j < _q; j++)
+            // VECTORIZED: Add non-seasonal MA component using dot product
+            if (_q > 0)
             {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[j], lastErrors[j]));
+                var maValues = lastErrors.Slice(0, _q);
+                prediction = NumOps.Add(prediction, Engine.DotProduct(_maCoefficients, maValues));
             }
 
-            // Add seasonal MA component
-            for (int j = 0; j < _Q; j++)
+            // VECTORIZED: Add seasonal MA component
+            if (_Q > 0)
             {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_smaCoefficients[j], lastErrors[(j + 1) * _m - 1]));
+                var smaValues = new Vector<T>(_Q);
+                for (int j = 0; j < _Q; j++)
+                    smaValues[j] = lastErrors[(j + 1) * _m - 1];
+                prediction = NumOps.Add(prediction, Engine.DotProduct(_smaCoefficients, smaValues));
             }
 
             predictions[i] = prediction;

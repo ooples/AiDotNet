@@ -657,11 +657,10 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
+        // === Vectorized State Reset (Phase B: US-GPU-015) ===
         // Reset the internal state of the layer
-        for (int i = 0; i < GetInputShape()[0]; i++)
-        {
-            _lastInput[i] = NumOps.Zero;
-            _lastOutput[i] = NumOps.Zero;
-        }
+        int size = GetInputShape()[0];
+        _lastInput = Vector<T>.CreateDefault(size, NumOps.Zero);
+        _lastOutput = Vector<T>.CreateDefault(size, NumOps.Zero);
     }
 }

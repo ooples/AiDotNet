@@ -65,6 +65,10 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     private readonly SigmoidActivation<T> _sigmoidActivation = new();
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -416,10 +420,11 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private (Tensor<T> hiddenState, Tensor<T> cellState) ConvLSTMCell(Tensor<T> input, Tensor<T> prevHiddenState, Tensor<T> prevCellState)
     {
-        var forgetGate = Convolve(input, _weightsFi).Add(Convolve(prevHiddenState, _weightsFh)).Add(_biasF).Transform((x, _) => _sigmoidActivation.Activate(x));
-        var inputGate = Convolve(input, _weightsIi).Add(Convolve(prevHiddenState, _weightsIh)).Add(_biasI).Transform((x, _) => _sigmoidActivation.Activate(x));
+        // Use Engine.Sigmoid for vectorized/GPU-accelerated sigmoid activations
+        var forgetGate = Engine.Sigmoid(Convolve(input, _weightsFi).Add(Convolve(prevHiddenState, _weightsFh)).Add(_biasF));
+        var inputGate = Engine.Sigmoid(Convolve(input, _weightsIi).Add(Convolve(prevHiddenState, _weightsIh)).Add(_biasI));
         var candidateCell = ApplyActivation(Convolve(input, _weightsCi).Add(Convolve(prevHiddenState, _weightsCh)).Add(_biasC));
-        var outputGate = Convolve(input, _weightsOi).Add(Convolve(prevHiddenState, _weightsOh)).Add(_biasO).Transform((x, _) => _sigmoidActivation.Activate(x));
+        var outputGate = Engine.Sigmoid(Convolve(input, _weightsOi).Add(Convolve(prevHiddenState, _weightsOh)).Add(_biasO));
 
         var newCellState = forgetGate.Multiply(prevCellState).Add(inputGate.Multiply(candidateCell));
         var newHiddenState = outputGate.Multiply(ApplyActivation(newCellState));
@@ -847,10 +852,11 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     private (Tensor<T> f, Tensor<T> i, Tensor<T> c, Tensor<T> o, Tensor<T> newC, Tensor<T> newH) ForwardStep(
             Tensor<T> xt, Tensor<T> prevH, Tensor<T> prevC)
     {
-        var f = Convolve(xt, _weightsFi).Add(Convolve(prevH, _weightsFh)).Add(_biasF).Transform((x, _) => _sigmoidActivation.Activate(x));
-        var i = Convolve(xt, _weightsIi).Add(Convolve(prevH, _weightsIh)).Add(_biasI).Transform((x, _) => _sigmoidActivation.Activate(x));
+        // Use Engine.Sigmoid for vectorized/GPU-accelerated sigmoid activations
+        var f = Engine.Sigmoid(Convolve(xt, _weightsFi).Add(Convolve(prevH, _weightsFh)).Add(_biasF));
+        var i = Engine.Sigmoid(Convolve(xt, _weightsIi).Add(Convolve(prevH, _weightsIh)).Add(_biasI));
         var c = ApplyActivation(Convolve(xt, _weightsCi).Add(Convolve(prevH, _weightsCh)).Add(_biasC));
-        var o = Convolve(xt, _weightsOi).Add(Convolve(prevH, _weightsOh)).Add(_biasO).Transform((x, _) => _sigmoidActivation.Activate(x));
+        var o = Engine.Sigmoid(Convolve(xt, _weightsOi).Add(Convolve(prevH, _weightsOh)).Add(_biasO));
 
         var newC = f.Multiply(prevC).Add(i.Multiply(c));
         var newH = o.Multiply(ApplyActivation(newC));

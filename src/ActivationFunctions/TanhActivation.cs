@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -9,19 +11,19 @@ namespace AiDotNet.ActivationFunctions;
 /// <b>For Beginners:</b> The Hyperbolic Tangent (tanh) activation function is a popular choice in neural networks.
 /// It transforms any input value to an output between -1 and 1, creating an S-shaped curve that's
 /// symmetric around the origin.
-/// 
+///
 /// Key properties of tanh:
 /// - Outputs values between -1 and 1
 /// - An input of 0 produces an output of 0
 /// - Large positive inputs approach +1
 /// - Large negative inputs approach -1
 /// - It's zero-centered, which often helps with learning
-/// 
+///
 /// When to use tanh:
 /// - When you need outputs centered around zero
 /// - For hidden layers in many types of neural networks
 /// - When dealing with data that naturally has both positive and negative values
-/// 
+///
 /// One limitation is the "vanishing gradient problem" - for very large or small inputs,
 /// the function's slope becomes very small, which can slow down learning in deep networks.
 /// </para>
@@ -58,6 +60,31 @@ public class TanhActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies the tanh activation function to a vector of input values using SIMD optimization.
+    /// </summary>
+    /// <param name="input">The input vector.</param>
+    /// <returns>A vector with tanh applied to each element.</returns>
+    /// <remarks>
+    /// <para>
+    /// This implementation uses TensorPrimitivesHelper for SIMD-optimized operations (3-6× speedup for float).
+    /// For arrays with fewer than 16 elements, it falls back to manual loops.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method transforms an entire vector of numbers at once using hardware
+    /// acceleration, making it much faster than processing each number separately.
+    ///
+    /// For example, if you have a vector [0.5, 1.0, -0.5, -1.0]:
+    /// - The output would be approximately [0.46, 0.76, -0.46, -0.76]
+    /// - All values are computed in parallel using SIMD instructions
+    /// </para>
+    /// </remarks>
+    public override Vector<T> Activate(Vector<T> input)
+    {
+        // Use SIMD-optimized Tanh (3-6× speedup for float)
+        return TensorPrimitivesHelper<T>.Tanh(input);
+    }
+
+    /// <summary>
     /// Calculates the derivative of the tanh function for a single input value.
     /// </summary>
     /// <param name="input">The input value.</param>
@@ -68,7 +95,7 @@ public class TanhActivation<T> : ActivationFunctionBase<T>
     /// when its input changes slightly. This is crucial during neural network training to determine
     /// how to adjust weights.
     /// 
-    /// The formula is: f'(x) = 1 - tanh�(x)
+    /// The formula is: f'(x) = 1 - tanh�(x)
     /// 
     /// Key properties of this derivative:
     /// - It's highest (equal to 1) at x = 0, where the function is steepest

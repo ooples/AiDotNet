@@ -282,15 +282,19 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
         };
         if (n == 3) v[2] = z ?? NumOps.Zero;
 
+        // VECTORIZED: Use dot product to compute norm
         T alpha = NumOps.Sqrt(v.DotProduct(v));
         if (NumOps.Equals(alpha, NumOps.Zero)) return Matrix<T>.CreateIdentity(n);
 
         v[0] = NumOps.Add(v[0], NumOps.Multiply(NumOps.SignOrZero(x), alpha));
-        T beta = NumOps.Sqrt(NumOps.Multiply(NumOps.FromDouble(2), v.DotProduct(v)));
+
+        // VECTORIZED: Use dot product for norm calculation (||v||)
+        T beta = NumOps.Sqrt(v.DotProduct(v));
 
         if (NumOps.Equals(beta, NumOps.Zero)) return Matrix<T>.CreateIdentity(n);
 
-        v = v.Divide(beta);
+        // VECTORIZED: Use Engine division for normalization
+        v = (Vector<T>)Engine.Divide(v, beta);
         return Matrix<T>.CreateIdentity(n).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
     }
 

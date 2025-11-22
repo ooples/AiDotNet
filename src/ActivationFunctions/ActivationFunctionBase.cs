@@ -28,6 +28,11 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Determines if the activation function supports operations on individual scalar values.
     /// </summary>
     /// <returns>True if scalar operations are supported; otherwise, false.</returns>

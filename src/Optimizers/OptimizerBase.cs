@@ -34,6 +34,11 @@ namespace AiDotNet.Optimizers;
 public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, TOutput>
 {
     /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Provides numeric operations for type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps;

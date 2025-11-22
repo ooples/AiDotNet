@@ -125,13 +125,7 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     private Vector<T> ApplyWindowFunction(Vector<T> signal)
     {
         var window = _spectralOptions.WindowFunction.Create(signal.Length);
-        Vector<T> windowedSignal = new Vector<T>(signal.Length);
-        for (int i = 0; i < signal.Length; i++)
-        {
-            windowedSignal[i] = NumOps.Multiply(signal[i], window[i]);
-        }
-
-        return windowedSignal;
+        return (Vector<T>)Engine.Multiply(signal, window);
     }
 
     /// <summary>
@@ -498,14 +492,14 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         T sinValue;
         if (NumOps.LessThan(angle, NumOps.FromDouble(Math.PI)))
         {
-            // Use sin(x) ˜ x - x³/6 for small x
+            // Use sin(x) ï¿½ x - xï¿½/6 for small x
             if (NumOps.LessThan(angle, NumOps.FromDouble(Math.PI / 2)))
             {
                 T xSquared = NumOps.Multiply(angle, angle);
                 T xCubed = NumOps.Multiply(xSquared, angle);
                 sinValue = NumOps.Subtract(angle, NumOps.Divide(xCubed, NumOps.FromDouble(6)));
             }
-            // For x near p/2, use sin(x) ˜ 1 - (x - p/2)²/2
+            // For x near p/2, use sin(x) ï¿½ 1 - (x - p/2)ï¿½/2
             else
             {
                 T diff = NumOps.Subtract(angle, NumOps.FromDouble(Math.PI / 2));

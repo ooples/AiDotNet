@@ -65,9 +65,11 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the FTRL algorithm.</param>
+    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public FTRLOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        FTRLOptimizerOptions<T, TInput, TOutput>? options = null)
+        FTRLOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
         : base(model, options ?? new())
     {
         _options = options ?? new FTRLOptimizerOptions<T, TInput, TOutput>();
@@ -162,53 +164,61 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <returns>The updated solution.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        // === Partially Vectorized FTRL Update using IEngine (Phase B: US-GPU-015) ===
+        // FTRL uses L1 thresholding which requires conditional logic per-element
+        // Vectorized: gradient operations, sigma calculation, state updates
+        // Element-wise: L1 thresholding conditional
+
         var parameters = currentSolution.GetParameters();
 
-        // Save pre-update parameters for reverse updates
-        if (_previousParameters == null || _previousParameters.Length != parameters.Length)
-        {
-            _previousParameters = new Vector<T>(parameters.Length);
-        }
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _previousParameters[i] = parameters[i];
-        }
+        // Save pre-update parameters for reverse updates (vectorized copy)
+        _previousParameters = new Vector<T>(parameters);
 
-        var newCoefficients = new Vector<T>(parameters.Length);
         var alpha = NumOps.FromDouble(_options.Alpha);
-        var beta = NumOps.FromDouble(_options.Beta);
         var lambda1 = NumOps.FromDouble(_options.Lambda1);
         var lambda2 = NumOps.FromDouble(_options.Lambda2);
+        var lambda2Factor = NumOps.FromDouble(_options.Lambda2 * (1 + _options.Beta));
+
+        // Vectorized gradient squared calculation
+        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
+
+        // Vectorized n update: n = n + g^2
+        var nPlusGradSq = (Vector<T>)Engine.Add(_n!, gradSquared);
+
+        // Vectorized sqrt operations for sigma calculation
+        var sqrtNPlusGradSq = (Vector<T>)Engine.Sqrt(nPlusGradSq);
+        var sqrtN = (Vector<T>)Engine.Sqrt(_n!);
+        var numerator = (Vector<T>)Engine.Subtract(sqrtNPlusGradSq, sqrtN);
+        var sigma = (Vector<T>)Engine.Divide(numerator, alpha);
+
+        // Vectorized z update: z = z + g - sigma * params
+        var sigmaTimesParams = (Vector<T>)Engine.Multiply(sigma, parameters);
+        var gradMinusSigmaParams = (Vector<T>)Engine.Subtract(gradient, sigmaTimesParams);
+        _z = (Vector<T>)Engine.Add(_z!, gradMinusSigmaParams);
+
+        // Update n state
+        _n = nPlusGradSq;
+
+        // L1 thresholding requires per-element conditional logic
+        var newCoefficients = new Vector<T>(parameters.Length);
+        var absZ = (Vector<T>)Engine.Abs(_z);
+        var signZ = (Vector<T>)Engine.Sign(_z);
+        var sqrtNOverAlpha = (Vector<T>)Engine.Divide(sqrtNPlusGradSq, alpha);
 
         for (int i = 0; i < parameters.Length; i++)
         {
-            var sigma = NumOps.Divide(
-                NumOps.Subtract(NumOps.Sqrt(NumOps.Add(_n![i], NumOps.Multiply(gradient[i], gradient[i]))), NumOps.Sqrt(_n[i])),
-                alpha
-            );
-            _z![i] = NumOps.Add(_z[i], NumOps.Subtract(gradient[i], NumOps.Multiply(sigma, parameters[i])));
-            _n![i] = NumOps.Add(_n[i], NumOps.Multiply(gradient[i], gradient[i]));
-
-            var sign = NumOps.SignOrZero(_z[i]);
-            if (NumOps.GreaterThan(NumOps.Abs(_z[i]), lambda1))
+            // L1 proximal operator: sparse solution via thresholding
+            if (NumOps.GreaterThan(absZ[i], lambda1))
             {
-                newCoefficients[i] = NumOps.Divide(
-                    NumOps.Multiply(
-                        NumOps.Subtract(lambda1, _z[i]),
-                        sign
-                    ),
-                    NumOps.Add(
-                        NumOps.Multiply(lambda2, NumOps.FromDouble(1 + _options.Beta)),
-                        NumOps.Divide(
-                            NumOps.Sqrt(_n[i]),
-                            alpha
-                        )
-                    )
-                );
+                // FTRL proximal: numerator = sign(z) * (lambda1 - |z|)
+                var lambda1MinusAbsZ = NumOps.Subtract(lambda1, absZ[i]);
+                var numeratorValue = NumOps.Multiply(lambda1MinusAbsZ, signZ[i]);
+                var denominatorValue = NumOps.Add(lambda2Factor, sqrtNOverAlpha[i]);
+                newCoefficients[i] = NumOps.Divide(numeratorValue, denominatorValue);
             }
             else
             {
-                newCoefficients[i] = NumOps.FromDouble(0);
+                newCoefficients[i] = NumOps.Zero;
             }
         }
 
@@ -254,15 +264,9 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         }
 
         // FTRL's complex proximal gradient descent with L1 thresholding makes exact reversal impossible.
-        // Return the pre-update parameters that were saved in UpdateSolution.
+        // Return the pre-update parameters that were saved in UpdateSolution (vectorized copy).
         // This is the best we can do for FTRL due to the irreversible L1 thresholding.
-        var original = new T[updatedParameters.Length];
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            original[i] = _previousParameters[i];
-        }
-
-        return new Vector<T>(original);
+        return new Vector<T>(_previousParameters);
     }
 
     /// <summary>

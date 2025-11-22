@@ -335,11 +335,9 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         }
 
         // Calculate first differences
-        Vector<T> diffs = new Vector<T>(y.Length - 1);
-        for (int i = 1; i < y.Length; i++)
-        {
-            diffs[i - 1] = NumOps.Subtract(y[i], y[i - 1]);
-        }
+        Vector<T> y_shifted = y.Slice(0, y.Length - 1);
+        Vector<T> y_current = y.Slice(1, y.Length - 1);
+        Vector<T> diffs = (Vector<T>)Engine.Subtract(y_current, y_shifted);
 
         // Remove zero differences to avoid issues with median calculation
         List<T> nonZeroDiffs = new List<T>();

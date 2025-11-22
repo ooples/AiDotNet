@@ -569,7 +569,8 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public LSTMLayer(int inputSize, int hiddenSize, int[] inputShape,
         IActivationFunction<T>? activation = null,
-        IActivationFunction<T>? recurrentActivation = null)
+        IActivationFunction<T>? recurrentActivation = null,
+        IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, hiddenSize), activation ?? new TanhActivation<T>())
     {
         _inputSize = inputSize;
@@ -633,7 +634,8 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public LSTMLayer(int inputSize, int hiddenSize, int[] inputShape,
         IVectorActivationFunction<T>? activation = null,
-        IVectorActivationFunction<T>? recurrentActivation = null)
+        IVectorActivationFunction<T>? recurrentActivation = null,
+        IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, hiddenSize), activation ?? new TanhActivation<T>())
     {
         _inputSize = inputSize;
@@ -880,23 +882,33 @@ public class LSTMLayer<T> : LayerBase<T>
 
         if (_useVectorActivation)
         {
-            f = _sigmoidVectorActivation!.Activate(f);
-            i = _sigmoidVectorActivation!.Activate(i);
-            c = _tanhVectorActivation!.Activate(c);
-            o = _sigmoidVectorActivation!.Activate(o);
+            // Use Engine methods for optimized activations (CPU SIMD / GPU kernels)
+            f = Engine.Sigmoid(f);
+            i = Engine.Sigmoid(i);
+            c = Engine.Tanh(c);
+            o = Engine.Sigmoid(o);
         }
         else
         {
-            f = f.Transform((x, _) => _sigmoidActivation!.Activate(x));
-            i = i.Transform((x, _) => _sigmoidActivation!.Activate(x));
-            c = c.Transform((x, _) => _tanhActivation!.Activate(x));
-            o = o.Transform((x, _) => _sigmoidActivation!.Activate(x));
+            if (_sigmoidActivation == null)
+                throw new InvalidOperationException("Sigmoid activation is null when not using vector activation");
+            if (_tanhActivation == null)
+                throw new InvalidOperationException("Tanh activation is null when not using vector activation");
+
+            f = f.Transform((x, _) => _sigmoidActivation.Activate(x));
+            i = i.Transform((x, _) => _sigmoidActivation.Activate(x));
+            c = c.Transform((x, _) => _tanhActivation.Activate(x));
+            o = o.Transform((x, _) => _sigmoidActivation.Activate(x));
         }
 
         var newC = f.ElementwiseMultiply(prevC).Add(i.ElementwiseMultiply(c));
-        var newH = o.ElementwiseMultiply(_useVectorActivation 
-            ? _tanhVectorActivation!.Activate(newC) 
-            : newC.Transform((x, _) => _tanhActivation!.Activate(x)));
+        var newH = o.ElementwiseMultiply(_useVectorActivation
+            ? Engine.Tanh(newC)
+            : newC.Transform((x, _) => {
+                if (_tanhActivation == null)
+                    throw new InvalidOperationException("Tanh activation is null");
+                return _tanhActivation.Activate(x);
+            }));
 
         return (newH, newC);
     }
@@ -1555,9 +1567,11 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private void CopyTensorToVector(Tensor<T> tensor, Vector<T> vector, ref int startIndex)
     {
-        for (int i = 0; i < tensor.Length; i++)
+        // Use optimized ToVector and copy range instead of element-by-element loop
+        var tensorVec = tensor.ToVector();
+        for (int i = 0; i < tensorVec.Length; i++)
         {
-            vector[startIndex++] = tensor[i];
+            vector[startIndex++] = tensorVec[i];
         }
     }
 
@@ -1638,9 +1652,19 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private void CopyVectorToTensor(Vector<T> vector, Tensor<T> tensor, ref int startIndex)
     {
+        // Use optimized array copy instead of element-by-element loop
+        var tempArray = new T[tensor.Length];
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor[i] = vector[startIndex++];
+            tempArray[i] = vector[startIndex++];
+        }
+        var tempVec = new Vector<T>(tempArray);
+        var tempTensor = Tensor<T>.FromVector(tempVec);
+
+        // Copy data to target tensor
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = tempTensor[i];
         }
     }
 

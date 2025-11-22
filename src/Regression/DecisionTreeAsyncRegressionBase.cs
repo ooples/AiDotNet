@@ -30,6 +30,11 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     protected readonly INumericOperations<T> NumOps;
 
     /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Gets or sets the root node of the decision tree.
     /// </summary>
     protected DecisionTreeNode<T>? Root;

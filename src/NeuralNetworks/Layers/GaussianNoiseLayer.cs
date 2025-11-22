@@ -316,19 +316,9 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> GenerateNoise(int[] shape)
     {
-        var noise = new Tensor<T>(shape);
-        for (int i = 0; i < noise.Length; i++)
-        {
-            T u1 = NumOps.FromDouble(Random.NextDouble());
-            T u2 = NumOps.FromDouble(Random.NextDouble());
-            T z = NumOps.Multiply(
-                NumOps.Sqrt(NumOps.Multiply(NumOps.FromDouble(-2.0), NumOps.Log(u1))),
-                MathHelper.Cos(NumOps.Multiply(NumOps.FromDouble(2.0 * Math.PI), u2))
-            );
-            noise[i] = NumOps.Add(_mean, NumOps.Multiply(_standardDeviation, z));
-        }
-
-        return noise;
+        // Use Engine to generate Gaussian noise in a vectorized manner
+        var noiseVector = Engine.GenerateGaussianNoise(new Tensor<T>(shape).Length, _mean, _standardDeviation);
+        return new Tensor<T>(shape, noiseVector);
     }
 
     /// <summary>

@@ -404,16 +404,9 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private double CalculateMatrixDifference(Matrix<T> matrix1, Matrix<T> matrix2)
     {
-        double sum = 0;
-        for (int i = 0; i < matrix1.Rows; i++)
-        {
-            for (int j = 0; j < matrix1.Columns; j++)
-            {
-                sum += Math.Pow(Convert.ToDouble(NumOps.Subtract(matrix1[i, j], matrix2[i, j])), 2);
-            }
-        }
-
-        return Math.Sqrt(sum);
+        var diff = Engine.MatrixSubtract(matrix1, matrix2);
+        T sumOfSquares = Engine.MatrixSumOfSquares(diff);
+        return Math.Sqrt(Convert.ToDouble(sumOfSquares));
     }
 
     /// <summary>

@@ -140,16 +140,16 @@ public class MeasurementLayer<T> : LayerBase<T>
             var imagSquared = NumOps.Multiply(complexValue.Imaginary, complexValue.Imaginary);
             probabilities[i] = NumOps.Add(realSquared, imagSquared);
         }
+        // === Vectorized Probability Normalization (Phase B: US-GPU-015) ===
         // Normalize probabilities
+        var probVec = new Vector<T>(probabilities);
         var sum = NumOps.Zero;
         for (int i = 0; i < probabilities.Length; i++)
         {
             sum = NumOps.Add(sum, probabilities[i]);
         }
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            probabilities[i] = NumOps.Divide(probabilities[i], sum);
-        }
+        probVec = (Vector<T>)Engine.Divide(probVec, sum);
+        probabilities = probVec.ToArray();
         // Create a new tensor with the calculated probabilities
         _lastOutput = new Tensor<T>([input.Shape[0]], new Vector<T>(probabilities));
         return _lastOutput;

@@ -38,6 +38,24 @@ public abstract class RegressionBase<T> : IRegression<T>
     protected INumericOperations<T> NumOps { get; private set; }
 
     /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property provides access to the execution engine (CPU or GPU) for performing
+    /// vectorized operations. The engine is determined by the global AiDotNetEngine configuration
+    /// and allows automatic fallback from GPU to CPU when GPU is not available.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b>
+    /// This gives access to either CPU or GPU processing for faster computations.
+    /// The system automatically chooses the best available option and falls back to CPU
+    /// if GPU acceleration is not available.
+    /// </para>
+    /// </remarks>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Gets the regression options.
     /// </summary>
     /// <value>

@@ -133,6 +133,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="capsuleDimension">The dimension of each output capsule.</param>
     /// <param name="numRoutingIterations">The number of dynamic routing iterations to perform.</param>
     /// <param name="activationFunction">The activation function to apply. Defaults to squash activation if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new capsule layer with the specified dimensions and routing parameters. It initializes
@@ -444,29 +445,54 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         for (int i = 0; i < _numRoutingIterations; i++)
         {
             var weightedSum = new Tensor<T>([batchSize, _numCapsules, _capsuleDimension]);
+
+            // === Vectorized Weighted Sum using IEngine (Phase B: US-GPU-015) ===
             for (int b = 0; b < batchSize; b++)
             {
                 for (int j = 0; j < inputCapsules; j++)
                 {
                     for (int k = 0; k < _numCapsules; k++)
                     {
+                        // Extract capsule vector for this batch, input capsule, output capsule
+                        var capsuleVec = new Vector<T>(_capsuleDimension);
                         for (int d = 0; d < _capsuleDimension; d++)
                         {
-                            weightedSum[b, k, d] = NumOps.Add(weightedSum[b, k, d], 
-                                NumOps.Multiply(couplingCoefficients[b, j, k], transformedInput[b, j, k, d]));
+                            capsuleVec[d] = transformedInput[b, j, k, d];
+                        }
+
+                        // Vectorized: weighted = capsule * coefficient (scalar multiply)
+                        var weighted = (Vector<T>)Engine.Multiply(capsuleVec, couplingCoefficients[b, j, k]);
+
+                        // Accumulate into weightedSum
+                        for (int d = 0; d < _capsuleDimension; d++)
+                        {
+                            weightedSum[b, k, d] = NumOps.Add(weightedSum[b, k, d], weighted[d]);
                         }
                     }
                 }
             }
 
-            // Apply bias after the weighted sum
+            // === Vectorized Bias Addition using IEngine (Phase B: US-GPU-015) ===
             for (int b = 0; b < batchSize; b++)
             {
                 for (int k = 0; k < _numCapsules; k++)
                 {
+                    // Extract bias vector for this capsule
+                    var biasVec = new Vector<T>(_capsuleDimension);
+                    var sumVec = new Vector<T>(_capsuleDimension);
                     for (int d = 0; d < _capsuleDimension; d++)
                     {
-                        weightedSum[b, k, d] = NumOps.Add(weightedSum[b, k, d], _bias[k * _capsuleDimension + d]);
+                        biasVec[d] = _bias[k * _capsuleDimension + d];
+                        sumVec[d] = weightedSum[b, k, d];
+                    }
+
+                    // Vectorized: sum = sum + bias
+                    var result = (Vector<T>)Engine.Add(sumVec, biasVec);
+
+                    // Store back
+                    for (int d = 0; d < _capsuleDimension; d++)
+                    {
+                        weightedSum[b, k, d] = result[d];
                     }
                 }
             }
@@ -477,18 +503,32 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Update coupling coefficients
             if (i < _numRoutingIterations - 1)
             {
+                // === Vectorized Agreement Calculation (Dot Product) using IEngine (Phase B: US-GPU-015) ===
                 for (int b = 0; b < batchSize; b++)
                 {
                     for (int j = 0; j < inputCapsules; j++)
                     {
                         for (int k = 0; k < _numCapsules; k++)
                         {
+                            // Extract vectors for dot product
+                            var transformedVec = new Vector<T>(_capsuleDimension);
+                            var outputVec = new Vector<T>(_capsuleDimension);
+                            for (int d = 0; d < _capsuleDimension; d++)
+                            {
+                                transformedVec[d] = transformedInput[b, j, k, d];
+                                outputVec[d] = output[b, k, d];
+                            }
+
+                            // Vectorized: product = transformed * output (element-wise)
+                            var product = (Vector<T>)Engine.Multiply(transformedVec, outputVec);
+
+                            // Sum the products to get agreement (dot product)
                             T agreement = NumOps.Zero;
                             for (int d = 0; d < _capsuleDimension; d++)
                             {
-                                agreement = NumOps.Add(agreement, 
-                                    NumOps.Multiply(transformedInput[b, j, k, d], output[b, k, d]));
+                                agreement = NumOps.Add(agreement, product[d]);
                             }
+
                             couplingCoefficients[b, j, k] = NumOps.Add(couplingCoefficients[b, j, k], agreement);
                         }
                     }
@@ -499,7 +539,10 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // output is guaranteed to be non-null because _numRoutingIterations is validated to be >= 1
-        _lastOutput = output!;
+        if (output == null)
+            throw new InvalidOperationException("Output tensor was not initialized during forward pass.");
+
+        _lastOutput = output;
         _lastCouplingCoefficients = couplingCoefficients;
 
         return _lastOutput;
@@ -564,35 +607,67 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _biasGradient = new Vector<T>(_numCapsules * _capsuleDimension);
         var inputGradient = new Tensor<T>(_lastInput.Shape);
 
+        // === Vectorized Gradient Accumulation using IEngine (Phase B: US-GPU-015) ===
         for (int b = 0; b < batchSize; b++)
         {
             for (int i = 0; i < inputCapsules; i++)
             {
                 for (int j = 0; j < _numCapsules; j++)
                 {
+                    // Extract gradient vector for this capsule
+                    var gradVec = new Vector<T>(_capsuleDimension);
+                    var currentBiasGrad = new Vector<T>(_capsuleDimension);
                     for (int d = 0; d < _capsuleDimension; d++)
                     {
-                        T grad = outputGradient[b, j, d];
-                        T coeff = _lastCouplingCoefficients[b, i, j];
+                        gradVec[d] = outputGradient[b, j, d];
+                        currentBiasGrad[d] = _biasGradient[j * _capsuleDimension + d];
+                    }
 
-                        // Update bias gradient
-                        _biasGradient[j * _capsuleDimension + d] = NumOps.Add(
-                            _biasGradient[j * _capsuleDimension + d],
-                            grad
-                        );
+                    // Vectorized: bias_grad = bias_grad + grad
+                    var updatedBiasGrad = (Vector<T>)Engine.Add(currentBiasGrad, gradVec);
+                    for (int d = 0; d < _capsuleDimension; d++)
+                    {
+                        _biasGradient[j * _capsuleDimension + d] = updatedBiasGrad[d];
+                    }
 
-                        for (int k = 0; k < inputDimension; k++)
+                    T coeff = _lastCouplingCoefficients[b, i, j];
+
+                    for (int k = 0; k < inputDimension; k++)
+                    {
+                        T input = _lastInput[b, i, k];
+
+                        // Vectorized: grad_weighted = grad * coeff * input (scalar operations on vector)
+                        var gradWeighted = (Vector<T>)Engine.Multiply(gradVec, NumOps.Multiply(coeff, input));
+
+                        // Accumulate transformation matrix gradient
+                        for (int d = 0; d < _capsuleDimension; d++)
                         {
-                            T input = _lastInput[b, i, k];
                             _transformationMatrixGradient[i, k, j, d] = NumOps.Add(
                                 _transformationMatrixGradient[i, k, j, d],
-                                NumOps.Multiply(NumOps.Multiply(grad, coeff), input)
-                            );
-                            inputGradient[b, i, k] = NumOps.Add(
-                                inputGradient[b, i, k],
-                                NumOps.Multiply(NumOps.Multiply(grad, coeff), _transformationMatrix[i, k, j, d])
+                                gradWeighted[d]
                             );
                         }
+
+                        // For input gradient: grad * coeff * weights
+                        var weightVec = new Vector<T>(_capsuleDimension);
+                        for (int d = 0; d < _capsuleDimension; d++)
+                        {
+                            weightVec[d] = _transformationMatrix[i, k, j, d];
+                        }
+
+                        // Vectorized: weighted_grad = grad * weight
+                        var weightedGrad = (Vector<T>)Engine.Multiply(gradVec, weightVec);
+
+                        // Sum and accumulate
+                        T inputGradAccum = NumOps.Zero;
+                        for (int d = 0; d < _capsuleDimension; d++)
+                        {
+                            inputGradAccum = NumOps.Add(inputGradAccum, weightedGrad[d]);
+                        }
+                        inputGradient[b, i, k] = NumOps.Add(
+                            inputGradient[b, i, k],
+                            NumOps.Multiply(inputGradAccum, coeff)
+                        );
                     }
                 }
             }

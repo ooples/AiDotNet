@@ -225,6 +225,10 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private LayerNormalizationLayer<T> _norm2;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -280,13 +284,13 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int sequenceLength = 1; // Default to 1
         _selfAttention = new MultiHeadAttentionLayer<T>(
-            sequenceLength, 
-            _embeddingSize, 
-            _numHeads, 
+            sequenceLength,
+            _embeddingSize,
+            _numHeads,
             new GELUActivation<T>() as IActivationFunction<T>);
-            
+
         _norm1 = new LayerNormalizationLayer<T>(_embeddingSize);
-        
+
         _feedForward = new FeedForwardLayer<T>(
             _embeddingSize,
             _feedForwardDim,
@@ -533,41 +537,19 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Collect parameters from all sublayers
+        // === Vectorized Parameter Concatenation (Phase B: US-GPU-015) ===
+        // Collect parameters from all sublayers and concatenate them
         var selfAttentionParams = _selfAttention.GetParameters();
         var norm1Params = _norm1.GetParameters();
         var feedForwardParams = _feedForward.GetParameters();
         var norm2Params = _norm2.GetParameters();
-    
-        // Calculate total parameter count
-        int totalParamCount = selfAttentionParams.Length + 
-                              norm1Params.Length + 
-                              feedForwardParams.Length + 
-                              norm2Params.Length;
-    
-        // Create a vector to hold all parameters
-        var parameters = new Vector<T>(totalParamCount);
-    
-        // Copy all parameters into the combined vector
-        int currentIndex = 0;
-    
-        // Copy self-attention parameters
-        for (int i = 0; i < selfAttentionParams.Length; i++)
-            parameters[currentIndex++] = selfAttentionParams[i];
-    
-        // Copy norm1 parameters
-        for (int i = 0; i < norm1Params.Length; i++)
-            parameters[currentIndex++] = norm1Params[i];
-    
-        // Copy feed-forward parameters
-        for (int i = 0; i < feedForwardParams.Length; i++)
-            parameters[currentIndex++] = feedForwardParams[i];
-    
-        // Copy norm2 parameters
-        for (int i = 0; i < norm2Params.Length; i++)
-            parameters[currentIndex++] = norm2Params[i];
-    
-        return parameters;
+
+        // Concatenate all parameter vectors at once
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(
+                Vector<T>.Concatenate(selfAttentionParams, norm1Params),
+                feedForwardParams),
+            norm2Params);
     }
 
     /// <summary>

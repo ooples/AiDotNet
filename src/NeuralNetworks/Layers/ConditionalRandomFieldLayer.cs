@@ -80,6 +80,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// <param name="numClasses">The number of possible label classes.</param>
     /// <param name="sequenceLength">The length of the input sequences.</param>
     /// <param name="scalarActivation">The scalar activation function to apply to inputs. Defaults to identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new CRF layer with the specified number of classes and sequence length.
@@ -119,6 +120,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// <param name="numClasses">The number of possible label classes.</param>
     /// <param name="sequenceLength">The length of the input sequences.</param>
     /// <param name="vectorActivation">The vector activation function to apply to inputs. Defaults to identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new CRF layer with the specified number of classes and sequence length.
@@ -575,18 +577,35 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (_transitionMatrixGradient == null || _startScoresGradient == null || _endScoresGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
+        // === Vectorized Parameter Updates using IEngine (Phase B: US-GPU-015) ===
+        // Update start and end scores (vectorized)
+        var scaledStartGrad = (Vector<T>)Engine.Multiply(_startScoresGradient, learningRate);
+        _startScores = (Vector<T>)Engine.Subtract(_startScores, scaledStartGrad);
+
+        var scaledEndGrad = (Vector<T>)Engine.Multiply(_endScoresGradient, learningRate);
+        _endScores = (Vector<T>)Engine.Subtract(_endScores, scaledEndGrad);
+
+        // Update transition matrix (row-wise vectorization)
         for (int i = 0; i < _numClasses; i++)
         {
+            // Extract row vectors
+            var transRow = new Vector<T>(_numClasses);
+            var gradRow = new Vector<T>(_numClasses);
             for (int j = 0; j < _numClasses; j++)
             {
-                _transitionMatrix[i, j] = NumOps.Subtract(_transitionMatrix[i, j], 
-                    NumOps.Multiply(learningRate, _transitionMatrixGradient[i, j]));
+                transRow[j] = _transitionMatrix[i, j];
+                gradRow[j] = _transitionMatrixGradient[i, j];
             }
 
-            _startScores[i] = NumOps.Subtract(_startScores[i], 
-                NumOps.Multiply(learningRate, _startScoresGradient[i]));
-            _endScores[i] = NumOps.Subtract(_endScores[i], 
-                NumOps.Multiply(learningRate, _endScoresGradient[i]));
+            // Vectorized: row = row - learningRate * gradRow
+            var scaledGrad = (Vector<T>)Engine.Multiply(gradRow, learningRate);
+            var updatedRow = (Vector<T>)Engine.Subtract(transRow, scaledGrad);
+
+            // Store back
+            for (int j = 0; j < _numClasses; j++)
+            {
+                _transitionMatrix[i, j] = updatedRow[j];
+            }
         }
     }
 

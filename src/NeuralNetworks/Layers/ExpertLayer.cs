@@ -389,18 +389,13 @@ public class ExpertLayer<T> : LayerBase<T>
                 nameof(parameters));
         }
 
+        // === Vectorized Parameter Distribution (Phase B: US-GPU-015) ===
         int offset = 0;
         foreach (var layer in _layers.Where(l => l.ParameterCount > 0))
         {
             var layerParamCount = layer.ParameterCount;
-            var layerParams = new List<T>();
-
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                layerParams.Add(parameters[offset + i]);
-            }
-
-            layer.SetParameters(new Vector<T>(layerParams.ToArray()));
+            var layerParamsVec = parameters.Slice(offset, layerParamCount);
+            layer.SetParameters(layerParamsVec);
             offset += layerParamCount;
         }
     }

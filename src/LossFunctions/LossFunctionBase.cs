@@ -10,7 +10,12 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     /// Provides operations for the numeric type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps;
-    
+
+    /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Initializes a new instance of the LossFunctionBase class.
     /// </summary>

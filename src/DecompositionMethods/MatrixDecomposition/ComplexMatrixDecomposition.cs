@@ -51,13 +51,17 @@ public class ComplexMatrixDecomposition<T> : MatrixDecompositionBase<Complex<T>>
     private static Matrix<Complex<T>> ConvertToComplexMatrix(Matrix<T> realMatrix, INumericOperations<T> ops)
     {
         var complexMatrix = new Matrix<Complex<T>>(realMatrix.Rows, realMatrix.Columns);
+
+        // VECTORIZED: Process each row as a vector operation
         for (int i = 0; i < realMatrix.Rows; i++)
         {
-            for (int j = 0; j < realMatrix.Columns; j++)
-            {
-                complexMatrix[i, j] = new Complex<T>(realMatrix[i, j], ops.Zero);
-            }
+            Vector<T> realRow = realMatrix.GetRow(i);
+            // Convert to array first to avoid nested Select operations for better performance
+            Complex<T>[] complexArray = realRow.Select(val => new Complex<T>(val, ops.Zero)).ToArray();
+            Vector<Complex<T>> complexRow = new Vector<Complex<T>>(complexArray);
+            complexMatrix.SetRow(i, complexRow);
         }
+
         return complexMatrix;
     }
 
@@ -85,12 +89,12 @@ public class ComplexMatrixDecomposition<T> : MatrixDecompositionBase<Complex<T>>
         var baseInverse = _baseDecomposition.Invert();
         var complexInverse = new Matrix<Complex<T>>(baseInverse.Rows, baseInverse.Columns);
 
+        // VECTORIZED: Process each row as a vector operation
         for (int i = 0; i < baseInverse.Rows; i++)
         {
-            for (int j = 0; j < baseInverse.Columns; j++)
-            {
-                complexInverse[i, j] = new Complex<T>(baseInverse[i, j], _realOps.Zero);
-            }
+            Vector<T> realRow = baseInverse.GetRow(i);
+            Vector<Complex<T>> complexRow = new Vector<Complex<T>>(realRow.Select(val => new Complex<T>(val, _realOps.Zero)));
+            complexInverse.SetRow(i, complexRow);
         }
 
         return complexInverse;
@@ -110,22 +114,14 @@ public class ComplexMatrixDecomposition<T> : MatrixDecompositionBase<Complex<T>>
     /// <returns>The solution vector x that satisfies Ax = b.</returns>
     public override Vector<Complex<T>> Solve(Vector<Complex<T>> b)
     {
-        // Extract real parts of b
-        var realB = new Vector<T>(b.Length);
-        for (int i = 0; i < b.Length; i++)
-        {
-            realB[i] = b[i].Real;
-        }
+        // VECTORIZED: Extract real parts using vector Select
+        var realB = new Vector<T>(b.Select(c => c.Real));
 
         // Solve using base decomposition
         var realSolution = _baseDecomposition.Solve(realB);
 
-        // Convert solution to complex
-        var complexSolution = new Vector<Complex<T>>(realSolution.Length);
-        for (int i = 0; i < realSolution.Length; i++)
-        {
-            complexSolution[i] = new Complex<T>(realSolution[i], _realOps.Zero);
-        }
+        // VECTORIZED: Convert solution to complex using vector Select
+        var complexSolution = new Vector<Complex<T>>(realSolution.Select(val => new Complex<T>(val, _realOps.Zero)));
 
         return complexSolution;
     }

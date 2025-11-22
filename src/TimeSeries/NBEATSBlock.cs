@@ -239,16 +239,12 @@ public class NBEATSBlock<T>
 
         for (int layer = 0; layer < _numHiddenLayers; layer++)
         {
-            // Linear transformation: y = Wx + b
+            // VECTORIZED: Linear transformation y = Wx + b using dot product
             Vector<T> linear = new Vector<T>(_fcWeights[layer].Rows);
             for (int i = 0; i < _fcWeights[layer].Rows; i++)
             {
-                T sum = _fcBiases[layer][i];
-                for (int j = 0; j < _fcWeights[layer].Columns; j++)
-                {
-                    sum = _numOps.Add(sum, _numOps.Multiply(_fcWeights[layer][i, j], x[j]));
-                }
-                linear[i] = sum;
+                Vector<T> weightRow = _fcWeights[layer].GetRow(i);
+                linear[i] = _numOps.Add(_fcBiases[layer][i], weightRow.DotProduct(x));
             }
 
             // ReLU activation
@@ -259,30 +255,22 @@ public class NBEATSBlock<T>
             }
         }
 
-        // Compute theta for backcast
+        // VECTORIZED: Compute theta for backcast using dot product
         Vector<T> thetaBackcast = new Vector<T>(_thetaSizeBackcast);
         int backcastLayerIdx = _numHiddenLayers;
         for (int i = 0; i < _fcWeights[backcastLayerIdx].Rows; i++)
         {
-            T sum = _fcBiases[backcastLayerIdx][i];
-            for (int j = 0; j < _fcWeights[backcastLayerIdx].Columns; j++)
-            {
-                sum = _numOps.Add(sum, _numOps.Multiply(_fcWeights[backcastLayerIdx][i, j], x[j]));
-            }
-            thetaBackcast[i] = sum;
+            Vector<T> weightRow = _fcWeights[backcastLayerIdx].GetRow(i);
+            thetaBackcast[i] = _numOps.Add(_fcBiases[backcastLayerIdx][i], weightRow.DotProduct(x));
         }
 
-        // Compute theta for forecast
+        // VECTORIZED: Compute theta for forecast using dot product
         Vector<T> thetaForecast = new Vector<T>(_thetaSizeForecast);
         int forecastLayerIdx = _numHiddenLayers + 1;
         for (int i = 0; i < _fcWeights[forecastLayerIdx].Rows; i++)
         {
-            T sum = _fcBiases[forecastLayerIdx][i];
-            for (int j = 0; j < _fcWeights[forecastLayerIdx].Columns; j++)
-            {
-                sum = _numOps.Add(sum, _numOps.Multiply(_fcWeights[forecastLayerIdx][i, j], x[j]));
-            }
-            thetaForecast[i] = sum;
+            Vector<T> weightRow = _fcWeights[forecastLayerIdx].GetRow(i);
+            thetaForecast[i] = _numOps.Add(_fcBiases[forecastLayerIdx][i], weightRow.DotProduct(x));
         }
 
         // Apply basis expansion
@@ -375,23 +363,20 @@ public class NBEATSBlock<T>
     {
         var parameters = new List<T>();
 
+        // VECTORIZED: Use row operations to collect weight parameters
         foreach (var weight in _fcWeights)
         {
             for (int i = 0; i < weight.Rows; i++)
             {
-                for (int j = 0; j < weight.Columns; j++)
-                {
-                    parameters.Add(weight[i, j]);
-                }
+                Vector<T> row = weight.GetRow(i);
+                parameters.AddRange(row);
             }
         }
 
+        // VECTORIZED: Use AddRange to collect bias parameters
         foreach (var bias in _fcBiases)
         {
-            for (int i = 0; i < bias.Length; i++)
-            {
-                parameters.Add(bias[i]);
-            }
+            parameters.AddRange(bias);
         }
 
         return new Vector<T>(parameters.ToArray());
@@ -418,23 +403,29 @@ public class NBEATSBlock<T>
 
         int idx = 0;
 
+        // VECTORIZED: Use SetRow to assign weight parameters
         foreach (var weight in _fcWeights)
         {
             for (int i = 0; i < weight.Rows; i++)
             {
+                T[] rowData = new T[weight.Columns];
                 for (int j = 0; j < weight.Columns; j++)
                 {
-                    weight[i, j] = parameters[idx++];
+                    rowData[j] = parameters[idx++];
                 }
+                weight.SetRow(i, new Vector<T>(rowData));
             }
         }
 
+        // VECTORIZED: Use Slice to assign bias parameters
         foreach (var bias in _fcBiases)
         {
+            Vector<T> biasSlice = parameters.Slice(idx, bias.Length);
             for (int i = 0; i < bias.Length; i++)
             {
-                bias[i] = parameters[idx++];
+                bias[i] = biasSlice[i];
             }
+            idx += bias.Length;
         }
     }
 }

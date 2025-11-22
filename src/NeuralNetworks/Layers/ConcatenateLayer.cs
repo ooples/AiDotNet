@@ -69,6 +69,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// <param name="inputShapes">The shapes of the input tensors to be concatenated.</param>
     /// <param name="axis">The axis along which to concatenate the inputs.</param>
     /// <param name="activationFunction">The activation function to apply after concatenation. Defaults to identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <exception cref="ArgumentException">Thrown when fewer than two input shapes are provided or when input shapes have different ranks.</exception>
     /// <remarks>
     /// <para>
@@ -102,6 +103,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// <param name="inputShapes">The shapes of the input tensors to be concatenated.</param>
     /// <param name="axis">The axis along which to concatenate the inputs.</param>
     /// <param name="vectorActivationFunction">The vector activation function to apply after concatenation. Defaults to identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <exception cref="ArgumentException">Thrown when fewer than two input shapes are provided or when input shapes have different ranks.</exception>
     /// <remarks>
     /// <para>

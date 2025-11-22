@@ -782,6 +782,43 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null);
 
     /// <summary>
+    /// Enables GPU acceleration for training and inference with optional configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> GPU acceleration makes your model train 10-100x faster on large datasets
+    /// by using your graphics card (GPU) for parallel computation. It automatically uses GPU for large
+    /// operations and CPU for small ones, with zero code changes required.
+    /// </para>
+    /// <para>
+    /// Benefits:
+    /// - 10-100x faster training for large neural networks
+    /// - Automatic size-based routing (GPU for large ops, CPU for small)
+    /// - Supports NVIDIA (CUDA) and AMD/Intel (OpenCL) GPUs
+    /// - Automatic CPU fallback if GPU unavailable
+    /// - Works transparently with existing models
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Enable with defaults (recommended)
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureGpuAcceleration()
+    ///     .BuildAsync(data, labels);
+    ///
+    /// // Or with aggressive settings for high-end GPUs
+    /// builder.ConfigureGpuAcceleration(GpuAccelerationConfig.Aggressive());
+    ///
+    /// // Or CPU-only for debugging
+    /// builder.ConfigureGpuAcceleration(GpuAccelerationConfig.CpuOnly());
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="config">GPU acceleration configuration (optional, uses defaults if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureGpuAcceleration(GpuAccelerationConfig? config = null);
+
+    /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>

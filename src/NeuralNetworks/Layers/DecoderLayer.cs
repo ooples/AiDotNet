@@ -22,6 +22,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 public class DecoderLayer<T> : LayerBase<T>
 {
+
     /// <summary>
     /// The self-attention mechanism of the decoder layer.
     /// </summary>
@@ -89,6 +90,7 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <param name="attentionSize">The size of the attention mechanism.</param>
     /// <param name="feedForwardSize">The size of the feed-forward network.</param>
     /// <param name="activation">The scalar activation function to use. If null, ReLUActivation is used.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     public DecoderLayer(int inputSize, int attentionSize, int feedForwardSize, IActivationFunction<T>? activation = null)
         : base([inputSize], [inputSize], activation ?? new ReLUActivation<T>())
     {
@@ -109,6 +111,7 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <param name="attentionSize">The size of the attention mechanism.</param>
     /// <param name="feedForwardSize">The size of the feed-forward network.</param>
     /// <param name="activation">The vector activation function to use. If null, ReLUActivation is used.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     public DecoderLayer(int inputSize, int attentionSize, int feedForwardSize, IVectorActivationFunction<T>? activation = null)
         : base([inputSize], [inputSize], activation ?? new ReLUActivation<T>())
     {

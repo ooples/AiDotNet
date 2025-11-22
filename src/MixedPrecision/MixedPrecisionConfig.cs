@@ -127,64 +127,6 @@ public class MixedPrecisionConfig
     }
 
     /// <summary>
-    /// Creates a configuration for conservative mixed-precision training (more stable, slightly slower scale growth).
-    /// </summary>
-    /// <returns>A conservative mixed-precision configuration.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this for models that are sensitive to numerical issues or when you're
-    /// just starting with mixed-precision training. It's more stable but may take longer to reach optimal scale.
-    /// </para>
-    /// </remarks>
-    public static MixedPrecisionConfig Conservative()
-    {
-        return new MixedPrecisionConfig
-        {
-            InitialLossScale = 4096.0,      // Lower initial scale (2^12)
-            ScaleGrowthInterval = 4000,      // Longer interval before scaling up
-            ScaleGrowthFactor = 1.5,         // More gradual growth
-            ScaleBackoffFactor = 0.25,       // More aggressive backoff when overflow occurs
-        };
-    }
-
-    /// <summary>
-    /// Creates a configuration for aggressive mixed-precision training (faster scale growth, may be less stable).
-    /// </summary>
-    /// <returns>An aggressive mixed-precision configuration.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this for models that are numerically stable and you want to maximize
-    /// the benefits of mixed-precision training. It grows the scale faster but may overflow more often.
-    /// </para>
-    /// </remarks>
-    public static MixedPrecisionConfig Aggressive()
-    {
-        return new MixedPrecisionConfig
-        {
-            InitialLossScale = 131072.0,     // Higher initial scale (2^17)
-            ScaleGrowthInterval = 1000,      // Shorter interval before scaling up
-            ScaleGrowthFactor = 2.5,         // Faster growth
-            ScaleBackoffFactor = 0.5,        // Standard backoff
-        };
-    }
-
-    /// <summary>
-    /// Creates a configuration with loss scaling disabled (for debugging or comparison).
-    /// </summary>
-    /// <returns>A configuration with no loss scaling.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this for debugging to isolate whether loss scaling is causing issues.
-    /// Not recommended for production training as it may cause gradient underflow.
-    /// </para>
-    /// </remarks>
-    public static MixedPrecisionConfig NoScaling()
-    {
-        return new MixedPrecisionConfig
-        {
-            InitialLossScale = 1.0,
-            EnableDynamicScaling = false,
-        };
-    }
-
-    /// <summary>
     /// Gets a summary of the configuration.
     /// </summary>
     /// <returns>A string describing the configuration.</returns>

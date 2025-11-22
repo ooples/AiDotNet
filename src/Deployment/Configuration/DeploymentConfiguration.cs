@@ -37,6 +37,11 @@ public class DeploymentConfiguration
     public ExportConfig? Export { get; set; }
 
     /// <summary>
+    /// Gets or sets the GPU acceleration configuration (null = use defaults).
+    /// </summary>
+    public GpuAccelerationConfig? GpuAcceleration { get; set; }
+
+    /// <summary>
     /// Creates a deployment configuration from individual config objects.
     /// </summary>
     public static DeploymentConfiguration Create(
@@ -45,7 +50,8 @@ public class DeploymentConfiguration
         VersioningConfig? versioning,
         ABTestingConfig? abTesting,
         TelemetryConfig? telemetry,
-        ExportConfig? export)
+        ExportConfig? export,
+        GpuAccelerationConfig? gpuAcceleration)
     {
         return new DeploymentConfiguration
         {
@@ -54,7 +60,8 @@ public class DeploymentConfiguration
             Versioning = versioning,
             ABTesting = abTesting,
             Telemetry = telemetry,
-            Export = export
+            Export = export,
+            GpuAcceleration = gpuAcceleration
         };
     }
 }

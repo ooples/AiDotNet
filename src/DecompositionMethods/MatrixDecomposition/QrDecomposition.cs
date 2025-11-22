@@ -133,11 +133,14 @@ public class QrDecomposition<T> : MatrixDecompositionBase<T>
 
         for (int j = 0; j < n; j++)
         {
-            Vector<T> v = matrix.GetColumn(j);
+            Vector<T> v = Engine.GetColumn(matrix, j);
             for (int i = 0; i < j; i++)
             {
-                R[i, j] = Q.GetColumn(i).DotProduct(v);
-                v = v.Subtract(Q.GetColumn(i).Multiply(R[i, j]));
+                var qCol = Engine.GetColumn(Q, i);
+                R[i, j] = qCol.DotProduct(v);
+                // VECTORIZED: Subtract the projection using Engine operations
+                var projection = (Vector<T>)Engine.Multiply(qCol, R[i, j]);
+                v = (Vector<T>)Engine.Subtract(v, projection);
             }
             R[j, j] = v.Norm();
             if (!NumOps.Equals(R[j, j], NumOps.Zero))
@@ -274,14 +277,19 @@ public class QrDecomposition<T> : MatrixDecompositionBase<T>
 
         for (int k = 0; k < n; k++)
         {
-            Vector<T> v = matrix.GetColumn(k);
+            Vector<T> v = Engine.GetColumn(matrix, k);
             R[k, k] = v.Norm();
-            Q.SetColumn(k, v.Divide(R[k, k]));
+            // VECTORIZED: Normalize using Engine division
+            var normalized = (Vector<T>)Engine.Divide(v, R[k, k]);
+            Engine.SetColumn(Q, k, normalized);
 
             for (int j = k + 1; j < n; j++)
             {
-                R[k, j] = Q.GetColumn(k).DotProduct(matrix.GetColumn(j));
-                matrix.SetColumn(j, matrix.GetColumn(j).Subtract(Q.GetColumn(k).Multiply(R[k, j])));
+                var qCol = Engine.GetColumn(Q, k);
+                var matCol = Engine.GetColumn(matrix, j);
+                R[k, j] = qCol.DotProduct(matCol);
+                var subtracted = matCol.Subtract(qCol.Multiply(R[k, j]));
+                Engine.SetColumn(matrix, j, subtracted);
             }
         }
 
@@ -316,11 +324,16 @@ public class QrDecomposition<T> : MatrixDecompositionBase<T>
                 {
                     T r = Q.GetColumn(j).DotProduct(v);
                     R[j, k] = NumOps.Add(R[j, k], r);
-                    v = v.Subtract(Q.GetColumn(j).Multiply(r));
+                    // VECTORIZED: Subtract the projection using Engine operations
+                    var qCol = Q.GetColumn(j);
+                    var projection = (Vector<T>)Engine.Multiply(qCol, r);
+                    v = (Vector<T>)Engine.Subtract(v, projection);
                 }
             }
             R[k, k] = v.Norm();
-            Q.SetColumn(k, v.Divide(R[k, k]));
+            // VECTORIZED: Normalize using Engine division
+            var normalized = (Vector<T>)Engine.Divide(v, R[k, k]);
+            Q.SetColumn(k, normalized);
         }
 
         return (Q, R);
@@ -345,11 +358,23 @@ public class QrDecomposition<T> : MatrixDecompositionBase<T>
         var x = new Vector<T>(R.Columns);
         for (int i = R.Columns - 1; i >= 0; i--)
         {
+            // VECTORIZED: Use dot product for sum computation
             T sum = NumOps.Zero;
-            for (int j = i + 1; j < R.Columns; j++)
+            if (i < R.Columns - 1)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(R[i, j], x[j]));
+                int remaining = R.Columns - i - 1;
+                var rowSlice = new T[remaining];
+                var xSlice = new T[remaining];
+                for (int k = 0; k < remaining; k++)
+                {
+                    rowSlice[k] = R[i, i + 1 + k];
+                    xSlice[k] = x[i + 1 + k];
+                }
+                var rowVec = new Vector<T>(rowSlice);
+                var xVec = new Vector<T>(xSlice);
+                sum = rowVec.DotProduct(xVec);
             }
+
             x[i] = NumOps.Divide(NumOps.Subtract(y[i], sum), R[i, i]);
         }
 

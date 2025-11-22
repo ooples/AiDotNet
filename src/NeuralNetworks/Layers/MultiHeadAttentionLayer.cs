@@ -158,6 +158,10 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private readonly int _headDimension;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+
+    /// <summary>
     /// Indicates whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
@@ -180,6 +184,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IActivationFunction<T>? activationFunction = null)
         : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], activationFunction ?? new IdentityActivation<T>())
     {
+
         // Initialize auxiliary loss fields first so compiler knows they're set
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         HeadDiversityWeight = NumOps.FromDouble(0.01);
@@ -208,6 +213,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], vectorActivationFunction ?? new IdentityActivation<T>())
     {
+
         // Initialize auxiliary loss fields first so compiler knows they're set
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         HeadDiversityWeight = NumOps.FromDouble(0.01);
@@ -237,10 +243,8 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         InitializeMatrix(_valueWeights, scale);
         InitializeMatrix(_outputWeights, scale);
 
-        for (int i = 0; i < _outputBias.Length; i++)
-        {
-            _outputBias[i] = NumOps.Zero;
-        }
+        // === Vectorized Zero-Fill Bias (Phase B: US-GPU-015) ===
+        _outputBias = Vector<T>.CreateDefault(_outputBias.Length, NumOps.Zero);
     }
 
     /// <summary>
@@ -250,11 +254,22 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="scale">The scaling factor for the random values.</param>
     private void InitializeMatrix(Matrix<T> matrix, T scale)
     {
+        // === Vectorized Matrix Initialization (Phase B: US-GPU-015) ===
+        int totalElements = matrix.Rows * matrix.Columns;
+        var randomValues = new T[totalElements];
+
+        for (int i = 0; i < totalElements; i++)
+        {
+            randomValues[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+        }
+
+        var randomVector = new Vector<T>(randomValues);
+        int index = 0;
         for (int i = 0; i < matrix.Rows; i++)
         {
             for (int j = 0; j < matrix.Columns; j++)
             {
-                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+                matrix[i, j] = randomVector[index++];
             }
         }
     }
@@ -368,22 +383,20 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private T ComputeCosineSimilarity(Tensor<T> a, Tensor<T> b)
     {
+        // === Vectorized Cosine Similarity (Phase B: US-GPU-015) ===
         var vecA = a.ToVector();
         var vecB = b.ToVector();
 
-        T dotProduct = NumOps.Zero;
-        T normA = NumOps.Zero;
-        T normB = NumOps.Zero;
+        // Use Engine.Multiply for element-wise multiplication and Engine.Sum for reduction
+        var dotVec = (Vector<T>)Engine.Multiply(vecA, vecB);
+        T dotProduct = Engine.Sum(dotVec);
 
-        for (int i = 0; i < vecA.Length; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(vecA[i], vecB[i]));
-            normA = NumOps.Add(normA, NumOps.Multiply(vecA[i], vecA[i]));
-            normB = NumOps.Add(normB, NumOps.Multiply(vecB[i], vecB[i]));
-        }
+        // Compute norms using vectorized operations
+        var normAVec = (Vector<T>)Engine.Multiply(vecA, vecA);
+        var normBVec = (Vector<T>)Engine.Multiply(vecB, vecB);
 
-        normA = NumOps.Sqrt(normA);
-        normB = NumOps.Sqrt(normB);
+        T normA = NumOps.Sqrt(Engine.Sum(normAVec));
+        T normB = NumOps.Sqrt(Engine.Sum(normBVec));
 
         T denominator = NumOps.Multiply(normA, normB);
         if (NumOps.Equals(denominator, NumOps.Zero))

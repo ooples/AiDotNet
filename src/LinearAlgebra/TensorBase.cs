@@ -32,6 +32,11 @@ public abstract class TensorBase<T>
     protected static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Gets the shape (dimensions) of the tensor.
     /// </summary>
     public int[] Shape { get; }
@@ -213,6 +218,41 @@ public abstract class TensorBase<T>
             indices[i] = remainder % Shape[i];
             remainder /= Shape[i];
         }
+    }
+
+    /// <summary>
+    /// Gets a read-only span over the internal tensor data.
+    /// </summary>
+    /// <returns>A read-only span view of the tensor data (row-major order).</returns>
+    /// <remarks>
+    /// <para><b>Phase B: US-GPU-003 - Zero-Copy Operations</b></para>
+    /// <para>
+    /// This method provides direct access to the underlying storage without copying.
+    /// The tensor is stored in row-major order (last dimension varies fastest).
+    /// </para>
+    /// <para><b>For Beginners:</b> A span is a view over memory that doesn't copy the data.
+    /// This is much faster than copying the entire tensor into a new array, especially for large tensors.
+    /// Use this when you need to pass tensor data to GPU or other operations that can work with spans.</para>
+    /// </remarks>
+    public ReadOnlySpan<T> AsSpan()
+    {
+        return _data.AsSpan();
+    }
+
+    /// <summary>
+    /// Gets a writable span over the internal tensor data.
+    /// </summary>
+    /// <returns>A writable span view of the tensor data (row-major order).</returns>
+    /// <remarks>
+    /// <para><b>Phase B: US-GPU-003 - Zero-Copy Operations</b></para>
+    /// <para>
+    /// Internal use only. Provides direct write access to underlying storage.
+    /// Used by GpuEngine to write results directly without intermediate copying.
+    /// </para>
+    /// </remarks>
+    internal Span<T> AsWritableSpan()
+    {
+        return _data.AsWritableSpan();
     }
 
     /// <summary>
