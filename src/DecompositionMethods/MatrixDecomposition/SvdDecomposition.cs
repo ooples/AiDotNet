@@ -856,9 +856,10 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
             for (int j = 0; j < n; j++) VT[i, j] = v[j];
 
             // VECTORIZED: Deflate ATA using Engine outer product
-            // ATA -= sigma * v * v^T
+            // ATA -= sigma^2 * v * v^T (since ATA has eigenvalues sigma^2)
             Matrix<T> outerProd = Engine.OuterProduct(v, v);
-            Matrix<T> scaled = outerProd.Multiply(sigma);
+            T sigmaSquared = NumOps.Multiply(sigma, sigma);
+            Matrix<T> scaled = outerProd.Multiply(sigmaSquared);
             ATA = ATA.Subtract(scaled);
         }
 
