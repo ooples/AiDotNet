@@ -6652,6 +6652,34 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
+    public void ExpM1(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        // For now, use CPU fallback. Future GPU implementation can use custom kernel.
+        TensorPrimitivesCore.InvokeSpanIntoSpan<ExpM1OperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void ExpM1(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        // For now, use CPU fallback. Future GPU implementation can use custom kernel.
+        TensorPrimitivesCore.InvokeSpanIntoSpan<ExpM1OperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Log1P(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        // For now, use CPU fallback. Future GPU implementation can use custom kernel.
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Log1POperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Log1P(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        // For now, use CPU fallback. Future GPU implementation can use custom kernel.
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Log1POperatorDouble>(x, destination);
+    }
+
     #endregion
 
     #region IDisposable
