@@ -822,6 +822,99 @@ public interface IEngine
     void Tan(System.ReadOnlySpan<double> x, System.Span<double> destination);
 
     /// <summary>
+    /// Computes the inverse sine of each element in a vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector (values in range [-1, 1]).</param>
+    /// <returns>A new vector containing arcsin values in range [-π/2, π/2].</returns>
+    /// <remarks>
+    /// <para>
+    /// Inverse sine (arcsin) is the inverse of the sine function.
+    /// Input domain: [-1, 1]
+    /// Output range: [-π/2, π/2] radians
+    /// </para>
+    /// </remarks>
+    Vector<T> Asin<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the inverse sine of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span (values in range [-1, 1]).</param>
+    /// <param name="destination">The destination span to write arcsin values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Asin(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes the inverse sine of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span (values in range [-1, 1]).</param>
+    /// <param name="destination">The destination span to write arcsin values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Asin(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
+    /// <summary>
+    /// Computes the inverse cosine of each element in a vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector (values in range [-1, 1]).</param>
+    /// <returns>A new vector containing arccos values in range [0, π].</returns>
+    /// <remarks>
+    /// <para>
+    /// Inverse cosine (arccos) is the inverse of the cosine function.
+    /// Input domain: [-1, 1]
+    /// Output range: [0, π] radians
+    /// </para>
+    /// </remarks>
+    Vector<T> Acos<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the inverse cosine of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span (values in range [-1, 1]).</param>
+    /// <param name="destination">The destination span to write arccos values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Acos(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes the inverse cosine of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span (values in range [-1, 1]).</param>
+    /// <param name="destination">The destination span to write arccos values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Acos(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
+    /// <summary>
+    /// Computes the inverse tangent of each element in a vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing arctan values in range (-π/2, π/2).</returns>
+    /// <remarks>
+    /// <para>
+    /// Inverse tangent (arctan) is the inverse of the tangent function.
+    /// Input domain: (-Inf, Inf)
+    /// Output range: (-π/2, π/2) radians
+    /// </para>
+    /// </remarks>
+    Vector<T> Atan<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the inverse tangent of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span.</param>
+    /// <param name="destination">The destination span to write arctan values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Atan(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes the inverse tangent of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span.</param>
+    /// <param name="destination">The destination span to write arctan values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Atan(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
+    /// <summary>
     /// Computes the square root of each element in a span using SIMD acceleration.
     /// </summary>
     /// <param name="x">The input span (must be non-negative).</param>
@@ -881,12 +974,140 @@ public interface IEngine
     /// </remarks>
     Vector<T> Cosh<T>(Vector<T> vector);
 
+    /// <summary>
+    /// Computes the inverse hyperbolic sine of each element.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing asinh values.</returns>
+    /// <remarks>
+    /// Inverse hyperbolic sine: asinh(x) = log(x + sqrt(x^2 + 1)).
+    /// Also called the hyperbolic area sine function. Domain: (-inf, inf), Range: (-inf, inf).
+    /// </remarks>
+    Vector<T> Asinh<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the inverse hyperbolic cosine of each element.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing acosh values.</returns>
+    /// <remarks>
+    /// Inverse hyperbolic cosine: acosh(x) = log(x + sqrt(x^2 - 1)).
+    /// Also called the hyperbolic area cosine function. Domain: [1, inf), Range: [0, inf).
+    /// </remarks>
+    Vector<T> Acosh<T>(Vector<T> vector);
+
+    /// <summary>
+    /// Computes the inverse hyperbolic tangent of each element.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector.</typeparam>
+    /// <param name="vector">The input vector.</param>
+    /// <returns>A new vector containing atanh values.</returns>
+    /// <remarks>
+    /// Inverse hyperbolic tangent: atanh(x) = 0.5 * log((1 + x) / (1 - x)).
+    /// Also called the hyperbolic area tangent function. Domain: (-1, 1), Range: (-inf, inf).
+    /// </remarks>
+    Vector<T> Atanh<T>(Vector<T> vector);
+
     void Sinh(System.ReadOnlySpan<float> x, System.Span<float> destination);
     void Sinh(System.ReadOnlySpan<double> x, System.Span<double> destination);
     void Cosh(System.ReadOnlySpan<float> x, System.Span<float> destination);
     void Cosh(System.ReadOnlySpan<double> x, System.Span<double> destination);
     void Tanh(System.ReadOnlySpan<float> x, System.Span<float> destination);
     void Tanh(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
+    /// <summary>
+    /// Computes the inverse hyperbolic sine of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span.</param>
+    /// <param name="destination">The destination span to write asinh values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Asinh(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes the inverse hyperbolic sine of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span.</param>
+    /// <param name="destination">The destination span to write asinh values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Asinh(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
+    /// <summary>
+    /// Computes the inverse hyperbolic cosine of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span (must be >= 1).</param>
+    /// <param name="destination">The destination span to write acosh values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Acosh(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes the inverse hyperbolic cosine of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span (must be >= 1).</param>
+    /// <param name="destination">The destination span to write acosh values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Acosh(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
+    /// <summary>
+    /// Computes the inverse hyperbolic tangent of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span (must be in range (-1, 1)).</param>
+    /// <param name="destination">The destination span to write atanh values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Atanh(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes the inverse hyperbolic tangent of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span (must be in range (-1, 1)).</param>
+    /// <param name="destination">The destination span to write atanh values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Atanh(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
+    #endregion
+
+    #region Additional Mathematical Operations
+
+    /// <summary>
+    /// Computes the reciprocal (1/x) of each element.
+    /// </summary>
+    void Reciprocal(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes the reciprocal (1/x) of each element.
+    /// </summary>
+    void Reciprocal(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
+    /// <summary>
+    /// Computes the cube root of each element.
+    /// </summary>
+    void Cbrt(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes the cube root of each element.
+    /// </summary>
+    void Cbrt(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
+    /// <summary>
+    /// Computes the base-2 logarithm of each element.
+    /// </summary>
+    void Log2(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes the base-2 logarithm of each element.
+    /// </summary>
+    void Log2(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
+    /// <summary>
+    /// Computes the base-10 logarithm of each element.
+    /// </summary>
+    void Log10(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes the base-10 logarithm of each element.
+    /// </summary>
+    void Log10(System.ReadOnlySpan<double> x, System.Span<double> destination);
 
     #endregion
 

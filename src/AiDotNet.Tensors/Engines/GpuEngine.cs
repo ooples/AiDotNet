@@ -6337,6 +6337,60 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
+    public Vector<T> Asin<T>(Vector<T> vector)
+    {
+        return _cpuFallback.Asin(vector);
+    }
+
+    /// <inheritdoc/>
+    public void Asin(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AsinOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Asin(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AsinOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Acos<T>(Vector<T> vector)
+    {
+        return _cpuFallback.Acos(vector);
+    }
+
+    /// <inheritdoc/>
+    public void Acos(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AcosOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Acos(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AcosOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Atan<T>(Vector<T> vector)
+    {
+        return _cpuFallback.Atan(vector);
+    }
+
+    /// <inheritdoc/>
+    public void Atan(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AtanOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Atan(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AtanOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
     public void Sqrt(ReadOnlySpan<float> x, Span<float> destination)
     {
         if (x.Length < _thresholds.VectorSqrt)

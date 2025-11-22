@@ -749,6 +749,147 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    public Vector<T> Asin<T>(Vector<T> vector)
+    {
+        if (vector is null)
+        {
+            throw new ArgumentNullException(nameof(vector));
+        }
+
+        var numOps = NumericOperations<T>.Default;
+        var result = new Vector<T>(vector.Length);
+
+        if (typeof(T) == typeof(float))
+        {
+            ReadOnlySpan<float> fVector = (ReadOnlySpan<float>)(object)vector.Data;
+            Span<float> fResult = (Span<float>)(object)result.Data;
+            TensorPrimitivesCore.InvokeSpanIntoSpan<AsinOperatorFloat>(fVector, fResult);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            ReadOnlySpan<double> dVector = (ReadOnlySpan<double>)(object)vector.Data;
+            Span<double> dResult = (Span<double>)(object)result.Data;
+            TensorPrimitivesCore.InvokeSpanIntoSpan<AsinOperatorDouble>(dVector, dResult);
+        }
+        else
+        {
+            for (int i = 0; i < vector.Length; i++)
+            {
+                double val = Convert.ToDouble(vector[i]);
+                result[i] = numOps.FromDouble(Math.Asin(val));
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public void Asin(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AsinOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Asin(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AsinOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Acos<T>(Vector<T> vector)
+    {
+        if (vector is null)
+        {
+            throw new ArgumentNullException(nameof(vector));
+        }
+
+        var numOps = NumericOperations<T>.Default;
+        var result = new Vector<T>(vector.Length);
+
+        if (typeof(T) == typeof(float))
+        {
+            ReadOnlySpan<float> fVector = (ReadOnlySpan<float>)(object)vector.Data;
+            Span<float> fResult = (Span<float>)(object)result.Data;
+            TensorPrimitivesCore.InvokeSpanIntoSpan<AcosOperatorFloat>(fVector, fResult);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            ReadOnlySpan<double> dVector = (ReadOnlySpan<double>)(object)vector.Data;
+            Span<double> dResult = (Span<double>)(object)result.Data;
+            TensorPrimitivesCore.InvokeSpanIntoSpan<AcosOperatorDouble>(dVector, dResult);
+        }
+        else
+        {
+            for (int i = 0; i < vector.Length; i++)
+            {
+                double val = Convert.ToDouble(vector[i]);
+                result[i] = numOps.FromDouble(Math.Acos(val));
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public void Acos(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AcosOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Acos(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AcosOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Atan<T>(Vector<T> vector)
+    {
+        if (vector is null)
+        {
+            throw new ArgumentNullException(nameof(vector));
+        }
+
+        var numOps = NumericOperations<T>.Default;
+        var result = new Vector<T>(vector.Length);
+
+        if (typeof(T) == typeof(float))
+        {
+            ReadOnlySpan<float> fVector = (ReadOnlySpan<float>)(object)vector.Data;
+            Span<float> fResult = (Span<float>)(object)result.Data;
+            TensorPrimitivesCore.InvokeSpanIntoSpan<AtanOperatorFloat>(fVector, fResult);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            ReadOnlySpan<double> dVector = (ReadOnlySpan<double>)(object)vector.Data;
+            Span<double> dResult = (Span<double>)(object)result.Data;
+            TensorPrimitivesCore.InvokeSpanIntoSpan<AtanOperatorDouble>(dVector, dResult);
+        }
+        else
+        {
+            for (int i = 0; i < vector.Length; i++)
+            {
+                double val = Convert.ToDouble(vector[i]);
+                result[i] = numOps.FromDouble(Math.Atan(val));
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public void Atan(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AtanOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Atan(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AtanOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
     public void Sqrt(ReadOnlySpan<float> x, Span<float> destination)
     {
         TensorPrimitivesCore.InvokeSpanIntoSpan<SqrtOperatorFloat>(x, destination);
@@ -809,6 +950,90 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    public void Asinh(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AsinhOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Asinh(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AsinhOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Acosh(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AcoshOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Acosh(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AcoshOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Atanh(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AtanhOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Atanh(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AtanhOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Reciprocal(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<ReciprocalOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Reciprocal(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<ReciprocalOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Cbrt(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<CbrtOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Cbrt(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<CbrtOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Log2(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Log2OperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Log2(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Log2OperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Log10(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Log10OperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Log10(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Log10OperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
     public Vector<T> Sinh<T>(Vector<T> vector)
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
@@ -837,6 +1062,57 @@ public class CpuEngine : IEngine
         {
             double val = Convert.ToDouble(vector[i]);
             result[i] = numOps.FromDouble(Math.Cosh(val));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Asinh<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        // Math.Asinh not available in all frameworks - use conversion
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            result[i] = numOps.FromDouble(Math.Asinh(val));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Acosh<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        // Math.Acosh not available in all frameworks - use conversion
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            result[i] = numOps.FromDouble(Math.Acosh(val));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> Atanh<T>(Vector<T> vector)
+    {
+        if (vector == null) throw new ArgumentNullException(nameof(vector));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Vector<T>(vector.Length);
+
+        // Math.Atanh not available in all frameworks - use conversion
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double val = Convert.ToDouble(vector[i]);
+            result[i] = numOps.FromDouble(Math.Atanh(val));
         }
 
         return result;
