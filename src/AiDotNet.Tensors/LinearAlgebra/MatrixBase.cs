@@ -56,8 +56,8 @@ public abstract class MatrixBase<T>
     /// </remarks>
     protected MatrixBase(int rows, int cols)
     {
-        if (rows <= 0) throw new ArgumentException("Rows must be positive", nameof(rows));
-        if (cols <= 0) throw new ArgumentException("Columns must be positive", nameof(cols));
+        if (rows < 0) throw new ArgumentException("Rows must be non-negative", nameof(rows));
+        if (cols < 0) throw new ArgumentException("Columns must be non-negative", nameof(cols));
 
         this._rows = rows;
         this._cols = cols;
