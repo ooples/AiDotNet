@@ -276,7 +276,8 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// </remarks>
     public Complex<T> Sqrt(Complex<T> value)
     {
-        var r = _ops.Sqrt(_ops.Add(_ops.Square(value.Real), _ops.Square(value.Imaginary)));
+        var magnitude = _ops.Sqrt(_ops.Add(_ops.Square(value.Real), _ops.Square(value.Imaginary)));
+        var r = _ops.Sqrt(magnitude);
         var theta = _ops.Divide(value.Phase, _ops.FromDouble(2));
         return new Complex<T>(
             _ops.Multiply(r, _ops.FromDouble(Math.Cos(Convert.ToDouble(theta)))),
