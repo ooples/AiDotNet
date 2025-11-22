@@ -664,7 +664,7 @@ public static class MathHelper
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The factorial of a number (written as n!) is the product of all positive 
-    /// integers less than or equal to n. For example, 5! = 5 ÃƒÆ’Ã¢â‚¬â€ 4 ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  3 ÃƒÆ’Ã¢â‚¬â€ 2 ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  1 = 120.
+    /// integers less than or equal to n. For example, 5! = 5 * 4 * 3 * 2 * 1 = 120.
     /// Factorials are used in many probability and statistics calculations.
     /// </para>
     /// </remarks>
@@ -776,7 +776,7 @@ public static class MathHelper
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The base-2 logarithm (log2) tells you what power you need to raise 2 to in order 
-    /// to get a specific number. For example, log2(8) = 3 because 2Ãƒâ€šÃ‚Â³ = 8. Base-2 logarithms are commonly 
+    /// to get a specific number. For example, log2(8) = 3 because 2^3 = 8. Base-2 logarithms are commonly 
     /// used in computer science and information theory because computers use binary (base-2) number systems.
     /// </para>
     /// </remarks>
