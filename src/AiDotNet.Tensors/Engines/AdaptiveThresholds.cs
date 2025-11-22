@@ -95,7 +95,7 @@ public class AdaptiveThresholds
     /// </summary>
     /// <remarks>
     /// Default: 512 (512x512 matrix)
-    /// GEMV is O(nÃƒâ€šÃ‚Â²), less benefit than GEMM.
+    /// GEMV is O(n²), less benefit than GEMM.
     /// </remarks>
     public int MatrixVectorMultiply { get; set; } = 512;
 
