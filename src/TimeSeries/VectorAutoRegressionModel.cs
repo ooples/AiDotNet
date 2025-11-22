@@ -117,8 +117,26 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
             throw new ArgumentException("Input dimensions do not match the model.");
         }
 
+        if (input.Rows < _varOptions.Lag)
+        {
+            throw new ArgumentException(
+                $"Input must contain at least {_varOptions.Lag} rows to form lagged values. Found {input.Rows}.");
+        }
+
         Vector<T> prediction = new Vector<T>(_varOptions.OutputDimension);
-        Vector<T> laggedValues = input.GetRow(input.Rows - 1);
+
+        // Build flattened lag vector (matches PrepareLaggedData ordering)
+        int m = _varOptions.OutputDimension;
+        int p = _varOptions.Lag;
+        var laggedValues = new Vector<T>(m * p);
+        for (int lag = 0; lag < p; lag++)
+        {
+            int rowIndex = input.Rows - lag - 1; // most recent row first
+            for (int col = 0; col < m; col++)
+            {
+                laggedValues[lag * m + col] = input[rowIndex, col];
+            }
+        }
 
         // Vectorized prediction using Engine.DotProduct for each output dimension
         for (int i = 0; i < _varOptions.OutputDimension; i++)
