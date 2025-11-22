@@ -1,7 +1,5 @@
 using System;
-#if NET5_0_OR_GREATER
 using System.Runtime.Intrinsics;
-#endif
 using AiDotNet.Tensors.Operators;
 using Xunit;
 

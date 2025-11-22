@@ -737,6 +737,78 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    public void Tan(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<TanOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Tan(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<TanOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Sqrt(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<SqrtOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Sqrt(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<SqrtOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Abs(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AbsOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Abs(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<AbsOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Sinh(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<SinhOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Sinh(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<SinhOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Cosh(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<CoshOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Cosh(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<CoshOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Tanh(ReadOnlySpan<float> x, Span<float> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<TanhOperatorFloat>(x, destination);
+    }
+
+    /// <inheritdoc/>
+    public void Tanh(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitivesCore.InvokeSpanIntoSpan<TanhOperatorDouble>(x, destination);
+    }
+
+    /// <inheritdoc/>
     public Vector<T> Sinh<T>(Vector<T> vector)
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));

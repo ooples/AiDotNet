@@ -805,6 +805,54 @@ public interface IEngine
     /// </remarks>
     void Log(System.ReadOnlySpan<double> x, System.Span<double> destination);
 
+    /// <summary>
+    /// Computes the tangent of each element in a span (in radians) using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span (angles in radians).</param>
+    /// <param name="destination">The destination span to write tangent values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Tan(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes the tangent of each element in a span (in radians) using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span (angles in radians).</param>
+    /// <param name="destination">The destination span to write tangent values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Tan(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
+    /// <summary>
+    /// Computes the square root of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span (must be non-negative).</param>
+    /// <param name="destination">The destination span to write sqrt values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Sqrt(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes the square root of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span (must be non-negative).</param>
+    /// <param name="destination">The destination span to write sqrt values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Sqrt(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
+    /// <summary>
+    /// Computes the absolute value of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span.</param>
+    /// <param name="destination">The destination span to write absolute values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Abs(System.ReadOnlySpan<float> x, System.Span<float> destination);
+
+    /// <summary>
+    /// Computes the absolute value of each element in a span using SIMD acceleration.
+    /// </summary>
+    /// <param name="x">The input span.</param>
+    /// <param name="destination">The destination span to write absolute values.</param>
+    /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
+    void Abs(System.ReadOnlySpan<double> x, System.Span<double> destination);
+
     #endregion
 
     #region Hyperbolic Operations
@@ -832,6 +880,13 @@ public interface IEngine
     /// Component of tanh gradient and used in hyperbolic geometry.
     /// </remarks>
     Vector<T> Cosh<T>(Vector<T> vector);
+
+    void Sinh(System.ReadOnlySpan<float> x, System.Span<float> destination);
+    void Sinh(System.ReadOnlySpan<double> x, System.Span<double> destination);
+    void Cosh(System.ReadOnlySpan<float> x, System.Span<float> destination);
+    void Cosh(System.ReadOnlySpan<double> x, System.Span<double> destination);
+    void Tanh(System.ReadOnlySpan<float> x, System.Span<float> destination);
+    void Tanh(System.ReadOnlySpan<double> x, System.Span<double> destination);
 
     #endregion
 
