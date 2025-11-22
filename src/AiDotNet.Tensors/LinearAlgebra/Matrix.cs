@@ -1247,6 +1247,8 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// </summary>
     /// <param name="indices">The indices of the rows to include in the new matrix.</param>
     /// <returns>A new matrix containing only the specified rows.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when indices is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any index is negative or greater than or equal to the number of rows.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method allows you to select specific rows from the matrix and create a new matrix
     /// containing only those rows. This is useful for data sampling or when you need to extract a subset of your data
@@ -1255,7 +1257,18 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// </remarks>
     public Matrix<T> GetRows(IEnumerable<int> indices)
     {
+        if (indices == null)
+            throw new ArgumentNullException(nameof(indices));
+
         var indexArray = indices.ToArray();
+
+        for (int i = 0; i < indexArray.Length; i++)
+        {
+            if (indexArray[i] < 0 || indexArray[i] >= Rows)
+                throw new ArgumentOutOfRangeException(nameof(indices),
+                    $"Index {indexArray[i]} at position {i} is out of range. Valid range is 0 to {Rows - 1}.");
+        }
+
         var newRows = indexArray.Length;
         var newMatrix = new T[newRows, Columns];
         for (int i = 0; i < newRows; i++)
