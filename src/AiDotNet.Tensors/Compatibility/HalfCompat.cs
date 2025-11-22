@@ -96,7 +96,7 @@ namespace System
             return value;
         }
 #else
-        // For NET5+, delegate to Math.Clamp
+        // For NET5+, delegate int/long to Math.Clamp; generic T uses custom implementation
         public static T Clamp<T>(T value, T min, T max) where T : IComparable<T>
         {
             if (value.CompareTo(min) < 0) return min;
