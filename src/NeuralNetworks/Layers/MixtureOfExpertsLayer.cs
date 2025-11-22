@@ -482,6 +482,12 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Validate input tensor is 2D (batch_size x features)
+        if (input.Shape.Length != 2)
+            throw new ArgumentException(
+                $"Input tensor must be 2D (batch_size x features). Got {input.Shape.Length}D tensor with shape [{string.Join(", ", input.Shape)}].",
+                nameof(input));
+
         // Cache input for backward pass
         _lastInput = input;
 
