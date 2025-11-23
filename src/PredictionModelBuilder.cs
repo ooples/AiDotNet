@@ -1699,7 +1699,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 // Convert KD trainer's Vector<T> to model's TInput type using reference for shape
                 TInput modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(input, referenceInput);
 
-                if (studentModel is NeuralNetworkModel<T> nnModel)
+                if (studentModel is INeuralNetworkModel<T> nnModel)
                 {
                     // Use ForwardWithMemory() to save activations for backpropagation
                     var output = nnModel.Network.ForwardWithMemory(Tensor<T>.FromVector(input));
@@ -1715,11 +1715,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             // This function receives output gradients from distillation strategy and applies them to the model
             Action<Vector<T>> studentBackward = gradient =>
             {
-                // Cast to NeuralNetworkModel to access backpropagation methods
-                if (studentModel is not NeuralNetworkModel<T> nnModel)
+                // Cast to INeuralNetworkModel to access backpropagation methods
+                if (studentModel is not INeuralNetworkModel<T> nnModel)
                 {
                     throw new InvalidOperationException(
-                        "Knowledge distillation requires a NeuralNetworkModel for gradient backpropagation. " +
+                        "Knowledge distillation requires a INeuralNetworkModel for gradient backpropagation. " +
                         $"Current model type: {studentModel.GetType().Name}");
                 }
 

@@ -2531,27 +2531,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         // Dense layer: output = input @ weights + bias
 
-        // Get layer parameters
-        var parameters = layer.GetParameters();
-        var inputSize = layer.InputSize;
-        var outputSize = layer.OutputSize;
+        // Get layer weights and biases directly using existing public API
+        var weights = layer.GetWeights();  // Matrix<T>
+        var biases = layer.GetBiases();    // Vector<T>
+        var inputShape = layer.GetInputShape();   // int[]
+        var outputShape = layer.GetOutputShape(); // int[]
 
-        // Extract weights and bias from parameters
-        // DenseLayer parameters are laid out as: [weights (inputSize * outputSize), bias (outputSize)]
-        var weightsSize = inputSize * outputSize;
-        var weightsData = new T[weightsSize];
-        var biasData = new T[outputSize];
+        var inputSize = inputShape[0];
+        var outputSize = outputShape[0];
 
-        for (int i = 0; i < weightsSize; i++)
+        // Convert Matrix<T> weights to Tensor - weights are [outputSize, inputSize]
+        // Need to transpose for matmul: [inputSize, outputSize]
+        var weightsData = new T[inputSize * outputSize];
+        for (int i = 0; i < inputSize; i++)
         {
-            weightsData[i] = parameters[i];
-        }
-        for (int i = 0; i < outputSize; i++)
-        {
-            biasData[i] = parameters[weightsSize + i];
+            for (int j = 0; j < outputSize; j++)
+            {
+                weightsData[i * outputSize + j] = weights[j, i]; // Transpose
+            }
         }
 
-        // Create weight matrix node: shape [inputSize, outputSize]
         var weightsShape = new int[] { inputSize, outputSize };
         var weightsTensor = new Tensor<T>(weightsShape, new Vector<T>(weightsData));
         var weightsNode = new ComputationNode<T>(weightsTensor);
@@ -2561,7 +2560,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         // Create bias vector node: shape [1, outputSize]
         var biasShape = new int[] { 1, outputSize };
-        var biasTensor = new Tensor<T>(biasShape, new Vector<T>(biasData));
+        var biasTensor = new Tensor<T>(biasShape, biases);
         var biasNode = new ComputationNode<T>(biasTensor);
 
         // Add bias: matmul + bias
