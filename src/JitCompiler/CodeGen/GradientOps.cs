@@ -205,13 +205,14 @@ public static class GradientOps
         for (int i = 0; i < inputData.Length; i++)
         {
             // Use dynamic to handle generic comparison
-            if (inputData[i] is null)
+            var dataVal = inputData[i];
+            if (dataVal is null)
             {
                 resultData[i] = (T)(object)0.0;
             }
             else
             {
-                dynamic val = inputData[i];
+                dynamic val = dataVal;
                 resultData[i] = val > 0 ? (T)(object)1.0 : (T)(object)0.0;
             }
         }

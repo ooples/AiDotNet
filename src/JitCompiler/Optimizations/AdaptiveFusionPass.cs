@@ -221,7 +221,7 @@ public class AdaptiveFusionPass : IOptimizationPass
 
                 // Maybe also fusion activation
                 var activationOp = FindConsumer(graph, nextOp);
-                if (IsActivation(activationOp))
+                if (activationOp is not null && IsActivation(activationOp))
                 {
                     pattern.Add(activationOp);
                 }
@@ -237,7 +237,7 @@ public class AdaptiveFusionPass : IOptimizationPass
                 pattern.Add(nextOp);
 
                 var activationOp = FindConsumer(graph, nextOp);
-                if (IsActivation(activationOp))
+                if (activationOp is not null && IsActivation(activationOp))
                 {
                     pattern.Add(activationOp);
                 }

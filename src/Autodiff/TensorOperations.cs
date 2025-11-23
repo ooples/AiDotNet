@@ -5395,6 +5395,7 @@ public static class TensorOperations<T>
     /// <returns>The looked up embeddings [batch_size, sequence_length, embedding_dim].</returns>
     public static ComputationNode<T> EmbeddingLookup(ComputationNode<T> embeddings, ComputationNode<T> indices)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         var embeddingMatrix = embeddings.Value;
         var indexTensor = indices.Value;
 
@@ -5433,7 +5434,7 @@ public static class TensorOperations<T>
                         for (int e = 0; e < embeddingDim; e++)
                         {
                             var gradVal = seqLength > 1 ? gradient[b, s, e] : gradient[b, e];
-                            embeddingGrad[idx, e] = NumOps.Add(embeddingGrad[idx, e], gradVal);
+                            embeddingGrad[idx, e] = numOps.Add(embeddingGrad[idx, e], gradVal);
                         }
                     }
                 }
@@ -5473,13 +5474,14 @@ public static class TensorOperations<T>
         ComputationNode<T> value,
         ComputationNode<T>? mask = null)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         // Q @ K^T
         var keyTransposed = Transpose(key);
         var scores = MatrixMultiply(query, keyTransposed);
 
         // Scale by sqrt(d_k)
         var dk = query.Value.Shape[query.Value.Shape.Length - 1];
-        var scaleFactor = NumOps.FromDouble(1.0 / Math.Sqrt(dk));
+        var scaleFactor = numOps.FromDouble(1.0 / Math.Sqrt(dk));
         var scaleShape = new int[] { 1 };
         var scaleTensor = new Tensor<T>(scaleShape, new Vector<T>(new T[] { scaleFactor }));
         var scaleNode = Constant(scaleTensor, "scale");
@@ -5488,7 +5490,7 @@ public static class TensorOperations<T>
         // Apply mask if provided
         if (mask != null)
         {
-            var largeNegValue = NumOps.FromDouble(-1e9);
+            var largeNegValue = numOps.FromDouble(-1e9);
             var maskShape = new int[] { 1 };
             var maskTensor = new Tensor<T>(maskShape, new Vector<T>(new T[] { largeNegValue }));
             var maskNode = Constant(maskTensor, "mask_value");
@@ -5612,6 +5614,7 @@ public static class TensorOperations<T>
         ComputationNode<T> weightHH,
         ComputationNode<T> bias)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         // Compute gates
         var inputTransform = MatrixMultiply(input, weightIH);
         var hiddenTransform = MatrixMultiply(hiddenState, weightHH);
@@ -5629,8 +5632,8 @@ public static class TensorOperations<T>
 
         // New hidden state: (1 - z) * h + z * h'
         var onesTensor = new Tensor<T>(updateGate.Value.Shape);
-        for (int i = 0; i < onesTensor.Data.Length; i++)
-            onesTensor.Data[i] = NumOps.FromDouble(1.0);
+        for (int i = 0; i < onesTensor.Length; i++)
+            onesTensor[i] = numOps.FromDouble(1.0);
         var onesNode = Constant(onesTensor, "ones");
 
         var inverseUpdate = Subtract(onesNode, updateGate);

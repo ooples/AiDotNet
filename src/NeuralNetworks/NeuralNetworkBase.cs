@@ -39,7 +39,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Use AddLayerToCollection() or RemoveLayerFromCollection() instead to ensure proper cache invalidation.
     /// </para>
     /// </remarks>
-    protected List<ILayer<T>> Layers => _layers;
+    public List<ILayer<T>> Layers => _layers;
 
     /// <summary>
     /// Gets the number of layers in this neural network.
@@ -2928,7 +2928,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         // Log variance layer computes log of variance
         // Using the ReduceLogVariance operation
-        return TensorOperations<T>.ReduceLogVariance(input, axes: null, keepDims: false);
+        return TensorOperations<T>.ReduceLogVariance(input, axis: 0);
     }
 
     /// <summary>
@@ -2997,10 +2997,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var padding = (int)paddingField!.GetValue(layer)!;
 
         var depthwiseKernelsNode = TensorOperations<T>.Constant(depthwiseKernels, "depthwise_kernels");
-        var pointwiseKernelsNode = TensorOperations<T>.Constant(pointwiseKernels, "pointwise_kernels");
         var biasesNode = TensorOperations<T>.Constant(biases, "depthwise_sep_biases");
 
-        return TensorOperations<T>.DepthwiseConv2D(input, depthwiseKernelsNode, pointwiseKernelsNode, biasesNode, stride, padding);
+        return TensorOperations<T>.DepthwiseConv2D(input, depthwiseKernelsNode, biasesNode, stride, padding);
     }
 
     /// <summary>
@@ -3062,7 +3061,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var weightsNode = TensorOperations<T>.Constant(weights, "locally_connected_weights");
         var biasesNode = TensorOperations<T>.Constant(biases, "locally_connected_biases");
 
-        return TensorOperations<T>.LocallyConnectedConv2D(input, weightsNode, biasesNode, kernelSize, stride);
+        return TensorOperations<T>.LocallyConnectedConv2D(input, weightsNode, biasesNode, stride);
     }
 
     /// <summary>

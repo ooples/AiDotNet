@@ -1667,7 +1667,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             case ExpressionNodeType.Multiply:
                 if (node.Left == null || node.Right == null)
                     throw new InvalidOperationException("Multiply operation requires both left and right operands.");
-                return TensorOperations<T>.Multiply(
+                return TensorOperations<T>.ElementwiseMultiply(
                     BuildComputationGraph(node.Left, variableNodes),
                     BuildComputationGraph(node.Right, variableNodes));
 

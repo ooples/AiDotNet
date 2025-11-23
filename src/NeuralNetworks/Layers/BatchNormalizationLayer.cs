@@ -201,6 +201,23 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     {
         return _runningVariance;
     }
+    /// <summary>
+    /// Gets the epsilon value used for numerical stability.
+    /// </summary>
+    /// <returns>The epsilon value.</returns>
+    public T GetEpsilon()
+    {
+        return _epsilon;
+    }
+
+    /// <summary>
+    /// Gets the momentum value for running statistics.
+    /// </summary>
+    /// <returns>The momentum value.</returns>
+    public T GetMomentum()
+    {
+        return _momentum;
+    }
 
     public override bool SupportsTraining => true;
 
