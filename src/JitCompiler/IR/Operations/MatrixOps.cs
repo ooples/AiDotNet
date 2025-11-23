@@ -5,7 +5,7 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.MatrixMultiply().
+/// Corresponds to TensorOperations<T>.MatrixMultiply().
 /// Performs matrix multiplication (dot product): C = A × B.
 /// For 2D matrices: C[i,j] = Σ(A[i,k] * B[k,j]).
 /// </para>
@@ -35,7 +35,7 @@ public class MatMulOp : IROp
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.Transpose().
+/// Corresponds to TensorOperations<T>.Transpose().
 /// Transposes a matrix: swaps rows and columns.
 /// </para>
 /// <para><b>For Beginners:</b> Flips a matrix along its diagonal.

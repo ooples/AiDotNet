@@ -5,7 +5,7 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.Exp().
+/// Corresponds to TensorOperations<T>.Exp().
 /// Computes e^x for each element: result[i] = exp(a[i]).
 /// </para>
 /// <para><b>For Beginners:</b> Calculates e raised to the power of each element.
@@ -29,7 +29,7 @@ public class ExpOp : IROp
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.Log().
+/// Corresponds to TensorOperations<T>.Log().
 /// Computes natural log for each element: result[i] = ln(a[i]).
 /// </para>
 /// <para><b>For Beginners:</b> Calculates the natural logarithm of each element.
@@ -53,7 +53,7 @@ public class LogOp : IROp
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.Sqrt().
+/// Corresponds to TensorOperations<T>.Sqrt().
 /// Computes square root for each element: result[i] = √a[i].
 /// </para>
 /// <para><b>For Beginners:</b> Calculates the square root of each element.

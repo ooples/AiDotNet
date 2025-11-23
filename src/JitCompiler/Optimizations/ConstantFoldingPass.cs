@@ -251,7 +251,7 @@ public class ConstantFoldingPass : IOptimizationPass
     ///
     /// For example, for AddOp:
     /// - Get input1 and input2 values
-    /// - Compute result = TensorOperations.Add(input1, input2)
+    /// - Compute result = TensorOperations<T>.Add(input1, input2)
     /// - Return result
     ///
     /// This requires integration with the runtime tensor library,

@@ -253,7 +253,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // Autodiff supports all scalar activations via generic TensorOperations.ApplyActivation
+        // Autodiff supports all scalar activations via generic TensorOperations<T>.ApplyActivation
         // Only vector activations need manual path
         if (UseAutodiff && !_useVectorActivation)
             return BackwardViaAutodiff(outputGradient);
@@ -313,7 +313,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// Applies activation function using autodiff operations.
     /// </summary>
     /// <remarks>
-    /// This method uses the generic TensorOperations.ApplyActivation which supports ALL 39 built-in
+    /// This method uses the generic TensorOperations<T>.ApplyActivation which supports ALL 39 built-in
     /// activation functions automatically. Only truly custom user-defined activations would fail.
     /// </remarks>
     private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)

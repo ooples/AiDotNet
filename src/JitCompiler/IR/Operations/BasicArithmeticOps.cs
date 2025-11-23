@@ -5,7 +5,7 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.Add().
+/// Corresponds to TensorOperations<T>.Add().
 /// Performs element-wise addition of two tensors: result[i] = a[i] + b[i].
 /// </para>
 /// <para><b>For Beginners:</b> Adds two tensors together, element by element.
@@ -32,7 +32,7 @@ public class AddOp : IROp
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.Subtract().
+/// Corresponds to TensorOperations<T>.Subtract().
 /// Performs element-wise subtraction: result[i] = a[i] - b[i].
 /// </para>
 /// <para><b>For Beginners:</b> Subtracts one tensor from another, element by element.
@@ -56,7 +56,7 @@ public class SubtractOp : IROp
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.ElementwiseMultiply().
+/// Corresponds to TensorOperations<T>.ElementwiseMultiply().
 /// Performs Hadamard (element-wise) product: result[i] = a[i] * b[i].
 /// This is different from matrix multiplication.
 /// </para>
@@ -83,7 +83,7 @@ public class ElementwiseMultiplyOp : IROp
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.Divide().
+/// Corresponds to TensorOperations<T>.Divide().
 /// Performs element-wise division: result[i] = a[i] / b[i].
 /// </para>
 /// <para><b>For Beginners:</b> Divides one tensor by another, element by element.
@@ -107,7 +107,7 @@ public class DivideOp : IROp
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.Power().
+/// Corresponds to TensorOperations<T>.Power().
 /// Raises each element to a power: result[i] = a[i] ^ exponent.
 /// </para>
 /// <para><b>For Beginners:</b> Raises each element to a power.
@@ -141,7 +141,7 @@ public class PowerOp : IROp
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.Negate().
+/// Corresponds to TensorOperations<T>.Negate().
 /// Negates each element: result[i] = -a[i].
 /// </para>
 /// <para><b>For Beginners:</b> Flips the sign of each element.

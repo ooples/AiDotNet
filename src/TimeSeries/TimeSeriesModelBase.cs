@@ -1837,7 +1837,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
 
         // MatMul: input @ parameters
         // Result shape: [1, 1] (single prediction)
-        var outputNode = TensorOperations.MatrixMultiply(inputNode, paramNode);
+        var outputNode = TensorOperations<T>.MatrixMultiply(inputNode, paramNode);
 
         // Note: Most time series models don't have an explicit intercept term
         // as it's often absorbed into the parameters or handled during preprocessing.

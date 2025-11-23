@@ -5,7 +5,7 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.ReLU().
+/// Corresponds to TensorOperations<T>.ReLU().
 /// Computes max(0, x) for each element: result[i] = max(0, a[i]).
 /// </para>
 /// <para><b>For Beginners:</b> Keeps positive values, zeros out negative values.
@@ -31,7 +31,7 @@ public class ReLUOp : IROp
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.Sigmoid().
+/// Corresponds to TensorOperations<T>.Sigmoid().
 /// Computes sigmoid function: result[i] = 1 / (1 + exp(-a[i])).
 /// Output range is (0, 1).
 /// </para>
@@ -58,7 +58,7 @@ public class SigmoidOp : IROp
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.Tanh().
+/// Corresponds to TensorOperations<T>.Tanh().
 /// Computes tanh function: result[i] = (exp(a[i]) - exp(-a[i])) / (exp(a[i]) + exp(-a[i])).
 /// Output range is (-1, 1).
 /// </para>
@@ -85,7 +85,7 @@ public class TanhOp : IROp
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.Softmax().
+/// Corresponds to TensorOperations<T>.Softmax().
 /// Computes softmax along specified axis. Converts logits to probabilities.
 /// </para>
 /// <para><b>For Beginners:</b> Converts scores to probabilities that sum to 1.
@@ -123,7 +123,7 @@ public class SoftmaxOp : IROp
 /// </summary>
 /// <remarks>
 /// <para>
-/// Corresponds to TensorOperations.ApplyActivation().
+/// Corresponds to TensorOperations<T>.ApplyActivation().
 /// Applies a named activation function to the input.
 /// </para>
 /// <para><b>For Beginners:</b> Applies any activation function by name.

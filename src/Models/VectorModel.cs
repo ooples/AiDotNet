@@ -1739,7 +1739,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
 
         // Linear regression: output = input @ coefficients
         // This is a matrix-vector multiplication
-        var outputNode = TensorOperations.MatrixMultiply(inputNode, coeffNode);
+        var outputNode = TensorOperations<T>.MatrixMultiply(inputNode, coeffNode);
 
         return outputNode;
     }

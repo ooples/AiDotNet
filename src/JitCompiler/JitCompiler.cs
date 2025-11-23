@@ -166,9 +166,9 @@ public class JitCompiler
     ///   var x = new ComputationNode<float>(...);
     ///   var weights = new ComputationNode<float>(...);
     ///   var bias = new ComputationNode<float>(...);
-    ///   var matmul = TensorOperations.MatrixMultiply(x, weights);
-    ///   var add = TensorOperations.Add(matmul, bias);
-    ///   var result = TensorOperations.ReLU(add);
+    ///   var matmul = TensorOperations<T>.MatrixMultiply(x, weights);
+    ///   var add = TensorOperations<T>.Add(matmul, bias);
+    ///   var result = TensorOperations<T>.ReLU(add);
     ///
     ///   // Compile it
     ///   var compiled = jit.Compile(result, new[] { x, weights, bias });

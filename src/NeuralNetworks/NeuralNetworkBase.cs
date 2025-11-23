@@ -2557,7 +2557,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var weightsNode = new ComputationNode<T>(weightsTensor);
 
         // Matrix multiply: input @ weights
-        var matmulNode = TensorOperations.MatrixMultiply(input, weightsNode);
+        var matmulNode = TensorOperations<T>.MatrixMultiply(input, weightsNode);
 
         // Create bias vector node: shape [1, outputSize]
         var biasShape = new int[] { 1, outputSize };
@@ -2565,7 +2565,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var biasNode = new ComputationNode<T>(biasTensor);
 
         // Add bias: matmul + bias
-        var outputNode = TensorOperations.Add(matmulNode, biasNode);
+        var outputNode = TensorOperations<T>.Add(matmulNode, biasNode);
 
         return outputNode;
     }
@@ -2605,7 +2605,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var weightsNode = new ComputationNode<T>(weightsTensor);
 
         // Matrix multiply: input @ weights
-        var matmulNode = TensorOperations.MatrixMultiply(input, weightsNode);
+        var matmulNode = TensorOperations<T>.MatrixMultiply(input, weightsNode);
 
         // Create bias vector node
         var biasShape = new int[] { 1, outputSize };
@@ -2613,7 +2613,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var biasNode = new ComputationNode<T>(biasTensor);
 
         // Add bias: matmul + bias
-        var outputNode = TensorOperations.Add(matmulNode, biasNode);
+        var outputNode = TensorOperations<T>.Add(matmulNode, biasNode);
 
         return outputNode;
     }
@@ -2641,13 +2641,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var weightsNode = new ComputationNode<T>(weights);
 
         // Matrix multiply: input @ weights
-        var matmulNode = TensorOperations.MatrixMultiply(input, weightsNode);
+        var matmulNode = TensorOperations<T>.MatrixMultiply(input, weightsNode);
 
         // Biases are [1, outputSize]
         var biasNode = new ComputationNode<T>(biases);
 
         // Add bias: matmul + bias
-        var outputNode = TensorOperations.Add(matmulNode, biasNode);
+        var outputNode = TensorOperations<T>.Add(matmulNode, biasNode);
 
         return outputNode;
     }
@@ -2662,10 +2662,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         return activationType switch
         {
-            "ReLU" or "ReLUActivation" => TensorOperations.ReLU(input),
-            "Sigmoid" or "SigmoidActivation" => TensorOperations.Sigmoid(input),
-            "Tanh" or "TanhActivation" => TensorOperations.Tanh(input),
-            "Softmax" or "SoftmaxActivation" => TensorOperations.Softmax(input),
+            "ReLU" or "ReLUActivation" => TensorOperations<T>.ReLU(input),
+            "Sigmoid" or "SigmoidActivation" => TensorOperations<T>.Sigmoid(input),
+            "Tanh" or "TanhActivation" => TensorOperations<T>.Tanh(input),
+            "Softmax" or "SoftmaxActivation" => TensorOperations<T>.Softmax(input),
             _ => throw new NotSupportedException(
                 $"Activation function {activationType} is not supported for JIT compilation. " +
                 $"Supported activations: ReLU, Sigmoid, Tanh, Softmax.")
@@ -2733,21 +2733,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var epsilonNode = new ComputationNode<T>(epsilonTensor);
 
         // Compute: (input - running_mean)
-        var centered = TensorOperations.Subtract(input, runningMeanNode);
+        var centered = TensorOperations<T>.Subtract(input, runningMeanNode);
 
         // Compute: running_variance + epsilon
-        var variancePlusEpsilon = TensorOperations.Add(runningVarianceNode, epsilonNode);
+        var variancePlusEpsilon = TensorOperations<T>.Add(runningVarianceNode, epsilonNode);
 
         // Compute: sqrt(running_variance + epsilon)
         // Note: We need to use element-wise square root, but we don't have a Sqrt operation yet
         // For now, we'll use element-wise multiply as a placeholder
         // TODO: Add proper Sqrt operation support
-        // var stddev = TensorOperations.Sqrt(variancePlusEpsilon);
+        // var stddev = TensorOperations<T>.Sqrt(variancePlusEpsilon);
 
         // Simplified version: normalized = centered * gamma + beta
         // This skips the variance normalization step for now
-        var scaled = TensorOperations.ElementwiseMultiply(centered, gammaNode);
-        var output = TensorOperations.Add(scaled, betaNode);
+        var scaled = TensorOperations<T>.ElementwiseMultiply(centered, gammaNode);
+        var output = TensorOperations<T>.Add(scaled, betaNode);
 
         return output;
     }
@@ -2785,8 +2785,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Simplified version: output = input * gamma + beta
         // Full layer norm would require computing mean and std dynamically per sample
         // which is not easily representable in a static computation graph
-        var scaled = TensorOperations.ElementwiseMultiply(input, gammaNode);
-        var output = TensorOperations.Add(scaled, betaNode);
+        var scaled = TensorOperations<T>.ElementwiseMultiply(input, gammaNode);
+        var output = TensorOperations<T>.Add(scaled, betaNode);
 
         return output;
     }
@@ -2814,7 +2814,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var innerOutput = ConvertLayerToGraph(innerLayer, input);
 
         // Add input to inner layer output (residual connection)
-        var output = TensorOperations.Add(input, innerOutput);
+        var output = TensorOperations<T>.Add(input, innerOutput);
 
         return output;
     }
@@ -2829,7 +2829,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var paddingField = layerType.GetField("_padding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         var padding = (int[])paddingField!.GetValue(layer)!;
 
-        return TensorOperations.Pad(input, padding);
+        return TensorOperations<T>.Pad(input, padding);
     }
 
     /// <summary>
@@ -2849,11 +2849,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var cropLeft = (int[])cropLeftField!.GetValue(layer)!;
         var cropRight = (int[])cropRightField!.GetValue(layer)!;
 
-        // Combine into single cropping array for TensorOperations.Crop
+        // Combine into single cropping array for TensorOperations<T>.Crop
         // Crop expects [top, bottom, left, right] for spatial dimensions
         var cropping = new int[] { cropTop[1], cropBottom[1], cropLeft[2], cropRight[2] };
 
-        return TensorOperations.Crop(input, cropping);
+        return TensorOperations<T>.Crop(input, cropping);
     }
 
     /// <summary>
@@ -2866,7 +2866,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var scaleFactorField = layerType.GetField("_scaleFactor", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         var scaleFactor = (int)scaleFactorField!.GetValue(layer)!;
 
-        return TensorOperations.Upsample(input, scaleFactor);
+        return TensorOperations<T>.Upsample(input, scaleFactor);
     }
 
     /// <summary>
@@ -2901,12 +2901,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (poolingTypeName == "Max")
         {
             // Global max pooling: reduce max over spatial dimensions
-            return TensorOperations.ReduceMax(input, axes: new int[] { 2, 3 }, keepDims: false);
+            return TensorOperations<T>.ReduceMax(input, axes: new int[] { 2, 3 }, keepDims: false);
         }
         else // Average
         {
             // Global average pooling: reduce mean over spatial dimensions
-            return TensorOperations.ReduceMean(input, axes: new int[] { 2, 3 }, keepDims: false);
+            return TensorOperations<T>.ReduceMean(input, axes: new int[] { 2, 3 }, keepDims: false);
         }
     }
 
@@ -2918,7 +2918,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Get axis via reflection or property
         var axis = layer.Axis;
 
-        return TensorOperations.ReduceMean(input, axes: new int[] { axis }, keepDims: false);
+        return TensorOperations<T>.ReduceMean(input, axes: new int[] { axis }, keepDims: false);
     }
 
     /// <summary>
@@ -2928,7 +2928,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         // Log variance layer computes log of variance
         // Using the ReduceLogVariance operation
-        return TensorOperations.ReduceLogVariance(input, axes: null, keepDims: false);
+        return TensorOperations<T>.ReduceLogVariance(input, axes: null, keepDims: false);
     }
 
     /// <summary>
@@ -2948,10 +2948,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var stride = (int)strideField!.GetValue(layer)!;
         var padding = (int)paddingField!.GetValue(layer)!;
 
-        var kernelsNode = TensorOperations.Constant(kernels, "conv_kernels");
-        var biasesNode = TensorOperations.Constant(biases, "conv_biases");
+        var kernelsNode = TensorOperations<T>.Constant(kernels, "conv_kernels");
+        var biasesNode = TensorOperations<T>.Constant(biases, "conv_biases");
 
-        return TensorOperations.Conv2D(input, kernelsNode, biasesNode, stride, padding);
+        return TensorOperations<T>.Conv2D(input, kernelsNode, biasesNode, stride, padding);
     }
 
     /// <summary>
@@ -2971,10 +2971,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var stride = (int)strideField!.GetValue(layer)!;
         var padding = (int)paddingField!.GetValue(layer)!;
 
-        var kernelsNode = TensorOperations.Constant(kernels, "deconv_kernels");
-        var biasesNode = TensorOperations.Constant(biases, "deconv_biases");
+        var kernelsNode = TensorOperations<T>.Constant(kernels, "deconv_kernels");
+        var biasesNode = TensorOperations<T>.Constant(biases, "deconv_biases");
 
-        return TensorOperations.ConvTranspose2D(input, kernelsNode, biasesNode, stride, padding);
+        return TensorOperations<T>.ConvTranspose2D(input, kernelsNode, biasesNode, stride, padding);
     }
 
     /// <summary>
@@ -2996,11 +2996,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var stride = (int)strideField!.GetValue(layer)!;
         var padding = (int)paddingField!.GetValue(layer)!;
 
-        var depthwiseKernelsNode = TensorOperations.Constant(depthwiseKernels, "depthwise_kernels");
-        var pointwiseKernelsNode = TensorOperations.Constant(pointwiseKernels, "pointwise_kernels");
-        var biasesNode = TensorOperations.Constant(biases, "depthwise_sep_biases");
+        var depthwiseKernelsNode = TensorOperations<T>.Constant(depthwiseKernels, "depthwise_kernels");
+        var pointwiseKernelsNode = TensorOperations<T>.Constant(pointwiseKernels, "pointwise_kernels");
+        var biasesNode = TensorOperations<T>.Constant(biases, "depthwise_sep_biases");
 
-        return TensorOperations.DepthwiseConv2D(input, depthwiseKernelsNode, pointwiseKernelsNode, biasesNode, stride, padding);
+        return TensorOperations<T>.DepthwiseConv2D(input, depthwiseKernelsNode, pointwiseKernelsNode, biasesNode, stride, padding);
     }
 
     /// <summary>
@@ -3022,10 +3022,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var padding = (int)paddingField!.GetValue(layer)!;
         var dilation = (int)dilationField!.GetValue(layer)!;
 
-        var kernelsNode = TensorOperations.Constant(kernels, "dilated_conv_kernels");
-        var biasesNode = TensorOperations.Constant(biases, "dilated_conv_biases");
+        var kernelsNode = TensorOperations<T>.Constant(kernels, "dilated_conv_kernels");
+        var biasesNode = TensorOperations<T>.Constant(biases, "dilated_conv_biases");
 
-        return TensorOperations.DilatedConv2D(input, kernelsNode, biasesNode, stride, padding, dilation);
+        return TensorOperations<T>.DilatedConv2D(input, kernelsNode, biasesNode, stride, padding, dilation);
     }
 
     /// <summary>
@@ -3039,7 +3039,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var upscaleFactor = (int)upscaleFactorField!.GetValue(layer)!;
 
         // SubpixelConvolutionalLayer uses PixelShuffle (depth-to-space)
-        return TensorOperations.PixelShuffle(input, upscaleFactor);
+        return TensorOperations<T>.PixelShuffle(input, upscaleFactor);
     }
 
     /// <summary>
@@ -3059,10 +3059,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var kernelSize = (int)kernelSizeField!.GetValue(layer)!;
         var stride = (int)strideField!.GetValue(layer)!;
 
-        var weightsNode = TensorOperations.Constant(weights, "locally_connected_weights");
-        var biasesNode = TensorOperations.Constant(biases, "locally_connected_biases");
+        var weightsNode = TensorOperations<T>.Constant(weights, "locally_connected_weights");
+        var biasesNode = TensorOperations<T>.Constant(biases, "locally_connected_biases");
 
-        return TensorOperations.LocallyConnectedConv2D(input, weightsNode, biasesNode, kernelSize, stride);
+        return TensorOperations<T>.LocallyConnectedConv2D(input, weightsNode, biasesNode, kernelSize, stride);
     }
 
     /// <summary>
@@ -3078,7 +3078,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var poolSize = (int)poolSizeField!.GetValue(layer)!;
         var stride = (int)strideField!.GetValue(layer)!;
 
-        return TensorOperations.MaxPool2D(input, poolSize, stride);
+        return TensorOperations<T>.MaxPool2D(input, poolSize, stride);
     }
 
     /// <summary>
@@ -3102,11 +3102,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         if (poolingTypeName == "Max")
         {
-            return TensorOperations.MaxPool2D(input, poolSize, stride);
+            return TensorOperations<T>.MaxPool2D(input, poolSize, stride);
         }
         else // Average
         {
-            return TensorOperations.AvgPool2D(input, poolSize, stride);
+            return TensorOperations<T>.AvgPool2D(input, poolSize, stride);
         }
     }
 
@@ -3123,9 +3123,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var centers = (Tensor<T>)centersField!.GetValue(layer)!;
         var sigma = (T)sigmaField!.GetValue(layer)!;
 
-        var centersNode = TensorOperations.Constant(centers, "rbf_centers");
+        var centersNode = TensorOperations<T>.Constant(centers, "rbf_centers");
 
-        return TensorOperations.RBFKernel(input, centersNode, sigma);
+        return TensorOperations<T>.RBFKernel(input, centersNode, sigma);
     }
 
     /// <summary>
@@ -3159,9 +3159,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             theta[b, 1, 2] = NumOps.Zero;           // Translate y
         }
 
-        var thetaNode = TensorOperations.Constant(theta, "identity_transform");
-        var grid = TensorOperations.AffineGrid(thetaNode, height, width);
-        return TensorOperations.GridSample(input, grid);
+        var thetaNode = TensorOperations<T>.Constant(theta, "identity_transform");
+        var grid = TensorOperations<T>.AffineGrid(thetaNode, height, width);
+        return TensorOperations<T>.GridSample(input, grid);
     }
 
     /// <summary>
@@ -3179,11 +3179,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var biases = (Tensor<T>)biasesField!.GetValue(layer)!;
         var adjacencyMatrix = (Tensor<T>)adjacencyMatrixField!.GetValue(layer)!;
 
-        var weightsNode = TensorOperations.Constant(weights, "graph_conv_weights");
-        var biasesNode = TensorOperations.Constant(biases, "graph_conv_biases");
-        var adjacencyNode = TensorOperations.Constant(adjacencyMatrix, "adjacency_matrix");
+        var weightsNode = TensorOperations<T>.Constant(weights, "graph_conv_weights");
+        var biasesNode = TensorOperations<T>.Constant(biases, "graph_conv_biases");
+        var adjacencyNode = TensorOperations<T>.Constant(adjacencyMatrix, "adjacency_matrix");
 
-        return TensorOperations.GraphConv(input, adjacencyNode, weightsNode, biasesNode);
+        return TensorOperations<T>.GraphConv(input, adjacencyNode, weightsNode, biasesNode);
     }
 
     /// <summary>
@@ -3209,33 +3209,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var gateWeightsTensor = MatrixToTensor(gateWeights);
         var gateBiasTensor = VectorToTensor(gateBias);
 
-        var transformWeightsNode = TensorOperations.Constant(transformWeightsTensor, "highway_transform_weights");
-        var transformBiasNode = TensorOperations.Constant(transformBiasTensor, "highway_transform_bias");
-        var gateWeightsNode = TensorOperations.Constant(gateWeightsTensor, "highway_gate_weights");
-        var gateBiasNode = TensorOperations.Constant(gateBiasTensor, "highway_gate_bias");
+        var transformWeightsNode = TensorOperations<T>.Constant(transformWeightsTensor, "highway_transform_weights");
+        var transformBiasNode = TensorOperations<T>.Constant(transformBiasTensor, "highway_transform_bias");
+        var gateWeightsNode = TensorOperations<T>.Constant(gateWeightsTensor, "highway_gate_weights");
+        var gateBiasNode = TensorOperations<T>.Constant(gateBiasTensor, "highway_gate_bias");
 
         // Transform path: H = tanh(input @ W_H + b_H)
-        var transformOutput = TensorOperations.MatrixMultiply(input, transformWeightsNode);
-        transformOutput = TensorOperations.Add(transformOutput, transformBiasNode);
-        transformOutput = TensorOperations.Tanh(transformOutput);
+        var transformOutput = TensorOperations<T>.MatrixMultiply(input, transformWeightsNode);
+        transformOutput = TensorOperations<T>.Add(transformOutput, transformBiasNode);
+        transformOutput = TensorOperations<T>.Tanh(transformOutput);
 
         // Gate path: T = sigmoid(input @ W_T + b_T)
-        var gateOutput = TensorOperations.MatrixMultiply(input, gateWeightsNode);
-        gateOutput = TensorOperations.Add(gateOutput, gateBiasNode);
-        gateOutput = TensorOperations.Sigmoid(gateOutput);
+        var gateOutput = TensorOperations<T>.MatrixMultiply(input, gateWeightsNode);
+        gateOutput = TensorOperations<T>.Add(gateOutput, gateBiasNode);
+        gateOutput = TensorOperations<T>.Sigmoid(gateOutput);
 
         // Output: y = H * T + input * (1 - T)
-        var gatedTransform = TensorOperations.ElementwiseMultiply(transformOutput, gateOutput);
+        var gatedTransform = TensorOperations<T>.ElementwiseMultiply(transformOutput, gateOutput);
 
         // Compute (1 - T)
         var onesTensor = new Tensor<T>(gateOutput.Value.Shape);
         for (int i = 0; i < onesTensor.Data.Length; i++)
             onesTensor.Data[i] = NumOps.FromDouble(1.0);
-        var onesNode = TensorOperations.Constant(onesTensor, "ones");
-        var inverseGate = TensorOperations.Subtract(onesNode, gateOutput);
+        var onesNode = TensorOperations<T>.Constant(onesTensor, "ones");
+        var inverseGate = TensorOperations<T>.Subtract(onesNode, gateOutput);
 
-        var gatedInput = TensorOperations.ElementwiseMultiply(input, inverseGate);
-        var output = TensorOperations.Add(gatedTransform, gatedInput);
+        var gatedInput = TensorOperations<T>.ElementwiseMultiply(input, inverseGate);
+        var output = TensorOperations<T>.Add(gatedTransform, gatedInput);
 
         return output;
     }
@@ -3262,26 +3262,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var weights2Tensor = MatrixToTensor(weights2);
         var bias2Tensor = VectorToTensor(bias2);
 
-        var weights1Node = TensorOperations.Constant(weights1Tensor, "se_weights1");
-        var bias1Node = TensorOperations.Constant(bias1Tensor, "se_bias1");
-        var weights2Node = TensorOperations.Constant(weights2Tensor, "se_weights2");
-        var bias2Node = TensorOperations.Constant(bias2Tensor, "se_bias2");
+        var weights1Node = TensorOperations<T>.Constant(weights1Tensor, "se_weights1");
+        var bias1Node = TensorOperations<T>.Constant(bias1Tensor, "se_bias1");
+        var weights2Node = TensorOperations<T>.Constant(weights2Tensor, "se_weights2");
+        var bias2Node = TensorOperations<T>.Constant(bias2Tensor, "se_bias2");
 
         // Squeeze: Global average pooling across spatial dimensions
-        var squeezed = TensorOperations.ReduceMean(input, axes: new int[] { 2, 3 }, keepDims: false);
+        var squeezed = TensorOperations<T>.ReduceMean(input, axes: new int[] { 2, 3 }, keepDims: false);
 
         // Excitation: FC -> ReLU -> FC -> Sigmoid
-        var fc1 = TensorOperations.MatrixMultiply(squeezed, weights1Node);
-        fc1 = TensorOperations.Add(fc1, bias1Node);
-        fc1 = TensorOperations.ReLU(fc1);
+        var fc1 = TensorOperations<T>.MatrixMultiply(squeezed, weights1Node);
+        fc1 = TensorOperations<T>.Add(fc1, bias1Node);
+        fc1 = TensorOperations<T>.ReLU(fc1);
 
-        var fc2 = TensorOperations.MatrixMultiply(fc1, weights2Node);
-        fc2 = TensorOperations.Add(fc2, bias2Node);
-        var excitation = TensorOperations.Sigmoid(fc2);
+        var fc2 = TensorOperations<T>.MatrixMultiply(fc1, weights2Node);
+        fc2 = TensorOperations<T>.Add(fc2, bias2Node);
+        var excitation = TensorOperations<T>.Sigmoid(fc2);
 
         // Scale: element-wise multiply input by excitation weights (channel-wise)
         // Note: This is simplified - full implementation would require proper broadcasting
-        var output = TensorOperations.ElementwiseMultiply(input, excitation);
+        var output = TensorOperations<T>.ElementwiseMultiply(input, excitation);
 
         return output;
     }
@@ -3308,22 +3308,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var linearBiasTensor = VectorToTensor(linearBias);
         var gateBiasTensor = VectorToTensor(gateBias);
 
-        var linearWeightsNode = TensorOperations.Constant(linearWeightsTensor, "glu_linear_weights");
-        var gateWeightsNode = TensorOperations.Constant(gateWeightsTensor, "glu_gate_weights");
-        var linearBiasNode = TensorOperations.Constant(linearBiasTensor, "glu_linear_bias");
-        var gateBiasNode = TensorOperations.Constant(gateBiasTensor, "glu_gate_bias");
+        var linearWeightsNode = TensorOperations<T>.Constant(linearWeightsTensor, "glu_linear_weights");
+        var gateWeightsNode = TensorOperations<T>.Constant(gateWeightsTensor, "glu_gate_weights");
+        var linearBiasNode = TensorOperations<T>.Constant(linearBiasTensor, "glu_linear_bias");
+        var gateBiasNode = TensorOperations<T>.Constant(gateBiasTensor, "glu_gate_bias");
 
         // Linear path
-        var linearOutput = TensorOperations.MatrixMultiply(input, linearWeightsNode);
-        linearOutput = TensorOperations.Add(linearOutput, linearBiasNode);
+        var linearOutput = TensorOperations<T>.MatrixMultiply(input, linearWeightsNode);
+        linearOutput = TensorOperations<T>.Add(linearOutput, linearBiasNode);
 
         // Gate path
-        var gateOutput = TensorOperations.MatrixMultiply(input, gateWeightsNode);
-        gateOutput = TensorOperations.Add(gateOutput, gateBiasNode);
-        gateOutput = TensorOperations.Sigmoid(gateOutput);
+        var gateOutput = TensorOperations<T>.MatrixMultiply(input, gateWeightsNode);
+        gateOutput = TensorOperations<T>.Add(gateOutput, gateBiasNode);
+        gateOutput = TensorOperations<T>.Sigmoid(gateOutput);
 
         // GLU: output = linear * sigmoid(gate)
-        var output = TensorOperations.ElementwiseMultiply(linearOutput, gateOutput);
+        var output = TensorOperations<T>.ElementwiseMultiply(linearOutput, gateOutput);
 
         return output;
     }
@@ -3365,10 +3365,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var embeddingMatrix = (Matrix<T>)embeddingMatrixField!.GetValue(layer)!;
 
         var embeddingTensor = MatrixToTensor(embeddingMatrix);
-        var embeddingsNode = TensorOperations.Constant(embeddingTensor, "embeddings");
+        var embeddingsNode = TensorOperations<T>.Constant(embeddingTensor, "embeddings");
 
         // Use EmbeddingLookup operation
-        return TensorOperations.EmbeddingLookup(embeddingsNode, input);
+        return TensorOperations<T>.EmbeddingLookup(embeddingsNode, input);
     }
 
     /// <summary>
@@ -3390,9 +3390,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var weightHHTensor = MatrixToTensor(weightHH);
         var biasTensor = VectorToTensor(bias);
 
-        var weightIHNode = TensorOperations.Constant(weightIHTensor, "lstm_weight_ih");
-        var weightHHNode = TensorOperations.Constant(weightHHTensor, "lstm_weight_hh");
-        var biasNode = TensorOperations.Constant(biasTensor, "lstm_bias");
+        var weightIHNode = TensorOperations<T>.Constant(weightIHTensor, "lstm_weight_ih");
+        var weightHHNode = TensorOperations<T>.Constant(weightHHTensor, "lstm_weight_hh");
+        var biasNode = TensorOperations<T>.Constant(biasTensor, "lstm_bias");
 
         // Initialize hidden and cell states (zeros for inference)
         var hiddenDim = weightHH.Rows;
@@ -3400,11 +3400,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var hiddenStateTensor = new Tensor<T>(hiddenShape);
         var cellStateTensor = new Tensor<T>(hiddenShape);
 
-        var hiddenStateNode = TensorOperations.Constant(hiddenStateTensor, "lstm_h0");
-        var cellStateNode = TensorOperations.Constant(cellStateTensor, "lstm_c0");
+        var hiddenStateNode = TensorOperations<T>.Constant(hiddenStateTensor, "lstm_h0");
+        var cellStateNode = TensorOperations<T>.Constant(cellStateTensor, "lstm_c0");
 
         // Apply LSTM cell
-        var (newHidden, newCell) = TensorOperations.LSTMCell(input, hiddenStateNode, cellStateNode, weightIHNode, weightHHNode, biasNode);
+        var (newHidden, newCell) = TensorOperations<T>.LSTMCell(input, hiddenStateNode, cellStateNode, weightIHNode, weightHHNode, biasNode);
 
         return newHidden;
     }
@@ -3428,19 +3428,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var weightHHTensor = MatrixToTensor(weightHH);
         var biasTensor = VectorToTensor(bias);
 
-        var weightIHNode = TensorOperations.Constant(weightIHTensor, "gru_weight_ih");
-        var weightHHNode = TensorOperations.Constant(weightHHTensor, "gru_weight_hh");
-        var biasNode = TensorOperations.Constant(biasTensor, "gru_bias");
+        var weightIHNode = TensorOperations<T>.Constant(weightIHTensor, "gru_weight_ih");
+        var weightHHNode = TensorOperations<T>.Constant(weightHHTensor, "gru_weight_hh");
+        var biasNode = TensorOperations<T>.Constant(biasTensor, "gru_bias");
 
         // Initialize hidden state (zeros for inference)
         var hiddenDim = weightHH.Rows;
         var hiddenShape = new int[] { input.Value.Shape[0], hiddenDim };
         var hiddenStateTensor = new Tensor<T>(hiddenShape);
 
-        var hiddenStateNode = TensorOperations.Constant(hiddenStateTensor, "gru_h0");
+        var hiddenStateNode = TensorOperations<T>.Constant(hiddenStateTensor, "gru_h0");
 
         // Apply GRU cell
-        var newHidden = TensorOperations.GRUCell(input, hiddenStateNode, weightIHNode, weightHHNode, biasNode);
+        var newHidden = TensorOperations<T>.GRUCell(input, hiddenStateNode, weightIHNode, weightHHNode, biasNode);
 
         return newHidden;
     }
@@ -3464,17 +3464,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var keyWeightsTensor = MatrixToTensor(keyWeights);
         var valueWeightsTensor = MatrixToTensor(valueWeights);
 
-        var queryWeightsNode = TensorOperations.Constant(queryWeightsTensor, "attention_query_weights");
-        var keyWeightsNode = TensorOperations.Constant(keyWeightsTensor, "attention_key_weights");
-        var valueWeightsNode = TensorOperations.Constant(valueWeightsTensor, "attention_value_weights");
+        var queryWeightsNode = TensorOperations<T>.Constant(queryWeightsTensor, "attention_query_weights");
+        var keyWeightsNode = TensorOperations<T>.Constant(keyWeightsTensor, "attention_key_weights");
+        var valueWeightsNode = TensorOperations<T>.Constant(valueWeightsTensor, "attention_value_weights");
 
         // Project input to Q, K, V
-        var query = TensorOperations.MatrixMultiply(input, queryWeightsNode);
-        var key = TensorOperations.MatrixMultiply(input, keyWeightsNode);
-        var value = TensorOperations.MatrixMultiply(input, valueWeightsNode);
+        var query = TensorOperations<T>.MatrixMultiply(input, queryWeightsNode);
+        var key = TensorOperations<T>.MatrixMultiply(input, keyWeightsNode);
+        var value = TensorOperations<T>.MatrixMultiply(input, valueWeightsNode);
 
         // Apply scaled dot-product attention
-        return TensorOperations.ScaledDotProductAttention(query, key, value);
+        return TensorOperations<T>.ScaledDotProductAttention(query, key, value);
     }
 
     /// <summary>
@@ -3496,17 +3496,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var keyWeightsTensor = MatrixToTensor(keyWeights);
         var valueWeightsTensor = MatrixToTensor(valueWeights);
 
-        var queryWeightsNode = TensorOperations.Constant(queryWeightsTensor, "self_attention_query_weights");
-        var keyWeightsNode = TensorOperations.Constant(keyWeightsTensor, "self_attention_key_weights");
-        var valueWeightsNode = TensorOperations.Constant(valueWeightsTensor, "self_attention_value_weights");
+        var queryWeightsNode = TensorOperations<T>.Constant(queryWeightsTensor, "self_attention_query_weights");
+        var keyWeightsNode = TensorOperations<T>.Constant(keyWeightsTensor, "self_attention_key_weights");
+        var valueWeightsNode = TensorOperations<T>.Constant(valueWeightsTensor, "self_attention_value_weights");
 
         // Project input to Q, K, V (self-attention uses same input for all three)
-        var query = TensorOperations.MatrixMultiply(input, queryWeightsNode);
-        var key = TensorOperations.MatrixMultiply(input, keyWeightsNode);
-        var value = TensorOperations.MatrixMultiply(input, valueWeightsNode);
+        var query = TensorOperations<T>.MatrixMultiply(input, queryWeightsNode);
+        var key = TensorOperations<T>.MatrixMultiply(input, keyWeightsNode);
+        var value = TensorOperations<T>.MatrixMultiply(input, valueWeightsNode);
 
         // Apply scaled dot-product attention
-        return TensorOperations.ScaledDotProductAttention(query, key, value);
+        return TensorOperations<T>.ScaledDotProductAttention(query, key, value);
     }
 
     /// <summary>
@@ -3533,13 +3533,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var wVTensor = MatrixToTensor(wV);
         var wOTensor = MatrixToTensor(wO);
 
-        var wQNode = TensorOperations.Constant(wQTensor, "mha_wq");
-        var wKNode = TensorOperations.Constant(wKTensor, "mha_wk");
-        var wVNode = TensorOperations.Constant(wVTensor, "mha_wv");
-        var wONode = TensorOperations.Constant(wOTensor, "mha_wo");
+        var wQNode = TensorOperations<T>.Constant(wQTensor, "mha_wq");
+        var wKNode = TensorOperations<T>.Constant(wKTensor, "mha_wk");
+        var wVNode = TensorOperations<T>.Constant(wVTensor, "mha_wv");
+        var wONode = TensorOperations<T>.Constant(wOTensor, "mha_wo");
 
         // Apply multi-head attention
-        return TensorOperations.MultiHeadAttention(input, input, input, numHeads, wQNode, wKNode, wVNode, wONode);
+        return TensorOperations<T>.MultiHeadAttention(input, input, input, numHeads, wQNode, wKNode, wVNode, wONode);
     }
 
     #endregion

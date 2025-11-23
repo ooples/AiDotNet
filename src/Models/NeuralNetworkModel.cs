@@ -1308,10 +1308,10 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         var biasesNode = new ComputationNode<T>(biasesTensor);
 
         // MatMul: output = input @ weights^T
-        var matmulNode = TensorOperations.MatrixMultiply(input, weightsNode);
+        var matmulNode = TensorOperations<T>.MatrixMultiply(input, weightsNode);
 
         // Add bias
-        var addNode = TensorOperations.Add(matmulNode, biasesNode);
+        var addNode = TensorOperations<T>.Add(matmulNode, biasesNode);
 
         // Apply activation if present
         if (layer.ScalarActivation != null)
@@ -1356,12 +1356,12 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         var padding = new int[] { 0, 0 };
 
         // Conv2D operation
-        var convNode = TensorOperations.Conv2D(input, filtersNode, stride, padding);
+        var convNode = TensorOperations<T>.Conv2D(input, filtersNode, stride, padding);
 
         // Add bias if present
         if (biasesNode != null)
         {
-            convNode = TensorOperations.Add(convNode, biasesNode);
+            convNode = TensorOperations<T>.Add(convNode, biasesNode);
         }
 
         // Apply activation if present
@@ -1380,7 +1380,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         var stride = layer.GetStride();
         var padding = new int[] { 0, 0 }; // Assume no padding for now
 
-        return TensorOperations.MaxPool2D(input, poolSize, stride, padding);
+        return TensorOperations<T>.MaxPool2D(input, poolSize, stride, padding);
     }
 
     private ComputationNode<T> ConvertAvgPoolingLayer(AvgPoolingLayer<T> layer, ComputationNode<T> input)
@@ -1390,7 +1390,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         var stride = layer.GetStride();
         var padding = new int[] { 0, 0 };
 
-        return TensorOperations.AvgPool2D(input, poolSize, stride, padding);
+        return TensorOperations<T>.AvgPool2D(input, poolSize, stride, padding);
     }
 
     private ComputationNode<T> ConvertBatchNormLayer(BatchNormalizationLayer<T> layer, ComputationNode<T> input)
@@ -1410,7 +1410,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         var epsilon = layer.GetEpsilon();
         var momentum = layer.GetMomentum();
 
-        return TensorOperations.BatchNorm(input, gammaNode, betaNode, meanNode, varianceNode, epsilon, momentum);
+        return TensorOperations<T>.BatchNorm(input, gammaNode, betaNode, meanNode, varianceNode, epsilon, momentum);
     }
 
     private ComputationNode<T> ConvertLayerNormLayer(LayerNormalizationLayer<T> layer, ComputationNode<T> input)
@@ -1424,7 +1424,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         var gammaNode = new ComputationNode<T>(VectorToTensor(gamma));
         var betaNode = new ComputationNode<T>(VectorToTensor(beta));
 
-        return TensorOperations.LayerNorm(input, gammaNode, betaNode, normalizedShape, epsilon);
+        return TensorOperations<T>.LayerNorm(input, gammaNode, betaNode, normalizedShape, epsilon);
     }
 
     private ComputationNode<T> ConvertFlattenLayer(FlattenLayer<T> layer, ComputationNode<T> input)
@@ -1434,13 +1434,13 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         var flattenedSize = input.Value.Shape.Skip(1).Aggregate(1, (a, b) => a * b);
         var newShape = new int[] { batchSize, flattenedSize };
 
-        return TensorOperations.Reshape(input, newShape);
+        return TensorOperations<T>.Reshape(input, newShape);
     }
 
     private ComputationNode<T> ConvertReshapeLayer(ReshapeLayer<T> layer, ComputationNode<T> input)
     {
         var targetShape = layer.GetTargetShape();
-        return TensorOperations.Reshape(input, targetShape);
+        return TensorOperations<T>.Reshape(input, targetShape);
     }
 
     private ComputationNode<T> ConvertAddLayer(AddLayer<T> layer, ComputationNode<T> input)
@@ -1465,11 +1465,11 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 
         return activationName switch
         {
-            "ReLU" or "ReLUActivation" => TensorOperations.ReLU(input),
-            "Sigmoid" or "SigmoidActivation" => TensorOperations.Sigmoid(input),
-            "Tanh" or "TanhActivation" => TensorOperations.Tanh(input),
-            "LeakyReLU" or "LeakyReLUActivation" => TensorOperations.ReLU(input), // Approximate with ReLU for now
-            "ELU" or "ELUActivation" => TensorOperations.ReLU(input), // Approximate with ReLU
+            "ReLU" or "ReLUActivation" => TensorOperations<T>.ReLU(input),
+            "Sigmoid" or "SigmoidActivation" => TensorOperations<T>.Sigmoid(input),
+            "Tanh" or "TanhActivation" => TensorOperations<T>.Tanh(input),
+            "LeakyReLU" or "LeakyReLUActivation" => TensorOperations<T>.ReLU(input), // Approximate with ReLU for now
+            "ELU" or "ELUActivation" => TensorOperations<T>.ReLU(input), // Approximate with ReLU
             _ => throw new NotSupportedException($"Activation {activationName} not supported in JIT compilation yet.")
         };
     }
@@ -1480,7 +1480,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 
         return activationName switch
         {
-            "Softmax" or "SoftmaxActivation" => TensorOperations.Softmax(input, axis: -1),
+            "Softmax" or "SoftmaxActivation" => TensorOperations<T>.Softmax(input, axis: -1),
             _ => throw new NotSupportedException($"Vector activation {activationName} not supported in JIT compilation yet.")
         };
     }

@@ -1044,7 +1044,7 @@ public abstract class RegressionBase<T> : IRegression<T>
 
         // MatMul: input @ coefficients
         // Result shape: [batch_size, 1]
-        var outputNode = TensorOperations.MatrixMultiply(inputNode, coeffNode);
+        var outputNode = TensorOperations<T>.MatrixMultiply(inputNode, coeffNode);
 
         // Add intercept if used
         if (HasIntercept)
@@ -1057,7 +1057,7 @@ public abstract class RegressionBase<T> : IRegression<T>
             var interceptNode = new ComputationNode<T>(interceptTensor);
 
             // Add: (input @ coefficients) + intercept
-            outputNode = TensorOperations.Add(outputNode, interceptNode);
+            outputNode = TensorOperations<T>.Add(outputNode, interceptNode);
         }
 
         return outputNode;

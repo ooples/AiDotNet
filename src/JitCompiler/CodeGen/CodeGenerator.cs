@@ -40,8 +40,8 @@ namespace AiDotNet.JitCompiler.CodeGen;
 /// IR Graph: t2 = Add(t0, t1); t3 = ReLU(t2)
 /// Generates code like:
 ///   (t0, t1) => {
-///     var t2 = TensorOperations.Add(t0, t1);
-///     var t3 = TensorOperations.ReLU(t2);
+///     var t2 = TensorOperations<T>.Add(t0, t1);
+///     var t3 = TensorOperations<T>.ReLU(t2);
 ///     return t3;
 ///   }
 ///
@@ -189,7 +189,7 @@ public class CodeGenerator
     ///
     /// Example:
     /// Operation: t2 = Add(t0, t1)
-    /// Generates: var t2 = TensorOperations.Add(t0, t1);
+    /// Generates: var t2 = TensorOperations<T>.Add(t0, t1);
     ///
     /// This expression becomes part of the final compiled function.
     /// </para>

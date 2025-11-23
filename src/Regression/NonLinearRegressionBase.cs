@@ -1257,7 +1257,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
             var alphaShape = new int[] { 1, 1 };
             var alphaTensor = new Tensor<T>(alphaShape, new Vector<T>(new T[] { Alphas[i] }));
             var alphaNode = new ComputationNode<T>(alphaTensor);
-            var weightedNode = TensorOperations.ElementwiseMultiply(kernelNode, alphaNode);
+            var weightedNode = TensorOperations<T>.ElementwiseMultiply(kernelNode, alphaNode);
 
             // Add to accumulator
             if (sumNode == null)
@@ -1266,7 +1266,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
             }
             else
             {
-                sumNode = TensorOperations.Add(sumNode, weightedNode);
+                sumNode = TensorOperations<T>.Add(sumNode, weightedNode);
             }
         }
 
@@ -1274,7 +1274,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         var biasShape = new int[] { 1, 1 };
         var biasTensor = new Tensor<T>(biasShape, new Vector<T>(new T[] { B }));
         var biasNode = new ComputationNode<T>(biasTensor);
-        var outputNode = TensorOperations.Add(sumNode!, biasNode);
+        var outputNode = TensorOperations<T>.Add(sumNode!, biasNode);
 
         return outputNode;
     }
@@ -1285,7 +1285,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     private ComputationNode<T> ComputeLinearKernel(ComputationNode<T> x1, ComputationNode<T> x2)
     {
         // Element-wise multiply
-        var product = TensorOperations.ElementwiseMultiply(x1, x2);
+        var product = TensorOperations<T>.ElementwiseMultiply(x1, x2);
 
         // Sum all elements (reduction)
         // Note: For now, we'll use a simple approach
@@ -1299,10 +1299,10 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     private ComputationNode<T> ComputeRBFKernel(ComputationNode<T> x1, ComputationNode<T> x2)
     {
         // Compute difference: x1 - x2
-        var diff = TensorOperations.Subtract(x1, x2);
+        var diff = TensorOperations<T>.Subtract(x1, x2);
 
         // Square: (x1 - x2)^2
-        var squared = TensorOperations.ElementwiseMultiply(diff, diff);
+        var squared = TensorOperations<T>.ElementwiseMultiply(diff, diff);
 
         // Sum squared differences (||x1 - x2||^2)
         // Simplified - assumes proper reduction
@@ -1312,10 +1312,10 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         var gammaShape = new int[] { 1, 1 };
         var gammaTensor = new Tensor<T>(gammaShape, new Vector<T>(new T[] { NumOps.FromDouble(-Options.Gamma) }));
         var gammaNode = new ComputationNode<T>(gammaTensor);
-        var scaled = TensorOperations.ElementwiseMultiply(sumSquared, gammaNode);
+        var scaled = TensorOperations<T>.ElementwiseMultiply(sumSquared, gammaNode);
 
         // Exp(-gamma * ||x1 - x2||^2)
-        var result = TensorOperations.Exp(scaled);
+        var result = TensorOperations<T>.Exp(scaled);
 
         return result;
     }
@@ -1326,23 +1326,23 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     private ComputationNode<T> ComputeSigmoidKernel(ComputationNode<T> x1, ComputationNode<T> x2)
     {
         // Dot product: x1 · x2
-        var dotProduct = TensorOperations.ElementwiseMultiply(x1, x2);
+        var dotProduct = TensorOperations<T>.ElementwiseMultiply(x1, x2);
         // Simplified - assumes proper reduction
 
         // Multiply by gamma
         var gammaShape = new int[] { 1, 1 };
         var gammaTensor = new Tensor<T>(gammaShape, new Vector<T>(new T[] { NumOps.FromDouble(Options.Gamma) }));
         var gammaNode = new ComputationNode<T>(gammaTensor);
-        var scaled = TensorOperations.ElementwiseMultiply(dotProduct, gammaNode);
+        var scaled = TensorOperations<T>.ElementwiseMultiply(dotProduct, gammaNode);
 
         // Add coef0
         var coef0Shape = new int[] { 1, 1 };
         var coef0Tensor = new Tensor<T>(coef0Shape, new Vector<T>(new T[] { NumOps.FromDouble(Options.Coef0) }));
         var coef0Node = new ComputationNode<T>(coef0Tensor);
-        var sum = TensorOperations.Add(scaled, coef0Node);
+        var sum = TensorOperations<T>.Add(scaled, coef0Node);
 
         // Tanh
-        var result = TensorOperations.Tanh(sum);
+        var result = TensorOperations<T>.Tanh(sum);
 
         return result;
     }
