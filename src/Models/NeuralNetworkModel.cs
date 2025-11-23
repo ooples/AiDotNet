@@ -1255,7 +1255,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         inputNodes.Add(currentNode);
 
         // Convert each layer to computation graph nodes
-        foreach (var layer in Network.Layers)
+        foreach (var layer in ((NeuralNetworkBase<T>)Network).Layers)
         {
             currentNode = ConvertLayerToGraph(layer, currentNode);
         }
@@ -1388,9 +1388,8 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         // Get pooling parameters
         var poolSize = layer.GetPoolSize();
         var stride = layer.GetStride();
-        var padding = new int[] { 0, 0 };
 
-        return TensorOperations<T>.AvgPool2D(input, poolSize, stride, padding);
+        return TensorOperations<T>.AvgPool2D(input, poolSize, stride);
     }
 
     private ComputationNode<T> ConvertBatchNormLayer(BatchNormalizationLayer<T> layer, ComputationNode<T> input)

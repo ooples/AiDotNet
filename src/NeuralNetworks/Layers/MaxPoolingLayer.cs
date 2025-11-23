@@ -48,6 +48,24 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// parameters to train, but they do support the training process by allowing gradients
     /// to flow backward through them.
     /// </remarks>
+    /// <summary>
+    /// Gets the pool size for the pooling operation.
+    /// </summary>
+    /// <returns>An array containing the pool size for height and width dimensions.</returns>
+    public int[] GetPoolSize()
+    {
+        return new int[] { PoolSize, PoolSize };
+    }
+
+    /// <summary>
+    /// Gets the stride for the pooling operation.
+    /// </summary>
+    /// <returns>An array containing the stride for height and width dimensions.</returns>
+    public int[] GetStride()
+    {
+        return new int[] { Strides, Strides };
+    }
+
     public override bool SupportsTraining => true;
 
     /// <summary>

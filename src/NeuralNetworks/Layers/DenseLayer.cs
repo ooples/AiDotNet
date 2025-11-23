@@ -571,6 +571,24 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// Gets the weights matrix of the layer.
+    /// </summary>
+    /// <returns>The weight matrix connecting input neurons to output neurons.</returns>
+    public Matrix<T> GetWeights()
+    {
+        return _weights;
+    }
+
+    /// <summary>
+    /// Gets the biases vector of the layer.
+    /// </summary>
+    /// <returns>The bias values added to each output neuron.</returns>
+    public Vector<T> GetBiases()
+    {
+        return _biases;
+    }
+
+    /// <summary>
     /// Processes the input data through the dense layer.
     /// </summary>
     /// <param name="input">The input tensor to process.</param>

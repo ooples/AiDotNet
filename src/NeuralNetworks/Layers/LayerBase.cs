@@ -49,7 +49,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDiagnosticsProvider<T>
     /// Without activation functions, neural networks couldn't learn complex patterns.
     /// </para>
     /// </remarks>
-    protected IActivationFunction<T>? ScalarActivation { get; private set; }
+    public IActivationFunction<T>? ScalarActivation { get; private set; }
 
     /// <summary>
     /// Gets the vector activation function for this layer, if specified.
@@ -70,7 +70,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDiagnosticsProvider<T>
     /// which is useful for classifying inputs into categories.
     /// </para>
     /// </remarks>
-    protected IVectorActivationFunction<T>? VectorActivation { get; private set; }
+    public IVectorActivationFunction<T>? VectorActivation { get; private set; }
 
     /// <summary>
     /// Gets a value indicating whether this layer uses a vector activation function.

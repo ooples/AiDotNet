@@ -166,6 +166,42 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// the layer's internal statistics are updated.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Gets the gamma (scale) parameters of the batch normalization layer.
+    /// </summary>
+    /// <returns>The gamma vector used for scaling normalized values.</returns>
+    public Vector<T> GetGamma()
+    {
+        return _gamma;
+    }
+
+    /// <summary>
+    /// Gets the beta (shift) parameters of the batch normalization layer.
+    /// </summary>
+    /// <returns>The beta vector used for shifting scaled values.</returns>
+    public Vector<T> GetBeta()
+    {
+        return _beta;
+    }
+
+    /// <summary>
+    /// Gets the running mean of the batch normalization layer.
+    /// </summary>
+    /// <returns>The running mean vector used during inference.</returns>
+    public Vector<T> GetRunningMean()
+    {
+        return _runningMean;
+    }
+
+    /// <summary>
+    /// Gets the running variance of the batch normalization layer.
+    /// </summary>
+    /// <returns>The running variance vector used during inference.</returns>
+    public Vector<T> GetRunningVariance()
+    {
+        return _runningVariance;
+    }
+
     public override bool SupportsTraining => true;
 
     /// <summary>
