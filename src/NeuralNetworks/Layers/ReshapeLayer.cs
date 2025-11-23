@@ -128,6 +128,15 @@ public class ReshapeLayer<T> : LayerBase<T>
 
     /// <summary>
     /// Performs the forward pass of the reshape layer.
+    /// <summary>
+    /// Gets the target shape for the reshape operation.
+    /// </summary>
+    /// <returns>The target shape array (excluding batch dimension).</returns>
+    public int[] GetTargetShape()
+    {
+        return _outputShape;
+    }
+
     /// </summary>
     /// <param name="input">The input tensor to reshape.</param>
     /// <returns>The reshaped output tensor.</returns>
