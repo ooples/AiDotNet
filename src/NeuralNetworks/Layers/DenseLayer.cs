@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -574,7 +576,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Gets the weights matrix of the layer.
     /// </summary>
     /// <returns>The weight matrix connecting input neurons to output neurons.</returns>
-    public Matrix<T> GetWeights()
+    public override Matrix<T> GetWeights()
     {
         return _weights;
     }
@@ -583,7 +585,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Gets the biases vector of the layer.
     /// </summary>
     /// <returns>The bias values added to each output neuron.</returns>
-    public Vector<T> GetBiases()
+    public override Vector<T> GetBiases()
     {
         return _biases;
     }
@@ -1132,4 +1134,166 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         copy.SetParameters(GetParameters());
         return copy;
     }
+
+    /// <summary>
+    /// Exports the dense layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes (input data, weights, biases).</param>
+    /// <returns>The output computation node representing the layer's prediction.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph that mirrors the layer's forward pass logic.
+    /// The graph uses TensorOperations which now integrates with IEngine for GPU acceleration
+    /// where supported (e.g., Add operations use IEngine.TensorAdd).
+    /// </para>
+    /// <para>
+    /// Current IEngine integration status:
+    /// - Addition operations: Fully GPU-accelerated via IEngine.TensorAdd
+    /// - Matrix multiplication: Uses Tensor.MatrixMultiply (pending IEngine integration)
+    /// - Transpose operations: Uses Tensor.Transpose (pending IEngine integration)
+    /// </para>
+    /// <para>
+    /// The computation graph enables:
+    /// - JIT compilation for optimized inference
+    /// - Operation fusion and dead code elimination
+    /// - Automatic differentiation via backpropagation
+    /// - Deferred execution with GPU acceleration
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        // Validate parameters
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_weights == null)
+            throw new InvalidOperationException("Layer weights not initialized. Call Initialize() or train the layer first.");
+
+        if (_biases == null)
+            throw new InvalidOperationException("Layer biases not initialized. Call Initialize() or train the layer first.");
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (!CanActivationBeJitted())
+        {
+            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax");
+        }
+
+        // Input shape: [batchSize, inputSize]
+        int inputSize = InputShape[0];
+        int outputSize = OutputShape[0];
+
+        // Create placeholder for input data with symbolic batch dimension
+        var inputShape = new int[] { -1, inputSize }; // -1 means variable batch size
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, inputSize }); // Actual placeholder is batch size 1
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+
+        // Create constant nodes for weights and biases
+        // Weights shape: [outputSize, inputSize] - transposed for efficient computation
+        var weightsNode = TensorOperations<T>.Variable(new Tensor<T>(new int[] { _weights.Rows, _weights.Columns }, _weights), "weights");
+
+        // Biases shape: [outputSize]
+        var biasesNode = TensorOperations<T>.Variable(new Tensor<T>(new int[] { _biases.Length }, _biases), "biases");
+
+        // Add input nodes in order: input, weights, biases
+        inputNodes.Add(inputNode);
+        inputNodes.Add(weightsNode);
+        inputNodes.Add(biasesNode);
+
+        // Build computation graph: output = (input x weights^T) + biases
+        // This mirrors the Forward() method logic at line 622
+
+        // Step 1: Transpose weights for matrix multiplication
+        var weightsTransposed = TensorOperations<T>.Transpose(weightsNode);
+
+        // Step 2: Matrix multiply: input x weights^T
+        var matmulResult = TensorOperations<T>.MatrixMultiply(inputNode, weightsTransposed);
+
+        // Step 3: Add biases (uses IEngine.TensorAdd for GPU acceleration!)
+        var outputNode = TensorOperations<T>.Add(matmulResult, biasesNode);
+
+        // Step 4: Apply activation function
+        var activatedOutput = ApplyActivationToGraph(outputNode);
+
+        return activatedOutput;
+    }
+
+    /// <summary>
+    /// Applies the layer's activation function to a computation graph node.
+    /// Maps the layer's configured activation to the corresponding TensorOperations method.
+    /// </summary>
+    private ComputationNode<T> ApplyActivationToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        // Check scalar activation first
+        if (ScalarActivation is not null)
+        {
+            if (ScalarActivation is ReLUActivation<T>)
+                return TensorOperations<T>.ReLU(input);
+            else if (ScalarActivation is SigmoidActivation<T>)
+                return TensorOperations<T>.Sigmoid(input);
+            else if (ScalarActivation is TanhActivation<T>)
+                return TensorOperations<T>.Tanh(input);
+            else if (ScalarActivation is IdentityActivation<T>)
+                return input; // Identity is a no-op
+            else
+                throw new NotSupportedException($"Activation {ScalarActivation.GetType().Name} is not supported for JIT compilation yet");
+        }
+
+        // Check vector activation
+        if (VectorActivation is not null)
+        {
+            if (VectorActivation is SoftmaxActivation<T>)
+                return TensorOperations<T>.Softmax(input);
+            else
+                throw new NotSupportedException($"Activation {VectorActivation.GetType().Name} is not supported for JIT compilation yet");
+        }
+
+        // No activation (identity)
+        return input;
+    }
+
+    /// <summary>
+    /// Checks if the layer's current activation function is supported for JIT compilation.
+    /// </summary>
+    private bool CanActivationBeJitted()
+    {
+        // List of supported scalar activations
+        if (ScalarActivation is ReLUActivation<T> ||
+            ScalarActivation is SigmoidActivation<T> ||
+            ScalarActivation is TanhActivation<T> ||
+            ScalarActivation is IdentityActivation<T>)
+        {
+            return true;
+        }
+
+        // List of supported vector activations
+        if (VectorActivation is SoftmaxActivation<T>)
+        {
+            return true;
+        }
+
+        // No activation is fine (identity)
+        if (ScalarActivation == null && VectorActivation == null)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// True if the layer's activation function is supported for JIT compilation.
+    /// Supported activations: ReLU, Sigmoid, Tanh, Softmax, Identity.
+    /// </value>
+    public override bool SupportsJitCompilation => CanActivationBeJitted();
 }
