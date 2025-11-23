@@ -39,7 +39,7 @@ public static class GradientOps
         for (int i = 1; i < gradients.Length; i++)
         {
             // Element-wise addition
-            result = TensorOperations.Add(result, gradients[i]);
+            result = TensorOperations<T>.Add(result, gradients[i]);
         }
         return result;
     }
@@ -71,7 +71,7 @@ public static class GradientOps
         else
         {
             // Gradient to right input (subtrahend) is negated
-            return TensorOperations.Negate(gradOutput);
+            return TensorOperations<T>.Negate(gradOutput);
         }
     }
 
@@ -83,7 +83,7 @@ public static class GradientOps
     public static Tensor<T> GradElementwiseMultiply<T>(Tensor<T> gradOutput, Tensor<T> otherInput, int inputIndex)
     {
         // Gradient is output gradient multiplied by the other input
-        return TensorOperations.ElementwiseMultiply(gradOutput, otherInput);
+        return TensorOperations<T>.ElementwiseMultiply(gradOutput, otherInput);
     }
 
     /// <summary>
@@ -94,8 +94,8 @@ public static class GradientOps
     public static Tensor<T> GradMatMulLeft<T>(Tensor<T> gradOutput, Tensor<T> rightInput)
     {
         // grad_A = grad_C @ B^T
-        var rightTransposed = TensorOperations.Transpose(rightInput);
-        return TensorOperations.MatrixMultiply(gradOutput, rightTransposed);
+        var rightTransposed = TensorOperations<T>.Transpose(rightInput);
+        return TensorOperations<T>.MatrixMultiply(gradOutput, rightTransposed);
     }
 
     /// <summary>
@@ -106,8 +106,8 @@ public static class GradientOps
     public static Tensor<T> GradMatMulRight<T>(Tensor<T> leftInput, Tensor<T> gradOutput)
     {
         // grad_B = A^T @ grad_C
-        var leftTransposed = TensorOperations.Transpose(leftInput);
-        return TensorOperations.MatrixMultiply(leftTransposed, gradOutput);
+        var leftTransposed = TensorOperations<T>.Transpose(leftInput);
+        return TensorOperations<T>.MatrixMultiply(leftTransposed, gradOutput);
     }
 
     /// <summary>
@@ -120,7 +120,7 @@ public static class GradientOps
         // Gradient flows only where input was positive
         // Create mask: 1 where input > 0, 0 elsewhere
         var mask = CreateMask(forwardInput);
-        return TensorOperations.ElementwiseMultiply(gradOutput, mask);
+        return TensorOperations<T>.ElementwiseMultiply(gradOutput, mask);
     }
 
     /// <summary>
@@ -132,9 +132,9 @@ public static class GradientOps
     {
         // grad_x = grad_y * y * (1 - y)
         var ones = CreateOnes<T>(forwardOutput.Shape);
-        var oneMinusY = TensorOperations.Subtract(ones, forwardOutput);
-        var yTimesOneMinusY = TensorOperations.ElementwiseMultiply(forwardOutput, oneMinusY);
-        return TensorOperations.ElementwiseMultiply(gradOutput, yTimesOneMinusY);
+        var oneMinusY = TensorOperations<T>.Subtract(ones, forwardOutput);
+        var yTimesOneMinusY = TensorOperations<T>.ElementwiseMultiply(forwardOutput, oneMinusY);
+        return TensorOperations<T>.ElementwiseMultiply(gradOutput, yTimesOneMinusY);
     }
 
     /// <summary>
@@ -145,10 +145,10 @@ public static class GradientOps
     public static Tensor<T> GradTanh<T>(Tensor<T> gradOutput, Tensor<T> forwardOutput)
     {
         // grad_x = grad_y * (1 - y^2)
-        var ySquared = TensorOperations.ElementwiseMultiply(forwardOutput, forwardOutput);
+        var ySquared = TensorOperations<T>.ElementwiseMultiply(forwardOutput, forwardOutput);
         var ones = CreateOnes<T>(forwardOutput.Shape);
-        var oneMinusYSquared = TensorOperations.Subtract(ones, ySquared);
-        return TensorOperations.ElementwiseMultiply(gradOutput, oneMinusYSquared);
+        var oneMinusYSquared = TensorOperations<T>.Subtract(ones, ySquared);
+        return TensorOperations<T>.ElementwiseMultiply(gradOutput, oneMinusYSquared);
     }
 
     /// <summary>
@@ -159,7 +159,7 @@ public static class GradientOps
     public static Tensor<T> GradExp<T>(Tensor<T> gradOutput, Tensor<T> forwardOutput)
     {
         // Derivative of exp(x) is exp(x) itself
-        return TensorOperations.ElementwiseMultiply(gradOutput, forwardOutput);
+        return TensorOperations<T>.ElementwiseMultiply(gradOutput, forwardOutput);
     }
 
     /// <summary>
@@ -170,7 +170,7 @@ public static class GradientOps
     public static Tensor<T> GradLog<T>(Tensor<T> gradOutput, Tensor<T> forwardInput)
     {
         // grad_x = grad_y / x
-        return TensorOperations.Divide(gradOutput, forwardInput);
+        return TensorOperations<T>.Divide(gradOutput, forwardInput);
     }
 
     /// <summary>
@@ -181,16 +181,16 @@ public static class GradientOps
     public static Tensor<T> GradSoftmax<T>(Tensor<T> gradOutput, Tensor<T> forwardOutput, int axis)
     {
         // grad_x = y * (grad_y - sum(grad_y * y))
-        var gradTimesOutput = TensorOperations.ElementwiseMultiply(gradOutput, forwardOutput);
+        var gradTimesOutput = TensorOperations<T>.ElementwiseMultiply(gradOutput, forwardOutput);
 
         // Sum along the axis
-        var summed = TensorOperations.Sum(gradTimesOutput, new[] { axis }, keepDims: true);
+        var summed = TensorOperations<T>.Sum(gradTimesOutput, new[] { axis }, keepDims: true);
 
         // grad_y - sum
-        var diff = TensorOperations.Subtract(gradOutput, summed);
+        var diff = TensorOperations<T>.Subtract(gradOutput, summed);
 
         // Multiply by y
-        return TensorOperations.ElementwiseMultiply(forwardOutput, diff);
+        return TensorOperations<T>.ElementwiseMultiply(forwardOutput, diff);
     }
 
     /// <summary>

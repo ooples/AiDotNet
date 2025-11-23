@@ -73,7 +73,7 @@ public class CodeGenerator
     public CodeGenerator()
     {
         // Cache TensorOperations methods for fast lookup
-        _tensorOperationsMethods = typeof(TensorOperations)
+        _tensorOperationsMethods = typeof(TensorOperations<>)
             .GetMethods(BindingFlags.Public | BindingFlags.Static)
             .ToArray();
     }
