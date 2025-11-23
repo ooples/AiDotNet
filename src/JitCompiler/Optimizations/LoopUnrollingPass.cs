@@ -1,4 +1,5 @@
 using AiDotNet.JitCompiler.IR;
+using Operations = AiDotNet.JitCompiler.IR.Operations;
 
 namespace AiDotNet.JitCompiler.Optimizations;
 

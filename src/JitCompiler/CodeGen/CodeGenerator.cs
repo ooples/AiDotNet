@@ -3,6 +3,7 @@ using System.Reflection;
 using AiDotNet.Autodiff;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
+using Operations = AiDotNet.JitCompiler.IR.Operations;
 
 namespace AiDotNet.JitCompiler.CodeGen;
 
