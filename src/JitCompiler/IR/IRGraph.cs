@@ -228,38 +228,38 @@ public class IRGraph
     /// </remarks>
     public int ComputeStructureHash()
     {
-        var hash = new HashCode();
+        int hash = 17;
 
         // Hash input shapes
         foreach (var inputId in InputIds.OrderBy(id => id))
         {
-            hash.Add(inputId);
+            hash = hash * 31 + inputId.GetHashCode();
             if (TensorShapes.TryGetValue(inputId, out var shape))
             {
-                hash.Add(shape.GetShapeHashCode());
+                hash = hash * 31 + shape.GetShapeHashCode();
             }
         }
 
         // Hash operations
         foreach (var op in Operations)
         {
-            hash.Add(op.OpType);
-            hash.Add(op.OutputId);
-            hash.Add(op.OutputType);
-            hash.Add(op.OutputShape.GetShapeHashCode());
+            hash = hash * 31 + op.OpType.GetHashCode();
+            hash = hash * 31 + op.OutputId.GetHashCode();
+            hash = hash * 31 + op.OutputType.GetHashCode();
+            hash = hash * 31 + op.OutputShape.GetShapeHashCode();
 
             foreach (var inputId in op.InputIds)
             {
-                hash.Add(inputId);
+                hash = hash * 31 + inputId.GetHashCode();
             }
         }
 
         // Hash output IDs
         foreach (var outputId in OutputIds.OrderBy(id => id))
         {
-            hash.Add(outputId);
+            hash = hash * 31 + outputId.GetHashCode();
         }
 
-        return hash.ToHashCode();
+        return hash;
     }
 }

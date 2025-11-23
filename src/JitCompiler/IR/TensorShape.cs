@@ -248,12 +248,12 @@ public static class TensorShapeExtensions
     /// </remarks>
     public static int GetShapeHashCode(this int[] shape)
     {
-        var hash = new HashCode();
+        int hash = 17;
         foreach (var dim in shape)
         {
-            hash.Add(dim);
+            hash = hash * 31 + dim.GetHashCode();
         }
-        return hash.ToHashCode();
+        return hash;
     }
 
     /// <summary>
