@@ -53,7 +53,7 @@ public class SIMDOptimizer
         {
             // Vector<T>.Count gives us the number of elements that fit in a SIMD register
             // This is typically 4 for float (128-bit SSE), 8 for AVX, or 16 for AVX-512
-            _vectorSize = Vector<float>.Count;
+            _vectorSize = System.Numerics.Vector<float>.Count;
         }
         else
         {
