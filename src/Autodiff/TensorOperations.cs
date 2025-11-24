@@ -2292,6 +2292,14 @@ public static class TensorOperations<T>
                 parents: parents,
                 backwardFunction: BackwardFunction,
                 name: null);
+
+            // Set JIT compiler metadata
+            node.OperationType = OperationType.LayerNorm;
+            node.OperationParams = new Dictionary<string, object>
+            {
+                { "Epsilon", epsilon }
+            };
+
             var tape = GradientTape<T>.Current;
             if (tape != null && tape.IsRecording)
                 tape.RecordOperation(node);
@@ -2578,6 +2586,14 @@ public static class TensorOperations<T>
                 parents: parents,
                 backwardFunction: BackwardFunction,
                 name: null);
+
+            // Set JIT compiler metadata
+            node.OperationType = OperationType.BatchNorm;
+            node.OperationParams = new Dictionary<string, object>
+            {
+                { "Epsilon", epsilon }
+            };
+
             var tape = GradientTape<T>.Current;
             if (tape != null && tape.IsRecording)
                 tape.RecordOperation(node);
