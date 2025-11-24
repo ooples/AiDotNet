@@ -1446,6 +1446,14 @@ public static class TensorOperations<T>
                 parents: new List<ComputationNode<T>> { a },
                 backwardFunction: BackwardFunction,
                 name: null);
+
+            // Set JIT compiler metadata
+            node.OperationType = OperationType.Softmax;
+            node.OperationParams = new Dictionary<string, object>
+            {
+                { "Axis", axis }
+            };
+
             var tape = GradientTape<T>.Current;
             if (tape != null && tape.IsRecording)
                 tape.RecordOperation(node);
