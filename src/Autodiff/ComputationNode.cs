@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.Autodiff;
@@ -158,7 +159,7 @@ public class ComputationNode<T>
     /// This is optional and only needed when using JIT compilation.
     /// </para>
     /// </remarks>
-    public string? OperationType { get; set; }
+    public OperationType? OperationType { get; set; }
 
     /// <summary>
     /// Gets or sets additional operation-specific parameters (used for JIT compilation).

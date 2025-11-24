@@ -261,6 +261,11 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a, b },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Subtract;
+        node.OperationParams = null;
+
         // Record to active tape if present
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
@@ -336,6 +341,11 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a, b },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Multiply;
+        node.OperationParams = null;
+
         // Record to active tape if present
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
@@ -431,6 +441,11 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a, b },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Divide;
+        node.OperationParams = null;
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -497,6 +512,14 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Power;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Exponent", exponent }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -552,6 +575,11 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Exp;
+        node.OperationParams = null;
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -610,6 +638,11 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Log;
+        node.OperationParams = null;
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -669,6 +702,11 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Sqrt;
+        node.OperationParams = null;
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -725,6 +763,11 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Tanh;
+        node.OperationParams = null;
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);

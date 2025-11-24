@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
 using Operations = AiDotNet.JitCompiler.IR.Operations;
@@ -152,7 +153,7 @@ public class IRBuilder
         }
 
         // Check if node has operation type metadata
-        if (string.IsNullOrEmpty(node.OperationType))
+        if (node.OperationType == null)
         {
             throw new InvalidOperationException(
                 $"Node {node.Name ?? "unnamed"} does not have OperationType metadata. " +
@@ -174,101 +175,101 @@ public class IRBuilder
         var outputShape = node.Value.Shape;
 
         // Create IR operation based on operation type
-        IROp op = node.OperationType switch
+        IROp op = node.OperationType.Value switch
         {
             // Basic arithmetic
-            "Add" => new AddOp(),
-            "Subtract" => new SubtractOp(),
-            "ElementwiseMultiply" => new ElementwiseMultiplyOp(),
-            "Divide" => new DivideOp(),
-            "Power" => new PowerOp { Exponent = GetParam<double>(node, "Exponent", 2.0) },
-            "Negate" => new NegateOp(),
+            OperationType.Add => new AddOp(),
+            OperationType.Subtract => new SubtractOp(),
+            OperationType.Multiply => new ElementwiseMultiplyOp(),
+            OperationType.Divide => new DivideOp(),
+            OperationType.Power => new PowerOp { Exponent = GetParam<double>(node, "Exponent", 2.0) },
+            OperationType.Negate => new NegateOp(),
 
             // Math operations
-            "Exp" => new ExpOp(),
-            "Log" => new LogOp(),
-            "Sqrt" => new SqrtOp(),
+            OperationType.Exp => new ExpOp(),
+            OperationType.Log => new LogOp(),
+            OperationType.Sqrt => new SqrtOp(),
 
             // Activations
-            "ReLU" => new ReLUOp(),
-            "Sigmoid" => new SigmoidOp(),
-            "Tanh" => new TanhOp(),
-            "Softmax" => new SoftmaxOp { Axis = GetParam<int>(node, "Axis", -1) },
-            "ApplyActivation" => new ApplyActivationOp { ActivationName = GetParam<string>(node, "ActivationName", "") },
+            OperationType.ReLU => new ReLUOp(),
+            OperationType.Sigmoid => new SigmoidOp(),
+            OperationType.Tanh => new TanhOp(),
+            OperationType.Softmax => new SoftmaxOp { Axis = GetParam<int>(node, "Axis", -1) },
+            OperationType.Activation => new ApplyActivationOp { ActivationName = GetParam<string>(node, "ActivationName", "") },
 
             // Matrix operations
-            "MatMul" => new MatMulOp(),
-            "Transpose" => new TransposeOp(),
+            OperationType.MatMul => new MatMulOp(),
+            OperationType.Transpose => new TransposeOp(),
 
             // Reduction operations
-            "Sum" => new SumOp
+            OperationType.ReduceSum => new SumOp
             {
                 Axes = GetParam<int[]?>(node, "Axes", null),
                 KeepDims = GetParam<bool>(node, "KeepDims", false)
             },
-            "Mean" => new MeanOp(),
-            "ReduceMax" => new ReduceMaxOp
+            OperationType.Mean => new MeanOp(),
+            OperationType.ReduceMax => new ReduceMaxOp
             {
                 Axes = GetParam<int[]?>(node, "Axes", null),
                 KeepDims = GetParam<bool>(node, "KeepDims", false)
             },
-            "ReduceMean" => new ReduceMeanOp
+            OperationType.ReduceMean => new ReduceMeanOp
             {
                 Axes = GetParam<int[]?>(node, "Axes", null),
                 KeepDims = GetParam<bool>(node, "KeepDims", false)
             },
-            "ReduceLogVariance" => new ReduceLogVarianceOp
+            OperationType.ReduceLogVariance => new ReduceLogVarianceOp
             {
                 Axes = GetParam<int[]?>(node, "Axes", null),
                 KeepDims = GetParam<bool>(node, "KeepDims", false)
             },
 
             // Shape operations
-            "Reshape" => new ReshapeOp { NewShape = GetParam<int[]>(node, "NewShape", Array.Empty<int>()) },
-            "Concat" => new ConcatOp { Axis = GetParam<int>(node, "Axis", 0) },
-            "Pad" => new PadOp { PadWidth = GetParam<int[,]?>(node, "PadWidth", null) },
-            "Crop" => new CropOp { Cropping = GetParam<int[]>(node, "Cropping", Array.Empty<int>()) },
-            "Upsample" => new UpsampleOp { Scale = GetParam<int>(node, "Scale", 2) },
-            "PixelShuffle" => new PixelShuffleOp { UpscaleFactor = GetParam<int>(node, "UpscaleFactor", 2) },
+            OperationType.Reshape => new ReshapeOp { NewShape = GetParam<int[]>(node, "NewShape", Array.Empty<int>()) },
+            OperationType.Concat => new ConcatOp { Axis = GetParam<int>(node, "Axis", 0) },
+            OperationType.Pad => new PadOp { PadWidth = GetParam<int[,]?>(node, "PadWidth", null) },
+            OperationType.Crop => new CropOp { Cropping = GetParam<int[]>(node, "Cropping", Array.Empty<int>()) },
+            OperationType.Upsample => new UpsampleOp { Scale = GetParam<int>(node, "Scale", 2) },
+            OperationType.PixelShuffle => new PixelShuffleOp { UpscaleFactor = GetParam<int>(node, "UpscaleFactor", 2) },
 
             // Convolution operations
-            "Conv2D" => new Conv2DOp
+            OperationType.Conv2D => new Conv2DOp
             {
                 Stride = GetParam<int[]>(node, "Stride", new int[] { 1, 1 }),
                 Padding = GetParam<int[]>(node, "Padding", new int[] { 0, 0 }),
                 HasBias = GetParam<bool>(node, "HasBias", false)
             },
-            "ConvTranspose2D" => new ConvTranspose2DOp
+            OperationType.ConvTranspose2D => new ConvTranspose2DOp
             {
                 Stride = GetParam<int[]>(node, "Stride", new int[] { 1, 1 }),
                 Padding = GetParam<int[]>(node, "Padding", new int[] { 0, 0 }),
                 OutputPadding = GetParam<int[]>(node, "OutputPadding", new int[] { 0, 0 })
             },
-            "DepthwiseConv2D" => new DepthwiseConv2DOp
+            OperationType.DepthwiseConv2D => new DepthwiseConv2DOp
             {
                 Stride = GetParam<int[]>(node, "Stride", new int[] { 1, 1 }),
                 Padding = GetParam<int[]>(node, "Padding", new int[] { 0, 0 })
             },
-            "DilatedConv2D" => new DilatedConv2DOp
+            OperationType.DilatedConv2D => new DilatedConv2DOp
             {
                 Stride = GetParam<int[]>(node, "Stride", new int[] { 1, 1 }),
                 Padding = GetParam<int[]>(node, "Padding", new int[] { 0, 0 }),
                 Dilation = GetParam<int[]>(node, "Dilation", new int[] { 1, 1 })
             },
-            "LocallyConnectedConv2D" => new LocallyConnectedConv2DOp
+            OperationType.LocallyConnectedConv2D => new LocallyConnectedConv2DOp
             {
                 Stride = GetParam<int[]>(node, "Stride", new int[] { 1, 1 }),
                 Padding = GetParam<int[]>(node, "Padding", new int[] { 0, 0 })
             },
 
             // Pooling operations
-            "MaxPool2D" => new MaxPool2DOp
+            OperationType.MaxPool2D => new MaxPool2DOp
             {
                 PoolSize = GetParam<int[]>(node, "PoolSize", new int[] { 2, 2 }),
                 Stride = GetParam<int[]>(node, "Stride", new int[] { 2, 2 }),
                 Padding = GetParam<int[]>(node, "Padding", new int[] { 0, 0 })
             },
-            "AvgPool2D" => new AvgPool2DOp
+            OperationType.AvgPool2D => new AvgPool2DOp
             {
                 PoolSize = GetParam<int[]>(node, "PoolSize", new int[] { 2, 2 }),
                 Stride = GetParam<int[]>(node, "Stride", new int[] { 2, 2 }),
@@ -276,29 +277,29 @@ public class IRBuilder
             },
 
             // Normalization operations
-            "LayerNorm" => new LayerNormOp
+            OperationType.LayerNorm => new LayerNormOp
             {
                 NormalizedShape = GetParam<int[]>(node, "NormalizedShape", Array.Empty<int>()),
                 Epsilon = GetParam<double>(node, "Epsilon", 1e-5)
             },
-            "BatchNorm" => new BatchNormOp
+            OperationType.BatchNorm => new BatchNormOp
             {
                 Epsilon = GetParam<double>(node, "Epsilon", 1e-5),
                 Momentum = GetParam<double>(node, "Momentum", 0.1)
             },
 
             // Advanced operations
-            "GraphConv" => new GraphConvOp(),
-            "AffineGrid" => new AffineGridOp
+            OperationType.GraphConv => new GraphConvOp(),
+            OperationType.AffineGrid => new AffineGridOp
             {
                 OutputSize = GetParam<int[]>(node, "OutputSize", Array.Empty<int>())
             },
-            "GridSample" => new GridSampleOp
+            OperationType.GridSample => new GridSampleOp
             {
                 InterpolationMode = GetParam<string>(node, "InterpolationMode", "bilinear"),
                 PaddingMode = GetParam<string>(node, "PaddingMode", "zeros")
             },
-            "RBFKernel" => new RBFKernelOp
+            OperationType.RBFKernel => new RBFKernelOp
             {
                 Gamma = GetParam<double>(node, "Gamma", 1.0)
             },
@@ -633,7 +634,7 @@ public class IRBuilder
         var ops = new List<IROp>();
         var irType = InferIRType(typeof(T));
 
-        if (string.IsNullOrEmpty(node.OperationType))
+        if (node.OperationType == null)
         {
             return ops;
         }
@@ -642,9 +643,9 @@ public class IRBuilder
         var forwardInputIds = node.Parents.Select(p => _nodeToTensorId[p]).ToArray();
         var forwardOutputId = _nodeToTensorId[node];
 
-        switch (node.OperationType)
+        switch (node.OperationType.Value)
         {
-            case "Add":
+            case OperationType.Add:
                 // grad_a = grad_c, grad_b = grad_c
                 for (int i = 0; i < 2; i++)
                 {
@@ -659,7 +660,7 @@ public class IRBuilder
                 }
                 break;
 
-            case "Subtract":
+            case OperationType.Subtract:
                 // grad_a = grad_c, grad_b = -grad_c
                 for (int i = 0; i < 2; i++)
                 {
@@ -674,7 +675,7 @@ public class IRBuilder
                 }
                 break;
 
-            case "ElementwiseMultiply":
+            case OperationType.Multiply:
                 // grad_a = grad_c * b, grad_b = grad_c * a
                 for (int i = 0; i < 2; i++)
                 {
@@ -690,7 +691,7 @@ public class IRBuilder
                 }
                 break;
 
-            case "MatMul":
+            case OperationType.MatMul:
                 // grad_A = grad_C @ B^T
                 ops.Add(new Operations.GradMatMulLeftOp
                 {
@@ -709,7 +710,7 @@ public class IRBuilder
                 });
                 break;
 
-            case "ReLU":
+            case OperationType.ReLU:
                 // grad_x = grad_y * (x > 0)
                 ops.Add(new Operations.GradReLUOp
                 {
@@ -721,7 +722,7 @@ public class IRBuilder
                 });
                 break;
 
-            case "Sigmoid":
+            case OperationType.Sigmoid:
                 // grad_x = grad_y * y * (1 - y)
                 ops.Add(new Operations.GradSigmoidOp
                 {
@@ -733,7 +734,7 @@ public class IRBuilder
                 });
                 break;
 
-            case "Tanh":
+            case OperationType.Tanh:
                 // grad_x = grad_y * (1 - y^2)
                 ops.Add(new Operations.GradTanhOp
                 {
@@ -745,7 +746,7 @@ public class IRBuilder
                 });
                 break;
 
-            case "Exp":
+            case OperationType.Exp:
                 // grad_x = grad_y * y
                 ops.Add(new Operations.GradExpOp
                 {
@@ -757,7 +758,7 @@ public class IRBuilder
                 });
                 break;
 
-            case "Log":
+            case OperationType.Log:
                 // grad_x = grad_y / x
                 ops.Add(new Operations.GradLogOp
                 {
@@ -769,7 +770,7 @@ public class IRBuilder
                 });
                 break;
 
-            case "Softmax":
+            case OperationType.Softmax:
                 // grad_x = y * (grad_y - sum(grad_y * y))
                 var axis = GetParam<int>(node, "Axis", -1);
                 ops.Add(new Operations.GradSoftmaxOp
