@@ -82,6 +82,11 @@ public enum OperationType
     /// </summary>
     Square,
 
+    /// <summary>
+    /// L2 norm computation along an axis - sqrt(sum(x²)).
+    /// </summary>
+    Norm,
+
     // Matrix Operations
 
     /// <summary>
@@ -282,6 +287,18 @@ public enum OperationType
     /// GRU cell operation for recurrent networks.
     /// </summary>
     GRUCell,
+
+    // Complex Number Operations
+
+    /// <summary>
+    /// Complex matrix multiplication for quantum operations.
+    /// </summary>
+    ComplexMatMul,
+
+    /// <summary>
+    /// Element-wise complex multiplication.
+    /// </summary>
+    ComplexMultiply,
 
     // Fused Operations (for JIT optimization)
 
