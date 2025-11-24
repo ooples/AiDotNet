@@ -532,7 +532,7 @@ public class DropoutLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// During inference, dropout is disabled and acts as an identity function (pass-through).
-    /// Therefore, the computation graph simply returns the input node unchanged.
+    /// The method validates inputs and creates a symbolic input node with proper batch dimension.
     /// </para>
     /// <para><b>For Beginners:</b> Dropout only works during training, not during inference.
     ///
@@ -546,10 +546,16 @@ public class DropoutLayer<T> : LayerBase<T>
     /// </remarks>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
         // Dropout is identity during inference (JIT is for inference, not training)
-        // Create input node placeholder and return it unchanged
-        var inputTensor = new Tensor<T>(InputShape);
-        var inputNode = new ComputationNode<T>(inputTensor);
+        // Create symbolic input node (shape definition only, batch size adapts at runtime)
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
         return inputNode; // Identity function

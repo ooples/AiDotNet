@@ -574,18 +574,19 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <summary>
     /// Exports the activation layer's computation graph for JIT compilation.
     /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes (unused for single-input layers).</param>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
     /// <returns>The output computation node representing the activation function applied to the input.</returns>
     /// <remarks>
     /// <para>
     /// This method constructs a computation graph representation of the activation layer by:
-    /// 1. Creating an input node placeholder
-    /// 2. Applying the activation function to the input node using the base class helper
+    /// 1. Validating input parameters and layer configuration
+    /// 2. Creating a symbolic input node with proper batch dimension
+    /// 3. Applying the activation function to the symbolic input
     /// </para>
     /// <para><b>For Beginners:</b> This method converts the activation layer into a computation graph for JIT compilation.
     ///
     /// The computation graph describes:
-    /// - Input: A placeholder tensor with the layer's input shape
+    /// - Input: A symbolic tensor with batch size = 1 plus the layer's input shape
     /// - Operation: Apply the activation function (ReLU, Sigmoid, etc.)
     /// - Output: The activated tensor
     ///
@@ -594,14 +595,32 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        // Create input node placeholder
-        var inputTensor = new Tensor<T>(InputShape);
-        var inputNode = new ComputationNode<T>(inputTensor);
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        IActivationFunction<T>? activation = ScalarActivation;
+        if (activation == null && VectorActivation != null)
+            activation = (IActivationFunction<T>)VectorActivation;
+
+        if (activation == null)
+            throw new InvalidOperationException("No activation function configured.");
+
+        if (!activation.SupportsJitCompilation)
+        {
+            throw new NotSupportedException(
+                $"Activation function '{activation.GetType().Name}' does not support JIT compilation yet.");
+        }
+
+        // Create symbolic input node (shape definition only, batch size adapts at runtime)
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        // Apply activation function to input node (delegates to base class helper)
-        // The base class handles both scalar and vector activations
-        return ApplyActivationToGraph(inputNode);
+        // Build symbolic computation graph by applying activation function
+        return activation.ApplyToGraph(inputNode);
     }
 
     /// <summary>
@@ -610,9 +629,8 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <value>True if the activation function supports JIT compilation, false otherwise.</value>
     /// <remarks>
     /// <para>
-    /// This property indicates whether the layer can be JIT compiled. It delegates to the
-    /// base class helper which checks if the configured activation function (scalar or vector)
-    /// supports JIT compilation.
+    /// This property checks whether the configured activation function supports JIT compilation.
+    /// Returns false if no activation is configured or if the activation doesn't support JIT.
     /// </para>
     /// <para><b>For Beginners:</b> This tells you if this layer can use JIT compilation for faster inference.
     ///
@@ -624,5 +642,14 @@ public class ActivationLayer<T> : LayerBase<T>
     /// Custom or exotic activations may not support it yet.
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => CanActivationBeJitted();
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            IActivationFunction<T>? activation = ScalarActivation;
+            if (activation == null && VectorActivation != null)
+                activation = (IActivationFunction<T>)VectorActivation;
+            return activation?.SupportsJitCompilation ?? false;
+        }
+    }
 }
