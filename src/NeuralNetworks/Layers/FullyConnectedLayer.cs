@@ -916,33 +916,32 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         int inputSize = InputShape[0];
         int outputSize = OutputShape[0];
 
-        // Create placeholder for input with symbolic batch dimension
-        var inputPlaceholder = new Tensor<T>(new int[] { 1, inputSize });
-        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input");
+        // Create symbolic input node (batch dimension of 1 adapts to actual batch size at runtime)
+        var symbolicInput = new Tensor<T>(new int[] { 1, inputSize });
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
 
-        // Convert weights to tensor and create constant node
+        // Create constant nodes for trained weights and biases
         var weightsTensor = MatrixToTensor(_weights);
         var weightsNode = Autodiff.TensorOperations<T>.Variable(weightsTensor, "weights");
 
-        // Convert biases to tensor and create constant node
         var biasesTensor = VectorToTensor(_biases);
         var biasesNode = Autodiff.TensorOperations<T>.Variable(biasesTensor, "biases");
 
-        // Add input nodes in order
+        // Register all nodes in the computation graph
         inputNodes.Add(inputNode);
         inputNodes.Add(weightsNode);
         inputNodes.Add(biasesNode);
 
-        // Build computation graph: output = (input x weights^T) + biases
+        // Build symbolic computation graph: output = (input × weights^T) + biases
         var weightsTransposed = Autodiff.TensorOperations<T>.Transpose(weightsNode);
         var matmulResult = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, weightsTransposed);
 
-        // Broadcast biases to match batch dimension
+        // Broadcast biases to match symbolic batch dimension
         var biasesBroadcast = BroadcastBiases(biasesTensor, 1);
         var biasesBroadcastNode = Autodiff.TensorOperations<T>.Variable(biasesBroadcast, "biases_broadcast");
         var outputNode = Autodiff.TensorOperations<T>.Add(matmulResult, biasesBroadcastNode);
 
-        // Apply activation function
+        // Apply activation function to symbolic graph
         var activatedOutput = ApplyActivationToGraph(outputNode);
         return activatedOutput;
     }

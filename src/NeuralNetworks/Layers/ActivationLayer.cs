@@ -593,12 +593,12 @@ public class ActivationLayer<T> : LayerBase<T>
                 $"Activation function '{activation.GetType().Name}' does not support JIT compilation yet.");
         }
 
-        // Create input placeholder
-        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+        // Create symbolic input node (shape definition only, batch size adapts at runtime)
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        // Apply activation function
+        // Build symbolic computation graph by applying activation function
         return activation.ApplyToGraph(inputNode);
     }
 

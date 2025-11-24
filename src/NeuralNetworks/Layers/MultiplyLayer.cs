@@ -526,24 +526,25 @@ public class MultiplyLayer<T> : LayerBase<T>
         if (OutputShape == null || OutputShape.Length == 0)
             throw new InvalidOperationException("Layer output shape not configured.");
 
-        // Create input nodes for each input
+        // Create symbolic input nodes for each input (multi-input layer)
+        // Each input has batch dimension of 1 that adapts to actual batch size at runtime
         var computationInputNodes = new List<ComputationNode<T>>();
         for (int i = 0; i < InputShapes.Length; i++)
         {
-            var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(InputShapes[i]).ToArray());
-            var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, $"input_{i}");
+            var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShapes[i]).ToArray());
+            var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, $"input_{i}");
             computationInputNodes.Add(inputNode);
             inputNodes.Add(inputNode);
         }
 
-        // Build computation graph: result = input[0] * input[1] * ... * input[n]
+        // Build symbolic computation graph: result = input[0] * input[1] * ... * input[n]
         var result = computationInputNodes[0];
         for (int i = 1; i < computationInputNodes.Count; i++)
         {
             result = Autodiff.TensorOperations<T>.ElementwiseMultiply(result, computationInputNodes[i]);
         }
 
-        // Apply activation function
+        // Apply activation function to symbolic graph
         var activatedOutput = ApplyActivationToGraph(result);
         return activatedOutput;
     }

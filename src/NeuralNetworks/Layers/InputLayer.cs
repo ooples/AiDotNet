@@ -242,9 +242,10 @@ public class InputLayer<T> : LayerBase<T>
         if (OutputShape == null || OutputShape.Length == 0)
             throw new InvalidOperationException("Layer output shape not configured.");
 
-        // Input layer just passes through
-        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(OutputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+        // Input layer creates symbolic input node (pass-through operation)
+        // Batch dimension of 1 is symbolic and adapts to actual batch size at runtime
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(OutputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
         return inputNode;

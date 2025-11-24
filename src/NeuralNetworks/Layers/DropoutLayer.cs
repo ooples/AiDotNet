@@ -533,12 +533,13 @@ public class DropoutLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // Dropout is a pass-through during inference (JIT is for inference)
-        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+        // Dropout is a pass-through during inference (JIT compilation is for inference, not training)
+        // Create symbolic input node with batch dimension that adapts to actual batch size at runtime
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        return inputNode; // Just pass through
+        return inputNode; // Pass through unchanged during inference
     }
 
     public override bool SupportsJitCompilation => true;

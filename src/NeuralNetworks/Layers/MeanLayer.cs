@@ -505,12 +505,13 @@ public class MeanLayer<T> : LayerBase<T>
         if (OutputShape == null || OutputShape.Length == 0)
             throw new InvalidOperationException("Layer output shape not configured.");
 
-        // Create placeholder for input with symbolic batch dimension
-        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+        // Create symbolic input node (shape-only tensor, works with any batch size at runtime)
+        // The batch dimension of 1 is symbolic and will match actual batch size during inference
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        // Build computation graph: output = ReduceMean(input, axis)
+        // Build symbolic computation graph: output = ReduceMean(input, axis)
         var outputNode = TensorOperations<T>.ReduceMean(inputNode, axes: new int[] { Axis }, keepDims: false);
         return outputNode;
     }
