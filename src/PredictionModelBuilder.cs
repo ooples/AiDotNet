@@ -758,7 +758,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             try
             {
                 // Check if the model supports JIT compilation
-                if (optimizationResult.BestSolution is IJitCompilable<T, TInput, TOutput> jitModel &&
+                if (optimizationResult.BestSolution is IJitCompilable<T> jitModel &&
                     jitModel.SupportsJitCompilation)
                 {
                     // Export computation graph from model
@@ -775,7 +775,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 {
                     throw new InvalidOperationException(
                         $"JIT compilation requested but model type {optimizationResult.BestSolution?.GetType().Name ?? "null"} " +
-                        $"does not implement IJitCompilable<T, TInput, TOutput> or does not support JIT compilation. " +
+                        $"does not implement IJitCompilable<T> or does not support JIT compilation. " +
                         $"To use JIT compilation, the model must implement IJitCompilable and set SupportsJitCompilation = true.");
                 }
                 else
