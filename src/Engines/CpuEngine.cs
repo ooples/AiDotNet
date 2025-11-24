@@ -1218,5 +1218,137 @@ public class CpuEngine : IEngine
         return new Tensor<T>(tensor.Shape, resultVector);
     }
 
+    public Tensor<T> Sparsemax<T>(Tensor<T> input) where T : struct
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var shape = input.Shape;
+        if (shape.Length != 2)
+        {
+            throw new NotSupportedException(
+                $"Sparsemax is currently only implemented for 2D tensors. Got shape=[{string.Join(", ", shape)}]");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batchSize = shape[0];
+        int features = shape[1];
+        var result = new Tensor<T>(shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            var row = new T[features];
+            for (int f = 0; f < features; f++)
+                row[f] = input[b, f];
+
+            var sorted = row.OrderByDescending(x => x).ToArray();
+
+            int k = 1;
+            T sum = sorted[0];
+            T threshold = numOps.Zero;
+
+            for (int i = 1; i < features; i++)
+            {
+                sum = numOps.Add(sum, sorted[i]);
+                T kPlusOne = numOps.FromDouble(i + 1);
+                T avgMinusZ = numOps.Subtract(
+                    numOps.Divide(sum, kPlusOne),
+                    sorted[i]
+                );
+
+                if (numOps.GreaterThan(avgMinusZ, numOps.Zero))
+                {
+                    k = i + 1;
+                    threshold = numOps.Divide(
+                        numOps.Subtract(sum, numOps.One),
+                        numOps.FromDouble(k)
+                    );
+                    break;
+                }
+            }
+
+            if (k == 1)
+            {
+                threshold = numOps.Divide(
+                    numOps.Subtract(sum, numOps.One),
+                    numOps.FromDouble(k)
+                );
+            }
+
+            for (int f = 0; f < features; f++)
+            {
+                var shifted = numOps.Subtract(row[f], threshold);
+                if (numOps.GreaterThan(shifted, numOps.Zero))
+                {
+                    result[b, f] = shifted;
+                }
+                else
+                {
+                    result[b, f] = numOps.Zero;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public Tensor<T> SphericalSoftmax<T>(Tensor<T> input) where T : struct
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var shape = input.Shape;
+        if (shape.Length != 2)
+        {
+            throw new NotSupportedException(
+                $"SphericalSoftmax is currently only implemented for 2D tensors. Got shape=[{string.Join(", ", shape)}]");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batchSize = shape[0];
+        int features = shape[1];
+        var result = new Tensor<T>(shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T sumSquares = numOps.Zero;
+            for (int f = 0; f < features; f++)
+            {
+                var val = input[b, f];
+                sumSquares = numOps.Add(sumSquares, numOps.Multiply(val, val));
+            }
+
+            T norm = numOps.Sqrt(sumSquares);
+            T epsilon = numOps.FromDouble(1e-8);
+            if (numOps.LessThan(norm, epsilon))
+                norm = epsilon;
+
+            var maxVal = numOps.Divide(input[b, 0], norm);
+            for (int f = 1; f < features; f++)
+            {
+                var normalized = numOps.Divide(input[b, f], norm);
+                if (numOps.GreaterThan(normalized, maxVal))
+                    maxVal = normalized;
+            }
+
+            var expSum = numOps.Zero;
+            var expValues = new T[features];
+            for (int f = 0; f < features; f++)
+            {
+                var normalized = numOps.Divide(input[b, f], norm);
+                var shifted = numOps.Subtract(normalized, maxVal);
+                expValues[f] = numOps.Exp(shifted);
+                expSum = numOps.Add(expSum, expValues[f]);
+            }
+
+            for (int f = 0; f < features; f++)
+            {
+                result[b, f] = numOps.Divide(expValues[f], expSum);
+            }
+        }
+
+        return result;
+    }
+
     #endregion
 }
