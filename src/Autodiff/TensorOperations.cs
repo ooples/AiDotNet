@@ -6587,6 +6587,162 @@ public static class TensorOperations<T>
 
         return node;
     }
+
+    /// <summary>
+    /// Extracts a slice from a tensor along a specified axis.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This operation extracts a portion of a tensor along a specified axis, starting at
+    /// a given offset and continuing for a specified length. An optional step parameter
+    /// allows for strided slicing (e.g., every 2nd element).
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this like taking a substring from a string.
+    ///
+    /// For example, if you have a tensor [1, 2, 3, 4, 5, 6] and you slice with start=1, length=3:
+    /// - You get [2, 3, 4]
+    ///
+    /// With step=2 and start=0, length=3:
+    /// - You get [1, 3, 5] (every 2nd element)
+    ///
+    /// This is useful for extracting specific parts of data, like separating real and
+    /// imaginary parts of complex numbers stored in interleaved format.
+    /// </para>
+    /// </remarks>
+    /// <param name="a">The input tensor to slice.</param>
+    /// <param name="start">The starting index along the specified axis.</param>
+    /// <param name="length">The number of elements to extract.</param>
+    /// <param name="step">The step size between elements (default 1).</param>
+    /// <param name="axis">The axis along which to slice (default 0).</param>
+    /// <returns>A new computation node containing the sliced tensor.</returns>
+    public static ComputationNode<T> Slice(ComputationNode<T> a, int start, int length, int step = 1, int axis = 0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+
+        // Handle negative axis
+        if (axis < 0)
+            axis = shape.Length + axis;
+
+        if (axis < 0 || axis >= shape.Length)
+            throw new ArgumentOutOfRangeException(nameof(axis), $"Axis {axis} is out of range for tensor with {shape.Length} dimensions.");
+
+        if (start < 0 || start >= shape[axis])
+            throw new ArgumentOutOfRangeException(nameof(start), $"Start index {start} is out of range for axis with size {shape[axis]}.");
+
+        if (step <= 0)
+            throw new ArgumentException("Step must be positive.", nameof(step));
+
+        // Calculate actual length based on step
+        int actualLength = 0;
+        for (int i = start; i < shape[axis] && actualLength < length; i += step)
+            actualLength++;
+
+        // Calculate result shape
+        var resultShape = shape.ToArray();
+        resultShape[axis] = actualLength;
+
+        var result = new Tensor<T>(resultShape);
+
+        // Copy elements
+        int[] srcIndices = new int[shape.Length];
+        int[] dstIndices = new int[shape.Length];
+
+        void CopyElements(int dim)
+        {
+            if (dim == shape.Length)
+            {
+                result[dstIndices] = a.Value[srcIndices];
+            }
+            else if (dim == axis)
+            {
+                int dstIdx = 0;
+                for (int i = start; i < shape[axis] && dstIdx < actualLength; i += step)
+                {
+                    srcIndices[dim] = i;
+                    dstIndices[dim] = dstIdx;
+                    CopyElements(dim + 1);
+                    dstIdx++;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < shape[dim]; i++)
+                {
+                    srcIndices[dim] = i;
+                    dstIndices[dim] = i;
+                    CopyElements(dim + 1);
+                }
+            }
+        }
+
+        CopyElements(0);
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // Gradient is scattered back to original positions
+                var gradA = new Tensor<T>(shape);
+
+                int[] gradSrcIndices = new int[resultShape.Length];
+                int[] gradDstIndices = new int[shape.Length];
+
+                void ScatterGradients(int dim)
+                {
+                    if (dim == resultShape.Length)
+                    {
+                        gradA[gradDstIndices] = numOps.Add(gradA[gradDstIndices], gradient[gradSrcIndices]);
+                    }
+                    else if (dim == axis)
+                    {
+                        int srcIdx = 0;
+                        for (int i = start; i < shape[axis] && srcIdx < actualLength; i += step)
+                        {
+                            gradDstIndices[dim] = i;
+                            gradSrcIndices[dim] = srcIdx;
+                            ScatterGradients(dim + 1);
+                            srcIdx++;
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < resultShape[dim]; i++)
+                        {
+                            gradDstIndices[dim] = i;
+                            gradSrcIndices[dim] = i;
+                            ScatterGradients(dim + 1);
+                        }
+                    }
+                }
+
+                ScatterGradients(0);
+                a.Gradient = a.Gradient == null ? gradA : a.Gradient.Add(gradA);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.Slice;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Start", start },
+            { "Length", length },
+            { "Step", step },
+            { "Axis", axis }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
 }
 
 

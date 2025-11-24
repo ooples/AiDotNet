@@ -186,6 +186,11 @@ public enum OperationType
     Split,
 
     /// <summary>
+    /// Slice tensor along an axis - extract a portion with optional stride.
+    /// </summary>
+    Slice,
+
+    /// <summary>
     /// Upsample tensor by repeating elements.
     /// </summary>
     Upsample,

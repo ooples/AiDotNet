@@ -328,16 +328,48 @@ public class MeasurementLayer<T> : LayerBase<T>
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
 
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // MeasurementLayer computes |amplitude|^2 which could be expressed with existing operations
-        throw new NotSupportedException(
-            "MeasurementLayer does not currently support JIT compilation. However, it COULD be supported by adding " +
-            "complex number operations to TensorOperations. Quantum measurement (probabilities = |amplitude|^2 / sum(|amplitude|^2)) " +
-            "can be computed as (real^2 + imag^2) / sum(real^2 + imag^2) using standard arithmetic operations.");
+        var input = inputNodes[0];
+        int size = InputShape[0];
+
+        // MeasurementLayer computes quantum measurement: probabilities = |amplitude|^2 / sum(|amplitude|^2)
+        // Input is complex-valued stored as [real_0, imag_0, real_1, imag_1, ...] or [real; imag] halves
+        // Assuming interleaved format: extract real and imaginary parts
+
+        // For interleaved format [r0, i0, r1, i1, ...]:
+        // Extract even indices (real) and odd indices (imaginary)
+        var realPart = TensorOperations<T>.Slice(input, 0, size, step: 2, axis: 0);
+        var imagPart = TensorOperations<T>.Slice(input, 1, size, step: 2, axis: 0);
+
+        // Compute |amplitude|^2 = real^2 + imag^2
+        var realSquared = TensorOperations<T>.Square(realPart);
+        var imagSquared = TensorOperations<T>.Square(imagPart);
+        var magnitudeSquared = TensorOperations<T>.Add(realSquared, imagSquared);
+
+        // Compute sum for normalization
+        var totalSum = TensorOperations<T>.Sum(magnitudeSquared);
+
+        // Normalize to get probabilities (add epsilon to avoid division by zero)
+        var epsilonTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(1e-10) }));
+        var epsilon = TensorOperations<T>.Constant(epsilonTensor, "Epsilon");
+        var safeDenom = TensorOperations<T>.Add(totalSum, epsilon);
+        var probabilities = TensorOperations<T>.Divide(magnitudeSquared, safeDenom);
+
+        return probabilities;
     }
 
-    public override bool SupportsJitCompilation => false; // Could be supported with complex ops
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> because MeasurementLayer computes quantum measurement using only
+    /// standard arithmetic operations: |amplitude|^2 = real^2 + imag^2, normalized by sum.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
 
 }

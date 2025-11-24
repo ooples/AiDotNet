@@ -642,16 +642,41 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
 
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // ContinuumMemorySystemLayer has fixed memory size and could potentially support JIT
-        throw new NotSupportedException(
-            "ContinuumMemorySystemLayer does not currently support JIT compilation. However, it COULD potentially be " +
-            "supported by adding memory access operations to TensorOperations if the memory size is fixed and known at " +
-            "compilation time. The addressing patterns could be represented as tensor indexing operations.");
+        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
+            throw new InvalidOperationException("MLP blocks are not initialized.");
+
+        // ContinuumMemorySystemLayer is a chain of DenseLayer (MLP) blocks
+        // Since DenseLayer supports JIT compilation, we can chain them together
+        // The update frequencies are only relevant during training, not inference
+
+        var current = inputNodes[0];
+
+        // Chain through all MLP blocks: yt = MLP^(fk)(MLP^(fk-1)(...MLP^(f1)(xt)))
+        for (int level = 0; level < _mlpBlocks.Length; level++)
+        {
+            if (_mlpBlocks[level] == null)
+                throw new InvalidOperationException($"MLP block at level {level} is null.");
+
+            current = _mlpBlocks[level].ExportComputationGraph([current]);
+        }
+
+        return current;
     }
 
-    public override bool SupportsJitCompilation => false; // Could be supported with memory ops
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> because ContinuumMemorySystemLayer is a chain of DenseLayer blocks,
+    /// each of which supports JIT compilation. The update frequency logic is only used
+    /// during training and does not affect inference.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
 
 }

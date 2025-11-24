@@ -611,16 +611,77 @@ public class QuantumLayer<T> : LayerBase<T>
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
 
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // QuantumLayer uses unitary matrix operations that could be expressed with complex number support
-        throw new NotSupportedException(
-            "QuantumLayer does not currently support JIT compilation. However, it COULD be supported by adding " +
-            "complex number operations to TensorOperations. Quantum gates are unitary matrices, and quantum state " +
-            "evolution is just matrix multiplication with complex numbers, which could be represented in a computation graph.");
+        var input = inputNodes[0];
+        int dimension = 1 << _numQubits;
+
+        // Convert quantum circuit (Complex<T> tensor) to real/imaginary split format for JIT
+        // Format: first dimension rows are real, next dimension rows are imaginary [2*dimension, dimension]
+        var circuitRealImag = new T[dimension * dimension * 2];
+        for (int i = 0; i < dimension; i++)
+        {
+            for (int j = 0; j < dimension; j++)
+            {
+                var complex = _quantumCircuit[i, j];
+                circuitRealImag[i * dimension + j] = complex.Real;                         // Real part
+                circuitRealImag[(dimension + i) * dimension + j] = complex.Imaginary;      // Imaginary part
+            }
+        }
+        var circuitTensor = new Tensor<T>(new[] { 2 * dimension, dimension }, new Vector<T>(circuitRealImag));
+        var quantumCircuitNode = TensorOperations<T>.Constant(circuitTensor, "QuantumCircuit");
+
+        // Input is real-valued, padded with zeros to dimension and create complex format
+        // Padding: add zeros after the input to reach dimension size
+        int inputSize = InputShape[0];
+        int padAmount = dimension - inputSize;
+        int[,] padWidth = new int[1, 2] { { 0, padAmount > 0 ? padAmount : 0 } };
+        var paddedInput = padAmount > 0 ? TensorOperations<T>.Pad(input, padWidth) : input;
+
+        // Compute squared norm for normalization: sum(input^2)
+        var inputSquared = TensorOperations<T>.Square(paddedInput);
+        var sumSquared = TensorOperations<T>.Sum(inputSquared);
+        var normFactor = TensorOperations<T>.Sqrt(sumSquared);
+
+        // Normalize input (avoid division by zero by adding small epsilon)
+        var epsilonTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(1e-10) }));
+        var epsilon = TensorOperations<T>.Constant(epsilonTensor, "Epsilon");
+        var safeDenom = TensorOperations<T>.Add(normFactor, epsilon);
+        var normalizedInput = TensorOperations<T>.Divide(paddedInput, safeDenom);
+
+        // Create complex state with zero imaginary part: [normalized_input; zeros]
+        var zerosData = new T[dimension];
+        var zerosTensor = new Tensor<T>(new[] { dimension }, new Vector<T>(zerosData));
+        var zeros = TensorOperations<T>.Constant(zerosTensor, "ZerosImag");
+        var complexState = TensorOperations<T>.Concat(new List<ComputationNode<T>> { normalizedInput, zeros }, axis: 0);
+
+        // Apply quantum circuit using complex matrix multiplication
+        // result_complex = quantumCircuit @ state_complex
+        var result = TensorOperations<T>.ComplexMatMul(quantumCircuitNode, complexState, "split");
+
+        // Extract probabilities: |amplitude|^2 = real^2 + imag^2
+        // Result is [2*dimension, 1] with first half real, second half imaginary
+        var resultReal = TensorOperations<T>.Slice(result, 0, dimension, step: 1, axis: 0);
+        var resultImag = TensorOperations<T>.Slice(result, dimension, dimension, step: 1, axis: 0);
+        var realSquared = TensorOperations<T>.Square(resultReal);
+        var imagSquared = TensorOperations<T>.Square(resultImag);
+        var probabilities = TensorOperations<T>.Add(realSquared, imagSquared);
+
+        return probabilities;
     }
 
-    public override bool SupportsJitCompilation => false; // Could be supported with complex number ops
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> because QuantumLayer uses complex matrix multiplication which is supported
+    /// in TensorOperations via ComplexMatMul. The quantum circuit can be compiled to a static
+    /// computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
 
 }
