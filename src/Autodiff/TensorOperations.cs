@@ -2859,6 +2859,15 @@ public static class TensorOperations<T>
             parents: parents,
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Conv2D;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Stride", stride },
+            { "Padding", padding }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -3115,6 +3124,16 @@ public static class TensorOperations<T>
             parents: parents,
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.ConvTranspose2D;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Stride", stride },
+            { "Padding", padding },
+            { "OutputPadding", outputPadding }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -3229,6 +3248,15 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.ReduceMax;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Axes", axes! },
+            { "KeepDims", keepDims }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -3359,6 +3387,15 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.ReduceMean;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Axes", axes! },
+            { "KeepDims", keepDims }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
