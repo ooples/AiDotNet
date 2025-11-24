@@ -699,4 +699,61 @@ public class FeedForwardLayer<T> : LayerBase<T>
         WeightsGradient = Tensor<T>.Empty();
         BiasesGradient = Tensor<T>.Empty();
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (Weights == null || Biases == null)
+            throw new InvalidOperationException("Layer weights and biases not initialized.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        var weightsNode = TensorOperations<T>.Constant(Weights, "weights");
+        var biasesNode = TensorOperations<T>.Constant(Biases, "biases");
+
+        var matmulNode = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
+        var addNode = TensorOperations<T>.Add(matmulNode, biasesNode);
+
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+        {
+            return ScalarActivation.ApplyToGraph(addNode);
+        }
+        else if (VectorActivation != null)
+        {
+            var activation = (IActivationFunction<T>)VectorActivation;
+            if (activation.SupportsJitCompilation)
+            {
+                return activation.ApplyToGraph(addNode);
+            }
+        }
+
+        return addNode;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            if (Weights == null || Biases == null)
+                return false;
+
+            if (ScalarActivation != null)
+                return ScalarActivation.SupportsJitCompilation;
+
+            if (VectorActivation != null)
+            {
+                var activation = (IActivationFunction<T>)VectorActivation;
+                return activation.SupportsJitCompilation;
+            }
+
+            return true;
+        }
+    }
 }
