@@ -146,3 +146,4 @@ public class HardTanhActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.HardTanh(input);
     }
+}

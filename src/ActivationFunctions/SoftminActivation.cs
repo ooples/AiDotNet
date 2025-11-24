@@ -159,3 +159,4 @@ public class SoftminActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.Softmin(input);
     }
+}

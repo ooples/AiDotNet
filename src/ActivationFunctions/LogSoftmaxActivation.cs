@@ -166,3 +166,4 @@ public class LogSoftmaxActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.LogSoftmax(input);
     }
+}

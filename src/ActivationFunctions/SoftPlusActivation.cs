@@ -142,3 +142,4 @@ public class SoftPlusActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.SoftPlus(input);
     }
+}

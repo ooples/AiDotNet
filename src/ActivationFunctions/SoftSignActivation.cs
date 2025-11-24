@@ -150,3 +150,4 @@ public class SoftSignActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.SoftSign(input);
     }
+}

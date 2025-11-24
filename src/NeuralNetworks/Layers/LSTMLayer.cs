@@ -1745,20 +1745,20 @@ public class LSTMLayer<T> : LayerBase<T>
         var prevCellNode = TensorOperations<T>.Variable(prevCellPlaceholder, "c_prev");
 
         // Create weight and bias nodes
-        var weightsFiNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsFi), "W_fi");
-        var weightsIiNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsIi), "W_ii");
-        var weightsCiNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsCi), "W_ci");
-        var weightsOiNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsOi), "W_oi");
+        var weightsFiNode = TensorOperations<T>.Variable(_weightsFi, "W_fi");
+        var weightsIiNode = TensorOperations<T>.Variable(_weightsIi, "W_ii");
+        var weightsCiNode = TensorOperations<T>.Variable(_weightsCi, "W_ci");
+        var weightsOiNode = TensorOperations<T>.Variable(_weightsOi, "W_oi");
 
-        var weightsFhNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsFh), "W_fh");
-        var weightsIhNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsIh), "W_ih");
-        var weightsChNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsCh), "W_ch");
-        var weightsOhNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsOh), "W_oh");
+        var weightsFhNode = TensorOperations<T>.Variable(_weightsFh, "W_fh");
+        var weightsIhNode = TensorOperations<T>.Variable(_weightsIh, "W_ih");
+        var weightsChNode = TensorOperations<T>.Variable(_weightsCh, "W_ch");
+        var weightsOhNode = TensorOperations<T>.Variable(_weightsOh, "W_oh");
 
-        var biasFNode = TensorOperations<T>.Variable(Tensor<T>.FromVector(_biasF), "b_f");
-        var biasINode = TensorOperations<T>.Variable(Tensor<T>.FromVector(_biasI), "b_i");
-        var biasCNode = TensorOperations<T>.Variable(Tensor<T>.FromVector(_biasC), "b_c");
-        var biasONode = TensorOperations<T>.Variable(Tensor<T>.FromVector(_biasO), "b_o");
+        var biasFNode = TensorOperations<T>.Variable(_biasF, "b_f");
+        var biasINode = TensorOperations<T>.Variable(_biasI, "b_i");
+        var biasCNode = TensorOperations<T>.Variable(_biasC, "b_c");
+        var biasONode = TensorOperations<T>.Variable(_biasO, "b_o");
 
         // Add inputs to the list
         inputNodes.Add(inputNode);
@@ -1829,28 +1829,4 @@ public class LSTMLayer<T> : LayerBase<T>
     /// True for LSTM layers, as single time-step JIT compilation is supported.
     /// </value>
     public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Converts a Matrix to a 2D Tensor for use in computation graphs.
-    /// </summary>
-    private static Tensor<T> MatrixToTensor(Matrix<T> matrix)
-    {
-        var tensor = new Tensor<T>(new int[] { matrix.Rows, matrix.Columns });
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                tensor[i, j] = matrix[i, j];
-            }
-        }
-        return tensor;
-    }
-
-    /// <summary>
-    /// Converts a Vector to a 1D Tensor for use in computation graphs.
-    /// </summary>
-    private static Tensor<T> VectorToTensor(Vector<T> vector)
-    {
-        return Tensor<T>.FromVector(vector);
-    }
 }

@@ -160,6 +160,7 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        double scale = NumOps.ToDouble(_scale);
+        double scale = NumOps.ToDouble(_beta);
         return TensorOperations<T>.ScaledTanh(input, scale);
     }
+}

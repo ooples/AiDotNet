@@ -249,3 +249,4 @@ public class SignActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.Sign(input);
     }
+}

@@ -150,3 +150,4 @@ public class LogSoftminActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.LogSoftmin(input);
     }
+}

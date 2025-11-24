@@ -128,3 +128,4 @@ public class GaussianActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.Gaussian(input);
     }
+}

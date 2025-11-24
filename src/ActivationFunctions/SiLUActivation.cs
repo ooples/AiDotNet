@@ -123,3 +123,4 @@ public class SiLUActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.SiLU(input);
     }
+}

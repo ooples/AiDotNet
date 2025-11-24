@@ -123,3 +123,4 @@ public class LiSHTActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.LiSHT(input);
     }
+}

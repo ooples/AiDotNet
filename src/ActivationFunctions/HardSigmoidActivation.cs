@@ -143,3 +143,4 @@ public class HardSigmoidActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.HardSigmoid(input);
     }
+}

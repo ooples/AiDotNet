@@ -473,16 +473,16 @@ public class MeanLayer<T> : LayerBase<T>
     /// This is useful when starting to process a new sequence or batch.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - Stored inputs and outputs from previous processing are cleared
     /// - The layer forgets any information from previous data batches
-    /// 
+    ///
     /// This is important for:
     /// - Processing a new, unrelated batch of data
     /// - Ensuring clean state before a new training epoch
     /// - Preventing information from one batch affecting another
-    /// 
+    ///
     /// While the MeanLayer doesn't maintain long-term state across samples (unlike recurrent layers),
     /// clearing these cached values helps with memory management and ensuring a clean processing pipeline.
     /// </para>
@@ -493,4 +493,27 @@ public class MeanLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastOutput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (OutputShape == null || OutputShape.Length == 0)
+            throw new InvalidOperationException("Layer output shape not configured.");
+
+        // Create placeholder for input with symbolic batch dimension
+        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+        inputNodes.Add(inputNode);
+
+        // Build computation graph: output = ReduceMean(input, axis)
+        var outputNode = TensorOperations<T>.ReduceMean(inputNode, axes: new int[] { Axis }, keepDims: false);
+        return outputNode;
+    }
+
+    public override bool SupportsJitCompilation => true;
 }

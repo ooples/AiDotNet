@@ -165,3 +165,4 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.Softmax(input);
     }
+}

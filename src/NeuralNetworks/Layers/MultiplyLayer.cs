@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -493,16 +494,16 @@ public class MultiplyLayer<T> : LayerBase<T>
     /// This is useful when starting to process a new sequence or batch of data.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - Stored inputs and outputs from previous processing are cleared
     /// - The layer forgets any information from previous data batches
-    /// 
+    ///
     /// This is important for:
     /// - Processing a new, unrelated batch of data
     /// - Ensuring clean state before a new training epoch
     /// - Preventing information from one batch affecting another
-    /// 
+    ///
     /// While the MultiplyLayer doesn't maintain long-term state across samples,
     /// clearing these cached values helps with memory management and ensuring a clean processing pipeline.
     /// </para>
@@ -512,5 +513,48 @@ public class MultiplyLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInputs = null;
         _lastOutput = null;
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShapes == null || InputShapes.Length < 2)
+            throw new InvalidOperationException("MultiplyLayer requires at least two inputs.");
+
+        if (OutputShape == null || OutputShape.Length == 0)
+            throw new InvalidOperationException("Layer output shape not configured.");
+
+        // Create input nodes for each input
+        var computationInputNodes = new List<ComputationNode<T>>();
+        for (int i = 0; i < InputShapes.Length; i++)
+        {
+            var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(InputShapes[i]).ToArray());
+            var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, $"input_{i}");
+            computationInputNodes.Add(inputNode);
+            inputNodes.Add(inputNode);
+        }
+
+        // Build computation graph: result = input[0] * input[1] * ... * input[n]
+        var result = computationInputNodes[0];
+        for (int i = 1; i < computationInputNodes.Count; i++)
+        {
+            result = Autodiff.TensorOperations<T>.ElementwiseMultiply(result, computationInputNodes[i]);
+        }
+
+        // Apply activation function
+        var activatedOutput = ApplyActivationToGraph(result);
+        return activatedOutput;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            // Check if the activation function supports JIT compilation
+            var activation = ScalarActivation ?? (IActivationFunction<T>)VectorActivation;
+            return activation?.SupportsJitCompilation ?? true;
+        }
     }
 }

@@ -171,3 +171,4 @@ public class ThresholdedReLUActivation<T> : ActivationFunctionBase<T>
         double theta = NumOps.ToDouble(_theta);
         return TensorOperations<T>.ThresholdedReLU(input, theta);
     }
+}

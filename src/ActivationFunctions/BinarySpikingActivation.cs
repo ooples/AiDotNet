@@ -356,3 +356,4 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.BinarySpiking(input);
     }
+}

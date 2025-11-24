@@ -177,6 +177,7 @@ public class SwishActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        double beta = NumOps.ToDouble(_beta);
-        return TensorOperations<T>.Swish(input, beta);
+        // Swish uses beta=1.0 (standard swish is x * sigmoid(x))
+        return TensorOperations<T>.Swish(input, 1.0);
     }
+}

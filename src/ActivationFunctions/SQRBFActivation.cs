@@ -168,3 +168,4 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.SQRBF(input);
     }
+}

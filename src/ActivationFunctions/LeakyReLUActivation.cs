@@ -203,6 +203,7 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        double negativeSlope = NumOps.ToDouble(_negativeSlope);
+        double negativeSlope = NumOps.ToDouble(_alpha);
         return TensorOperations<T>.LeakyReLU(input, negativeSlope);
     }
+}

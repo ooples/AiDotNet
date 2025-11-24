@@ -300,3 +300,4 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
 
         return TensorOperations<T>.Squash(input);
     }
+}

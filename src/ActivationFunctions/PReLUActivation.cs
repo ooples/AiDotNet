@@ -172,6 +172,7 @@ public class PReLUActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        double slope = NumOps.ToDouble(_slope);
+        double slope = NumOps.ToDouble(_alpha);
         return TensorOperations<T>.PReLU(input, slope);
     }
+}

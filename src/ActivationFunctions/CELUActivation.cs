@@ -161,3 +161,4 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
         double alpha = NumOps.ToDouble(_alpha);
         return TensorOperations<T>.CELU(input, alpha);
     }
+}
