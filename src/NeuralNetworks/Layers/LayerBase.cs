@@ -685,26 +685,21 @@ public abstract class LayerBase<T> : ILayer<T>
     /// <remarks>
     /// <para>
     /// This method constructs a computation graph representation of the layer's forward pass
-    /// that can be JIT compiled for faster inference. The base implementation throws
-    /// NotImplementedException - layers that support JIT compilation must override this method.
+    /// that can be JIT compiled for faster inference. All layers MUST implement this method
+    /// to support JIT compilation.
     /// </para>
     /// <para><b>For Beginners:</b> JIT (Just-In-Time) compilation converts the layer's operations
     /// into optimized native code for 5-10x faster inference.
     ///
     /// To support JIT compilation, a layer must:
-    /// 1. Override this method to export its computation graph
+    /// 1. Implement this method to export its computation graph
     /// 2. Set SupportsJitCompilation to true
     /// 3. Use ComputationNode and TensorOperations to build the graph
     ///
-    /// Layers that do not override this method will use the standard (non-JIT) execution path.
+    /// All layers are required to implement this method, even if they set SupportsJitCompilation = false.
     /// </para>
     /// </remarks>
-    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotImplementedException(
-            $"{GetType().Name} does not support JIT compilation yet. " +
-            "Override ExportComputationGraph() and set SupportsJitCompilation = true to enable JIT compilation for this layer.");
-    }
+    public abstract ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes);
 
     /// <summary>
     /// Gets whether this layer supports JIT compilation.
@@ -713,20 +708,20 @@ public abstract class LayerBase<T> : ILayer<T>
     /// <remarks>
     /// <para>
     /// This property indicates whether the layer has implemented ExportComputationGraph()
-    /// and can benefit from JIT compilation. The base implementation returns false.
+    /// and can benefit from JIT compilation. All layers MUST implement this property.
     /// </para>
     /// <para><b>For Beginners:</b> JIT compilation can make inference 5-10x faster by converting
     /// the layer's operations into optimized native code.
     ///
-    /// Layers return false if they:
-    /// - Have not yet implemented ExportComputationGraph()
+    /// Layers should return false if they:
+    /// - Have not yet implemented a working ExportComputationGraph()
     /// - Use dynamic operations that change based on input data
     /// - Are too simple to benefit from JIT compilation
     ///
     /// When false, the layer will use the standard Forward() method instead.
     /// </para>
     /// </remarks>
-    public virtual bool SupportsJitCompilation => false;
+    public abstract bool SupportsJitCompilation { get; }
     /// <summary>
     /// Performs the forward pass of the layer.
     /// </summary>
