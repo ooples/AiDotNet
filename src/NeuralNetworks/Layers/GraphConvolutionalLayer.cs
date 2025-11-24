@@ -1093,13 +1093,56 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // GraphConvolutionalLayer uses matrix multiplication which is standard
-        throw new NotSupportedException(
-            "GraphConvolutionalLayer does not currently support JIT compilation. However, it COULD be supported as " +
-            "graph convolution is just matrix multiplication: output = AdjacencyMatrix * Features * Weights. This can " +
-            "be expressed using standard MatrixMultiply operations already available in TensorOperations.");
+        if (_weights == null || _bias == null)
+            throw new InvalidOperationException("Layer not initialized. Call Initialize() first.");
+
+        if (_adjacencyMatrix == null)
+            throw new InvalidOperationException("Adjacency matrix not set. Call SetAdjacencyMatrix() first.");
+
+        // Create symbolic input [numNodes, inputFeatures]
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Convert adjacency matrix to constant node
+        var adjNode = TensorOperations<T>.Constant(_adjacencyMatrix, "adjacency");
+
+        // Convert weights matrix to tensor
+        var weightsTensor = new Tensor<T>(new int[] { _weights.Rows, _weights.Columns });
+        for (int i = 0; i < _weights.Rows; i++)
+        {
+            for (int j = 0; j < _weights.Columns; j++)
+            {
+                weightsTensor[i, j] = _weights[i, j];
+            }
+        }
+        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "weights");
+
+        // Use GraphConv operation: output = adjacency @ input @ weights
+        var convOutput = TensorOperations<T>.GraphConv(inputNode, adjNode, weightsNode);
+
+        // Add bias
+        var biasTensor = new Tensor<T>(new int[] { _bias.Length });
+        for (int i = 0; i < _bias.Length; i++)
+        {
+            biasTensor[i] = _bias[i];
+        }
+        var biasNode = TensorOperations<T>.Constant(biasTensor, "bias");
+        var output = TensorOperations<T>.Add(convOutput, biasNode);
+
+        // Apply activation if present
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+        {
+            output = ScalarActivation.ApplyToGraph(output);
+        }
+        else if (VectorActivation != null && VectorActivation.SupportsJitCompilation)
+        {
+            output = VectorActivation.ApplyToGraph(output);
+        }
+
+        return output;
     }
 
-    public override bool SupportsJitCompilation => false; // Could be supported with MatrixMultiply
+    public override bool SupportsJitCompilation => _weights != null && _bias != null && _adjacencyMatrix != null;
 
 }

@@ -675,13 +675,42 @@ public class RBFLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // RBFLayer uses distance calculations that could be expressed with existing operations
-        throw new NotSupportedException(
-            "RBFLayer does not currently support JIT compilation. However, it COULD be supported as RBF distance " +
-            "calculations (sqrt(sum((x - center)^2))) can be expressed using Subtract, Square, Sum, and Sqrt operations. " +
-            "These operations likely already exist or could easily be added to TensorOperations.");
+        if (_centers == null || _widths == null)
+            throw new InvalidOperationException("Layer not initialized. Call Initialize() first.");
+
+        // Create symbolic input [batch, inputSize]
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Convert centers matrix to tensor [numCenters, inputSize]
+        var centersTensor = new Tensor<T>(new int[] { _centers.Rows, _centers.Columns });
+        for (int i = 0; i < _centers.Rows; i++)
+        {
+            for (int j = 0; j < _centers.Columns; j++)
+            {
+                centersTensor[i, j] = _centers[i, j];
+            }
+        }
+        var centersNode = TensorOperations<T>.Constant(centersTensor, "centers");
+
+        // Convert widths to epsilons tensor [numCenters]
+        // epsilon = 1 / (2 * width²) for Gaussian RBF
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var epsilonsTensor = new Tensor<T>(new int[] { _widths.Length });
+        for (int i = 0; i < _widths.Length; i++)
+        {
+            // epsilon = 1 / (2 * width²)
+            T widthSquared = numOps.Multiply(_widths[i], _widths[i]);
+            T twoWidthSquared = numOps.Multiply(numOps.FromDouble(2.0), widthSquared);
+            epsilonsTensor[i] = numOps.Divide(numOps.One, twoWidthSquared);
+        }
+        var epsilonsNode = TensorOperations<T>.Constant(epsilonsTensor, "epsilons");
+
+        // Use RBFKernel operation: computes exp(-epsilon * distance²)
+        return TensorOperations<T>.RBFKernel(inputNode, centersNode, epsilonsNode);
     }
 
-    public override bool SupportsJitCompilation => false; // Could be supported with distance ops
+    public override bool SupportsJitCompilation => _centers != null && _widths != null;
 
 }
