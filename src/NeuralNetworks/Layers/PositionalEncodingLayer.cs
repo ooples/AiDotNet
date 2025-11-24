@@ -389,4 +389,22 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         // No state to reset in this layer
         // The encodings are fixed and don't change during training
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // PositionalEncodingLayer adds fixed positional encodings to input
+        return TensorOperations<T>.Add(inputNode, TensorOperations<T>.Constant(encodings, "positional_encodings"));
+    }
+
+    public override bool SupportsJitCompilation => true;
 }
