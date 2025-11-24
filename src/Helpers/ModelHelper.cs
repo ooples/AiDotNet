@@ -93,7 +93,7 @@ public static class ModelHelper<T, TInput, TOutput>
         else if (typeof(TInput) == typeof(Tensor<T>) && typeof(TOutput) == typeof(Tensor<T>))
         {
             // For neural network models (tensor input and output)
-            return (IFullModel<T, TInput, TOutput>)new NeuralNetworkModel<T>(
+            return (IFullModel<T, TInput, TOutput>)(object)new NeuralNetwork<T>(
                 new NeuralNetworkArchitecture<T>(InputType.ThreeDimensional, NeuralNetworkTaskType.Custom));
         }
         else
@@ -148,7 +148,7 @@ public static class ModelHelper<T, TInput, TOutput>
                 if (index < 0 || index >= tensor.Shape[1])
                 {
                     throw new ArgumentOutOfRangeException(nameof(indices), 
-                        $"Column index {index} is out of range for tensor with shape {string.Join("×", tensor.Shape)}");
+                        $"Column index {index} is out of range for tensor with shape {string.Join("ï¿½", tensor.Shape)}");
                 }
             
                 // Create a vector from the column
@@ -357,7 +357,7 @@ public static class ModelHelper<T, TInput, TOutput>
         );
     
         // Create the neural network model
-        var neuralModel = new NeuralNetworkModel<T>(architecture);
+        var neuralModel = new NeuralNetwork<T>(architecture);
 
         return (IFullModel<T, TInput, TOutput>)(object)neuralModel;
     }
