@@ -21,7 +21,7 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider
     /// <b>For Beginners:</b> This tells us what size and shape of data this layer expects to receive.
     /// For example, if processing images, this might be [3, 28, 28] for 28×28 pixel images with 3 color channels.
     /// </remarks>
-    Vector<int> GetInputShape();
+    int[] GetInputShape();
 
     /// <summary>
     /// Gets the shape (dimensions) of the output data produced by this layer.
@@ -32,7 +32,7 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider
     /// The output shape often differs from the input shape because the layer may transform the data.
     /// For example, a pooling layer might reduce the dimensions from [3, 28, 28] to [3, 14, 14].
     /// </remarks>
-    Vector<int> GetOutputShape();
+    int[] GetOutputShape();
 
     /// <summary>
     /// Gets the weight matrix for layers that have trainable weights.

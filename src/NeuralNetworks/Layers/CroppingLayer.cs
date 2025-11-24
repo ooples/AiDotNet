@@ -595,6 +595,85 @@ public class CroppingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to which input variable nodes should be added.</param>
+    /// <returns>The output computation node representing this layer's operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the activation function is not supported for JIT compilation.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representation of the cropping operation that can be compiled
+    /// and optimized for efficient execution. The graph represents removing specified portions from the edges
+    /// of the input tensor followed by optional activation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an optimized version of the cropping operation.
+    ///
+    /// For cropping layers:
+    /// - Creates a placeholder for the input tensor
+    /// - Applies the cropping operation (removes edges)
+    /// - Applies the activation function if present
+    /// - Returns a computation graph for efficient execution
+    ///
+    /// This allows for faster inference by pre-compiling the cropping operation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (!CanActivationBeJitted())
+        {
+            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax");
+        }
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // CroppingLayer uses NHWC format [batch, H, W, channels]
+        // Need to convert to NCHW for TensorOperations.Crop
+        // Create placeholder for input in NHWC format
+        var inputPlaceholderNHWC = new Tensor<T>(InputShape);
+
+        // Convert to NCHW format
+        int batch = InputShape[0];
+        int height = InputShape[1];
+        int width = InputShape[2];
+        int channels = InputShape[3];
+        var inputShapeNCHW = new int[] { batch, channels, height, width };
+        var inputPlaceholderNCHW = new Tensor<T>(inputShapeNCHW);
+
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholderNCHW, "input");
+        inputNodes.Add(inputNode);
+
+        // Apply cropping operation
+        // Crop expects [top, bottom, left, right] for 4D tensors in NCHW format
+        var cropping = new int[] { _cropTop[1], _cropBottom[1], _cropLeft[2], _cropRight[2] };
+        var croppedNode = TensorOperations<T>.Crop(inputNode, cropping);
+
+        // Apply activation function using LayerBase helper
+        var activatedOutput = ApplyActivationToGraph(croppedNode);
+
+        return activatedOutput;
+    }
+
+    /// <summary>
+    /// Gets whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>True if the activation function supports JIT compilation, false otherwise.</value>
+    /// <remarks>
+    /// <para>
+    /// Cropping layers support JIT compilation as long as their activation function does.
+    /// The cropping operation is straightforward to compile and optimize.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => CanActivationBeJitted();
+
+    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -603,7 +682,7 @@ public class CroppingLayer<T> : LayerBase<T>
     /// It is implemented to satisfy the abstract method requirement from the base class.
     /// </para>
     /// <para><b>For Beginners:</b> This method is empty because cropping layers don't store any temporary information.
-    /// 
+    ///
     /// Since cropping layers:
     /// - Don't keep track of past inputs
     /// - Don't remember anything between operations

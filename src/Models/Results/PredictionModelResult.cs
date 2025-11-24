@@ -1964,7 +1964,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             }
 
             // Check if the model implements IJitCompilable and supports JIT
-            if (Model is IJitCompilable<T, TInput, TOutput> jitModel)
+            if (Model is IJitCompilable<T> jitModel)
             {
                 return jitModel.SupportsJitCompilation;
             }
@@ -2017,7 +2017,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         // Check if the model implements IJitCompilable
-        if (Model is IJitCompilable<T, TInput, TOutput> jitModel)
+        if (Model is IJitCompilable<T> jitModel)
         {
             // Check if it actually supports JIT before delegating
             if (!jitModel.SupportsJitCompilation)
@@ -2033,7 +2033,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // Model doesn't implement IJitCompilable at all
         throw new NotSupportedException(
-            $"The underlying model type ({Model.GetType().Name}) does not implement IJitCompilable<T, TInput, TOutput>. " +
+            $"The underlying model type ({Model.GetType().Name}) does not implement IJitCompilable<T>. " +
             "JIT compilation is only supported for models that use differentiable computation graphs, such as " +
             "linear models, polynomial models, and neural networks. Tree-based models (decision trees, random forests, " +
             "gradient boosting) cannot be JIT compiled due to their discrete branching logic.");

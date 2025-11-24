@@ -170,7 +170,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// Gets the biases vector of the convolutional layer.
     /// </summary>
     /// <returns>The bias values added to each output channel.</returns>
-    public Vector<T> GetBiases()
+    public override Vector<T> GetBiases()
     {
         return _biases;
     }

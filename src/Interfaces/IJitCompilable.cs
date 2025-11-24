@@ -6,8 +6,6 @@ namespace AiDotNet.Interfaces;
 /// Interface for models that can expose their computation graph for JIT compilation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <typeparam name="TInput">The input type for predictions.</typeparam>
-/// <typeparam name="TOutput">The output type for predictions.</typeparam>
 /// <remarks>
 /// <para>
 /// Models implementing this interface can be JIT compiled for significantly faster inference.
@@ -32,7 +30,7 @@ namespace AiDotNet.Interfaces;
 /// This is planned for a future update.
 /// </para>
 /// </remarks>
-public interface IJitCompilable<T, TInput, TOutput>
+public interface IJitCompilable<T>
 {
     /// <summary>
     /// Exports the model's computation graph for JIT compilation.
