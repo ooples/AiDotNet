@@ -1218,5 +1218,94 @@ public class CpuEngine : IEngine
         return new Tensor<T>(tensor.Shape, resultVector);
     }
 
+    public Tensor<T> GumbelSoftmax<T>(Tensor<T> input, double temperature = 1.0)
+    {
+        if (input.Rank != 2)
+            throw new ArgumentException("GumbelSoftmax requires 2D input [batch, features]");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batchSize = input.Shape[0];
+        int features = input.Shape[1];
+        var output = new Tensor<T>(input.Shape);
+        var tempValue = numOps.FromDouble(temperature);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Find max for numerical stability
+            var maxVal = numOps.Divide(input[b, 0], tempValue);
+            for (int f = 1; f < features; f++)
+            {
+                var scaledVal = numOps.Divide(input[b, f], tempValue);
+                if (numOps.GreaterThan(scaledVal, maxVal))
+                    maxVal = scaledVal;
+            }
+
+            // Compute exp((x - max) / temperature) and sum
+            var expSum = numOps.Zero;
+            var expValues = new T[features];
+            for (int f = 0; f < features; f++)
+            {
+                var scaledVal = numOps.Divide(input[b, f], tempValue);
+                var shifted = numOps.Subtract(scaledVal, maxVal);
+                expValues[f] = numOps.Exp(shifted);
+                expSum = numOps.Add(expSum, expValues[f]);
+            }
+
+            // Normalize
+            for (int f = 0; f < features; f++)
+            {
+                output[b, f] = numOps.Divide(expValues[f], expSum);
+            }
+        }
+
+        return output;
+    }
+
+    public Tensor<T> TaylorSoftmax<T>(Tensor<T> input, int order = 2)
+    {
+        if (input.Rank != 2)
+            throw new ArgumentException("TaylorSoftmax requires 2D input [batch, features]");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batchSize = input.Shape[0];
+        int features = input.Shape[1];
+        var output = new Tensor<T>(input.Shape);
+
+        // Helper function to compute Taylor series approximation of exp(x)
+        T TaylorExp(T x, int n)
+        {
+            T res = numOps.One;
+            T term = numOps.One;
+
+            for (int i = 1; i <= n; i++)
+            {
+                term = numOps.Divide(numOps.Multiply(term, x), numOps.FromDouble(i));
+                res = numOps.Add(res, term);
+            }
+
+            return res;
+        }
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Compute Taylor exp for each element and sum
+            var taylorSum = numOps.Zero;
+            var taylorValues = new T[features];
+            for (int f = 0; f < features; f++)
+            {
+                taylorValues[f] = TaylorExp(input[b, f], order);
+                taylorSum = numOps.Add(taylorSum, taylorValues[f]);
+            }
+
+            // Normalize
+            for (int f = 0; f < features; f++)
+            {
+                output[b, f] = numOps.Divide(taylorValues[f], taylorSum);
+            }
+        }
+
+        return output;
+    }
+
     #endregion
 }
