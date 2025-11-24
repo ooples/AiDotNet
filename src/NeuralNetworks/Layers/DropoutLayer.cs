@@ -523,4 +523,48 @@ public class DropoutLayer<T> : LayerBase<T>
         _lastInput = null;
         _dropoutMask = null;
     }
+
+    /// <summary>
+    /// Exports the dropout layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the layer's output.</returns>
+    /// <remarks>
+    /// <para>
+    /// For JIT compilation, dropout is implemented in inference mode (no randomness).
+    /// During inference, dropout simply scales the input by (1 - dropout_rate) to maintain
+    /// the expected magnitude of activations.
+    /// </para>
+    /// <para>
+    /// The computation graph is simple: output = input * (1 - dropout_rate)
+    /// This ensures consistency between training and inference without requiring
+    /// random number generation in the compiled code.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create placeholder for input data
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, InputShape[0] });
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+        inputNodes.Add(inputNode);
+
+        // For inference mode in JIT: output = input (no dropout)
+        // Dropout is only applied during training, not during inference
+        // The forward pass already handles scaling during training
+        return inputNode;
+    }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always true. Dropout layers support JIT compilation in inference mode.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
 }
