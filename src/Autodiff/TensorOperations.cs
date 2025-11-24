@@ -74,12 +74,18 @@ public static class TensorOperations<T>
         string? name = null,
         bool requiresGradient = true)
     {
-        return new ComputationNode<T>(
+        var node = new ComputationNode<T>(
             value: value,
             requiresGradient: requiresGradient,
             parents: null,
             backwardFunction: null,
             name: name);
+
+        // Set JIT compiler metadata
+        node.OperationType = "Input";
+        node.OperationParams = null;
+
+        return node;
     }
     /// <summary>
     /// Creates a constant computation node from a tensor value.
@@ -102,7 +108,13 @@ public static class TensorOperations<T>
     /// </remarks>
     public static ComputationNode<T> Constant(Tensor<T> value, string? name = null)
     {
-        return Variable(value, name, requiresGradient: false);
+        var node = Variable(value, name, requiresGradient: false);
+
+        // Set JIT compiler metadata for constant
+        node.OperationType = "Constant";
+        node.OperationParams = null;
+
+        return node;
     }
     /// <summary>
     /// Performs element-wise addition of two computation nodes.
@@ -169,6 +181,11 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a, b },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = "Add";
+        node.OperationParams = null;
+
         // Record to active tape if present
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
