@@ -6103,7 +6103,22 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("Sign gradient computation will be added in gradient implementation phase");
+                // Sign function has zero gradient almost everywhere
+                // We use the straight-through estimator (STE): gradient passes through unchanged
+                // This allows gradient flow in binary neural networks
+                var gradA = gradient; // Straight-through estimator
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradA);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -6142,7 +6157,30 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("Gaussian gradient computation will be added in gradient implementation phase");
+                // Gaussian: f(x) = exp(-x²)
+                // Gradient: f'(x) = -2x * exp(-x²) = -2x * f(x)
+                var gradA = new Tensor<T>(a.Value.Shape);
+                var two = numOps.FromDouble(2.0);
+                for (int i = 0; i < a.Value.Length; i++)
+                {
+                    var x = a.Value[i];
+                    var y = result[i]; // exp(-x²)
+                    var minusTwoX = numOps.Negate(numOps.Multiply(two, x));
+                    var localGrad = numOps.Multiply(minusTwoX, y);
+                    gradA[i] = numOps.Multiply(gradient[i], localGrad);
+                }
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradA);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -6184,7 +6222,32 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("ISRU gradient computation will be added in gradient implementation phase");
+                // ISRU: f(x) = x / sqrt(1 + α*x²)
+                // Gradient: f'(x) = 1 / (1 + α*x²)^(3/2)
+                var gradA = new Tensor<T>(a.Value.Shape);
+                for (int i = 0; i < a.Value.Length; i++)
+                {
+                    var x = a.Value[i];
+                    var xSquared = numOps.Multiply(x, x);
+                    var alphaMulXSquared = numOps.Multiply(alphaT, xSquared);
+                    var onePlusAlphaXSquared = numOps.Add(numOps.One, alphaMulXSquared);
+                    // (1 + α*x²)^(3/2) = (1 + α*x²) * sqrt(1 + α*x²)
+                    var denom = numOps.Multiply(onePlusAlphaXSquared, numOps.Sqrt(onePlusAlphaXSquared));
+                    var localGrad = numOps.Divide(numOps.One, denom);
+                    gradA[i] = numOps.Multiply(gradient[i], localGrad);
+                }
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradA);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -6222,7 +6285,31 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("LiSHT gradient computation will be added in gradient implementation phase");
+                // LiSHT: f(x) = x * tanh(x)
+                // Gradient: f'(x) = tanh(x) + x * (1 - tanh²(x))
+                var gradA = new Tensor<T>(a.Value.Shape);
+                for (int i = 0; i < a.Value.Length; i++)
+                {
+                    var x = a.Value[i];
+                    var tanhX = MathHelper.Tanh(x);
+                    var tanhXSquared = numOps.Multiply(tanhX, tanhX);
+                    var oneMinusTanhXSquared = numOps.Subtract(numOps.One, tanhXSquared);
+                    var xTimesSech2 = numOps.Multiply(x, oneMinusTanhXSquared);
+                    var localGrad = numOps.Add(tanhX, xTimesSech2);
+                    gradA[i] = numOps.Multiply(gradient[i], localGrad);
+                }
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradA);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -6268,7 +6355,30 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("SQRBF gradient computation will be added in gradient implementation phase");
+                // SQRBF: f(x) = exp(-((x - center)² / (2 * width²)))
+                // Gradient: f'(x) = -(x - center) / width² * f(x)
+                var gradA = new Tensor<T>(a.Value.Shape);
+                for (int i = 0; i < a.Value.Length; i++)
+                {
+                    var x = a.Value[i];
+                    var y = result[i]; // exp(-((x-c)²/(2w²)))
+                    var diff = numOps.Subtract(x, centerT);
+                    var minusDiffOverWidthSq = numOps.Negate(numOps.Divide(diff, widthSquared));
+                    var localGrad = numOps.Multiply(minusDiffOverWidthSq, y);
+                    gradA[i] = numOps.Multiply(gradient[i], localGrad);
+                }
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradA);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -6311,7 +6421,32 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("Squash gradient computation will be added in gradient implementation phase");
+                // Squash (simplified scalar version): f(x) = x²/(1+x²) * sign(x)
+                // Gradient: f'(x) = 2x/(1+x²)² (approximate, treating sign as smooth)
+                var gradA = new Tensor<T>(a.Value.Shape);
+                var two = numOps.FromDouble(2.0);
+                for (int i = 0; i < a.Value.Length; i++)
+                {
+                    var x = a.Value[i];
+                    var xSquared = numOps.Multiply(x, x);
+                    var onePlusXSquared = numOps.Add(numOps.One, xSquared);
+                    var denominator = numOps.Multiply(onePlusXSquared, onePlusXSquared);
+                    var twoX = numOps.Multiply(two, x);
+                    var localGrad = numOps.Divide(twoX, denominator);
+                    gradA[i] = numOps.Multiply(gradient[i], localGrad);
+                }
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradA);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -6348,7 +6483,21 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("BinarySpiking gradient computation will be added in gradient implementation phase");
+                // Binary Spiking is a step function with zero gradient almost everywhere
+                // Use straight-through estimator (STE) for gradient flow in spiking neural networks
+                var gradA = gradient; // Straight-through estimator
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradA);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
