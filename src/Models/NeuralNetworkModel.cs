@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Autodiff;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
@@ -1355,14 +1356,8 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         var stride = new int[] { 1, 1 };
         var padding = new int[] { 0, 0 };
 
-        // Conv2D operation
-        var convNode = TensorOperations<T>.Conv2D(input, filtersNode, stride, padding);
-
-        // Add bias if present
-        if (biasesNode != null)
-        {
-            convNode = TensorOperations<T>.Add(convNode, biasesNode);
-        }
+        // Conv2D operation with optional bias
+        var convNode = TensorOperations<T>.Conv2D(input, filtersNode, biasesNode, stride, padding);
 
         // Apply activation if present
         if (layer.ScalarActivation != null)
@@ -1399,16 +1394,18 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         var mean = layer.GetRunningMean();
         var variance = layer.GetRunningVariance();
 
-        // Create parameter nodes
+        // Create parameter nodes for gamma and beta
         var gammaNode = new ComputationNode<T>(VectorToTensor(gamma));
         var betaNode = new ComputationNode<T>(VectorToTensor(beta));
-        var meanNode = new ComputationNode<T>(VectorToTensor(mean));
-        var varianceNode = new ComputationNode<T>(VectorToTensor(variance));
 
-        var epsilon = layer.GetEpsilon();
-        var momentum = layer.GetMomentum();
+        // Running mean and variance are Tensors, not ComputationNodes
+        var runningMean = VectorToTensor(mean);
+        var runningVariance = VectorToTensor(variance);
 
-        return TensorOperations<T>.BatchNorm(input, gammaNode, betaNode, meanNode, varianceNode, epsilon, momentum);
+        var epsilon = Convert.ToDouble(layer.GetEpsilon());
+        var isTraining = false; // During JIT compilation, use inference mode
+
+        return TensorOperations<T>.BatchNorm(input, gammaNode, betaNode, runningMean, runningVariance, isTraining, epsilon);
     }
 
     private ComputationNode<T> ConvertLayerNormLayer(LayerNormalizationLayer<T> layer, ComputationNode<T> input)
@@ -1417,12 +1414,13 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         var gamma = layer.GetGamma();
         var beta = layer.GetBeta();
         var normalizedShape = layer.GetNormalizedShape();
-        var epsilon = layer.GetEpsilon();
+        var epsilon = Convert.ToDouble(layer.GetEpsilon());
 
         var gammaNode = new ComputationNode<T>(VectorToTensor(gamma));
         var betaNode = new ComputationNode<T>(VectorToTensor(beta));
 
-        return TensorOperations<T>.LayerNorm(input, gammaNode, betaNode, normalizedShape, epsilon);
+        // LayerNorm signature: (input, normalizedShape, gamma, beta, epsilon)
+        return TensorOperations<T>.LayerNorm(input, normalizedShape, gammaNode, betaNode, epsilon);
     }
 
     private ComputationNode<T> ConvertFlattenLayer(FlattenLayer<T> layer, ComputationNode<T> input)

@@ -769,7 +769,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                     var jitCompiler = new AiDotNet.JitCompiler.JitCompiler(_jitCompilationConfig.CompilerOptions);
                     jitCompiledFunction = jitCompiler.Compile(outputNode, inputNodes);
 
-                    Console.WriteLine($"JIT compilation successful for model {optimizationResult.BestSolution.GetType().Name}");
+                    Console.WriteLine($"JIT compilation successful for model {optimizationResult.BestSolution?.GetType().Name}");
                 }
                 else if (_jitCompilationConfig.ThrowOnFailure)
                 {
@@ -1699,10 +1699,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 // Convert KD trainer's Vector<T> to model's TInput type using reference for shape
                 TInput modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(input, referenceInput);
 
-                if (studentModel is INeuralNetworkModel<T> nnModel)
+                if (studentModel is INeuralNetwork<T> nnModel)
                 {
                     // Use ForwardWithMemory() to save activations for backpropagation
-                    var output = nnModel.Network.ForwardWithMemory(Tensor<T>.FromVector(input));
+                    var output = nnModel.ForwardWithMemory(Tensor<T>.FromVector(input));
                     return output.ToVector();
                 }
 
@@ -1715,11 +1715,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             // This function receives output gradients from distillation strategy and applies them to the model
             Action<Vector<T>> studentBackward = gradient =>
             {
-                // Cast to INeuralNetworkModel to access backpropagation methods
-                if (studentModel is not INeuralNetworkModel<T> nnModel)
+                // Cast to INeuralNetwork to access backpropagation methods
+                if (studentModel is not INeuralNetwork<T> nnModel)
                 {
                     throw new InvalidOperationException(
-                        "Knowledge distillation requires a INeuralNetworkModel for gradient backpropagation. " +
+                        "Knowledge distillation requires a neural network (INeuralNetwork<T>) for gradient backpropagation. " +
                         $"Current model type: {studentModel.GetType().Name}");
                 }
 
@@ -1732,14 +1732,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                     if (inputQueue.Count > 0)
                     {
                         var matchingInput = inputQueue.Dequeue();
-                        nnModel.Network.ForwardWithMemory(Tensor<T>.FromVector(matchingInput));
+                        nnModel.ForwardWithMemory(Tensor<T>.FromVector(matchingInput));
                     }
 
                     // Step 1: Backpropagate output gradient through network to compute parameter gradients
-                    nnModel.Network.Backpropagate(Tensor<T>.FromVector(gradient));
+                    nnModel.Backpropagate(Tensor<T>.FromVector(gradient));
 
                     // Step 2: Get parameter gradients from backpropagation
-                    var paramGradients = nnModel.Network.GetParameterGradients();
+                    var paramGradients = nnModel.GetParameterGradients();
 
                     // Step 3: Apply gradient-based optimizer update if available
                     if (optimizer is IGradientBasedOptimizer<T, Vector<T>, Vector<T>> gradOptimizer)
@@ -1748,7 +1748,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                         // This preserves momentum, ADAM state, and uses configured learning rate
                         var currentParams = nnModel.GetParameters();
                         var updatedParams = gradOptimizer.UpdateParameters(currentParams, paramGradients);
-                        nnModel.Network.UpdateParameters(updatedParams);
+                        nnModel.UpdateParameters(updatedParams);
                     }
                     else
                     {
@@ -1765,7 +1765,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                                 NumOps.Multiply(learningRate, paramGradients[i]));
                         }
 
-                        nnModel.Network.UpdateParameters(newParams);
+                        nnModel.UpdateParameters(newParams);
                     }
                 }
                 catch (Exception ex)
