@@ -1140,4 +1140,36 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
         if (data.Length == 0) throw new InvalidOperationException("Stream contains no data.");
         Deserialize(data);
     }
+
+    /// <summary>
+    /// Gets a value indicating whether this model supports JIT (Just-In-Time) compilation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Decision tree models do not support JIT compilation because they use branching logic
+    /// with dynamic conditions that cannot be represented as a static computation graph.
+    /// JIT compilation is designed for models with fixed tensor operations (like neural networks),
+    /// not tree-based conditional logic.
+    /// </para>
+    /// </remarks>
+    public virtual bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Exports the model's computation as a graph of operations.
+    /// </summary>
+    /// <param name="inputNodes">The input nodes for the computation graph.</param>
+    /// <returns>The root node of the exported computation graph.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Always throws because decision tree models do not support JIT compilation.
+    /// </exception>
+    public virtual AiDotNet.Autodiff.ComputationNode<T> ExportComputationGraph(List<AiDotNet.Autodiff.ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "Decision tree regression models do not support JIT compilation because they use:\n" +
+            "- Tree-based branching logic with dynamic conditions\n" +
+            "- Recursive tree traversal that depends on input values\n" +
+            "- Conditional splits that cannot be represented as static tensor operations\n\n" +
+            "JIT compilation is designed for models with fixed computation graphs (e.g., neural networks), " +
+            "not for tree-based models with data-dependent control flow.");
+    }
 }

@@ -850,5 +850,50 @@ public interface IEngine
     /// </remarks>
     Tensor<T> Conv2D<T>(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0, int dilation = 1);
 
+    /// <summary>
+    /// Transposes a 2D tensor (matrix represented as tensor).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input 2D tensor to transpose.</param>
+    /// <returns>The transposed tensor where rows become columns.</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor is not 2D.</exception>
+    /// <remarks>
+    /// <para><b>Phase C: JIT Compilation Support</b></para>
+    /// <para>
+    /// Transposes a 2D tensor by swapping its dimensions. For a tensor with shape [M, N],
+    /// the result has shape [N, M].
+    /// </para>
+    /// <para>
+    /// GPU acceleration provides significant speedup for large tensors.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorTranspose<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Performs matrix multiplication on two 2D tensors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first 2D tensor with shape [M, N].</param>
+    /// <param name="b">The second 2D tensor with shape [N, P].</param>
+    /// <returns>The result tensor with shape [M, P].</returns>
+    /// <exception cref="ArgumentException">Thrown when tensors are not 2D or inner dimensions don't match.</exception>
+    /// <remarks>
+    /// <para><b>Phase C: JIT Compilation Support</b></para>
+    /// <para>
+    /// Performs standard matrix multiplication C = A x B where:
+    /// - A has shape [M, N]
+    /// - B has shape [N, P]
+    /// - C has shape [M, P]
+    /// </para>
+    /// <para>
+    /// This is distinct from BatchMatMul which handles batched operations on higher-dimensional tensors.
+    /// Use this method for 2D tensor matrix operations in computation graphs.
+    /// </para>
+    /// <para>
+    /// GPU acceleration provides 10-100x speedup depending on matrix sizes.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorMatMul<T>(Tensor<T> a, Tensor<T> b);
+
     #endregion
 }

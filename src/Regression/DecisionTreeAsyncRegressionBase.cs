@@ -1033,4 +1033,85 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         if (data.Length == 0) throw new InvalidOperationException("Stream contains no data.");
         Deserialize(data);
     }
+
+    #region IJitCompilable Implementation
+
+    /// <summary>
+    /// Gets whether this model currently supports JIT compilation.
+    /// </summary>
+    /// <value>Always returns false for async decision trees, which are not differentiable models.</value>
+    /// <remarks>
+    /// <para>
+    /// Async decision trees, like their synchronous counterparts, are not continuously differentiable models.
+    /// They make discrete decisions based on threshold comparisons. JIT compilation requires a computation graph
+    /// with differentiable operations, which decision trees do not provide.
+    /// </para>
+    /// <para><b>For Beginners:</b> Async decision trees cannot be JIT compiled for the same reasons as regular decision trees.
+    ///
+    /// Async decision trees:
+    /// - Make decisions using if-then rules (e.g., "if feature > 5, go left, else go right")
+    /// - These are discrete, non-smooth operations
+    /// - Cannot be represented as a continuous computation graph
+    /// - The "async" part refers to training/prediction execution, not the model structure
+    ///
+    /// JIT compilation needs:
+    /// - Smooth, differentiable operations (like matrix multiplication, addition)
+    /// - A computation graph structure
+    /// - Operations that can be optimized and fused
+    ///
+    /// For async tree-based models, you get fast predictions through:
+    /// - Parallel tree traversal using async operations
+    /// - Efficient node evaluation
+    /// - Ensemble methods that parallelize predictions across trees asynchronously
+    /// </para>
+    /// </remarks>
+    public virtual bool SupportsJitCompilation
+    {
+        get { return false; }
+    }
+
+    /// <summary>
+    /// Exports the model's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes (not used).</param>
+    /// <returns>Not supported - always throws NotSupportedException.</returns>
+    /// <exception cref="NotSupportedException">Always thrown - async decision trees do not support JIT compilation.</exception>
+    /// <remarks>
+    /// <para>
+    /// Async decision trees cannot be represented as a computation graph suitable for JIT compilation because
+    /// they use discrete branching logic rather than continuous mathematical operations, regardless of whether
+    /// their execution is asynchronous or synchronous.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method cannot be used with async decision trees.
+    ///
+    /// Async decision trees use if-then-else logic:
+    /// - "If age > 30, check income. Else, check credit score."
+    /// - These are discrete decisions, not smooth mathematical functions
+    /// - They cannot be converted to a computation graph
+    /// - The asynchronous execution model doesn't change this fundamental limitation
+    ///
+    /// Models that support JIT compilation use continuous operations:
+    /// - Linear models: y = Wx + b
+    /// - Neural networks: y = activation(W2 * activation(W1 * x + b1) + b2)
+    /// - These can be represented as computation graphs
+    ///
+    /// If you need fast predictions with async tree models, use:
+    /// - Ensemble methods (Random Forests) that parallelize tree evaluations asynchronously
+    /// - Optimized tree traversal algorithms with async/await patterns
+    /// - Hardware-optimized libraries for tree inference with async support
+    /// </para>
+    /// </remarks>
+    public virtual AiDotNet.Autodiff.ComputationNode<T> ExportComputationGraph(List<AiDotNet.Autodiff.ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "Async decision trees do not support JIT compilation. " +
+            "Tree-based models use discrete branching logic (if-then-else rules) rather than continuous " +
+            "differentiable operations, which makes them incompatible with computation graph-based JIT compilation. " +
+            "The asynchronous execution model is for training/prediction parallelization and does not change " +
+            "the fundamental tree structure. For fast async tree inference, use ensemble methods like Random Forests " +
+            "which parallelize predictions across multiple trees, or consider hybrid approaches that combine " +
+            "tree-based feature engineering with differentiable models.");
+    }
+
+    #endregion
 }

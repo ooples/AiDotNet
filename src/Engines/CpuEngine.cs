@@ -839,6 +839,99 @@ public class CpuEngine : IEngine
         return result;
     }
 
+    public Tensor<T> TensorTranspose<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        
+        // Verify tensor is 2D
+        if (tensor.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"TensorTranspose requires a 2D tensor, but got {tensor.Shape.Length}D tensor with shape {FormatShape(tensor.Shape)}.",
+                nameof(tensor));
+        }
+
+        int rows = tensor.Shape[0];
+        int cols = tensor.Shape[1];
+        
+        // Create result tensor with transposed dimensions
+        var result = new Tensor<T>(new int[] { cols, rows });
+        
+        // Perform transpose: result[j, i] = tensor[i, j]
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                int sourceIdx = i * cols + j;
+                int destIdx = j * rows + i;
+                result[destIdx] = tensor[sourceIdx];
+            }
+        }
+        
+        return result;
+    }
+
+    public Tensor<T> TensorMatMul<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        
+        // Verify both tensors are 2D
+        if (a.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"TensorMatMul requires 2D tensors, but first tensor is {a.Shape.Length}D with shape {FormatShape(a.Shape)}.",
+                nameof(a));
+        }
+        if (b.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"TensorMatMul requires 2D tensors, but second tensor is {b.Shape.Length}D with shape {FormatShape(b.Shape)}.",
+                nameof(b));
+        }
+        
+        int M = a.Shape[0];  // Rows in A
+        int N = a.Shape[1];  // Cols in A (must equal rows in B)
+        int P = b.Shape[1];  // Cols in B
+        
+        // Verify inner dimensions match
+        if (b.Shape[0] != N)
+        {
+            throw new ArgumentException(
+                $"Matrix multiplication requires inner dimensions to match. " +
+                $"Got A: {FormatShape(a.Shape)} and B: {FormatShape(b.Shape)}. " +
+                $"A has {N} columns but B has {b.Shape[0]} rows.");
+        }
+        
+        var numOps = MathHelper.GetNumericOperations<T>();
+        
+        // Create result tensor with shape [M, P]
+        var result = new Tensor<T>(new int[] { M, P });
+        
+        // Perform matrix multiplication: C[i,k] = sum(A[i,j] * B[j,k])
+        for (int i = 0; i < M; i++)
+        {
+            for (int k = 0; k < P; k++)
+            {
+                T sum = numOps.Zero;
+                
+                for (int j = 0; j < N; j++)
+                {
+                    int aIdx = i * N + j;      // A[i,j]
+                    int bIdx = j * P + k;      // B[j,k]
+                    
+                    T product = numOps.Multiply(a[aIdx], b[bIdx]);
+                    sum = numOps.Add(sum, product);
+                }
+                
+                int resultIdx = i * P + k;
+                result[resultIdx] = sum;
+            }
+        }
+        
+        return result;
+    }
+
     /// <summary>
     /// Helper method to check if two shapes match.
     /// </summary>

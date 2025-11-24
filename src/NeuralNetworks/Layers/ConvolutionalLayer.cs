@@ -157,6 +157,24 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// - It will improve its pattern recognition as it processes more data
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Gets the filter kernels of the convolutional layer.
+    /// </summary>
+    /// <returns>The filter tensor used for convolution operations.</returns>
+    public Tensor<T> GetFilters()
+    {
+        return _kernels;
+    }
+
+    /// <summary>
+    /// Gets the biases vector of the convolutional layer.
+    /// </summary>
+    /// <returns>The bias values added to each output channel.</returns>
+    public override Vector<T> GetBiases()
+    {
+        return _biases;
+    }
+
     public override bool SupportsTraining => true;
 
     /// <summary>

@@ -48,6 +48,24 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// parameters to train, but they do support the training process by allowing gradients
     /// to flow backward through them.
     /// </remarks>
+    /// <summary>
+    /// Gets the pool size for the pooling operation.
+    /// </summary>
+    /// <returns>An array containing the pool size for height and width dimensions.</returns>
+    public int[] GetPoolSize()
+    {
+        return new int[] { PoolSize, PoolSize };
+    }
+
+    /// <summary>
+    /// Gets the stride for the pooling operation.
+    /// </summary>
+    /// <returns>An array containing the stride for height and width dimensions.</returns>
+    public int[] GetStride()
+    {
+        return new int[] { Strides, Strides };
+    }
+
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -433,4 +451,34 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _maxIndices = new Tensor<int>(OutputShape);
     }
+
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        var pooledNode = Autodiff.TensorOperations<T>.MaxPool2D(inputNode, new int[] { PoolSize, PoolSize }, new int[] { Strides, Strides });
+
+        var activatedOutput = ApplyActivationToGraph(pooledNode);
+        return activatedOutput;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            IActivationFunction<T>? activation = ScalarActivation;
+            if (activation == null && VectorActivation != null)
+                activation = (IActivationFunction<T>)VectorActivation;
+            return activation?.SupportsJitCompilation ?? true;
+        }
+    }
+
 }

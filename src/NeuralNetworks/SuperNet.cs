@@ -10,6 +10,7 @@ using AiDotNet.Interpretability;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NumericOperations;
+using AiDotNet.Autodiff;
 
 namespace AiDotNet.NeuralNetworks
 {
@@ -1460,6 +1461,85 @@ namespace AiDotNet.NeuralNetworks
                     $"Failed to deserialize SuperNet state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
             }
         }
+
+    #region IJitCompilable Implementation
+
+    /// <summary>
+    /// Gets whether this SuperNet supports JIT compilation.
+    /// </summary>
+    /// <value>False - SuperNet uses dynamic architecture search with softmax-weighted operation mixing which cannot be statically compiled.</value>
+    /// <remarks>
+    /// <para>
+    /// SuperNet implements Differentiable Architecture Search (DARTS), which maintains a
+    /// continuous relaxation of the architecture space. During search, it simultaneously
+    /// evaluates all possible operations using softmax-weighted mixing. This dynamic
+    /// architecture selection makes the computation graph structure data-dependent and
+    /// non-deterministic, which is incompatible with JIT compilation requirements.
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT compilation requires a fixed, unchanging network structure.
+    ///
+    /// SuperNet is special because:
+    /// - It searches for the best architecture by trying many different structures
+    /// - During search, it keeps ALL possible operations active simultaneously
+    /// - The actual operations used depend on learned weights that change during training
+    /// - This means the network structure is not fixed
+    ///
+    /// However, after architecture search completes, you can:
+    /// 1. Call DeriveArchitecture() to get the final architecture
+    /// 2. Create a standard neural network with that architecture
+    /// 3. That final network CAN be JIT compiled for fast inference
+    ///
+    /// So while SuperNet itself cannot be JIT compiled during search,
+    /// the final discovered architecture can be.
+    /// </para>
+    /// </remarks>
+    public bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Exports the model's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes (parameters).</param>
+    /// <returns>Not supported for SuperNet during architecture search.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Always thrown - SuperNet cannot be exported as a static computation graph during architecture search.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// SuperNet uses differentiable architecture search (DARTS) with dynamic operation selection.
+    /// The computation graph structure depends on the current architecture parameters (alpha)
+    /// and changes during training, making it incompatible with static JIT compilation.
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT compilation needs to know the exact structure of your network
+    /// ahead of time so it can optimize it. But SuperNet is designed to search for the best structure,
+    /// so its structure keeps changing during training.
+    ///
+    /// Think of it like this:
+    /// - Regular neural network: "I will always use these specific operations in this order"
+    ///   → Can be JIT compiled
+    /// - SuperNet during search: "I'm trying out different combinations of operations to find the best"
+    ///   → Cannot be JIT compiled
+    ///
+    /// <b>Solution:</b> After architecture search completes:
+    /// 1. Call DeriveArchitecture() to get the final, fixed architecture
+    /// 2. Create a new NeuralNetwork with that specific architecture
+    /// 3. Train the new network (transfer weights if desired)
+    /// 4. The new network CAN be JIT compiled for deployment
+    ///
+    /// This two-stage approach gives you the best of both worlds:
+    /// - Use SuperNet to automatically discover great architectures
+    /// - Use JIT compilation for fast inference in production
+    /// </para>
+    /// </remarks>
+    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "SuperNet cannot be exported as a computation graph for JIT compilation during architecture search. " +
+            "SuperNet uses differentiable architecture search (DARTS) with dynamic, softmax-weighted operation mixing, " +
+            "where the computation graph structure is data-dependent and changes during training. " +
+            "To use JIT compilation: (1) Complete architecture search, (2) Call DeriveArchitecture() to get the final architecture, " +
+            "(3) Create a standard NeuralNetwork with that architecture, (4) JIT compile the final network for deployment.");
+    }
+
+    #endregion
     }
 }
-

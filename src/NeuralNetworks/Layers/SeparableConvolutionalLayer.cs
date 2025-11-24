@@ -1231,4 +1231,30 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         _pointwiseKernelsVelocity = null;
         _biasesVelocity = null;
     }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Currently <c>false</c> because this layer requires separable convolution operations for JIT support.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Exports the separable convolutional layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node.</returns>
+    /// <remarks>
+    /// <para>
+    /// Separable convolutional layers require depthwise and pointwise convolution operations for JIT compilation.
+    /// This will be implemented in a future update.
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "SeparableConvolutionalLayer requires depthwise and pointwise convolution operations for JIT compilation. " +
+            "This will be implemented in a future update.");
+    }
 }

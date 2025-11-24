@@ -556,4 +556,47 @@ public class ConcatenateLayer<T> : LayerBase<T>
         _lastInputs = null;
         _lastOutput = null;
     }
+
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShapes == null || InputShapes.Length < 2)
+            throw new InvalidOperationException("ConcatenateLayer requires at least two inputs.");
+
+        if (OutputShape == null || OutputShape.Length == 0)
+            throw new InvalidOperationException("Layer output shape not configured.");
+
+        // Create symbolic input nodes for each input (multi-input layer)
+        // Each input has batch dimension of 1 that adapts to actual batch size at runtime
+        var computationInputNodes = new List<Autodiff.ComputationNode<T>>();
+        for (int i = 0; i < InputShapes.Length; i++)
+        {
+            var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShapes[i]).ToArray());
+            var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, $"input_{i}");
+            computationInputNodes.Add(inputNode);
+            inputNodes.Add(inputNode);
+        }
+
+        // Build symbolic computation graph: concatenate along specified axis
+        // Note: axis needs to account for batch dimension (axis 0), so add 1
+        var concatNode = Autodiff.TensorOperations<T>.Concat(computationInputNodes, axis: _axis + 1);
+
+        // Apply activation function to symbolic graph
+        var activatedOutput = ApplyActivationToGraph(concatNode);
+        return activatedOutput;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            // Check if the activation function supports JIT compilation
+            IActivationFunction<T>? activation = ScalarActivation;
+            if (activation == null && VectorActivation != null)
+                activation = (IActivationFunction<T>)VectorActivation;
+            return activation?.SupportsJitCompilation ?? true;
+        }
+    }
 }
