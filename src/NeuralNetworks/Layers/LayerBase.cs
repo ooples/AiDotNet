@@ -727,6 +727,7 @@ public abstract class LayerBase<T> : ILayer<T>
     /// </para>
     /// </remarks>
     public virtual bool SupportsJitCompilation => false;
+
     /// <summary>
     /// Performs the forward pass of the layer.
     /// </summary>
