@@ -167,6 +167,31 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the number of attention heads in this layer.
+    /// </summary>
+    public int HeadCount => _headCount;
+
+    /// <summary>
+    /// Gets the query projection weights for JIT compilation.
+    /// </summary>
+    public Matrix<T> GetQueryWeights() => _queryWeights;
+
+    /// <summary>
+    /// Gets the key projection weights for JIT compilation.
+    /// </summary>
+    public Matrix<T> GetKeyWeights() => _keyWeights;
+
+    /// <summary>
+    /// Gets the value projection weights for JIT compilation.
+    /// </summary>
+    public Matrix<T> GetValueWeights() => _valueWeights;
+
+    /// <summary>
+    /// Gets the output projection weights for JIT compilation.
+    /// </summary>
+    public Matrix<T> GetOutputWeights() => _outputWeights;
+
+    /// <summary>
     /// Creates a new multi-head attention layer with the specified dimensions and head count.
     /// </summary>
     /// <param name="sequenceLength">The length of the input sequence.</param>

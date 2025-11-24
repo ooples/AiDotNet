@@ -210,6 +210,16 @@ public class FeedForwardLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the weight tensor for JIT compilation and graph composition.
+    /// </summary>
+    public Tensor<T> GetWeightsTensor() => Weights;
+
+    /// <summary>
+    /// Gets the bias tensor for JIT compilation and graph composition.
+    /// </summary>
+    public Tensor<T> GetBiasesTensor() => Biases;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="FeedForwardLayer{T}"/> class with a scalar activation function.
     /// </summary>
     /// <param name="inputSize">The number of input neurons.</param>

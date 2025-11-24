@@ -1108,27 +1108,137 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _feedForward == null || _norm3 == null)
             throw new InvalidOperationException("Sublayers not initialized. Initialize the layer first.");
 
-        // Create symbolic input node (decoder input)
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
+        // Create symbolic input nodes: decoder input and encoder output
+        var symbolicDecoderInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var decoderInputNode = TensorOperations<T>.Variable(symbolicDecoderInput, "decoder_input");
+        inputNodes.Add(decoderInputNode);
 
-        // Note: TransformerDecoderLayer is a composite layer.
-        // A complete JIT implementation would compose sublayer graphs:
-        // 1. self_attn_out = _selfAttention.ExportComputationGraph([inputNode])  // masked
-        // 2. residual1 = Add(inputNode, self_attn_out)
-        // 3. norm1_out = _norm1.ExportComputationGraph([residual1])
-        // 4. cross_attn_out = _crossAttention.ExportComputationGraph([norm1_out, encoder_output])
-        // 5. residual2 = Add(norm1_out, cross_attn_out)
-        // 6. norm2_out = _norm2.ExportComputationGraph([residual2])
-        // 7. ff_out = _feedForward.ExportComputationGraph([norm2_out])
-        // 8. residual3 = Add(norm2_out, ff_out)
-        // 9. output = _norm3.ExportComputationGraph([residual3])
-        //
-        // For now, we return the input as placeholder.
-        // Sublayers can be independently JIT compiled when called.
+        // Encoder output has same shape as decoder input in standard transformers
+        var symbolicEncoderOutput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var encoderOutputNode = TensorOperations<T>.Variable(symbolicEncoderOutput, "encoder_output");
+        inputNodes.Add(encoderOutputNode);
 
-        return inputNode;
+        // Step 1: Masked self-attention sublayer (decoder attends to itself)
+        var selfAttentionOut = ApplyMultiHeadAttentionGraph(_selfAttention, decoderInputNode, decoderInputNode, decoderInputNode);
+
+        // Step 2: First residual connection: residual1 = input + self_attention_out
+        var residual1 = TensorOperations<T>.Add(decoderInputNode, selfAttentionOut);
+
+        // Step 3: First layer normalization
+        var normalized1 = ApplyLayerNormGraph(_norm1, residual1);
+
+        // Step 4: Cross-attention sublayer (decoder attends to encoder output)
+        // Query comes from decoder, Key and Value come from encoder
+        var crossAttentionOut = ApplyMultiHeadAttentionGraph(_crossAttention, normalized1, encoderOutputNode, encoderOutputNode);
+
+        // Step 5: Second residual connection: residual2 = normalized1 + cross_attention_out
+        var residual2 = TensorOperations<T>.Add(normalized1, crossAttentionOut);
+
+        // Step 6: Second layer normalization
+        var normalized2 = ApplyLayerNormGraph(_norm2, residual2);
+
+        // Step 7: Feed-forward sublayer
+        var ffOut = ApplyFeedForwardGraph(_feedForward, normalized2);
+
+        // Step 8: Third residual connection: residual3 = normalized2 + ff_out
+        var residual3 = TensorOperations<T>.Add(normalized2, ffOut);
+
+        // Step 9: Third layer normalization (final output)
+        var output = ApplyLayerNormGraph(_norm3, residual3);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Applies multi-head attention graph to input nodes (supports both self-attention and cross-attention).
+    /// </summary>
+    private ComputationNode<T> ApplyMultiHeadAttentionGraph(
+        MultiHeadAttentionLayer<T> attentionLayer,
+        ComputationNode<T> query,
+        ComputationNode<T> key,
+        ComputationNode<T> value)
+    {
+        // Get attention projection weights
+        var queryWeights = attentionLayer.GetQueryWeights();
+        var keyWeights = attentionLayer.GetKeyWeights();
+        var valueWeights = attentionLayer.GetValueWeights();
+        var outputWeights = attentionLayer.GetOutputWeights();
+
+        if (queryWeights == null || keyWeights == null || valueWeights == null || outputWeights == null)
+            throw new InvalidOperationException("Attention weights not initialized.");
+
+        // Create constant nodes for projection weights using Tensor.FromMatrix
+        var wqNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(queryWeights), "Wq");
+        var wkNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(keyWeights), "Wk");
+        var wvNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(valueWeights), "Wv");
+        var woNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(outputWeights), "Wo");
+
+        // Apply multi-head attention
+        return TensorOperations<T>.MultiHeadAttention(
+            query: query,
+            key: key,
+            value: value,
+            numHeads: attentionLayer.HeadCount,
+            wQ: wqNode,
+            wK: wkNode,
+            wV: wvNode,
+            wO: woNode);
+    }
+
+    /// <summary>
+    /// Applies layer normalization graph to an input node.
+    /// </summary>
+    private ComputationNode<T> ApplyLayerNormGraph(LayerNormalizationLayer<T> normLayer, ComputationNode<T> input)
+    {
+        // Get normalization parameters
+        var gamma = normLayer.GetGamma();
+        var beta = normLayer.GetBeta();
+        var normalizedShape = normLayer.GetNormalizedShape();
+        var epsilon = Convert.ToDouble(normLayer.GetEpsilon());
+
+        // Create constant nodes for gamma and beta
+        var gammaTensor = new Tensor<T>(new int[] { gamma.Length });
+        var betaTensor = new Tensor<T>(new int[] { beta.Length });
+        for (int i = 0; i < gamma.Length; i++)
+        {
+            gammaTensor[i] = gamma[i];
+            betaTensor[i] = beta[i];
+        }
+        var gammaNode = TensorOperations<T>.Constant(gammaTensor, "gamma");
+        var betaNode = TensorOperations<T>.Constant(betaTensor, "beta");
+
+        return TensorOperations<T>.LayerNorm(input, normalizedShape, gammaNode, betaNode, epsilon);
+    }
+
+    /// <summary>
+    /// Applies feed-forward graph to an input node.
+    /// </summary>
+    private ComputationNode<T> ApplyFeedForwardGraph(FeedForwardLayer<T> ffLayer, ComputationNode<T> input)
+    {
+        // Get feed-forward weights and biases directly as tensors
+        var weightsTensor = ffLayer.GetWeightsTensor();
+        var biasTensor = ffLayer.GetBiasesTensor();
+
+        if (weightsTensor == null || biasTensor == null)
+            throw new InvalidOperationException("Feed-forward layer weights not initialized.");
+
+        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "ff_weights");
+        var biasNode = TensorOperations<T>.Constant(biasTensor, "ff_bias");
+
+        // Linear transformation: output = input @ weights^T + bias
+        var weightsT = TensorOperations<T>.Transpose(weightsNode);
+        var linear = TensorOperations<T>.MatrixMultiply(input, weightsT);
+        var withBias = TensorOperations<T>.Add(linear, biasNode);
+
+        // Apply activation if present using the activation's own ApplyToGraph method
+        // This follows OCP - each activation knows how to export itself to a graph
+        var activation = ffLayer.ScalarActivation;
+        if (activation != null)
+        {
+            return activation.ApplyToGraph(withBias);
+        }
+
+        return withBias;
     }
 
     /// <summary>

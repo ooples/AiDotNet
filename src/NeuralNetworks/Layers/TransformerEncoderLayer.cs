@@ -761,24 +761,119 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_selfAttention == null || _norm1 == null || _feedForward == null || _norm2 == null)
             throw new InvalidOperationException("Sublayers not initialized. Initialize the layer first.");
 
-        // Create symbolic input node
+        // Create symbolic input node with batch dimension
+        // InputShape is [sequenceLength, embeddingDimension]
         var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "encoder_input");
         inputNodes.Add(inputNode);
 
-        // Note: TransformerEncoderLayer is a composite layer.
-        // A complete JIT implementation would compose sublayer graphs:
-        // 1. attention_out = _selfAttention.ExportComputationGraph([inputNode])
-        // 2. residual1 = Add(inputNode, attention_out)
-        // 3. norm1_out = _norm1.ExportComputationGraph([residual1])
-        // 4. ff_out = _feedForward.ExportComputationGraph([norm1_out])
-        // 5. residual2 = Add(norm1_out, ff_out)
-        // 6. output = _norm2.ExportComputationGraph([residual2])
-        //
-        // For now, we return the input as placeholder.
-        // Sublayers can be independently JIT compiled when called.
+        // Step 1: Self-attention sublayer using MultiHeadAttention operation
+        var attentionOut = ApplyMultiHeadAttentionGraph(_selfAttention, inputNode);
 
-        return inputNode;
+        // Step 2: First residual connection: residual1 = input + attention_out
+        var residual1 = TensorOperations<T>.Add(inputNode, attentionOut);
+
+        // Step 3: First layer normalization
+        var normalized1 = ApplyLayerNormGraph(_norm1, residual1);
+
+        // Step 4: Feed-forward sublayer
+        var ffApplied = ApplyFeedForwardGraph(_feedForward, normalized1);
+
+        // Step 5: Second residual connection: residual2 = normalized1 + ff_out
+        var residual2 = TensorOperations<T>.Add(normalized1, ffApplied);
+
+        // Step 6: Second layer normalization
+        var output = ApplyLayerNormGraph(_norm2, residual2);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Applies multi-head attention graph to an input node.
+    /// </summary>
+    private ComputationNode<T> ApplyMultiHeadAttentionGraph(MultiHeadAttentionLayer<T> attentionLayer, ComputationNode<T> input)
+    {
+        // Get attention projection weights
+        var queryWeights = attentionLayer.GetQueryWeights();
+        var keyWeights = attentionLayer.GetKeyWeights();
+        var valueWeights = attentionLayer.GetValueWeights();
+        var outputWeights = attentionLayer.GetOutputWeights();
+
+        if (queryWeights == null || keyWeights == null || valueWeights == null || outputWeights == null)
+            throw new InvalidOperationException("Attention weights not initialized.");
+
+        // Create constant nodes for projection weights using Tensor.FromMatrix
+        var wqNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(queryWeights), "Wq");
+        var wkNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(keyWeights), "Wk");
+        var wvNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(valueWeights), "Wv");
+        var woNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(outputWeights), "Wo");
+
+        // Apply multi-head attention (self-attention: query, key, value all from same input)
+        return TensorOperations<T>.MultiHeadAttention(
+            query: input,
+            key: input,
+            value: input,
+            numHeads: attentionLayer.HeadCount,
+            wQ: wqNode,
+            wK: wkNode,
+            wV: wvNode,
+            wO: woNode);
+    }
+
+    /// <summary>
+    /// Applies layer normalization graph to an input node.
+    /// </summary>
+    private ComputationNode<T> ApplyLayerNormGraph(LayerNormalizationLayer<T> normLayer, ComputationNode<T> input)
+    {
+        // Get normalization parameters
+        var gamma = normLayer.GetGamma();
+        var beta = normLayer.GetBeta();
+        var normalizedShape = normLayer.GetNormalizedShape();
+        var epsilon = Convert.ToDouble(normLayer.GetEpsilon());
+
+        // Create constant nodes for gamma and beta
+        var gammaTensor = new Tensor<T>(new int[] { gamma.Length });
+        var betaTensor = new Tensor<T>(new int[] { beta.Length });
+        for (int i = 0; i < gamma.Length; i++)
+        {
+            gammaTensor[i] = gamma[i];
+            betaTensor[i] = beta[i];
+        }
+        var gammaNode = TensorOperations<T>.Constant(gammaTensor, "gamma");
+        var betaNode = TensorOperations<T>.Constant(betaTensor, "beta");
+
+        return TensorOperations<T>.LayerNorm(input, normalizedShape, gammaNode, betaNode, epsilon);
+    }
+
+    /// <summary>
+    /// Applies feed-forward graph to an input node.
+    /// </summary>
+    private ComputationNode<T> ApplyFeedForwardGraph(FeedForwardLayer<T> ffLayer, ComputationNode<T> input)
+    {
+        // Get feed-forward weights and biases directly as tensors
+        var weightsTensor = ffLayer.GetWeightsTensor();
+        var biasTensor = ffLayer.GetBiasesTensor();
+
+        if (weightsTensor == null || biasTensor == null)
+            throw new InvalidOperationException("Feed-forward layer weights not initialized.");
+
+        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "ff_weights");
+        var biasNode = TensorOperations<T>.Constant(biasTensor, "ff_bias");
+
+        // Linear transformation: output = input @ weights + bias
+        var weightsT = TensorOperations<T>.Transpose(weightsNode);
+        var linear = TensorOperations<T>.MatrixMultiply(input, weightsT);
+        var withBias = TensorOperations<T>.Add(linear, biasNode);
+
+        // Apply activation if present using the activation's own ApplyToGraph method
+        // This follows OCP - each activation knows how to export itself to a graph
+        var activation = ffLayer.ScalarActivation;
+        if (activation != null)
+        {
+            return activation.ApplyToGraph(withBias);
+        }
+
+        return withBias;
     }
 
     /// <summary>
