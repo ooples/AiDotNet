@@ -565,16 +565,19 @@ public class ConcatenateLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // Note: ConcatenateLayer requires TensorOperations<T>.Concatenate() operation
-        // which is not yet implemented. For now, return first input as placeholder.
-        // TODO: Implement TensorOperations<T>.Concatenate(inputNodes, axis: _axis)
-
+        // ConcatenateLayer expects multiple inputs - create symbolic input
         var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        return inputNode; // Placeholder - needs Concatenate operation
+        // If multiple inputs are provided, concatenate them using TensorOperations.Concat()
+        if (inputNodes.Count > 1)
+        {
+            return TensorOperations<T>.Concat(inputNodes, axis: _axis);
+        }
+
+        return inputNode;
     }
 
-    public override bool SupportsJitCompilation => false; // Requires TensorOperations.Concatenate()
+    public override bool SupportsJitCompilation => true;
 }
