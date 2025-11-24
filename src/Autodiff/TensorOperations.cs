@@ -5315,6 +5315,228 @@ public static class TensorOperations<T>
             ExtractPaddedDataRecursive(source, dest, padding, destIndices, sourceIndices, dimension + 1);
         }
     }
+    /// <summary>
+    /// Applies HierarchicalSoftmax activation (simplified as grouped softmax for JIT compilation).
+    /// </summary>
+    /// <param name="input">Input computation node [batch, features].</param>
+    /// <param name="numGroups">Number of groups to divide features into (default 1 = regular softmax).</param>
+    /// <returns>Computation node with hierarchical softmax applied.</returns>
+    /// <remarks>
+    /// Simplified implementation for JIT: divides output into groups and applies softmax within each group.
+    /// Full tree-based hierarchical softmax with learnable parameters is available in HierarchicalSoftmaxActivation class.
+    /// </remarks>
+    public static ComputationNode<T> HierarchicalSoftmax(ComputationNode<T> input, int numGroups = 1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = input.Value.Shape;
+
+        if (shape.Length != 2)
+            throw new ArgumentException("HierarchicalSoftmax requires 2D input [batch, features]");
+
+        int batchSize = shape[0];
+        int features = shape[1];
+
+        if (features % numGroups != 0)
+            throw new ArgumentException($"Features ({features}) must be divisible by numGroups ({numGroups})");
+
+        int groupSize = features / numGroups;
+        var result = new Tensor<T>(shape);
+
+        // Forward pass: apply softmax within each group
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int g = 0; g < numGroups; g++)
+            {
+                int groupStart = g * groupSize;
+
+                // Find max for numerical stability
+                var maxVal = input.Value[b, groupStart];
+                for (int i = 1; i < groupSize; i++)
+                {
+                    if (numOps.GreaterThan(input.Value[b, groupStart + i], maxVal))
+                        maxVal = input.Value[b, groupStart + i];
+                }
+
+                // Compute exp(x - max) and sum
+                var expSum = numOps.Zero;
+                var expValues = new T[groupSize];
+                for (int i = 0; i < groupSize; i++)
+                {
+                    var shifted = numOps.Subtract(input.Value[b, groupStart + i], maxVal);
+                    expValues[i] = numOps.Exp(shifted);
+                    expSum = numOps.Add(expSum, expValues[i]);
+                }
+
+                // Normalize
+                for (int i = 0; i < groupSize; i++)
+                {
+                    result[b, groupStart + i] = numOps.Divide(expValues[i], expSum);
+                }
+            }
+        }
+
+        // Backward function: softmax Jacobian within each group
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradA = new Tensor<T>(shape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int g = 0; g < numGroups; g++)
+                    {
+                        int groupStart = g * groupSize;
+
+                        // Compute sum of (gradient * softmax) for this group
+                        var dotProduct = numOps.Zero;
+                        for (int i = 0; i < groupSize; i++)
+                        {
+                            dotProduct = numOps.Add(dotProduct,
+                                numOps.Multiply(gradient[b, groupStart + i], result[b, groupStart + i]));
+                        }
+
+                        // Compute gradient for each element in group
+                        for (int i = 0; i < groupSize; i++)
+                        {
+                            var gradMinusDot = numOps.Subtract(gradient[b, groupStart + i], dotProduct);
+                            gradA[b, groupStart + i] = numOps.Multiply(result[b, groupStart + i], gradMinusDot);
+                        }
+                    }
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradA);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies Maxout activation (takes maximum over groups of features).
+    /// </summary>
+    /// <param name="input">Input computation node [batch, features].</param>
+    /// <param name="groupSize">Size of each group (features must be divisible by this).</param>
+    /// <returns>Computation node with maxout applied [batch, features/groupSize].</returns>
+    /// <remarks>
+    /// Maxout selects the maximum value from each group of features, reducing output dimensionality.
+    /// Gradient flows only to the maximum element in each group.
+    /// </remarks>
+    public static ComputationNode<T> Maxout(ComputationNode<T> input, int groupSize)
+    {
+        if (groupSize < 2)
+            throw new ArgumentException("Maxout groupSize must be at least 2", nameof(groupSize));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = input.Value.Shape;
+
+        if (shape.Length != 2)
+            throw new ArgumentException("Maxout requires 2D input [batch, features]");
+
+        int batchSize = shape[0];
+        int features = shape[1];
+
+        if (features % groupSize != 0)
+            throw new ArgumentException($"Features ({features}) must be divisible by groupSize ({groupSize})");
+
+        int outputSize = features / groupSize;
+        var resultShape = new int[] { batchSize, outputSize };
+        var result = new Tensor<T>(resultShape);
+        var maxIndices = new int[batchSize, outputSize]; // Track which element was maximum
+
+        // Forward pass: select maximum from each group
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < outputSize; i++)
+            {
+                int groupStart = i * groupSize;
+                var maxValue = input.Value[b, groupStart];
+                int maxIdx = groupStart;
+
+                for (int j = 1; j < groupSize; j++)
+                {
+                    int idx = groupStart + j;
+                    if (numOps.GreaterThan(input.Value[b, idx], maxValue))
+                    {
+                        maxValue = input.Value[b, idx];
+                        maxIdx = idx;
+                    }
+                }
+
+                result[b, i] = maxValue;
+                maxIndices[b, i] = maxIdx;
+            }
+        }
+
+        // Backward function: gradient flows only to maximum elements
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradA = new Tensor<T>(shape);
+                // Initialize to zero (all elements except maximums get zero gradient)
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int i = 0; i < outputSize; i++)
+                    {
+                        int maxIdx = maxIndices[b, i];
+                        gradA[b, maxIdx] = gradient[b, i];
+                    }
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradA);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+
 
     /// <summary>
     /// Applies a generic activation function (scalar or element-wise) with automatic differentiation.
