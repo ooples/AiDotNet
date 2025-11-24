@@ -5347,7 +5347,42 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("GELU gradient computation will be added in gradient implementation phase");
+                // ∂GELU/∂x = Φ(x) + x * φ(x)
+                // where Φ(x) = CDF of standard normal = 0.5 * (1 + erf(x / sqrt(2)))
+                //       φ(x) = PDF of standard normal = (1 / sqrt(2π)) * exp(-x² / 2)
+
+                var inputValue = a.Value;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    var xDouble = numOps.ToDouble(x);
+
+                    // Φ(x) = 0.5 * (1 + erf(x / sqrt(2)))
+                    var cdf = 0.5 * (1.0 + Erf(xDouble / Math.Sqrt(2.0)));
+
+                    // φ(x) = (1 / sqrt(2π)) * exp(-x² / 2)
+                    var pdf = (1.0 / Math.Sqrt(2.0 * Math.PI)) * Math.Exp(-xDouble * xDouble / 2.0);
+
+                    // ∂GELU/∂x = Φ(x) + x * φ(x)
+                    var grad = cdf + xDouble * pdf;
+
+                    gradInput[i] = numOps.Multiply(gradient[i], numOps.FromDouble(grad));
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -5389,7 +5424,44 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("ELU gradient computation will be added in gradient implementation phase");
+                // ∂ELU/∂x = 1 if x > 0
+                //         = α * exp(x) if x ≤ 0
+                //         = ELU(x) + α if x ≤ 0
+
+                var inputValue = a.Value;
+                var outputValue = result;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    T grad;
+
+                    if (numOps.GreaterThan(x, numOps.Zero))
+                    {
+                        grad = numOps.One; // ∂ELU/∂x = 1 for x > 0
+                    }
+                    else
+                    {
+                        // ∂ELU/∂x = ELU(x) + α for x ≤ 0
+                        grad = numOps.Add(outputValue[i], alphaT);
+                    }
+
+                    gradInput[i] = numOps.Multiply(gradient[i], grad);
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -5431,7 +5503,44 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("SELU gradient computation will be added in gradient implementation phase");
+                // ∂SELU/∂x = λ if x > 0
+                //          = λ * α * exp(x) if x ≤ 0
+                // where λ = scale, α = alpha
+
+                var inputValue = a.Value;
+                var outputValue = result;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    T grad;
+
+                    if (numOps.GreaterThan(x, numOps.Zero))
+                    {
+                        grad = scale; // ∂SELU/∂x = λ for x > 0
+                    }
+                    else
+                    {
+                        // ∂SELU/∂x = λ * (SELU(x) / λ + α) = SELU(x) + λ * α for x ≤ 0
+                        grad = numOps.Add(outputValue[i], numOps.Multiply(scale, alpha));
+                    }
+
+                    gradInput[i] = numOps.Multiply(gradient[i], grad);
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -5475,7 +5584,43 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("CELU gradient computation will be added in gradient implementation phase");
+                // ∂CELU/∂x = 1 if x > 0
+                //          = exp(x/α) if x ≤ 0
+
+                var inputValue = a.Value;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    T grad;
+
+                    if (numOps.GreaterThan(x, numOps.Zero))
+                    {
+                        grad = numOps.One; // ∂CELU/∂x = 1 for x > 0
+                    }
+                    else
+                    {
+                        // ∂CELU/∂x = exp(x/α) for x ≤ 0
+                        var xDivAlpha = numOps.Divide(x, alphaT);
+                        grad = numOps.Exp(xDivAlpha);
+                    }
+
+                    gradInput[i] = numOps.Multiply(gradient[i], grad);
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -5512,7 +5657,31 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("LeakyReLU gradient computation will be added in gradient implementation phase");
+                // ∂LeakyReLU/∂x = 1 if x > 0
+                //               = negativeSlope if x ≤ 0
+
+                var inputValue = a.Value;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    var grad = numOps.GreaterThan(x, numOps.Zero) ? numOps.One : slope;
+                    gradInput[i] = numOps.Multiply(gradient[i], grad);
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -5549,7 +5718,31 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("PReLU gradient computation will be added in gradient implementation phase");
+                // ∂PReLU/∂x = 1 if x > 0
+                //           = α if x ≤ 0
+
+                var inputValue = a.Value;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    var grad = numOps.GreaterThan(x, numOps.Zero) ? numOps.One : alphaT;
+                    gradInput[i] = numOps.Multiply(gradient[i], grad);
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -5588,7 +5781,31 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("RReLU gradient computation will be added in gradient implementation phase");
+                // ∂RReLU/∂x = 1 if x > 0
+                //           = midpoint (fixed during inference) if x ≤ 0
+
+                var inputValue = a.Value;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    var grad = numOps.GreaterThan(x, numOps.Zero) ? numOps.One : slope;
+                    gradInput[i] = numOps.Multiply(gradient[i], grad);
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -5625,7 +5842,31 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("ThresholdedReLU gradient computation will be added in gradient implementation phase");
+                // ∂ThresholdedReLU/∂x = 1 if x > threshold
+                //                     = 0 otherwise
+
+                var inputValue = a.Value;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    var grad = numOps.GreaterThan(x, threshT) ? numOps.One : numOps.Zero;
+                    gradInput[i] = numOps.Multiply(gradient[i], grad);
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -6542,5 +6783,32 @@ public static class TensorOperations<T>
             tape.RecordOperation(node);
 
         return node;
+    }
+
+    /// <summary>
+    /// Approximation of the error function using Abramowitz and Stegun formula.
+    /// </summary>
+    /// <param name="x">The input value.</param>
+    /// <returns>The error function value erf(x).</returns>
+    /// <remarks>
+    /// Used for GELU gradient computation. Maximum error: 1.5 × 10⁻⁷
+    /// </remarks>
+    private static double Erf(double x)
+    {
+        // Abramowitz and Stegun approximation
+        double a1 = 0.254829592;
+        double a2 = -0.284496736;
+        double a3 = 1.421413741;
+        double a4 = -1.453152027;
+        double a5 = 1.061405429;
+        double p = 0.3275911;
+
+        int sign = x < 0 ? -1 : 1;
+        x = Math.Abs(x);
+
+        double t = 1.0 / (1.0 + p * x);
+        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
+
+        return sign * y;
     }
 }
