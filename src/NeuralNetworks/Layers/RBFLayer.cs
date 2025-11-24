@@ -675,13 +675,13 @@ public class RBFLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // RBFLayer uses radial basis functions with custom distance calculations
+        // RBFLayer uses distance calculations that could be expressed with existing operations
         throw new NotSupportedException(
-            "RBFLayer does not support JIT compilation because it requires radial basis function computations " +
-            "with distance calculations between inputs and learned center points that are not available in the " +
-            "current TensorOperations framework.");
+            "RBFLayer does not currently support JIT compilation. However, it COULD be supported as RBF distance " +
+            "calculations (sqrt(sum((x - center)^2))) can be expressed using Subtract, Square, Sum, and Sqrt operations. " +
+            "These operations likely already exist or could easily be added to TensorOperations.");
     }
 
-    public override bool SupportsJitCompilation => false; // Requires RBF distance calculations
+    public override bool SupportsJitCompilation => false; // Could be supported with distance ops
 
 }

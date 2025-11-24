@@ -1132,13 +1132,13 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // MemoryReadLayer accesses external memory with attention mechanism
+        // MemoryReadLayer uses attention operations that are standard
         throw new NotSupportedException(
-            "MemoryReadLayer does not support JIT compilation because it requires access to external memory state " +
-            "with attention-based addressing. The layer's memory access patterns depend on runtime attention scores " +
-            "and cannot be statically compiled.");
+            "MemoryReadLayer does not currently support JIT compilation. However, it COULD be supported as attention " +
+            "operations (scores = softmax(Q @ K.T), output = scores @ V) can be expressed using MatrixMultiply, Transpose, " +
+            "and Softmax operations that are likely already available in TensorOperations.");
     }
 
-    public override bool SupportsJitCompilation => false; // Requires external memory access
+    public override bool SupportsJitCompilation => false; // Could be supported with attention ops
 
 }

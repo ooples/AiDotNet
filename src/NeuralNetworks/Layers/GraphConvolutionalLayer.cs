@@ -1093,13 +1093,13 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // GraphConvolutionalLayer requires adjacency matrix operations and graph-specific computations
+        // GraphConvolutionalLayer uses matrix multiplication which is standard
         throw new NotSupportedException(
-            "GraphConvolutionalLayer does not support JIT compilation because it processes graph-structured data " +
-            "using an adjacency matrix and requires graph-specific operations for node feature aggregation that are " +
-            "not available in the standard TensorOperations framework.");
+            "GraphConvolutionalLayer does not currently support JIT compilation. However, it COULD be supported as " +
+            "graph convolution is just matrix multiplication: output = AdjacencyMatrix * Features * Weights. This can " +
+            "be expressed using standard MatrixMultiply operations already available in TensorOperations.");
     }
 
-    public override bool SupportsJitCompilation => false; // Requires graph-specific operations
+    public override bool SupportsJitCompilation => false; // Could be supported with MatrixMultiply
 
 }

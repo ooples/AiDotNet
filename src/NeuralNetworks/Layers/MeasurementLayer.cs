@@ -331,13 +331,13 @@ public class MeasurementLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // MeasurementLayer performs quantum measurement operations on complex-valued states
+        // MeasurementLayer computes |amplitude|^2 which could be expressed with existing operations
         throw new NotSupportedException(
-            "MeasurementLayer does not support JIT compilation because it performs quantum measurement operations " +
-            "on complex-valued quantum state amplitudes, requiring operations with complex numbers and probability " +
-            "collapse that are not available in the TensorOperations framework.");
+            "MeasurementLayer does not currently support JIT compilation. However, it COULD be supported by adding " +
+            "complex number operations to TensorOperations. Quantum measurement (probabilities = |amplitude|^2 / sum(|amplitude|^2)) " +
+            "can be computed as (real^2 + imag^2) / sum(real^2 + imag^2) using standard arithmetic operations.");
     }
 
-    public override bool SupportsJitCompilation => false; // Requires quantum measurement operations
+    public override bool SupportsJitCompilation => false; // Could be supported with complex ops
 
 }

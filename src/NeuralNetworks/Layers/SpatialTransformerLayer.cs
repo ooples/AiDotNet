@@ -1514,12 +1514,13 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // SpatialTransformerLayer requires grid generation and bilinear interpolation
+        // SpatialTransformerLayer uses grid generation and sampling that could be added
         throw new NotSupportedException(
-            "SpatialTransformerLayer does not support JIT compilation because it requires learnable spatial transformations " +
-            "with grid generation and bilinear interpolation sampling that are not available in the TensorOperations framework.");
+            "SpatialTransformerLayer does not currently support JIT compilation. However, it COULD be supported by adding " +
+            "GridGenerator and BilinearSampler operations to TensorOperations. Both are deterministic operations that can " +
+            "be expressed mathematically and represented in a computation graph.");
     }
 
-    public override bool SupportsJitCompilation => false; // Requires spatial transformation operations
+    public override bool SupportsJitCompilation => false; // Could be supported with GridGenerator + BilinearSampler
 
 }

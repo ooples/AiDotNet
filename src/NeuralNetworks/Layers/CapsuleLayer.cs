@@ -894,13 +894,13 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // CapsuleLayer uses dynamic routing algorithm with iterative refinement
+        // CapsuleLayer uses routing algorithm with fixed iterations that could be unrolled
         throw new NotSupportedException(
-            "CapsuleLayer does not support JIT compilation because it requires dynamic routing between capsules " +
-            "with multiple routing iterations. The routing algorithm iteratively updates coupling coefficients, " +
-            "which cannot be represented in a static computation graph.");
+            "CapsuleLayer does not currently support JIT compilation. However, it COULD be supported by adding " +
+            "loop unrolling to TensorOperations since the number of routing iterations is fixed at construction time. " +
+            "The routing algorithm could be unrolled into a static computation graph with the appropriate operations.");
     }
 
-    public override bool SupportsJitCompilation => false; // Requires dynamic routing iterations
+    public override bool SupportsJitCompilation => false; // Could be supported with loop unrolling
 
 }

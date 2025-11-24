@@ -614,13 +614,13 @@ public class QuantumLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // QuantumLayer simulates quantum computing operations with complex quantum state manipulations
+        // QuantumLayer uses unitary matrix operations that could be expressed with complex number support
         throw new NotSupportedException(
-            "QuantumLayer does not support JIT compilation because it simulates quantum computing operations " +
-            "including quantum gates, superposition, and entanglement that require specialized quantum state " +
-            "manipulation not available in classical computation graphs.");
+            "QuantumLayer does not currently support JIT compilation. However, it COULD be supported by adding " +
+            "complex number operations to TensorOperations. Quantum gates are unitary matrices, and quantum state " +
+            "evolution is just matrix multiplication with complex numbers, which could be represented in a computation graph.");
     }
 
-    public override bool SupportsJitCompilation => false; // Requires quantum simulation operations
+    public override bool SupportsJitCompilation => false; // Could be supported with complex number ops
 
 }

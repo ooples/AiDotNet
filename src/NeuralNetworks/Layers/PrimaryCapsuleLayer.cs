@@ -700,13 +700,13 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // PrimaryCapsuleLayer creates capsule representations with custom squashing
+        // PrimaryCapsuleLayer uses convolutions and squashing that could be added to TensorOperations
         throw new NotSupportedException(
-            "PrimaryCapsuleLayer does not support JIT compilation because it uses capsule-specific operations " +
-            "including squashing activations and capsule grouping that require specialized processing not available " +
-            "in the static computation graph framework.");
+            "PrimaryCapsuleLayer does not currently support JIT compilation. However, it COULD be supported by adding " +
+            "Conv2D and custom squashing activation operations to TensorOperations. The layer's operations are " +
+            "deterministic and could be represented in a static computation graph.");
     }
 
-    public override bool SupportsJitCompilation => false; // Requires capsule-specific operations
+    public override bool SupportsJitCompilation => false; // Could be supported with Conv2D + squashing ops
 
 }

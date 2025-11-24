@@ -645,13 +645,13 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // ContinuumMemorySystemLayer maintains complex memory structures with dynamic addressing
+        // ContinuumMemorySystemLayer has fixed memory size and could potentially support JIT
         throw new NotSupportedException(
-            "ContinuumMemorySystemLayer does not support JIT compilation because it maintains complex internal " +
-            "memory structures with dynamic read/write addressing patterns that cannot be represented in a " +
-            "static computation graph.");
+            "ContinuumMemorySystemLayer does not currently support JIT compilation. However, it COULD potentially be " +
+            "supported by adding memory access operations to TensorOperations if the memory size is fixed and known at " +
+            "compilation time. The addressing patterns could be represented as tensor indexing operations.");
     }
 
-    public override bool SupportsJitCompilation => false; // Requires dynamic memory addressing
+    public override bool SupportsJitCompilation => false; // Could be supported with memory ops
 
 }
