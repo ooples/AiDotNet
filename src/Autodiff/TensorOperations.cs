@@ -5663,7 +5663,35 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("Swish gradient computation will be added in gradient implementation phase");
+                var inputValue = a.Value;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    var xDouble = numOps.ToDouble(x);
+
+                    // σ(x) = 1 / (1 + exp(-x))
+                    var sigmoid = 1.0 / (1.0 + Math.Exp(-xDouble));
+
+                    // f'(x) = σ(x) + x * σ(x) * (1 - σ(x))
+                    var grad = sigmoid + xDouble * sigmoid * (1.0 - sigmoid);
+
+                    gradInput[i] = numOps.Multiply(gradient[i], numOps.FromDouble(grad));
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient is not null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -5718,7 +5746,44 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("Mish gradient computation will be added in gradient implementation phase");
+                var inputValue = a.Value;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    var xDouble = numOps.ToDouble(x);
+
+                    // softplus(x) = log(1 + exp(x))
+                    var softplus = Math.Log(1.0 + Math.Exp(xDouble));
+
+                    // tanh(softplus(x))
+                    var tanhSoftplus = Math.Tanh(softplus);
+
+                    // σ(x) = 1 / (1 + exp(-x))
+                    var sigmoid = 1.0 / (1.0 + Math.Exp(-xDouble));
+
+                    // sech²(softplus(x)) = 1 - tanh²(softplus(x))
+                    var sechSquared = 1.0 - tanhSoftplus * tanhSoftplus;
+
+                    // f'(x) = tanh(softplus(x)) + x * sech²(softplus(x)) * σ(x)
+                    var grad = tanhSoftplus + xDouble * sechSquared * sigmoid;
+
+                    gradInput[i] = numOps.Multiply(gradient[i], numOps.FromDouble(grad));
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient is not null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -5762,7 +5827,37 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("HardSigmoid gradient computation will be added in gradient implementation phase");
+                var inputValue = a.Value;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    var xDouble = numOps.ToDouble(x);
+
+                    // f(x) = max(0, min(1, 0.2 * x + 0.5))
+                    // f'(x) = 0.2 if -2.5 < x < 2.5, else 0
+                    double grad = 0.0;
+                    if (xDouble > -2.5 && xDouble < 2.5)
+                    {
+                        grad = 0.2;
+                    }
+
+                    gradInput[i] = numOps.Multiply(gradient[i], numOps.FromDouble(grad));
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient is not null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -5804,7 +5899,37 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("HardTanh gradient computation will be added in gradient implementation phase");
+                var inputValue = a.Value;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    var xDouble = numOps.ToDouble(x);
+
+                    // f(x) = max(-1, min(1, x))
+                    // f'(x) = 1 if -1 < x < 1, else 0
+                    double grad = 0.0;
+                    if (xDouble > -1.0 && xDouble < 1.0)
+                    {
+                        grad = 1.0;
+                    }
+
+                    gradInput[i] = numOps.Multiply(gradient[i], numOps.FromDouble(grad));
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient is not null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -5847,7 +5972,34 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("ScaledTanh gradient computation will be added in gradient implementation phase");
+                var inputValue = a.Value;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    var xDouble = numOps.ToDouble(x);
+
+                    // f(x) = α * tanh(β * x)
+                    // f'(x) = α * β * (1 - tanh²(β * x))
+                    var tanhBetaX = Math.Tanh(beta * xDouble);
+                    var grad = alpha * beta * (1.0 - tanhBetaX * tanhBetaX);
+
+                    gradInput[i] = numOps.Multiply(gradient[i], numOps.FromDouble(grad));
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient is not null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -5882,7 +6034,32 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("Softplus gradient computation will be added in gradient implementation phase");
+                var inputValue = a.Value;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    var xDouble = numOps.ToDouble(x);
+
+                    // f'(x) = σ(x) = exp(x) / (1 + exp(x)) = 1 / (1 + exp(-x))
+                    var sigmoid = 1.0 / (1.0 + Math.Exp(-xDouble));
+
+                    gradInput[i] = numOps.Multiply(gradient[i], numOps.FromDouble(sigmoid));
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient is not null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -5921,7 +6098,34 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("Softsign gradient computation will be added in gradient implementation phase");
+                var inputValue = a.Value;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    var xDouble = numOps.ToDouble(x);
+
+                    // f'(x) = 1 / (1 + |x|)²
+                    var absX = Math.Abs(xDouble);
+                    var denom = 1.0 + absX;
+                    var grad = 1.0 / (denom * denom);
+
+                    gradInput[i] = numOps.Multiply(gradient[i], numOps.FromDouble(grad));
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient is not null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
@@ -5963,7 +6167,34 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                throw new NotImplementedException("BentIdentity gradient computation will be added in gradient implementation phase");
+                var inputValue = a.Value;
+                var gradInput = new Tensor<T>(inputValue.Shape);
+
+                for (int i = 0; i < inputValue.Length; i++)
+                {
+                    var x = inputValue[i];
+                    var xDouble = numOps.ToDouble(x);
+
+                    // f(x) = ((sqrt(x² + 1) - 1) / 2) + x
+                    // f'(x) = x / (2 * sqrt(x² + 1)) + 1
+                    var sqrtPart = Math.Sqrt(xDouble * xDouble + 1.0);
+                    var grad = (xDouble / (2.0 * sqrtPart)) + 1.0;
+
+                    gradInput[i] = numOps.Multiply(gradient[i], numOps.FromDouble(grad));
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient is not null)
+                    {
+                        a.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
             }
         }
         var node = new ComputationNode<T>(
