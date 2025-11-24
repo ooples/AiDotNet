@@ -436,4 +436,25 @@ public class SplitLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInput = null;
     }
+
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        int inputSize = InputShape[0];
+        int splitSize = inputSize / _numSplits;
+
+        var symbolicInput = new Tensor<T>(new int[] { 1, inputSize });
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        var reshapedNode = Autodiff.TensorOperations<T>.Reshape(inputNode, 1, _numSplits, splitSize);
+        return reshapedNode;
+    }
+
+    public override bool SupportsJitCompilation => true;
 }

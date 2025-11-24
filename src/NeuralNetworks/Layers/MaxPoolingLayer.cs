@@ -451,4 +451,34 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _maxIndices = new Tensor<int>(OutputShape);
     }
+
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        var pooledNode = Autodiff.TensorOperations<T>.MaxPool2D(inputNode, new int[] { PoolSize, PoolSize }, new int[] { Strides, Strides });
+
+        var activatedOutput = ApplyActivationToGraph(pooledNode);
+        return activatedOutput;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            IActivationFunction<T>? activation = ScalarActivation;
+            if (activation == null && VectorActivation != null)
+                activation = (IActivationFunction<T>)VectorActivation;
+            return activation?.SupportsJitCompilation ?? true;
+        }
+    }
+
 }
