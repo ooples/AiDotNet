@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -1052,7 +1054,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
 
-        if (_kernel == null || _biases == null)
+        if (_kernels == null || _biases == null)
             throw new InvalidOperationException("Layer weights not initialized. Call Initialize() or train the layer first.");
 
         if (!CanActivationBeJitted())

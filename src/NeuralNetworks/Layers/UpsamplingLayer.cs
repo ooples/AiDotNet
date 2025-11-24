@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
