@@ -451,4 +451,52 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _maxIndices = new Tensor<int>(OutputShape);
     }
+
+    /// <summary>
+    /// Exports the max pooling layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the layer's output.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph for max pooling that mirrors the Forward() method logic.
+    /// The graph uses TensorOperations.MaxPool2D which integrates with IEngine for GPU acceleration.
+    /// </para>
+    /// <para>
+    /// The computation graph enables:
+    /// - JIT compilation for optimized inference
+    /// - Automatic differentiation via backpropagation
+    /// - GPU acceleration where supported
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create placeholder for input data
+        // Input shape for pooling: [batch, channels, height, width]
+        // We use batch size 1 as placeholder
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, InputShape[0], InputShape[1], InputShape[2] });
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+        inputNodes.Add(inputNode);
+
+        // Build computation graph: output = MaxPool2D(input, poolSize, strides)
+        var poolSize = new int[] { PoolSize, PoolSize };
+        var strides = new int[] { Strides, Strides };
+        var outputNode = TensorOperations<T>.MaxPool2D(inputNode, poolSize, strides);
+
+        return outputNode;
+    }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always true. Max pooling layers support JIT compilation.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
 }
