@@ -3552,6 +3552,14 @@ public static class TensorOperations<T>
                 parents: new List<ComputationNode<T>> { a },
                 backwardFunction: BackwardFunction,
                 name: null);
+
+            // Set JIT compiler metadata
+            node.OperationType = OperationType.Crop;
+            node.OperationParams = new Dictionary<string, object>
+            {
+                { "Cropping", cropping }
+            };
+
             var tape = GradientTape<T>.Current;
             if (tape != null && tape.IsRecording)
                 tape.RecordOperation(node);
@@ -3628,6 +3636,14 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Upsample;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Scale", scale }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
