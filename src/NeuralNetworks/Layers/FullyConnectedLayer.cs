@@ -897,4 +897,47 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         _weightsGradient = null;
         _biasesGradient = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_weights == null || _biases == null)
+            throw new InvalidOperationException("Layer weights not initialized.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        var weightsNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _weights.Rows, _weights.Columns }, _weights.ToArray()), "weights");
+        var biasesNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _biases.Length }, _biases.ToArray()), "biases");
+
+        var matmulNode = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
+        var addNode = TensorOperations<T>.Add(matmulNode, biasesNode);
+
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+        {
+            return ScalarActivation.ApplyToGraph(addNode);
+        }
+
+        return addNode;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            if (_weights == null || _biases == null)
+                return false;
+
+            if (ScalarActivation != null)
+                return ScalarActivation.SupportsJitCompilation;
+
+            return true;
+        }
+    }
 }
