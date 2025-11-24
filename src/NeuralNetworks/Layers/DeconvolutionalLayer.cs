@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using AiDotNet.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -932,4 +934,27 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         _kernelsGradient = null;
         _biasesGradient = null;
     }
+
+    /// <summary>
+    /// Exports the computation graph for this layer (JIT compilation support).
+    /// </summary>
+    /// <param name="inputNodes">The input computation nodes.</param>
+    /// <returns>The output computation node representing this layer's operation.</returns>
+    /// <remarks>
+    /// This is a stub implementation. Full JIT support will be added in a future update.
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotImplementedException(
+            $"{GetType().Name} does not have full JIT compilation support yet. " +
+            "This layer will use the standard Forward() method for now.");
+    }
+
+    /// <summary>
+    /// Gets whether this layer supports JIT compilation.
+    /// </summary>
+    /// <remarks>
+    /// Currently returns false as full JIT support is not yet implemented.
+    /// </remarks>
+    public override bool SupportsJitCompilation => false;
 }
