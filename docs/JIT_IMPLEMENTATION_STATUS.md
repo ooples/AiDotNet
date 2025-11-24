@@ -25,7 +25,7 @@ This document tracks the implementation status of JIT compilation support across
 - **Expected Speedup**: 3-5x for inference with many support vectors
 
 ### 3. NeuralNetworkBase ✓
-- **Status**: 36/77 layers with proper implementations
+- **Status**: 42/77 layers with proper implementations
 - **File**: `src/NeuralNetworks/NeuralNetworkBase.cs`
 - **Functionality**: Layer-based neural network with forward pass
 - **Expected Speedup**: 5-10x for inference
@@ -44,11 +44,11 @@ This document tracks the implementation status of JIT compilation support across
 
 - **Total Layer Files**: 77
 - **Actual Layer Types**: 75 (excluding LayerBase.cs and MixtureOfExpertsBuilder.cs)
-- **Fully Implemented**: 36 layers with proper conversion logic
-- **Identity/Pass-through**: 6 layers (correct for inference)
-- **Not Yet Supported**: 33 layers (throw NotSupportedException with clear error messages)
+- **Fully Implemented**: 42 layers with proper conversion logic
+- **Identity/Pass-through**: 9 layers (correct for inference)
+- **Not Yet Supported**: 24 layers (throw NotSupportedException with clear error messages)
 
-### Fully Implemented Layers (36) ✓
+### Fully Implemented Layers (42) ✓
 
 #### Basic Layers
 1. **DenseLayer** ✓
@@ -180,51 +180,72 @@ This document tracks the implementation status of JIT compilation support across
     - Linear and gate paths with element-wise multiplication
     - `output = linear * sigmoid(gate)`
 
-### Identity/Pass-through Layers (6) ✓
+#### Attention & Transformer Layers
+31. **TransformerEncoderLayer** ✓
+    - Composes multi-head attention, layer norm, and feed-forward sublayers
+    - Uses TensorOperations.MultiHeadAttention, LayerNorm
+    - Full residual connections: `output = norm(input + attention(input))`
+
+32. **TransformerDecoderLayer** ✓
+    - Self-attention, cross-attention, layer norm, and feed-forward sublayers
+    - Supports encoder-decoder architecture with cross-attention
+    - Three residual connections with layer normalization
+
+33. **MultiHeadAttentionLayer** ✓
+    - Uses TensorOperations.MultiHeadAttention
+    - Q/K/V projections with configurable head count
+
+#### Embedding Layers
+34. **EmbeddingLayer** ✓
+    - Uses TensorOperations.EmbeddingLookup
+    - Lookup table for token embeddings with gradient support
+
+#### Shape & Split Layers
+35. **SplitLayer** ✓
+    - Uses TensorOperations.Reshape
+    - Splits input into multiple equal-sized chunks: `[batch, size] → [batch, splits, split_size]`
+
+### Identity/Pass-through Layers (9) ✓
 
 These layers correctly return identity for inference mode:
 
-31. **DropoutLayer** ✓
+36. **DropoutLayer** ✓
     - Identity during inference
     - `output = input`
 
-32. **GaussianNoiseLayer** ✓
+37. **GaussianNoiseLayer** ✓
     - Identity during inference (noise disabled)
     - `output = input`
 
-33. **InputLayer** ✓
+38. **InputLayer** ✓
     - Pass-through operation
     - `output = input`
 
-34. **MaskingLayer** ✓
+39. **MaskingLayer** ✓
     - Identity during inference (mask is data-dependent)
     - `output = input`
 
-35. **PositionalEncodingLayer** ✓
+40. **PositionalEncodingLayer** ✓
     - Identity during inference (encoding added during training)
     - `output = input`
 
-36. **ReadoutLayer** ✓
+41. **ReadoutLayer** ✓
     - Pass-through layer for inference
     - `output = input`
 
-### Inference-Specific Identity Layers (3) ✓
-
-These layers are identity during inference because their operations are training-specific:
-
-37. **ReconstructionLayer** ✓
+42. **ReconstructionLayer** ✓
     - Identity during inference (reconstruction logic is training-specific)
     - `output = input`
 
-38. **RepParameterizationLayer** ✓
+43. **RepParameterizationLayer** ✓
     - Identity during inference (reparameterization is training-specific)
     - `output = input`
 
-39. **MeasurementLayer** ✓
+44. **MeasurementLayer** ✓
     - Identity for standard inference (quantum measurement is context-specific)
     - `output = input`
 
-### Not Yet Supported (36 layers)
+### Not Yet Supported (24 layers)
 
 These layers throw NotSupportedException with clear error messages explaining what operations are missing:
 
@@ -235,25 +256,20 @@ These layers throw NotSupportedException with clear error messages explaining wh
 - **BidirectionalLayer** - Requires bidirectional sequence processing
 - **ConvLSTMLayer** - Requires convolutional LSTM cell operations
 
-#### Attention & Transformer Layers
+#### Attention Layers (Remaining)
 - **AttentionLayer** - Requires attention mechanism operations
 - **SelfAttentionLayer** - Requires self-attention operations (Q/K/V projections, scaled dot-product)
-- **MultiHeadAttentionLayer** - Requires multi-head attention operations
-- **TransformerEncoderLayer** - Requires multi-head attention, layer norm, and feed-forward networks
-- **TransformerDecoderLayer** - Requires masked multi-head attention, cross-attention, and feed-forward
 
 #### Specialized Convolutional Layers
 - **SeparableConvolutionalLayer** - Requires separable convolution operations
 
-#### Embedding Layers
-- **EmbeddingLayer** - Requires embedding lookup operation
+#### Embedding Layers (Remaining)
 - **PatchEmbeddingLayer** - Requires patch extraction and embedding operations
 
 #### Multi-Input Layers
 - **AddLayer** - Requires multi-input graph architecture
 - **MultiplyLayer** - Requires multi-input graph architecture
 - **ConcatenateLayer** - Requires multi-input graph architecture and concatenation
-- **SplitLayer** - Requires multi-output graph architecture
 
 #### Capsule Layers
 - **CapsuleLayer** - Requires dynamic routing and capsule operations
@@ -289,19 +305,19 @@ These layers throw NotSupportedException with clear error messages explaining wh
 ## Summary by Category
 
 ### By Implementation Type
-- **Fully Implemented with TensorOperations**: 30 layers
+- **Fully Implemented with TensorOperations**: 35 layers
 - **Identity/Pass-through (Correct for Inference)**: 9 layers
-- **NotSupportedException (Missing Operations)**: 36 layers
+- **NotSupportedException (Missing Operations)**: 24 layers
 
 ### By Functional Category
 - **Basic/Dense Layers**: 7/7 ✓
-- **Shape Manipulation**: 4/4 ✓
+- **Shape Manipulation**: 5/5 ✓ (including SplitLayer)
 - **Normalization**: 2/2 ✓
 - **Convolutional**: 6/9 (67%)
 - **Pooling**: 3/3 ✓
-- **Gating & Attention**: 3/9 (33%)
+- **Gating & Attention**: 6/9 (67%) - added MultiHeadAttention, TransformerEncoder/Decoder
 - **Recurrent/Sequence**: 0/5 (0%)
-- **Attention/Transformer**: 0/5 (0%)
+- **Embedding**: 1/2 (50%) - EmbeddingLayer implemented
 - **Specialized**: 14/41 (34%)
 
 ## Implementation Strategy
@@ -320,11 +336,12 @@ These layers throw NotSupportedException with clear error messages explaining wh
 - Add gating mechanisms (Highway, GLU, SE) ✓
 - Current: 36 layers properly implemented ✓
 
-### Phase 3: Attention & Transformers (NEXT)
-- Implement attention mechanisms
-- Add multi-head attention
-- Support transformer encoder/decoder
-- Target: +6 layers
+### Phase 3: Attention & Transformers ✓ (COMPLETED)
+- Implemented multi-head attention ✓
+- TransformerEncoderLayer with full graph composition ✓
+- TransformerDecoderLayer with self + cross attention ✓
+- Uses TensorOperations.MultiHeadAttention, LayerNorm ✓
+- Remaining: AttentionLayer, SelfAttentionLayer (2 layers)
 
 ### Phase 4: Recurrent Networks
 - Implement LSTM/GRU cells
@@ -398,7 +415,7 @@ All implemented ✓:
 ### Base Class Implementations
 - `src/Regression/RegressionBase.cs` ✓
 - `src/Regression/NonLinearRegressionBase.cs` ✓
-- `src/NeuralNetworks/NeuralNetworkBase.cs` ✓ (36/75 layers - 48%)
+- `src/NeuralNetworks/NeuralNetworkBase.cs` ✓ (44/75 layers - 59%)
 - `src/TimeSeries/TimeSeriesModelBase.cs` ✓
 
 ### TensorOperations (Autodiff)
@@ -411,6 +428,8 @@ All implemented ✓:
   - Normalization: LayerNorm, BatchNorm
   - Convolution: Conv2D, ConvTranspose2D, DilatedConv2D, DepthwiseConv2D, LocallyConnectedConv2D
   - Pooling: MaxPool2D, AvgPool2D
+  - Attention: MultiHeadAttention, ScaledDotProductAttention
+  - Embedding: EmbeddingLookup (with gradient support)
   - Advanced: PixelShuffle, RBFKernel, AffineGrid, GridSample, GraphConv, ReduceLogVariance
 
 ### Optimization Passes

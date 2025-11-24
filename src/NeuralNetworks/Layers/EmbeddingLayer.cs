@@ -725,10 +725,17 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <remarks>
     /// <para>
     /// This method builds a computation graph for the embedding lookup operation.
-    /// The graph uses the embedding matrix as a constant and performs a lookup (gather) operation
-    /// based on the input indices. This is a simplified implementation - full JIT support for
-    /// embedding layers would require a Gather operation in TensorOperations.
-    /// For now, this returns a placeholder that indicates the operation is conceptually supported.
+    /// The graph uses the embedding matrix as a constant and performs an EmbeddingLookup operation
+    /// based on the input indices.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates an optimized version of the embedding lookup.
+    ///
+    /// The computation graph:
+    /// - Takes input indices (token IDs)
+    /// - Looks up corresponding rows in the embedding matrix
+    /// - Returns the embedding vectors for each token
+    ///
+    /// This is JIT compiled for faster inference.
     /// </para>
     /// </remarks>
     public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
@@ -740,24 +747,16 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("Embedding matrix not initialized.");
 
         // Create placeholder for input indices
-        // Input shape for embeddings is typically [sequenceLength, batchSize, 1]
-        var inputPlaceholder = new Tensor<T>(new int[] { 1, 1, 1 });
+        // Input shape for embeddings: [batchSize, sequenceLength] or [batchSize, 1]
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, 1 });
         var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input_indices");
-
-        // Create constant node for embedding matrix
-        var embeddingNode = Autodiff.TensorOperations<T>.Variable(
-            new Tensor<T>(new int[] { _embeddingMatrix.Rows, _embeddingMatrix.Columns }, _embeddingMatrix),
-            "embeddings");
-
         inputNodes.Add(inputNode);
-        inputNodes.Add(embeddingNode);
 
-        // TODO: Full implementation would use TensorOperations.Gather(embeddingNode, inputNode)
-        // For now, return embedding node as placeholder since gather operation is not yet implemented
-        // This indicates the layer is conceptually JIT-compilable, but actual compilation
-        // requires implementing the Gather operation in TensorOperations
-        throw new NotSupportedException(
-            "Embedding layer requires Gather operation in TensorOperations for full JIT support. " +
-            "This will be implemented in a future update.");
+        // Create constant node for embedding matrix [vocab_size, embedding_dim]
+        var embeddingTensor = Tensor<T>.FromMatrix(_embeddingMatrix);
+        var embeddingNode = Autodiff.TensorOperations<T>.Constant(embeddingTensor, "embeddings");
+
+        // Use EmbeddingLookup operation which supports gradients
+        return Autodiff.TensorOperations<T>.EmbeddingLookup(embeddingNode, inputNode);
     }
 }
