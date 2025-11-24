@@ -976,25 +976,106 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Gets a value indicating whether this layer supports JIT compilation.
     /// </summary>
     /// <value>
-    /// Currently <c>false</c> because this layer's gating mechanism requires additional implementation.
+    /// <c>true</c> when weights are initialized and activation functions support JIT.
     /// </value>
-    public override bool SupportsJitCompilation => false;
+    /// <remarks>
+    /// <para>
+    /// Highway layers support JIT compilation when:
+    /// - Transform and gate weights are initialized
+    /// - The transform activation function (typically Tanh) supports JIT
+    /// - The gate activation function (typically Sigmoid) supports JIT
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation =>
+        _transformWeights != null && _transformBias != null &&
+        _gateWeights != null && _gateBias != null &&
+        (_transformActivation?.SupportsJitCompilation ?? _vectorTransformActivation != null) &&
+        (_gateActivation?.SupportsJitCompilation ?? _vectorGateActivation != null);
 
     /// <summary>
     /// Exports the highway layer's forward pass as a JIT-compilable computation graph.
     /// </summary>
     /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node.</returns>
+    /// <returns>The output computation node representing the gated highway output.</returns>
     /// <remarks>
     /// <para>
-    /// Highway layer uses gating mechanisms that require proper handling in the computation graph.
-    /// This will be implemented in a future update.
+    /// The highway layer computation graph implements:
+    /// output = gate * transform(input) + (1 - gate) * input
+    ///
+    /// Where:
+    /// - transform = activation(input @ transformWeights + transformBias)
+    /// - gate = sigmoid(input @ gateWeights + gateBias)
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates an optimized version of the highway layer.
+    /// The gate controls how much information flows through the transform path vs. the bypass path.
     /// </para>
     /// </remarks>
     public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
     {
-        throw new NotSupportedException(
-            "HighwayLayer requires gating operations for JIT compilation. " +
-            "This will be implemented in a future update.");
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_transformWeights == null || _transformBias == null ||
+            _gateWeights == null || _gateBias == null)
+            throw new InvalidOperationException("Weights and biases not initialized.");
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input node with batch dimension
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "highway_input");
+        inputNodes.Add(inputNode);
+
+        // Create constant nodes for weights and biases
+        var transformWeightsNode = Autodiff.TensorOperations<T>.Constant(
+            Tensor<T>.FromMatrix(_transformWeights), "transform_weights");
+        var transformBiasNode = Autodiff.TensorOperations<T>.Constant(
+            Tensor<T>.FromVector(_transformBias), "transform_bias");
+        var gateWeightsNode = Autodiff.TensorOperations<T>.Constant(
+            Tensor<T>.FromMatrix(_gateWeights), "gate_weights");
+        var gateBiasNode = Autodiff.TensorOperations<T>.Constant(
+            Tensor<T>.FromVector(_gateBias), "gate_bias");
+
+        // Step 1: Compute transform path: transform = activation(input @ weights + bias)
+        var transformLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, transformWeightsNode);
+        var transformWithBias = Autodiff.TensorOperations<T>.Add(transformLinear, transformBiasNode);
+
+        // Apply transform activation (typically Tanh)
+        Autodiff.ComputationNode<T> transformOutput;
+        if (_transformActivation != null && _transformActivation.SupportsJitCompilation)
+        {
+            transformOutput = _transformActivation.ApplyToGraph(transformWithBias);
+        }
+        else
+        {
+            // Default to Tanh if no activation specified
+            transformOutput = Autodiff.TensorOperations<T>.Tanh(transformWithBias);
+        }
+
+        // Step 2: Compute gate path: gate = sigmoid(input @ weights + bias)
+        var gateLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, gateWeightsNode);
+        var gateWithBias = Autodiff.TensorOperations<T>.Add(gateLinear, gateBiasNode);
+
+        // Apply gate activation (typically Sigmoid)
+        Autodiff.ComputationNode<T> gateOutput;
+        if (_gateActivation != null && _gateActivation.SupportsJitCompilation)
+        {
+            gateOutput = _gateActivation.ApplyToGraph(gateWithBias);
+        }
+        else
+        {
+            // Default to Sigmoid if no activation specified
+            gateOutput = Autodiff.TensorOperations<T>.Sigmoid(gateWithBias);
+        }
+
+        // Step 3: Compute highway output: output = gate * transform + (1 - gate) * input
+        // Rewrite as: output = gate * transform + input - gate * input
+        //           = gate * (transform - input) + input
+        var transformMinusInput = Autodiff.TensorOperations<T>.Subtract(transformOutput, inputNode);
+        var gatedDiff = Autodiff.TensorOperations<T>.ElementwiseMultiply(gateOutput, transformMinusInput);
+        var output = Autodiff.TensorOperations<T>.Add(gatedDiff, inputNode);
+
+        return output;
     }
 }

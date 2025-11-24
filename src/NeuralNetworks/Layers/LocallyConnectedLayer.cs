@@ -1076,25 +1076,74 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports JIT compilation.
     /// </summary>
     /// <value>
-    /// Currently <c>false</c> because this layer requires specialized locally connected operations for JIT support.
+    /// <c>true</c> when weights are initialized and activation function supports JIT.
     /// </value>
-    public override bool SupportsJitCompilation => false;
+    /// <remarks>
+    /// <para>
+    /// Locally connected layers support JIT compilation using the LocallyConnectedConv2D operation
+    /// from TensorOperations. The layer applies different filters to different spatial locations.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation =>
+        _weights != null && _biases != null && CanActivationBeJitted();
 
     /// <summary>
     /// Exports the locally connected layer's forward pass as a JIT-compilable computation graph.
     /// </summary>
     /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node.</returns>
+    /// <returns>The output computation node representing the locally connected layer output.</returns>
     /// <remarks>
     /// <para>
-    /// Locally connected layers require specialized spatial operations for JIT compilation.
-    /// This will be implemented in a future update.
+    /// The locally connected layer computation graph implements:
+    /// output = activation(LocallyConnectedConv2D(input, weights) + bias)
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates an optimized version of the locally connected layer.
+    /// Unlike convolution which shares filters, locally connected layers use unique filters for each position.
     /// </para>
     /// </remarks>
     public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
     {
-        throw new NotSupportedException(
-            "LocallyConnectedLayer requires specialized spatial operations for JIT compilation. " +
-            "This will be implemented in a future update.");
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_weights == null || _biases == null)
+            throw new InvalidOperationException("Weights and biases not initialized.");
+
+        if (InputShape == null || InputShape.Length < 3)
+            throw new InvalidOperationException("Layer input shape not configured. Expected [height, width, channels].");
+
+        // Validate activation can be JIT compiled
+        if (!CanActivationBeJitted())
+        {
+            var activationType = (ScalarActivation?.GetType() ?? VectorActivation?.GetType())?.Name ?? "Unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax, Identity");
+        }
+
+        // Create symbolic input node in NHWC format [batch, height, width, channels]
+        var symbolicInput = new Tensor<T>(new int[] { 1, _inputHeight, _inputWidth, _inputChannels });
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "locally_connected_input");
+        inputNodes.Add(inputNode);
+
+        // Convert weights to NCHW format for LocallyConnectedConv2D
+        var weightsNCHW = ConvertWeightsToNCHW(_weights);
+        var weightsNode = Autodiff.TensorOperations<T>.Constant(weightsNCHW, "locally_connected_weights");
+
+        // Convert bias to tensor
+        var biasTensor = ConvertVectorToTensor(_biases);
+        var biasNode = Autodiff.TensorOperations<T>.Constant(biasTensor, "locally_connected_bias");
+
+        // Apply LocallyConnectedConv2D operation
+        var convOutput = Autodiff.TensorOperations<T>.LocallyConnectedConv2D(
+            inputNode,
+            weightsNode,
+            biasNode,
+            stride: new int[] { _stride, _stride });
+
+        // Apply activation function using base class helper
+        var output = ApplyActivationToGraph(convOutput);
+
+        return output;
     }
 }
