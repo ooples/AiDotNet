@@ -1202,4 +1202,86 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
     }
+
+    /// <summary>
+    /// Exports the convolutional layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the layer's output.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph for 2D convolution that mirrors the Forward() method logic.
+    /// The graph uses TensorOperations.Conv2D which integrates with IEngine for GPU acceleration.
+    /// </para>
+    /// <para>
+    /// The computation graph implements:
+    /// 1. Conv2D operation: output = Conv2D(input, kernels, stride, padding)
+    /// 2. Add bias: output = output + biases
+    /// 3. Apply activation function
+    /// </para>
+    /// <para>
+    /// This enables:
+    /// - JIT compilation for optimized inference
+    /// - Automatic differentiation via backpropagation
+    /// - GPU acceleration where supported
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_kernels == null)
+            throw new InvalidOperationException("Layer kernels not initialized. Call Initialize() or train the layer first.");
+
+        if (_biases == null)
+            throw new InvalidOperationException("Layer biases not initialized. Call Initialize() or train the layer first.");
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (!CanActivationBeJitted())
+        {
+            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax");
+        }
+
+        // InputShape for conv layer: [inputDepth, inputHeight, inputWidth]
+        // We use batch size 1 as placeholder
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, InputDepth, InputShape[1], InputShape[2] });
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+        inputNodes.Add(inputNode);
+
+        // Create constant nodes for kernels and biases
+        // Kernel shape: [outputDepth, inputDepth, kernelSize, kernelSize]
+        var kernelsNode = TensorOperations<T>.Variable(
+            new Tensor<T>(_kernels.Shape, _kernels), "kernels");
+        var biasesNode = TensorOperations<T>.Variable(
+            new Tensor<T>(new int[] { _biases.Length }, _biases), "biases");
+
+        inputNodes.Add(kernelsNode);
+        inputNodes.Add(biasesNode);
+
+        // Build computation graph: output = Conv2D(input, kernels, biases, stride, padding)
+        var stride = new int[] { Stride, Stride };
+        var padding = new int[] { Padding, Padding };
+
+        var convNode = TensorOperations<T>.Conv2D(inputNode, kernelsNode, biasesNode, stride, padding);
+
+        // Apply activation using LayerBase helper
+        var activatedOutput = ApplyActivationToGraph(convNode);
+
+        return activatedOutput;
+    }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// True if the layer's activation function is supported for JIT compilation.
+    /// Supported activations: ReLU, Sigmoid, Tanh, Softmax, Identity.
+    /// </value>
+    public override bool SupportsJitCompilation => CanActivationBeJitted();
 }
