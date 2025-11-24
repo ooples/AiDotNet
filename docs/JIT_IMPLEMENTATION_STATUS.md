@@ -25,7 +25,7 @@ This document tracks the implementation status of JIT compilation support across
 - **Expected Speedup**: 3-5x for inference with many support vectors
 
 ### 3. NeuralNetworkBase ✓
-- **Status**: 54/76 layers with JIT support (71%)
+- **Status**: 58/76 layers with JIT support (76%)
 - **File**: `src/NeuralNetworks/NeuralNetworkBase.cs`
 - **Functionality**: Layer-based neural network with forward pass
 - **Expected Speedup**: 5-10x for inference
@@ -45,12 +45,12 @@ This document tracks the implementation status of JIT compilation support across
 - **Total Layer Files**: 78
 - **Actual Layer Types**: 76 (excluding LayerBase.cs and MixtureOfExpertsBuilder.cs)
 - **Always Supported**: 19 layers (return `SupportsJitCompilation => true`)
-- **Conditionally Supported**: 35 layers (depend on weights/sublayers/activations being JIT-compatible)
-- **Not Supported**: 22 layers (return `SupportsJitCompilation => false`)
+- **Conditionally Supported**: 39 layers (depend on weights/sublayers/activations being JIT-compatible)
+- **Not Supported**: 18 layers (return `SupportsJitCompilation => false`)
 
-**Effective JIT Coverage**: 54/76 layers (71%) when weights are initialized and activations support JIT
+**Effective JIT Coverage**: 58/76 layers (76%) when weights are initialized and activations support JIT
 
-### Layers with JIT Support (54) ✓
+### Layers with JIT Support (58) ✓
 
 These layers support JIT compilation when their weights are initialized and activation functions (if any) support JIT.
 
@@ -139,6 +139,10 @@ These layers support JIT compilation when their weights are initialized and acti
 20. **LocallyConnectedLayer** ✓
     - Uses TensorOperations.LocallyConnectedConv2D
     - Locally connected operations (unshared weights)
+
+21. **SeparableConvolutionalLayer** ✓
+    - Uses TensorOperations.DepthwiseConv2D + Conv2D
+    - Depthwise + pointwise convolution
 
 #### Pooling Layers
 21. **MaxPoolingLayer** ✓
@@ -296,7 +300,7 @@ These layers correctly return identity for inference mode:
     - Identity for standard inference (quantum measurement is context-specific)
     - `output = input`
 
-### Not Supported (22 layers)
+### Not Supported (18 layers)
 
 These layers explicitly return `SupportsJitCompilation => false` due to architectural or theoretical limitations:
 
@@ -310,46 +314,40 @@ These layers explicitly return `SupportsJitCompilation => false` due to architec
 - **SpikingLayer** - Requires spiking neuron simulation with temporal dynamics
 - **RBMLayer** - Requires stochastic sampling (contrastive divergence)
 
-#### Memory & Temporal Layers (6)
+#### Memory & Temporal Layers (5)
 - **ReservoirLayer** - Stateful recurrent reservoir with echo state dynamics
 - **SynapticPlasticityLayer** - Requires STDP temporal traces
 - **TemporalMemoryLayer** - Requires HTM temporal state tracking
 - **SpatialPoolerLayer** - Requires HTM learning dynamics
 - **ContinuumMemorySystemLayer** - Could be supported with memory operations
-- **TimeDistributedLayer** - Requires dynamic time-step iteration
 
-#### Specialized Architectures (5)
+#### Specialized Architectures (4)
 - **AnomalyDetectorLayer** - Stateful with historical context tracking
 - **ConditionalRandomFieldLayer** - Requires dynamic sequence inference (Viterbi)
 - **DecoderLayer** - Requires multiple runtime inputs
 - **MixtureOfExpertsLayer** - Requires input-dependent dynamic routing
-- **HighwayLayer** - Could be supported but currently disabled
-
-#### Convolutional Variants (3)
-- **LocallyConnectedLayer** - Requires locally connected operations
-- **SeparableConvolutionalLayer** - Requires separable convolution operations
-- **DepthwiseSeparableConvolutionalLayer** - Could be supported with DepthwiseConv2D
 
 #### Recurrent Layers (1)
 - **ConvLSTMLayer** - Stateful recurrent layer with temporal dependencies
 
-#### Quantum/Measurement (1)
+#### Quantum/Measurement (2)
 - **MeasurementLayer** - Could be supported with complex operations
+- **TimeDistributedLayer** - Requires dynamic time-step iteration
 
 ## Summary by Category
 
 ### By Implementation Type
 - **Always Supported** (`=> true`): 19 layers
-- **Conditionally Supported** (depends on weights/activations): 35 layers
-- **Not Supported** (`=> false`): 22 layers
+- **Conditionally Supported** (depends on weights/activations): 39 layers
+- **Not Supported** (`=> false`): 18 layers
 
 ### By Functional Category
 - **Basic/Dense Layers**: 7/7 ✓ (all conditional on activation)
 - **Shape Manipulation**: 7/7 ✓ (Split, Reshape, Flatten, Padding, Cropping, Upsampling, Mean)
 - **Normalization**: 2/2 ✓ (BatchNorm, LayerNorm - conditional on weights)
-- **Convolutional**: 4/7 ✓ (Conv, Deconv, Dilated, Subpixel; missing Separable, DepthwiseSeparable, LocallyConnected)
+- **Convolutional**: 7/7 ✓ (Conv, Deconv, Dilated, Subpixel, Separable, DepthwiseSeparable, LocallyConnected)
 - **Pooling**: 4/4 ✓ (Max, Avg, Global, generic Pooling)
-- **Gating & Attention**: 8/9 ✓ (MultiHead, Transformer Encoder/Decoder, Self/Attention, SE, GLU, Highway disabled)
+- **Gating & Attention**: 9/9 ✓ (MultiHead, Transformer Encoder/Decoder, Self/Attention, SE, GLU, Highway)
 - **Recurrent/Sequence**: 4/5 ✓ (LSTM, GRU, Bidirectional, Recurrent; missing ConvLSTM)
 - **Embedding**: 2/2 ✓ (Embedding, PatchEmbedding)
 - **Memory Networks**: 2/4 (MemoryRead, MemoryWrite; missing Reservoir, ContinuumMemory)
@@ -391,13 +389,14 @@ These layers explicitly return `SupportsJitCompilation => false` due to architec
 - MemoryWriteLayer ✓
 
 ### Future Work: Remaining Specialized Layers
-The following 22 layers explicitly do not support JIT due to architectural limitations:
+The following 18 layers explicitly do not support JIT due to architectural limitations:
 - Dynamic routing (Capsule, DigitCapsule)
 - Stochastic operations (RBM, Quantum)
 - User-defined functions (Lambda)
 - Stateful temporal processing (HTM layers, Spiking, Synaptic)
 - Dynamic routing (MixtureOfExperts)
-- Complex convolutions (Separable, DepthwiseSeparable, LocallyConnected)
+- Multi-input requirements (DecoderLayer)
+- Temporal recurrence (ConvLSTMLayer)
 
 ## Technical Details
 
@@ -433,20 +432,22 @@ All implemented ✓:
 
 ## Current Status
 
-**JIT compilation is feature-complete for 54/76 layers (71%).**
+**JIT compilation is feature-complete for 58/76 layers (76%).**
 
-The 22 unsupported layers have fundamental architectural limitations:
+The 18 unsupported layers have fundamental architectural limitations:
 - Require stochastic operations (RBM, Quantum)
 - Require user-defined functions (Lambda)
 - Require stateful temporal processing (HTM, Spiking, Synaptic)
 - Require dynamic input-dependent routing (MixtureOfExperts)
+- Require multiple runtime inputs (DecoderLayer)
+- Require temporal recurrence (ConvLSTM)
 
 ## Potential Future Enhancements
 
 1. **Capsule Networks**: Implement loop unrolling for CapsuleLayer and DigitCapsuleLayer
-2. **Separable Convolutions**: Add TensorOperations.SeparableConv2D
-3. **Highway Networks**: Enable HighwayLayer JIT support
-4. **Complex Numbers**: Add complex number support for QuantumLayer and MeasurementLayer
+2. **Complex Numbers**: Add complex number support for QuantumLayer and MeasurementLayer
+3. **Stochastic Layers**: Implement RBM with differentiable approximations
+4. **Dynamic Routing**: Support MixtureOfExperts with fixed routing for common cases
 
 ## Related Files
 
@@ -459,7 +460,7 @@ The 22 unsupported layers have fundamental architectural limitations:
 ### Base Class Implementations
 - `src/Regression/RegressionBase.cs` ✓
 - `src/Regression/NonLinearRegressionBase.cs` ✓
-- `src/NeuralNetworks/NeuralNetworkBase.cs` ✓ (54/76 layers - 71%)
+- `src/NeuralNetworks/NeuralNetworkBase.cs` ✓ (58/76 layers - 76%)
 - `src/TimeSeries/TimeSeriesModelBase.cs` ✓
 
 ### TensorOperations (Autodiff)
