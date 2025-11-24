@@ -77,6 +77,11 @@ public enum OperationType
     /// </summary>
     Sqrt,
 
+    /// <summary>
+    /// Element-wise square - x² for each element.
+    /// </summary>
+    Square,
+
     // Matrix Operations
 
     /// <summary>
@@ -115,6 +120,11 @@ public enum OperationType
     /// Generic activation function application.
     /// </summary>
     Activation,
+
+    /// <summary>
+    /// Squashing activation for capsule networks - s(v) = ||v||² / (1 + ||v||²) * (v / ||v||).
+    /// </summary>
+    Squash,
 
     // Reduction Operations
 
