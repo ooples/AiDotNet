@@ -580,7 +580,10 @@ public class ActivationLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var activation = ScalarActivation ?? (IActivationFunction<T>)VectorActivation;
+        IActivationFunction<T>? activation = ScalarActivation;
+        if (activation == null && VectorActivation != null)
+            activation = (IActivationFunction<T>)VectorActivation;
+
         if (activation == null)
             throw new InvalidOperationException("No activation function configured.");
 
@@ -603,7 +606,9 @@ public class ActivationLayer<T> : LayerBase<T>
     {
         get
         {
-            var activation = ScalarActivation ?? (IActivationFunction<T>)VectorActivation;
+            IActivationFunction<T>? activation = ScalarActivation;
+            if (activation == null && VectorActivation != null)
+                activation = (IActivationFunction<T>)VectorActivation;
             return activation?.SupportsJitCompilation ?? false;
         }
     }

@@ -190,8 +190,8 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        double lower = NumOps.ToDouble(_lowerBound);
-        double upper = NumOps.ToDouble(_upperBound);
+        double lower = NumOps.ToDouble(_lowerBoundBound);
+        double upper = NumOps.ToDouble(_upperBoundBound);
         return TensorOperations<T>.RReLU(input, lower, upper);
     }
 }

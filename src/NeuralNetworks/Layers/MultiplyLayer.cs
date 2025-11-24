@@ -553,7 +553,9 @@ public class MultiplyLayer<T> : LayerBase<T>
         get
         {
             // Check if the activation function supports JIT compilation
-            var activation = ScalarActivation ?? (IActivationFunction<T>)VectorActivation;
+            IActivationFunction<T>? activation = ScalarActivation;
+            if (activation == null && VectorActivation != null)
+                activation = (IActivationFunction<T>)VectorActivation;
             return activation?.SupportsJitCompilation ?? true;
         }
     }
