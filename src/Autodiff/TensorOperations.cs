@@ -1649,6 +1649,14 @@ public static class TensorOperations<T>
             parents: nodes,
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Concat;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Axis", axis }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -1749,6 +1757,15 @@ public static class TensorOperations<T>
                 parents: new List<ComputationNode<T>> { a },
                 backwardFunction: BackwardFunction,
                 name: null);
+
+            // Set JIT compiler metadata
+            node.OperationType = OperationType.Pad;
+            node.OperationParams = new Dictionary<string, object>
+            {
+                { "PadWidth", padWidth },
+                { "Value", value! }
+            };
+
             var tape = GradientTape<T>.Current;
             if (tape != null && tape.IsRecording)
                 tape.RecordOperation(node);
@@ -1905,6 +1922,16 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.MaxPool2D;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "KernelSize", poolSize },
+            { "Stride", strides },
+            { "Padding", padding }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -2042,6 +2069,16 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.AvgPool2D;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "KernelSize", poolSize },
+            { "Stride", strides },
+            { "Padding", padding }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
