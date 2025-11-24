@@ -1020,6 +1020,11 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a, b },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.MatMul;
+        node.OperationParams = null;
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -1068,6 +1073,11 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Transpose;
+        node.OperationParams = null;
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -1195,6 +1205,15 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.ReduceSum;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Axes", axes! },
+            { "KeepDims", keepDims }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -1253,6 +1272,11 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Mean;
+        node.OperationParams = null;
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -1304,6 +1328,14 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Reshape;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "NewShape", newShape }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
