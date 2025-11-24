@@ -570,4 +570,59 @@ public class ActivationLayer<T> : LayerBase<T>
     {
         _lastInput = null;
     }
+
+    /// <summary>
+    /// Exports the activation layer's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes (unused for single-input layers).</param>
+    /// <returns>The output computation node representing the activation function applied to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method constructs a computation graph representation of the activation layer by:
+    /// 1. Creating an input node placeholder
+    /// 2. Applying the activation function to the input node using the base class helper
+    /// </para>
+    /// <para><b>For Beginners:</b> This method converts the activation layer into a computation graph for JIT compilation.
+    ///
+    /// The computation graph describes:
+    /// - Input: A placeholder tensor with the layer's input shape
+    /// - Operation: Apply the activation function (ReLU, Sigmoid, etc.)
+    /// - Output: The activated tensor
+    ///
+    /// JIT compilation can make inference 5-10x faster by optimizing this graph into native code.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        // Create input node placeholder
+        var inputTensor = new Tensor<T>(InputShape);
+        var inputNode = new ComputationNode<T>(inputTensor);
+        inputNodes.Add(inputNode);
+
+        // Apply activation function to input node (delegates to base class helper)
+        // The base class handles both scalar and vector activations
+        return ApplyActivationToGraph(inputNode);
+    }
+
+    /// <summary>
+    /// Gets whether this activation layer supports JIT compilation.
+    /// </summary>
+    /// <value>True if the activation function supports JIT compilation, false otherwise.</value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the layer can be JIT compiled. It delegates to the
+    /// base class helper which checks if the configured activation function (scalar or vector)
+    /// supports JIT compilation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you if this layer can use JIT compilation for faster inference.
+    ///
+    /// The layer can be JIT compiled if:
+    /// - The activation function (ReLU, Sigmoid, etc.) has JIT support implemented
+    /// - The activation's gradient computation is available
+    ///
+    /// Common activations like ReLU, Sigmoid, and Tanh typically support JIT.
+    /// Custom or exotic activations may not support it yet.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => CanActivationBeJitted();
 }
