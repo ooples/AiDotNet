@@ -817,4 +817,22 @@ public class RBMLayer<T> : LayerBase<T>
     /// Indicates whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // RBMLayer uses stochastic sampling and iterative Gibbs sampling
+        throw new NotSupportedException(
+            "RBMLayer does not support JIT compilation because it requires stochastic sampling operations " +
+            "and iterative Gibbs sampling (Contrastive Divergence) that cannot be represented in a " +
+            "deterministic static computation graph.");
+    }
+
+    public override bool SupportsJitCompilation => false; // Requires stochastic sampling
+
 }

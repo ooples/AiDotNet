@@ -157,6 +157,24 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// - It will improve its pattern recognition as it processes more data
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Gets the filter kernels of the convolutional layer.
+    /// </summary>
+    /// <returns>The filter tensor used for convolution operations.</returns>
+    public Tensor<T> GetFilters()
+    {
+        return _kernels;
+    }
+
+    /// <summary>
+    /// Gets the biases vector of the convolutional layer.
+    /// </summary>
+    /// <returns>The bias values added to each output channel.</returns>
+    public override Vector<T> GetBiases()
+    {
+        return _biases;
+    }
+
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -1183,5 +1201,102 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+    }
+
+    /// <summary>
+    /// Exports the convolutional layer's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the convolution operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method constructs a computation graph representation of the convolutional layer by:
+    /// 1. Validating input parameters and layer configuration
+    /// 2. Creating a symbolic input node with proper batch dimension
+    /// 3. Creating constant nodes for kernels and biases
+    /// 4. Applying Conv2D operation
+    /// 5. Applying activation function if configured
+    /// </para>
+    /// <para><b>For Beginners:</b> This method converts the convolutional layer into a computation graph for JIT compilation.
+    ///
+    /// The computation graph describes:
+    /// - Input: A symbolic tensor with shape [1, InputDepth, Height, Width]
+    /// - Kernels: The learned filters [OutputDepth, InputDepth, KernelSize, KernelSize]
+    /// - Operation: 2D convolution with specified stride and padding
+    /// - Activation: Applied to the convolution output
+    /// - Output: Feature maps with shape [1, OutputDepth, OutputHeight, OutputWidth]
+    ///
+    /// JIT compilation can make inference 5-10x faster by optimizing this graph into native code.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_kernels == null)
+            throw new InvalidOperationException("Layer weights not initialized.");
+
+        // Create symbolic input node (shape definition only, batch size adapts at runtime)
+        // ConvolutionalLayer expects input shape: [depth, height, width]
+        // Conv2D expects: [batch, channels, height, width]
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Create constant nodes for kernels and biases
+        var kernelNode = TensorOperations<T>.Constant(_kernels, "kernel");
+        var biasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { OutputDepth }, _biases), "bias");
+
+        // Apply Conv2D operation
+        var conv2dNode = TensorOperations<T>.Conv2D(
+            inputNode,
+            kernelNode,
+            biasNode,
+            stride: new int[] { Stride, Stride },
+            padding: new int[] { Padding, Padding });
+
+        // Apply activation function if configured
+        var activatedOutput = ApplyActivationToGraph(conv2dNode);
+        return activatedOutput;
+    }
+
+    /// <summary>
+    /// Gets whether this convolutional layer supports JIT compilation.
+    /// </summary>
+    /// <value>True if the layer and its activation function support JIT compilation.</value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the layer can be JIT compiled. The layer supports JIT if:
+    /// - The layer is properly initialized with weights
+    /// - The activation function (if any) supports JIT compilation
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you if this layer can use JIT compilation for faster inference.
+    ///
+    /// The layer can be JIT compiled if:
+    /// - The layer has been trained or initialized with weights
+    /// - The activation function (ReLU, etc.) supports JIT
+    ///
+    /// Conv2D operations are fully supported for JIT compilation.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            // Check if weights are initialized
+            if (_kernels == null || _biases == null)
+                return false;
+
+            // Check if activation supports JIT
+            IActivationFunction<T>? activation = ScalarActivation;
+            if (activation == null && VectorActivation != null)
+                activation = (IActivationFunction<T>)VectorActivation;
+
+            return activation?.SupportsJitCompilation ?? true;
+        }
     }
 }

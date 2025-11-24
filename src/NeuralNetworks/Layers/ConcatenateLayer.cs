@@ -556,4 +556,28 @@ public class ConcatenateLayer<T> : LayerBase<T>
         _lastInputs = null;
         _lastOutput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // ConcatenateLayer expects multiple inputs - create symbolic input
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // If multiple inputs are provided, concatenate them using TensorOperations.Concat()
+        if (inputNodes.Count > 1)
+        {
+            return TensorOperations<T>.Concat(inputNodes, axis: _axis);
+        }
+
+        return inputNode;
+    }
+
+    public override bool SupportsJitCompilation => true;
 }

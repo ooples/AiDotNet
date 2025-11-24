@@ -443,4 +443,22 @@ public class DecoderLayer<T> : LayerBase<T>
         _norm1.ParameterCount +
         _norm2.ParameterCount +
         _norm3.ParameterCount;
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // DecoderLayer requires multiple inputs at runtime (decoder input and encoder output)
+        // which cannot be compiled into a single computation graph without both inputs available
+        throw new NotSupportedException(
+            "DecoderLayer does not support JIT compilation because it requires multiple runtime inputs " +
+            "(decoder input and encoder output) that must be provided separately at inference time.");
+    }
+
+    public override bool SupportsJitCompilation => false; // Requires multiple runtime inputs
+
 }

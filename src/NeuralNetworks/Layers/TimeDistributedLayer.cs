@@ -545,4 +545,23 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastOutput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // TimeDistributedLayer cannot support JIT compilation because it requires dynamic looping
+        // over time steps and slicing operations that are not available in the static computation graph
+        throw new NotSupportedException(
+            "TimeDistributedLayer does not support JIT compilation because it requires dynamic iteration " +
+            "over variable-length time sequences and tensor slicing operations that cannot be represented " +
+            "in a static computation graph.");
+    }
+
+    public override bool SupportsJitCompilation => false; // Requires dynamic time-step iteration
+
 }

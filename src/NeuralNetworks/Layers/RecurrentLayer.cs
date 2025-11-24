@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -927,6 +929,87 @@ public class RecurrentLayer<T> : LayerBase<T>
         _inputWeightsGradient = null;
         _hiddenWeightsGradient = null;
         _biasesGradient = null;
+    }
+
+    /// <summary>
+    /// Exports the recurrent layer's single time-step computation as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the hidden state at one time step.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method exports a single RNN cell computation for JIT compilation.
+    /// The graph computes: h_t = activation(W_input @ x_t + W_hidden @ h_{t-1} + b)
+    /// using the standard vanilla RNN equation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        int inputSize = _inputWeights.Columns;
+        int hiddenSize = _inputWeights.Rows;
+
+        // Create placeholders for single time-step inputs
+        // x_t shape: [batchSize, inputSize]
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, inputSize });
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "x_t");
+
+        // h_{t-1} shape: [batchSize, hiddenSize]
+        var prevHiddenPlaceholder = new Tensor<T>(new int[] { 1, hiddenSize });
+        var prevHiddenNode = TensorOperations<T>.Variable(prevHiddenPlaceholder, "h_prev");
+
+        // Create weight and bias nodes
+        var inputWeightsNode = TensorOperations<T>.Variable(MatrixToTensor(_inputWeights), "W_input");
+        var hiddenWeightsNode = TensorOperations<T>.Variable(MatrixToTensor(_hiddenWeights), "W_hidden");
+        var biasesNode = TensorOperations<T>.Variable(VectorToTensor(_biases), "biases");
+
+        // Add inputs to the list
+        inputNodes.Add(inputNode);
+        inputNodes.Add(prevHiddenNode);
+        inputNodes.Add(inputWeightsNode);
+        inputNodes.Add(hiddenWeightsNode);
+        inputNodes.Add(biasesNode);
+
+        // Build RNN computation graph (single time step)
+        // h_t = activation(W_input @ x_t + W_hidden @ h_{t-1} + b)
+
+        // Step 1: W_input @ x_t
+        var inputWeightsT = TensorOperations<T>.Transpose(inputWeightsNode);
+        var inputContribution = TensorOperations<T>.MatrixMultiply(inputNode, inputWeightsT);
+
+        // Step 2: W_hidden @ h_{t-1}
+        var hiddenWeightsT = TensorOperations<T>.Transpose(hiddenWeightsNode);
+        var hiddenContribution = TensorOperations<T>.MatrixMultiply(prevHiddenNode, hiddenWeightsT);
+
+        // Step 3: Sum all contributions
+        var preActivation = TensorOperations<T>.Add(inputContribution, hiddenContribution);
+        preActivation = TensorOperations<T>.Add(preActivation, biasesNode);
+
+        // Step 4: Apply activation function
+        var h_t = ApplyActivationToGraph(preActivation);
+
+        return h_t;
+    }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// True if the layer's activation function is supported for JIT compilation.
+    /// Supported activations: ReLU, Sigmoid, Tanh, Softmax.
+    /// </value>
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            return ScalarActivation is ReLUActivation<T> ||
+                   ScalarActivation is SigmoidActivation<T> ||
+                   ScalarActivation is TanhActivation<T> ||
+                   VectorActivation is SoftmaxActivation<T> ||
+                   (ScalarActivation == null && VectorActivation == null);
+        }
     }
 
     /// <summary>

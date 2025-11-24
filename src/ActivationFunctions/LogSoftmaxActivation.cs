@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -59,17 +61,17 @@ public class LogSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
-        // Use SIMD-optimized Max (8-12× speedup for float)
+        // Use SIMD-optimized Max (8-12Ã— speedup for float)
         T maxInput = TensorPrimitivesHelper<T>.Max(input);
 
         // Subtract max from all elements (for numerical stability)
         var maxVector = new Vector<T>(Enumerable.Repeat(maxInput, input.Length).ToArray());
         var shifted = TensorPrimitivesHelper<T>.Subtract(input, maxVector);
 
-        // Apply Exp using SIMD (3-6× speedup for float)
+        // Apply Exp using SIMD (3-6Ã— speedup for float)
         var shiftedExp = TensorPrimitivesHelper<T>.Exp(shifted);
 
-        // Use SIMD-optimized Sum (8-12× speedup for float)
+        // Use SIMD-optimized Sum (8-12Ã— speedup for float)
         T sumExp = TensorPrimitivesHelper<T>.Sum(shiftedExp);
         T logSumExp = NumOps.Add(NumOps.Log(sumExp), maxInput);
 
@@ -123,5 +125,48 @@ public class LogSoftmaxActivation<T> : ActivationFunctionBase<T>
         }
 
         return jacobian;
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <remarks>
+    /// <para>
+    /// This activation does not yet support JIT compilation because the gradient
+    /// computation (backward pass) has not been implemented in TensorOperations.LogSoftmax.
+    /// </para>
+    /// <para>
+    /// To enable JIT support:
+    /// 1. Implement the backward pass in TensorOperations.LogSoftmax
+    /// 2. Test the gradient computation
+    /// 3. Change SupportsJitCompilation to return true
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with LogSoftmax activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method would map the activation to TensorOperations&lt;T&gt;.LogSoftmax(input)
+    /// once the gradient computation is implemented.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        throw new NotSupportedException(
+            $"LogSoftmaxActivation does not support JIT compilation yet. " +
+            $"The gradient computation (backward pass) has not been implemented in TensorOperations.LogSoftmax. " +
+            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
     }
 }

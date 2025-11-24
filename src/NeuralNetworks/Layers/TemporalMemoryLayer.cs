@@ -563,4 +563,22 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
             }
         }
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // TemporalMemoryLayer uses HTM sequence learning with complex cell state tracking
+        throw new NotSupportedException(
+            "TemporalMemoryLayer does not support JIT compilation because it implements Hierarchical Temporal Memory (HTM) " +
+            "sequence learning with complex cell state tracking, predictive columns, and temporal context. The layer maintains " +
+            "internal state across time steps and uses adaptive learning rules that cannot be represented in a static computation graph.");
+    }
+
+    public override bool SupportsJitCompilation => false; // Requires HTM temporal state tracking
+
 }

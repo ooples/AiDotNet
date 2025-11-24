@@ -322,4 +322,22 @@ public class MeasurementLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastOutput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // MeasurementLayer computes |amplitude|^2 which could be expressed with existing operations
+        throw new NotSupportedException(
+            "MeasurementLayer does not currently support JIT compilation. However, it COULD be supported by adding " +
+            "complex number operations to TensorOperations. Quantum measurement (probabilities = |amplitude|^2 / sum(|amplitude|^2)) " +
+            "can be computed as (real^2 + imag^2) / sum(real^2 + imag^2) using standard arithmetic operations.");
+    }
+
+    public override bool SupportsJitCompilation => false; // Could be supported with complex ops
+
 }

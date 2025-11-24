@@ -596,4 +596,23 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         // Reset smoothed anomaly score
         _smoothedAnomalyScore = 0.0;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // AnomalyDetectorLayer is stateful and maintains historical context for anomaly detection
+        throw new NotSupportedException(
+            "AnomalyDetectorLayer does not support JIT compilation because it maintains internal state " +
+            "(anomaly history and smoothed scores) that is updated during each forward pass. The anomaly " +
+            "detection calculations depend on historical context and statistical operations that cannot be " +
+            "represented in a static computation graph.");
+    }
+
+    public override bool SupportsJitCompilation => false; // Stateful with historical context
+
 }

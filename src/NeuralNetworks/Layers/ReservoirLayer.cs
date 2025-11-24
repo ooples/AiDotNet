@@ -578,4 +578,22 @@ public class ReservoirLayer<T> : LayerBase<T>
         // Return absolute value to ensure positive spectral radius
         return NumOps.Abs(prevEigenvalue);
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // ReservoirLayer is a stateful recurrent layer with internal reservoir dynamics
+        throw new NotSupportedException(
+            "ReservoirLayer does not support JIT compilation because it is a stateful recurrent layer (Echo State Network) " +
+            "that maintains internal reservoir state across time steps. The layer's recurrent dynamics with fixed random " +
+            "weights require temporal state propagation that cannot be represented in a static computation graph.");
+    }
+
+    public override bool SupportsJitCompilation => false; // Stateful recurrent reservoir
+
 }

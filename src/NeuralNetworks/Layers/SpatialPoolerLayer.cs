@@ -674,4 +674,22 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         LastInput = null;
         LastOutput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // SpatialPoolerLayer uses HTM principles with adaptive learning and sparse distributed representations
+        throw new NotSupportedException(
+            "SpatialPoolerLayer does not support JIT compilation because it implements Hierarchical Temporal Memory (HTM) " +
+            "principles with adaptive learning of sparse distributed representations. The layer requires competitive " +
+            "inhibition, permanence updates, and boosting mechanisms that cannot be represented in a static computation graph.");
+    }
+
+    public override bool SupportsJitCompilation => false; // Requires HTM learning dynamics
+
 }

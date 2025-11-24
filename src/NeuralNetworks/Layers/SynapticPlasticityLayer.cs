@@ -663,4 +663,23 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
         _lastInput = Vector<T>.CreateDefault(size, NumOps.Zero);
         _lastOutput = Vector<T>.CreateDefault(size, NumOps.Zero);
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // SynapticPlasticityLayer uses STDP and temporal activity traces
+        throw new NotSupportedException(
+            "SynapticPlasticityLayer does not support JIT compilation because it implements spike-timing-dependent " +
+            "plasticity (STDP) with temporal activity traces. The layer requires tracking the timing of pre- and " +
+            "post-synaptic spikes to modify connection strengths, which involves temporal state that cannot be " +
+            "represented in a static computation graph.");
+    }
+
+    public override bool SupportsJitCompilation => false; // Requires STDP temporal traces
+
 }

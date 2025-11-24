@@ -636,4 +636,22 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             _accumulatedGradients[i] = new Vector<T>(_accumulatedGradients[i].Length);
         }
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // ContinuumMemorySystemLayer has fixed memory size and could potentially support JIT
+        throw new NotSupportedException(
+            "ContinuumMemorySystemLayer does not currently support JIT compilation. However, it COULD potentially be " +
+            "supported by adding memory access operations to TensorOperations if the memory size is fixed and known at " +
+            "compilation time. The addressing patterns could be represented as tensor indexing operations.");
+    }
+
+    public override bool SupportsJitCompilation => false; // Could be supported with memory ops
+
 }

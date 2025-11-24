@@ -1258,4 +1258,24 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         // Clear gradients
         _gradients.Clear();
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // ConvLSTMLayer is a stateful recurrent layer that requires backpropagation through time
+        // and cannot be compiled into a static computation graph
+        throw new NotSupportedException(
+            "ConvLSTMLayer does not support JIT compilation because it is a stateful recurrent layer " +
+            "that requires dynamic iteration over time sequences with hidden and cell state propagation " +
+            "across timesteps. The layer uses Backpropagation Through Time (BPTT) which cannot be " +
+            "represented in a static computation graph.");
+    }
+
+    public override bool SupportsJitCompilation => false; // Stateful recurrent layer with temporal dependencies
+
 }

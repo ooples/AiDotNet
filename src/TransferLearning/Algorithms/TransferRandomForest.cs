@@ -6,6 +6,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Regularization;
 using AiDotNet.TransferLearning.FeatureMapping;
 using AiDotNet.Helpers;
+using AiDotNet.Autodiff;
 
 namespace AiDotNet.TransferLearning.Algorithms;
 
@@ -617,5 +618,68 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                 $"Failed to deserialize mapped Random Forest model state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
         }
     }
-}
 
+    #region IJitCompilable Implementation
+
+    /// <summary>
+    /// Gets whether this mapped Random Forest model supports JIT compilation.
+    /// </summary>
+    /// <value>False - Random Forests use tree-based decision logic which is not differentiable and cannot be JIT compiled.</value>
+    /// <remarks>
+    /// <para>
+    /// Random Forests are ensemble models composed of decision trees that make predictions
+    /// through discrete branching logic (if-then-else rules). This discrete nature makes them
+    /// incompatible with JIT compilation, which requires differentiable computation graphs.
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT compilation works best with mathematical operations
+    /// that can be represented as smooth functions (addition, multiplication, etc.).
+    ///
+    /// Random Forests use decision trees, which work like:
+    /// - If feature X is greater than 5, go left, else go right
+    /// - These "if-then" rules are not smooth mathematical operations
+    /// - They cannot be compiled into the type of computation graph JIT needs
+    ///
+    /// For Random Forests, use the standard prediction methods which are already optimized
+    /// for tree-based inference.
+    /// </para>
+    /// </remarks>
+    public bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Exports the model's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes (parameters).</param>
+    /// <returns>Not supported for Random Forests.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Always thrown - Random Forests cannot be exported as computation graphs.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// Random Forest models use tree-based decision logic which cannot be represented
+    /// as a differentiable computation graph required for JIT compilation.
+    /// </para>
+    /// <para><b>For Beginners:</b> Unlike neural networks which use mathematical operations
+    /// (multiply, add, etc.), Random Forests use decision trees with discrete branching logic.
+    ///
+    /// Decision trees work like flowcharts:
+    /// - "Is age greater than 30?" → Yes/No branches
+    /// - "Is income above $50k?" → Yes/No branches
+    ///
+    /// This discrete, rule-based logic cannot be converted into the smooth mathematical
+    /// computation graphs that JIT compilation requires.
+    ///
+    /// For efficient Random Forest inference, use the standard Predict() method which is
+    /// optimized for tree traversal.
+    /// </para>
+    /// </remarks>
+    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "Random Forest models cannot be exported as computation graphs for JIT compilation. " +
+            "Random Forests use tree-based decision logic with discrete branching (if-then-else rules), " +
+            "which is fundamentally incompatible with the differentiable computation graphs required for JIT compilation. " +
+            "Use the standard Predict() method for inference, which is optimized for tree-based models.");
+    }
+
+    #endregion
+}

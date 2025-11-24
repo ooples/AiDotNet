@@ -605,4 +605,22 @@ public class QuantumLayer<T> : LayerBase<T>
             }
         }
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // QuantumLayer uses unitary matrix operations that could be expressed with complex number support
+        throw new NotSupportedException(
+            "QuantumLayer does not currently support JIT compilation. However, it COULD be supported by adding " +
+            "complex number operations to TensorOperations. Quantum gates are unitary matrices, and quantum state " +
+            "evolution is just matrix multiplication with complex numbers, which could be represented in a computation graph.");
+    }
+
+    public override bool SupportsJitCompilation => false; // Could be supported with complex number ops
+
 }
