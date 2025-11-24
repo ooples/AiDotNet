@@ -5648,5 +5648,732 @@ public static class TensorOperations<T>
 
         return newHiddenState;
     }
+
+    /// <summary>
+    /// Sparsemax activation: Euclidean projection onto the probability simplex.
+    /// Returns a sparse probability distribution (many exact zeros).
+    /// </summary>
+    public static ComputationNode<T> Sparsemax(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        if (inputVal.Shape.Length != 2)
+            throw new ArgumentException("Sparsemax requires 2D input [batch, features]");
+
+        int batchSize = inputVal.Shape[0];
+        int numFeatures = inputVal.Shape[1];
+        var result = new Tensor<T>(inputVal.Shape);
+
+        // Process each sample in batch
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Extract row and sort descending
+            var row = new T[numFeatures];
+            var rowDoubles = new double[numFeatures];
+            for (int i = 0; i < numFeatures; i++)
+            {
+                row[i] = inputVal[b * numFeatures + i];
+                rowDoubles[i] = numOps.ToDouble(row[i]);
+            }
+            Array.Sort(rowDoubles);
+            Array.Reverse(rowDoubles); // descending
+            for (int i = 0; i < numFeatures; i++)
+            {
+                row[i] = numOps.FromDouble(rowDoubles[i]);
+            }
+
+            // Find threshold via cumulative sum
+            T sum = numOps.Zero;
+            T threshold = numOps.Zero;
+            int k = 1;
+
+            for (int i = 0; i < numFeatures; i++)
+            {
+                sum = numOps.Add(sum, row[i]);
+                T average = numOps.Divide(sum, numOps.FromDouble(i + 1));
+                if (numOps.GreaterThan(average, row[i]))
+                {
+                    k = i;
+                    threshold = average;
+                    break;
+                }
+            }
+
+            if (k == numFeatures)
+            {
+                threshold = numOps.Divide(sum, numOps.FromDouble(numFeatures));
+            }
+
+            // Apply: sparsemax(z_i) = max(z_i - threshold, 0)
+            for (int i = 0; i < numFeatures; i++)
+            {
+                int idx = b * numFeatures + i;
+                T val = inputVal[idx];
+                T shifted = numOps.Subtract(val, threshold);
+                result[idx] = numOps.GreaterThan(shifted, numOps.Zero) ? shifted : numOps.Zero;
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                // Gradient only flows through support set (non-zero outputs)
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    // Find support set (non-zero indices)
+                    var supportIndices = new List<int>();
+                    for (int j = 0; j < numFeatures; j++)
+                    {
+                        int idx = b * numFeatures + j;
+                        if (numOps.GreaterThan(result[idx], numOps.FromDouble(1e-8)))
+                        {
+                            supportIndices.Add(j);
+                        }
+                    }
+
+                    if (supportIndices.Count == 0) continue;
+
+                    // Compute gradient correction
+                    T correction = numOps.Zero;
+                    foreach (int j in supportIndices)
+                    {
+                        int idx = b * numFeatures + j;
+                        correction = numOps.Add(correction, gradient[idx]);
+                    }
+                    correction = numOps.Divide(correction, numOps.FromDouble(supportIndices.Count));
+
+                    // Apply gradient for support set
+                    foreach (int j in supportIndices)
+                    {
+                        int idx = b * numFeatures + j;
+                        T grad = numOps.Subtract(gradient[idx], correction);
+                        gradInput[idx] = grad;
+                    }
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// SphericalSoftmax: L2 normalization followed by softmax.
+    /// Formula: softmax(x / ||x||_2)
+    /// </summary>
+    public static ComputationNode<T> SphericalSoftmax(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        if (inputVal.Shape.Length != 2)
+            throw new ArgumentException("SphericalSoftmax requires 2D input [batch, features]");
+
+        int batchSize = inputVal.Shape[0];
+        int numFeatures = inputVal.Shape[1];
+        var result = new Tensor<T>(inputVal.Shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Step 1: L2 normalize
+            T normSq = numOps.Zero;
+            for (int i = 0; i < numFeatures; i++)
+            {
+                T val = inputVal[b * numFeatures + i];
+                normSq = numOps.Add(normSq, numOps.Multiply(val, val));
+            }
+            double norm = Math.Sqrt(numOps.ToDouble(normSq));
+            if (norm < 1e-8) norm = 1.0;
+
+            var normalized = new T[numFeatures];
+            for (int i = 0; i < numFeatures; i++)
+            {
+                T val = inputVal[b * numFeatures + i];
+                normalized[i] = numOps.Divide(val, numOps.FromDouble(norm));
+            }
+
+            // Step 2: Apply softmax
+            T maxVal = normalized[0];
+            for (int i = 1; i < numFeatures; i++)
+            {
+                if (numOps.GreaterThan(normalized[i], maxVal))
+                    maxVal = normalized[i];
+            }
+
+            T sum = numOps.Zero;
+            for (int i = 0; i < numFeatures; i++)
+            {
+                T shifted = numOps.Subtract(normalized[i], maxVal);
+                double expVal = Math.Exp(numOps.ToDouble(shifted));
+                normalized[i] = numOps.FromDouble(expVal);
+                sum = numOps.Add(sum, normalized[i]);
+            }
+
+            for (int i = 0; i < numFeatures; i++)
+            {
+                result[b * numFeatures + i] = numOps.Divide(normalized[i], sum);
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    // Compute L2 norm
+                    T normSq = numOps.Zero;
+                    for (int i = 0; i < numFeatures; i++)
+                    {
+                        T val = inputVal[b * numFeatures + i];
+                        normSq = numOps.Add(normSq, numOps.Multiply(val, val));
+                    }
+                    double norm = Math.Sqrt(numOps.ToDouble(normSq));
+                    if (norm < 1e-8) norm = 1.0;
+
+                    // Softmax gradient: y * (grad - sum(y * grad))
+                    T dotProduct = numOps.Zero;
+                    for (int i = 0; i < numFeatures; i++)
+                    {
+                        int idx = b * numFeatures + i;
+                        T y = result[idx];
+                        T gradOut = gradient[idx];
+                        dotProduct = numOps.Add(dotProduct, numOps.Multiply(y, gradOut));
+                    }
+
+                    // Apply chain rule through normalization
+                    for (int i = 0; i < numFeatures; i++)
+                    {
+                        int idx = b * numFeatures + i;
+                        T y = result[idx];
+                        T gradOut = gradient[idx];
+                        T x = inputVal[idx];
+
+                        // Softmax gradient part
+                        T gradSoftmax = numOps.Multiply(y, numOps.Subtract(gradOut, dotProduct));
+
+                        // L2 normalization gradient
+                        T gradNorm = numOps.Divide(gradSoftmax, numOps.FromDouble(norm));
+
+                        gradInput[idx] = gradNorm;
+                    }
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// GumbelSoftmax activation (deterministic/inference mode for JIT).
+    /// Formula: softmax(x / temperature)
+    /// </summary>
+    public static ComputationNode<T> GumbelSoftmax(ComputationNode<T> input, double temperature = 1.0)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+        if (temperature <= 0.0)
+            throw new ArgumentException("Temperature must be positive");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        if (inputVal.Shape.Length != 2)
+            throw new ArgumentException("GumbelSoftmax requires 2D input [batch, features]");
+
+        int batchSize = inputVal.Shape[0];
+        int numFeatures = inputVal.Shape[1];
+        var result = new Tensor<T>(inputVal.Shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Divide by temperature and apply softmax
+            var scaled = new T[numFeatures];
+            T maxVal = numOps.Divide(inputVal[b * numFeatures], numOps.FromDouble(temperature));
+
+            for (int i = 0; i < numFeatures; i++)
+            {
+                scaled[i] = numOps.Divide(inputVal[b * numFeatures + i], numOps.FromDouble(temperature));
+                if (numOps.GreaterThan(scaled[i], maxVal))
+                    maxVal = scaled[i];
+            }
+
+            T sum = numOps.Zero;
+            for (int i = 0; i < numFeatures; i++)
+            {
+                T shifted = numOps.Subtract(scaled[i], maxVal);
+                double expVal = Math.Exp(numOps.ToDouble(shifted));
+                scaled[i] = numOps.FromDouble(expVal);
+                sum = numOps.Add(sum, scaled[i]);
+            }
+
+            for (int i = 0; i < numFeatures; i++)
+            {
+                result[b * numFeatures + i] = numOps.Divide(scaled[i], sum);
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    // Compute sum(y_i * grad_i)
+                    T dotProduct = numOps.Zero;
+                    for (int i = 0; i < numFeatures; i++)
+                    {
+                        int idx = b * numFeatures + i;
+                        T y = result[idx];
+                        T gradOut = gradient[idx];
+                        dotProduct = numOps.Add(dotProduct, numOps.Multiply(y, gradOut));
+                    }
+
+                    // Apply softmax Jacobian scaled by temperature
+                    for (int i = 0; i < numFeatures; i++)
+                    {
+                        int idx = b * numFeatures + i;
+                        T y = result[idx];
+                        T gradOut = gradient[idx];
+                        T grad = numOps.Multiply(y, numOps.Subtract(gradOut, dotProduct));
+                        gradInput[idx] = numOps.Divide(grad, numOps.FromDouble(temperature));
+                    }
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// TaylorSoftmax: 2nd-order Taylor approximation of softmax.
+    /// Formula: taylor_i = (1 + x_i + x_i²/2) / sum(1 + x_j + x_j²/2)
+    /// </summary>
+    public static ComputationNode<T> TaylorSoftmax(ComputationNode<T> input, int order = 2)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+        if (order != 2)
+            throw new ArgumentException("Only 2nd order Taylor supported");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        if (inputVal.Shape.Length != 2)
+            throw new ArgumentException("TaylorSoftmax requires 2D input [batch, features]");
+
+        int batchSize = inputVal.Shape[0];
+        int numFeatures = inputVal.Shape[1];
+        var result = new Tensor<T>(inputVal.Shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Compute Taylor polynomial: 1 + x + x²/2
+            var taylorVals = new T[numFeatures];
+            T sum = numOps.Zero;
+
+            for (int i = 0; i < numFeatures; i++)
+            {
+                T x = inputVal[b * numFeatures + i];
+                double xDouble = numOps.ToDouble(x);
+                double taylorVal = 1.0 + xDouble + (xDouble * xDouble) / 2.0;
+                taylorVals[i] = numOps.FromDouble(taylorVal);
+                sum = numOps.Add(sum, taylorVals[i]);
+            }
+
+            // Normalize
+            for (int i = 0; i < numFeatures; i++)
+            {
+                result[b * numFeatures + i] = numOps.Divide(taylorVals[i], sum);
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    // Recompute Taylor values and derivatives
+                    T totalSum = numOps.Zero;
+                    var taylorVals = new T[numFeatures];
+                    var taylorDerivs = new T[numFeatures];
+
+                    for (int i = 0; i < numFeatures; i++)
+                    {
+                        T x = inputVal[b * numFeatures + i];
+                        double xDouble = numOps.ToDouble(x);
+                        taylorVals[i] = numOps.FromDouble(1.0 + xDouble + (xDouble * xDouble) / 2.0);
+                        taylorDerivs[i] = numOps.FromDouble(1.0 + xDouble); // d/dx(1 + x + x²/2) = 1 + x
+                        totalSum = numOps.Add(totalSum, taylorVals[i]);
+                    }
+
+                    // Compute gradient using quotient rule
+                    T gradSum = numOps.Zero;
+                    for (int i = 0; i < numFeatures; i++)
+                    {
+                        int idx = b * numFeatures + i;
+                        T gradOut = gradient[idx];
+                        gradSum = numOps.Add(gradSum, numOps.Multiply(gradOut, taylorDerivs[i]));
+                    }
+
+                    for (int i = 0; i < numFeatures; i++)
+                    {
+                        int idx = b * numFeatures + i;
+                        T gradOut = gradient[idx];
+                        T y = result[idx];
+
+                        // Quotient rule gradient
+                        T numerator = numOps.Subtract(
+                            numOps.Multiply(taylorDerivs[i], totalSum),
+                            numOps.Multiply(taylorVals[i], gradSum));
+                        T grad = numOps.Multiply(gradOut, numOps.Multiply(y, numOps.Divide(numerator, totalSum)));
+                        gradInput[idx] = numOps.Divide(grad, totalSum);
+                    }
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// HierarchicalSoftmax: Grouped softmax activation.
+    /// Applies softmax within groups of features.
+    /// </summary>
+    public static ComputationNode<T> HierarchicalSoftmax(ComputationNode<T> input, int groupSize = 0)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        if (inputVal.Shape.Length != 2)
+            throw new ArgumentException("HierarchicalSoftmax requires 2D input [batch, features]");
+
+        int batchSize = inputVal.Shape[0];
+        int numFeatures = inputVal.Shape[1];
+        int actualGroupSize = groupSize <= 0 ? numFeatures : groupSize;
+        int numGroups = (numFeatures + actualGroupSize - 1) / actualGroupSize;
+
+        var result = new Tensor<T>(inputVal.Shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int g = 0; g < numGroups; g++)
+            {
+                int groupStart = g * actualGroupSize;
+                int groupEnd = Math.Min(groupStart + actualGroupSize, numFeatures);
+
+                // Apply softmax within this group
+                T maxVal = inputVal[b * numFeatures + groupStart];
+                for (int i = groupStart + 1; i < groupEnd; i++)
+                {
+                    T val = inputVal[b * numFeatures + i];
+                    if (numOps.GreaterThan(val, maxVal))
+                        maxVal = val;
+                }
+
+                T sum = numOps.Zero;
+                var expVals = new T[groupEnd - groupStart];
+                for (int i = groupStart; i < groupEnd; i++)
+                {
+                    T val = inputVal[b * numFeatures + i];
+                    T shifted = numOps.Subtract(val, maxVal);
+                    double expVal = Math.Exp(numOps.ToDouble(shifted));
+                    expVals[i - groupStart] = numOps.FromDouble(expVal);
+                    sum = numOps.Add(sum, expVals[i - groupStart]);
+                }
+
+                for (int i = groupStart; i < groupEnd; i++)
+                {
+                    result[b * numFeatures + i] = numOps.Divide(expVals[i - groupStart], sum);
+                }
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int g = 0; g < numGroups; g++)
+                    {
+                        int groupStart = g * actualGroupSize;
+                        int groupEnd = Math.Min(groupStart + actualGroupSize, numFeatures);
+
+                        // Compute sum(y_i * grad_i) within group
+                        T dotProduct = numOps.Zero;
+                        for (int i = groupStart; i < groupEnd; i++)
+                        {
+                            int idx = b * numFeatures + i;
+                            T y = result[idx];
+                            T gradOut = gradient[idx];
+                            dotProduct = numOps.Add(dotProduct, numOps.Multiply(y, gradOut));
+                        }
+
+                        // Apply softmax Jacobian within group
+                        for (int i = groupStart; i < groupEnd; i++)
+                        {
+                            int idx = b * numFeatures + i;
+                            T y = result[idx];
+                            T gradOut = gradient[idx];
+                            T grad = numOps.Multiply(y, numOps.Subtract(gradOut, dotProduct));
+                            gradInput[idx] = grad;
+                        }
+                    }
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Maxout activation: Takes maximum value within each group of features.
+    /// Output dimension = input dimension / groupSize
+    /// </summary>
+    public static ComputationNode<T> Maxout(ComputationNode<T> input, int groupSize)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+        if (groupSize <= 0)
+            throw new ArgumentException("Group size must be positive");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        if (inputVal.Shape.Length != 2)
+            throw new ArgumentException("Maxout requires 2D input [batch, features]");
+
+        int batchSize = inputVal.Shape[0];
+        int numFeatures = inputVal.Shape[1];
+
+        if (numFeatures % groupSize != 0)
+            throw new ArgumentException($"Number of features ({numFeatures}) must be divisible by group size ({groupSize})");
+
+        int numGroups = numFeatures / groupSize;
+        var result = new Tensor<T>(new int[] { batchSize, numGroups });
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int g = 0; g < numGroups; g++)
+            {
+                // Find maximum in this group
+                int groupStart = g * groupSize;
+                T maxVal = inputVal[b * numFeatures + groupStart];
+
+                for (int i = 1; i < groupSize; i++)
+                {
+                    T val = inputVal[b * numFeatures + groupStart + i];
+                    if (numOps.GreaterThan(val, maxVal))
+                        maxVal = val;
+                }
+
+                result[b * numGroups + g] = maxVal;
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                // Gradient flows only to the maximum element in each group
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int g = 0; g < numGroups; g++)
+                    {
+                        // Find index of maximum in this group
+                        int groupStart = g * groupSize;
+                        int maxIdx = groupStart;
+                        T maxVal = inputVal[b * numFeatures + groupStart];
+
+                        for (int i = 1; i < groupSize; i++)
+                        {
+                            int idx = b * numFeatures + groupStart + i;
+                            T val = inputVal[idx];
+                            if (numOps.GreaterThan(val, maxVal))
+                            {
+                                maxVal = val;
+                                maxIdx = groupStart + i;
+                            }
+                        }
+
+                        // Gradient flows only to max element
+                        int inputIdx = b * numFeatures + maxIdx;
+                        int outputIdx = b * numGroups + g;
+                        gradInput[inputIdx] = gradient[outputIdx];
+                    }
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
 }
 
