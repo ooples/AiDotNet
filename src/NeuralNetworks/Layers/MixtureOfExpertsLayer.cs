@@ -1811,13 +1811,14 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // MixtureOfExpertsLayer cannot support JIT compilation due to input-dependent dynamic routing
+        throw new NotSupportedException(
+            "MixtureOfExpertsLayer does not support JIT compilation because it requires input-dependent " +
+            "dynamic routing decisions at runtime. The layer uses a router network to determine which experts " +
+            "to activate for each input, and in Top-K mode, performs dynamic expert selection that cannot be " +
+            "represented in a static computation graph.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Requires input-dependent dynamic routing
 
 }

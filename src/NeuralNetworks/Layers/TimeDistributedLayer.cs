@@ -554,13 +554,14 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // TimeDistributedLayer cannot support JIT compilation because it requires dynamic looping
+        // over time steps and slicing operations that are not available in the static computation graph
+        throw new NotSupportedException(
+            "TimeDistributedLayer does not support JIT compilation because it requires dynamic iteration " +
+            "over variable-length time sequences and tensor slicing operations that cannot be represented " +
+            "in a static computation graph.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Requires dynamic time-step iteration
 
 }

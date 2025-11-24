@@ -1132,13 +1132,13 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // MemoryReadLayer accesses external memory with attention mechanism
+        throw new NotSupportedException(
+            "MemoryReadLayer does not support JIT compilation because it requires access to external memory state " +
+            "with attention-based addressing. The layer's memory access patterns depend on runtime attention scores " +
+            "and cannot be statically compiled.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Requires external memory access
 
 }

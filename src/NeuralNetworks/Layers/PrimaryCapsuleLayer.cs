@@ -700,13 +700,13 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // PrimaryCapsuleLayer creates capsule representations with custom squashing
+        throw new NotSupportedException(
+            "PrimaryCapsuleLayer does not support JIT compilation because it uses capsule-specific operations " +
+            "including squashing activations and capsule grouping that require specialized processing not available " +
+            "in the static computation graph framework.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Requires capsule-specific operations
 
 }

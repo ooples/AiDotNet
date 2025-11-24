@@ -672,13 +672,14 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // SynapticPlasticityLayer uses STDP and temporal activity traces
+        throw new NotSupportedException(
+            "SynapticPlasticityLayer does not support JIT compilation because it implements spike-timing-dependent " +
+            "plasticity (STDP) with temporal activity traces. The layer requires tracking the timing of pre- and " +
+            "post-synaptic spikes to modify connection strengths, which involves temporal state that cannot be " +
+            "represented in a static computation graph.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Requires STDP temporal traces
 
 }

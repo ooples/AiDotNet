@@ -1185,13 +1185,13 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // MemoryWriteLayer writes to external memory with attention mechanism
+        throw new NotSupportedException(
+            "MemoryWriteLayer does not support JIT compilation because it writes to external memory state " +
+            "with attention-based addressing. The layer's memory write operations depend on runtime attention scores " +
+            "and cannot be statically compiled.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Requires external memory modification
 
 }

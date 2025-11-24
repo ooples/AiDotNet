@@ -587,13 +587,28 @@ public class ReconstructionLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
+        // Check if all inner layers support JIT compilation
+        if (!_fc1.SupportsJitCompilation || !_fc2.SupportsJitCompilation || !_fc3.SupportsJitCompilation)
+            throw new InvalidOperationException("ReconstructionLayer requires all inner fully connected layers to support JIT compilation.");
+
         var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // Chain the three fully connected layers sequentially
+        var fc1InputNodes = new List<ComputationNode<T>>();
+        var currentNode = _fc1.ExportComputationGraph(fc1InputNodes);
+
+        var fc2InputNodes = new List<ComputationNode<T>>();
+        currentNode = _fc2.ExportComputationGraph(fc2InputNodes);
+
+        var fc3InputNodes = new List<ComputationNode<T>>();
+        currentNode = _fc3.ExportComputationGraph(fc3InputNodes);
+
+        return currentNode;
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation =>
+        _fc1.SupportsJitCompilation && _fc2.SupportsJitCompilation && _fc3.SupportsJitCompilation;
 
 }

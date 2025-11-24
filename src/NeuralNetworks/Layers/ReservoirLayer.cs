@@ -587,13 +587,13 @@ public class ReservoirLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // ReservoirLayer is a stateful recurrent layer with internal reservoir dynamics
+        throw new NotSupportedException(
+            "ReservoirLayer does not support JIT compilation because it is a stateful recurrent layer (Echo State Network) " +
+            "that maintains internal reservoir state across time steps. The layer's recurrent dynamics with fixed random " +
+            "weights require temporal state propagation that cannot be represented in a static computation graph.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Stateful recurrent reservoir
 
 }

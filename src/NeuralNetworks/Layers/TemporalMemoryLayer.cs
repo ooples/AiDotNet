@@ -572,13 +572,13 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // TemporalMemoryLayer uses HTM sequence learning with complex cell state tracking
+        throw new NotSupportedException(
+            "TemporalMemoryLayer does not support JIT compilation because it implements Hierarchical Temporal Memory (HTM) " +
+            "sequence learning with complex cell state tracking, predictive columns, and temporal context. The layer maintains " +
+            "internal state across time steps and uses adaptive learning rules that cannot be represented in a static computation graph.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Requires HTM temporal state tracking
 
 }

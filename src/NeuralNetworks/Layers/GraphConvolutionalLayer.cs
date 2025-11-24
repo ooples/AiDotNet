@@ -1093,13 +1093,13 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // GraphConvolutionalLayer requires adjacency matrix operations and graph-specific computations
+        throw new NotSupportedException(
+            "GraphConvolutionalLayer does not support JIT compilation because it processes graph-structured data " +
+            "using an adjacency matrix and requires graph-specific operations for node feature aggregation that are " +
+            "not available in the standard TensorOperations framework.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Requires graph-specific operations
 
 }

@@ -1514,13 +1514,12 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // SpatialTransformerLayer requires grid generation and bilinear interpolation
+        throw new NotSupportedException(
+            "SpatialTransformerLayer does not support JIT compilation because it requires learnable spatial transformations " +
+            "with grid generation and bilinear interpolation sampling that are not available in the TensorOperations framework.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Requires spatial transformation operations
 
 }

@@ -683,13 +683,13 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // SpatialPoolerLayer uses HTM principles with adaptive learning and sparse distributed representations
+        throw new NotSupportedException(
+            "SpatialPoolerLayer does not support JIT compilation because it implements Hierarchical Temporal Memory (HTM) " +
+            "principles with adaptive learning of sparse distributed representations. The layer requires competitive " +
+            "inhibition, permanence updates, and boosting mechanisms that cannot be represented in a static computation graph.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Requires HTM learning dynamics
 
 }

@@ -331,13 +331,13 @@ public class MeasurementLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // MeasurementLayer performs quantum measurement operations on complex-valued states
+        throw new NotSupportedException(
+            "MeasurementLayer does not support JIT compilation because it performs quantum measurement operations " +
+            "on complex-valued quantum state amplitudes, requiring operations with complex numbers and probability " +
+            "collapse that are not available in the TensorOperations framework.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Requires quantum measurement operations
 
 }

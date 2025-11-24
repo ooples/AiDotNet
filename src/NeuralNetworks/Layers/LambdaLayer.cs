@@ -379,13 +379,11 @@ public class LambdaLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // LambdaLayer cannot support JIT compilation because it uses arbitrary user-defined functions
+        // that cannot be compiled to a computation graph
+        throw new NotSupportedException("LambdaLayer does not support JIT compilation because it relies on custom runtime functions.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Cannot compile arbitrary user functions
 
 }

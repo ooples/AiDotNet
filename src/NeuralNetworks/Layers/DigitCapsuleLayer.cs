@@ -684,13 +684,13 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // DigitCapsuleLayer uses dynamic routing algorithm similar to CapsuleLayer
+        throw new NotSupportedException(
+            "DigitCapsuleLayer does not support JIT compilation because it requires dynamic routing between " +
+            "capsules with iterative agreement computation. The routing algorithm cannot be represented in a " +
+            "static computation graph.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Requires dynamic routing iterations
 
 }

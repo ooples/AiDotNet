@@ -1589,13 +1589,14 @@ public class SpikingLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // SpikingLayer simulates biological neuron dynamics with discrete spike events
+        throw new NotSupportedException(
+            "SpikingLayer does not support JIT compilation because it simulates biologically-inspired spiking neuron models " +
+            "(Leaky Integrate-and-Fire, Izhikevich, etc.) with discrete spike events, membrane potential dynamics, and " +
+            "refractory periods. These temporal dynamics require simulation across time steps and cannot be represented " +
+            "in a static computation graph.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Requires spiking neuron simulation
 
 }

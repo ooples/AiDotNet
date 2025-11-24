@@ -487,13 +487,38 @@ public class ExpertLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
+        // Check if all inner layers support JIT
+        foreach (var layer in _layers)
+        {
+            if (layer is LayerBase<T> layerBase && !layerBase.SupportsJitCompilation)
+                throw new InvalidOperationException($"Inner layer does not support JIT compilation.");
+        }
+
         var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // Chain layers sequentially
+        var currentNode = inputNode;
+        foreach (var layer in _layers)
+        {
+            if (layer is LayerBase<T> layerBase)
+            {
+                var layerInputNodes = new List<ComputationNode<T>>();
+                currentNode = layerBase.ExportComputationGraph(layerInputNodes);
+            }
+        }
+
+        // Apply expert's activation function if specified
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+        {
+            currentNode = ScalarActivation.ApplyToGraph(currentNode);
+        }
+
+        return currentNode;
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation =>
+        _layers.All(l => l is LayerBase<T> layerBase && layerBase.SupportsJitCompilation);
 
 }

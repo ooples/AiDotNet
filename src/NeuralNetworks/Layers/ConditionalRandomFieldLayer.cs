@@ -765,13 +765,13 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity/placeholder - needs specific implementation
+        // ConditionalRandomFieldLayer uses iterative inference algorithms like Viterbi decoding
+        throw new NotSupportedException(
+            "ConditionalRandomFieldLayer does not support JIT compilation because it requires dynamic " +
+            "inference algorithms such as Viterbi decoding or forward-backward passes that involve " +
+            "variable-length sequences and iterative computations.");
     }
 
-    public override bool SupportsJitCompilation => false; // Placeholder
+    public override bool SupportsJitCompilation => false; // Requires dynamic sequence inference
 
 }
