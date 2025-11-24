@@ -3730,6 +3730,14 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { a },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.PixelShuffle;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "UpscaleFactor", upscaleFactor }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -3923,6 +3931,16 @@ public static class TensorOperations<T>
             parents: parents,
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.DilatedConv2D;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Stride", stride },
+            { "Padding", padding },
+            { "Dilation", dilation }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -4147,6 +4165,15 @@ public static class TensorOperations<T>
             parents: parents,
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.DepthwiseConv2D;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Stride", stride },
+            { "Padding", padding }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -4360,6 +4387,15 @@ public static class TensorOperations<T>
             parents: parents,
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.LocallyConnectedConv2D;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Stride", stride },
+            { "Padding", padding }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
