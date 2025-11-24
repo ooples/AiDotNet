@@ -1346,6 +1346,336 @@ public static class TensorOperations<T>
                 $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
         }
     }
+
+    /// <summary>
+    /// Applies Sparsemax activation function (sparse softmax via Euclidean projection onto simplex).
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="axis">The axis along which to compute sparsemax. Default is -1 (last axis).</param>
+    /// <returns>A new computation node containing the sparsemax result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Sparsemax is a sparse alternative to softmax that can produce exactly zero probabilities.
+    /// Algorithm: sparsemax(z) = max(z - τ, 0) where τ is computed via Euclidean projection onto probability simplex.
+    /// The backward pass uses: ∂sparsemax/∂z = diag(S) - (1/|S|) * (s * s^T) where S is the support set (non-zero indices).
+    /// </para>
+    /// <para><b>For Beginners:</b> Sparsemax converts scores to probabilities like softmax, but can assign exactly zero probability.
+    ///
+    /// For sparsemax:
+    /// - The forward pass projects input onto the simplex, potentially setting some values to exactly zero
+    /// - All non-zero values sum to 1 (probability distribution)
+    /// - The backward pass only propagates gradients through non-zero outputs
+    ///
+    /// Sparsemax is useful for:
+    /// - Classification with many classes where only a few are relevant
+    /// - Attention mechanisms with sparse focus
+    /// - Interpretable probability distributions
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Sparsemax(ComputationNode<T> a, int axis = -1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+
+        if (axis < 0)
+            axis = shape.Length + axis;
+
+        if (shape.Length == 2 && axis == 1)
+        {
+            int batchSize = shape[0];
+            int features = shape[1];
+            var result = new Tensor<T>(shape);
+            var supportSets = new List<bool[]>();
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                var row = new T[features];
+                for (int f = 0; f < features; f++)
+                    row[f] = a.Value[b, f];
+
+                var sorted = row.OrderByDescending(x => x).ToArray();
+
+                int k = 1;
+                T sum = sorted[0];
+                T threshold = numOps.Zero;
+
+                for (int i = 1; i < features; i++)
+                {
+                    sum = numOps.Add(sum, sorted[i]);
+                    T kPlusOne = numOps.FromDouble(i + 1);
+                    T avgMinusZ = numOps.Subtract(
+                        numOps.Divide(sum, kPlusOne),
+                        sorted[i]
+                    );
+
+                    if (numOps.GreaterThan(avgMinusZ, numOps.Zero))
+                    {
+                        k = i + 1;
+                        threshold = numOps.Divide(
+                            numOps.Subtract(sum, numOps.One),
+                            numOps.FromDouble(k)
+                        );
+                        break;
+                    }
+                }
+
+                if (k == 1)
+                {
+                    threshold = numOps.Divide(
+                        numOps.Subtract(sum, numOps.One),
+                        numOps.FromDouble(k)
+                    );
+                }
+
+                var support = new bool[features];
+                for (int f = 0; f < features; f++)
+                {
+                    var shifted = numOps.Subtract(row[f], threshold);
+                    if (numOps.GreaterThan(shifted, numOps.Zero))
+                    {
+                        result[b, f] = shifted;
+                        support[f] = true;
+                    }
+                    else
+                    {
+                        result[b, f] = numOps.Zero;
+                        support[f] = false;
+                    }
+                }
+                supportSets.Add(support);
+            }
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                if (a.RequiresGradient)
+                {
+                    var gradA = new Tensor<T>(shape);
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        var support = supportSets[b];
+                        int supportSize = support.Count(s => s);
+
+                        if (supportSize == 0)
+                            continue;
+
+                        T supportSizeT = numOps.FromDouble(supportSize);
+                        T sumGrad = numOps.Zero;
+
+                        for (int f = 0; f < features; f++)
+                        {
+                            if (support[f])
+                                sumGrad = numOps.Add(sumGrad, gradient[b, f]);
+                        }
+
+                        T avgGrad = numOps.Divide(sumGrad, supportSizeT);
+
+                        for (int f = 0; f < features; f++)
+                        {
+                            if (support[f])
+                                gradA[b, f] = numOps.Subtract(gradient[b, f], avgGrad);
+                            else
+                                gradA[b, f] = numOps.Zero;
+                        }
+                    }
+
+                    if (a.Gradient == null)
+                    {
+                        a.Gradient = gradA;
+                    }
+                    else
+                    {
+                        var existingGradient = a.Gradient;
+                        if (existingGradient != null)
+                        {
+                            a.Gradient = existingGradient.Add(gradA);
+                        }
+                    }
+                }
+            }
+
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient,
+                parents: new List<ComputationNode<T>> { a },
+                backwardFunction: BackwardFunction,
+                name: null);
+
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+
+            return node;
+        }
+        else
+        {
+            throw new NotImplementedException(
+                $"Sparsemax is currently only implemented for 2D tensors along axis=-1. " +
+                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
+        }
+    }
+
+    /// <summary>
+    /// Applies Spherical Softmax activation function (L2 normalization followed by softmax).
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="axis">The axis along which to compute spherical softmax. Default is -1 (last axis).</param>
+    /// <returns>A new computation node containing the spherical softmax result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Spherical Softmax normalizes inputs to unit sphere before applying softmax.
+    /// Formula: spherical_softmax(x) = softmax(x / ||x||_2).
+    /// The backward pass combines gradients from both normalization and softmax steps.
+    /// </para>
+    /// <para><b>For Beginners:</b> Spherical Softmax is softmax with L2 normalization for numerical stability.
+    ///
+    /// For spherical softmax:
+    /// - First normalizes input to unit length (projects to unit sphere)
+    /// - Then applies standard softmax
+    /// - Improves stability with large magnitude inputs
+    ///
+    /// Spherical Softmax is useful for:
+    /// - Classification with varying input magnitudes
+    /// - Attention mechanisms with scale invariance
+    /// - Numerically stable probability distributions
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> SphericalSoftmax(ComputationNode<T> a, int axis = -1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+
+        if (axis < 0)
+            axis = shape.Length + axis;
+
+        if (shape.Length == 2 && axis == 1)
+        {
+            int batchSize = shape[0];
+            int features = shape[1];
+            var result = new Tensor<T>(shape);
+            var norms = new T[batchSize];
+            var normalized = new Tensor<T>(shape);
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                T sumSquares = numOps.Zero;
+                for (int f = 0; f < features; f++)
+                {
+                    var val = a.Value[b, f];
+                    sumSquares = numOps.Add(sumSquares, numOps.Multiply(val, val));
+                }
+
+                T norm = numOps.Sqrt(sumSquares);
+                norms[b] = norm;
+
+                T epsilon = numOps.FromDouble(1e-8);
+                if (numOps.LessThan(norm, epsilon))
+                    norm = epsilon;
+
+                for (int f = 0; f < features; f++)
+                {
+                    normalized[b, f] = numOps.Divide(a.Value[b, f], norm);
+                }
+
+                var maxVal = normalized[b, 0];
+                for (int f = 1; f < features; f++)
+                {
+                    if (numOps.GreaterThan(normalized[b, f], maxVal))
+                        maxVal = normalized[b, f];
+                }
+
+                var expSum = numOps.Zero;
+                var expValues = new T[features];
+                for (int f = 0; f < features; f++)
+                {
+                    var shifted = numOps.Subtract(normalized[b, f], maxVal);
+                    expValues[f] = numOps.Exp(shifted);
+                    expSum = numOps.Add(expSum, expValues[f]);
+                }
+
+                for (int f = 0; f < features; f++)
+                {
+                    result[b, f] = numOps.Divide(expValues[f], expSum);
+                }
+            }
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                if (a.RequiresGradient)
+                {
+                    var gradA = new Tensor<T>(shape);
+
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        var dotProduct = numOps.Zero;
+                        for (int f = 0; f < features; f++)
+                        {
+                            dotProduct = numOps.Add(dotProduct,
+                                numOps.Multiply(gradient[b, f], result[b, f]));
+                        }
+
+                        var norm = norms[b];
+                        T epsilon = numOps.FromDouble(1e-8);
+                        if (numOps.LessThan(norm, epsilon))
+                            norm = epsilon;
+
+                        for (int f = 0; f < features; f++)
+                        {
+                            var softmaxGrad = numOps.Subtract(gradient[b, f], dotProduct);
+                            softmaxGrad = numOps.Multiply(result[b, f], softmaxGrad);
+
+                            T normTerm = numOps.Zero;
+                            for (int j = 0; j < features; j++)
+                            {
+                                normTerm = numOps.Add(normTerm,
+                                    numOps.Multiply(a.Value[b, j], gradient[b, j]));
+                            }
+                            normTerm = numOps.Multiply(normTerm, a.Value[b, f]);
+                            normTerm = numOps.Divide(normTerm,
+                                numOps.Multiply(norm, numOps.Multiply(norm, norm)));
+
+                            gradA[b, f] = numOps.Divide(
+                                numOps.Subtract(softmaxGrad, normTerm),
+                                norm
+                            );
+                        }
+                    }
+
+                    if (a.Gradient == null)
+                    {
+                        a.Gradient = gradA;
+                    }
+                    else
+                    {
+                        var existingGradient = a.Gradient;
+                        if (existingGradient != null)
+                        {
+                            a.Gradient = existingGradient.Add(gradA);
+                        }
+                    }
+                }
+            }
+
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient,
+                parents: new List<ComputationNode<T>> { a },
+                backwardFunction: BackwardFunction,
+                name: null);
+
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+
+            return node;
+        }
+        else
+        {
+            throw new NotImplementedException(
+                $"SphericalSoftmax is currently only implemented for 2D tensors along axis=-1. " +
+                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
+        }
+    }
+
     /// <summary>
     /// Concatenates multiple computation nodes along a specified axis.
     /// </summary>

@@ -469,6 +469,16 @@ public interface IEngine
     /// </summary>
     Tensor<T> ELU<T>(Tensor<T> tensor, double alpha = 1.0);
 
+    /// <summary>
+    /// Applies Sparsemax activation function (sparse softmax via Euclidean projection onto simplex).
+    /// </summary>
+    Tensor<T> Sparsemax<T>(Tensor<T> input) where T : struct;
+
+    /// <summary>
+    /// Applies Spherical Softmax activation function (L2 normalization followed by softmax).
+    /// </summary>
+    Tensor<T> SphericalSoftmax<T>(Tensor<T> input) where T : struct;
+
     #endregion
 
     #region Matrix Operations (Phase B: Epic 2)

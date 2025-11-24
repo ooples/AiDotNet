@@ -1499,6 +1499,18 @@ public class GpuEngine : IEngine, IDisposable
         return _cpuFallback.ELU(tensor, alpha);
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> Sparsemax<T>(Tensor<T> input) where T : struct
+    {
+        return _cpuFallback.Sparsemax(input);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SphericalSoftmax<T>(Tensor<T> input) where T : struct
+    {
+        return _cpuFallback.SphericalSoftmax(input);
+    }
+
     #endregion
 
     #region GPU Kernels (Float Implementation)
