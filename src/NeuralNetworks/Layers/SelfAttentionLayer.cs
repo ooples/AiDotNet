@@ -1064,18 +1064,18 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// that the activations and gradients have appropriate magnitudes, which improves training dynamics.
     /// </para>
     /// <para><b>For Beginners:</b> This method fills a weight matrix with properly sized random values.
-    /// 
+    ///
     /// During initialization:
     /// - The method loops through every position in the matrix
     /// - At each position, it generates a random number between -0.5 and 0.5
     /// - It multiplies this number by a scaling factor to get the right magnitude
     /// - The result becomes the initial weight value at that position
-    /// 
+    ///
     /// This random initialization is crucial because:
     /// - Starting with all zeros or the same value would make all neurons learn the same patterns
     /// - Starting with values that are too large or small would cause training problems
     /// - The slight randomness breaks symmetry and allows different neurons to specialize
-    /// 
+    ///
     /// The scaling factor ensures that these random values are appropriately sized based on
     /// the dimensions of the matrix, helping training to proceed smoothly.
     /// </para>
@@ -1089,5 +1089,133 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
             }
         }
+    }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// True if the layer's activation function is supported for JIT compilation.
+    /// </value>
+    public override bool SupportsJitCompilation => CanActivationBeJitted();
+
+    /// <summary>
+    /// Exports the computation graph for this self-attention layer for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input variable nodes.</param>
+    /// <returns>The output computation node representing the self-attention output.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds the computation graph for self-attention:
+    /// SelfAttention(X) = Attention(X·W_Q, X·W_K, X·W_V)
+    /// where Q = K = V = X (input attends to itself)
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        // Validate parameters
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_queryWeights == null || _keyWeights == null || _valueWeights == null)
+            throw new InvalidOperationException("Layer weights not initialized. Call Initialize() or train the layer first.");
+
+        if (_outputBias == null)
+            throw new InvalidOperationException("Layer biases not initialized. Call Initialize() or train the layer first.");
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (!CanActivationBeJitted())
+        {
+            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax, Identity");
+        }
+
+        // For self-attention, input shape is [batchSize, sequenceLength, embeddingDimension]
+        int sequenceLength = _sequenceLength;
+        int embeddingDimension = _embeddingDimension;
+
+        // Create placeholder for input data
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, sequenceLength, embeddingDimension });
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input");
+
+        // Create constant nodes for weights
+        var queryWeightsTensor = MatrixToTensor(_queryWeights);
+        var keyWeightsTensor = MatrixToTensor(_keyWeights);
+        var valueWeightsTensor = MatrixToTensor(_valueWeights);
+
+        var queryWeightsNode = Autodiff.TensorOperations<T>.Variable(queryWeightsTensor, "queryWeights");
+        var keyWeightsNode = Autodiff.TensorOperations<T>.Variable(keyWeightsTensor, "keyWeights");
+        var valueWeightsNode = Autodiff.TensorOperations<T>.Variable(valueWeightsTensor, "valueWeights");
+
+        var biasesTensor = VectorToTensor(_outputBias);
+        var biasesNode = Autodiff.TensorOperations<T>.Variable(biasesTensor, "outputBias");
+
+        // Add input nodes
+        inputNodes.Add(inputNode);
+        inputNodes.Add(queryWeightsNode);
+        inputNodes.Add(keyWeightsNode);
+        inputNodes.Add(valueWeightsNode);
+        inputNodes.Add(biasesNode);
+
+        // Build computation graph for self-attention
+        // SelfAttention(X) where Q = K = V = X
+
+        // Step 1: Compute Q, K, V projections from the same input
+        var Q = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, queryWeightsNode);
+        var K = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, keyWeightsNode);
+        var V = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, valueWeightsNode);
+
+        // Step 2: Compute attention scores: Q · K^T
+        var K_T = Autodiff.TensorOperations<T>.Transpose(K);
+        var scores = Autodiff.TensorOperations<T>.MatrixMultiply(Q, K_T);
+
+        // Step 3: Scale by sqrt(d_k)
+        var scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+        var scaleTensor = new Tensor<T>(new int[] { 1 });
+        scaleTensor[0] = scale;
+        var scaleNode = Autodiff.TensorOperations<T>.Variable(scaleTensor, "scale");
+        var scaledScores = Autodiff.TensorOperations<T>.ElementwiseMultiply(scores, scaleNode);
+
+        // Step 4: Apply softmax
+        var attentionWeights = Autodiff.TensorOperations<T>.Softmax(scaledScores, axis: -1);
+
+        // Step 5: Apply attention to values: attention_weights · V
+        var attentionOutput = Autodiff.TensorOperations<T>.MatrixMultiply(attentionWeights, V);
+
+        // Step 6: Add biases
+        var output = Autodiff.TensorOperations<T>.Add(attentionOutput, biasesNode);
+
+        // Step 7: Apply activation (typically Identity for self-attention)
+        var activatedOutput = ApplyActivationToGraph(output);
+
+        return activatedOutput;
+    }
+
+    /// <summary>
+    /// Converts a Matrix to a 2D Tensor.
+    /// </summary>
+    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
+    {
+        var tensor = new Tensor<T>(new int[] { matrix.Rows, matrix.Columns });
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                tensor[i, j] = matrix[i, j];
+            }
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a Vector to a 1D Tensor.
+    /// </summary>
+    private Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        return Tensor<T>.FromVector(vector);
     }
 }
