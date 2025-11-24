@@ -692,6 +692,45 @@ public interface IEngine
     Tensor<T> BatchMatMul<T>(Tensor<T> a, Tensor<T> b);
 
     /// <summary>
+    /// Performs matrix multiplication on two 2D tensors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor (M x K) - must be 2D.</param>
+    /// <param name="b">The second tensor (K x N) - must be 2D.</param>
+    /// <returns>The product tensor (M x N).</returns>
+    /// <exception cref="ArgumentException">Thrown when tensors are not 2D or dimensions are incompatible.</exception>
+    /// <remarks>
+    /// <para>
+    /// Matrix multiplication for 2D tensors. This is the tensor equivalent of MatrixMultiply.
+    /// Used in autodiff computation graphs where operations work with Tensor types.
+    /// </para>
+    /// <para>
+    /// For 2D tensors: result[i,j] = sum(a[i,k] * b[k,j]) for all k.
+    /// GPU acceleration provides significant speedup for large matrices.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorMatMul<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Transposes a 2D tensor (swaps rows and columns).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor (M x N) - must be 2D.</param>
+    /// <returns>The transposed tensor (N x M).</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor is not 2D.</exception>
+    /// <remarks>
+    /// <para>
+    /// Transpose operation for 2D tensors. This is the tensor equivalent of MatrixTranspose.
+    /// Used in autodiff computation graphs where operations work with Tensor types.
+    /// </para>
+    /// <para>
+    /// For a 2D tensor, swaps dimensions: if input has shape [M, N], result has shape [N, M].
+    /// GPU acceleration provides speedup for large tensors through coalesced memory access.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorTranspose<T>(Tensor<T> tensor);
+
+    /// <summary>
     /// Adds two tensors element-wise.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>

@@ -3966,6 +3966,104 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
+    public Tensor<T> TensorMatMul<T>(Tensor<T> a, Tensor<T> b)
+    {
+        // Adaptive execution: check size threshold (Phase B: US-GPU-004)
+        // Use matrix multiply threshold since this is a matrix operation
+        if (Math.Max(a.Shape[0], a.Shape[1]) < _thresholds.MatrixMultiply)
+        {
+            return _cpuFallback.TensorMatMul(a, b);
+        }
+
+        // Check GPU health and type support (Phase B: US-GPU-006)
+        if (SupportsGpu && _gpuHealthy)
+        {
+            // For 2D tensors, we can use matrix operations directly
+            // Convert to Matrix, multiply, convert back to Tensor
+            if (typeof(T) == typeof(float))
+            {
+                var matrixA = ToMatrix((Tensor<float>)(object)a);
+                var matrixB = ToMatrix((Tensor<float>)(object)b);
+                var resultMatrix = MatrixMultiply(matrixA, matrixB);
+                return (Tensor<T>)(object)ToTensor(resultMatrix);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var matrixA = ToMatrix((Tensor<double>)(object)a);
+                var matrixB = ToMatrix((Tensor<double>)(object)b);
+                var resultMatrix = MatrixMultiply(matrixA, matrixB);
+                return (Tensor<T>)(object)ToTensor(resultMatrix);
+            }
+        }
+
+        // Fallback to CPU for unsupported types or unhealthy GPU
+        return _cpuFallback.TensorMatMul(a, b);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorTranspose<T>(Tensor<T> tensor)
+    {
+        // Adaptive execution: check size threshold (Phase B: US-GPU-004)
+        // Use MatrixMultiply threshold as a proxy for transpose threshold
+        if (Math.Max(tensor.Shape[0], tensor.Shape[1]) < _thresholds.MatrixMultiply)
+        {
+            return _cpuFallback.TensorTranspose(tensor);
+        }
+
+        // Check GPU health and type support (Phase B: US-GPU-006)
+        if (SupportsGpu && _gpuHealthy)
+        {
+            // For 2D tensors, we can use matrix transpose directly
+            // Convert to Matrix, transpose, convert back to Tensor
+            if (typeof(T) == typeof(float))
+            {
+                var matrix = ToMatrix((Tensor<float>)(object)tensor);
+                var resultMatrix = MatrixTranspose(matrix);
+                return (Tensor<T>)(object)ToTensor(resultMatrix);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var matrix = ToMatrix((Tensor<double>)(object)tensor);
+                var resultMatrix = MatrixTranspose(matrix);
+                return (Tensor<T>)(object)ToTensor(resultMatrix);
+            }
+        }
+
+        // Fallback to CPU for unsupported types or unhealthy GPU
+        return _cpuFallback.TensorTranspose(tensor);
+    }
+
+    // Helper methods to convert between Matrix and Tensor for 2D operations
+    private static Matrix<T> ToMatrix<T>(Tensor<T> tensor)
+    {
+        if (tensor.Rank != 2)
+            throw new ArgumentException("Tensor must be 2D to convert to Matrix");
+
+        var matrix = new Matrix<T>(tensor.Shape[0], tensor.Shape[1]);
+        for (int i = 0; i < tensor.Shape[0]; i++)
+        {
+            for (int j = 0; j < tensor.Shape[1]; j++)
+            {
+                matrix[i, j] = tensor[i, j];
+            }
+        }
+        return matrix;
+    }
+
+    private static Tensor<T> ToTensor<T>(Matrix<T> matrix)
+    {
+        var tensor = new Tensor<T>(new[] { matrix.Rows, matrix.Columns });
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                tensor[i, j] = matrix[i, j];
+            }
+        }
+        return tensor;
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> TensorAdd<T>(Tensor<T> a, Tensor<T> b)
     {
         // Adaptive execution: use vector threshold (Phase B: US-GPU-004)

@@ -730,6 +730,76 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    public Tensor<T> TensorMatMul<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Rank != 2 || b.Rank != 2)
+        {
+            throw new ArgumentException(
+                $"TensorMatMul requires 2D tensors. Got ranks {a.Rank} and {b.Rank}.");
+        }
+
+        int m = a.Shape[0];
+        int k = a.Shape[1];
+        int k2 = b.Shape[0];
+        int n = b.Shape[1];
+
+        if (k != k2)
+        {
+            throw new ArgumentException(
+                $"Matrix dimensions incompatible for multiplication. " +
+                $"First tensor has shape [{m}, {k}], second has shape [{k2}, {n}]. " +
+                $"Inner dimensions must match ({k} != {k2}).");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(new[] { m, n });
+
+        // Standard matrix multiplication: C = A @ B
+        for (int i = 0; i < m; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                T sum = numOps.Zero;
+                for (int p = 0; p < k; p++)
+                {
+                    sum = numOps.Add(sum, numOps.Multiply(a[i, p], b[p, j]));
+                }
+                result[i, j] = sum;
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorTranspose<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (tensor.Rank != 2)
+        {
+            throw new ArgumentException(
+                $"TensorTranspose requires a 2D tensor. Got rank {tensor.Rank}.");
+        }
+
+        int rows = tensor.Shape[0];
+        int cols = tensor.Shape[1];
+        var result = new Tensor<T>(new[] { cols, rows });
+
+        // Transpose: result[j, i] = tensor[i, j]
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                result[j, i] = tensor[i, j];
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> TensorAdd<T>(Tensor<T> a, Tensor<T> b)
     {
         if (a == null) throw new ArgumentNullException(nameof(a));
