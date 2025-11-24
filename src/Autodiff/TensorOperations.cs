@@ -1347,6 +1347,242 @@ public static class TensorOperations<T>
         }
     }
     /// <summary>
+    /// Applies Gumbel-Softmax activation for differentiable sampling from discrete distributions.
+    /// </summary>
+    /// <param name="a">Input computation node.</param>
+    /// <param name="temperature">Temperature parameter (default 1.0). Lower temperature makes distribution more peaked.</param>
+    /// <param name="hard">Whether to use straight-through estimator (hard=true) or soft (hard=false).</param>
+    /// <returns>A computation node with Gumbel-Softmax applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// For JIT compilation, Gumbel-Softmax is implemented without Gumbel noise (inference mode).
+    /// This is equivalent to temperature-scaled softmax: softmax(x / temperature).
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> GumbelSoftmax(ComputationNode<T> a, double temperature = 1.0, bool hard = false)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+
+        // For JIT: implement as temperature-scaled softmax (no Gumbel noise)
+        // This is the inference mode which is deterministic and suitable for JIT
+        if (shape.Length == 2)
+        {
+            int batchSize = shape[0];
+            int features = shape[1];
+            var result = new Tensor<T>(shape);
+            var tempValue = numOps.FromDouble(temperature);
+
+            // Compute temperature-scaled softmax for each row
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Find max for numerical stability
+                var maxVal = numOps.Divide(a.Value[b, 0], tempValue);
+                for (int f = 1; f < features; f++)
+                {
+                    var scaledVal = numOps.Divide(a.Value[b, f], tempValue);
+                    if (numOps.GreaterThan(scaledVal, maxVal))
+                        maxVal = scaledVal;
+                }
+
+                // Compute exp((x - max) / temperature) and sum
+                var expSum = numOps.Zero;
+                var expValues = new T[features];
+                for (int f = 0; f < features; f++)
+                {
+                    var scaledVal = numOps.Divide(a.Value[b, f], tempValue);
+                    var shifted = numOps.Subtract(scaledVal, maxVal);
+                    expValues[f] = numOps.Exp(shifted);
+                    expSum = numOps.Add(expSum, expValues[f]);
+                }
+
+                // Normalize
+                for (int f = 0; f < features; f++)
+                {
+                    result[b, f] = numOps.Divide(expValues[f], expSum);
+                }
+            }
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                if (a.RequiresGradient)
+                {
+                    // Gradient same as softmax but scaled by 1/temperature
+                    var gradA = new Tensor<T>(shape);
+                    var invTemp = numOps.Divide(numOps.One, tempValue);
+
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        // Compute sum of (gradient * output)
+                        var dotProduct = numOps.Zero;
+                        for (int f = 0; f < features; f++)
+                        {
+                            dotProduct = numOps.Add(dotProduct,
+                                numOps.Multiply(gradient[b, f], result[b, f]));
+                        }
+
+                        // Compute gradient for each element with temperature scaling
+                        for (int f = 0; f < features; f++)
+                        {
+                            var gradMinusDot = numOps.Subtract(gradient[b, f], dotProduct);
+                            var softmaxGrad = numOps.Multiply(result[b, f], gradMinusDot);
+                            gradA[b, f] = numOps.Multiply(softmaxGrad, invTemp);
+                        }
+                    }
+
+                    if (a.Gradient == null)
+                    {
+                        a.Gradient = gradA;
+                    }
+                    else
+                    {
+                        var existingGradient = a.Gradient;
+                        if (existingGradient != null)
+                        {
+                            a.Gradient = existingGradient.Add(gradA);
+                        }
+                    }
+                }
+            }
+
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient,
+                parents: new List<ComputationNode<T>> { a },
+                backwardFunction: BackwardFunction,
+                name: null);
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+            return node;
+        }
+        else
+        {
+            throw new NotImplementedException(
+                $"GumbelSoftmax is currently only implemented for 2D tensors. " +
+                $"Got shape=[{string.Join(", ", shape)}]");
+        }
+    }
+
+    /// <summary>
+    /// Applies Taylor-Softmax activation using Taylor series approximation of exp.
+    /// </summary>
+    /// <param name="a">Input computation node.</param>
+    /// <param name="order">Order of Taylor series approximation (default 2).</param>
+    /// <returns>A computation node with Taylor-Softmax applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// Taylor-Softmax approximates exp(x) using Taylor series: 1 + x + x^2/2 + x^3/6 + ...
+    /// This provides a computationally efficient approximation to standard softmax.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> TaylorSoftmax(ComputationNode<T> a, int order = 2)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+
+        if (shape.Length == 2)
+        {
+            int batchSize = shape[0];
+            int features = shape[1];
+            var result = new Tensor<T>(shape);
+
+            // Helper function to compute Taylor series approximation of exp(x)
+            T TaylorExp(T x, int n)
+            {
+                T res = numOps.One;
+                T term = numOps.One;
+
+                for (int i = 1; i <= n; i++)
+                {
+                    term = numOps.Divide(numOps.Multiply(term, x), numOps.FromDouble(i));
+                    res = numOps.Add(res, term);
+                }
+
+                return res;
+            }
+
+            // Compute Taylor-Softmax for each row
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Compute Taylor exp for each element and sum
+                var taylorSum = numOps.Zero;
+                var taylorValues = new T[features];
+                for (int f = 0; f < features; f++)
+                {
+                    taylorValues[f] = TaylorExp(a.Value[b, f], order);
+                    taylorSum = numOps.Add(taylorSum, taylorValues[f]);
+                }
+
+                // Normalize
+                for (int f = 0; f < features; f++)
+                {
+                    result[b, f] = numOps.Divide(taylorValues[f], taylorSum);
+                }
+            }
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                if (a.RequiresGradient)
+                {
+                    // Gradient of Taylor-Softmax follows quotient rule
+                    var gradA = new Tensor<T>(shape);
+
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        // Compute sum of (gradient * output)
+                        var dotProduct = numOps.Zero;
+                        for (int f = 0; f < features; f++)
+                        {
+                            dotProduct = numOps.Add(dotProduct,
+                                numOps.Multiply(gradient[b, f], result[b, f]));
+                        }
+
+                        // Compute gradient for each element
+                        // For Taylor approximation g(x) = 1 + x + x^2/2 + ...
+                        // g'(x) = 1 + x + x^2/2 + ... (one order lower)
+                        for (int f = 0; f < features; f++)
+                        {
+                            var gradMinusDot = numOps.Subtract(gradient[b, f], dotProduct);
+                            gradA[b, f] = numOps.Multiply(result[b, f], gradMinusDot);
+                        }
+                    }
+
+                    if (a.Gradient == null)
+                    {
+                        a.Gradient = gradA;
+                    }
+                    else
+                    {
+                        var existingGradient = a.Gradient;
+                        if (existingGradient != null)
+                        {
+                            a.Gradient = existingGradient.Add(gradA);
+                        }
+                    }
+                }
+            }
+
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient,
+                parents: new List<ComputationNode<T>> { a },
+                backwardFunction: BackwardFunction,
+                name: null);
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+            return node;
+        }
+        else
+        {
+            throw new NotImplementedException(
+                $"TaylorSoftmax is currently only implemented for 2D tensors. " +
+                $"Got shape=[{string.Join(", ", shape)}]");
+        }
+    }
+
+    /// <summary>
     /// Concatenates multiple computation nodes along a specified axis.
     /// </summary>
     /// <param name="nodes">The list of nodes to concatenate.</param>

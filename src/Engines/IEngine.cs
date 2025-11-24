@@ -850,5 +850,36 @@ public interface IEngine
     /// </remarks>
     Tensor<T> Conv2D<T>(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0, int dilation = 1);
 
+    /// <summary>
+    /// Applies Gumbel-Softmax activation for differentiable categorical sampling.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, features].</param>
+    /// <param name="temperature">Temperature parameter for controlling distribution sharpness. Default is 1.0.</param>
+    /// <returns>The output tensor with Gumbel-Softmax applied [batch, features].</returns>
+    /// <remarks>
+    /// <para>
+    /// For JIT compilation, this implements temperature-scaled softmax without Gumbel noise (inference mode).
+    /// This is equivalent to softmax(x / temperature), providing a deterministic output suitable for JIT.
+    /// </para>
+    /// </remarks>
+    Tensor<T> GumbelSoftmax<T>(Tensor<T> input, double temperature = 1.0);
+
+    /// <summary>
+    /// Applies Taylor-Softmax activation using Taylor series approximation of exponential.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, features].</param>
+    /// <param name="order">Order of Taylor series approximation. Default is 2.</param>
+    /// <returns>The output tensor with Taylor-Softmax applied [batch, features].</returns>
+    /// <remarks>
+    /// <para>
+    /// Taylor-Softmax approximates exp(x) using Taylor series: 1 + x + x^2/2! + x^3/3! + ...
+    /// This provides a computationally efficient approximation to standard softmax.
+    /// Higher order values provide better approximation but require more computation.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TaylorSoftmax<T>(Tensor<T> input, int order = 2);
+
     #endregion
 }

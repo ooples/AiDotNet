@@ -1499,6 +1499,22 @@ public class GpuEngine : IEngine, IDisposable
         return _cpuFallback.ELU(tensor, alpha);
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> GumbelSoftmax<T>(Tensor<T> input, double temperature = 1.0)
+    {
+        // For now, delegate to CPU implementation
+        // GPU kernel optimization can be added later
+        return _cpuFallback.GumbelSoftmax(input, temperature);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TaylorSoftmax<T>(Tensor<T> input, int order = 2)
+    {
+        // For now, delegate to CPU implementation
+        // GPU kernel optimization can be added later
+        return _cpuFallback.TaylorSoftmax(input, order);
+    }
+
     #endregion
 
     #region GPU Kernels (Float Implementation)
