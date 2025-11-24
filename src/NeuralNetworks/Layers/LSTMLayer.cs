@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -1702,4 +1704,129 @@ public class LSTMLayer<T> : LayerBase<T>
         _lastCellState = null;
         Gradients.Clear();
     }
+
+    /// <summary>
+    /// Exports the LSTM layer's single time-step computation as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the hidden state at one time step.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method exports a single LSTM cell computation for JIT compilation.
+    /// The graph computes: h_t, c_t = LSTMCell(x_t, h_{t-1}, c_{t-1})
+    /// using the standard LSTM equations with forget, input, output gates and cell candidate.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_weightsFi == null || _weightsIi == null || _weightsCi == null || _weightsOi == null)
+            throw new InvalidOperationException("LSTM weights not initialized. Call Initialize() first.");
+
+        if (_weightsFh == null || _weightsIh == null || _weightsCh == null || _weightsOh == null)
+            throw new InvalidOperationException("LSTM recurrent weights not initialized. Call Initialize() first.");
+
+        if (_biasF == null || _biasI == null || _biasC == null || _biasO == null)
+            throw new InvalidOperationException("LSTM biases not initialized. Call Initialize() first.");
+
+        // Create placeholders for single time-step inputs
+        // x_t shape: [batchSize, inputSize]
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, _inputSize });
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "x_t");
+
+        // h_{t-1} shape: [batchSize, hiddenSize]
+        var prevHiddenPlaceholder = new Tensor<T>(new int[] { 1, _hiddenSize });
+        var prevHiddenNode = TensorOperations<T>.Variable(prevHiddenPlaceholder, "h_prev");
+
+        // c_{t-1} shape: [batchSize, hiddenSize]
+        var prevCellPlaceholder = new Tensor<T>(new int[] { 1, _hiddenSize });
+        var prevCellNode = TensorOperations<T>.Variable(prevCellPlaceholder, "c_prev");
+
+        // Create weight and bias nodes
+        var weightsFiNode = TensorOperations<T>.Variable(_weightsFi, "W_fi");
+        var weightsIiNode = TensorOperations<T>.Variable(_weightsIi, "W_ii");
+        var weightsCiNode = TensorOperations<T>.Variable(_weightsCi, "W_ci");
+        var weightsOiNode = TensorOperations<T>.Variable(_weightsOi, "W_oi");
+
+        var weightsFhNode = TensorOperations<T>.Variable(_weightsFh, "W_fh");
+        var weightsIhNode = TensorOperations<T>.Variable(_weightsIh, "W_ih");
+        var weightsChNode = TensorOperations<T>.Variable(_weightsCh, "W_ch");
+        var weightsOhNode = TensorOperations<T>.Variable(_weightsOh, "W_oh");
+
+        var biasFNode = TensorOperations<T>.Variable(_biasF, "b_f");
+        var biasINode = TensorOperations<T>.Variable(_biasI, "b_i");
+        var biasCNode = TensorOperations<T>.Variable(_biasC, "b_c");
+        var biasONode = TensorOperations<T>.Variable(_biasO, "b_o");
+
+        // Add inputs to the list
+        inputNodes.Add(inputNode);
+        inputNodes.Add(prevHiddenNode);
+        inputNodes.Add(prevCellNode);
+        inputNodes.Add(weightsFiNode);
+        inputNodes.Add(weightsIiNode);
+        inputNodes.Add(weightsCiNode);
+        inputNodes.Add(weightsOiNode);
+        inputNodes.Add(weightsFhNode);
+        inputNodes.Add(weightsIhNode);
+        inputNodes.Add(weightsChNode);
+        inputNodes.Add(weightsOhNode);
+        inputNodes.Add(biasFNode);
+        inputNodes.Add(biasINode);
+        inputNodes.Add(biasCNode);
+        inputNodes.Add(biasONode);
+
+        // Build LSTM computation graph (single time step)
+        // Forget gate: f_t = sigmoid(W_fi @ x_t + W_fh @ h_{t-1} + b_f)
+        var weightsFiT = TensorOperations<T>.Transpose(weightsFiNode);
+        var weightsFhT = TensorOperations<T>.Transpose(weightsFhNode);
+        var f_input = TensorOperations<T>.MatrixMultiply(inputNode, weightsFiT);
+        var f_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, weightsFhT);
+        var f_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(f_input, f_hidden), biasFNode);
+        var f_t = TensorOperations<T>.Sigmoid(f_preact);
+
+        // Input gate: i_t = sigmoid(W_ii @ x_t + W_ih @ h_{t-1} + b_i)
+        var weightsIiT = TensorOperations<T>.Transpose(weightsIiNode);
+        var weightsIhT = TensorOperations<T>.Transpose(weightsIhNode);
+        var i_input = TensorOperations<T>.MatrixMultiply(inputNode, weightsIiT);
+        var i_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, weightsIhT);
+        var i_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(i_input, i_hidden), biasINode);
+        var i_t = TensorOperations<T>.Sigmoid(i_preact);
+
+        // Cell candidate: c_tilde = tanh(W_ci @ x_t + W_ch @ h_{t-1} + b_c)
+        var weightsCiT = TensorOperations<T>.Transpose(weightsCiNode);
+        var weightsChT = TensorOperations<T>.Transpose(weightsChNode);
+        var c_input = TensorOperations<T>.MatrixMultiply(inputNode, weightsCiT);
+        var c_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, weightsChT);
+        var c_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(c_input, c_hidden), biasCNode);
+        var c_tilde = TensorOperations<T>.Tanh(c_preact);
+
+        // Output gate: o_t = sigmoid(W_oi @ x_t + W_oh @ h_{t-1} + b_o)
+        var weightsOiT = TensorOperations<T>.Transpose(weightsOiNode);
+        var weightsOhT = TensorOperations<T>.Transpose(weightsOhNode);
+        var o_input = TensorOperations<T>.MatrixMultiply(inputNode, weightsOiT);
+        var o_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, weightsOhT);
+        var o_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(o_input, o_hidden), biasONode);
+        var o_t = TensorOperations<T>.Sigmoid(o_preact);
+
+        // Cell state: c_t = f_t ⊙ c_{t-1} + i_t ⊙ c_tilde
+        var forget_gated = TensorOperations<T>.ElementwiseMultiply(f_t, prevCellNode);
+        var input_gated = TensorOperations<T>.ElementwiseMultiply(i_t, c_tilde);
+        var c_t = TensorOperations<T>.Add(forget_gated, input_gated);
+
+        // Hidden state: h_t = o_t ⊙ tanh(c_t)
+        var c_t_tanh = TensorOperations<T>.Tanh(c_t);
+        var h_t = TensorOperations<T>.ElementwiseMultiply(o_t, c_t_tanh);
+
+        return h_t;
+    }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// True for LSTM layers, as single time-step JIT compilation is supported.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
 }

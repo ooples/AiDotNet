@@ -434,4 +434,37 @@ public class PaddingLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input node (batch dimension of 1 adapts to actual batch size at runtime)
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Build symbolic computation graph: pad input
+        var outputNode = TensorOperations<T>.Pad(inputNode, _padding);
+
+        // Apply activation function to symbolic graph
+        var activatedOutput = ApplyActivationToGraph(outputNode);
+        return activatedOutput;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            IActivationFunction<T>? activation = ScalarActivation;
+            if (activation == null && VectorActivation != null)
+                activation = (IActivationFunction<T>)VectorActivation;
+            return activation?.SupportsJitCompilation ?? true;
+        }
+    }
+
 }

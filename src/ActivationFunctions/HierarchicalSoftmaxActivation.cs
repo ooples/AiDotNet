@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -55,7 +57,7 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// - Each node in the tree gets its own set of weights
     /// - Weights are initialized randomly to start the learning process
     /// 
-    /// For example, if you have 8 classes, it creates a 3-level tree (because 2³=8),
+    /// For example, if you have 8 classes, it creates a 3-level tree (because 2Â³=8),
     /// allowing the model to make 3 binary decisions to reach any of the 8 classes.
     /// </para>
     /// </remarks>
@@ -224,5 +226,38 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
         }
 
         return probability;
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <remarks>
+    /// <para>
+    /// This activation does not yet support JIT compilation because the gradient
+    /// computation (backward pass) has not been implemented in TensorOperations.HierarchicalSoftmax.
+    /// </para>
+    /// <para>
+    /// To enable JIT support:
+    /// 1. Implement the backward pass in TensorOperations.HierarchicalSoftmax
+    /// 2. Test the gradient computation
+    /// 3. Change SupportsJitCompilation to return true
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with HierarchicalSoftmax activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        return TensorOperations<T>.HierarchicalSoftmax(input, 0);
     }
 }

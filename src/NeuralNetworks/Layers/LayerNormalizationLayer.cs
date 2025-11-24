@@ -139,6 +139,42 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
     /// 
+    /// <summary>
+    /// Gets the gamma (scale) parameters of the layer normalization layer.
+    /// </summary>
+    /// <returns>The gamma vector used for scaling normalized values.</returns>
+    public Vector<T> GetGamma()
+    {
+        return _gamma;
+    }
+
+    /// <summary>
+    /// Gets the beta (shift) parameters of the layer normalization layer.
+    /// </summary>
+    /// <returns>The beta vector used for shifting scaled values.</returns>
+    public Vector<T> GetBeta()
+    {
+        return _beta;
+    }
+
+    /// <summary>
+    /// Gets the normalized shape (feature size) of the layer.
+    /// </summary>
+    /// <returns>The normalized shape array.</returns>
+    public int[] GetNormalizedShape()
+    {
+        return OutputShape;
+    }
+
+    /// <summary>
+    /// Gets the epsilon value used for numerical stability.
+    /// </summary>
+    /// <returns>The epsilon value.</returns>
+    public T GetEpsilon()
+    {
+        return _epsilon;
+    }
+
     /// A value of true means:
     /// - The layer has parameters that can be adjusted during training
     /// - It will improve its performance as it sees more data

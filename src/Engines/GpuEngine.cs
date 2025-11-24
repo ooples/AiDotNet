@@ -310,6 +310,10 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorMultiplyKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, double, ArrayView<double>>? _tensorMultiplyScalarKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _tensorDivideKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int>? _tensorTransposeKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int>? _tensorTransposeKernelDouble;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int>? _tensorMatMulKernelFloat;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int>? _tensorMatMulKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int>? _maxPool2DKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int>? _avgPool2DKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, Conv2DParams>? _conv2DKernelDouble;
@@ -801,6 +805,76 @@ public class GpuEngine : IEngine, IDisposable
                 _tensorDivideKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
                     (index, a, b, result) => result[index] = a[index] / b[index]);
+
+                // Pre-compile transpose kernels - float and double (Phase C: JIT compilation support)
+                _tensorTransposeKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, int, int>(
+                    (index, input, output, rows, cols) =>
+                    {
+                        int i = (int)index / cols;
+                        int j = (int)index % cols;
+                        if (i < rows && j < cols)
+                        {
+                            int sourceIdx = i * cols + j;
+                            int destIdx = j * rows + i;
+                            output[destIdx] = input[sourceIdx];
+                        }
+                    });
+
+                _tensorTransposeKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, int, int>(
+                    (index, input, output, rows, cols) =>
+                    {
+                        int i = (int)index / cols;
+                        int j = (int)index % cols;
+                        if (i < rows && j < cols)
+                        {
+                            int sourceIdx = i * cols + j;
+                            int destIdx = j * rows + i;
+                            output[destIdx] = input[sourceIdx];
+                        }
+                    });
+
+                // Pre-compile matrix multiplication kernels - float and double (Phase C: JIT compilation support)
+                _tensorMatMulKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index2D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int>(
+                    (index, a, b, result, m, k, n) =>
+                    {
+                        int i = index.X;
+                        int kIdx = index.Y;
+                        if (i < m && kIdx < n)
+                        {
+                            float sum = 0;
+                            for (int j = 0; j < k; j++)
+                            {
+                                int aIdx = i * k + j;
+                                int bIdx = j * n + kIdx;
+                                sum += a[aIdx] * b[bIdx];
+                            }
+                            int resultIdx = i * n + kIdx;
+                            result[resultIdx] = sum;
+                        }
+                    });
+
+                _tensorMatMulKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index2D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int>(
+                    (index, a, b, result, m, k, n) =>
+                    {
+                        int i = index.X;
+                        int kIdx = index.Y;
+                        if (i < m && kIdx < n)
+                        {
+                            double sum = 0;
+                            for (int j = 0; j < k; j++)
+                            {
+                                int aIdx = i * k + j;
+                                int bIdx = j * n + kIdx;
+                                sum += a[aIdx] * b[bIdx];
+                            }
+                            int resultIdx = i * n + kIdx;
+                            result[resultIdx] = sum;
+                        }
+                    });
 
                 // Pre-compile pooling kernels - float (Phase B: Epic 3, US-GPU-012)
                 _maxPool2DKernelFloat = _accelerator.LoadAutoGroupedKernel<
@@ -4065,6 +4139,316 @@ public class GpuEngine : IEngine, IDisposable
         {
             Console.WriteLine($"[GpuEngine] GPU tensor add (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.TensorAdd(a, b);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorTranspose<T>(Tensor<T> tensor)
+    {
+        // Use matrix transpose threshold for 2D tensor operations
+        if (tensor.Length < _thresholds.MatrixMultiply)
+        {
+            return _cpuFallback.TensorTranspose(tensor);
+        }
+
+        // Check GPU health and type support
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorTransposeGpu((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorTransposeGpuDouble((Tensor<double>)(object)tensor);
+        }
+
+        return _cpuFallback.TensorTranspose(tensor);
+    }
+
+    private Tensor<float> TensorTransposeGpu(Tensor<float> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (tensor.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"TensorTranspose requires a 2D tensor, but got {tensor.Shape.Length}D tensor.",
+                nameof(tensor));
+        }
+
+        try
+        {
+            int rows = tensor.Shape[0];
+            int cols = tensor.Shape[1];
+            var result = new Tensor<float>(new int[] { cols, rows });
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_tensorTransposeKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length,
+                        gpuInput.View,
+                        gpuResult.View,
+                        rows,
+                        cols);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuResult);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU tensor transpose failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorTranspose(tensor);
+        }
+    }
+
+    private Tensor<double> TensorTransposeGpuDouble(Tensor<double> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (tensor.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"TensorTranspose requires a 2D tensor, but got {tensor.Shape.Length}D tensor.",
+                nameof(tensor));
+        }
+
+        try
+        {
+            int rows = tensor.Shape[0];
+            int cols = tensor.Shape[1];
+            var result = new Tensor<double>(new int[] { cols, rows });
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+            var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_tensorTransposeKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        tensor.Length,
+                        gpuInput.View,
+                        gpuResult.View,
+                        rows,
+                        cols);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuResult);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU tensor transpose (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorTranspose(tensor);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorMatMul<T>(Tensor<T> a, Tensor<T> b)
+    {
+        // Use matrix multiplication threshold
+        if (a.Length < _thresholds.MatrixMultiply || b.Length < _thresholds.MatrixMultiply)
+        {
+            return _cpuFallback.TensorMatMul(a, b);
+        }
+
+        // Check GPU health and type support
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorMatMulGpu((Tensor<float>)(object)a, (Tensor<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorMatMulGpuDouble((Tensor<double>)(object)a, (Tensor<double>)(object)b);
+        }
+
+        return _cpuFallback.TensorMatMul(a, b);
+    }
+
+    private Tensor<float> TensorMatMulGpu(Tensor<float> a, Tensor<float> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+
+        if (a.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"TensorMatMul requires 2D tensors, but first tensor is {a.Shape.Length}D.",
+                nameof(a));
+        }
+        if (b.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"TensorMatMul requires 2D tensors, but second tensor is {b.Shape.Length}D.",
+                nameof(b));
+        }
+
+        int m = a.Shape[0];
+        int k = a.Shape[1];
+        int n = b.Shape[1];
+
+        if (b.Shape[0] != k)
+        {
+            throw new ArgumentException(
+                $"Matrix multiplication requires inner dimensions to match. " +
+                $"Got A: [{a.Shape[0]}, {a.Shape[1]}] and B: [{b.Shape[0]}, {b.Shape[1]}].");
+        }
+
+        try
+        {
+            var result = new Tensor<float>(new int[] { m, n });
+
+            var gpuA = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(a.Length);
+            var gpuB = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(b.Length);
+            var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
+
+            try
+            {
+                gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+                gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_tensorMatMulKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        new Index2D(m, n),
+                        gpuA.View,
+                        gpuB.View,
+                        gpuResult.View,
+                        m,
+                        k,
+                        n);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuA);
+                _memoryPoolFloat.Return(gpuB);
+                _memoryPoolFloat.Return(gpuResult);
+            }
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted for matrix multiply (float): {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorMatMul(a, b);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.TensorMatMul(a, b);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix multiply (float) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorMatMul(a, b);
+        }
+    }
+
+    private Tensor<double> TensorMatMulGpuDouble(Tensor<double> a, Tensor<double> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+
+        if (a.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"TensorMatMul requires 2D tensors, but first tensor is {a.Shape.Length}D.",
+                nameof(a));
+        }
+        if (b.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"TensorMatMul requires 2D tensors, but second tensor is {b.Shape.Length}D.",
+                nameof(b));
+        }
+
+        int m = a.Shape[0];
+        int k = a.Shape[1];
+        int n = b.Shape[1];
+
+        if (b.Shape[0] != k)
+        {
+            throw new ArgumentException(
+                $"Matrix multiplication requires inner dimensions to match. " +
+                $"Got A: [{a.Shape[0]}, {a.Shape[1]}] and B: [{b.Shape[0]}, {b.Shape[1]}].");
+        }
+
+        try
+        {
+            var result = new Tensor<double>(new int[] { m, n });
+
+            var gpuA = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(a.Length);
+            var gpuB = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(b.Length);
+            var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
+
+            try
+            {
+                gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+                gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_tensorMatMulKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        new Index2D(m, n),
+                        gpuA.View,
+                        gpuB.View,
+                        gpuResult.View,
+                        m,
+                        k,
+                        n);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuA);
+                _memoryPoolDouble.Return(gpuB);
+                _memoryPoolDouble.Return(gpuResult);
+            }
+        }
+        catch (OutOfMemoryException ex)
+        {
+            Console.WriteLine($"[GpuEngine] GPU memory exhausted for matrix multiply (double): {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorMatMul(a, b);
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.TensorMatMul(a, b);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix multiply (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorMatMul(a, b);
         }
     }
 

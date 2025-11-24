@@ -636,4 +636,48 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastOutput = null;
     }
+
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        Autodiff.ComputationNode<T> pooledNode;
+        if (_poolingType == PoolingType.Average)
+        {
+            int[] axes = new int[InputShape.Length - 1];
+            for (int i = 0; i < axes.Length; i++)
+                axes[i] = i + 1;
+            pooledNode = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: false);
+        }
+        else
+        {
+            int[] axes = new int[InputShape.Length - 1];
+            for (int i = 0; i < axes.Length; i++)
+                axes[i] = i + 1;
+            pooledNode = Autodiff.TensorOperations<T>.ReduceMax(inputNode, axes, keepDims: false);
+        }
+
+        var activatedOutput = ApplyActivationToGraph(pooledNode);
+        return activatedOutput;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            IActivationFunction<T>? activation = ScalarActivation;
+            if (activation == null && VectorActivation != null)
+                activation = (IActivationFunction<T>)VectorActivation;
+            return activation?.SupportsJitCompilation ?? true;
+        }
+    }
+
 }

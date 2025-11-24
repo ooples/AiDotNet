@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -6,7 +8,7 @@ namespace AiDotNet.ActivationFunctions;
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// The SQRBF activation function is defined as f(x) = exp(-ß * x²), where ß is a parameter that controls
+/// The SQRBF activation function is defined as f(x) = exp(-ÃŸ * xÂ²), where ÃŸ is a parameter that controls
 /// the width of the Gaussian bell curve. This function outputs values between 0 and 1, with the maximum value
 /// of 1 occurring when the input is 0, and values approaching 0 as the input moves away from 0 in either direction.
 /// </para>
@@ -17,9 +19,9 @@ namespace AiDotNet.ActivationFunctions;
 /// 
 /// Think of SQRBF like a "proximity detector" - it gives its highest output (1.0) when the input is exactly 0,
 /// and progressively smaller outputs as the input moves away from 0 in either direction (positive or negative).
-/// The ß parameter controls how quickly the output drops off as you move away from 0:
-/// - A larger ß makes the bell curve narrower (drops off quickly)
-/// - A smaller ß makes the bell curve wider (drops off slowly)
+/// The ÃŸ parameter controls how quickly the output drops off as you move away from 0:
+/// - A larger ÃŸ makes the bell curve narrower (drops off quickly)
+/// - A smaller ÃŸ makes the bell curve wider (drops off slowly)
 /// 
 /// This is useful in machine learning when you want to measure how close an input is to a specific reference point.
 /// </para>
@@ -72,7 +74,7 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
     /// <returns>The result of applying the SQRBF function to the input.</returns>
     /// <remarks>
     /// <para>
-    /// The SQRBF function is calculated as f(x) = exp(-ß * x²), where ß is the width parameter.
+    /// The SQRBF function is calculated as f(x) = exp(-ÃŸ * xÂ²), where ÃŸ is the width parameter.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This method takes an input value and returns a value between 0 and 1:
@@ -89,7 +91,7 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Activate(T input)
     {
-        // f(x) = exp(-ß * x^2)
+        // f(x) = exp(-ÃŸ * x^2)
         T square = NumOps.Multiply(input, input);
         T negBetaSquare = NumOps.Negate(NumOps.Multiply(_beta, square));
 
@@ -103,7 +105,7 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
     /// <returns>The derivative of the SQRBF function at the input value.</returns>
     /// <remarks>
     /// <para>
-    /// The derivative of the SQRBF function is calculated as f'(x) = -2ßx * exp(-ß * x²).
+    /// The derivative of the SQRBF function is calculated as f'(x) = -2ÃŸx * exp(-ÃŸ * xÂ²).
     /// This derivative is used during the backpropagation step of neural network training.
     /// </para>
     /// <para>
@@ -120,10 +122,50 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Derivative(T input)
     {
-        // f'(x) = -2ßx * exp(-ß * x^2)
+        // f'(x) = -2ÃŸx * exp(-ÃŸ * x^2)
         T activationValue = Activate(input);
         T negTwoBeta = NumOps.Negate(NumOps.Multiply(NumOps.FromDouble(2), _beta));
 
         return NumOps.Multiply(NumOps.Multiply(negTwoBeta, input), activationValue);
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <remarks>
+    /// <para>
+    /// This activation does not yet support JIT compilation because the gradient
+    /// computation (backward pass) has not been implemented in TensorOperations.SQRBF.
+    /// </para>
+    /// <para>
+    /// To enable JIT support:
+    /// 1. Implement the backward pass in TensorOperations.SQRBF
+    /// 2. Test the gradient computation
+    /// 3. Change SupportsJitCompilation to return true
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with SQRBF activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method would map the activation to TensorOperations&lt;T&gt;.SQRBF(input)
+    /// once the gradient computation is implemented.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        return TensorOperations<T>.SQRBF(input);
     }
 }

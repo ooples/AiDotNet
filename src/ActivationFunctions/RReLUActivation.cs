@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -28,12 +30,12 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// The minimum value for the random alpha parameter.
     /// </summary>
-    private readonly T _lowerBound;
+    private readonly T _lowerBoundBound;
     
     /// <summary>
     /// The maximum value for the random alpha parameter.
     /// </summary>
-    private readonly T _upperBound;
+    private readonly T _upperBoundBound;
     
     /// <summary>
     /// The current alpha value used to scale negative inputs.
@@ -58,8 +60,8 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
     public RReLUActivation(double lowerBound = 1.0 / 8, double upperBound = 1.0 / 3)
     {
         _random = new Random();
-        _lowerBound = NumOps.FromDouble(lowerBound);
-        _upperBound = NumOps.FromDouble(upperBound);
+        _lowerBoundBound = NumOps.FromDouble(lowerBound);
+        _upperBoundBound = NumOps.FromDouble(upperBound);
         _alpha = NumOps.FromDouble((_random.NextDouble() * (upperBound - lowerBound)) + lowerBound);
         _isTraining = true;
     }
@@ -88,7 +90,7 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
     {
         if (_isTraining)
         {
-            _alpha = NumOps.Multiply(NumOps.FromDouble(_random.NextDouble()), NumOps.Add(NumOps.Subtract(_upperBound, _lowerBound), _lowerBound));
+            _alpha = NumOps.Multiply(NumOps.FromDouble(_random.NextDouble()), NumOps.Add(NumOps.Subtract(_upperBoundBound, _lowerBoundBound), _lowerBoundBound));
         }
 
         if (NumOps.GreaterThanOrEquals(input, NumOps.Zero))
@@ -147,7 +149,49 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
         if (!_isTraining)
         {
             // Set alpha to the average of lower and upper bounds for inference
-            _alpha = NumOps.Divide(NumOps.Add(_lowerBound, _upperBound), NumOps.FromDouble(2));
+            _alpha = NumOps.Divide(NumOps.Add(_lowerBoundBound, _upperBoundBound), NumOps.FromDouble(2));
         }
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <remarks>
+    /// <para>
+    /// This activation does not yet support JIT compilation because the gradient
+    /// computation (backward pass) has not been implemented in TensorOperations.RReLU.
+    /// </para>
+    /// <para>
+    /// To enable JIT support:
+    /// 1. Implement the backward pass in TensorOperations.RReLU
+    /// 2. Test the gradient computation
+    /// 3. Change SupportsJitCompilation to return true
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with RReLU activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method would map the activation to TensorOperations&lt;T&gt;.RReLU(input)
+    /// once the gradient computation is implemented.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        double lower = NumOps.ToDouble(_lowerBoundBound);
+        double upper = NumOps.ToDouble(_upperBoundBound);
+        return TensorOperations<T>.RReLU(input, lower, upper);
     }
 }

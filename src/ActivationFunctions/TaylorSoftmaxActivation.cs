@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -152,12 +154,12 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// technique called a Taylor series. Instead of calculating the exact value of e^x, which can be
     /// computationally expensive, it uses a sum of simpler terms to get close to the right answer.
     /// 
-    /// The formula used is: e^x ˜ 1 + x + x²/2! + x³/3! + ... + xn/n!
+    /// The formula used is: e^x Ëœ 1 + x + xÂ²/2! + xÂ³/3! + ... + xn/n!
     /// 
     /// Where:
     /// - x is the input value
     /// - n is the order of approximation
-    /// - n! (factorial) means n × (n-1) × (n-2) × ... × 1
+    /// - n! (factorial) means n Ã— (n-1) Ã— (n-2) Ã— ... Ã— 1
     /// 
     /// Higher orders give more accurate results but require more computation.
     /// </para>
@@ -174,5 +176,38 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
         }
 
         return result;
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <remarks>
+    /// <para>
+    /// This activation does not yet support JIT compilation because the gradient
+    /// computation (backward pass) has not been implemented in TensorOperations.TaylorSoftmax.
+    /// </para>
+    /// <para>
+    /// To enable JIT support:
+    /// 1. Implement the backward pass in TensorOperations.TaylorSoftmax
+    /// 2. Test the gradient computation
+    /// 3. Change SupportsJitCompilation to return true
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with TaylorSoftmax activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        return TensorOperations<T>.TaylorSoftmax(input, _order);
     }
 }

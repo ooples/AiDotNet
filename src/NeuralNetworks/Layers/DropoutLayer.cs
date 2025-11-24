@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -523,4 +524,23 @@ public class DropoutLayer<T> : LayerBase<T>
         _lastInput = null;
         _dropoutMask = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Dropout is a pass-through during inference (JIT compilation is for inference, not training)
+        // Create symbolic input node with batch dimension that adapts to actual batch size at runtime
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        return inputNode; // Pass through unchanged during inference
+    }
+
+    public override bool SupportsJitCompilation => true;
 }

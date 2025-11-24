@@ -134,6 +134,58 @@ public class ComputationNode<T>
     public string? Name { get; set; }
 
     /// <summary>
+    /// Gets or sets the type of operation that created this node (used for JIT compilation).
+    /// </summary>
+    /// <value>A string identifying the operation type (e.g., "Add", "MatMul", "ReLU"), or null if not set.</value>
+    /// <remarks>
+    /// <para>
+    /// This property is used by the JIT compiler to convert ComputationNode graphs to IR operations.
+    /// It stores the name of the operation that produced this node's value, enabling the compiler
+    /// to reconstruct the operation graph and optimize it for faster execution.
+    /// </para>
+    /// <para><b>For Beginners:</b> This records what operation created this node's value.
+    ///
+    /// For example:
+    /// - If this node was created by adding two tensors, OperationType would be "Add"
+    /// - If created by matrix multiplication, OperationType would be "MatMul"
+    /// - If created by ReLU activation, OperationType would be "ReLU"
+    ///
+    /// This information allows the JIT compiler to:
+    /// - Understand what operations are in the graph
+    /// - Optimize sequences of operations
+    /// - Generate fast compiled code
+    ///
+    /// This is optional and only needed when using JIT compilation.
+    /// </para>
+    /// </remarks>
+    public string? OperationType { get; set; }
+
+    /// <summary>
+    /// Gets or sets additional operation-specific parameters (used for JIT compilation).
+    /// </summary>
+    /// <value>A dictionary of parameter names to values, or null if not set.</value>
+    /// <remarks>
+    /// <para>
+    /// Some operations require additional parameters beyond their inputs. For example,
+    /// convolution needs stride and padding, softmax needs an axis, etc. This dictionary
+    /// stores those parameters for use by the JIT compiler.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores extra settings for operations.
+    ///
+    /// For example:
+    /// - A Power operation might store {"Exponent": 2.0}
+    /// - A Softmax operation might store {"Axis": -1}
+    /// - A Conv2D operation might store {"Stride": [1, 1], "Padding": [0, 0]}
+    ///
+    /// These parameters tell the JIT compiler exactly how the operation should behave,
+    /// enabling it to generate the correct optimized code.
+    ///
+    /// This is optional and only needed when using JIT compilation.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, object>? OperationParams { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ComputationNode{T}"/> class.
     /// </summary>
     /// <param name="value">The value stored in this node.</param>

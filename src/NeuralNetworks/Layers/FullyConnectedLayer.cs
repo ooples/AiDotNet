@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -873,17 +874,17 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// and backward passes. This is useful when starting to process a new batch of data.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - The saved input and output are cleared
     /// - The calculated gradients are cleared
     /// - The layer forgets previous calculations it performed
-    /// 
+    ///
     /// This is typically called:
     /// - Between training batches to free up memory
     /// - When switching from training to evaluation mode
     /// - When starting to process completely new data
-    /// 
+    ///
     /// It's like wiping a whiteboard clean before starting a new calculation.
     /// Note that this doesn't affect the learned weights and biases, just the
     /// temporary working data.
@@ -896,5 +897,64 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         _lastOutput = null;
         _weightsGradient = null;
         _biasesGradient = null;
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_weights == null || _biases == null)
+            throw new InvalidOperationException("Layer weights/biases not initialized.");
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (OutputShape == null || OutputShape.Length == 0)
+            throw new InvalidOperationException("Layer output shape not configured.");
+
+        int inputSize = InputShape[0];
+        int outputSize = OutputShape[0];
+
+        // Create symbolic input node (batch dimension of 1 adapts to actual batch size at runtime)
+        var symbolicInput = new Tensor<T>(new int[] { 1, inputSize });
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
+
+        // Create constant nodes for trained weights and biases
+        var weightsTensor = MatrixToTensor(_weights);
+        var weightsNode = Autodiff.TensorOperations<T>.Variable(weightsTensor, "weights");
+
+        var biasesTensor = VectorToTensor(_biases);
+        var biasesNode = Autodiff.TensorOperations<T>.Variable(biasesTensor, "biases");
+
+        // Register all nodes in the computation graph
+        inputNodes.Add(inputNode);
+        inputNodes.Add(weightsNode);
+        inputNodes.Add(biasesNode);
+
+        // Build symbolic computation graph: output = (input × weights^T) + biases
+        var weightsTransposed = Autodiff.TensorOperations<T>.Transpose(weightsNode);
+        var matmulResult = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, weightsTransposed);
+
+        // Broadcast biases to match symbolic batch dimension
+        var biasesBroadcast = BroadcastBiases(biasesTensor, 1);
+        var biasesBroadcastNode = Autodiff.TensorOperations<T>.Variable(biasesBroadcast, "biases_broadcast");
+        var outputNode = Autodiff.TensorOperations<T>.Add(matmulResult, biasesBroadcastNode);
+
+        // Apply activation function to symbolic graph
+        var activatedOutput = ApplyActivationToGraph(outputNode);
+        return activatedOutput;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            // Check if the activation function supports JIT compilation
+            IActivationFunction<T>? activation = ScalarActivation;
+            if (activation == null && VectorActivation != null)
+                activation = (IActivationFunction<T>)VectorActivation;
+            return activation?.SupportsJitCompilation ?? true;
+        }
     }
 }

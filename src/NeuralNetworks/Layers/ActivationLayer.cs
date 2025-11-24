@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -253,7 +254,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // Autodiff supports all scalar activations via generic TensorOperations.ApplyActivation
+        // Autodiff supports all scalar activations via generic TensorOperations<T>.ApplyActivation
         // Only vector activations need manual path
         if (UseAutodiff && !_useVectorActivation)
             return BackwardViaAutodiff(outputGradient);
@@ -313,7 +314,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// Applies activation function using autodiff operations.
     /// </summary>
     /// <remarks>
-    /// This method uses the generic TensorOperations.ApplyActivation which supports ALL 39 built-in
+    /// This method uses the generic TensorOperations<T>.ApplyActivation which supports ALL 39 built-in
     /// activation functions automatically. Only truly custom user-defined activations would fail.
     /// </remarks>
     private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
@@ -569,5 +570,46 @@ public class ActivationLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        IActivationFunction<T>? activation = ScalarActivation;
+        if (activation == null && VectorActivation != null)
+            activation = (IActivationFunction<T>)VectorActivation;
+
+        if (activation == null)
+            throw new InvalidOperationException("No activation function configured.");
+
+        if (!activation.SupportsJitCompilation)
+        {
+            throw new NotSupportedException(
+                $"Activation function '{activation.GetType().Name}' does not support JIT compilation yet.");
+        }
+
+        // Create symbolic input node (shape definition only, batch size adapts at runtime)
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Build symbolic computation graph by applying activation function
+        return activation.ApplyToGraph(inputNode);
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            IActivationFunction<T>? activation = ScalarActivation;
+            if (activation == null && VectorActivation != null)
+                activation = (IActivationFunction<T>)VectorActivation;
+            return activation?.SupportsJitCompilation ?? false;
+        }
     }
 }
