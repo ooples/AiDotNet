@@ -82,7 +82,7 @@ public static class TensorOperations<T>
             name: name);
 
         // Set JIT compiler metadata
-        node.OperationType = "Input";
+        node.OperationType = OperationType.Input;
         node.OperationParams = null;
 
         return node;
@@ -111,7 +111,7 @@ public static class TensorOperations<T>
         var node = Variable(value, name, requiresGradient: false);
 
         // Set JIT compiler metadata for constant
-        node.OperationType = "Constant";
+        node.OperationType = OperationType.Constant;
         node.OperationParams = null;
 
         return node;
@@ -183,7 +183,7 @@ public static class TensorOperations<T>
             name: null);
 
         // Set JIT compiler metadata
-        node.OperationType = "Add";
+        node.OperationType = OperationType.Add;
         node.OperationParams = null;
 
         // Record to active tape if present
@@ -3480,6 +3480,16 @@ public static class TensorOperations<T>
                 parents: new List<ComputationNode<T>> { a },
                 backwardFunction: BackwardFunction,
                 name: null);
+
+            // Set JIT compiler metadata
+            node.OperationType = OperationType.Split;
+            node.OperationParams = new Dictionary<string, object>
+            {
+                { "Axis", axis },
+                { "NumSplits", numSplits },
+                { "SplitIndex", split }
+            };
+
             var tape = GradientTape<T>.Current;
             if (tape != null && tape.IsRecording)
                 tape.RecordOperation(node);
@@ -4545,6 +4555,16 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { input },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.ReduceLogVariance;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Axes", axes! },
+            { "KeepDims", keepDims },
+            { "Mean", mean }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -4748,6 +4768,11 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { input, centers, epsilons },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.RBFKernel;
+        node.OperationParams = null;
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -4884,6 +4909,14 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { theta },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.AffineGrid;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "OutputSize", new int[] { outputHeight, outputWidth } }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -5118,6 +5151,15 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { input, grid },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.GridSample;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "PaddingMode", paddingMode },
+            { "AlignCorners", alignCorners }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -5391,6 +5433,11 @@ public static class TensorOperations<T>
             parents: parents,
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.GraphConv;
+        node.OperationParams = null;
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -5529,6 +5576,13 @@ public static class TensorOperations<T>
             backwardFunction: BackwardFunction,
             name: null);
 
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Pad;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Padding", padding }
+        };
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -5642,6 +5696,10 @@ public static class TensorOperations<T>
             backwardFunction: BackwardFunction,
             name: null);
 
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Activation;
+        node.OperationParams = null;
+
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
@@ -5714,6 +5772,10 @@ public static class TensorOperations<T>
             parents: new List<ComputationNode<T>> { embeddings, indices },
             backwardFunction: BackwardFunction,
             name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Embedding;
+        node.OperationParams = null;
 
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)

@@ -166,6 +166,11 @@ public enum OperationType
     Crop,
 
     /// <summary>
+    /// Split tensor along an axis into multiple tensors.
+    /// </summary>
+    Split,
+
+    /// <summary>
     /// Upsample tensor by repeating elements.
     /// </summary>
     Upsample,
