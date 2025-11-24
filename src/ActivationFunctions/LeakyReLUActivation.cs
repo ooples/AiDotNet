@@ -203,9 +203,6 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        throw new NotSupportedException(
-            $"LeakyReLUActivation does not support JIT compilation yet. " +
-            $"The gradient computation (backward pass) has not been implemented in TensorOperations.LeakyReLU. " +
-            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+        double negativeSlope = NumOps.ToDouble(_negativeSlope);
+        return TensorOperations<T>.LeakyReLU(input, negativeSlope);
     }
-}

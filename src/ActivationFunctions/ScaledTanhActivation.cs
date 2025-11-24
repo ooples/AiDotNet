@@ -160,9 +160,6 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        throw new NotSupportedException(
-            $"ScaledTanhActivation does not support JIT compilation yet. " +
-            $"The gradient computation (backward pass) has not been implemented in TensorOperations.ScaledTanh. " +
-            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+        double scale = NumOps.ToDouble(_scale);
+        return TensorOperations<T>.ScaledTanh(input, scale);
     }
-}

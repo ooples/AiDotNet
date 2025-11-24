@@ -168,9 +168,6 @@ public class ThresholdedReLUActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        throw new NotSupportedException(
-            $"ThresholdedReLUActivation does not support JIT compilation yet. " +
-            $"The gradient computation (backward pass) has not been implemented in TensorOperations.ThresholdedReLU. " +
-            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+        double theta = NumOps.ToDouble(_theta);
+        return TensorOperations<T>.ThresholdedReLU(input, theta);
     }
-}

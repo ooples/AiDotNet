@@ -148,7 +148,7 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
     /// 3. Change SupportsJitCompilation to return true
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.
@@ -156,21 +156,12 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The computation node to apply the activation to.</param>
     /// <returns>A new computation node with ISRU activation applied.</returns>
     /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method would map the activation to TensorOperations&lt;T&gt;.ISRU(input)
-    /// once the gradient computation is implemented.
-    /// </para>
-    /// </remarks>
     public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
     {
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        throw new NotSupportedException(
-            $"ISRUActivation does not support JIT compilation yet. " +
-            $"The gradient computation (backward pass) has not been implemented in TensorOperations.ISRU. " +
-            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+        double alpha = NumOps.ToDouble(_alpha);
+        return TensorOperations<T>.ISRU(input, alpha);
     }
 }

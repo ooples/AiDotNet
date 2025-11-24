@@ -6375,5 +6375,1759 @@ public static class TensorOperations<T>
 
         return node;
     }
+
+    /// <summary>
+    /// Applies the ISRU (Inverse Square Root Unit) activation function: f(x) = x / sqrt(1 + alpha*x²)
+    /// </summary>
+    public static ComputationNode<T> ISRU(ComputationNode<T> input, double alpha)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+        var alphaT = numOps.FromDouble(alpha);
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            T squaredInput = numOps.Multiply(x, x);
+            T alphaSquaredInput = numOps.Multiply(alphaT, squaredInput);
+            T denominator = numOps.Sqrt(numOps.Add(numOps.One, alphaSquaredInput));
+            return numOps.Divide(x, denominator);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T squaredInput = numOps.Multiply(x, x);
+                    T alphaSquaredInput = numOps.Multiply(alphaT, squaredInput);
+                    T baseValue = numOps.Add(numOps.One, alphaSquaredInput);
+                    T exponent = numOps.FromDouble(-1.5);
+                    T derivative = numOps.Power(baseValue, exponent);
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Bent Identity activation function: f(x) = (sqrt(x² + 1) - 1) / 2 + x
+    /// </summary>
+    public static ComputationNode<T> BentIdentity(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            T squarePlusOne = numOps.Add(numOps.Multiply(x, x), numOps.One);
+            T sqrtTerm = numOps.Sqrt(squarePlusOne);
+            T firstTerm = numOps.Multiply(numOps.FromDouble(0.5), numOps.Subtract(sqrtTerm, numOps.One));
+            return numOps.Add(firstTerm, x);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T squarePlusOne = numOps.Add(numOps.Multiply(x, x), numOps.One);
+                    T sqrtTerm = numOps.Sqrt(squarePlusOne);
+                    T firstTerm = numOps.Divide(x, numOps.Multiply(numOps.FromDouble(2), sqrtTerm));
+                    T derivative = numOps.Add(firstTerm, numOps.One);
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Mish activation: f(x) = x * tanh(softplus(x)) = x * tanh(ln(1 + e^x))
+    /// </summary>
+    public static ComputationNode<T> Mish(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            T softplus = numOps.Log(numOps.Add(numOps.One, numOps.Exp(x)));
+            T tanh = MathHelper.Tanh(softplus);
+            return numOps.Multiply(x, tanh);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T exp_x = numOps.Exp(x);
+                    T exp_2x = numOps.Exp(numOps.Multiply(numOps.FromDouble(2), x));
+                    T exp_3x = numOps.Exp(numOps.Multiply(numOps.FromDouble(3), x));
+
+                    T omega = numOps.Add(
+                        numOps.Add(
+                            numOps.Multiply(numOps.FromDouble(4), numOps.Add(x, numOps.One)),
+                            numOps.Multiply(numOps.FromDouble(4), exp_2x)
+                        ),
+                        numOps.Add(
+                            exp_3x,
+                            numOps.Multiply(exp_x, numOps.Add(numOps.Multiply(numOps.FromDouble(4), x), numOps.FromDouble(6)))
+                        )
+                    );
+
+                    T delta = numOps.Add(
+                        numOps.Add(numOps.Multiply(numOps.FromDouble(2), exp_x), numOps.FromDouble(2)),
+                        numOps.Multiply(exp_x, numOps.Multiply(numOps.Add(x, numOps.One), numOps.Add(x, numOps.One)))
+                    );
+
+                    T derivative = numOps.Divide(numOps.Multiply(exp_x, omega), numOps.Multiply(delta, delta));
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the GELU activation: f(x) = 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
+    /// </summary>
+    public static ComputationNode<T> GELU(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            T sqrt2OverPi = numOps.Sqrt(numOps.FromDouble(2.0 / Math.PI));
+            T x3 = numOps.Multiply(numOps.Multiply(x, x), x);
+            T inner = numOps.Add(x, numOps.Multiply(numOps.FromDouble(0.044715), x3));
+            T tanhTerm = numOps.Add(numOps.One, MathHelper.Tanh(numOps.Multiply(sqrt2OverPi, inner)));
+            return numOps.Multiply(numOps.FromDouble(0.5), numOps.Multiply(x, tanhTerm));
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T x3 = numOps.Multiply(numOps.Multiply(x, x), x);
+                    T tanhArg = numOps.Add(numOps.Multiply(numOps.FromDouble(0.0356774), x3), numOps.Multiply(numOps.FromDouble(0.797885), x));
+                    T tanhVal = MathHelper.Tanh(tanhArg);
+                    T sechSquared = numOps.Subtract(numOps.One, numOps.Multiply(tanhVal, tanhVal));
+
+                    T term1 = numOps.Multiply(numOps.FromDouble(0.5), tanhVal);
+                    T term2Coeff = numOps.Add(numOps.Multiply(numOps.FromDouble(0.0535161), x3), numOps.Multiply(numOps.FromDouble(0.398942), x));
+                    T term2 = numOps.Multiply(term2Coeff, sechSquared);
+                    T derivative = numOps.Add(numOps.Add(term1, term2), numOps.FromDouble(0.5));
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the SiLU/Swish activation: f(x) = x * sigmoid(x)
+    /// </summary>
+    public static ComputationNode<T> SiLU(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            T sigmoid = numOps.Divide(numOps.One, numOps.Add(numOps.One, numOps.Exp(numOps.Negate(x))));
+            return numOps.Multiply(x, sigmoid);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T sigmoid = numOps.Divide(numOps.One, numOps.Add(numOps.One, numOps.Exp(numOps.Negate(x))));
+                    T derivative = numOps.Add(numOps.Multiply(x, numOps.Multiply(sigmoid, numOps.Subtract(numOps.One, sigmoid))), sigmoid);
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Swish activation: f(x) = x * sigmoid(beta * x)
+    /// </summary>
+    public static ComputationNode<T> Swish(ComputationNode<T> input, double beta)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+        var betaT = numOps.FromDouble(beta);
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            T betaX = numOps.Multiply(betaT, x);
+            T sigmoid = numOps.Divide(numOps.One, numOps.Add(numOps.One, numOps.Exp(numOps.Negate(betaX))));
+            return numOps.Multiply(x, sigmoid);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T betaX = numOps.Multiply(betaT, x);
+                    T sigmoid = numOps.Divide(numOps.One, numOps.Add(numOps.One, numOps.Exp(numOps.Negate(betaX))));
+                    T derivative = numOps.Add(
+                        numOps.Multiply(betaT, numOps.Multiply(x, numOps.Multiply(sigmoid, numOps.Subtract(numOps.One, sigmoid)))),
+                        sigmoid
+                    );
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the ELU activation: f(x) = x if x > 0, else alpha * (e^x - 1)
+    /// </summary>
+    public static ComputationNode<T> ELU(ComputationNode<T> input, double alpha)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+        var alphaT = numOps.FromDouble(alpha);
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            if (numOps.GreaterThan(x, numOps.Zero))
+                return x;
+            return numOps.Multiply(alphaT, numOps.Subtract(numOps.Exp(x), numOps.One));
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T derivative = numOps.GreaterThan(x, numOps.Zero) ?
+                        numOps.One :
+                        numOps.Multiply(alphaT, numOps.Exp(x));
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the SELU activation: f(x) = lambda * (x if x > 0, else alpha * (e^x - 1))
+    /// </summary>
+    public static ComputationNode<T> SELU(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+        var lambda = numOps.FromDouble(1.0507009873554804934193349852946);
+        var alpha = numOps.FromDouble(1.6732632423543772848170429916717);
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            if (numOps.GreaterThan(x, numOps.Zero))
+                return numOps.Multiply(lambda, x);
+            return numOps.Multiply(lambda, numOps.Multiply(alpha, numOps.Subtract(numOps.Exp(x), numOps.One)));
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T derivative = numOps.GreaterThan(x, numOps.Zero) ?
+                        lambda :
+                        numOps.Multiply(lambda, numOps.Multiply(alpha, numOps.Exp(x)));
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the CELU activation: f(x) = max(0, x) + min(0, alpha * (e^(x/alpha) - 1))
+    /// </summary>
+    public static ComputationNode<T> CELU(ComputationNode<T> input, double alpha)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+        var alphaT = numOps.FromDouble(alpha);
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            T positive = numOps.GreaterThan(x, numOps.Zero) ? x : numOps.Zero;
+            T exponent = numOps.Divide(x, alphaT);
+            T negative = numOps.LessThan(x, numOps.Zero) ?
+                numOps.Multiply(alphaT, numOps.Subtract(numOps.Exp(exponent), numOps.One)) :
+                numOps.Zero;
+            return numOps.Add(positive, negative);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T derivative;
+                    if (numOps.GreaterThan(x, numOps.Zero))
+                    {
+                        derivative = numOps.One;
+                    }
+                    else
+                    {
+                        T exponent = numOps.Divide(x, alphaT);
+                        derivative = numOps.Exp(exponent);
+                    }
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the LeakyReLU activation: f(x) = x if x > 0, else negativeSlope * x
+    /// </summary>
+    public static ComputationNode<T> LeakyReLU(ComputationNode<T> input, double negativeSlope)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+        var slopeT = numOps.FromDouble(negativeSlope);
+
+        var result = inputVal.Transform((x, _) =>
+            numOps.GreaterThan(x, numOps.Zero) ? x : numOps.Multiply(slopeT, x));
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T derivative = numOps.GreaterThan(x, numOps.Zero) ? numOps.One : slopeT;
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the PReLU activation: f(x) = x if x > 0, else slope * x (slope is learnable, but here just a parameter)
+    /// </summary>
+    public static ComputationNode<T> PReLU(ComputationNode<T> input, double slope)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+        var slopeT = numOps.FromDouble(slope);
+
+        var result = inputVal.Transform((x, _) =>
+            numOps.GreaterThan(x, numOps.Zero) ? x : numOps.Multiply(slopeT, x));
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T derivative = numOps.GreaterThan(x, numOps.Zero) ? numOps.One : slopeT;
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the HardSigmoid activation: f(x) = clip((x + 2.5) / 5, 0, 1)
+    /// </summary>
+    public static ComputationNode<T> HardSigmoid(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            T shifted = numOps.Add(x, numOps.FromDouble(2.5));
+            T scaled = numOps.Divide(shifted, numOps.FromDouble(5.0));
+            if (numOps.GreaterThan(scaled, numOps.One))
+                return numOps.One;
+            if (numOps.LessThan(scaled, numOps.Zero))
+                return numOps.Zero;
+            return scaled;
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T derivative = numOps.Zero;
+                    if (numOps.GreaterThan(x, numOps.FromDouble(-2.5)) && numOps.LessThan(x, numOps.FromDouble(2.5)))
+                    {
+                        derivative = numOps.FromDouble(0.2);
+                    }
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the HardTanh activation: f(x) = clip(x, -1, 1)
+    /// </summary>
+    public static ComputationNode<T> HardTanh(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            if (numOps.GreaterThan(x, numOps.One))
+                return numOps.One;
+            if (numOps.LessThan(x, numOps.Negate(numOps.One)))
+                return numOps.Negate(numOps.One);
+            return x;
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T derivative = (numOps.GreaterThanOrEqual(x, numOps.Negate(numOps.One)) &&
+                                   numOps.LessThanOrEqual(x, numOps.One)) ?
+                        numOps.One : numOps.Zero;
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the SoftPlus activation: f(x) = ln(1 + e^x)
+    /// </summary>
+    public static ComputationNode<T> SoftPlus(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        var result = inputVal.Transform((x, _) =>
+            numOps.Log(numOps.Add(numOps.One, numOps.Exp(x))));
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T derivative = numOps.Divide(numOps.One, numOps.Add(numOps.One, numOps.Exp(numOps.Negate(x))));
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the SoftSign activation: f(x) = x / (1 + |x|)
+    /// </summary>
+    public static ComputationNode<T> SoftSign(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            T absX = numOps.Abs(x);
+            return numOps.Divide(x, numOps.Add(numOps.One, absX));
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T absX = numOps.Abs(x);
+                    T denominator = numOps.Add(numOps.One, absX);
+                    T derivative = numOps.Divide(numOps.One, numOps.Multiply(denominator, denominator));
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Gaussian activation: f(x) = e^(-x²)
+    /// </summary>
+    public static ComputationNode<T> Gaussian(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            T xSquared = numOps.Multiply(x, x);
+            return numOps.Exp(numOps.Negate(xSquared));
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T xSquared = numOps.Multiply(x, x);
+                    T gaussian = numOps.Exp(numOps.Negate(xSquared));
+                    T derivative = numOps.Multiply(numOps.FromDouble(-2.0), numOps.Multiply(x, gaussian));
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Sign activation: f(x) = 1 if x > 0, -1 if x < 0, 0 if x == 0
+    /// </summary>
+    public static ComputationNode<T> Sign(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            if (numOps.GreaterThan(x, numOps.Zero))
+                return numOps.One;
+            if (numOps.LessThan(x, numOps.Zero))
+                return numOps.Negate(numOps.One);
+            return numOps.Zero;
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    gradInput[i] = numOps.Zero;
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the ThresholdedReLU activation: f(x) = x if x > theta, else 0
+    /// </summary>
+    public static ComputationNode<T> ThresholdedReLU(ComputationNode<T> input, double theta)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+        var thetaT = numOps.FromDouble(theta);
+
+        var result = inputVal.Transform((x, _) =>
+            numOps.GreaterThan(x, thetaT) ? x : numOps.Zero);
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T derivative = numOps.GreaterThan(x, thetaT) ? numOps.One : numOps.Zero;
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the RReLU (Randomized Leaky ReLU) activation: f(x) = x if x > 0, else slope * x (slope random during training, fixed during inference)
+    /// For JIT, we use a fixed slope (midpoint of range)
+    /// </summary>
+    public static ComputationNode<T> RReLU(ComputationNode<T> input, double lower, double upper)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+        var slope = numOps.FromDouble((lower + upper) / 2.0);
+
+        var result = inputVal.Transform((x, _) =>
+            numOps.GreaterThan(x, numOps.Zero) ? x : numOps.Multiply(slope, x));
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T derivative = numOps.GreaterThan(x, numOps.Zero) ? numOps.One : slope;
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the ScaledTanh activation: f(x) = scale * tanh(x)
+    /// </summary>
+    public static ComputationNode<T> ScaledTanh(ComputationNode<T> input, double scale)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+        var scaleT = numOps.FromDouble(scale);
+
+        var result = inputVal.Transform((x, _) =>
+            numOps.Multiply(scaleT, MathHelper.Tanh(x)));
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T tanhVal = MathHelper.Tanh(x);
+                    T sechSquared = numOps.Subtract(numOps.One, numOps.Multiply(tanhVal, tanhVal));
+                    T derivative = numOps.Multiply(scaleT, sechSquared);
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the LiSHT (Linearly Scaled Hyperbolic Tangent) activation: f(x) = x * tanh(x)
+    /// </summary>
+    public static ComputationNode<T> LiSHT(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        var result = inputVal.Transform((x, _) =>
+            numOps.Multiply(x, MathHelper.Tanh(x)));
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T tanhVal = MathHelper.Tanh(x);
+                    T sechSquared = numOps.Subtract(numOps.One, numOps.Multiply(tanhVal, tanhVal));
+                    T derivative = numOps.Add(tanhVal, numOps.Multiply(x, sechSquared));
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the SQRBF (Square Radial Basis Function) activation: f(x) = 1 / (1 + x²)
+    /// </summary>
+    public static ComputationNode<T> SQRBF(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            T xSquared = numOps.Multiply(x, x);
+            return numOps.Divide(numOps.One, numOps.Add(numOps.One, xSquared));
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T xSquared = numOps.Multiply(x, x);
+                    T denominator = numOps.Add(numOps.One, xSquared);
+                    T derivative = numOps.Divide(
+                        numOps.Multiply(numOps.FromDouble(-2.0), x),
+                        numOps.Multiply(denominator, denominator)
+                    );
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Squash activation: f(x) = x / (1 + |x|)
+    /// </summary>
+    public static ComputationNode<T> Squash(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        var result = inputVal.Transform((x, _) =>
+        {
+            T absX = numOps.Abs(x);
+            return numOps.Divide(x, numOps.Add(numOps.One, absX));
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    T x = inputVal[i];
+                    T absX = numOps.Abs(x);
+                    T denominator = numOps.Add(numOps.One, absX);
+                    T derivative = numOps.Divide(numOps.One, numOps.Multiply(denominator, denominator));
+
+                    gradInput[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the BinarySpiking activation: f(x) = 1 if x >= 0, else 0
+    /// </summary>
+    public static ComputationNode<T> BinarySpiking(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        var result = inputVal.Transform((x, _) =>
+            numOps.GreaterThanOrEqual(x, numOps.Zero) ? numOps.One : numOps.Zero);
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int i = 0; i < inputVal.Length; i++)
+                {
+                    gradInput[i] = numOps.Zero;
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Softmax activation function for classification tasks
+    /// </summary>
+    public static ComputationNode<T> Softmax(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        if (inputVal.Shape.Length != 2)
+            throw new ArgumentException("Softmax requires 2D input [batch, features]");
+
+        int batchSize = inputVal.Shape[0];
+        int numFeatures = inputVal.Shape[1];
+        var result = new Tensor<T>(inputVal.Shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T max = inputVal[b * numFeatures];
+            for (int i = 1; i < numFeatures; i++)
+            {
+                T val = inputVal[b * numFeatures + i];
+                if (numOps.GreaterThan(val, max))
+                    max = val;
+            }
+
+            T sum = numOps.Zero;
+            for (int i = 0; i < numFeatures; i++)
+            {
+                int idx = b * numFeatures + i;
+                T shifted = numOps.Subtract(inputVal[idx], max);
+                T expVal = numOps.Exp(shifted);
+                result[idx] = expVal;
+                sum = numOps.Add(sum, expVal);
+            }
+
+            for (int i = 0; i < numFeatures; i++)
+            {
+                int idx = b * numFeatures + i;
+                result[idx] = numOps.Divide(result[idx], sum);
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int i = 0; i < numFeatures; i++)
+                    {
+                        int idx_i = b * numFeatures + i;
+                        T sum = numOps.Zero;
+
+                        for (int j = 0; j < numFeatures; j++)
+                        {
+                            int idx_j = b * numFeatures + j;
+                            T jacobian = (i == j) ?
+                                numOps.Multiply(result[idx_i], numOps.Subtract(numOps.One, result[idx_i])) :
+                                numOps.Negate(numOps.Multiply(result[idx_i], result[idx_j]));
+
+                            sum = numOps.Add(sum, numOps.Multiply(jacobian, gradient[idx_j]));
+                        }
+
+                        gradInput[idx_i] = sum;
+                    }
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Softmin activation function
+    /// </summary>
+    public static ComputationNode<T> Softmin(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var negatedInput = input.Value.Transform((x, _) => numOps.Negate(x));
+        var negatedNode = new ComputationNode<T>(
+            value: negatedInput,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: null,
+            name: null);
+
+        return Softmax(negatedNode);
+    }
+
+    /// <summary>
+    /// Applies the LogSoftmax activation: f(x) = log(softmax(x))
+    /// </summary>
+    public static ComputationNode<T> LogSoftmax(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputVal = input.Value;
+
+        if (inputVal.Shape.Length != 2)
+            throw new ArgumentException("LogSoftmax requires 2D input [batch, features]");
+
+        int batchSize = inputVal.Shape[0];
+        int numFeatures = inputVal.Shape[1];
+        var result = new Tensor<T>(inputVal.Shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T max = inputVal[b * numFeatures];
+            for (int i = 1; i < numFeatures; i++)
+            {
+                T val = inputVal[b * numFeatures + i];
+                if (numOps.GreaterThan(val, max))
+                    max = val;
+            }
+
+            T logSumExp = numOps.Zero;
+            for (int i = 0; i < numFeatures; i++)
+            {
+                int idx = b * numFeatures + i;
+                T shifted = numOps.Subtract(inputVal[idx], max);
+                logSumExp = numOps.Add(logSumExp, numOps.Exp(shifted));
+            }
+            logSumExp = numOps.Add(max, numOps.Log(logSumExp));
+
+            for (int i = 0; i < numFeatures; i++)
+            {
+                int idx = b * numFeatures + i;
+                result[idx] = numOps.Subtract(inputVal[idx], logSumExp);
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputVal.Shape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    T sumGrad = numOps.Zero;
+                    for (int i = 0; i < numFeatures; i++)
+                    {
+                        sumGrad = numOps.Add(sumGrad, gradient[b * numFeatures + i]);
+                    }
+
+                    for (int i = 0; i < numFeatures; i++)
+                    {
+                        int idx = b * numFeatures + i;
+                        T softmax = numOps.Exp(result[idx]);
+                        gradInput[idx] = numOps.Subtract(gradient[idx], numOps.Multiply(softmax, sumGrad));
+                    }
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradInput);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the LogSoftmin activation: f(x) = log(softmin(x))
+    /// </summary>
+    public static ComputationNode<T> LogSoftmin(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var negatedInput = input.Value.Transform((x, _) => numOps.Negate(x));
+        var negatedNode = new ComputationNode<T>(
+            value: negatedInput,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: null,
+            name: null);
+
+        return LogSoftmax(negatedNode);
+    }
 }
 

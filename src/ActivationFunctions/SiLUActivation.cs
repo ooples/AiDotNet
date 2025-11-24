@@ -101,7 +101,7 @@ public class SiLUActivation<T> : ActivationFunctionBase<T>
     /// 3. Change SupportsJitCompilation to return true
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.
@@ -121,9 +121,5 @@ public class SiLUActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        throw new NotSupportedException(
-            $"SiLUActivation does not support JIT compilation yet. " +
-            $"The gradient computation (backward pass) has not been implemented in TensorOperations.SiLU. " +
-            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+        return TensorOperations<T>.SiLU(input);
     }
-}

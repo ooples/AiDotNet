@@ -172,9 +172,6 @@ public class PReLUActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        throw new NotSupportedException(
-            $"PReLUActivation does not support JIT compilation yet. " +
-            $"The gradient computation (backward pass) has not been implemented in TensorOperations.PReLU. " +
-            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+        double slope = NumOps.ToDouble(_slope);
+        return TensorOperations<T>.PReLU(input, slope);
     }
-}
