@@ -1008,4 +1008,85 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         _gammaGradient = null;
         _betaGradient = null;
     }
+
+    /// <summary>
+    /// Exports the batch normalization layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the layer's output.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph for batch normalization in inference mode.
+    /// It uses the running mean and variance statistics collected during training,
+    /// rather than computing batch statistics.
+    /// </para>
+    /// <para>
+    /// The computation graph implements: output = gamma * ((input - running_mean) / sqrt(running_variance + epsilon)) + beta
+    /// </para>
+    /// <para>
+    /// This enables:
+    /// - JIT compilation for optimized inference
+    /// - Automatic differentiation via backpropagation
+    /// - GPU acceleration where supported
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_gamma == null || _beta == null)
+            throw new InvalidOperationException("Layer parameters not initialized.");
+
+        if (_runningMean == null || _runningVariance == null)
+            throw new InvalidOperationException("Running statistics not initialized.");
+
+        int featureSize = InputShape[0];
+
+        // Create placeholder for input data
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, featureSize });
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+        inputNodes.Add(inputNode);
+
+        // Create constant nodes for running statistics and learned parameters
+        var runningMeanNode = TensorOperations<T>.Variable(
+            new Tensor<T>(new int[] { featureSize }, _runningMean), "running_mean");
+        var runningVarianceNode = TensorOperations<T>.Variable(
+            new Tensor<T>(new int[] { featureSize }, _runningVariance), "running_variance");
+        var gammaNode = TensorOperations<T>.Variable(
+            new Tensor<T>(new int[] { featureSize }, _gamma), "gamma");
+        var betaNode = TensorOperations<T>.Variable(
+            new Tensor<T>(new int[] { featureSize }, _beta), "beta");
+        var epsilonNode = TensorOperations<T>.Variable(
+            new Tensor<T>(new int[] { 1 }, new T[] { _epsilon }), "epsilon");
+
+        inputNodes.Add(runningMeanNode);
+        inputNodes.Add(runningVarianceNode);
+        inputNodes.Add(gammaNode);
+        inputNodes.Add(betaNode);
+        inputNodes.Add(epsilonNode);
+
+        // Build computation graph: normalized = (input - running_mean) / sqrt(running_variance + epsilon)
+        var centered = TensorOperations<T>.Subtract(inputNode, runningMeanNode);
+        var variancePlusEpsilon = TensorOperations<T>.Add(runningVarianceNode, epsilonNode);
+        var stdDev = TensorOperations<T>.Sqrt(variancePlusEpsilon);
+        var normalized = TensorOperations<T>.Divide(centered, stdDev);
+
+        // Apply scale and shift: output = gamma * normalized + beta
+        var scaled = TensorOperations<T>.Multiply(normalized, gammaNode);
+        var output = TensorOperations<T>.Add(scaled, betaNode);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always true. Batch normalization layers support JIT compilation in inference mode.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
 }
