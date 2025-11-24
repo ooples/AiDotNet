@@ -523,4 +523,22 @@ public class DropoutLayer<T> : LayerBase<T>
         _lastInput = null;
         _dropoutMask = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Dropout is a pass-through during inference (JIT is for inference)
+        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+        inputNodes.Add(inputNode);
+
+        return inputNode; // Just pass through
+    }
+
+    public override bool SupportsJitCompilation => true;
 }

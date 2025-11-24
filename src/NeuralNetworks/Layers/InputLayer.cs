@@ -232,4 +232,22 @@ public class InputLayer<T> : LayerBase<T>
     {
         // InputLayer has no state to reset
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (OutputShape == null || OutputShape.Length == 0)
+            throw new InvalidOperationException("Layer output shape not configured.");
+
+        // Input layer just passes through
+        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(OutputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+        inputNodes.Add(inputNode);
+
+        return inputNode;
+    }
+
+    public override bool SupportsJitCompilation => true;
 }
