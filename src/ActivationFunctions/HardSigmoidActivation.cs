@@ -108,20 +108,17 @@ public class HardSigmoidActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
-    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <value>True because gradient computation is fully implemented in TensorOperations.HardSigmoid.</value>
     /// <remarks>
     /// <para>
-    /// This activation does not yet support JIT compilation because the gradient
-    /// computation (backward pass) has not been implemented in TensorOperations.HardSigmoid.
-    /// </para>
-    /// <para>
-    /// To enable JIT support:
-    /// 1. Implement the backward pass in TensorOperations.HardSigmoid
-    /// 2. Test the gradient computation
-    /// 3. Change SupportsJitCompilation to return true
+    /// HardSigmoid supports JIT compilation because:
+    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
+    /// - The gradient is 0.5 when -1 &lt; x &lt; 1, and 0 otherwise
+    /// - It's computationally efficient and commonly used in mobile/embedded applications
+    /// - It can be represented as a static computation graph node
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.
@@ -129,11 +126,10 @@ public class HardSigmoidActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The computation node to apply the activation to.</param>
     /// <returns>A new computation node with HardSigmoid activation applied.</returns>
     /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
     /// <remarks>
     /// <para>
-    /// This method would map the activation to TensorOperations&lt;T&gt;.HardSigmoid(input)
-    /// once the gradient computation is implemented.
+    /// This method maps the HardSigmoid activation to TensorOperations&lt;T&gt;.HardSigmoid(input),
+    /// which handles both forward and backward passes for JIT compilation.
     /// </para>
     /// </remarks>
     public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
@@ -141,9 +137,6 @@ public class HardSigmoidActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        throw new NotSupportedException(
-            $"HardSigmoidActivation does not support JIT compilation yet. " +
-            $"The gradient computation (backward pass) has not been implemented in TensorOperations.HardSigmoid. " +
-            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+        return TensorOperations<T>.HardSigmoid(input);
     }
 }

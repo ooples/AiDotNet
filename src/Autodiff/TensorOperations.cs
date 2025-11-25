@@ -1842,6 +1842,759 @@ public static class TensorOperations<T>
     }
 
     /// <summary>
+    /// Applies the SoftPlus activation function element-wise: f(x) = ln(1 + e^x).
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <returns>A new computation node with SoftPlus applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// SoftPlus is a smooth approximation of ReLU. The gradient is the sigmoid function:
+    /// d(SoftPlus)/dx = sigmoid(x) = 1 / (1 + e^(-x))
+    /// </para>
+    /// <para><b>For Beginners:</b> SoftPlus smoothly approaches 0 for negative inputs and
+    /// approaches the input value for large positive inputs, similar to ReLU but without
+    /// the sharp corner at x=0.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> SoftPlus(ComputationNode<T> a)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Forward pass: ln(1 + e^x)
+        // Using numerically stable version: max(0, x) + ln(1 + exp(-|x|))
+        var result = a.Value.Transform((x, idx) =>
+        {
+            var expX = numOps.Exp(x);
+            var onePlusExpX = numOps.Add(numOps.One, expX);
+            return numOps.Log(onePlusExpX);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // d(SoftPlus)/dx = sigmoid(x) = 1 / (1 + e^(-x))
+                var derivative = a.Value.Transform((x, idx) =>
+                {
+                    var negX = numOps.Negate(x);
+                    var expNegX = numOps.Exp(negX);
+                    var onePlusExpNegX = numOps.Add(numOps.One, expNegX);
+                    return numOps.Divide(numOps.One, onePlusExpNegX);
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.SoftPlus;
+        node.OperationParams = null;
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the SELU (Scaled Exponential Linear Unit) activation function element-wise.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <returns>A new computation node with SELU applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// SELU is defined as: λ * x if x > 0, otherwise λ * α * (e^x - 1)
+    /// where λ ≈ 1.0507 and α ≈ 1.6733 are fixed constants for self-normalization.
+    /// The gradient is: λ if x > 0, otherwise λ * α * e^x
+    /// </para>
+    /// <para><b>For Beginners:</b> SELU enables self-normalizing neural networks where
+    /// activations converge to zero mean and unit variance, reducing the need for
+    /// batch normalization.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> SELU(ComputationNode<T> a)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // SELU constants for self-normalization
+        var lambda = numOps.FromDouble(1.0507009873554804934193349852946);
+        var alpha = numOps.FromDouble(1.6732632423543772848170429916717);
+        var lambdaAlpha = numOps.Multiply(lambda, alpha);
+
+        // Forward pass
+        var result = a.Value.Transform((x, idx) =>
+        {
+            if (numOps.GreaterThanOrEquals(x, numOps.Zero))
+            {
+                return numOps.Multiply(lambda, x);
+            }
+            else
+            {
+                var expTerm = numOps.Subtract(numOps.Exp(x), numOps.One);
+                return numOps.Multiply(lambdaAlpha, expTerm);
+            }
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // d(SELU)/dx = λ if x >= 0, else λ * α * e^x
+                var derivative = a.Value.Transform((x, idx) =>
+                {
+                    if (numOps.GreaterThanOrEquals(x, numOps.Zero))
+                    {
+                        return lambda;
+                    }
+                    else
+                    {
+                        return numOps.Multiply(lambdaAlpha, numOps.Exp(x));
+                    }
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.SELU;
+        node.OperationParams = null;
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Hard Sigmoid activation function element-wise: f(x) = clip((x + 1) / 2, 0, 1).
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <returns>A new computation node with HardSigmoid applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// HardSigmoid is a piecewise linear approximation of sigmoid that is computationally efficient.
+    /// The gradient is 0.5 when -1 &lt; x &lt; 1, and 0 otherwise.
+    /// </para>
+    /// <para><b>For Beginners:</b> HardSigmoid uses straight lines instead of curves,
+    /// making it faster to compute while still mapping inputs to the [0, 1] range.
+    /// It's commonly used in mobile and embedded neural networks.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> HardSigmoid(ComputationNode<T> a)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var half = numOps.FromDouble(0.5);
+        var minusOne = numOps.FromDouble(-1.0);
+
+        // Forward pass: clip((x + 1) / 2, 0, 1)
+        var result = a.Value.Transform((x, idx) =>
+        {
+            var shifted = numOps.Add(x, numOps.One);
+            var scaled = numOps.Multiply(shifted, half);
+            // Clamp to [0, 1]
+            if (numOps.LessThan(scaled, numOps.Zero))
+                return numOps.Zero;
+            if (numOps.GreaterThan(scaled, numOps.One))
+                return numOps.One;
+            return scaled;
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // d(HardSigmoid)/dx = 0.5 if -1 < x < 1, else 0
+                var derivative = a.Value.Transform((x, idx) =>
+                {
+                    if (numOps.GreaterThan(x, minusOne) && numOps.LessThan(x, numOps.One))
+                    {
+                        return half;
+                    }
+                    return numOps.Zero;
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.HardSigmoid;
+        node.OperationParams = null;
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Hard Tanh activation function element-wise: f(x) = clip(x, -1, 1).
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <returns>A new computation node with HardTanh applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// HardTanh is a piecewise linear approximation of tanh that is computationally efficient.
+    /// The gradient is 1 when -1 &lt; x &lt; 1, and 0 otherwise.
+    /// </para>
+    /// <para><b>For Beginners:</b> HardTanh clips values to the range [-1, 1], passing
+    /// through values in the middle range unchanged. It's faster than regular tanh
+    /// and useful when you need bounded outputs.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> HardTanh(ComputationNode<T> a)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var minusOne = numOps.FromDouble(-1.0);
+
+        // Forward pass: clip(x, -1, 1)
+        var result = a.Value.Transform((x, idx) =>
+        {
+            if (numOps.LessThan(x, minusOne))
+                return minusOne;
+            if (numOps.GreaterThan(x, numOps.One))
+                return numOps.One;
+            return x;
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // d(HardTanh)/dx = 1 if -1 < x < 1, else 0
+                var derivative = a.Value.Transform((x, idx) =>
+                {
+                    if (numOps.GreaterThan(x, minusOne) && numOps.LessThan(x, numOps.One))
+                    {
+                        return numOps.One;
+                    }
+                    return numOps.Zero;
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.HardTanh;
+        node.OperationParams = null;
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the SoftSign activation function element-wise: f(x) = x / (1 + |x|).
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <returns>A new computation node with SoftSign applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// SoftSign is an alternative to tanh with polynomial tails that approach ±1 more slowly.
+    /// The gradient is: d(SoftSign)/dx = 1 / (1 + |x|)²
+    /// </para>
+    /// <para><b>For Beginners:</b> SoftSign maps inputs to (-1, 1) like tanh, but with
+    /// a different shape. The slower saturation can help prevent vanishing gradients
+    /// in deep networks.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> SoftSign(ComputationNode<T> a)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Forward pass: x / (1 + |x|)
+        var result = a.Value.Transform((x, idx) =>
+        {
+            var absX = numOps.Abs(x);
+            var denominator = numOps.Add(numOps.One, absX);
+            return numOps.Divide(x, denominator);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // d(SoftSign)/dx = 1 / (1 + |x|)²
+                var derivative = a.Value.Transform((x, idx) =>
+                {
+                    var absX = numOps.Abs(x);
+                    var denominator = numOps.Add(numOps.One, absX);
+                    var denominatorSquared = numOps.Multiply(denominator, denominator);
+                    return numOps.Divide(numOps.One, denominatorSquared);
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.SoftSign;
+        node.OperationParams = null;
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the CELU (Continuously Differentiable ELU) activation function element-wise.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="alpha">The alpha parameter controlling negative saturation. Default is 1.0.</param>
+    /// <returns>A new computation node with CELU applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// CELU is defined as: max(0, x) + min(0, α * (exp(x/α) - 1))
+    /// The gradient is: 1 if x >= 0, otherwise exp(x/α)
+    /// </para>
+    /// <para><b>For Beginners:</b> CELU is an improved version of ELU that is continuously
+    /// differentiable everywhere, which can help with optimization and training stability.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> CELU(ComputationNode<T> a, double alpha = 1.0)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var alphaT = numOps.FromDouble(alpha);
+
+        // Forward pass: max(0, x) + min(0, α * (exp(x/α) - 1))
+        var result = a.Value.Transform((x, idx) =>
+        {
+            var positivePart = numOps.GreaterThanOrEquals(x, numOps.Zero) ? x : numOps.Zero;
+            var expTerm = numOps.Subtract(numOps.Exp(numOps.Divide(x, alphaT)), numOps.One);
+            var negativePart = numOps.Multiply(alphaT, expTerm);
+            var negativeClipped = numOps.LessThan(negativePart, numOps.Zero) ? negativePart : numOps.Zero;
+            return numOps.Add(positivePart, negativeClipped);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // d(CELU)/dx = 1 if x >= 0, else exp(x/α)
+                var derivative = a.Value.Transform((x, idx) =>
+                {
+                    if (numOps.GreaterThanOrEquals(x, numOps.Zero))
+                    {
+                        return numOps.One;
+                    }
+                    else
+                    {
+                        return numOps.Exp(numOps.Divide(x, alphaT));
+                    }
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.CELU;
+        node.OperationParams = new Dictionary<string, object> { { "alpha", alpha } };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the LiSHT (Linearly Scaled Hyperbolic Tangent) activation function element-wise.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <returns>A new computation node with LiSHT applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// LiSHT is defined as: f(x) = x * tanh(x)
+    /// The gradient is: tanh(x) + x * (1 - tanh²(x))
+    /// </para>
+    /// <para><b>For Beginners:</b> LiSHT combines the input with its tanh, creating a smooth
+    /// activation that preserves sign and helps prevent vanishing gradients.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> LiSHT(ComputationNode<T> a)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Forward pass: x * tanh(x)
+        var result = a.Value.Transform((x, idx) =>
+        {
+            var tanhX = MathHelper.Tanh(x);
+            return numOps.Multiply(x, tanhX);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // d(LiSHT)/dx = tanh(x) + x * (1 - tanh²(x))
+                var derivative = a.Value.Transform((x, idx) =>
+                {
+                    var tanhX = MathHelper.Tanh(x);
+                    var tanhSquared = numOps.Multiply(tanhX, tanhX);
+                    var sech2 = numOps.Subtract(numOps.One, tanhSquared);
+                    return numOps.Add(tanhX, numOps.Multiply(x, sech2));
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.LiSHT;
+        node.OperationParams = null;
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Bent Identity activation function element-wise.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <returns>A new computation node with BentIdentity applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// BentIdentity is defined as: f(x) = (sqrt(x² + 1) - 1) / 2 + x
+    /// The gradient is: x / (2 * sqrt(x² + 1)) + 1
+    /// </para>
+    /// <para><b>For Beginners:</b> BentIdentity is a smooth alternative to ReLU with
+    /// non-zero gradient everywhere, preventing dead neurons during training.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> BentIdentity(ComputationNode<T> a)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var half = numOps.FromDouble(0.5);
+        var two = numOps.FromDouble(2.0);
+
+        // Forward pass: (sqrt(x² + 1) - 1) / 2 + x
+        var result = a.Value.Transform((x, idx) =>
+        {
+            var xSquared = numOps.Multiply(x, x);
+            var sqrtTerm = numOps.Sqrt(numOps.Add(xSquared, numOps.One));
+            var firstPart = numOps.Multiply(half, numOps.Subtract(sqrtTerm, numOps.One));
+            return numOps.Add(firstPart, x);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // d(BentIdentity)/dx = x / (2 * sqrt(x² + 1)) + 1
+                var derivative = a.Value.Transform((x, idx) =>
+                {
+                    var xSquared = numOps.Multiply(x, x);
+                    var sqrtTerm = numOps.Sqrt(numOps.Add(xSquared, numOps.One));
+                    var firstPart = numOps.Divide(x, numOps.Multiply(two, sqrtTerm));
+                    return numOps.Add(firstPart, numOps.One);
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.BentIdentity;
+        node.OperationParams = null;
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Gaussian activation function element-wise: f(x) = exp(-x²).
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <returns>A new computation node with Gaussian applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// Gaussian is defined as: f(x) = exp(-x²)
+    /// The gradient is: -2x * exp(-x²)
+    /// </para>
+    /// <para><b>For Beginners:</b> Gaussian creates a bell-shaped response curve that is
+    /// maximum at zero and approaches zero for large inputs in either direction.
+    /// Useful for RBF networks and pattern recognition.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Gaussian(ComputationNode<T> a)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var negTwo = numOps.FromDouble(-2.0);
+
+        // Forward pass: exp(-x²)
+        var result = a.Value.Transform((x, idx) =>
+        {
+            var negXSquared = numOps.Negate(numOps.Multiply(x, x));
+            return numOps.Exp(negXSquared);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // d(Gaussian)/dx = -2x * exp(-x²)
+                var derivative = a.Value.Transform((x, idx) =>
+                {
+                    var negXSquared = numOps.Negate(numOps.Multiply(x, x));
+                    var expTerm = numOps.Exp(negXSquared);
+                    return numOps.Multiply(numOps.Multiply(negTwo, x), expTerm);
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.Gaussian;
+        node.OperationParams = null;
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Scaled Tanh activation function element-wise.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="beta">The steepness parameter. Default is 1.0.</param>
+    /// <returns>A new computation node with ScaledTanh applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// ScaledTanh is defined as: f(x) = (1 - exp(-βx)) / (1 + exp(-βx))
+    /// The gradient is: β * (1 - f(x)²)
+    /// When β = 2, this equals standard tanh.
+    /// </para>
+    /// <para><b>For Beginners:</b> ScaledTanh allows you to control the steepness of the
+    /// tanh curve, which can be useful for tuning network behavior.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> ScaledTanh(ComputationNode<T> a, double beta = 1.0)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var betaT = numOps.FromDouble(beta);
+
+        // Forward pass: (1 - exp(-βx)) / (1 + exp(-βx))
+        var result = a.Value.Transform((x, idx) =>
+        {
+            var negBetaX = numOps.Negate(numOps.Multiply(betaT, x));
+            var expTerm = numOps.Exp(negBetaX);
+            var numerator = numOps.Subtract(numOps.One, expTerm);
+            var denominator = numOps.Add(numOps.One, expTerm);
+            return numOps.Divide(numerator, denominator);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // d(ScaledTanh)/dx = β * (1 - f(x)²)
+                var derivative = result.Transform((fx, idx) =>
+                {
+                    var fxSquared = numOps.Multiply(fx, fx);
+                    var oneMinusFxSquared = numOps.Subtract(numOps.One, fxSquared);
+                    return numOps.Multiply(betaT, oneMinusFxSquared);
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.ScaledTanh;
+        node.OperationParams = new Dictionary<string, object> { { "beta", beta } };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
     /// Concatenates multiple computation nodes along a specified axis.
     /// </summary>
     /// <param name="nodes">The list of nodes to concatenate.</param>

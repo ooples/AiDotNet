@@ -125,20 +125,17 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
-    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <value>True because gradient computation is fully implemented in TensorOperations.CELU.</value>
     /// <remarks>
     /// <para>
-    /// This activation does not yet support JIT compilation because the gradient
-    /// computation (backward pass) has not been implemented in TensorOperations.CELU.
-    /// </para>
-    /// <para>
-    /// To enable JIT support:
-    /// 1. Implement the backward pass in TensorOperations.CELU
-    /// 2. Test the gradient computation
-    /// 3. Change SupportsJitCompilation to return true
+    /// CELU supports JIT compilation because:
+    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
+    /// - The gradient is 1 if x >= 0, otherwise exp(x/α)
+    /// - It provides continuous differentiability unlike standard ELU
+    /// - It can be represented as a static computation graph node
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.
@@ -146,11 +143,10 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The computation node to apply the activation to.</param>
     /// <returns>A new computation node with CELU activation applied.</returns>
     /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
     /// <remarks>
     /// <para>
-    /// This method would map the activation to TensorOperations&lt;T&gt;.CELU(input)
-    /// once the gradient computation is implemented.
+    /// This method maps the CELU activation to TensorOperations&lt;T&gt;.CELU(input, alpha),
+    /// which handles both forward and backward passes for JIT compilation.
     /// </para>
     /// </remarks>
     public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
@@ -158,9 +154,7 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        throw new NotSupportedException(
-            $"CELUActivation does not support JIT compilation yet. " +
-            $"The gradient computation (backward pass) has not been implemented in TensorOperations.CELU. " +
-            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+        double alphaDouble = Convert.ToDouble(_alpha);
+        return TensorOperations<T>.CELU(input, alphaDouble);
     }
 }

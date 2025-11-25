@@ -147,6 +147,56 @@ public enum OperationType
     Mish,
 
     /// <summary>
+    /// SoftPlus activation - ln(1 + e^x), smooth approximation of ReLU.
+    /// </summary>
+    SoftPlus,
+
+    /// <summary>
+    /// Scaled Exponential Linear Unit - self-normalizing activation with fixed lambda and alpha.
+    /// </summary>
+    SELU,
+
+    /// <summary>
+    /// Hard Sigmoid - piecewise linear approximation of sigmoid: clip((x + 1) / 2, 0, 1).
+    /// </summary>
+    HardSigmoid,
+
+    /// <summary>
+    /// Hard Tanh - piecewise linear approximation of tanh: clip(x, -1, 1).
+    /// </summary>
+    HardTanh,
+
+    /// <summary>
+    /// SoftSign activation - x / (1 + |x|), alternative to tanh with polynomial tails.
+    /// </summary>
+    SoftSign,
+
+    /// <summary>
+    /// Continuously Differentiable ELU - max(0, x) + min(0, α * (exp(x/α) - 1)).
+    /// </summary>
+    CELU,
+
+    /// <summary>
+    /// Linearly Scaled Hyperbolic Tangent - x * tanh(x).
+    /// </summary>
+    LiSHT,
+
+    /// <summary>
+    /// Bent Identity - (sqrt(x² + 1) - 1) / 2 + x, smooth alternative to ReLU.
+    /// </summary>
+    BentIdentity,
+
+    /// <summary>
+    /// Gaussian activation - exp(-x²), bell-shaped response curve.
+    /// </summary>
+    Gaussian,
+
+    /// <summary>
+    /// Scaled Tanh - parameterized tanh with adjustable steepness β.
+    /// </summary>
+    ScaledTanh,
+
+    /// <summary>
     /// Generic activation function application.
     /// </summary>
     Activation,
