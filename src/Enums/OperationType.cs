@@ -437,5 +437,57 @@ public enum OperationType
     /// <summary>
     /// Anomaly score computation.
     /// </summary>
-    AnomalyScore
+    AnomalyScore,
+
+    // Additional Activation Functions
+
+    /// <summary>
+    /// Parametric Rectified Linear Unit - max(0, x) + alpha * min(0, x) where alpha is learned.
+    /// </summary>
+    PReLU,
+
+    /// <summary>
+    /// Thresholded Rectified Linear Unit - x if x > threshold, 0 otherwise.
+    /// </summary>
+    ThresholdedReLU,
+
+    /// <summary>
+    /// Inverse Square Root Unit - x / sqrt(1 + alpha * x²).
+    /// </summary>
+    ISRU,
+
+    /// <summary>
+    /// Sign function with surrogate gradient for training - returns -1, 0, or 1.
+    /// </summary>
+    Sign,
+
+    /// <summary>
+    /// Log-Softmax - log(softmax(x)), numerically stable for cross-entropy loss.
+    /// </summary>
+    LogSoftmax,
+
+    /// <summary>
+    /// Softmin - softmax(-x), assigns higher probability to lower values.
+    /// </summary>
+    Softmin,
+
+    /// <summary>
+    /// Log-Softmin - log(softmin(x)) = log(softmax(-x)).
+    /// </summary>
+    LogSoftmin,
+
+    /// <summary>
+    /// Square Radial Basis Function - smooth bell-shaped activation.
+    /// </summary>
+    SQRBF,
+
+    /// <summary>
+    /// Maxout activation - maximum over multiple linear pieces.
+    /// </summary>
+    Maxout,
+
+    /// <summary>
+    /// Randomized Leaky ReLU - LeakyReLU with random alpha during training.
+    /// </summary>
+    RReLU
 }

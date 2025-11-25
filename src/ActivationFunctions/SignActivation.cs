@@ -214,32 +214,27 @@ public class SignActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
-    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <value>True because TensorOperations.Sign provides surrogate gradient support for training.</value>
     /// <remarks>
     /// <para>
-    /// This activation does not yet support JIT compilation because the gradient
-    /// computation (backward pass) has not been implemented in TensorOperations.Sign.
-    /// </para>
-    /// <para>
-    /// To enable JIT support:
-    /// 1. Implement the backward pass in TensorOperations.Sign
-    /// 2. Test the gradient computation
-    /// 3. Change SupportsJitCompilation to return true
+    /// Sign supports JIT compilation using surrogate gradients. The forward pass produces
+    /// the hard sign function (-1, 0, or 1), while the backward pass uses a sigmoid surrogate
+    /// for gradient flow. This enables training despite the discontinuous nature of the sign function.
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.
     /// </summary>
     /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with Sign activation applied.</returns>
+    /// <returns>A new computation node with Sign activation applied using surrogate gradients.</returns>
     /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
     /// <remarks>
     /// <para>
-    /// This method would map the activation to TensorOperations&lt;T&gt;.Sign(input)
-    /// once the gradient computation is implemented.
+    /// This method maps to TensorOperations&lt;T&gt;.Sign(input) which uses the
+    /// straight-through estimator pattern: hard sign in forward pass, sigmoid surrogate
+    /// gradients in backward pass.
     /// </para>
     /// </remarks>
     public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
@@ -247,9 +242,6 @@ public class SignActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        throw new NotSupportedException(
-            $"SignActivation does not support JIT compilation yet. " +
-            $"The gradient computation (backward pass) has not been implemented in TensorOperations.Sign. " +
-            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+        return TensorOperations<T>.Sign(input);
     }
 }

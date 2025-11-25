@@ -88,32 +88,25 @@ public class SiLUActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
-    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <value>True because SiLU is mathematically equivalent to Swish, which is fully implemented in TensorOperations.</value>
     /// <remarks>
     /// <para>
-    /// This activation does not yet support JIT compilation because the gradient
-    /// computation (backward pass) has not been implemented in TensorOperations.SiLU.
-    /// </para>
-    /// <para>
-    /// To enable JIT support:
-    /// 1. Implement the backward pass in TensorOperations.SiLU
-    /// 2. Test the gradient computation
-    /// 3. Change SupportsJitCompilation to return true
+    /// SiLU (Sigmoid Linear Unit) is mathematically identical to Swish: f(x) = x * sigmoid(x).
+    /// TensorOperations.Swish provides full forward and backward pass support for JIT compilation.
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.
     /// </summary>
     /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with SiLU activation applied.</returns>
+    /// <returns>A new computation node with SiLU/Swish activation applied.</returns>
     /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
     /// <remarks>
     /// <para>
-    /// This method would map the activation to TensorOperations&lt;T&gt;.SiLU(input)
-    /// once the gradient computation is implemented.
+    /// This method maps SiLU to TensorOperations&lt;T&gt;.Swish(input) since SiLU and Swish
+    /// are mathematically equivalent: f(x) = x * sigmoid(x).
     /// </para>
     /// </remarks>
     public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
@@ -121,9 +114,7 @@ public class SiLUActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        throw new NotSupportedException(
-            $"SiLUActivation does not support JIT compilation yet. " +
-            $"The gradient computation (backward pass) has not been implemented in TensorOperations.SiLU. " +
-            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+        // SiLU is mathematically equivalent to Swish: x * sigmoid(x)
+        return TensorOperations<T>.Swish(input);
     }
 }

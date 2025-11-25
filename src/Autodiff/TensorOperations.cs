@@ -8391,6 +8391,703 @@ public static class TensorOperations<T>
         var squared = Square(diff);
         return Mean(squared);
     }
+
+    /// <summary>
+    /// Applies the Parametric Rectified Linear Unit (PReLU) activation function.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="alpha">The slope for negative values (default 0.01).</param>
+    /// <returns>A new computation node with PReLU applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// PReLU(x) = x if x > 0, alpha * x otherwise.
+    /// Similar to LeakyReLU but alpha is typically learned during training.
+    /// </para>
+    /// <para><b>Gradient:</b> d(PReLU)/dx = 1 if x > 0, alpha otherwise.</para>
+    /// </remarks>
+    public static ComputationNode<T> PReLU(ComputationNode<T> a, double alpha = 0.01)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var alphaT = numOps.FromDouble(alpha);
+
+        // Forward pass: max(0, x) + alpha * min(0, x)
+        var result = a.Value.Transform((x, _) =>
+        {
+            if (numOps.GreaterThan(x, numOps.Zero))
+                return x;
+            else
+                return numOps.Multiply(alphaT, x);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // d(PReLU)/dx = 1 if x > 0, alpha if x <= 0
+                var derivative = a.Value.Transform((x, _) =>
+                {
+                    if (numOps.GreaterThan(x, numOps.Zero))
+                        return numOps.One;
+                    else
+                        return alphaT;
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.PReLU;
+        node.OperationParams = new Dictionary<string, object> { { "Alpha", alpha } };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Thresholded Rectified Linear Unit activation function.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="threshold">The threshold value (default 1.0).</param>
+    /// <returns>A new computation node with ThresholdedReLU applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// ThresholdedReLU(x) = x if x > threshold, 0 otherwise.
+    /// Unlike standard ReLU which activates at 0, this activates at a configurable threshold.
+    /// </para>
+    /// <para><b>Gradient:</b> d(ThresholdedReLU)/dx = 1 if x > threshold, 0 otherwise.</para>
+    /// </remarks>
+    public static ComputationNode<T> ThresholdedReLU(ComputationNode<T> a, double threshold = 1.0)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var thresholdT = numOps.FromDouble(threshold);
+
+        var result = a.Value.Transform((x, _) =>
+        {
+            if (numOps.GreaterThan(x, thresholdT))
+                return x;
+            else
+                return numOps.Zero;
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                var derivative = a.Value.Transform((x, _) =>
+                {
+                    if (numOps.GreaterThan(x, thresholdT))
+                        return numOps.One;
+                    else
+                        return numOps.Zero;
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.ThresholdedReLU;
+        node.OperationParams = new Dictionary<string, object> { { "Threshold", threshold } };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Inverse Square Root Unit (ISRU) activation function.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="alpha">The scaling parameter (default 1.0).</param>
+    /// <returns>A new computation node with ISRU applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// ISRU(x) = x / sqrt(1 + alpha * x²)
+    /// A smooth, bounded activation function that ranges from -1/sqrt(alpha) to 1/sqrt(alpha).
+    /// </para>
+    /// <para><b>Gradient:</b> d(ISRU)/dx = (1 + alpha * x²)^(-3/2)</para>
+    /// </remarks>
+    public static ComputationNode<T> ISRU(ComputationNode<T> a, double alpha = 1.0)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var alphaT = numOps.FromDouble(alpha);
+
+        var result = a.Value.Transform((x, _) =>
+        {
+            var xSquared = numOps.Multiply(x, x);
+            var denom = numOps.Sqrt(numOps.Add(numOps.One, numOps.Multiply(alphaT, xSquared)));
+            return numOps.Divide(x, denom);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // d(ISRU)/dx = (1 + alpha * x²)^(-3/2)
+                var derivative = a.Value.Transform((x, _) =>
+                {
+                    var xSquared = numOps.Multiply(x, x);
+                    var inner = numOps.Add(numOps.One, numOps.Multiply(alphaT, xSquared));
+                    var sqrtInner = numOps.Sqrt(inner);
+                    return numOps.Divide(numOps.One, numOps.Multiply(inner, sqrtInner));
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.ISRU;
+        node.OperationParams = new Dictionary<string, object> { { "Alpha", alpha } };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Sign function with surrogate gradient for training.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="surrogateBeta">Sharpness of the surrogate gradient (default 1.0).</param>
+    /// <returns>A new computation node with Sign applied using straight-through estimator.</returns>
+    /// <remarks>
+    /// <para>
+    /// Sign(x) = 1 if x > 0, -1 if x < 0, 0 if x = 0.
+    /// Uses sigmoid surrogate gradient for backpropagation since the true derivative is zero almost everywhere.
+    /// </para>
+    /// <para><b>Surrogate Gradient:</b> beta * sigmoid(beta * x) * (1 - sigmoid(beta * x))</para>
+    /// </remarks>
+    public static ComputationNode<T> Sign(ComputationNode<T> a, double surrogateBeta = 1.0)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var betaT = numOps.FromDouble(surrogateBeta);
+
+        // Forward: hard sign
+        var result = a.Value.Transform((x, _) =>
+        {
+            if (numOps.GreaterThan(x, numOps.Zero))
+                return numOps.One;
+            else if (numOps.LessThan(x, numOps.Zero))
+                return numOps.Negate(numOps.One);
+            else
+                return numOps.Zero;
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // Surrogate gradient: beta * sigmoid(beta*x) * (1 - sigmoid(beta*x))
+                var derivative = a.Value.Transform((x, _) =>
+                {
+                    var scaledX = numOps.Multiply(betaT, x);
+                    var sig = numOps.Divide(numOps.One, numOps.Add(numOps.One, numOps.Exp(numOps.Negate(scaledX))));
+                    var oneMinusSig = numOps.Subtract(numOps.One, sig);
+                    return numOps.Multiply(betaT, numOps.Multiply(sig, oneMinusSig));
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.Sign;
+        node.OperationParams = new Dictionary<string, object> { { "SurrogateBeta", surrogateBeta } };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Log-Softmax function for numerically stable cross-entropy loss computation.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="axis">The axis along which to compute log-softmax (default -1, last axis).</param>
+    /// <returns>A new computation node with Log-Softmax applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// LogSoftmax(x) = log(softmax(x)) = x - log(sum(exp(x)))
+    /// More numerically stable than computing log(softmax(x)) separately.
+    /// </para>
+    /// <para><b>Gradient:</b> d(LogSoftmax)/dx_i = 1 - softmax(x)_i for the target class.</para>
+    /// </remarks>
+    public static ComputationNode<T> LogSoftmax(ComputationNode<T> a, int axis = -1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+
+        if (axis < 0)
+            axis = shape.Length + axis;
+
+        if (shape.Length == 2 && axis == 1)
+        {
+            int batchSize = shape[0];
+            int features = shape[1];
+            var result = new Tensor<T>(shape);
+            var softmaxOutput = new Tensor<T>(shape);
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Find max for numerical stability
+                var maxVal = a.Value[b, 0];
+                for (int f = 1; f < features; f++)
+                {
+                    if (numOps.GreaterThan(a.Value[b, f], maxVal))
+                        maxVal = a.Value[b, f];
+                }
+
+                // Compute log-sum-exp
+                var logSumExp = numOps.Zero;
+                for (int f = 0; f < features; f++)
+                {
+                    var shifted = numOps.Subtract(a.Value[b, f], maxVal);
+                    logSumExp = numOps.Add(logSumExp, numOps.Exp(shifted));
+                }
+                logSumExp = numOps.Add(numOps.Log(logSumExp), maxVal);
+
+                // Compute log-softmax: x - log-sum-exp
+                for (int f = 0; f < features; f++)
+                {
+                    result[b, f] = numOps.Subtract(a.Value[b, f], logSumExp);
+                    softmaxOutput[b, f] = numOps.Exp(result[b, f]);
+                }
+            }
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                if (a.RequiresGradient)
+                {
+                    var gradA = new Tensor<T>(shape);
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        // Sum of gradients * softmax for this batch
+                        var gradSum = numOps.Zero;
+                        for (int f = 0; f < features; f++)
+                        {
+                            gradSum = numOps.Add(gradSum, numOps.Multiply(gradient[b, f], softmaxOutput[b, f]));
+                        }
+                        // Gradient: gradient - softmax * sum(gradient)
+                        for (int f = 0; f < features; f++)
+                        {
+                            gradA[b, f] = numOps.Subtract(gradient[b, f],
+                                numOps.Multiply(softmaxOutput[b, f], gradSum));
+                        }
+                    }
+                    if (a.Gradient == null)
+                    {
+                        a.Gradient = gradA;
+                    }
+                    else
+                    {
+                        var existingGradient = a.Gradient;
+                        if (existingGradient != null)
+                        {
+                            a.Gradient = existingGradient.Add(gradA);
+                        }
+                    }
+                }
+            }
+
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient,
+                parents: new List<ComputationNode<T>> { a },
+                backwardFunction: BackwardFunction,
+                name: null);
+
+            node.OperationType = OperationType.LogSoftmax;
+            node.OperationParams = new Dictionary<string, object> { { "Axis", axis } };
+
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+            return node;
+        }
+        else
+        {
+            throw new NotImplementedException(
+                $"LogSoftmax is currently only implemented for 2D tensors along axis=-1. " +
+                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
+        }
+    }
+
+    /// <summary>
+    /// Applies the Softmin function, which assigns higher probability to lower values.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="axis">The axis along which to compute softmin (default -1, last axis).</param>
+    /// <returns>A new computation node with Softmin applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// Softmin(x) = softmax(-x) = exp(-x) / sum(exp(-x))
+    /// Useful when lower values should have higher probability, e.g., in attention over distances.
+    /// </para>
+    /// <para><b>Gradient:</b> Same Jacobian structure as softmax but with negated input.</para>
+    /// </remarks>
+    public static ComputationNode<T> Softmin(ComputationNode<T> a, int axis = -1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+
+        if (axis < 0)
+            axis = shape.Length + axis;
+
+        if (shape.Length == 2 && axis == 1)
+        {
+            int batchSize = shape[0];
+            int features = shape[1];
+            var result = new Tensor<T>(shape);
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Find max of -x for numerical stability (which is -min of x)
+                var maxNegVal = numOps.Negate(a.Value[b, 0]);
+                for (int f = 1; f < features; f++)
+                {
+                    var negVal = numOps.Negate(a.Value[b, f]);
+                    if (numOps.GreaterThan(negVal, maxNegVal))
+                        maxNegVal = negVal;
+                }
+
+                // Compute exp(-x - max(-x)) and sum
+                var expSum = numOps.Zero;
+                var expValues = new T[features];
+                for (int f = 0; f < features; f++)
+                {
+                    var shifted = numOps.Subtract(numOps.Negate(a.Value[b, f]), maxNegVal);
+                    expValues[f] = numOps.Exp(shifted);
+                    expSum = numOps.Add(expSum, expValues[f]);
+                }
+
+                // Normalize
+                for (int f = 0; f < features; f++)
+                {
+                    result[b, f] = numOps.Divide(expValues[f], expSum);
+                }
+            }
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                if (a.RequiresGradient)
+                {
+                    // Same as softmax gradient but with negation
+                    var gradA = new Tensor<T>(shape);
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        var dotProduct = numOps.Zero;
+                        for (int f = 0; f < features; f++)
+                        {
+                            dotProduct = numOps.Add(dotProduct,
+                                numOps.Multiply(gradient[b, f], result[b, f]));
+                        }
+                        for (int f = 0; f < features; f++)
+                        {
+                            var gradMinusDot = numOps.Subtract(gradient[b, f], dotProduct);
+                            // Negate because d(softmax(-x))/dx = -softmax(-x) * (gradient - dot)
+                            gradA[b, f] = numOps.Negate(numOps.Multiply(result[b, f], gradMinusDot));
+                        }
+                    }
+                    if (a.Gradient == null)
+                    {
+                        a.Gradient = gradA;
+                    }
+                    else
+                    {
+                        var existingGradient = a.Gradient;
+                        if (existingGradient != null)
+                        {
+                            a.Gradient = existingGradient.Add(gradA);
+                        }
+                    }
+                }
+            }
+
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient,
+                parents: new List<ComputationNode<T>> { a },
+                backwardFunction: BackwardFunction,
+                name: null);
+
+            node.OperationType = OperationType.Softmin;
+            node.OperationParams = new Dictionary<string, object> { { "Axis", axis } };
+
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+            return node;
+        }
+        else
+        {
+            throw new NotImplementedException(
+                $"Softmin is currently only implemented for 2D tensors along axis=-1. " +
+                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
+        }
+    }
+
+    /// <summary>
+    /// Applies the Log-Softmin function for numerically stable computation.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="axis">The axis along which to compute log-softmin (default -1, last axis).</param>
+    /// <returns>A new computation node with Log-Softmin applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// LogSoftmin(x) = log(softmin(x)) = -x - log(sum(exp(-x)))
+    /// Combines log and softmin for numerical stability.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> LogSoftmin(ComputationNode<T> a, int axis = -1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+
+        if (axis < 0)
+            axis = shape.Length + axis;
+
+        if (shape.Length == 2 && axis == 1)
+        {
+            int batchSize = shape[0];
+            int features = shape[1];
+            var result = new Tensor<T>(shape);
+            var softminOutput = new Tensor<T>(shape);
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Find max of -x for numerical stability
+                var maxNegVal = numOps.Negate(a.Value[b, 0]);
+                for (int f = 1; f < features; f++)
+                {
+                    var negVal = numOps.Negate(a.Value[b, f]);
+                    if (numOps.GreaterThan(negVal, maxNegVal))
+                        maxNegVal = negVal;
+                }
+
+                // Compute log-sum-exp of -x
+                var logSumExp = numOps.Zero;
+                for (int f = 0; f < features; f++)
+                {
+                    var shifted = numOps.Subtract(numOps.Negate(a.Value[b, f]), maxNegVal);
+                    logSumExp = numOps.Add(logSumExp, numOps.Exp(shifted));
+                }
+                logSumExp = numOps.Add(numOps.Log(logSumExp), maxNegVal);
+
+                // Compute log-softmin: -x - log-sum-exp(-x)
+                for (int f = 0; f < features; f++)
+                {
+                    result[b, f] = numOps.Subtract(numOps.Negate(a.Value[b, f]), logSumExp);
+                    softminOutput[b, f] = numOps.Exp(result[b, f]);
+                }
+            }
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                if (a.RequiresGradient)
+                {
+                    var gradA = new Tensor<T>(shape);
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        var gradSum = numOps.Zero;
+                        for (int f = 0; f < features; f++)
+                        {
+                            gradSum = numOps.Add(gradSum, numOps.Multiply(gradient[b, f], softminOutput[b, f]));
+                        }
+                        for (int f = 0; f < features; f++)
+                        {
+                            // Gradient: -(gradient - softmin * sum(gradient))
+                            gradA[b, f] = numOps.Negate(numOps.Subtract(gradient[b, f],
+                                numOps.Multiply(softminOutput[b, f], gradSum)));
+                        }
+                    }
+                    if (a.Gradient == null)
+                    {
+                        a.Gradient = gradA;
+                    }
+                    else
+                    {
+                        var existingGradient = a.Gradient;
+                        if (existingGradient != null)
+                        {
+                            a.Gradient = existingGradient.Add(gradA);
+                        }
+                    }
+                }
+            }
+
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient,
+                parents: new List<ComputationNode<T>> { a },
+                backwardFunction: BackwardFunction,
+                name: null);
+
+            node.OperationType = OperationType.LogSoftmin;
+            node.OperationParams = new Dictionary<string, object> { { "Axis", axis } };
+
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+            return node;
+        }
+        else
+        {
+            throw new NotImplementedException(
+                $"LogSoftmin is currently only implemented for 2D tensors along axis=-1. " +
+                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
+        }
+    }
+
+    /// <summary>
+    /// Applies the Squared Radial Basis Function (SQRBF) activation.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="beta">The width parameter controlling the Gaussian bell curve (default 1.0).</param>
+    /// <returns>A new computation node with SQRBF applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// SQRBF(x) = exp(-β * x²)
+    /// A Gaussian bell-shaped activation with maximum at x=0 and values approaching 0 as |x| increases.
+    /// </para>
+    /// <para><b>Gradient:</b> d(SQRBF)/dx = -2βx * exp(-β * x²)</para>
+    /// </remarks>
+    public static ComputationNode<T> SQRBF(ComputationNode<T> a, double beta = 1.0)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var betaT = numOps.FromDouble(beta);
+
+        // Forward: exp(-β * x²)
+        var result = a.Value.Transform((x, _) =>
+        {
+            var xSquared = numOps.Multiply(x, x);
+            var negBetaSquared = numOps.Negate(numOps.Multiply(betaT, xSquared));
+            return numOps.Exp(negBetaSquared);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // d(SQRBF)/dx = -2βx * exp(-β * x²) = -2βx * SQRBF(x)
+                var derivative = a.Value.Transform((x, idx) =>
+                {
+                    var xSquared = numOps.Multiply(x, x);
+                    var negBetaSquared = numOps.Negate(numOps.Multiply(betaT, xSquared));
+                    var activation = numOps.Exp(negBetaSquared);
+                    var negTwoBeta = numOps.Negate(numOps.Multiply(numOps.FromDouble(2.0), betaT));
+                    return numOps.Multiply(numOps.Multiply(negTwoBeta, x), activation);
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.SQRBF;
+        node.OperationParams = new Dictionary<string, object> { { "Beta", beta } };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
 }
 
 
