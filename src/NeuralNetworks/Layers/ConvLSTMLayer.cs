@@ -1261,6 +1261,47 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         _gradients.Clear();
     }
 
+    /// <summary>
+    /// Exports the ConvLSTM computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to which input nodes will be added. The method adds:
+    /// <list type="bullet">
+    /// <item><description>x_t: Current input tensor [batch, height, width, channels]</description></item>
+    /// <item><description>h_prev: Previous hidden state [batch, height, width, filters]</description></item>
+    /// <item><description>c_prev: Previous cell state [batch, height, width, filters]</description></item>
+    /// </list>
+    /// </param>
+    /// <returns>A computation node representing the new hidden state h_t.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method exports a single timestep of the ConvLSTM cell for JIT compilation.
+    /// The computation graph implements the full ConvLSTM equations using Conv2D operations:
+    /// </para>
+    /// <para>
+    /// <b>Gates (all use Conv2D operations):</b>
+    /// <list type="bullet">
+    /// <item><description>Forget gate: f_t = σ(Conv2D(x_t, W_fi) + Conv2D(h_{t-1}, W_fh) + b_f)</description></item>
+    /// <item><description>Input gate: i_t = σ(Conv2D(x_t, W_ii) + Conv2D(h_{t-1}, W_ih) + b_i)</description></item>
+    /// <item><description>Cell candidate: c̃_t = tanh(Conv2D(x_t, W_ci) + Conv2D(h_{t-1}, W_ch) + b_c)</description></item>
+    /// <item><description>Output gate: o_t = σ(Conv2D(x_t, W_oi) + Conv2D(h_{t-1}, W_oh) + b_o)</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>State updates:</b>
+    /// <list type="bullet">
+    /// <item><description>Cell state: c_t = f_t ⊙ c_{t-1} + i_t ⊙ c̃_t</description></item>
+    /// <item><description>Hidden state: h_t = o_t ⊙ tanh(c_t)</description></item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a blueprint for running ConvLSTM faster.
+    ///
+    /// For processing sequences:
+    /// 1. Initialize h_prev and c_prev to zeros for the first timestep
+    /// 2. Call the JIT-compiled graph for each timestep in your sequence
+    /// 3. Pass the output hidden state as h_prev for the next timestep
+    /// 4. Track cell state separately if needed for stateful operation
+    /// </para>
+    /// </remarks>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
         if (inputNodes == null)
@@ -1269,96 +1310,111 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+        // ConvLSTM expects input shape: [batch, height, width, channels]
+        // For JIT, we work with single-timestep input (no time dimension)
+        int height = InputShape[1];
+        int width = InputShape[2];
+        int inputChannels = InputShape[3];
 
-        // ConvLSTMLayer JIT provides a single-step LSTM cell computation:
-        // Input: inputNodes[0] = input tensor, inputNodes[1] = hidden state (optional), inputNodes[2] = cell state (optional)
-        // Output: new hidden state
-        //
-        // Gates:
-        //   forget_gate = sigmoid(Conv(input, W_fi) + Conv(hidden, W_fh) + bias_f)
-        //   input_gate = sigmoid(Conv(input, W_ii) + Conv(hidden, W_ih) + bias_i)
-        //   cell_candidate = tanh(Conv(input, W_ci) + Conv(hidden, W_ch) + bias_c)
-        //   output_gate = sigmoid(Conv(input, W_oi) + Conv(hidden, W_oh) + bias_o)
-        //
-        // State updates:
-        //   new_cell = forget_gate * cell_state + input_gate * cell_candidate
-        //   new_hidden = output_gate * tanh(new_cell)
+        // Create input placeholder: x_t with shape [batch, height, width, channels]
+        var inputPlaceholder = new Tensor<T>([1, height, width, inputChannels]);
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "x_t");
+        inputNodes.Add(inputNode);
 
-        var input = inputNodes[0];
+        // Create previous hidden state placeholder: h_{t-1} with shape [batch, height, width, filters]
+        int outHeight = OutputShape[1];
+        int outWidth = OutputShape[2];
+        var prevHiddenPlaceholder = new Tensor<T>([1, outHeight, outWidth, _filters]);
+        var prevHiddenNode = TensorOperations<T>.Variable(prevHiddenPlaceholder, "h_prev");
+        inputNodes.Add(prevHiddenNode);
 
-        // For JIT, we provide a simplified dense approximation since we can't do dynamic convolution easily
-        // This uses the gate weights as dense layers, approximating the spatial convolution
+        // Create previous cell state placeholder: c_{t-1} with shape [batch, height, width, filters]
+        var prevCellPlaceholder = new Tensor<T>([1, outHeight, outWidth, _filters]);
+        var prevCellNode = TensorOperations<T>.Variable(prevCellPlaceholder, "c_prev");
+        inputNodes.Add(prevCellNode);
 
-        // Get the flattened size of input for dense approximation
-        int inputFlatSize = 1;
-        foreach (var dim in InputShape)
-            inputFlatSize *= dim;
+        // Create constant nodes for all weights (input weights)
+        var weightsFiNode = TensorOperations<T>.Constant(_weightsFi, "W_fi");
+        var weightsIiNode = TensorOperations<T>.Constant(_weightsIi, "W_ii");
+        var weightsCiNode = TensorOperations<T>.Constant(_weightsCi, "W_ci");
+        var weightsOiNode = TensorOperations<T>.Constant(_weightsOi, "W_oi");
 
-        // Flatten input
-        var inputFlat = TensorOperations<T>.Reshape(input, inputFlatSize);
+        // Create constant nodes for all weights (hidden/recurrent weights)
+        var weightsFhNode = TensorOperations<T>.Constant(_weightsFh, "W_fh");
+        var weightsIhNode = TensorOperations<T>.Constant(_weightsIh, "W_ih");
+        var weightsChNode = TensorOperations<T>.Constant(_weightsCh, "W_ch");
+        var weightsOhNode = TensorOperations<T>.Constant(_weightsOh, "W_oh");
 
-        // Create weight matrices for each gate (simplified dense approximation)
-        var weightFi = CreateConstantFromTensor(_weightsFi, "convlstm_wfi");
-        var weightIi = CreateConstantFromTensor(_weightsIi, "convlstm_wii");
-        var weightCi = CreateConstantFromTensor(_weightsCi, "convlstm_wci");
-        var weightOi = CreateConstantFromTensor(_weightsOi, "convlstm_woi");
+        // Create constant nodes for biases
+        var biasFNode = TensorOperations<T>.Constant(_biasF, "b_f");
+        var biasINode = TensorOperations<T>.Constant(_biasI, "b_i");
+        var biasCNode = TensorOperations<T>.Constant(_biasC, "b_c");
+        var biasONode = TensorOperations<T>.Constant(_biasO, "b_o");
 
-        var biasF = CreateConstantFromTensor(_biasF, "convlstm_bf");
-        var biasI = CreateConstantFromTensor(_biasI, "convlstm_bi");
-        var biasC = CreateConstantFromTensor(_biasC, "convlstm_bc");
-        var biasO = CreateConstantFromTensor(_biasO, "convlstm_bo");
+        // Stride and padding arrays for Conv2D
+        var stride = new int[] { _strides, _strides };
+        var padding = new int[] { _padding, _padding };
 
-        // Compute input contributions to each gate
-        var forgetInput = ComputeGateInput(inputFlat, weightFi, biasF);
-        var inputGateInput = ComputeGateInput(inputFlat, weightIi, biasI);
-        var cellInput = ComputeGateInput(inputFlat, weightCi, biasC);
-        var outputInput = ComputeGateInput(inputFlat, weightOi, biasO);
+        // ========== Forget Gate: f_t = sigmoid(Conv2D(x_t, W_fi) + Conv2D(h_{t-1}, W_fh) + b_f) ==========
+        var f_input = TensorOperations<T>.Conv2D(inputNode, weightsFiNode, biasFNode, stride, padding);
+        var f_hidden = TensorOperations<T>.Conv2D(prevHiddenNode, weightsFhNode, stride: stride, padding: padding);
+        var f_preact = TensorOperations<T>.Add(f_input, f_hidden);
+        var f_t = TensorOperations<T>.Sigmoid(f_preact);
 
-        // Apply gate activations
-        var forgetGate = TensorOperations<T>.Sigmoid(forgetInput);
-        var inputGate = TensorOperations<T>.Sigmoid(inputGateInput);
-        var cellCandidate = TensorOperations<T>.Tanh(cellInput);
-        var outputGate = TensorOperations<T>.Sigmoid(outputInput);
+        // ========== Input Gate: i_t = sigmoid(Conv2D(x_t, W_ii) + Conv2D(h_{t-1}, W_ih) + b_i) ==========
+        var i_input = TensorOperations<T>.Conv2D(inputNode, weightsIiNode, biasINode, stride, padding);
+        var i_hidden = TensorOperations<T>.Conv2D(prevHiddenNode, weightsIhNode, stride: stride, padding: padding);
+        var i_preact = TensorOperations<T>.Add(i_input, i_hidden);
+        var i_t = TensorOperations<T>.Sigmoid(i_preact);
 
-        // Compute new cell state: input_gate * cell_candidate
-        // (simplified without previous cell state for stateless JIT)
-        var newCell = TensorOperations<T>.ElementwiseMultiply(inputGate, cellCandidate);
+        // ========== Cell Candidate: c̃_t = tanh(Conv2D(x_t, W_ci) + Conv2D(h_{t-1}, W_ch) + b_c) ==========
+        var c_input = TensorOperations<T>.Conv2D(inputNode, weightsCiNode, biasCNode, stride, padding);
+        var c_hidden = TensorOperations<T>.Conv2D(prevHiddenNode, weightsChNode, stride: stride, padding: padding);
+        var c_preact = TensorOperations<T>.Add(c_input, c_hidden);
+        var c_tilde = TensorOperations<T>.Tanh(c_preact);
 
-        // Compute new hidden state: output_gate * tanh(new_cell)
-        var cellActivated = TensorOperations<T>.Tanh(newCell);
-        var newHidden = TensorOperations<T>.ElementwiseMultiply(outputGate, cellActivated);
+        // ========== Output Gate: o_t = sigmoid(Conv2D(x_t, W_oi) + Conv2D(h_{t-1}, W_oh) + b_o) ==========
+        var o_input = TensorOperations<T>.Conv2D(inputNode, weightsOiNode, biasONode, stride, padding);
+        var o_hidden = TensorOperations<T>.Conv2D(prevHiddenNode, weightsOhNode, stride: stride, padding: padding);
+        var o_preact = TensorOperations<T>.Add(o_input, o_hidden);
+        var o_t = TensorOperations<T>.Sigmoid(o_preact);
 
-        // Apply layer activation
-        var output = ApplyActivationToComputationGraph(newHidden);
+        // ========== Cell State: c_t = f_t ⊙ c_{t-1} + i_t ⊙ c̃_t ==========
+        var forget_gated = TensorOperations<T>.ElementwiseMultiply(f_t, prevCellNode);
+        var input_gated = TensorOperations<T>.ElementwiseMultiply(i_t, c_tilde);
+        var c_t = TensorOperations<T>.Add(forget_gated, input_gated);
+
+        // ========== Hidden State: h_t = o_t ⊙ tanh(c_t) ==========
+        var c_t_activated = TensorOperations<T>.Tanh(c_t);
+        var h_t = TensorOperations<T>.ElementwiseMultiply(o_t, c_t_activated);
+
+        // Apply layer activation if configured (typically identity for ConvLSTM)
+        var output = ApplyActivationToComputationGraph(h_t);
 
         return output;
-    }
-
-    private ComputationNode<T> CreateConstantFromTensor(Tensor<T> tensor, string name)
-    {
-        return TensorOperations<T>.Constant(tensor, name);
-    }
-
-    private ComputationNode<T> ComputeGateInput(ComputationNode<T> input, ComputationNode<T> weight, ComputationNode<T> bias)
-    {
-        // Simple element-wise multiply and add for simplified gate computation
-        var weighted = TensorOperations<T>.ElementwiseMultiply(input, weight);
-        return TensorOperations<T>.Add(weighted, bias);
     }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports JIT compilation.
     /// </summary>
     /// <value>
-    /// Always <c>true</c>. ConvLSTMLayer exports a single-step LSTM cell computation.
+    /// Always <c>true</c>. ConvLSTMLayer exports a single-step LSTM cell computation
+    /// with full Conv2D operations for all gates.
     /// </value>
     /// <remarks>
     /// <para>
     /// JIT compilation for ConvLSTM exports a single timestep of the LSTM cell computation.
-    /// For sequences, the JIT-compiled graph should be called iteratively for each timestep.
-    /// Hidden and cell states can be passed as additional inputs for stateful operation.
+    /// The exported graph uses proper Conv2D operations for all gate computations, matching
+    /// the behavior of the Forward method.
+    /// </para>
+    /// <para>
+    /// For processing sequences with the JIT-compiled graph:
+    /// <list type="number">
+    /// <item><description>Initialize hidden and cell states to zero tensors</description></item>
+    /// <item><description>For each timestep, call the compiled graph with (input, h_prev, c_prev)</description></item>
+    /// <item><description>The output is the new hidden state h_t</description></item>
+    /// <item><description>Track cell state c_t for the next iteration (available from intermediate computation)</description></item>
+    /// </list>
     /// </para>
     /// </remarks>
     public override bool SupportsJitCompilation => true;
