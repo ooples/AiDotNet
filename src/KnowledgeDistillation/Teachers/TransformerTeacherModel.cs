@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -49,4 +50,26 @@ public class TransformerTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
     /// <param name="input">The input data.</param>
     /// <returns>Raw logits from the transformer.</returns>
     public override Vector<T> GetLogits(Vector<T> input) => _forwardFunc(input);
+
+    /// <summary>
+    /// Gets whether this teacher supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. TransformerTeacherModel uses a function delegate which cannot be
+    /// exported as a computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for TransformerTeacherModel.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "TransformerTeacherModel does not support JIT compilation because it uses a function delegate. " +
+            "To enable JIT compilation, use a Transformer model that implements IJitCompilable<T> directly.");
+    }
 }
