@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -71,10 +73,10 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
     /// <para>
     /// <b>For Beginners:</b> This method transforms an input value using the formula:
     /// 
-    /// f(x) = x / sqrt(1 + a·x²)
+    /// f(x) = x / sqrt(1 + aÂ·xÂ²)
     /// 
     /// This creates a smooth curve that:
-    /// - For small inputs, behaves almost like the identity function (output ˜ input)
+    /// - For small inputs, behaves almost like the identity function (output Ëœ input)
     /// - For large positive inputs, approaches but never exceeds +1
     /// - For large negative inputs, approaches but never exceeds -1
     /// 
@@ -107,7 +109,7 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
     /// 
     /// For the ISRU function, the derivative is calculated using:
     /// 
-    /// f'(x) = (1 + a·x²)^(-3/2)
+    /// f'(x) = (1 + aÂ·xÂ²)^(-3/2)
     /// 
     /// Key properties of this derivative:
     /// - It's always positive (meaning the function always increases as input increases)
@@ -127,5 +129,48 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
         T exponent = NumOps.FromDouble(-1.5);
 
         return NumOps.Power(baseValue, exponent);
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <remarks>
+    /// <para>
+    /// This activation does not yet support JIT compilation because the gradient
+    /// computation (backward pass) has not been implemented in TensorOperations.ISRU.
+    /// </para>
+    /// <para>
+    /// To enable JIT support:
+    /// 1. Implement the backward pass in TensorOperations.ISRU
+    /// 2. Test the gradient computation
+    /// 3. Change SupportsJitCompilation to return true
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with ISRU activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method would map the activation to TensorOperations&lt;T&gt;.ISRU(input)
+    /// once the gradient computation is implemented.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        throw new NotSupportedException(
+            $"ISRUActivation does not support JIT compilation yet. " +
+            $"The gradient computation (backward pass) has not been implemented in TensorOperations.ISRU. " +
+            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
     }
 }

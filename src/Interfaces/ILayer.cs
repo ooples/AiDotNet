@@ -11,7 +11,7 @@ namespace AiDotNet.Interfaces;
 /// This interface defines what all layers must be able to do, regardless of their specific type.
 /// Think of it as a checklist of abilities that every layer must have to work within our neural network.
 /// </remarks>
-public interface ILayer<T>
+public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider
 {
     /// <summary>
     /// Gets the shape (dimensions) of the input data expected by this layer.
@@ -21,7 +21,7 @@ public interface ILayer<T>
     /// <b>For Beginners:</b> This tells us what size and shape of data this layer expects to receive.
     /// For example, if processing images, this might be [3, 28, 28] for 28×28 pixel images with 3 color channels.
     /// </remarks>
-    int[] GetInputShape();
+    Vector<int> GetInputShape();
 
     /// <summary>
     /// Gets the shape (dimensions) of the output data produced by this layer.
@@ -32,7 +32,20 @@ public interface ILayer<T>
     /// The output shape often differs from the input shape because the layer may transform the data.
     /// For example, a pooling layer might reduce the dimensions from [3, 28, 28] to [3, 14, 14].
     /// </remarks>
-    int[] GetOutputShape();
+    Vector<int> GetOutputShape();
+
+    /// <summary>
+    /// Gets the weight matrix for layers that have trainable weights.
+    /// </summary>
+    /// <returns>The weight matrix, or null if the layer has no weights.</returns>
+    Matrix<T>? GetWeights();
+
+    /// <summary>
+    /// Gets the bias vector for layers that have trainable biases.
+    /// </summary>
+    /// <returns>The bias vector, or null if the layer has no biases.</returns>
+    Vector<T>? GetBiases();
+
 
     /// <summary>
     /// Processes input data through the layer during the forward pass.

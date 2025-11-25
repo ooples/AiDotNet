@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -58,10 +60,10 @@ public class SoftSignActivation<T> : ActivationFunctionBase<T>
     /// 3. Divide the original input by this sum
     /// 
     /// For example:
-    /// - If input is 2, the output is 2/(1+2) = 2/3 ˜ 0.67
-    /// - If input is -2, the output is -2/(1+2) = -2/3 ˜ -0.67
-    /// - If input is 10, the output is 10/(1+10) = 10/11 ˜ 0.91
-    /// - If input is -10, the output is -10/(1+10) = -10/11 ˜ -0.91
+    /// - If input is 2, the output is 2/(1+2) = 2/3 Ëœ 0.67
+    /// - If input is -2, the output is -2/(1+2) = -2/3 Ëœ -0.67
+    /// - If input is 10, the output is 10/(1+10) = 10/11 Ëœ 0.91
+    /// - If input is -10, the output is -10/(1+10) = -10/11 Ëœ -0.91
     /// 
     /// Notice that even with large inputs like 10 or -10, the outputs stay between -1 and 1.
     /// </para>
@@ -107,5 +109,48 @@ public class SoftSignActivation<T> : ActivationFunctionBase<T>
         T squaredDenominator = NumOps.Multiply(denominator, denominator);
 
         return NumOps.Divide(NumOps.One, squaredDenominator);
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <remarks>
+    /// <para>
+    /// This activation does not yet support JIT compilation because the gradient
+    /// computation (backward pass) has not been implemented in TensorOperations.SoftSign.
+    /// </para>
+    /// <para>
+    /// To enable JIT support:
+    /// 1. Implement the backward pass in TensorOperations.SoftSign
+    /// 2. Test the gradient computation
+    /// 3. Change SupportsJitCompilation to return true
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with SoftSign activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method would map the activation to TensorOperations&lt;T&gt;.SoftSign(input)
+    /// once the gradient computation is implemented.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        throw new NotSupportedException(
+            $"SoftSignActivation does not support JIT compilation yet. " +
+            $"The gradient computation (backward pass) has not been implemented in TensorOperations.SoftSign. " +
+            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
     }
 }

@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -32,7 +34,7 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>A vector of probabilities that sum to 1.</returns>
     /// <remarks>
     /// <para>
-    /// The implementation uses TensorPrimitivesHelper for SIMD-optimized Exp and Sum operations (5-10× speedup for float),
+    /// The implementation uses TensorPrimitivesHelper for SIMD-optimized Exp and Sum operations (5-10Ã— speedup for float),
     /// then divides each value by the sum to ensure the output values sum to 1.
     /// </para>
     /// <para>
@@ -48,16 +50,16 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
-        // Use TensorPrimitivesHelper for SIMD-optimized Exp (5-10× speedup for float)
+        // Use TensorPrimitivesHelper for SIMD-optimized Exp (5-10Ã— speedup for float)
         var expVector = TensorPrimitivesHelper<T>.Exp(input);
 
-        // Use TensorPrimitivesHelper for SIMD-optimized Sum (8-12× speedup for float)
+        // Use TensorPrimitivesHelper for SIMD-optimized Sum (8-12Ã— speedup for float)
         T sum = TensorPrimitivesHelper<T>.Sum(expVector);
 
         // Create sum vector for vectorized division
         var sumVector = new Vector<T>(Enumerable.Repeat(sum, expVector.Length).ToArray());
 
-        // Use TensorPrimitivesHelper for SIMD-optimized Divide (5-10× speedup for float)
+        // Use TensorPrimitivesHelper for SIMD-optimized Divide (5-10Ã— speedup for float)
         return TensorPrimitivesHelper<T>.Divide(expVector, sumVector);
     }
 
@@ -123,4 +125,47 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </para>
     /// </remarks>
     protected override bool SupportsScalarOperations() => false;
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <remarks>
+    /// <para>
+    /// This activation does not yet support JIT compilation because the gradient
+    /// computation (backward pass) has not been implemented in TensorOperations.Softmax.
+    /// </para>
+    /// <para>
+    /// To enable JIT support:
+    /// 1. Implement the backward pass in TensorOperations.Softmax
+    /// 2. Test the gradient computation
+    /// 3. Change SupportsJitCompilation to return true
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with Softmax activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method would map the activation to TensorOperations&lt;T&gt;.Softmax(input)
+    /// once the gradient computation is implemented.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        throw new NotSupportedException(
+            $"SoftmaxActivation does not support JIT compilation yet. " +
+            $"The gradient computation (backward pass) has not been implemented in TensorOperations.Softmax. " +
+            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+    }
 }
