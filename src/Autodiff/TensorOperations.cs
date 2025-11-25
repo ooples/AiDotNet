@@ -5317,6 +5317,1163 @@ public static class TensorOperations<T>
     }
 
     /// <summary>
+    /// Computes the GELU (Gaussian Error Linear Unit) activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the GELU result.</returns>
+    /// <remarks>
+    /// <para>
+    /// GELU activation: x * Φ(x) where Φ is the standard Gaussian CDF.
+    /// Approximation: 0.5 * x * (1 + tanh(√(2/π) * (x + 0.044715 * x³)))
+    /// Commonly used in transformers (BERT, GPT) and modern architectures.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> GELU(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = a.Value.Transform((x, _) =>
+        {
+            var c1 = numOps.FromDouble(0.5);
+            var c2 = numOps.FromDouble(0.7978845608028654);
+            var c3 = numOps.FromDouble(0.044715);
+            var xCubed = numOps.Multiply(numOps.Multiply(x, x), x);
+            var inner = numOps.Add(x, numOps.Multiply(c3, xCubed));
+            var tanhArg = numOps.Multiply(c2, inner);
+            var tanhVal = MathHelper.Tanh(tanhArg);
+            var onePlusTanh = numOps.Add(numOps.One, tanhVal);
+            return numOps.Multiply(c1, numOps.Multiply(x, onePlusTanh));
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("GELU gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the ELU (Exponential Linear Unit) activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="alpha">Scale factor for negative values (default 1.0).</param>
+    /// <returns>A new computation node containing the ELU result.</returns>
+    /// <remarks>
+    /// <para>
+    /// ELU activation: x if x > 0, alpha * (exp(x) - 1) otherwise.
+    /// Helps with vanishing gradient problem and can produce negative outputs.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> ELU(ComputationNode<T> a, double alpha = 1.0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var alphaT = numOps.FromDouble(alpha);
+        var result = a.Value.Transform((x, _) =>
+        {
+            if (numOps.GreaterThan(x, numOps.Zero))
+                return x;
+            var expMinusOne = numOps.Subtract(numOps.Exp(x), numOps.One);
+            return numOps.Multiply(alphaT, expMinusOne);
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("ELU gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the SELU (Scaled Exponential Linear Unit) activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the SELU result.</returns>
+    /// <remarks>
+    /// <para>
+    /// SELU activation: scale * (x if x > 0, alpha * (exp(x) - 1) otherwise).
+    /// Self-normalizing activation function with alpha = 1.67326 and scale = 1.0507.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> SELU(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var alpha = numOps.FromDouble(1.67326324);
+        var scale = numOps.FromDouble(1.05070098);
+        var result = a.Value.Transform((x, _) =>
+        {
+            if (numOps.GreaterThan(x, numOps.Zero))
+                return numOps.Multiply(scale, x);
+            var expMinusOne = numOps.Subtract(numOps.Exp(x), numOps.One);
+            return numOps.Multiply(scale, numOps.Multiply(alpha, expMinusOne));
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("SELU gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the CELU (Continuously Differentiable ELU) activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="alpha">Scale factor (default 1.0).</param>
+    /// <returns>A new computation node containing the CELU result.</returns>
+    /// <remarks>
+    /// <para>
+    /// CELU activation: max(0, x) + min(0, alpha * (exp(x/alpha) - 1)).
+    /// Continuously differentiable variant of ELU.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> CELU(ComputationNode<T> a, double alpha = 1.0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var alphaT = numOps.FromDouble(alpha);
+        var result = a.Value.Transform((x, _) =>
+        {
+            var maxPart = numOps.GreaterThan(x, numOps.Zero) ? x : numOps.Zero;
+            var xDivAlpha = numOps.Divide(x, alphaT);
+            var expMinusOne = numOps.Subtract(numOps.Exp(xDivAlpha), numOps.One);
+            var minArg = numOps.Multiply(alphaT, expMinusOne);
+            var minPart = numOps.LessThan(minArg, numOps.Zero) ? minArg : numOps.Zero;
+            return numOps.Add(maxPart, minPart);
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("CELU gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Leaky ReLU activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="negativeSlope">Slope for negative values (default 0.01).</param>
+    /// <returns>A new computation node containing the Leaky ReLU result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Leaky ReLU: x if x > 0, negativeSlope * x otherwise.
+    /// Prevents dying ReLU problem by allowing small gradient for negative values.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> LeakyReLU(ComputationNode<T> a, double negativeSlope = 0.01)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var slope = numOps.FromDouble(negativeSlope);
+        var result = a.Value.Transform((x, _) =>
+            numOps.GreaterThan(x, numOps.Zero) ? x : numOps.Multiply(slope, x));
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("LeakyReLU gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the PReLU (Parametric ReLU) activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="alpha">Learnable parameter for negative values (default 0.25).</param>
+    /// <returns>A new computation node containing the PReLU result.</returns>
+    /// <remarks>
+    /// <para>
+    /// PReLU: x if x > 0, alpha * x otherwise, where alpha is learnable.
+    /// Note: This implementation uses a fixed alpha; learnable version requires parameter management.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> PReLU(ComputationNode<T> a, double alpha = 0.25)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var alphaT = numOps.FromDouble(alpha);
+        var result = a.Value.Transform((x, _) =>
+            numOps.GreaterThan(x, numOps.Zero) ? x : numOps.Multiply(alphaT, x));
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("PReLU gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the RReLU (Randomized Leaky ReLU) activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="lower">Lower bound for random slope (default 0.125).</param>
+    /// <param name="upper">Upper bound for random slope (default 0.333).</param>
+    /// <returns>A new computation node containing the RReLU result.</returns>
+    /// <remarks>
+    /// <para>
+    /// RReLU: x if x > 0, alpha * x otherwise, where alpha is random in [lower, upper] during training.
+    /// Note: This implementation uses fixed midpoint; true randomization requires training mode detection.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> RReLU(ComputationNode<T> a, double lower = 0.125, double upper = 0.333)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var midpoint = (lower + upper) / 2.0;
+        var slope = numOps.FromDouble(midpoint);
+        var result = a.Value.Transform((x, _) =>
+            numOps.GreaterThan(x, numOps.Zero) ? x : numOps.Multiply(slope, x));
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("RReLU gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Thresholded ReLU activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="threshold">Threshold value (default 1.0).</param>
+    /// <returns>A new computation node containing the Thresholded ReLU result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Thresholded ReLU: x if x > threshold, 0 otherwise.
+    /// Zeros out values below threshold.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> ThresholdedReLU(ComputationNode<T> a, double threshold = 1.0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var threshT = numOps.FromDouble(threshold);
+        var result = a.Value.Transform((x, _) =>
+            numOps.GreaterThan(x, threshT) ? x : numOps.Zero);
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("ThresholdedReLU gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Swish/SiLU activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the Swish result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Swish/SiLU activation: x * sigmoid(x) = x / (1 + exp(-x)).
+    /// Used in EfficientNet and other modern architectures. Self-gated activation.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Swish(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = a.Value.Transform((x, _) =>
+        {
+            var sigmoid = MathHelper.Sigmoid(x);
+            return numOps.Multiply(x, sigmoid);
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("Swish gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the SiLU (Sigmoid Linear Unit) activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the SiLU result.</returns>
+    /// <remarks>
+    /// <para>
+    /// SiLU is identical to Swish: x * sigmoid(x).
+    /// Alias provided for consistency with PyTorch naming.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> SiLU(ComputationNode<T> a)
+    {
+        return Swish(a);
+    }
+
+    /// <summary>
+    /// Computes the Mish activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the Mish result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Mish activation: x * tanh(softplus(x)) = x * tanh(ln(1 + exp(x))).
+    /// Smooth, self-regularizing activation function with better performance than ReLU in some tasks.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Mish(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = a.Value.Transform((x, _) =>
+        {
+            var softplus = numOps.Log(numOps.Add(numOps.One, numOps.Exp(x)));
+            var tanhSoftplus = MathHelper.Tanh(softplus);
+            return numOps.Multiply(x, tanhSoftplus);
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("Mish gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Hard Sigmoid activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the Hard Sigmoid result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Hard Sigmoid: max(0, min(1, 0.2 * x + 0.5)).
+    /// Piecewise linear approximation of sigmoid, faster to compute.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> HardSigmoid(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var slope = numOps.FromDouble(0.2);
+        var offset = numOps.FromDouble(0.5);
+        var result = a.Value.Transform((x, _) =>
+        {
+            var linear = numOps.Add(numOps.Multiply(slope, x), offset);
+            if (numOps.LessThan(linear, numOps.Zero))
+                return numOps.Zero;
+            if (numOps.GreaterThan(linear, numOps.One))
+                return numOps.One;
+            return linear;
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("HardSigmoid gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Hard Tanh activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the Hard Tanh result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Hard Tanh: max(-1, min(1, x)).
+    /// Piecewise linear approximation of tanh, clips values to [-1, 1].
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> HardTanh(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var negOne = numOps.FromDouble(-1.0);
+        var result = a.Value.Transform((x, _) =>
+        {
+            if (numOps.LessThan(x, negOne))
+                return negOne;
+            if (numOps.GreaterThan(x, numOps.One))
+                return numOps.One;
+            return x;
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("HardTanh gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Scaled Tanh activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="alpha">Scale factor (default 1.0).</param>
+    /// <param name="beta">Input scale factor (default 1.0).</param>
+    /// <returns>A new computation node containing the Scaled Tanh result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Scaled Tanh: alpha * tanh(beta * x).
+    /// Allows adjusting range and sensitivity of tanh activation.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> ScaledTanh(ComputationNode<T> a, double alpha = 1.0, double beta = 1.0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var alphaT = numOps.FromDouble(alpha);
+        var betaT = numOps.FromDouble(beta);
+        var result = a.Value.Transform((x, _) =>
+        {
+            var scaled = numOps.Multiply(betaT, x);
+            var tanhVal = MathHelper.Tanh(scaled);
+            return numOps.Multiply(alphaT, tanhVal);
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("ScaledTanh gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Softplus activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the Softplus result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Softplus: ln(1 + exp(x)).
+    /// Smooth approximation of ReLU, always positive.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Softplus(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = a.Value.Transform((x, _) =>
+            numOps.Log(numOps.Add(numOps.One, numOps.Exp(x))));
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("Softplus gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Softsign activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the Softsign result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Softsign: x / (1 + |x|).
+    /// Similar to tanh but with polynomial rather than exponential decay.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Softsign(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = a.Value.Transform((x, _) =>
+        {
+            var absX = numOps.Abs(x);
+            var denom = numOps.Add(numOps.One, absX);
+            return numOps.Divide(x, denom);
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("Softsign gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Bent Identity activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the Bent Identity result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Bent Identity: (sqrt(x² + 1) - 1) / 2 + x.
+    /// Allows both positive and negative outputs.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> BentIdentity(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var two = numOps.FromDouble(2.0);
+        var result = a.Value.Transform((x, _) =>
+        {
+            var xSquared = numOps.Multiply(x, x);
+            var sqrtPart = numOps.Sqrt(numOps.Add(xSquared, numOps.One));
+            var minusOne = numOps.Subtract(sqrtPart, numOps.One);
+            var divided = numOps.Divide(minusOne, two);
+            return numOps.Add(divided, x);
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("BentIdentity gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Identity activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the Identity result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Identity: f(x) = x.
+    /// Pass-through activation, no transformation.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Identity(ComputationNode<T> a)
+    {
+        var result = a.Value;
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradient;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradient);
+                    }
+                }
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Softmin activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="axis">The axis along which to compute softmin. Default is -1 (last axis).</param>
+    /// <returns>A new computation node containing the Softmin result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Softmin: softmax(-x).
+    /// Converts scores to probabilities with preference for minimum values.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Softmin(ComputationNode<T> a, int axis = -1)
+    {
+        var negated = Negate(a);
+        return Softmax(negated, axis);
+    }
+
+    /// <summary>
+    /// Computes the Log-Softmax activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="axis">The axis along which to compute log-softmax. Default is -1 (last axis).</param>
+    /// <returns>A new computation node containing the Log-Softmax result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Log-Softmax: log(softmax(x)).
+    /// Numerically stable computation for classification with cross-entropy loss.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> LogSoftmax(ComputationNode<T> a, int axis = -1)
+    {
+        var softmax = Softmax(a, axis);
+        return Log(softmax);
+    }
+
+    /// <summary>
+    /// Computes the Log-Softmin activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="axis">The axis along which to compute log-softmin. Default is -1 (last axis).</param>
+    /// <returns>A new computation node containing the Log-Softmin result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Log-Softmin: log(softmin(x)) = log(softmax(-x)).
+    /// Numerically stable computation for softmin.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> LogSoftmin(ComputationNode<T> a, int axis = -1)
+    {
+        var negated = Negate(a);
+        return LogSoftmax(negated, axis);
+    }
+
+    /// <summary>
+    /// Computes the Sign activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the Sign result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Sign: -1 if x &lt; 0, 0 if x == 0, +1 if x &gt; 0.
+    /// Used in binary neural networks and gradient sign methods.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Sign(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var negOne = numOps.FromDouble(-1.0);
+        var result = a.Value.Transform((x, _) =>
+        {
+            if (numOps.GreaterThan(x, numOps.Zero))
+                return numOps.One;
+            if (numOps.LessThan(x, numOps.Zero))
+                return negOne;
+            return numOps.Zero;
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("Sign gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Gaussian activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the Gaussian result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Gaussian: exp(-x²).
+    /// Bell-shaped activation centered at 0.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Gaussian(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = a.Value.Transform((x, _) =>
+        {
+            var xSquared = numOps.Multiply(x, x);
+            var negXSquared = numOps.Negate(xSquared);
+            return numOps.Exp(negXSquared);
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("Gaussian gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the ISRU (Inverse Square Root Unit) activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="alpha">Scale parameter (default 1.0).</param>
+    /// <returns>A new computation node containing the ISRU result.</returns>
+    /// <remarks>
+    /// <para>
+    /// ISRU: x / sqrt(1 + alpha * x²).
+    /// Computationally cheaper alternative to ELU and SELU.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> ISRU(ComputationNode<T> a, double alpha = 1.0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var alphaT = numOps.FromDouble(alpha);
+        var result = a.Value.Transform((x, _) =>
+        {
+            var xSquared = numOps.Multiply(x, x);
+            var alphaMulXSquared = numOps.Multiply(alphaT, xSquared);
+            var denom = numOps.Sqrt(numOps.Add(numOps.One, alphaMulXSquared));
+            return numOps.Divide(x, denom);
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("ISRU gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the LiSHT (Linearly Scaled Hyperbolic Tangent) activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the LiSHT result.</returns>
+    /// <remarks>
+    /// <para>
+    /// LiSHT: x * tanh(x).
+    /// Self-gated activation combining identity and tanh.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> LiSHT(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = a.Value.Transform((x, _) =>
+        {
+            var tanhX = MathHelper.Tanh(x);
+            return numOps.Multiply(x, tanhX);
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("LiSHT gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the SQRBF (Square Radial Basis Function) activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="center">Center of the radial basis function (default 0.0).</param>
+    /// <param name="width">Width parameter (default 1.0).</param>
+    /// <returns>A new computation node containing the SQRBF result.</returns>
+    /// <remarks>
+    /// <para>
+    /// SQRBF: exp(-((x - center)² / (2 * width²))).
+    /// Radial basis function for localized activation.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> SQRBF(ComputationNode<T> a, double center = 0.0, double width = 1.0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var centerT = numOps.FromDouble(center);
+        var two = numOps.FromDouble(2.0);
+        var widthSquared = numOps.FromDouble(width * width);
+        var twoWidthSquared = numOps.Multiply(two, widthSquared);
+        var result = a.Value.Transform((x, _) =>
+        {
+            var diff = numOps.Subtract(x, centerT);
+            var diffSquared = numOps.Multiply(diff, diff);
+            var exponent = numOps.Negate(numOps.Divide(diffSquared, twoWidthSquared));
+            return numOps.Exp(exponent);
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("SQRBF gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Squash activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the Squash result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Squash: (||x||² / (1 + ||x||²)) * (x / ||x||).
+    /// Used in capsule networks to preserve direction while normalizing magnitude.
+    /// Note: For scalar inputs, uses simplified version: x² / (1 + x²) * sign(x).
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Squash(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = a.Value.Transform((x, _) =>
+        {
+            var xSquared = numOps.Multiply(x, x);
+            var onePlusXSquared = numOps.Add(numOps.One, xSquared);
+            var scale = numOps.Divide(xSquared, onePlusXSquared);
+            var signX = numOps.GreaterThan(x, numOps.Zero) ? numOps.One :
+                       (numOps.LessThan(x, numOps.Zero) ? numOps.FromDouble(-1.0) : numOps.Zero);
+            return numOps.Multiply(scale, signX);
+        });
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("Squash gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Binary Spiking activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="threshold">Spike threshold (default 0.0).</param>
+    /// <returns>A new computation node containing the Binary Spiking result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Binary Spiking: 1 if x &gt; threshold, 0 otherwise.
+    /// Used in spiking neural networks and binary networks.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> BinarySpiking(ComputationNode<T> a, double threshold = 0.0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var threshT = numOps.FromDouble(threshold);
+        var result = a.Value.Transform((x, _) =>
+            numOps.GreaterThan(x, threshT) ? numOps.One : numOps.Zero);
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                throw new NotImplementedException("BinarySpiking gradient computation will be added in gradient implementation phase");
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the Sparsemax activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="axis">The axis along which to compute sparsemax. Default is -1 (last axis).</param>
+    /// <returns>A new computation node containing the Sparsemax result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Sparsemax: Sparse alternative to softmax, produces exact zeros for low-scoring classes.
+    /// Note: This is a simplified implementation. Full sparsemax requires projection onto simplex.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Sparsemax(ComputationNode<T> a, int axis = -1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        throw new NotImplementedException("Sparsemax requires complex projection algorithm - will be implemented in gradient phase");
+    }
+
+    /// <summary>
+    /// Computes the Spherical Softmax activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="axis">The axis along which to compute spherical softmax. Default is -1 (last axis).</param>
+    /// <returns>A new computation node containing the Spherical Softmax result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Spherical Softmax: Normalizes vectors to unit sphere before applying softmax.
+    /// Used for directional data and spherical geometry.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> SphericalSoftmax(ComputationNode<T> a, int axis = -1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        throw new NotImplementedException("SphericalSoftmax requires vector normalization - will be implemented in gradient phase");
+    }
+
+    /// <summary>
+    /// Computes the Gumbel-Softmax activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="temperature">Temperature parameter for controlling sharpness (default 1.0).</param>
+    /// <param name="axis">The axis along which to compute gumbel-softmax. Default is -1 (last axis).</param>
+    /// <returns>A new computation node containing the Gumbel-Softmax result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Gumbel-Softmax: Differentiable sampling from categorical distribution.
+    /// Used for discrete latent variables in variational autoencoders.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> GumbelSoftmax(ComputationNode<T> a, double temperature = 1.0, int axis = -1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        throw new NotImplementedException("GumbelSoftmax requires Gumbel noise sampling - will be implemented in gradient phase");
+    }
+
+    /// <summary>
+    /// Computes the Taylor Softmax activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="order">Order of Taylor approximation (default 2).</param>
+    /// <param name="axis">The axis along which to compute taylor softmax. Default is -1 (last axis).</param>
+    /// <returns>A new computation node containing the Taylor Softmax result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Taylor Softmax: Polynomial approximation of softmax using Taylor series.
+    /// Faster computation with acceptable approximation error.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> TaylorSoftmax(ComputationNode<T> a, int order = 2, int axis = -1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        throw new NotImplementedException("TaylorSoftmax requires Taylor series expansion - will be implemented in gradient phase");
+    }
+
+    /// <summary>
+    /// Computes the Hierarchical Softmax activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the Hierarchical Softmax result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Hierarchical Softmax: Tree-structured softmax for efficient computation with large vocabularies.
+    /// Used in word2vec and language models with many output classes.
+    /// Note: Requires tree structure definition - placeholder implementation.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> HierarchicalSoftmax(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        throw new NotImplementedException("HierarchicalSoftmax requires tree structure - will be implemented in gradient phase");
+    }
+
+    /// <summary>
+    /// Computes the Maxout activation for a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="numPieces">Number of pieces/groups (default 2).</param>
+    /// <returns>A new computation node containing the Maxout result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Maxout: Takes maximum over linear pieces. Generalizes ReLU and Leaky ReLU.
+    /// Note: Requires input to be reshaped into groups - placeholder implementation.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Maxout(ComputationNode<T> a, int numPieces = 2)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        throw new NotImplementedException("Maxout requires grouping and max reduction - will be implemented in gradient phase");
+    }
+
+    /// <summary>
     /// Applies a generic activation function (scalar or element-wise) with automatic differentiation.
     /// </summary>
     /// <param name="input">The input computation node.</param>
