@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -62,5 +63,33 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         if (_cachedPredictions == null || index >= _cachedPredictions.Length)
             throw new InvalidOperationException("Predictions not cached or index out of range");
         return _cachedPredictions[index];
+    }
+
+    /// <summary>
+    /// Gets whether this teacher supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. SelfTeacherModel uses cached predictions rather than a computation
+    /// graph, so it cannot be JIT compiled.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for SelfTeacherModel.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    /// <remarks>
+    /// <para>
+    /// SelfTeacherModel uses pre-cached predictions from earlier training epochs rather than
+    /// computing outputs from inputs. There is no computation to represent as a graph.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        return ThrowJitNotSupported(
+            nameof(SelfTeacherModel<T>),
+            "it uses cached predictions rather than a computation graph");
     }
 }

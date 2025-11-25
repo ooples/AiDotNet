@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -375,6 +376,39 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         }
 
         return maxIndex;
+    }
+
+    /// <summary>
+    /// Gets whether this teacher supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. EnsembleTeacherModel aggregates multiple teacher models,
+    /// and combining multiple computation graphs is not currently supported.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for EnsembleTeacherModel.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    /// <remarks>
+    /// <para>
+    /// EnsembleTeacherModel aggregates predictions from multiple teacher models. While individual
+    /// teachers may support JIT compilation, combining their computation graphs into a single
+    /// ensemble graph is complex and not currently supported.
+    /// </para>
+    /// <para>
+    /// To use JIT compilation with ensembles, JIT compile individual teachers separately and
+    /// aggregate their outputs at runtime.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        return ThrowJitNotSupported(
+            nameof(EnsembleTeacherModel<T>),
+            "it aggregates multiple teacher models and combining computation graphs is not supported");
     }
 }
 

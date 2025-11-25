@@ -111,6 +111,96 @@ public abstract class TeacherModelBase<TInput, TOutput, T> : ITeacherModel<TInpu
 
     #endregion
 
+    #region JIT Helper Methods
+
+    /// <summary>
+    /// Checks if a wrapped teacher model supports JIT compilation.
+    /// </summary>
+    /// <param name="wrappedModel">The wrapped teacher model to check.</param>
+    /// <returns>
+    /// <c>true</c> if the wrapped model implements IJitCompilable and supports JIT; otherwise, <c>false</c>.
+    /// </returns>
+    /// <remarks>
+    /// <para>Use this helper method in derived classes that wrap another ITeacherModel to implement
+    /// the SupportsJitCompilation property.</para>
+    /// <para>Example:
+    /// <code>
+    /// public override bool SupportsJitCompilation => CheckWrappedModelJitSupport(_baseTeacher);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected static bool CheckWrappedModelJitSupport(ITeacherModel<TInput, TOutput> wrappedModel)
+    {
+        return wrappedModel is IJitCompilable<T> jitCompilable && jitCompilable.SupportsJitCompilation;
+    }
+
+    /// <summary>
+    /// Delegates JIT compilation export to a wrapped teacher model.
+    /// </summary>
+    /// <param name="wrappedModel">The wrapped teacher model to delegate to.</param>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <param name="wrapperTypeName">Name of the wrapper type (for error messages).</param>
+    /// <returns>The output computation node from the wrapped model.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the wrapped model does not implement IJitCompilable or does not support JIT.
+    /// </exception>
+    /// <remarks>
+    /// <para>Use this helper method in derived classes that wrap another ITeacherModel to implement
+    /// the ExportComputationGraph method.</para>
+    /// <para>Example:
+    /// <code>
+    /// public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)
+    ///     => DelegateJitExport(_baseTeacher, inputNodes, nameof(AdaptiveTeacherModel&lt;T&gt;));
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected static ComputationNode<T> DelegateJitExport(
+        ITeacherModel<TInput, TOutput> wrappedModel,
+        List<ComputationNode<T>> inputNodes,
+        string wrapperTypeName)
+    {
+        if (wrappedModel is not IJitCompilable<T> jitCompilable)
+        {
+            throw new NotSupportedException(
+                $"{wrapperTypeName} cannot export computation graph because the wrapped model " +
+                $"({wrappedModel.GetType().Name}) does not implement IJitCompilable<T>.");
+        }
+
+        if (!jitCompilable.SupportsJitCompilation)
+        {
+            throw new NotSupportedException(
+                $"{wrapperTypeName} cannot export computation graph because the wrapped model " +
+                $"({wrappedModel.GetType().Name}) does not support JIT compilation.");
+        }
+
+        return jitCompilable.ExportComputationGraph(inputNodes);
+    }
+
+    /// <summary>
+    /// Throws a standardized NotSupportedException for teacher models that cannot support JIT compilation.
+    /// </summary>
+    /// <param name="teacherTypeName">Name of the teacher type.</param>
+    /// <param name="reason">Reason why JIT is not supported.</param>
+    /// <returns>Never returns (always throws).</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    /// <remarks>
+    /// <para>Use this helper method in derived classes that cannot support JIT compilation.</para>
+    /// <para>Example:
+    /// <code>
+    /// public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)
+    ///     => ThrowJitNotSupported(nameof(PretrainedTeacherModel&lt;T&gt;),
+    ///         "it uses a function delegate which cannot be exported as a computation graph");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected static ComputationNode<T> ThrowJitNotSupported(string teacherTypeName, string reason)
+    {
+        throw new NotSupportedException(
+            $"{teacherTypeName} does not support JIT compilation because {reason}.");
+    }
+
+    #endregion
+
     /// <summary>
     /// Validates that the input is not null.
     /// </summary>

@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -80,6 +81,39 @@ public class DistributedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
         }
 
         return aggregated;
+    }
+
+    /// <summary>
+    /// Gets whether this teacher supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. DistributedTeacherModel aggregates predictions from multiple
+    /// distributed workers, and combining computation graphs across workers is not supported.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for DistributedTeacherModel.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    /// <remarks>
+    /// <para>
+    /// DistributedTeacherModel aggregates predictions from multiple distributed workers.
+    /// Each worker may be on a different machine or process, making it impossible to
+    /// combine their computation graphs into a single JIT-compiled graph.
+    /// </para>
+    /// <para>
+    /// To use JIT compilation with distributed workers, JIT compile each worker's model
+    /// separately and aggregate their outputs at runtime.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        return ThrowJitNotSupported(
+            nameof(DistributedTeacherModel<T>),
+            "it aggregates predictions from multiple distributed workers and combining computation graphs is not supported");
     }
 }
 

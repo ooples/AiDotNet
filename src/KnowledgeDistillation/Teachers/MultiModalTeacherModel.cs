@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -91,5 +92,38 @@ public class MultiModalTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
         }
 
         return combined;
+    }
+
+    /// <summary>
+    /// Gets whether this teacher supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. MultiModalTeacherModel combines predictions from multiple modality
+    /// teachers, and combining computation graphs across modalities is not currently supported.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for MultiModalTeacherModel.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    /// <remarks>
+    /// <para>
+    /// MultiModalTeacherModel combines predictions from multiple modality-specific teachers
+    /// (e.g., vision, text, audio). Each modality may have different input representations
+    /// and computation graphs, making it complex to combine them into a single JIT-compiled graph.
+    /// </para>
+    /// <para>
+    /// To use JIT compilation with multi-modal models, JIT compile each modality teacher
+    /// separately and combine their outputs at runtime.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        return ThrowJitNotSupported(
+            nameof(MultiModalTeacherModel<T>),
+            "it combines multiple modality teachers and combining computation graphs is not supported");
     }
 }

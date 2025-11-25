@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -54,5 +55,39 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Gets whether this teacher supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. QuantizedTeacherModel applies quantization which involves
+    /// runtime min/max finding and element-wise operations that cannot be efficiently
+    /// represented in a static computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for QuantizedTeacherModel.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    /// <remarks>
+    /// <para>
+    /// QuantizedTeacherModel cannot support JIT compilation because it applies quantization
+    /// which involves runtime min/max finding across the output vector. This dynamic operation
+    /// cannot be efficiently represented in a static computation graph.
+    /// </para>
+    /// <para>
+    /// To enable JIT compilation, use the base teacher directly without quantization, or
+    /// apply quantization as a post-processing step outside the computation graph.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        return ThrowJitNotSupported(
+            nameof(QuantizedTeacherModel<T>),
+            "it applies quantization which involves runtime min/max finding that cannot be represented in a static computation graph");
     }
 }

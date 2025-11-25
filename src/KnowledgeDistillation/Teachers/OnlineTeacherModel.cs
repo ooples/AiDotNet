@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -265,6 +266,39 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// Resets the update counter.
     /// </summary>
     public void ResetCounter() => _updateCounter = 0;
+
+    /// <summary>
+    /// Gets whether this teacher supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. OnlineTeacherModel uses function delegates which cannot be
+    /// exported as a computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for OnlineTeacherModel.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    /// <remarks>
+    /// <para>
+    /// OnlineTeacherModel uses function delegates for forward pass and updates which are
+    /// opaque to the JIT compiler. Function delegates can contain arbitrary code that
+    /// cannot be represented as tensor operations.
+    /// </para>
+    /// <para>
+    /// To enable JIT compilation, use a teacher model that wraps an IJitCompilable model
+    /// directly instead of using function delegates.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        return ThrowJitNotSupported(
+            nameof(OnlineTeacherModel<T>),
+            "it uses function delegates which cannot be exported as a computation graph");
+    }
 }
 
 /// <summary>
