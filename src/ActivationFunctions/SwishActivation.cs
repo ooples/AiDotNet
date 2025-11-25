@@ -144,20 +144,16 @@ public class SwishActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
-    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <value>True because gradient computation is fully implemented in TensorOperations.Swish.</value>
     /// <remarks>
     /// <para>
-    /// This activation does not yet support JIT compilation because the gradient
-    /// computation (backward pass) has not been implemented in TensorOperations.Swish.
-    /// </para>
-    /// <para>
-    /// To enable JIT support:
-    /// 1. Implement the backward pass in TensorOperations.Swish
-    /// 2. Test the gradient computation
-    /// 3. Change SupportsJitCompilation to return true
+    /// Swish supports JIT compilation because:
+    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
+    /// - The operation uses IEngine for GPU acceleration
+    /// - It can be represented as a static computation graph node
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.
@@ -165,11 +161,11 @@ public class SwishActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The computation node to apply the activation to.</param>
     /// <returns>A new computation node with Swish activation applied.</returns>
     /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
     /// <remarks>
     /// <para>
-    /// This method would map the activation to TensorOperations&lt;T&gt;.Swish(input)
-    /// once the gradient computation is implemented.
+    /// This method maps the Swish activation to TensorOperations&lt;T&gt;.Swish(input),
+    /// which handles both forward and backward passes for JIT compilation.
+    /// Swish (also known as SiLU) is used in EfficientNet and other modern architectures.
     /// </para>
     /// </remarks>
     public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
@@ -177,9 +173,6 @@ public class SwishActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        throw new NotSupportedException(
-            $"SwishActivation does not support JIT compilation yet. " +
-            $"The gradient computation (backward pass) has not been implemented in TensorOperations.Swish. " +
-            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+        return TensorOperations<T>.Swish(input);
     }
 }

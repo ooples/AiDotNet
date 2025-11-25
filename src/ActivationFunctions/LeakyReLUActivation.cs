@@ -180,10 +180,9 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// To enable JIT support:
     /// 1. Implement the backward pass in TensorOperations.LeakyReLU
     /// 2. Test the gradient computation
-    /// 3. Change SupportsJitCompilation to return true
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.
@@ -191,11 +190,10 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The computation node to apply the activation to.</param>
     /// <returns>A new computation node with LeakyReLU activation applied.</returns>
     /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
     /// <remarks>
     /// <para>
-    /// This method would map the activation to TensorOperations&lt;T&gt;.LeakyReLU(input)
-    /// once the gradient computation is implemented.
+    /// This method maps the LeakyReLU activation to TensorOperations&lt;T&gt;.LeakyReLU(input, alpha),
+    /// which handles both forward and backward passes for JIT compilation.
     /// </para>
     /// </remarks>
     public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
@@ -203,9 +201,8 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        throw new NotSupportedException(
-            $"LeakyReLUActivation does not support JIT compilation yet. " +
-            $"The gradient computation (backward pass) has not been implemented in TensorOperations.LeakyReLU. " +
-            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+        // Convert alpha to double for TensorOperations
+        double alphaDouble = Convert.ToDouble(_alpha);
+        return TensorOperations<T>.LeakyReLU(input, alphaDouble);
     }
 }

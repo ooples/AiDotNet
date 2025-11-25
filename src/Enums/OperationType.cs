@@ -122,6 +122,31 @@ public enum OperationType
     Softmax,
 
     /// <summary>
+    /// Exponential Linear Unit - ELU(x) = x if x > 0, alpha * (exp(x) - 1) otherwise.
+    /// </summary>
+    ELU,
+
+    /// <summary>
+    /// Leaky Rectified Linear Unit - max(alpha * x, x) where alpha is typically 0.01.
+    /// </summary>
+    LeakyReLU,
+
+    /// <summary>
+    /// Gaussian Error Linear Unit - x * Φ(x) where Φ is standard normal CDF.
+    /// </summary>
+    GELU,
+
+    /// <summary>
+    /// Swish/SiLU activation - x * sigmoid(x).
+    /// </summary>
+    Swish,
+
+    /// <summary>
+    /// Mish activation - x * tanh(softplus(x)).
+    /// </summary>
+    Mish,
+
+    /// <summary>
     /// Generic activation function application.
     /// </summary>
     Activation,
