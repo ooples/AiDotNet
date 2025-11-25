@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Layers.Graph;
+
 namespace AiDotNet.Helpers;
 
 /// <summary>
