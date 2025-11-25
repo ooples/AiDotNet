@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -690,5 +692,28 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     
         // Create and return a new instance with the same options
         return new StateSpaceModel<T>(options);
+    }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. State Space Model uses Kalman filtering with iterative state
+    /// estimation that cannot be represented as a static computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for State Space Model.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "StateSpaceModel does not support JIT compilation because it uses Kalman filtering " +
+            "with iterative state estimation and matrix inversions that cannot be represented " +
+            "as a static computation graph. For JIT-compilable time series, consider simple ARIMA models.");
     }
 }

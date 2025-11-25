@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -1671,5 +1673,29 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     
         // Return the single prediction
         return predictions[0];
+    }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. Bayesian Structural Time Series uses MCMC sampling and Kalman
+    /// filtering which cannot be represented as a static computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for Bayesian Structural Time Series Model.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "BayesianStructuralTimeSeriesModel does not support JIT compilation because it uses MCMC sampling " +
+            "for Bayesian inference and Kalman filtering for state estimation. These stochastic and iterative " +
+            "operations cannot be represented as a static computation graph. For JIT-compilable time series, " +
+            "consider simple ARIMA models.");
     }
 }

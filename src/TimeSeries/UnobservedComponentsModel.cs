@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.TimeSeries;
+using AiDotNet.Autodiff;
+
+namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements an Unobserved Components Model (UCM) for time series decomposition and forecasting.
@@ -1837,5 +1839,28 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         };
     
         return metadata;
+    }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. Unobserved Components Model uses Kalman filtering with iterative
+    /// state estimation that cannot be represented as a static computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for Unobserved Components Model.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "UnobservedComponentsModel does not support JIT compilation because it uses Kalman filtering " +
+            "with iterative state estimation and EM parameter optimization that cannot be represented " +
+            "as a static computation graph. For JIT-compilable time series, consider simple ARIMA models.");
     }
 }

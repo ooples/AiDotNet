@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -1112,5 +1114,47 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     
         // Create a new instance with the copied options
         return new ProphetModel<T, TInput, TOutput>(newOptions);
+    }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. ProphetModel uses complex trend/seasonality decomposition with
+    /// Fourier series, holiday effects, changepoint detection, and regressor effects that
+    /// cannot be represented as a static computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for ProphetModel.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    /// <remarks>
+    /// <para>
+    /// ProphetModel cannot support JIT compilation because it uses a complex decomposition
+    /// approach with multiple components:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>Trend component with changepoint detection</item>
+    /// <item>Seasonal components using Fourier series with configurable periods</item>
+    /// <item>Holiday effects with date-based lookups</item>
+    /// <item>External regressor effects</item>
+    /// </list>
+    /// <para>
+    /// These components involve date-based conditional logic, dynamic holiday lookups,
+    /// and complex initialization procedures that cannot be represented as tensor operations
+    /// in a static computation graph.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "ProphetModel does not support JIT compilation because it uses complex trend/seasonality " +
+            "decomposition with Fourier series, holiday effects with date-based lookups, changepoint detection, " +
+            "and regressor effects. These components involve conditional logic and dynamic lookups that cannot " +
+            "be represented as a static computation graph.");
     }
 }

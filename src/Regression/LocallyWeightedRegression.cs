@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -421,5 +423,53 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new LocallyWeightedRegression<T>(_options, Regularization);
+    }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. Locally Weighted Regression is an instance-based algorithm that creates
+    /// a unique model for each prediction point, which cannot be represented as a static computation graph.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// LWR creates a new weighted regression model for each query point by:
+    /// - Computing distance-based weights for all training samples
+    /// - Solving a weighted least squares problem specific to that query point
+    /// </para>
+    /// <para>
+    /// This dynamic, per-query model creation is fundamentally incompatible with JIT compilation,
+    /// which requires a fixed computation graph.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for Locally Weighted Regression.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    /// <remarks>
+    /// <para>
+    /// Locally Weighted Regression cannot support JIT compilation because predictions require:
+    /// - Storing all training examples in memory
+    /// - Computing distance-based weights for each query point
+    /// - Solving a new weighted least squares problem for each prediction
+    /// </para>
+    /// <para>
+    /// These operations are dynamic and query-dependent, making them incompatible with static
+    /// computation graphs. For JIT-compilable regression, consider using kernel-based models
+    /// like SupportVectorRegression or standard linear regression models.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "LocallyWeightedRegression does not support JIT compilation because it creates a unique " +
+            "weighted regression model for each query point. This dynamic, per-query model creation " +
+            "cannot be represented as a static computation graph. For JIT-compilable regression, " +
+            "consider kernel-based models like SupportVectorRegression.");
     }
 }

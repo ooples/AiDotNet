@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -396,5 +398,49 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new KNearestNeighborsRegression<T>(_options, Regularization);
+    }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. K-Nearest Neighbors is an instance-based algorithm that requires
+    /// distance calculations against all training samples at prediction time, which cannot be
+    /// represented as a static computation graph.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// KNN stores all training data and performs distance-based lookup at prediction time.
+    /// This dynamic, instance-based behavior is fundamentally incompatible with JIT compilation,
+    /// which requires a fixed computation graph that doesn't depend on the training data structure.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for K-Nearest Neighbors Regression.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    /// <remarks>
+    /// <para>
+    /// K-Nearest Neighbors cannot support JIT compilation because predictions require:
+    /// - Storing all training examples in memory
+    /// - Computing distances to all training examples at prediction time
+    /// - Sorting/selecting the K nearest neighbors dynamically
+    /// </para>
+    /// <para>
+    /// These operations cannot be represented as a static computation graph. For JIT-compilable
+    /// regression, consider using kernel-based models like SupportVectorRegression with
+    /// supported kernels (Linear, RBF, or Sigmoid).
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "KNearestNeighborsRegression does not support JIT compilation because it is an instance-based " +
+            "algorithm that requires distance calculations against all training samples at prediction time. " +
+            "For JIT-compilable regression, consider kernel-based models like SupportVectorRegression.");
     }
 }

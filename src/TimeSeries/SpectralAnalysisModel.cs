@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -657,5 +659,28 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     
         // Create a new instance with the copied options
         return new SpectralAnalysisModel<T>(newOptions);
+    }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. Spectral Analysis uses FFT operations which cannot be
+    /// efficiently represented as a static computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for Spectral Analysis Model.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "SpectralAnalysisModel does not support JIT compilation because it uses FFT (Fast Fourier Transform) " +
+            "operations for frequency domain analysis that cannot be efficiently represented as a static " +
+            "computation graph. For JIT-compilable time series, consider simple ARIMA models.");
     }
 }

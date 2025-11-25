@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -583,5 +585,42 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 
             block.SetParameters(blockParams);
         }
+    }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. NBEATSModel uses a deep neural architecture with multiple blocks
+    /// performing doubly-residual stacking that cannot be efficiently represented as a static
+    /// computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for NBEATSModel.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    /// <remarks>
+    /// <para>
+    /// NBEATSModel cannot support JIT compilation because it uses a deep neural architecture
+    /// with multiple blocks that perform doubly-residual stacking. Each block produces backcast
+    /// and forecast outputs that are combined through residual connections, and this complex
+    /// block-wise forward pass cannot be efficiently represented as a static computation graph.
+    /// </para>
+    /// <para>
+    /// For JIT-compilable time series forecasting, consider simpler models like ARIMA
+    /// or use individual neural network layers that support JIT compilation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "NBEATSModel does not support JIT compilation because it uses a deep neural architecture " +
+            "with multiple blocks performing doubly-residual stacking. The complex block-wise forward pass " +
+            "with residual connections and aggregated forecasts cannot be represented as a static computation graph. " +
+            "For JIT-compilable time series, consider simpler models or individual neural network layers.");
     }
 }

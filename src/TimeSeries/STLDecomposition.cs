@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.TimeSeries;
+using AiDotNet.Autodiff;
+
+namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements Seasonal-Trend decomposition using LOESS (STL) for time series analysis.
@@ -1760,5 +1762,28 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
         }
     
         return smoothed;
+    }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. STL decomposition uses iterative LOESS smoothing which cannot be
+    /// represented as a static computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for STL Decomposition.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "STLDecomposition does not support JIT compilation because it uses iterative LOESS smoothing " +
+            "with convergence checking that cannot be represented as a static computation graph. " +
+            "For JIT-compilable time series, consider simple ARIMA or exponential smoothing models.");
     }
 }

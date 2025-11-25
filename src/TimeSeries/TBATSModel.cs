@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using Newtonsoft.Json;
 
 namespace AiDotNet.TimeSeries;
@@ -1300,5 +1301,29 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     
         // Return the first (and only) predicted value
         return predictions[0];
+    }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. TBATS model uses Box-Cox transformation, trigonometric seasonality,
+    /// and ARMA errors that cannot be efficiently represented as a static computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for TBATS Model.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "TBATSModel does not support JIT compilation because it uses Box-Cox transformation, " +
+            "trigonometric Fourier basis for seasonality, and ARMA error modeling that cannot be " +
+            "efficiently represented as a static computation graph. For JIT-compilable time series, " +
+            "consider simple ARIMA or exponential smoothing models.");
     }
 }

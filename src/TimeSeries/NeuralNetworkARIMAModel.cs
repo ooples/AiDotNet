@@ -1,6 +1,8 @@
 global using AiDotNet.NeuralNetworks;
 global using AiDotNet.ActivationFunctions;
 
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -821,5 +823,43 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     
         // Return a new instance with the copied options
         return new NeuralNetworkARIMAModel<T>(optionsCopy);
+    }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>false</c>. NeuralNetworkARIMAModel is a hybrid model combining ARIMA with
+    /// neural networks, using iterative predictions and maintaining internal state that cannot
+    /// be represented in a static computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Not supported for NeuralNetworkARIMAModel.
+    /// </summary>
+    /// <param name="inputNodes">Not used.</param>
+    /// <returns>Never returns normally.</returns>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    /// <remarks>
+    /// <para>
+    /// NeuralNetworkARIMAModel cannot support JIT compilation because it is a hybrid model
+    /// that combines ARIMA components (AR and MA terms) with neural network predictions.
+    /// The model maintains internal state (residuals from previous predictions) and uses
+    /// iterative predictions where each output depends on previous predictions.
+    /// </para>
+    /// <para>
+    /// Additionally, the neural network component uses function delegates and optimizer
+    /// callbacks that are opaque to the JIT compiler. These dynamic dependencies cannot
+    /// be represented as a static computation graph.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "NeuralNetworkARIMAModel does not support JIT compilation because it is a hybrid model " +
+            "combining ARIMA with neural networks. The model uses iterative predictions where each output " +
+            "depends on previous predictions and residuals, and maintains internal state that cannot be " +
+            "represented as a static computation graph.");
     }
 }
