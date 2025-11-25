@@ -899,4 +899,90 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastWasCrossAttention = false;
         _lastUsedMask = false;
     }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// True if the layer's activation function is supported for JIT compilation.
+    /// </value>
+    public override bool SupportsJitCompilation => CanActivationBeJitted();
+
+    /// <summary>
+    /// Exports the computation graph for this attention layer for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input variable nodes.</param>
+    /// <returns>The output computation node representing the attention output.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds the computation graph for standard attention mechanism:
+    /// Attention(Q, K, V) = softmax(Q·K^T / sqrt(d_k)) · V
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        // Validate parameters
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_Wq == null || _Wk == null || _Wv == null)
+            throw new InvalidOperationException("Layer weights not initialized. Call Initialize() or train the layer first.");
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (!CanActivationBeJitted())
+        {
+            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax");
+        }
+
+        // Create placeholder for input data
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, _inputSize });
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input");
+
+        // Create constant nodes for weights
+        var WqNode = Autodiff.TensorOperations<T>.Variable(_Wq, "Wq");
+        var WkNode = Autodiff.TensorOperations<T>.Variable(_Wk, "Wk");
+        var WvNode = Autodiff.TensorOperations<T>.Variable(_Wv, "Wv");
+
+        // Add input nodes
+        inputNodes.Add(inputNode);
+        inputNodes.Add(WqNode);
+        inputNodes.Add(WkNode);
+        inputNodes.Add(WvNode);
+
+        // Build computation graph: Attention(Q, K, V) = softmax(Q·K^T / sqrt(d_k)) · V
+
+        // Step 1: Compute Q = input · Wq
+        var Q = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, WqNode);
+
+        // Step 2: Compute K = input · Wk
+        var K = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, WkNode);
+
+        // Step 3: Compute V = input · Wv
+        var V = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, WvNode);
+
+        // Step 4: Compute attention scores: Q · K^T
+        var K_T = Autodiff.TensorOperations<T>.Transpose(K);
+        var scores = Autodiff.TensorOperations<T>.MatrixMultiply(Q, K_T);
+
+        // Step 5: Scale by sqrt(d_k)
+        var d_k = _attentionSize;
+        var scale = NumOps.FromDouble(1.0 / Math.Sqrt(d_k));
+        var scaleTensor = new Tensor<T>(new int[] { 1 });
+        scaleTensor[0] = scale;
+        var scaleNode = Autodiff.TensorOperations<T>.Variable(scaleTensor, "scale");
+        var scaledScores = Autodiff.TensorOperations<T>.ElementwiseMultiply(scores, scaleNode);
+
+        // Step 6: Apply softmax (using activation)
+        var attentionWeights = ApplyActivationToGraph(scaledScores);
+
+        // Step 7: Apply attention to values: attention_weights · V
+        var output = Autodiff.TensorOperations<T>.MatrixMultiply(attentionWeights, V);
+
+        return output;
+    }
 }
