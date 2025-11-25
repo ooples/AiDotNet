@@ -817,6 +817,134 @@ public interface IEngine
     Tensor<T> AvgPool2D<T>(Tensor<T> input, int poolSize, int stride = 0, int padding = 0);
 
     /// <summary>
+    /// Performs 2D max pooling with asymmetric pool size and stride, returning max indices for backpropagation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, channels, height, width].</param>
+    /// <param name="poolSize">The pool size [poolH, poolW].</param>
+    /// <param name="stride">The stride [strideH, strideW].</param>
+    /// <param name="maxIndices">Output: indices of max elements for backpropagation [batch, channels, outH, outW, 2].</param>
+    /// <returns>The pooled tensor [batch, channels, output_height, output_width].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-012b: MaxPool2D with indices</b></para>
+    /// <para>
+    /// This overload supports asymmetric pooling parameters and returns max indices
+    /// needed for gradient routing during backpropagation.
+    /// </para>
+    /// </remarks>
+    Tensor<T> MaxPool2DWithIndices<T>(Tensor<T> input, int[] poolSize, int[] stride, out int[,,,,] maxIndices);
+
+    /// <summary>
+    /// Computes the gradient of MaxPool2D with respect to the input.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the output [batch, channels, outH, outW].</param>
+    /// <param name="maxIndices">The max indices from forward pass [batch, channels, outH, outW, 2].</param>
+    /// <param name="inputShape">The shape of the original input [batch, channels, height, width].</param>
+    /// <param name="poolSize">The pool size [poolH, poolW] used in forward pass.</param>
+    /// <param name="stride">The stride [strideH, strideW] used in forward pass.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-012c: MaxPool2D Backward</b></para>
+    /// <para>
+    /// Routes gradients only to the max positions identified during forward pass.
+    /// GPU acceleration provides 20-100x speedup.
+    /// </para>
+    /// </remarks>
+    Tensor<T> MaxPool2DBackward<T>(Tensor<T> gradOutput, int[,,,,] maxIndices, int[] inputShape, int[] poolSize, int[] stride);
+
+    /// <summary>
+    /// Performs 2D average pooling with asymmetric pool size and stride.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, channels, height, width].</param>
+    /// <param name="poolSize">The pool size [poolH, poolW].</param>
+    /// <param name="stride">The stride [strideH, strideW].</param>
+    /// <returns>The pooled tensor [batch, channels, output_height, output_width].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-012d: AvgPool2D with asymmetric parameters</b></para>
+    /// </remarks>
+    Tensor<T> AvgPool2D<T>(Tensor<T> input, int[] poolSize, int[] stride);
+
+    /// <summary>
+    /// Computes the gradient of AvgPool2D with respect to the input.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the output [batch, channels, outH, outW].</param>
+    /// <param name="inputShape">The shape of the original input [batch, channels, height, width].</param>
+    /// <param name="poolSize">The pool size [poolH, poolW] used in forward pass.</param>
+    /// <param name="stride">The stride [strideH, strideW] used in forward pass.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-012e: AvgPool2D Backward</b></para>
+    /// <para>
+    /// Distributes gradients equally to all positions in each pooling window.
+    /// GPU acceleration provides 20-100x speedup.
+    /// </para>
+    /// </remarks>
+    Tensor<T> AvgPool2DBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] poolSize, int[] stride);
+
+    /// <summary>
+    /// Performs depthwise 2D convolution where each input channel is convolved independently.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, in_channels, height, width].</param>
+    /// <param name="kernel">The kernel tensor [in_channels, multiplier, kernel_height, kernel_width].</param>
+    /// <param name="stride">The stride [strideH, strideW].</param>
+    /// <param name="padding">The padding [padH, padW].</param>
+    /// <returns>The convolved tensor [batch, in_channels * multiplier, output_height, output_width].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-013: DepthwiseConv2D</b></para>
+    /// <para>
+    /// Depthwise convolution applies separate filters to each input channel.
+    /// This is a key component of MobileNet and other efficient architectures.
+    /// GPU acceleration provides 20-100x speedup.
+    /// </para>
+    /// </remarks>
+    Tensor<T> DepthwiseConv2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding);
+
+    /// <summary>
+    /// Computes the gradient of DepthwiseConv2D with respect to the input.
+    /// </summary>
+    Tensor<T> DepthwiseConv2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding);
+
+    /// <summary>
+    /// Computes the gradient of DepthwiseConv2D with respect to the kernel.
+    /// </summary>
+    Tensor<T> DepthwiseConv2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding);
+
+    /// <summary>
+    /// Performs 2D transposed convolution (deconvolution) for upsampling.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, in_channels, height, width].</param>
+    /// <param name="kernel">The kernel tensor [in_channels, out_channels, kernel_height, kernel_width].</param>
+    /// <param name="stride">The stride [strideH, strideW].</param>
+    /// <param name="padding">The padding [padH, padW].</param>
+    /// <param name="outputPadding">Output padding for size adjustment [outPadH, outPadW].</param>
+    /// <returns>The upsampled tensor.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-014: ConvTranspose2D</b></para>
+    /// <para>
+    /// Transposed convolution upsamples spatial dimensions, commonly used in:
+    /// - GANs for image generation
+    /// - Autoencoders for decoding
+    /// - Semantic segmentation for dense predictions
+    /// </para>
+    /// </remarks>
+    Tensor<T> ConvTranspose2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] outputPadding);
+
+    /// <summary>
+    /// Computes the gradient of ConvTranspose2D with respect to the input.
+    /// </summary>
+    Tensor<T> ConvTranspose2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding);
+
+    /// <summary>
+    /// Computes the gradient of ConvTranspose2D with respect to the kernel.
+    /// </summary>
+    Tensor<T> ConvTranspose2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding);
+
+    /// <summary>
     /// Performs 2D convolution on a 4D input tensor using a 4D kernel.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>

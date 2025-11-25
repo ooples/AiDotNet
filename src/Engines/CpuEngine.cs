@@ -1438,6 +1438,675 @@ public class CpuEngine : IEngine
         return gradKernel;
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> MaxPool2DWithIndices<T>(Tensor<T> input, int[] poolSize, int[] stride, out int[,,,,] maxIndices)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 4)
+            throw new ArgumentException($"MaxPool2D requires a 4D tensor [batch, channels, height, width]. Got rank {input.Rank}.");
+        if (poolSize == null || poolSize.Length != 2)
+            throw new ArgumentException("PoolSize must be a 2-element array [poolH, poolW].");
+        if (stride == null || stride.Length != 2)
+            throw new ArgumentException("Stride must be a 2-element array [strideH, strideW].");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int poolH = poolSize[0];
+        int poolW = poolSize[1];
+        int strideH = stride[0];
+        int strideW = stride[1];
+
+        int outputHeight = (height - poolH) / strideH + 1;
+        int outputWidth = (width - poolW) / strideW + 1;
+
+        var result = new Tensor<T>(new[] { batch, channels, outputHeight, outputWidth });
+        maxIndices = new int[batch, channels, outputHeight, outputWidth, 2];
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int oh = 0; oh < outputHeight; oh++)
+                {
+                    for (int ow = 0; ow < outputWidth; ow++)
+                    {
+                        T maxValue = numOps.MinValue;
+                        int maxIh = 0, maxIw = 0;
+
+                        for (int kh = 0; kh < poolH; kh++)
+                        {
+                            for (int kw = 0; kw < poolW; kw++)
+                            {
+                                int ih = oh * strideH + kh;
+                                int iw = ow * strideW + kw;
+
+                                if (ih < height && iw < width)
+                                {
+                                    T value = input[b, c, ih, iw];
+                                    if (numOps.GreaterThan(value, maxValue))
+                                    {
+                                        maxValue = value;
+                                        maxIh = ih;
+                                        maxIw = iw;
+                                    }
+                                }
+                            }
+                        }
+
+                        result[b, c, oh, ow] = maxValue;
+                        maxIndices[b, c, oh, ow, 0] = maxIh;
+                        maxIndices[b, c, oh, ow, 1] = maxIw;
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MaxPool2DBackward<T>(Tensor<T> gradOutput, int[,,,,] maxIndices, int[] inputShape, int[] poolSize, int[] stride)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (maxIndices == null) throw new ArgumentNullException(nameof(maxIndices));
+        if (inputShape == null || inputShape.Length != 4)
+            throw new ArgumentException("InputShape must be a 4-element array [batch, channels, height, width].");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batch = inputShape[0];
+        int channels = inputShape[1];
+        int outH = gradOutput.Shape[2];
+        int outW = gradOutput.Shape[3];
+
+        var gradInput = new Tensor<T>(inputShape);
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int oh = 0; oh < outH; oh++)
+                {
+                    for (int ow = 0; ow < outW; ow++)
+                    {
+                        int ih = maxIndices[b, c, oh, ow, 0];
+                        int iw = maxIndices[b, c, oh, ow, 1];
+                        T gradVal = gradOutput[b, c, oh, ow];
+
+                        // Accumulate gradient at max position
+                        gradInput[b, c, ih, iw] = numOps.Add(gradInput[b, c, ih, iw], gradVal);
+                    }
+                }
+            }
+        }
+
+        return gradInput;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> AvgPool2D<T>(Tensor<T> input, int[] poolSize, int[] stride)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 4)
+            throw new ArgumentException($"AvgPool2D requires a 4D tensor [batch, channels, height, width]. Got rank {input.Rank}.");
+        if (poolSize == null || poolSize.Length != 2)
+            throw new ArgumentException("PoolSize must be a 2-element array [poolH, poolW].");
+        if (stride == null || stride.Length != 2)
+            throw new ArgumentException("Stride must be a 2-element array [strideH, strideW].");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int poolH = poolSize[0];
+        int poolW = poolSize[1];
+        int strideH = stride[0];
+        int strideW = stride[1];
+
+        int outputHeight = (height - poolH) / strideH + 1;
+        int outputWidth = (width - poolW) / strideW + 1;
+
+        var result = new Tensor<T>(new[] { batch, channels, outputHeight, outputWidth });
+        T poolArea = numOps.FromDouble(poolH * poolW);
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int oh = 0; oh < outputHeight; oh++)
+                {
+                    for (int ow = 0; ow < outputWidth; ow++)
+                    {
+                        T sum = numOps.Zero;
+
+                        for (int kh = 0; kh < poolH; kh++)
+                        {
+                            for (int kw = 0; kw < poolW; kw++)
+                            {
+                                int ih = oh * strideH + kh;
+                                int iw = ow * strideW + kw;
+
+                                if (ih < height && iw < width)
+                                {
+                                    sum = numOps.Add(sum, input[b, c, ih, iw]);
+                                }
+                            }
+                        }
+
+                        result[b, c, oh, ow] = numOps.Divide(sum, poolArea);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> AvgPool2DBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] poolSize, int[] stride)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (inputShape == null || inputShape.Length != 4)
+            throw new ArgumentException("InputShape must be a 4-element array [batch, channels, height, width].");
+        if (poolSize == null || poolSize.Length != 2)
+            throw new ArgumentException("PoolSize must be a 2-element array [poolH, poolW].");
+        if (stride == null || stride.Length != 2)
+            throw new ArgumentException("Stride must be a 2-element array [strideH, strideW].");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batch = inputShape[0];
+        int channels = inputShape[1];
+        int inH = inputShape[2];
+        int inW = inputShape[3];
+
+        int poolH = poolSize[0];
+        int poolW = poolSize[1];
+        int strideH = stride[0];
+        int strideW = stride[1];
+
+        int outH = gradOutput.Shape[2];
+        int outW = gradOutput.Shape[3];
+
+        var gradInput = new Tensor<T>(inputShape);
+        T poolArea = numOps.FromDouble(poolH * poolW);
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int oh = 0; oh < outH; oh++)
+                {
+                    for (int ow = 0; ow < outW; ow++)
+                    {
+                        T gradVal = numOps.Divide(gradOutput[b, c, oh, ow], poolArea);
+
+                        for (int kh = 0; kh < poolH; kh++)
+                        {
+                            for (int kw = 0; kw < poolW; kw++)
+                            {
+                                int ih = oh * strideH + kh;
+                                int iw = ow * strideW + kw;
+
+                                if (ih < inH && iw < inW)
+                                {
+                                    gradInput[b, c, ih, iw] = numOps.Add(gradInput[b, c, ih, iw], gradVal);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return gradInput;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DepthwiseConv2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (input.Rank != 4)
+            throw new ArgumentException($"DepthwiseConv2D input requires a 4D tensor [batch, in_channels, height, width]. Got rank {input.Rank}.");
+        if (kernel.Rank != 4)
+            throw new ArgumentException($"DepthwiseConv2D kernel requires a 4D tensor [in_channels, multiplier, kernel_height, kernel_width]. Got rank {kernel.Rank}.");
+        if (stride == null || stride.Length != 2)
+            throw new ArgumentException("Stride must be a 2-element array [strideH, strideW].");
+        if (padding == null || padding.Length != 2)
+            throw new ArgumentException("Padding must be a 2-element array [padH, padW].");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int kernelChannels = kernel.Shape[0];
+        int multiplier = kernel.Shape[1];
+        int kernelH = kernel.Shape[2];
+        int kernelW = kernel.Shape[3];
+
+        if (inChannels != kernelChannels)
+            throw new ArgumentException($"Input channels ({inChannels}) must match kernel channels ({kernelChannels}).");
+
+        int strideH = stride[0];
+        int strideW = stride[1];
+        int padH = padding[0];
+        int padW = padding[1];
+
+        int outputHeight = (height + 2 * padH - kernelH) / strideH + 1;
+        int outputWidth = (width + 2 * padW - kernelW) / strideW + 1;
+        int outChannels = inChannels * multiplier;
+
+        var result = new Tensor<T>(new[] { batch, outChannels, outputHeight, outputWidth });
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int ic = 0; ic < inChannels; ic++)
+            {
+                for (int m = 0; m < multiplier; m++)
+                {
+                    int oc = ic * multiplier + m;
+
+                    for (int oh = 0; oh < outputHeight; oh++)
+                    {
+                        for (int ow = 0; ow < outputWidth; ow++)
+                        {
+                            T sum = numOps.Zero;
+
+                            for (int kh = 0; kh < kernelH; kh++)
+                            {
+                                for (int kw = 0; kw < kernelW; kw++)
+                                {
+                                    int ih = oh * strideH + kh - padH;
+                                    int iw = ow * strideW + kw - padW;
+
+                                    if (ih >= 0 && ih < height && iw >= 0 && iw < width)
+                                    {
+                                        T inputVal = input[b, ic, ih, iw];
+                                        T kernelVal = kernel[ic, m, kh, kw];
+                                        sum = numOps.Add(sum, numOps.Multiply(inputVal, kernelVal));
+                                    }
+                                }
+                            }
+
+                            result[b, oc, oh, ow] = sum;
+                        }
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DepthwiseConv2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (inputShape == null || inputShape.Length != 4)
+            throw new ArgumentException("InputShape must be a 4-element array [batch, in_channels, height, width].");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = inputShape[0];
+        int inChannels = inputShape[1];
+        int inH = inputShape[2];
+        int inW = inputShape[3];
+
+        int multiplier = kernel.Shape[1];
+        int kernelH = kernel.Shape[2];
+        int kernelW = kernel.Shape[3];
+
+        int strideH = stride[0];
+        int strideW = stride[1];
+        int padH = padding[0];
+        int padW = padding[1];
+
+        int outH = gradOutput.Shape[2];
+        int outW = gradOutput.Shape[3];
+
+        var gradInput = new Tensor<T>(inputShape);
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int ic = 0; ic < inChannels; ic++)
+            {
+                for (int ih = 0; ih < inH; ih++)
+                {
+                    for (int iw = 0; iw < inW; iw++)
+                    {
+                        T sum = numOps.Zero;
+
+                        for (int m = 0; m < multiplier; m++)
+                        {
+                            int oc = ic * multiplier + m;
+
+                            for (int kh = 0; kh < kernelH; kh++)
+                            {
+                                for (int kw = 0; kw < kernelW; kw++)
+                                {
+                                    int ohShifted = ih + padH - kh;
+                                    int owShifted = iw + padW - kw;
+
+                                    if (ohShifted % strideH == 0 && owShifted % strideW == 0)
+                                    {
+                                        int oh = ohShifted / strideH;
+                                        int ow = owShifted / strideW;
+
+                                        if (oh >= 0 && oh < outH && ow >= 0 && ow < outW)
+                                        {
+                                            T gradVal = gradOutput[b, oc, oh, ow];
+                                            T kernelVal = kernel[ic, m, kh, kw];
+                                            sum = numOps.Add(sum, numOps.Multiply(gradVal, kernelVal));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        gradInput[b, ic, ih, iw] = sum;
+                    }
+                }
+            }
+        }
+
+        return gradInput;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DepthwiseConv2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernelShape == null || kernelShape.Length != 4)
+            throw new ArgumentException("KernelShape must be a 4-element array [in_channels, multiplier, kernelH, kernelW].");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = input.Shape[0];
+        int inChannels = kernelShape[0];
+        int multiplier = kernelShape[1];
+        int kernelH = kernelShape[2];
+        int kernelW = kernelShape[3];
+
+        int inH = input.Shape[2];
+        int inW = input.Shape[3];
+
+        int strideH = stride[0];
+        int strideW = stride[1];
+        int padH = padding[0];
+        int padW = padding[1];
+
+        int outH = gradOutput.Shape[2];
+        int outW = gradOutput.Shape[3];
+
+        var gradKernel = new Tensor<T>(kernelShape);
+
+        for (int ic = 0; ic < inChannels; ic++)
+        {
+            for (int m = 0; m < multiplier; m++)
+            {
+                int oc = ic * multiplier + m;
+
+                for (int kh = 0; kh < kernelH; kh++)
+                {
+                    for (int kw = 0; kw < kernelW; kw++)
+                    {
+                        T sum = numOps.Zero;
+
+                        for (int b = 0; b < batch; b++)
+                        {
+                            for (int oh = 0; oh < outH; oh++)
+                            {
+                                for (int ow = 0; ow < outW; ow++)
+                                {
+                                    int ih = oh * strideH + kh - padH;
+                                    int iw = ow * strideW + kw - padW;
+
+                                    if (ih >= 0 && ih < inH && iw >= 0 && iw < inW)
+                                    {
+                                        T gradVal = gradOutput[b, oc, oh, ow];
+                                        T inputVal = input[b, ic, ih, iw];
+                                        sum = numOps.Add(sum, numOps.Multiply(gradVal, inputVal));
+                                    }
+                                }
+                            }
+                        }
+
+                        gradKernel[ic, m, kh, kw] = sum;
+                    }
+                }
+            }
+        }
+
+        return gradKernel;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ConvTranspose2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] outputPadding)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (input.Rank != 4)
+            throw new ArgumentException($"ConvTranspose2D input requires a 4D tensor [batch, in_channels, height, width]. Got rank {input.Rank}.");
+        if (kernel.Rank != 4)
+            throw new ArgumentException($"ConvTranspose2D kernel requires a 4D tensor [in_channels, out_channels, kernel_height, kernel_width]. Got rank {kernel.Rank}.");
+        if (stride == null || stride.Length != 2)
+            throw new ArgumentException("Stride must be a 2-element array [strideH, strideW].");
+        if (padding == null || padding.Length != 2)
+            throw new ArgumentException("Padding must be a 2-element array [padH, padW].");
+        if (outputPadding == null || outputPadding.Length != 2)
+            throw new ArgumentException("OutputPadding must be a 2-element array [outPadH, outPadW].");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int inH = input.Shape[2];
+        int inW = input.Shape[3];
+
+        int kernelInChannels = kernel.Shape[0];
+        int outChannels = kernel.Shape[1];
+        int kernelH = kernel.Shape[2];
+        int kernelW = kernel.Shape[3];
+
+        if (inChannels != kernelInChannels)
+            throw new ArgumentException($"Input channels ({inChannels}) must match kernel input channels ({kernelInChannels}).");
+
+        int strideH = stride[0];
+        int strideW = stride[1];
+        int padH = padding[0];
+        int padW = padding[1];
+        int outPadH = outputPadding[0];
+        int outPadW = outputPadding[1];
+
+        // Output size formula for transposed convolution
+        int outputHeight = (inH - 1) * strideH - 2 * padH + kernelH + outPadH;
+        int outputWidth = (inW - 1) * strideW - 2 * padW + kernelW + outPadW;
+
+        var result = new Tensor<T>(new[] { batch, outChannels, outputHeight, outputWidth });
+
+        // Transposed convolution: scatter input values through kernel
+        for (int b = 0; b < batch; b++)
+        {
+            for (int ic = 0; ic < inChannels; ic++)
+            {
+                for (int ih = 0; ih < inH; ih++)
+                {
+                    for (int iw = 0; iw < inW; iw++)
+                    {
+                        T inputVal = input[b, ic, ih, iw];
+
+                        for (int oc = 0; oc < outChannels; oc++)
+                        {
+                            for (int kh = 0; kh < kernelH; kh++)
+                            {
+                                for (int kw = 0; kw < kernelW; kw++)
+                                {
+                                    int oh = ih * strideH + kh - padH;
+                                    int ow = iw * strideW + kw - padW;
+
+                                    if (oh >= 0 && oh < outputHeight && ow >= 0 && ow < outputWidth)
+                                    {
+                                        T kernelVal = kernel[ic, oc, kh, kw];
+                                        result[b, oc, oh, ow] = numOps.Add(
+                                            result[b, oc, oh, ow],
+                                            numOps.Multiply(inputVal, kernelVal));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ConvTranspose2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (inputShape == null || inputShape.Length != 4)
+            throw new ArgumentException("InputShape must be a 4-element array [batch, in_channels, height, width].");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = inputShape[0];
+        int inChannels = inputShape[1];
+        int inH = inputShape[2];
+        int inW = inputShape[3];
+
+        int outChannels = kernel.Shape[1];
+        int kernelH = kernel.Shape[2];
+        int kernelW = kernel.Shape[3];
+
+        int strideH = stride[0];
+        int strideW = stride[1];
+        int padH = padding[0];
+        int padW = padding[1];
+
+        int outH = gradOutput.Shape[2];
+        int outW = gradOutput.Shape[3];
+
+        var gradInput = new Tensor<T>(inputShape);
+
+        // Backward of ConvTranspose2D w.r.t. input is a regular Conv2D
+        for (int b = 0; b < batch; b++)
+        {
+            for (int ic = 0; ic < inChannels; ic++)
+            {
+                for (int ih = 0; ih < inH; ih++)
+                {
+                    for (int iw = 0; iw < inW; iw++)
+                    {
+                        T sum = numOps.Zero;
+
+                        for (int oc = 0; oc < outChannels; oc++)
+                        {
+                            for (int kh = 0; kh < kernelH; kh++)
+                            {
+                                for (int kw = 0; kw < kernelW; kw++)
+                                {
+                                    int oh = ih * strideH + kh - padH;
+                                    int ow = iw * strideW + kw - padW;
+
+                                    if (oh >= 0 && oh < outH && ow >= 0 && ow < outW)
+                                    {
+                                        T gradVal = gradOutput[b, oc, oh, ow];
+                                        T kernelVal = kernel[ic, oc, kh, kw];
+                                        sum = numOps.Add(sum, numOps.Multiply(gradVal, kernelVal));
+                                    }
+                                }
+                            }
+                        }
+
+                        gradInput[b, ic, ih, iw] = sum;
+                    }
+                }
+            }
+        }
+
+        return gradInput;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ConvTranspose2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernelShape == null || kernelShape.Length != 4)
+            throw new ArgumentException("KernelShape must be a 4-element array [in_channels, out_channels, kernelH, kernelW].");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = input.Shape[0];
+        int inChannels = kernelShape[0];
+        int outChannels = kernelShape[1];
+        int kernelH = kernelShape[2];
+        int kernelW = kernelShape[3];
+
+        int inH = input.Shape[2];
+        int inW = input.Shape[3];
+
+        int strideH = stride[0];
+        int strideW = stride[1];
+        int padH = padding[0];
+        int padW = padding[1];
+
+        int outH = gradOutput.Shape[2];
+        int outW = gradOutput.Shape[3];
+
+        var gradKernel = new Tensor<T>(kernelShape);
+
+        for (int ic = 0; ic < inChannels; ic++)
+        {
+            for (int oc = 0; oc < outChannels; oc++)
+            {
+                for (int kh = 0; kh < kernelH; kh++)
+                {
+                    for (int kw = 0; kw < kernelW; kw++)
+                    {
+                        T sum = numOps.Zero;
+
+                        for (int b = 0; b < batch; b++)
+                        {
+                            for (int ih = 0; ih < inH; ih++)
+                            {
+                                for (int iw = 0; iw < inW; iw++)
+                                {
+                                    int oh = ih * strideH + kh - padH;
+                                    int ow = iw * strideW + kw - padW;
+
+                                    if (oh >= 0 && oh < outH && ow >= 0 && ow < outW)
+                                    {
+                                        T gradVal = gradOutput[b, oc, oh, ow];
+                                        T inputVal = input[b, ic, ih, iw];
+                                        sum = numOps.Add(sum, numOps.Multiply(gradVal, inputVal));
+                                    }
+                                }
+                            }
+                        }
+
+                        gradKernel[ic, oc, kh, kw] = sum;
+                    }
+                }
+            }
+        }
+
+        return gradKernel;
+    }
+
     #endregion
 
     #region Activation Functions
