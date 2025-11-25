@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -605,14 +607,39 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // AnomalyDetectorLayer is stateful and maintains historical context for anomaly detection
-        throw new NotSupportedException(
-            "AnomalyDetectorLayer does not support JIT compilation because it maintains internal state " +
-            "(anomaly history and smoothed scores) that is updated during each forward pass. The anomaly " +
-            "detection calculations depend on historical context and statistical operations that cannot be " +
-            "represented in a static computation graph.");
+        if (inputNodes.Count < 2)
+            throw new ArgumentException("AnomalyDetector requires two inputs: input and reconstruction.", nameof(inputNodes));
+
+        // AnomalyDetectorLayer JIT computes anomaly scores from reconstruction error:
+        // anomaly_score = mean((input - reconstruction)^2)
+        // This is differentiable and enables training of anomaly detection models.
+
+        var input = inputNodes[0];
+        var reconstruction = inputNodes[1];
+
+        // Compute anomaly score as mean squared error
+        var anomalyScore = TensorOperations<T>.AnomalyScore(input, reconstruction);
+
+        // Apply activation
+        var output = ApplyActivationToComputationGraph(anomalyScore);
+
+        return output;
     }
 
-    public override bool SupportsJitCompilation => false; // Stateful with historical context
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c>. AnomalyDetector uses differentiable reconstruction error.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for AnomalyDetector computes the anomaly score as the
+    /// reconstruction error (mean squared error between input and reconstruction).
+    /// This enables training of anomaly detection models with gradient descent.
+    /// The stateful historical tracking is not used in JIT mode.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
 
 }

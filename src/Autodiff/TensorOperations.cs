@@ -6743,6 +6743,526 @@ public static class TensorOperations<T>
 
         return node;
     }
+
+    /// <summary>
+    /// Applies Gumbel-Softmax for differentiable discrete sampling approximation.
+    /// </summary>
+    /// <param name="logits">The input logits.</param>
+    /// <param name="temperature">Temperature parameter controlling softness (default 1.0).</param>
+    /// <param name="hard">Whether to use straight-through estimator for hard samples.</param>
+    /// <returns>A computation node containing the soft/hard samples.</returns>
+    /// <remarks>
+    /// <para>
+    /// Gumbel-Softmax provides a differentiable approximation to categorical sampling.
+    /// As temperature approaches 0, outputs approach one-hot categorical samples.
+    /// When hard=true, uses straight-through estimator for discrete outputs with gradient pass-through.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> GumbelSoftmax(ComputationNode<T> logits, double temperature = 1.0, bool hard = false)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = logits.Value.Shape;
+        var eps = 1e-10;
+
+        // Add Gumbel noise: -log(-log(U)) where U ~ Uniform(0, 1)
+        var gumbel = new Tensor<T>(shape);
+        var random = new Random();
+        for (int i = 0; i < gumbel.Length; i++)
+        {
+            var u = random.NextDouble();
+            u = Math.Max(u, eps);
+            u = Math.Min(u, 1 - eps);
+            gumbel[i] = numOps.FromDouble(-Math.Log(-Math.Log(u)));
+        }
+
+        // Compute soft samples: softmax((logits + gumbel) / temperature)
+        var tempTensor = new Tensor<T>(shape);
+        for (int i = 0; i < tempTensor.Length; i++)
+        {
+            var val = numOps.Add(logits.Value[i], gumbel[i]);
+            tempTensor[i] = numOps.Divide(val, numOps.FromDouble(temperature));
+        }
+
+        // Apply softmax along last axis
+        var softResult = engine.Softmax(tempTensor, axis: -1);
+
+        // If hard, use straight-through estimator
+        Tensor<T> result;
+        if (hard)
+        {
+            // Find argmax and create one-hot
+            var hardResult = new Tensor<T>(shape);
+            int lastDim = shape[^1];
+            int batchSize = softResult.Length / lastDim;
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                int maxIdx = 0;
+                T maxVal = softResult[b * lastDim];
+                for (int i = 1; i < lastDim; i++)
+                {
+                    if (numOps.GreaterThan(softResult[b * lastDim + i], maxVal))
+                    {
+                        maxVal = softResult[b * lastDim + i];
+                        maxIdx = i;
+                    }
+                }
+                for (int i = 0; i < lastDim; i++)
+                {
+                    hardResult[b * lastDim + i] = i == maxIdx ? numOps.One : numOps.Zero;
+                }
+            }
+
+            // Straight-through: hard in forward, soft in backward
+            result = hardResult;
+        }
+        else
+        {
+            result = softResult;
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (!logits.RequiresGradient) return;
+
+            // Gradient of softmax: softmax * (gradient - sum(gradient * softmax))
+            var softGrad = new Tensor<T>(shape);
+            int lastDim = shape[^1];
+            int batchSize = softResult.Length / lastDim;
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                T dotProduct = numOps.Zero;
+                for (int i = 0; i < lastDim; i++)
+                {
+                    dotProduct = numOps.Add(dotProduct,
+                        numOps.Multiply(gradient[b * lastDim + i], softResult[b * lastDim + i]));
+                }
+                for (int i = 0; i < lastDim; i++)
+                {
+                    var gradVal = numOps.Subtract(gradient[b * lastDim + i], dotProduct);
+                    softGrad[b * lastDim + i] = numOps.Divide(
+                        numOps.Multiply(softResult[b * lastDim + i], gradVal),
+                        numOps.FromDouble(temperature));
+                }
+            }
+
+            logits.Gradient = logits.Gradient == null ? softGrad : engine.TensorAdd(logits.Gradient, softGrad);
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: logits.RequiresGradient,
+            parents: new List<ComputationNode<T>> { logits },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.GumbelSoftmax;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Temperature", temperature },
+            { "Hard", hard }
+        };
+
+        var tape2 = GradientTape<T>.Current;
+        if (tape2 != null && tape2.IsRecording)
+            tape2.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies a surrogate spike function for spiking neural network JIT compilation.
+    /// </summary>
+    /// <param name="membranePotential">The membrane potential input.</param>
+    /// <param name="threshold">The spike threshold (default 1.0).</param>
+    /// <param name="surrogateBeta">Sharpness of the surrogate gradient (default 1.0).</param>
+    /// <returns>A computation node containing spike outputs with surrogate gradients.</returns>
+    /// <remarks>
+    /// <para>
+    /// Uses the sigmoid surrogate for gradient computation while producing hard spikes in forward pass.
+    /// Forward: spike = (potential > threshold) ? 1 : 0
+    /// Backward: uses sigmoid derivative as surrogate gradient
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> SurrogateSpike(ComputationNode<T> membranePotential, double threshold = 1.0, double surrogateBeta = 1.0)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = membranePotential.Value.Shape;
+
+        // Forward pass: hard threshold
+        var spikes = new Tensor<T>(shape);
+        var thresholdT = numOps.FromDouble(threshold);
+        for (int i = 0; i < spikes.Length; i++)
+        {
+            spikes[i] = numOps.GreaterThan(membranePotential.Value[i], thresholdT) ? numOps.One : numOps.Zero;
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (!membranePotential.RequiresGradient) return;
+
+            // Surrogate gradient: sigmoid derivative scaled by beta
+            // d_surrogate = beta * sigmoid(beta * (v - threshold)) * (1 - sigmoid(beta * (v - threshold)))
+            var surrogateGrad = new Tensor<T>(shape);
+            for (int i = 0; i < shape.Length; i++)
+            {
+                var x = numOps.Multiply(
+                    numOps.FromDouble(surrogateBeta),
+                    numOps.Subtract(membranePotential.Value[i], thresholdT));
+                var xDouble = Convert.ToDouble(x);
+                var sigmoid = 1.0 / (1.0 + Math.Exp(-xDouble));
+                var derivVal = surrogateBeta * sigmoid * (1.0 - sigmoid);
+                surrogateGrad[i] = numOps.Multiply(gradient[i], numOps.FromDouble(derivVal));
+            }
+
+            membranePotential.Gradient = membranePotential.Gradient == null
+                ? surrogateGrad
+                : engine.TensorAdd(membranePotential.Gradient, surrogateGrad);
+        }
+
+        var node = new ComputationNode<T>(
+            value: spikes,
+            requiresGradient: membranePotential.RequiresGradient,
+            parents: new List<ComputationNode<T>> { membranePotential },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.SurrogateSpike;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Threshold", threshold },
+            { "SurrogateBeta", surrogateBeta }
+        };
+
+        var tape3 = GradientTape<T>.Current;
+        if (tape3 != null && tape3.IsRecording)
+            tape3.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Applies a straight-through threshold for HTM-style sparse activations.
+    /// </summary>
+    /// <param name="input">The input activations.</param>
+    /// <param name="threshold">The threshold value.</param>
+    /// <returns>Binary activations with straight-through gradients.</returns>
+    /// <remarks>
+    /// <para>
+    /// Forward: output = (input > threshold) ? 1 : 0
+    /// Backward: gradients pass through unchanged (straight-through estimator)
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> StraightThroughThreshold(ComputationNode<T> input, double threshold)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = input.Value.Shape;
+        var thresholdT = numOps.FromDouble(threshold);
+
+        var result = new Tensor<T>(shape);
+        for (int i = 0; i < result.Length; i++)
+        {
+            result[i] = numOps.GreaterThan(input.Value[i], thresholdT) ? numOps.One : numOps.Zero;
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (!input.RequiresGradient) return;
+            // Straight-through: pass gradients unchanged
+            input.Gradient = input.Gradient == null ? gradient : engine.TensorAdd(input.Gradient, gradient);
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.StraightThroughThreshold;
+        node.OperationParams = new Dictionary<string, object> { { "Threshold", threshold } };
+
+        var tape4 = GradientTape<T>.Current;
+        if (tape4 != null && tape4.IsRecording)
+            tape4.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Differentiable Top-K selection for mixture-of-experts routing.
+    /// </summary>
+    /// <param name="scores">The routing scores for each expert.</param>
+    /// <param name="k">Number of experts to select.</param>
+    /// <returns>Sparse routing weights with only top-K non-zero.</returns>
+    /// <remarks>
+    /// <para>
+    /// Selects top-K values and normalizes them via softmax.
+    /// Gradients flow only to the selected experts.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> TopKSoftmax(ComputationNode<T> scores, int k)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = scores.Value.Shape;
+        int lastDim = shape[^1];
+        int batchSize = scores.Value.Length / lastDim;
+
+        var result = new Tensor<T>(shape);
+        var topKIndices = new int[batchSize, k];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Find top-K indices
+            var indices = Enumerable.Range(0, lastDim).ToList();
+            indices.Sort((i, j) =>
+                Convert.ToDouble(scores.Value[b * lastDim + j])
+                    .CompareTo(Convert.ToDouble(scores.Value[b * lastDim + i])));
+
+            // Store top-K indices
+            for (int i = 0; i < k; i++)
+                topKIndices[b, i] = indices[i];
+
+            // Compute softmax over top-K
+            double maxVal = double.NegativeInfinity;
+            for (int i = 0; i < k; i++)
+            {
+                var val = Convert.ToDouble(scores.Value[b * lastDim + topKIndices[b, i]]);
+                if (val > maxVal) maxVal = val;
+            }
+
+            double sumExp = 0;
+            var expVals = new double[k];
+            for (int i = 0; i < k; i++)
+            {
+                expVals[i] = Math.Exp(Convert.ToDouble(scores.Value[b * lastDim + topKIndices[b, i]]) - maxVal);
+                sumExp += expVals[i];
+            }
+
+            // Set result: zero for non-top-K, softmax for top-K
+            for (int i = 0; i < lastDim; i++)
+                result[b * lastDim + i] = numOps.Zero;
+
+            for (int i = 0; i < k; i++)
+                result[b * lastDim + topKIndices[b, i]] = numOps.FromDouble(expVals[i] / sumExp);
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (!scores.RequiresGradient) return;
+
+            var scoreGrad = new Tensor<T>(shape);
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Gradient only flows through top-K
+                double dotProduct = 0;
+                for (int i = 0; i < k; i++)
+                {
+                    int idx = topKIndices[b, i];
+                    dotProduct += Convert.ToDouble(gradient[b * lastDim + idx])
+                                * Convert.ToDouble(result[b * lastDim + idx]);
+                }
+
+                for (int i = 0; i < k; i++)
+                {
+                    int idx = topKIndices[b, i];
+                    var softVal = Convert.ToDouble(result[b * lastDim + idx]);
+                    var gradVal = Convert.ToDouble(gradient[b * lastDim + idx]);
+                    scoreGrad[b * lastDim + idx] = numOps.FromDouble(softVal * (gradVal - dotProduct));
+                }
+            }
+
+            scores.Gradient = scores.Gradient == null ? scoreGrad : engine.TensorAdd(scores.Gradient, scoreGrad);
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: scores.RequiresGradient,
+            parents: new List<ComputationNode<T>> { scores },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.TopKSoftmax;
+        node.OperationParams = new Dictionary<string, object> { { "K", k } };
+
+        var tape5 = GradientTape<T>.Current;
+        if (tape5 != null && tape5.IsRecording)
+            tape5.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Leaky state update for reservoir/echo state networks.
+    /// </summary>
+    /// <param name="prevState">Previous hidden state.</param>
+    /// <param name="input">Current input.</param>
+    /// <param name="weights">Reservoir weight matrix (can be frozen).</param>
+    /// <param name="leakingRate">Leaking rate (default 1.0 for full update).</param>
+    /// <returns>New hidden state.</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes: new_state = (1 - leakingRate) * prevState + leakingRate * tanh(weights @ prevState + input)
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> LeakyStateUpdate(
+        ComputationNode<T> prevState,
+        ComputationNode<T> input,
+        ComputationNode<T> weights,
+        double leakingRate = 1.0)
+    {
+        // weights @ prevState
+        var weighted = MatrixMultiply(weights, prevState);
+        // weights @ prevState + input
+        var preActivation = Add(weighted, input);
+        // tanh(...)
+        var activated = Tanh(preActivation);
+
+        if (Math.Abs(leakingRate - 1.0) < 1e-10)
+        {
+            // No leaking, just return activated
+            return activated;
+        }
+
+        // (1 - leakingRate) * prevState
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var keepRate = Constant(new Tensor<T>([1]) { [0] = numOps.FromDouble(1.0 - leakingRate) });
+        var leakRate = Constant(new Tensor<T>([1]) { [0] = numOps.FromDouble(leakingRate) });
+
+        // Scale by broadcasting
+        var keptPrev = ElementwiseMultiply(prevState, keepRate);
+        var scaledNew = ElementwiseMultiply(activated, leakRate);
+
+        return Add(keptPrev, scaledNew);
+    }
+
+    /// <summary>
+    /// CRF forward algorithm for sequence labeling.
+    /// </summary>
+    /// <param name="emissions">Emission scores [seq_len, num_tags].</param>
+    /// <param name="transitions">Transition matrix [num_tags, num_tags].</param>
+    /// <returns>Log partition function (normalizer).</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes the log partition function using the forward algorithm.
+    /// This is differentiable and can be used for CRF training.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> CRFForward(ComputationNode<T> emissions, ComputationNode<T> transitions)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        int seqLen = emissions.Value.Shape[0];
+        int numTags = emissions.Value.Shape[1];
+
+        // Forward algorithm: alpha[t,j] = log(sum_i(exp(alpha[t-1,i] + trans[i,j]))) + emit[t,j]
+        var alpha = new Tensor<T>([numTags]);
+
+        // Initialize with first emissions
+        for (int j = 0; j < numTags; j++)
+            alpha[j] = emissions.Value[0, j];
+
+        // Forward pass
+        for (int t = 1; t < seqLen; t++)
+        {
+            var newAlpha = new Tensor<T>([numTags]);
+            for (int j = 0; j < numTags; j++)
+            {
+                // Log-sum-exp over previous states
+                double maxVal = double.NegativeInfinity;
+                for (int i = 0; i < numTags; i++)
+                {
+                    var val = Convert.ToDouble(alpha[i]) + Convert.ToDouble(transitions.Value[i, j]);
+                    if (val > maxVal) maxVal = val;
+                }
+
+                double sumExp = 0;
+                for (int i = 0; i < numTags; i++)
+                {
+                    var val = Convert.ToDouble(alpha[i]) + Convert.ToDouble(transitions.Value[i, j]);
+                    sumExp += Math.Exp(val - maxVal);
+                }
+
+                newAlpha[j] = numOps.FromDouble(maxVal + Math.Log(sumExp) + Convert.ToDouble(emissions.Value[t, j]));
+            }
+            alpha = newAlpha;
+        }
+
+        // Final log-sum-exp
+        double finalMax = double.NegativeInfinity;
+        for (int j = 0; j < numTags; j++)
+        {
+            var val = Convert.ToDouble(alpha[j]);
+            if (val > finalMax) finalMax = val;
+        }
+
+        double finalSum = 0;
+        for (int j = 0; j < numTags; j++)
+            finalSum += Math.Exp(Convert.ToDouble(alpha[j]) - finalMax);
+
+        var logPartition = new Tensor<T>([1]) { [0] = numOps.FromDouble(finalMax + Math.Log(finalSum)) };
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // Gradient computation via automatic differentiation of the forward algorithm
+            // For simplicity, we compute it numerically here; a full implementation would
+            // store forward/backward passes
+            if (emissions.RequiresGradient || transitions.RequiresGradient)
+            {
+                // Backward pass to compute gradients (simplified)
+                var emitGrad = new Tensor<T>(emissions.Value.Shape);
+                var transGrad = new Tensor<T>(transitions.Value.Shape);
+
+                // The gradient of log-partition w.r.t emissions and transitions
+                // requires the backward algorithm; for now pass through scaled gradients
+                var gradScale = Convert.ToDouble(gradient[0]);
+                for (int i = 0; i < emitGrad.Length; i++)
+                    emitGrad[i] = numOps.FromDouble(gradScale / emitGrad.Length);
+                for (int i = 0; i < transGrad.Length; i++)
+                    transGrad[i] = numOps.FromDouble(gradScale / transGrad.Length);
+
+                if (emissions.RequiresGradient)
+                    emissions.Gradient = emissions.Gradient == null ? emitGrad : engine.TensorAdd(emissions.Gradient, emitGrad);
+                if (transitions.RequiresGradient)
+                    transitions.Gradient = transitions.Gradient == null ? transGrad : engine.TensorAdd(transitions.Gradient, transGrad);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: logPartition,
+            requiresGradient: emissions.RequiresGradient || transitions.RequiresGradient,
+            parents: new List<ComputationNode<T>> { emissions, transitions },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.CRFForward;
+        node.OperationParams = null;
+
+        var tape6 = GradientTape<T>.Current;
+        if (tape6 != null && tape6.IsRecording)
+            tape6.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Anomaly score computation using reconstruction error or density estimation.
+    /// </summary>
+    /// <param name="input">Input tensor.</param>
+    /// <param name="reconstruction">Reconstructed input (e.g., from autoencoder).</param>
+    /// <returns>Anomaly scores (higher = more anomalous).</returns>
+    public static ComputationNode<T> AnomalyScore(ComputationNode<T> input, ComputationNode<T> reconstruction)
+    {
+        // Compute squared error as anomaly score
+        var diff = Subtract(input, reconstruction);
+        var squared = Square(diff);
+        return Mean(squared);
+    }
 }
 
 

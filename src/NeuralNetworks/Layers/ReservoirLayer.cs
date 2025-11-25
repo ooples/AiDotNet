@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -587,13 +589,103 @@ public class ReservoirLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // ReservoirLayer is a stateful recurrent layer with internal reservoir dynamics
-        throw new NotSupportedException(
-            "ReservoirLayer does not support JIT compilation because it is a stateful recurrent layer (Echo State Network) " +
-            "that maintains internal reservoir state across time steps. The layer's recurrent dynamics with fixed random " +
-            "weights require temporal state propagation that cannot be represented in a static computation graph.");
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        // ReservoirLayer JIT provides single-step update with frozen reservoir weights:
+        // new_state = (1 - leakingRate) * prev_state + leakingRate * tanh(W_res @ prev_state + input * inputScaling)
+        //
+        // For JIT compilation, we export the computation assuming prev_state is provided as a second input
+        // or initialized to zeros. The reservoir weights are fixed (not trainable).
+
+        var input = inputNodes[0];
+
+        // Convert reservoir weights to tensor [reservoirSize, reservoirSize]
+        var reservoirWeightsTensor = new Tensor<T>([_reservoirSize, _reservoirSize]);
+        for (int i = 0; i < _reservoirSize; i++)
+            for (int j = 0; j < _reservoirSize; j++)
+                reservoirWeightsTensor[i, j] = _reservoirWeights[i, j];
+
+        var weightsNode = TensorOperations<T>.Constant(reservoirWeightsTensor, "reservoir_weights");
+
+        // Get previous state from second input or use current state
+        ComputationNode<T> prevState;
+        if (inputNodes.Count > 1)
+        {
+            prevState = inputNodes[1];
+        }
+        else
+        {
+            // Use current reservoir state as initial state
+            var stateTensor = new Tensor<T>([_reservoirSize, 1]);
+            for (int i = 0; i < _reservoirSize; i++)
+                stateTensor[i, 0] = _reservoirState[i];
+            prevState = TensorOperations<T>.Constant(stateTensor, "reservoir_state");
+        }
+
+        // Scale input
+        var scalingFactor = TensorOperations<T>.Constant(
+            new Tensor<T>([1]) { [0] = NumOps.FromDouble(_inputScaling) },
+            "input_scaling");
+        var scaledInput = TensorOperations<T>.ElementwiseMultiply(input, scalingFactor);
+
+        // Reshape for matrix multiplication
+        var prevStateReshaped = TensorOperations<T>.Reshape(prevState, _reservoirSize, 1);
+
+        // W_res @ prev_state
+        var reservoirContrib = TensorOperations<T>.MatrixMultiply(weightsNode, prevStateReshaped);
+
+        // W_res @ prev_state + scaled_input
+        var scaledInputReshaped = TensorOperations<T>.Reshape(scaledInput, _reservoirSize, 1);
+        var preActivation = TensorOperations<T>.Add(reservoirContrib, scaledInputReshaped);
+
+        // tanh activation
+        var activated = TensorOperations<T>.Tanh(preActivation);
+
+        // Apply leaking rate: (1 - leakingRate) * prev_state + leakingRate * activated
+        ComputationNode<T> newState;
+        if (Math.Abs(_leakingRate - 1.0) < 1e-10)
+        {
+            // No leaking, use activated directly
+            newState = activated;
+        }
+        else
+        {
+            var keepRate = TensorOperations<T>.Constant(
+                new Tensor<T>([1]) { [0] = NumOps.FromDouble(1.0 - _leakingRate) },
+                "keep_rate");
+            var leakRate = TensorOperations<T>.Constant(
+                new Tensor<T>([1]) { [0] = NumOps.FromDouble(_leakingRate) },
+                "leak_rate");
+
+            var keptPrev = TensorOperations<T>.ElementwiseMultiply(prevStateReshaped, keepRate);
+            var scaledNew = TensorOperations<T>.ElementwiseMultiply(activated, leakRate);
+            newState = TensorOperations<T>.Add(keptPrev, scaledNew);
+        }
+
+        // Reshape output
+        var output = TensorOperations<T>.Reshape(newState, _reservoirSize);
+
+        // Apply layer activation if present
+        output = ApplyActivationToComputationGraph(output);
+
+        return output;
     }
 
-    public override bool SupportsJitCompilation => false; // Stateful recurrent reservoir
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c>. ReservoirLayer exports single-step computation with frozen weights.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for ReservoirLayer exports a single-step state update. The reservoir
+    /// weights remain frozen (not trainable) during both forward and backward passes, which
+    /// is the standard behavior for Echo State Networks. The computation graph represents
+    /// one time step of the reservoir dynamics.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
 
 }

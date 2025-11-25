@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -1811,14 +1813,79 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // MixtureOfExpertsLayer cannot support JIT compilation due to input-dependent dynamic routing
-        throw new NotSupportedException(
-            "MixtureOfExpertsLayer does not support JIT compilation because it requires input-dependent " +
-            "dynamic routing decisions at runtime. The layer uses a router network to determine which experts " +
-            "to activate for each input, and in Top-K mode, performs dynamic expert selection that cannot be " +
-            "represented in a static computation graph.");
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        // Check that all components support JIT
+        if (!_router.SupportsJitCompilation)
+            throw new NotSupportedException("MoE router does not support JIT compilation.");
+
+        foreach (var expert in _experts)
+        {
+            if (!expert.SupportsJitCompilation)
+                throw new NotSupportedException($"Expert does not support JIT compilation.");
+        }
+
+        // MixtureOfExpertsLayer JIT uses soft routing with TopK selection:
+        // 1. Router computes routing logits for each expert
+        // 2. TopKSoftmax selects top-K experts with differentiable routing weights
+        // 3. Each expert processes the input
+        // 4. Outputs are weighted by routing weights and summed
+
+        var input = inputNodes[0];
+
+        // Get routing logits from router
+        var routingLogits = _router.ExportComputationGraph(inputNodes);
+
+        // Apply TopKSoftmax for differentiable expert selection
+        var routingWeights = TensorOperations<T>.TopKSoftmax(routingLogits, _topK);
+
+        // Process through each expert and compute weighted sum
+        ComputationNode<T>? output = null;
+        int numExperts = _experts.Count;
+
+        for (int i = 0; i < numExperts; i++)
+        {
+            // Get expert output
+            var expertOutput = _experts[i].ExportComputationGraph(inputNodes);
+
+            // Get routing weight for this expert (slice from routing weights)
+            var expertWeight = TensorOperations<T>.Slice(routingWeights, i, 1, axis: -1);
+
+            // Weight the expert output
+            var weightedOutput = TensorOperations<T>.ElementwiseMultiply(expertOutput, expertWeight);
+
+            // Accumulate outputs
+            if (output == null)
+            {
+                output = weightedOutput;
+            }
+            else
+            {
+                output = TensorOperations<T>.Add(output, weightedOutput);
+            }
+        }
+
+        // Apply layer activation
+        output = ApplyActivationToComputationGraph(output!);
+
+        return output;
     }
 
-    public override bool SupportsJitCompilation => false; // Requires input-dependent dynamic routing
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> if both the router and all experts support JIT compilation; otherwise, <c>false</c>.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for MoE uses TopKSoftmax for differentiable expert selection.
+    /// The routing is performed by the router network, and the selected experts'
+    /// outputs are weighted by the softmax-normalized routing scores.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation =>
+        _router.SupportsJitCompilation && _experts.All(e => e.SupportsJitCompilation);
 
 }

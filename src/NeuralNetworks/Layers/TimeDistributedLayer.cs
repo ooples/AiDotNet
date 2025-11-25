@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -554,14 +556,43 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        // TimeDistributedLayer cannot support JIT compilation because it requires dynamic looping
-        // over time steps and slicing operations that are not available in the static computation graph
-        throw new NotSupportedException(
-            "TimeDistributedLayer does not support JIT compilation because it requires dynamic iteration " +
-            "over variable-length time sequences and tensor slicing operations that cannot be represented " +
-            "in a static computation graph.");
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        // Check if inner layer supports JIT
+        if (!_innerLayer.SupportsJitCompilation)
+            throw new NotSupportedException("TimeDistributed inner layer does not support JIT compilation.");
+
+        // TimeDistributedLayer JIT delegates to the inner layer:
+        // For a fixed sequence length, we apply the inner layer to the entire sequence
+        // treating the time dimension as part of the batch dimension.
+
+        var input = inputNodes[0];
+
+        // Apply inner layer's computation graph
+        // The inner layer will process the input with time steps treated as batch samples
+        var output = _innerLayer.ExportComputationGraph(inputNodes);
+
+        // Apply layer activation
+        output = ApplyActivationToComputationGraph(output);
+
+        return output;
     }
 
-    public override bool SupportsJitCompilation => false; // Requires dynamic time-step iteration
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> if the inner layer supports JIT compilation; otherwise, <c>false</c>.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for TimeDistributed delegates to the inner layer. The time
+    /// distributed behavior is achieved by reshaping the input so that time steps
+    /// are treated as batch samples, allowing the inner layer to process all
+    /// time steps in parallel.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => _innerLayer.SupportsJitCompilation;
 
 }

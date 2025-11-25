@@ -325,5 +325,42 @@ public enum OperationType
     /// <summary>
     /// Fused addition + ReLU.
     /// </summary>
-    FusedAddReLU
+    FusedAddReLU,
+
+    // Differentiable Approximations for Dynamic Layers
+
+    /// <summary>
+    /// Gumbel-Softmax for differentiable discrete sampling (used in stochastic layers).
+    /// </summary>
+    GumbelSoftmax,
+
+    /// <summary>
+    /// Surrogate spike function for spiking neural networks with gradient estimation.
+    /// </summary>
+    SurrogateSpike,
+
+    /// <summary>
+    /// Straight-through threshold for HTM-style sparse activations.
+    /// </summary>
+    StraightThroughThreshold,
+
+    /// <summary>
+    /// Top-K softmax for mixture-of-experts routing.
+    /// </summary>
+    TopKSoftmax,
+
+    /// <summary>
+    /// Leaky state update for reservoir/echo state networks.
+    /// </summary>
+    LeakyStateUpdate,
+
+    /// <summary>
+    /// CRF forward algorithm for sequence labeling.
+    /// </summary>
+    CRFForward,
+
+    /// <summary>
+    /// Anomaly score computation.
+    /// </summary>
+    AnomalyScore
 }
