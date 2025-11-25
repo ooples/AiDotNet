@@ -499,5 +499,15 @@ public enum OperationType
     /// <summary>
     /// Taylor Softmax - softmax using Taylor series approximation of exp.
     /// </summary>
-    TaylorSoftmax
+    TaylorSoftmax,
+
+    /// <summary>
+    /// Sparsemax - projects onto probability simplex, can produce sparse outputs.
+    /// </summary>
+    Sparsemax,
+
+    /// <summary>
+    /// Hierarchical Softmax - tree-based efficient softmax for large vocabularies.
+    /// </summary>
+    HierarchicalSoftmax
 }

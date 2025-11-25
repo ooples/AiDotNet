@@ -45,6 +45,19 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     private readonly Matrix<T> _nodeWeights;
 
     /// <summary>
+    /// Gets the node weights as a tensor for use in computation graphs.
+    /// </summary>
+    /// <value>A tensor containing the node weights with shape [treeDepth, numClasses].</value>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This property provides access to the internal weights used by the hierarchical
+    /// tree structure. When using JIT compilation, you can wrap these weights in a ComputationNode
+    /// to enable gradient computation and weight updates during training.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> NodeWeightsTensor => Tensor<T>.FromMatrix(_nodeWeights);
+
+    /// <summary>
     /// Initializes a new instance of the Hierarchical Softmax activation function.
     /// </summary>
     /// <param name="numClasses">The number of output classes to support.</param>
@@ -232,20 +245,18 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
-    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <value>True because TensorOperations.HierarchicalSoftmax provides full forward and backward pass support.</value>
     /// <remarks>
     /// <para>
-    /// This activation does not yet support JIT compilation because the gradient
-    /// computation (backward pass) has not been implemented in TensorOperations.HierarchicalSoftmax.
+    /// HierarchicalSoftmax supports JIT compilation with gradient computation through the binary tree structure.
+    /// The backward pass computes gradients for both the input and the node weights, enabling end-to-end training.
     /// </para>
     /// <para>
-    /// To enable JIT support:
-    /// 1. Implement the backward pass in TensorOperations.HierarchicalSoftmax
-    /// 2. Test the gradient computation
-    /// 3. Change SupportsJitCompilation to return true
+    /// The node weights are exposed via <see cref="NodeWeightsTensor"/> for use in computation graphs.
+    /// For training, wrap the weights in a ComputationNode to track gradients.
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.
@@ -253,11 +264,15 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The computation node to apply the activation to.</param>
     /// <returns>A new computation node with HierarchicalSoftmax activation applied.</returns>
     /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
     /// <remarks>
     /// <para>
-    /// This method would map the activation to TensorOperations&lt;T&gt;.HierarchicalSoftmax(input)
-    /// once the gradient computation is implemented.
+    /// This method maps to TensorOperations&lt;T&gt;.HierarchicalSoftmax which handles both
+    /// forward and backward passes for JIT compilation.
+    /// </para>
+    /// <para>
+    /// The internal node weights are wrapped in a ComputationNode to enable gradient tracking.
+    /// For full training support with weight updates, use <see cref="ApplyToGraph(ComputationNode{T}, ComputationNode{T})"/>
+    /// with externally managed weights.
     /// </para>
     /// </remarks>
     public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
@@ -265,9 +280,39 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        throw new NotSupportedException(
-            $"HierarchicalSoftmaxActivation does not support JIT compilation yet. " +
-            $"The gradient computation (backward pass) has not been implemented in TensorOperations.HierarchicalSoftmax. " +
-            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+        // Wrap internal weights in a ComputationNode for JIT compilation
+        var weightsNode = new ComputationNode<T>(NodeWeightsTensor, requiresGrad: true);
+        return TensorOperations<T>.HierarchicalSoftmax(input, weightsNode, _numClasses);
+    }
+
+    /// <summary>
+    /// Applies Hierarchical Softmax with externally provided weights for full training support.
+    /// </summary>
+    /// <param name="input">The computation node containing the input features.</param>
+    /// <param name="nodeWeights">The computation node containing the tree node weights.</param>
+    /// <returns>A new computation node with HierarchicalSoftmax activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input or nodeWeights is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this overload when you want to train the hierarchical softmax weights
+    /// as part of your model. By providing the weights as a ComputationNode, gradients will flow
+    /// through them during backpropagation, allowing the optimizer to update them.
+    /// </para>
+    /// <para>
+    /// Example usage:
+    /// <code>
+    /// var weightsNode = new ComputationNode&lt;float&gt;(activation.NodeWeightsTensor, requiresGrad: true);
+    /// var output = activation.ApplyToGraph(input, weightsNode);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public ComputationNode<T> ApplyToGraph(ComputationNode<T> input, ComputationNode<T> nodeWeights)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+        if (nodeWeights == null)
+            throw new ArgumentNullException(nameof(nodeWeights));
+
+        return TensorOperations<T>.HierarchicalSoftmax(input, nodeWeights, _numClasses);
     }
 }

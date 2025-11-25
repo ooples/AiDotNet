@@ -9587,6 +9587,403 @@ public static class TensorOperations<T>
                 $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
         }
     }
+
+    /// <summary>
+    /// Applies the Sparsemax activation function which projects onto the probability simplex.
+    /// </summary>
+    /// <param name="a">The input computation node (2D: batch × features).</param>
+    /// <param name="axis">Axis along which to apply (default -1, last axis).</param>
+    /// <returns>A new computation node with Sparsemax applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// Sparsemax produces sparse probability distributions where some outputs are exactly zero.
+    /// Unlike softmax which always gives positive probabilities to all classes, sparsemax
+    /// can assign exactly zero to low-scoring classes.
+    /// </para>
+    /// <para><b>Gradient:</b> For support set S (non-zero outputs): grad = upstream - mean(upstream[S])</para>
+    /// </remarks>
+    public static ComputationNode<T> Sparsemax(ComputationNode<T> a, int axis = -1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+
+        if (axis < 0)
+            axis = shape.Length + axis;
+
+        if (shape.Length == 2 && axis == 1)
+        {
+            int batchSize = shape[0];
+            int features = shape[1];
+            var result = new Tensor<T>(shape);
+            var supportMasks = new bool[batchSize, features]; // Track support set for backward
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Extract row and sort indices by value (descending)
+                var indexed = new List<(T value, int idx)>();
+                for (int f = 0; f < features; f++)
+                {
+                    indexed.Add((a.Value[b, f], f));
+                }
+
+                // Sort by value descending
+                indexed.Sort((x, y) =>
+                {
+                    if (numOps.GreaterThan(x.value, y.value)) return -1;
+                    if (numOps.LessThan(x.value, y.value)) return 1;
+                    return 0;
+                });
+
+                // Find k (support size) and threshold tau
+                var cumSum = numOps.Zero;
+                int k = 0;
+                var tau = numOps.Zero;
+
+                for (int i = 0; i < features; i++)
+                {
+                    cumSum = numOps.Add(cumSum, indexed[i].value);
+                    var avg = numOps.Divide(
+                        numOps.Subtract(cumSum, numOps.One),
+                        numOps.FromDouble(i + 1));
+
+                    if (numOps.GreaterThanOrEquals(indexed[i].value, avg))
+                    {
+                        k = i + 1;
+                        tau = avg;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                // If we didn't break early, recalculate tau with all elements
+                if (k == features)
+                {
+                    tau = numOps.Divide(
+                        numOps.Subtract(cumSum, numOps.One),
+                        numOps.FromDouble(features));
+                }
+
+                // Compute output and support mask
+                for (int f = 0; f < features; f++)
+                {
+                    var diff = numOps.Subtract(a.Value[b, f], tau);
+                    if (numOps.GreaterThan(diff, numOps.Zero))
+                    {
+                        result[b, f] = diff;
+                        supportMasks[b, f] = true;
+                    }
+                    else
+                    {
+                        result[b, f] = numOps.Zero;
+                        supportMasks[b, f] = false;
+                    }
+                }
+            }
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                if (a.RequiresGradient)
+                {
+                    var gradA = new Tensor<T>(shape);
+
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        // Count support size and compute mean of gradients on support
+                        int supportSize = 0;
+                        var gradSum = numOps.Zero;
+
+                        for (int f = 0; f < features; f++)
+                        {
+                            if (supportMasks[b, f])
+                            {
+                                supportSize++;
+                                gradSum = numOps.Add(gradSum, gradient[b, f]);
+                            }
+                        }
+
+                        // Compute gradient: for support elements, subtract mean
+                        if (supportSize > 0)
+                        {
+                            var gradMean = numOps.Divide(gradSum, numOps.FromDouble(supportSize));
+
+                            for (int f = 0; f < features; f++)
+                            {
+                                if (supportMasks[b, f])
+                                {
+                                    gradA[b, f] = numOps.Subtract(gradient[b, f], gradMean);
+                                }
+                                else
+                                {
+                                    gradA[b, f] = numOps.Zero;
+                                }
+                            }
+                        }
+                    }
+
+                    if (a.Gradient == null)
+                    {
+                        a.Gradient = gradA;
+                    }
+                    else
+                    {
+                        a.Gradient = a.Gradient.Add(gradA);
+                    }
+                }
+            }
+
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient,
+                parents: new List<ComputationNode<T>> { a },
+                backwardFunction: BackwardFunction,
+                name: null);
+
+            node.OperationType = OperationType.Sparsemax;
+            node.OperationParams = new Dictionary<string, object> { { "Axis", axis } };
+
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+            return node;
+        }
+        else
+        {
+            throw new NotImplementedException(
+                $"Sparsemax is currently only implemented for 2D tensors along axis=-1. " +
+                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
+        }
+    }
+
+    /// <summary>
+    /// Applies the Hierarchical Softmax activation function for efficient large-vocabulary classification.
+    /// </summary>
+    /// <param name="input">The input computation node (2D: batch × inputDim).</param>
+    /// <param name="nodeWeights">The tree node weights (2D: treeDepth × inputDim).</param>
+    /// <param name="numClasses">Number of output classes.</param>
+    /// <returns>A new computation node with HierarchicalSoftmax applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// Hierarchical Softmax organizes classes in a binary tree structure.
+    /// Each node makes a binary decision using sigmoid, and the final probability
+    /// is the product of probabilities along the path to each class.
+    /// </para>
+    /// <para>
+    /// Computational complexity is O(log N) instead of O(N) for standard softmax.
+    /// </para>
+    /// <para><b>Gradient:</b> Flows through sigmoid derivatives at each tree node.</para>
+    /// </remarks>
+    public static ComputationNode<T> HierarchicalSoftmax(
+        ComputationNode<T> input,
+        ComputationNode<T> nodeWeights,
+        int numClasses)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = input.Value.Shape;
+        var weightsShape = nodeWeights.Value.Shape;
+
+        if (inputShape.Length != 2)
+            throw new ArgumentException($"Input must be 2D [batch, inputDim], got {inputShape.Length}D");
+
+        if (weightsShape.Length != 2)
+            throw new ArgumentException($"NodeWeights must be 2D [treeDepth, inputDim], got {weightsShape.Length}D");
+
+        int batchSize = inputShape[0];
+        int inputDim = inputShape[1];
+        int treeDepth = weightsShape[0];
+
+        if (weightsShape[1] != inputDim)
+            throw new ArgumentException($"NodeWeights inputDim ({weightsShape[1]}) must match input inputDim ({inputDim})");
+
+        var resultShape = new int[] { batchSize, numClasses };
+        var result = new Tensor<T>(resultShape);
+
+        // Store intermediate sigmoid outputs for backward pass
+        var sigmoidOutputs = new T[batchSize, treeDepth];
+        var pathDirections = new bool[numClasses, treeDepth]; // Pre-compute paths
+
+        // Pre-compute path directions for each class
+        for (int c = 0; c < numClasses; c++)
+        {
+            for (int d = 0; d < treeDepth; d++)
+            {
+                pathDirections[c, d] = (c & (1 << (treeDepth - d - 1))) != 0;
+            }
+        }
+
+        // Forward pass: compute class probabilities
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Compute sigmoid at each depth
+            for (int d = 0; d < treeDepth; d++)
+            {
+                var dotProduct = numOps.Zero;
+                for (int i = 0; i < inputDim; i++)
+                {
+                    dotProduct = numOps.Add(dotProduct,
+                        numOps.Multiply(input.Value[b, i], nodeWeights.Value[d, i]));
+                }
+                // Sigmoid: 1 / (1 + exp(-x))
+                var negDot = numOps.Negate(dotProduct);
+                var expNegDot = numOps.Exp(negDot);
+                sigmoidOutputs[b, d] = numOps.Divide(numOps.One, numOps.Add(numOps.One, expNegDot));
+            }
+
+            // Compute probability for each class
+            for (int c = 0; c < numClasses; c++)
+            {
+                var prob = numOps.One;
+                for (int d = 0; d < treeDepth; d++)
+                {
+                    var sigOut = sigmoidOutputs[b, d];
+                    if (pathDirections[c, d])
+                    {
+                        prob = numOps.Multiply(prob, sigOut);
+                    }
+                    else
+                    {
+                        prob = numOps.Multiply(prob, numOps.Subtract(numOps.One, sigOut));
+                    }
+
+                    // Early termination if probability becomes negligible
+                    if (numOps.LessThan(prob, numOps.FromDouble(1e-10)))
+                    {
+                        prob = numOps.FromDouble(1e-10);
+                        break;
+                    }
+                }
+                result[b, c] = prob;
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // Gradient w.r.t. input
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputShape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int c = 0; c < numClasses; c++)
+                    {
+                        var classGrad = gradient[b, c];
+
+                        // Gradient flows through each node in the path
+                        for (int d = 0; d < treeDepth; d++)
+                        {
+                            var sigOut = sigmoidOutputs[b, d];
+                            var sigDeriv = numOps.Multiply(sigOut, numOps.Subtract(numOps.One, sigOut));
+
+                            // Compute the probability contribution excluding this node
+                            var otherProb = numOps.One;
+                            for (int d2 = 0; d2 < treeDepth; d2++)
+                            {
+                                if (d2 != d)
+                                {
+                                    var sig = sigmoidOutputs[b, d2];
+                                    otherProb = numOps.Multiply(otherProb,
+                                        pathDirections[c, d2] ? sig : numOps.Subtract(numOps.One, sig));
+                                }
+                            }
+
+                            // Gradient factor depends on path direction
+                            var factor = pathDirections[c, d]
+                                ? numOps.Multiply(classGrad, numOps.Multiply(sigDeriv, otherProb))
+                                : numOps.Negate(numOps.Multiply(classGrad, numOps.Multiply(sigDeriv, otherProb)));
+
+                            // Accumulate gradient w.r.t. input
+                            for (int i = 0; i < inputDim; i++)
+                            {
+                                gradInput[b, i] = numOps.Add(gradInput[b, i],
+                                    numOps.Multiply(factor, nodeWeights.Value[d, i]));
+                            }
+                        }
+                    }
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradInput;
+                }
+                else
+                {
+                    input.Gradient = input.Gradient.Add(gradInput);
+                }
+            }
+
+            // Gradient w.r.t. weights
+            if (nodeWeights.RequiresGradient)
+            {
+                var gradWeights = new Tensor<T>(weightsShape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int c = 0; c < numClasses; c++)
+                    {
+                        var classGrad = gradient[b, c];
+
+                        for (int d = 0; d < treeDepth; d++)
+                        {
+                            var sigOut = sigmoidOutputs[b, d];
+                            var sigDeriv = numOps.Multiply(sigOut, numOps.Subtract(numOps.One, sigOut));
+
+                            var otherProb = numOps.One;
+                            for (int d2 = 0; d2 < treeDepth; d2++)
+                            {
+                                if (d2 != d)
+                                {
+                                    var sig = sigmoidOutputs[b, d2];
+                                    otherProb = numOps.Multiply(otherProb,
+                                        pathDirections[c, d2] ? sig : numOps.Subtract(numOps.One, sig));
+                                }
+                            }
+
+                            var factor = pathDirections[c, d]
+                                ? numOps.Multiply(classGrad, numOps.Multiply(sigDeriv, otherProb))
+                                : numOps.Negate(numOps.Multiply(classGrad, numOps.Multiply(sigDeriv, otherProb)));
+
+                            // Accumulate gradient w.r.t. weights
+                            for (int i = 0; i < inputDim; i++)
+                            {
+                                gradWeights[d, i] = numOps.Add(gradWeights[d, i],
+                                    numOps.Multiply(factor, input.Value[b, i]));
+                            }
+                        }
+                    }
+                }
+
+                if (nodeWeights.Gradient == null)
+                {
+                    nodeWeights.Gradient = gradWeights;
+                }
+                else
+                {
+                    nodeWeights.Gradient = nodeWeights.Gradient.Add(gradWeights);
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient || nodeWeights.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input, nodeWeights },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.HierarchicalSoftmax;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "NumClasses", numClasses },
+            { "TreeDepth", treeDepth }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
 }
 
 
