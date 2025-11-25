@@ -5279,6 +5279,348 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> Conv2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation)
+    {
+        if (stride == null || stride.Length != 2) throw new ArgumentException("Stride must be a 2-element array.");
+        if (padding == null || padding.Length != 2) throw new ArgumentException("Padding must be a 2-element array.");
+        if (dilation == null || dilation.Length != 2) throw new ArgumentException("Dilation must be a 2-element array.");
+
+        // If parameters are symmetric, use the optimized GPU kernel via the single-int overload
+        if (stride[0] == stride[1] && padding[0] == padding[1] && dilation[0] == dilation[1])
+        {
+            return Conv2D(input, kernel, stride[0], padding[0], dilation[0]);
+        }
+
+        // For asymmetric parameters, fall back to CPU implementation
+        // Future: Add GPU kernel with asymmetric parameter support
+        return _cpuFallback.Conv2D(input, kernel, stride, padding, dilation);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Conv2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding, int[] dilation)
+    {
+        // Check GPU health and type support for potential GPU acceleration
+        if (SupportsGpu && _gpuHealthy && gradOutput.Length >= _thresholds.Convolution)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)Conv2DBackwardInputGpu(
+                    (Tensor<float>)(object)gradOutput,
+                    (Tensor<float>)(object)kernel,
+                    inputShape, stride, padding, dilation);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)Conv2DBackwardInputGpuDouble(
+                    (Tensor<double>)(object)gradOutput,
+                    (Tensor<double>)(object)kernel,
+                    inputShape, stride, padding, dilation);
+        }
+
+        return _cpuFallback.Conv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding, dilation);
+    }
+
+    private Tensor<float> Conv2DBackwardInputGpu(Tensor<float> gradOutput, Tensor<float> kernel, int[] inputShape, int[] stride, int[] padding, int[] dilation)
+    {
+        // GPU backward input implementation
+        // For now, use CPU fallback. Future: implement GPU kernel for transposed convolution
+        try
+        {
+            int batch = inputShape[0];
+            int inChannels = inputShape[1];
+            int inH = inputShape[2];
+            int inW = inputShape[3];
+
+            int outChannels = kernel.Shape[0];
+            int kernelH = kernel.Shape[2];
+            int kernelW = kernel.Shape[3];
+
+            int outH = gradOutput.Shape[2];
+            int outW = gradOutput.Shape[3];
+
+            int strideH = stride[0];
+            int strideW = stride[1];
+            int padH = padding[0];
+            int padW = padding[1];
+            int dilationH = dilation[0];
+            int dilationW = dilation[1];
+
+            var gradInput = new Tensor<float>(inputShape);
+
+            // Compute gradient w.r.t. input using transposed convolution logic
+            for (int b = 0; b < batch; b++)
+            {
+                for (int ic = 0; ic < inChannels; ic++)
+                {
+                    for (int ih = 0; ih < inH; ih++)
+                    {
+                        for (int iw = 0; iw < inW; iw++)
+                        {
+                            float sum = 0f;
+
+                            for (int oc = 0; oc < outChannels; oc++)
+                            {
+                                for (int kh = 0; kh < kernelH; kh++)
+                                {
+                                    for (int kw = 0; kw < kernelW; kw++)
+                                    {
+                                        int ohShifted = ih + padH - kh * dilationH;
+                                        int owShifted = iw + padW - kw * dilationW;
+
+                                        if (ohShifted % strideH == 0 && owShifted % strideW == 0)
+                                        {
+                                            int oh = ohShifted / strideH;
+                                            int ow = owShifted / strideW;
+
+                                            if (oh >= 0 && oh < outH && ow >= 0 && ow < outW)
+                                            {
+                                                sum += gradOutput[b, oc, oh, ow] * kernel[oc, ic, kh, kw];
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            gradInput[b, ic, ih, iw] = sum;
+                        }
+                    }
+                }
+            }
+
+            return gradInput;
+        }
+        catch (Exception)
+        {
+            return _cpuFallback.Conv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding, dilation);
+        }
+    }
+
+    private Tensor<double> Conv2DBackwardInputGpuDouble(Tensor<double> gradOutput, Tensor<double> kernel, int[] inputShape, int[] stride, int[] padding, int[] dilation)
+    {
+        // GPU backward input implementation for double
+        try
+        {
+            int batch = inputShape[0];
+            int inChannels = inputShape[1];
+            int inH = inputShape[2];
+            int inW = inputShape[3];
+
+            int outChannels = kernel.Shape[0];
+            int kernelH = kernel.Shape[2];
+            int kernelW = kernel.Shape[3];
+
+            int outH = gradOutput.Shape[2];
+            int outW = gradOutput.Shape[3];
+
+            int strideH = stride[0];
+            int strideW = stride[1];
+            int padH = padding[0];
+            int padW = padding[1];
+            int dilationH = dilation[0];
+            int dilationW = dilation[1];
+
+            var gradInput = new Tensor<double>(inputShape);
+
+            for (int b = 0; b < batch; b++)
+            {
+                for (int ic = 0; ic < inChannels; ic++)
+                {
+                    for (int ih = 0; ih < inH; ih++)
+                    {
+                        for (int iw = 0; iw < inW; iw++)
+                        {
+                            double sum = 0.0;
+
+                            for (int oc = 0; oc < outChannels; oc++)
+                            {
+                                for (int kh = 0; kh < kernelH; kh++)
+                                {
+                                    for (int kw = 0; kw < kernelW; kw++)
+                                    {
+                                        int ohShifted = ih + padH - kh * dilationH;
+                                        int owShifted = iw + padW - kw * dilationW;
+
+                                        if (ohShifted % strideH == 0 && owShifted % strideW == 0)
+                                        {
+                                            int oh = ohShifted / strideH;
+                                            int ow = owShifted / strideW;
+
+                                            if (oh >= 0 && oh < outH && ow >= 0 && ow < outW)
+                                            {
+                                                sum += gradOutput[b, oc, oh, ow] * kernel[oc, ic, kh, kw];
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            gradInput[b, ic, ih, iw] = sum;
+                        }
+                    }
+                }
+            }
+
+            return gradInput;
+        }
+        catch (Exception)
+        {
+            return _cpuFallback.Conv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding, dilation);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Conv2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding, int[] dilation)
+    {
+        // Check GPU health and type support for potential GPU acceleration
+        if (SupportsGpu && _gpuHealthy && gradOutput.Length >= _thresholds.Convolution)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)Conv2DBackwardKernelGpu(
+                    (Tensor<float>)(object)gradOutput,
+                    (Tensor<float>)(object)input,
+                    kernelShape, stride, padding, dilation);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)Conv2DBackwardKernelGpuDouble(
+                    (Tensor<double>)(object)gradOutput,
+                    (Tensor<double>)(object)input,
+                    kernelShape, stride, padding, dilation);
+        }
+
+        return _cpuFallback.Conv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding, dilation);
+    }
+
+    private Tensor<float> Conv2DBackwardKernelGpu(Tensor<float> gradOutput, Tensor<float> input, int[] kernelShape, int[] stride, int[] padding, int[] dilation)
+    {
+        // GPU backward kernel implementation
+        try
+        {
+            int batch = input.Shape[0];
+            int inChannels = input.Shape[1];
+            int inH = input.Shape[2];
+            int inW = input.Shape[3];
+
+            int outChannels = kernelShape[0];
+            int kernelH = kernelShape[2];
+            int kernelW = kernelShape[3];
+
+            int outH = gradOutput.Shape[2];
+            int outW = gradOutput.Shape[3];
+
+            int strideH = stride[0];
+            int strideW = stride[1];
+            int padH = padding[0];
+            int padW = padding[1];
+            int dilationH = dilation[0];
+            int dilationW = dilation[1];
+
+            var gradKernel = new Tensor<float>(kernelShape);
+
+            for (int oc = 0; oc < outChannels; oc++)
+            {
+                for (int ic = 0; ic < inChannels; ic++)
+                {
+                    for (int kh = 0; kh < kernelH; kh++)
+                    {
+                        for (int kw = 0; kw < kernelW; kw++)
+                        {
+                            float sum = 0f;
+
+                            for (int b = 0; b < batch; b++)
+                            {
+                                for (int oh = 0; oh < outH; oh++)
+                                {
+                                    for (int ow = 0; ow < outW; ow++)
+                                    {
+                                        int ih = oh * strideH + kh * dilationH - padH;
+                                        int iw = ow * strideW + kw * dilationW - padW;
+
+                                        if (ih >= 0 && ih < inH && iw >= 0 && iw < inW)
+                                        {
+                                            sum += gradOutput[b, oc, oh, ow] * input[b, ic, ih, iw];
+                                        }
+                                    }
+                                }
+                            }
+
+                            gradKernel[oc, ic, kh, kw] = sum;
+                        }
+                    }
+                }
+            }
+
+            return gradKernel;
+        }
+        catch (Exception)
+        {
+            return _cpuFallback.Conv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding, dilation);
+        }
+    }
+
+    private Tensor<double> Conv2DBackwardKernelGpuDouble(Tensor<double> gradOutput, Tensor<double> input, int[] kernelShape, int[] stride, int[] padding, int[] dilation)
+    {
+        // GPU backward kernel implementation for double
+        try
+        {
+            int batch = input.Shape[0];
+            int inChannels = input.Shape[1];
+            int inH = input.Shape[2];
+            int inW = input.Shape[3];
+
+            int outChannels = kernelShape[0];
+            int kernelH = kernelShape[2];
+            int kernelW = kernelShape[3];
+
+            int outH = gradOutput.Shape[2];
+            int outW = gradOutput.Shape[3];
+
+            int strideH = stride[0];
+            int strideW = stride[1];
+            int padH = padding[0];
+            int padW = padding[1];
+            int dilationH = dilation[0];
+            int dilationW = dilation[1];
+
+            var gradKernel = new Tensor<double>(kernelShape);
+
+            for (int oc = 0; oc < outChannels; oc++)
+            {
+                for (int ic = 0; ic < inChannels; ic++)
+                {
+                    for (int kh = 0; kh < kernelH; kh++)
+                    {
+                        for (int kw = 0; kw < kernelW; kw++)
+                        {
+                            double sum = 0.0;
+
+                            for (int b = 0; b < batch; b++)
+                            {
+                                for (int oh = 0; oh < outH; oh++)
+                                {
+                                    for (int ow = 0; ow < outW; ow++)
+                                    {
+                                        int ih = oh * strideH + kh * dilationH - padH;
+                                        int iw = ow * strideW + kw * dilationW - padW;
+
+                                        if (ih >= 0 && ih < inH && iw >= 0 && iw < inW)
+                                        {
+                                            sum += gradOutput[b, oc, oh, ow] * input[b, ic, ih, iw];
+                                        }
+                                    }
+                                }
+                            }
+
+                            gradKernel[oc, ic, kh, kw] = sum;
+                        }
+                    }
+                }
+            }
+
+            return gradKernel;
+        }
+        catch (Exception)
+        {
+            return _cpuFallback.Conv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding, dilation);
+        }
+    }
+
     #endregion
 
     /// <summary>

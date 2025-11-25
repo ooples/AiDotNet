@@ -851,6 +851,77 @@ public interface IEngine
     Tensor<T> Conv2D<T>(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0, int dilation = 1);
 
     /// <summary>
+    /// Performs 2D convolution with asymmetric stride, padding, and dilation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, in_channels, height, width].</param>
+    /// <param name="kernel">The convolution kernel [out_channels, in_channels, kernel_height, kernel_width].</param>
+    /// <param name="stride">The stride [strideH, strideW] of the convolution.</param>
+    /// <param name="padding">The padding [padH, padW] to add to the input.</param>
+    /// <param name="dilation">The dilation [dilationH, dilationW] spacing between kernel elements.</param>
+    /// <returns>The convolved tensor [batch, out_channels, output_height, output_width].</returns>
+    /// <exception cref="ArgumentException">Thrown when input or kernel dimensions are invalid.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-011b: Conv2D with asymmetric parameters</b></para>
+    /// <para>
+    /// This overload supports different stride/padding/dilation values for height and width dimensions,
+    /// which is required by some network architectures (e.g., certain ResNet variants, asymmetric kernels).
+    /// </para>
+    /// <para>
+    /// Output dimensions:
+    /// output_height = floor((height + 2*padH - dilationH*(kernel_height-1) - 1) / strideH) + 1
+    /// output_width = floor((width + 2*padW - dilationW*(kernel_width-1) - 1) / strideW) + 1
+    /// </para>
+    /// </remarks>
+    Tensor<T> Conv2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation);
+
+    /// <summary>
+    /// Computes the gradient of Conv2D with respect to the input tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output [batch, out_channels, outH, outW].</param>
+    /// <param name="kernel">The convolution kernel [out_channels, in_channels, kernel_height, kernel_width].</param>
+    /// <param name="inputShape">The shape of the original input tensor [batch, in_channels, height, width].</param>
+    /// <param name="stride">The stride [strideH, strideW] used in forward pass.</param>
+    /// <param name="padding">The padding [padH, padW] used in forward pass.</param>
+    /// <param name="dilation">The dilation [dilationH, dilationW] used in forward pass.</param>
+    /// <returns>The gradient with respect to the input tensor.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-011c: Conv2D Backward Input</b></para>
+    /// <para>
+    /// Computes ∂L/∂input given ∂L/∂output using transposed convolution (deconvolution).
+    /// This is essential for backpropagation through convolutional layers.
+    /// </para>
+    /// <para>
+    /// GPU acceleration provides 50-500x speedup, critical for training CNNs.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Conv2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding, int[] dilation);
+
+    /// <summary>
+    /// Computes the gradient of Conv2D with respect to the kernel (weights).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient flowing back from the output [batch, out_channels, outH, outW].</param>
+    /// <param name="input">The original input tensor [batch, in_channels, height, width].</param>
+    /// <param name="kernelShape">The shape of the kernel [out_channels, in_channels, kernelH, kernelW].</param>
+    /// <param name="stride">The stride [strideH, strideW] used in forward pass.</param>
+    /// <param name="padding">The padding [padH, padW] used in forward pass.</param>
+    /// <param name="dilation">The dilation [dilationH, dilationW] used in forward pass.</param>
+    /// <returns>The gradient with respect to the kernel.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-011d: Conv2D Backward Kernel</b></para>
+    /// <para>
+    /// Computes ∂L/∂kernel given ∂L/∂output using cross-correlation between input and gradient.
+    /// This is essential for learning the convolutional filters during training.
+    /// </para>
+    /// <para>
+    /// GPU acceleration provides 50-500x speedup, critical for training CNNs.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Conv2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding, int[] dilation);
+
+    /// <summary>
     /// Transposes a 2D tensor (matrix represented as tensor).
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
