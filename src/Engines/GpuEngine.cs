@@ -6048,6 +6048,146 @@ public class GpuEngine : IEngine, IDisposable
 
     #endregion
 
+    #region Normalization and Activation Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> Softmax<T>(Tensor<T> input, int axis = -1)
+    {
+        // CPU fallback - softmax requires careful numerical handling
+        return _cpuFallback.Softmax(input, axis);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, int axis = -1)
+    {
+        return _cpuFallback.SoftmaxBackward(gradOutput, output, axis);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> BatchNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon,
+        out Tensor<T> mean, out Tensor<T> variance)
+    {
+        // CPU fallback - batch normalization requires cross-batch statistics
+        return _cpuFallback.BatchNorm(input, gamma, beta, epsilon, out mean, out variance);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> BatchNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma,
+        Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta)
+    {
+        return _cpuFallback.BatchNormBackward(gradOutput, input, gamma, mean, variance, epsilon, out gradGamma, out gradBeta);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> LayerNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon,
+        out Tensor<T> mean, out Tensor<T> variance)
+    {
+        // CPU fallback - layer normalization requires per-sample statistics
+        return _cpuFallback.LayerNorm(input, gamma, beta, epsilon, out mean, out variance);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> LayerNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma,
+        Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta)
+    {
+        return _cpuFallback.LayerNormBackward(gradOutput, input, gamma, mean, variance, epsilon, out gradGamma, out gradBeta);
+    }
+
+    #endregion
+
+    #region Reduction Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> ReduceMax<T>(Tensor<T> input, int[] axes, bool keepDims, out int[] maxIndices)
+    {
+        // CPU fallback - reduction operations benefit from GPU but need index tracking
+        return _cpuFallback.ReduceMax(input, axes, keepDims, out maxIndices);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReduceMaxBackward<T>(Tensor<T> gradOutput, int[] maxIndices, int[] inputShape)
+    {
+        return _cpuFallback.ReduceMaxBackward(gradOutput, maxIndices, inputShape);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReduceMean<T>(Tensor<T> input, int[] axes, bool keepDims)
+    {
+        // CPU fallback - mean reduction requires accumulation
+        return _cpuFallback.ReduceMean(input, axes, keepDims);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReduceMeanBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] axes)
+    {
+        return _cpuFallback.ReduceMeanBackward(gradOutput, inputShape, axes);
+    }
+
+    #endregion
+
+    #region Spatial Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> Upsample<T>(Tensor<T> input, int scaleH, int scaleW)
+    {
+        // CPU fallback - upsampling can benefit from GPU for large tensors
+        return _cpuFallback.Upsample(input, scaleH, scaleW);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> UpsampleBackward<T>(Tensor<T> gradOutput, int[] inputShape, int scaleH, int scaleW)
+    {
+        return _cpuFallback.UpsampleBackward(gradOutput, inputShape, scaleH, scaleW);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> PixelShuffle<T>(Tensor<T> input, int upscaleFactor)
+    {
+        // CPU fallback - pixel shuffle is primarily data rearrangement
+        return _cpuFallback.PixelShuffle(input, upscaleFactor);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> PixelShuffleBackward<T>(Tensor<T> gradOutput, int[] inputShape, int upscaleFactor)
+    {
+        return _cpuFallback.PixelShuffleBackward(gradOutput, inputShape, upscaleFactor);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Crop<T>(Tensor<T> input, int top, int left, int height, int width)
+    {
+        // CPU fallback - crop is primarily data copying
+        return _cpuFallback.Crop(input, top, left, height, width);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> CropBackward<T>(Tensor<T> gradOutput, int[] inputShape, int top, int left)
+    {
+        return _cpuFallback.CropBackward(gradOutput, inputShape, top, left);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Pad<T>(Tensor<T> input, int padTop, int padBottom, int padLeft, int padRight, T padValue)
+    {
+        // CPU fallback - padding is primarily data copying
+        return _cpuFallback.Pad(input, padTop, padBottom, padLeft, padRight, padValue);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> PadBackward<T>(Tensor<T> gradOutput, int padTop, int padLeft, int[] inputShape)
+    {
+        return _cpuFallback.PadBackward(gradOutput, padTop, padLeft, inputShape);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Concat<T>(IReadOnlyList<Tensor<T>> tensors, int axis)
+    {
+        // CPU fallback - concatenation is primarily data copying
+        return _cpuFallback.Concat(tensors, axis);
+    }
+
+    #endregion
+
     /// <summary>
     /// Disposes GPU resources.
     /// </summary>

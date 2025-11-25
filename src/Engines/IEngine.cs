@@ -1095,4 +1095,228 @@ public interface IEngine
     Tensor<T> TensorMatMul<T>(Tensor<T> a, Tensor<T> b);
 
     #endregion
+
+    #region Normalization and Activation Operations
+
+    /// <summary>
+    /// Applies softmax activation along the specified axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="axis">The axis along which to apply softmax. Default is -1 (last axis).</param>
+    /// <returns>A tensor where values along the axis sum to 1.</returns>
+    Tensor<T> Softmax<T>(Tensor<T> input, int axis = -1);
+
+    /// <summary>
+    /// Computes the backward pass for softmax.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="output">The output from the forward softmax pass.</param>
+    /// <param name="axis">The axis along which softmax was applied.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> SoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, int axis = -1);
+
+    /// <summary>
+    /// Applies batch normalization to a 2D tensor [batch, features].
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, features].</param>
+    /// <param name="gamma">Scale parameter with shape [features].</param>
+    /// <param name="beta">Shift parameter with shape [features].</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="mean">Output: computed mean with shape [features].</param>
+    /// <param name="variance">Output: computed variance with shape [features].</param>
+    /// <returns>The normalized tensor.</returns>
+    Tensor<T> BatchNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance);
+
+    /// <summary>
+    /// Computes the backward pass for batch normalization.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <param name="gamma">Scale parameter.</param>
+    /// <param name="mean">The mean computed during forward pass.</param>
+    /// <param name="variance">The variance computed during forward pass.</param>
+    /// <param name="epsilon">Small constant used during forward pass.</param>
+    /// <param name="gradGamma">Output: gradient with respect to gamma.</param>
+    /// <param name="gradBeta">Output: gradient with respect to beta.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> BatchNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta);
+
+    /// <summary>
+    /// Applies layer normalization to a 2D tensor [batch, features].
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, features].</param>
+    /// <param name="gamma">Scale parameter with shape [features].</param>
+    /// <param name="beta">Shift parameter with shape [features].</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    /// <param name="mean">Output: computed mean per sample with shape [batch].</param>
+    /// <param name="variance">Output: computed variance per sample with shape [batch].</param>
+    /// <returns>The normalized tensor.</returns>
+    Tensor<T> LayerNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance);
+
+    /// <summary>
+    /// Computes the backward pass for layer normalization.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <param name="gamma">Scale parameter.</param>
+    /// <param name="mean">The mean computed during forward pass.</param>
+    /// <param name="variance">The variance computed during forward pass.</param>
+    /// <param name="epsilon">Small constant used during forward pass.</param>
+    /// <param name="gradGamma">Output: gradient with respect to gamma.</param>
+    /// <param name="gradBeta">Output: gradient with respect to beta.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> LayerNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta);
+
+    #endregion
+
+    #region Reduction Operations
+
+    /// <summary>
+    /// Computes the maximum value along specified axes.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="axes">The axes along which to compute the maximum.</param>
+    /// <param name="keepDims">Whether to keep reduced dimensions with size 1.</param>
+    /// <param name="maxIndices">Output: indices of maximum values for backward pass.</param>
+    /// <returns>The tensor containing maximum values.</returns>
+    Tensor<T> ReduceMax<T>(Tensor<T> input, int[] axes, bool keepDims, out int[] maxIndices);
+
+    /// <summary>
+    /// Computes the backward pass for reduce max.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="maxIndices">The indices of maximum values from forward pass.</param>
+    /// <param name="inputShape">The original input shape.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> ReduceMaxBackward<T>(Tensor<T> gradOutput, int[] maxIndices, int[] inputShape);
+
+    /// <summary>
+    /// Computes the mean along specified axes.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="axes">The axes along which to compute the mean.</param>
+    /// <param name="keepDims">Whether to keep reduced dimensions with size 1.</param>
+    /// <returns>The tensor containing mean values.</returns>
+    Tensor<T> ReduceMean<T>(Tensor<T> input, int[] axes, bool keepDims);
+
+    /// <summary>
+    /// Computes the backward pass for reduce mean.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="inputShape">The original input shape.</param>
+    /// <param name="axes">The axes that were reduced.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> ReduceMeanBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] axes);
+
+    #endregion
+
+    #region Spatial Operations
+
+    /// <summary>
+    /// Performs nearest-neighbor upsampling on a 4D tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, channels, height, width].</param>
+    /// <param name="scaleH">The height scaling factor.</param>
+    /// <param name="scaleW">The width scaling factor.</param>
+    /// <returns>The upsampled tensor.</returns>
+    Tensor<T> Upsample<T>(Tensor<T> input, int scaleH, int scaleW);
+
+    /// <summary>
+    /// Computes the backward pass for upsampling.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="inputShape">The original input shape.</param>
+    /// <param name="scaleH">The height scaling factor used in forward pass.</param>
+    /// <param name="scaleW">The width scaling factor used in forward pass.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> UpsampleBackward<T>(Tensor<T> gradOutput, int[] inputShape, int scaleH, int scaleW);
+
+    /// <summary>
+    /// Performs pixel shuffle (depth-to-space) operation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, channels, height, width].</param>
+    /// <param name="upscaleFactor">The factor to upscale spatial dimensions.</param>
+    /// <returns>The rearranged tensor with increased spatial dimensions.</returns>
+    Tensor<T> PixelShuffle<T>(Tensor<T> input, int upscaleFactor);
+
+    /// <summary>
+    /// Computes the backward pass for pixel shuffle.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="inputShape">The original input shape.</param>
+    /// <param name="upscaleFactor">The upscale factor used in forward pass.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> PixelShuffleBackward<T>(Tensor<T> gradOutput, int[] inputShape, int upscaleFactor);
+
+    /// <summary>
+    /// Crops a region from a 4D tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, channels, height, width].</param>
+    /// <param name="top">The top offset for cropping.</param>
+    /// <param name="left">The left offset for cropping.</param>
+    /// <param name="height">The height of the cropped region.</param>
+    /// <param name="width">The width of the cropped region.</param>
+    /// <returns>The cropped tensor.</returns>
+    Tensor<T> Crop<T>(Tensor<T> input, int top, int left, int height, int width);
+
+    /// <summary>
+    /// Computes the backward pass for crop.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="inputShape">The original input shape.</param>
+    /// <param name="top">The top offset used in forward pass.</param>
+    /// <param name="left">The left offset used in forward pass.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> CropBackward<T>(Tensor<T> gradOutput, int[] inputShape, int top, int left);
+
+    /// <summary>
+    /// Pads a 2D tensor with specified values.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="padTop">Padding for top edge.</param>
+    /// <param name="padBottom">Padding for bottom edge.</param>
+    /// <param name="padLeft">Padding for left edge.</param>
+    /// <param name="padRight">Padding for right edge.</param>
+    /// <param name="padValue">The value to use for padding.</param>
+    /// <returns>The padded tensor.</returns>
+    Tensor<T> Pad<T>(Tensor<T> input, int padTop, int padBottom, int padLeft, int padRight, T padValue);
+
+    /// <summary>
+    /// Computes the backward pass for padding.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="padTop">Padding used for top edge.</param>
+    /// <param name="padLeft">Padding used for left edge.</param>
+    /// <param name="inputShape">The original input shape.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> PadBackward<T>(Tensor<T> gradOutput, int padTop, int padLeft, int[] inputShape);
+
+    /// <summary>
+    /// Concatenates tensors along a specified axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensors">The list of tensors to concatenate.</param>
+    /// <param name="axis">The axis along which to concatenate.</param>
+    /// <returns>The concatenated tensor.</returns>
+    Tensor<T> Concat<T>(IReadOnlyList<Tensor<T>> tensors, int axis);
+
+    #endregion
 }

@@ -1379,103 +1379,55 @@ public static class TensorOperations<T>
     /// </remarks>
     public static ComputationNode<T> Softmax(ComputationNode<T> a, int axis = -1)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
         var shape = a.Value.Shape;
-        // Normalize axis to positive index
-        if (axis < 0)
-            axis = shape.Length + axis;
-        // For simplicity, handle 2D case (batch, features) with axis=-1
-        if (shape.Length == 2 && axis == 1)
+
+        // Use IEngine for GPU-accelerated forward pass
+        var result = engine.Softmax(a.Value, axis);
+
+        // Capture the axis value for backward
+        int capturedAxis = axis;
+
+        void BackwardFunction(Tensor<T> gradient)
         {
-            int batchSize = shape[0];
-            int features = shape[1];
-            var result = new Tensor<T>(shape);
-            // Compute softmax for each row
-            for (int b = 0; b < batchSize; b++)
+            if (a.RequiresGradient)
             {
-                // Find max for numerical stability
-                var maxVal = a.Value[b, 0];
-                for (int f = 1; f < features; f++)
+                // Use IEngine for GPU-accelerated backward pass
+                var gradA = engine.SoftmaxBackward(gradient, result, capturedAxis);
+
+                if (a.Gradient == null)
                 {
-                    if (numOps.GreaterThan(a.Value[b, f], maxVal))
-                        maxVal = a.Value[b, f];
+                    a.Gradient = gradA;
                 }
-                // Compute exp(x - max) and sum
-                var expSum = numOps.Zero;
-                var expValues = new T[features];
-                for (int f = 0; f < features; f++)
+                else
                 {
-                    var shifted = numOps.Subtract(a.Value[b, f], maxVal);
-                    expValues[f] = numOps.Exp(shifted);
-                    expSum = numOps.Add(expSum, expValues[f]);
-                }
-                // Normalize
-                for (int f = 0; f < features; f++)
-                {
-                    result[b, f] = numOps.Divide(expValues[f], expSum);
-                }
-            }
-            void BackwardFunction(Tensor<T> gradient)
-            {
-                if (a.RequiresGradient)
-                {
-                    // ∂softmax/∂x_i = softmax_i * (∂L/∂y_i - Σ_j(∂L/∂y_j * softmax_j))
-                    var gradA = new Tensor<T>(shape);
-                    for (int b = 0; b < batchSize; b++)
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
                     {
-                        // Compute sum of (gradient * softmax)
-                        var dotProduct = numOps.Zero;
-                        for (int f = 0; f < features; f++)
-                        {
-                            dotProduct = numOps.Add(dotProduct,
-                                numOps.Multiply(gradient[b, f], result[b, f]));
-                        }
-                        // Compute gradient for each element
-                        for (int f = 0; f < features; f++)
-                        {
-                            var gradMinusDot = numOps.Subtract(gradient[b, f], dotProduct);
-                            gradA[b, f] = numOps.Multiply(result[b, f], gradMinusDot);
-                        }
-                    }
-                    if (a.Gradient == null)
-                    {
-                        a.Gradient = gradA;
-                    }
-                    else
-                    {
-                        var existingGradient = a.Gradient;
-                        if (existingGradient != null)
-                        {
-                            a.Gradient = existingGradient.Add(gradA);
-                        }
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
                     }
                 }
             }
-            var node = new ComputationNode<T>(
-                value: result,
-                requiresGradient: a.RequiresGradient,
-                parents: new List<ComputationNode<T>> { a },
-                backwardFunction: BackwardFunction,
-                name: null);
-
-            // Set JIT compiler metadata
-            node.OperationType = OperationType.Softmax;
-            node.OperationParams = new Dictionary<string, object>
-            {
-                { "Axis", axis }
-            };
-
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
-            return node;
         }
-        else
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Softmax;
+        node.OperationParams = new Dictionary<string, object>
         {
-            throw new NotImplementedException(
-                $"Softmax is currently only implemented for 2D tensors along axis=-1. " +
-                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
-        }
+            { "Axis", axis }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
     }
 
     /// <summary>
@@ -2623,154 +2575,58 @@ public static class TensorOperations<T>
     {
         if (nodes.Count == 0)
             throw new ArgumentException("Cannot concatenate empty list of nodes");
-        var numOps = MathHelper.GetNumericOperations<T>();
+
+        var engine = AiDotNetEngine.Current;
         var firstShape = nodes[0].Value.Shape;
+
         // Normalize axis
-        if (axis < 0)
-            axis = firstShape.Length + axis;
-        // Validate shapes match except on concat axis
-        for (int i = 1; i < nodes.Count; i++)
-        {
-            var shape = nodes[i].Value.Shape;
-            if (shape.Length != firstShape.Length)
-                throw new ArgumentException("All tensors must have the same rank");
-            for (int d = 0; d < firstShape.Length; d++)
-            {
-                if (d != axis && shape[d] != firstShape[d])
-                    throw new ArgumentException(
-                        $"Shape mismatch at dimension {d}: {shape[d]} vs {firstShape[d]}");
-            }
-        }
-        // Compute output shape
-        int[] outputShape = (int[])firstShape.Clone();
-        for (int i = 1; i < nodes.Count; i++)
-        {
-            outputShape[axis] += nodes[i].Value.Shape[axis];
-        }
-        // Perform concatenation (handle 2D case for simplicity)
-        Tensor<T> result;
-        if (firstShape.Length == 2 && axis == 1)
-        {
-            // Concatenate along columns (features)
-            int rows = firstShape[0];
-            int totalCols = outputShape[1];
-            result = new Tensor<T>(new int[] { rows, totalCols });
-            int colOffset = 0;
-            foreach (var inputNode in nodes)
-            {
-                int cols = inputNode.Value.Shape[1];
-                for (int r = 0; r < rows; r++)
-                {
-                    for (int c = 0; c < cols; c++)
-                    {
-                        result[r, colOffset + c] = inputNode.Value[r, c];
-                    }
-                }
-                colOffset += cols;
-            }
-        }
-        else if (firstShape.Length == 2 && axis == 0)
-        {
-            // Concatenate along rows (batch)
-            int cols = firstShape[1];
-            int totalRows = outputShape[0];
-            result = new Tensor<T>(new int[] { totalRows, cols });
-            int rowOffset = 0;
-            foreach (var inputNode in nodes)
-            {
-                int rows = inputNode.Value.Shape[0];
-                for (int r = 0; r < rows; r++)
-                {
-                    for (int c = 0; c < cols; c++)
-                    {
-                        result[rowOffset + r, c] = inputNode.Value[r, c];
-                    }
-                }
-                rowOffset += rows;
-            }
-        }
-        else
-        {
-            throw new NotImplementedException(
-                $"Concat is currently only implemented for 2D tensors. " +
-                $"Got shape=[{string.Join(", ", firstShape)}]");
-        }
-        // Store sizes for gradient splitting
-        var sizes = nodes.Select(n => n.Value.Shape[axis]).ToList();
+        int normalizedAxis = axis < 0 ? firstShape.Length + axis : axis;
+
+        // Use IEngine for GPU-accelerated forward pass
+        var tensors = nodes.Select(n => n.Value).ToList();
+        var result = engine.Concat(tensors, normalizedAxis);
+
+        // Store sizes and shapes for gradient splitting
+        var sizes = nodes.Select(n => n.Value.Shape[normalizedAxis]).ToList();
+        var shapes = nodes.Select(n => n.Value.Shape).ToList();
+        int capturedAxis = normalizedAxis;
+
         void BackwardFunction(Tensor<T> gradient)
         {
             // Split gradient along concat axis and distribute to inputs
-            if (firstShape.Length == 2 && axis == 1)
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var gradShape = gradient.Shape;
+            var strides = ComputeStridesStatic(gradShape);
+            var gradData = gradient.ToArray();
+
+            int axisOffset = 0;
+            for (int i = 0; i < nodes.Count; i++)
             {
-                int rows = firstShape[0];
-                int colOffset = 0;
-                for (int i = 0; i < nodes.Count; i++)
+                if (!nodes[i].RequiresGradient)
                 {
-                    if (!nodes[i].RequiresGradient)
-                    {
-                        colOffset += sizes[i];
-                        continue;
-                    }
-                    int cols = sizes[i];
-                    var gradPart = new Tensor<T>(new int[] { rows, cols });
-                    for (int r = 0; r < rows; r++)
-                    {
-                        for (int c = 0; c < cols; c++)
-                        {
-                            gradPart[r, c] = gradient[r, colOffset + c];
-                        }
-                    }
-                    if (nodes[i].Gradient == null)
-                    {
-                        nodes[i].Gradient = gradPart;
-                    }
-                    else
-                    {
-                        var existingGradient = nodes[i].Gradient;
-                        if (existingGradient != null)
-                        {
-                            nodes[i].Gradient = existingGradient.Add(gradPart);
-                        }
-                    }
-                    colOffset += cols;
+                    axisOffset += sizes[i];
+                    continue;
                 }
-            }
-            else if (firstShape.Length == 2 && axis == 0)
-            {
-                int cols = firstShape[1];
-                int rowOffset = 0;
-                for (int i = 0; i < nodes.Count; i++)
+
+                var nodeShape = shapes[i];
+                var gradPart = ExtractSlice(gradData, gradShape, strides, capturedAxis, axisOffset, sizes[i], nodeShape);
+
+                if (nodes[i].Gradient == null)
                 {
-                    if (!nodes[i].RequiresGradient)
-                    {
-                        rowOffset += sizes[i];
-                        continue;
-                    }
-                    int rows = sizes[i];
-                    var gradPart = new Tensor<T>(new int[] { rows, cols });
-                    for (int r = 0; r < rows; r++)
-                    {
-                        for (int c = 0; c < cols; c++)
-                        {
-                            gradPart[r, c] = gradient[rowOffset + r, c];
-                        }
-                    }
-                    if (nodes[i].Gradient == null)
-                    {
-                        nodes[i].Gradient = gradPart;
-                    }
-                    else
-                    {
-                        var existingGradient = nodes[i].Gradient;
-                        if (existingGradient != null)
-                        {
-                            nodes[i].Gradient = existingGradient.Add(gradPart);
-                        }
-                    }
-                    rowOffset += rows;
+                    nodes[i].Gradient = gradPart;
                 }
+                else
+                {
+                    var existingGradient = nodes[i].Gradient;
+                    if (existingGradient != null)
+                    {
+                        nodes[i].Gradient = engine.TensorAdd(existingGradient, gradPart);
+                    }
+                }
+                axisOffset += sizes[i];
             }
         }
+
         var node = new ComputationNode<T>(
             value: result,
             requiresGradient: nodes.Any(n => n.RequiresGradient),
@@ -2782,13 +2638,64 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Concat;
         node.OperationParams = new Dictionary<string, object>
         {
-            { "Axis", axis }
+            { "Axis", normalizedAxis }
         };
 
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
         return node;
+    }
+
+    // Helper method to extract a slice from a tensor along a given axis
+    private static Tensor<T> ExtractSlice(T[] data, int[] shape, int[] strides, int axis, int start, int length, int[] outputShape)
+    {
+        int outputSize = outputShape.Aggregate(1, (a, b) => a * b);
+        var outputData = new T[outputSize];
+        var outputStrides = ComputeStridesStatic(outputShape);
+
+        for (int i = 0; i < outputSize; i++)
+        {
+            var multiIndex = FlatToMultiIndexStatic(i, outputShape, outputStrides);
+            multiIndex[axis] += start;
+            int sourceIdx = MultiToFlatIndexStatic(multiIndex, shape, strides);
+            outputData[i] = data[sourceIdx];
+        }
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    private static int[] ComputeStridesStatic(int[] shape)
+    {
+        var strides = new int[shape.Length];
+        int stride = 1;
+        for (int i = shape.Length - 1; i >= 0; i--)
+        {
+            strides[i] = stride;
+            stride *= shape[i];
+        }
+        return strides;
+    }
+
+    private static int[] FlatToMultiIndexStatic(int flatIndex, int[] shape, int[] strides)
+    {
+        var multiIndex = new int[shape.Length];
+        for (int i = 0; i < shape.Length; i++)
+        {
+            multiIndex[i] = flatIndex / strides[i];
+            flatIndex %= strides[i];
+        }
+        return multiIndex;
+    }
+
+    private static int MultiToFlatIndexStatic(int[] multiIndex, int[] shape, int[] strides)
+    {
+        int flatIndex = 0;
+        for (int i = 0; i < multiIndex.Length; i++)
+        {
+            flatIndex += multiIndex[i] * strides[i];
+        }
+        return flatIndex;
     }
     /// <summary>
     /// Pads a tensor with a constant value along specified dimensions.
@@ -4390,58 +4297,40 @@ public static class TensorOperations<T>
     /// <returns>A computation node representing the upsampled tensor.</returns>
     public static ComputationNode<T> Upsample(ComputationNode<T> a, int scale)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
         var inputShape = a.Value.Shape;
+
         if (inputShape.Length != 4)
             throw new ArgumentException("Upsample expects 4D input [batch, channels, height, width]");
-        int batch = inputShape[0];
-        int channels = inputShape[1];
-        int inH = inputShape[2];
-        int inW = inputShape[3];
-        int outH = inH * scale;
-        int outW = inW * scale;
-        var outputShape = new int[] { batch, channels, outH, outW };
-        var result = new Tensor<T>(outputShape);
-        // Forward: nearest neighbor upsampling
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < outH; h++)
-                {
-                    for (int w = 0; w < outW; w++)
-                    {
-                        int inH_idx = h / scale;
-                        int inW_idx = w / scale;
-                        result[b, c, h, w] = a.Value[b, c, inH_idx, inW_idx];
-                    }
-                }
-            }
-        }
+
+        // Use IEngine for GPU-accelerated forward pass
+        var result = engine.Upsample(a.Value, scale, scale);
+
+        // Capture for backward pass
+        int[] capturedInputShape = inputShape;
+        int capturedScale = scale;
+
         void BackwardFunction(Tensor<T> gradient)
         {
             if (!a.RequiresGradient) return;
+
+            // Use IEngine for GPU-accelerated backward pass
+            var gradA = engine.UpsampleBackward(gradient, capturedInputShape, capturedScale, capturedScale);
+
             if (a.Gradient == null)
-                a.Gradient = new Tensor<T>(inputShape);
-            // Backward: sum gradients that came from the same input pixel
-            for (int b = 0; b < batch; b++)
             {
-                for (int c = 0; c < channels; c++)
+                a.Gradient = gradA;
+            }
+            else
+            {
+                var existingGradient = a.Gradient;
+                if (existingGradient != null)
                 {
-                    for (int h = 0; h < outH; h++)
-                    {
-                        for (int w = 0; w < outW; w++)
-                        {
-                            int inH_idx = h / scale;
-                            int inW_idx = w / scale;
-                            a.Gradient[b, c, inH_idx, inW_idx] = numOps.Add(
-                                a.Gradient[b, c, inH_idx, inW_idx],
-                                gradient[b, c, h, w]);
-                        }
-                    }
+                    a.Gradient = engine.TensorAdd(existingGradient, gradA);
                 }
             }
         }
+
         var node = new ComputationNode<T>(
             value: result,
             requiresGradient: a.RequiresGradient,
@@ -4469,73 +4358,44 @@ public static class TensorOperations<T>
     /// <returns>A computation node with shape [batch, channels/(r²), height*r, width*r].</returns>
     public static ComputationNode<T> PixelShuffle(ComputationNode<T> a, int upscaleFactor)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
         var inputShape = a.Value.Shape;
+
         if (inputShape.Length != 4)
             throw new ArgumentException("PixelShuffle expects 4D input [batch, channels, height, width]");
-        int batch = inputShape[0];
-        int channels = inputShape[1];
-        int inH = inputShape[2];
-        int inW = inputShape[3];
-        int r = upscaleFactor;
-        int r2 = r * r;
-        if (channels % r2 != 0)
-            throw new ArgumentException($"Channels {channels} must be divisible by upscale_factor² ({r2})");
-        int outC = channels / r2;
-        int outH = inH * r;
-        int outW = inW * r;
-        var outputShape = new int[] { batch, outC, outH, outW };
-        var result = new Tensor<T>(outputShape);
-        // Forward: rearrange channels into spatial dimensions
-        // input[b, c, h, w] -> output[b, c/(r²), h*r + r_h, w*r + r_w]
-        // where c = c_out * r² + r_h * r + r_w
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                int c_out = c / r2;
-                int c_offset = c % r2;
-                int r_h = c_offset / r;
-                int r_w = c_offset % r;
-                for (int h = 0; h < inH; h++)
-                {
-                    for (int w = 0; w < inW; w++)
-                    {
-                        int out_h = h * r + r_h;
-                        int out_w = w * r + r_w;
-                        result[b, c_out, out_h, out_w] = a.Value[b, c, h, w];
-                    }
-                }
-            }
-        }
+
+        int r2 = upscaleFactor * upscaleFactor;
+        if (inputShape[1] % r2 != 0)
+            throw new ArgumentException($"Channels {inputShape[1]} must be divisible by upscale_factor² ({r2})");
+
+        // Use IEngine for GPU-accelerated forward pass
+        var result = engine.PixelShuffle(a.Value, upscaleFactor);
+
+        // Capture for backward pass
+        int[] capturedInputShape = inputShape;
+        int capturedUpscaleFactor = upscaleFactor;
+
         void BackwardFunction(Tensor<T> gradient)
         {
             if (!a.RequiresGradient) return;
+
+            // Use IEngine for GPU-accelerated backward pass
+            var gradA = engine.PixelShuffleBackward(gradient, capturedInputShape, capturedUpscaleFactor);
+
             if (a.Gradient == null)
-                a.Gradient = new Tensor<T>(inputShape);
-            // Backward: reverse the rearrangement
-            for (int b = 0; b < batch; b++)
             {
-                for (int c = 0; c < channels; c++)
+                a.Gradient = gradA;
+            }
+            else
+            {
+                var existingGradient = a.Gradient;
+                if (existingGradient != null)
                 {
-                    int c_out = c / r2;
-                    int c_offset = c % r2;
-                    int r_h = c_offset / r;
-                    int r_w = c_offset % r;
-                    for (int h = 0; h < inH; h++)
-                    {
-                        for (int w = 0; w < inW; w++)
-                        {
-                            int out_h = h * r + r_h;
-                            int out_w = w * r + r_w;
-                            a.Gradient[b, c, h, w] = numOps.Add(
-                                a.Gradient[b, c, h, w],
-                                gradient[b, c_out, out_h, out_w]);
-                        }
-                    }
+                    a.Gradient = engine.TensorAdd(existingGradient, gradA);
                 }
             }
         }
+
         var node = new ComputationNode<T>(
             value: result,
             requiresGradient: a.RequiresGradient,

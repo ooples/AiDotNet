@@ -2109,6 +2109,1072 @@ public class CpuEngine : IEngine
 
     #endregion
 
+    #region Normalization and Activation Operations
+
+    public Tensor<T> Softmax<T>(Tensor<T> input, int axis = -1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = input.Shape;
+        int rank = shape.Length;
+
+        // Handle negative axis
+        if (axis < 0) axis = rank + axis;
+        if (axis < 0 || axis >= rank)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {rank} dimensions");
+
+        var outputData = new T[input.Length];
+        var inputData = input.ToArray();
+
+        // Calculate the size of each dimension
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++)
+            outerSize *= shape[i];
+
+        int axisSize = shape[axis];
+
+        int innerSize = 1;
+        for (int i = axis + 1; i < rank; i++)
+            innerSize *= shape[i];
+
+        // Apply softmax along the specified axis
+        Parallel.For(0, outerSize * innerSize, idx =>
+        {
+            int outer = idx / innerSize;
+            int inner = idx % innerSize;
+
+            // Find max for numerical stability
+            T max = inputData[outer * axisSize * innerSize + inner];
+            for (int i = 1; i < axisSize; i++)
+            {
+                int inputIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                if (numOps.GreaterThan(inputData[inputIdx], max))
+                    max = inputData[inputIdx];
+            }
+
+            // Compute exp(x - max) and sum
+            T sum = numOps.Zero;
+            var expValues = new T[axisSize];
+            for (int i = 0; i < axisSize; i++)
+            {
+                int inputIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                expValues[i] = numOps.Exp(numOps.Subtract(inputData[inputIdx], max));
+                sum = numOps.Add(sum, expValues[i]);
+            }
+
+            // Normalize
+            for (int i = 0; i < axisSize; i++)
+            {
+                int outputIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                outputData[outputIdx] = numOps.Divide(expValues[i], sum);
+            }
+        });
+
+        return new Tensor<T>(shape, new Vector<T>(outputData));
+    }
+
+    public Tensor<T> SoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, int axis = -1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = output.Shape;
+        int rank = shape.Length;
+
+        // Handle negative axis
+        if (axis < 0) axis = rank + axis;
+
+        var gradInputData = new T[output.Length];
+        var gradOutputData = gradOutput.ToArray();
+        var outputData = output.ToArray();
+
+        // Calculate the size of each dimension
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++)
+            outerSize *= shape[i];
+
+        int axisSize = shape[axis];
+
+        int innerSize = 1;
+        for (int i = axis + 1; i < rank; i++)
+            innerSize *= shape[i];
+
+        // Compute gradient: dL/dx_i = sum_j(dL/dy_j * dy_j/dx_i)
+        // For softmax: dy_j/dx_i = y_j * (delta_ij - y_i)
+        // So: dL/dx_i = y_i * (dL/dy_i - sum_j(dL/dy_j * y_j))
+        Parallel.For(0, outerSize * innerSize, idx =>
+        {
+            int outer = idx / innerSize;
+            int inner = idx % innerSize;
+
+            // Compute dot product: sum_j(dL/dy_j * y_j)
+            T dotProduct = numOps.Zero;
+            for (int j = 0; j < axisSize; j++)
+            {
+                int index = outer * axisSize * innerSize + j * innerSize + inner;
+                dotProduct = numOps.Add(dotProduct, numOps.Multiply(gradOutputData[index], outputData[index]));
+            }
+
+            // Compute gradient for each element
+            for (int i = 0; i < axisSize; i++)
+            {
+                int index = outer * axisSize * innerSize + i * innerSize + inner;
+                // dL/dx_i = y_i * (dL/dy_i - dot_product)
+                gradInputData[index] = numOps.Multiply(outputData[index],
+                    numOps.Subtract(gradOutputData[index], dotProduct));
+            }
+        });
+
+        return new Tensor<T>(shape, new Vector<T>(gradInputData));
+    }
+
+    public Tensor<T> BatchNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon,
+        out Tensor<T> mean, out Tensor<T> variance)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = input.Shape;
+
+        if (shape.Length != 2)
+            throw new ArgumentException("BatchNorm expects 2D tensor [batch, features]");
+
+        int batchSize = shape[0];
+        int features = shape[1];
+
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var betaData = beta.ToArray();
+
+        var meanData = new T[features];
+        var varianceData = new T[features];
+        var outputData = new T[batchSize * features];
+
+        T eps = numOps.FromDouble(epsilon);
+
+        // Compute mean and variance for each feature
+        for (int f = 0; f < features; f++)
+        {
+            // Mean
+            T sum = numOps.Zero;
+            for (int b = 0; b < batchSize; b++)
+            {
+                sum = numOps.Add(sum, inputData[b * features + f]);
+            }
+            meanData[f] = numOps.Divide(sum, numOps.FromDouble(batchSize));
+
+            // Variance
+            T varSum = numOps.Zero;
+            for (int b = 0; b < batchSize; b++)
+            {
+                T diff = numOps.Subtract(inputData[b * features + f], meanData[f]);
+                varSum = numOps.Add(varSum, numOps.Multiply(diff, diff));
+            }
+            varianceData[f] = numOps.Divide(varSum, numOps.FromDouble(batchSize));
+        }
+
+        // Normalize and apply scale/shift
+        Parallel.For(0, batchSize, b =>
+        {
+            for (int f = 0; f < features; f++)
+            {
+                int idx = b * features + f;
+                // x_norm = (x - mean) / sqrt(variance + eps)
+                T xNorm = numOps.Divide(
+                    numOps.Subtract(inputData[idx], meanData[f]),
+                    numOps.Sqrt(numOps.Add(varianceData[f], eps)));
+                // y = gamma * x_norm + beta
+                outputData[idx] = numOps.Add(numOps.Multiply(gammaData[f], xNorm), betaData[f]);
+            }
+        });
+
+        mean = new Tensor<T>([features], new Vector<T>(meanData));
+        variance = new Tensor<T>([features], new Vector<T>(varianceData));
+        return new Tensor<T>(shape, new Vector<T>(outputData));
+    }
+
+    public Tensor<T> BatchNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma,
+        Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = input.Shape;
+
+        int batchSize = shape[0];
+        int features = shape[1];
+
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var meanData = mean.ToArray();
+        var varianceData = variance.ToArray();
+
+        var gradInputData = new T[batchSize * features];
+        var gradGammaData = new T[features];
+        var gradBetaData = new T[features];
+
+        T eps = numOps.FromDouble(epsilon);
+        T batchSizeT = numOps.FromDouble(batchSize);
+
+        // Compute gradients for gamma and beta, and intermediate values
+        for (int f = 0; f < features; f++)
+        {
+            T std = numOps.Sqrt(numOps.Add(varianceData[f], eps));
+            T invStd = numOps.Divide(numOps.One, std);
+
+            T sumGradBeta = numOps.Zero;
+            T sumGradGamma = numOps.Zero;
+            T sumGradXNorm = numOps.Zero;
+            T sumGradXNormTimesXNorm = numOps.Zero;
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                int idx = b * features + f;
+                T xNorm = numOps.Multiply(numOps.Subtract(inputData[idx], meanData[f]), invStd);
+
+                sumGradBeta = numOps.Add(sumGradBeta, gradOutputData[idx]);
+                sumGradGamma = numOps.Add(sumGradGamma, numOps.Multiply(gradOutputData[idx], xNorm));
+                T gradXNorm = numOps.Multiply(gradOutputData[idx], gammaData[f]);
+                sumGradXNorm = numOps.Add(sumGradXNorm, gradXNorm);
+                sumGradXNormTimesXNorm = numOps.Add(sumGradXNormTimesXNorm, numOps.Multiply(gradXNorm, xNorm));
+            }
+
+            gradBetaData[f] = sumGradBeta;
+            gradGammaData[f] = sumGradGamma;
+
+            // Compute gradient with respect to input
+            for (int b = 0; b < batchSize; b++)
+            {
+                int idx = b * features + f;
+                T xNorm = numOps.Multiply(numOps.Subtract(inputData[idx], meanData[f]), invStd);
+                T gradXNorm = numOps.Multiply(gradOutputData[idx], gammaData[f]);
+
+                // dL/dx = (1/N) * gamma * invStd * (N * dL/dxNorm - sum(dL/dxNorm) - xNorm * sum(dL/dxNorm * xNorm))
+                T term1 = numOps.Multiply(batchSizeT, gradXNorm);
+                T term2 = sumGradXNorm;
+                T term3 = numOps.Multiply(xNorm, sumGradXNormTimesXNorm);
+
+                gradInputData[idx] = numOps.Multiply(
+                    numOps.Divide(numOps.Multiply(gammaData[f], invStd), batchSizeT),
+                    numOps.Subtract(numOps.Subtract(term1, term2), term3));
+            }
+        }
+
+        gradGamma = new Tensor<T>([features], new Vector<T>(gradGammaData));
+        gradBeta = new Tensor<T>([features], new Vector<T>(gradBetaData));
+        return new Tensor<T>(shape, new Vector<T>(gradInputData));
+    }
+
+    public Tensor<T> LayerNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon,
+        out Tensor<T> mean, out Tensor<T> variance)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = input.Shape;
+
+        if (shape.Length != 2)
+            throw new ArgumentException("LayerNorm expects 2D tensor [batch, features]");
+
+        int batchSize = shape[0];
+        int features = shape[1];
+
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var betaData = beta.ToArray();
+
+        var meanData = new T[batchSize];
+        var varianceData = new T[batchSize];
+        var outputData = new T[batchSize * features];
+
+        T eps = numOps.FromDouble(epsilon);
+
+        // Compute mean and variance for each sample (along features dimension)
+        Parallel.For(0, batchSize, b =>
+        {
+            // Mean
+            T sum = numOps.Zero;
+            for (int f = 0; f < features; f++)
+            {
+                sum = numOps.Add(sum, inputData[b * features + f]);
+            }
+            meanData[b] = numOps.Divide(sum, numOps.FromDouble(features));
+
+            // Variance
+            T varSum = numOps.Zero;
+            for (int f = 0; f < features; f++)
+            {
+                T diff = numOps.Subtract(inputData[b * features + f], meanData[b]);
+                varSum = numOps.Add(varSum, numOps.Multiply(diff, diff));
+            }
+            varianceData[b] = numOps.Divide(varSum, numOps.FromDouble(features));
+
+            // Normalize and apply scale/shift
+            T std = numOps.Sqrt(numOps.Add(varianceData[b], eps));
+            for (int f = 0; f < features; f++)
+            {
+                int idx = b * features + f;
+                T xNorm = numOps.Divide(numOps.Subtract(inputData[idx], meanData[b]), std);
+                outputData[idx] = numOps.Add(numOps.Multiply(gammaData[f], xNorm), betaData[f]);
+            }
+        });
+
+        mean = new Tensor<T>([batchSize], new Vector<T>(meanData));
+        variance = new Tensor<T>([batchSize], new Vector<T>(varianceData));
+        return new Tensor<T>(shape, new Vector<T>(outputData));
+    }
+
+    public Tensor<T> LayerNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma,
+        Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = input.Shape;
+
+        int batchSize = shape[0];
+        int features = shape[1];
+
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var gammaData = gamma.ToArray();
+        var meanData = mean.ToArray();
+        var varianceData = variance.ToArray();
+
+        var gradInputData = new T[batchSize * features];
+        var gradGammaData = new T[features];
+        var gradBetaData = new T[features];
+
+        T eps = numOps.FromDouble(epsilon);
+        T featuresT = numOps.FromDouble(features);
+
+        // First compute gradGamma and gradBeta
+        for (int f = 0; f < features; f++)
+        {
+            T sumGradBeta = numOps.Zero;
+            T sumGradGamma = numOps.Zero;
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                int idx = b * features + f;
+                T std = numOps.Sqrt(numOps.Add(varianceData[b], eps));
+                T xNorm = numOps.Divide(numOps.Subtract(inputData[idx], meanData[b]), std);
+
+                sumGradBeta = numOps.Add(sumGradBeta, gradOutputData[idx]);
+                sumGradGamma = numOps.Add(sumGradGamma, numOps.Multiply(gradOutputData[idx], xNorm));
+            }
+
+            gradBetaData[f] = sumGradBeta;
+            gradGammaData[f] = sumGradGamma;
+        }
+
+        // Compute gradient with respect to input
+        Parallel.For(0, batchSize, b =>
+        {
+            T std = numOps.Sqrt(numOps.Add(varianceData[b], eps));
+            T invStd = numOps.Divide(numOps.One, std);
+
+            T sumGradXNorm = numOps.Zero;
+            T sumGradXNormTimesXNorm = numOps.Zero;
+
+            for (int f = 0; f < features; f++)
+            {
+                int idx = b * features + f;
+                T xNorm = numOps.Multiply(numOps.Subtract(inputData[idx], meanData[b]), invStd);
+                T gradXNorm = numOps.Multiply(gradOutputData[idx], gammaData[f]);
+                sumGradXNorm = numOps.Add(sumGradXNorm, gradXNorm);
+                sumGradXNormTimesXNorm = numOps.Add(sumGradXNormTimesXNorm, numOps.Multiply(gradXNorm, xNorm));
+            }
+
+            for (int f = 0; f < features; f++)
+            {
+                int idx = b * features + f;
+                T xNorm = numOps.Multiply(numOps.Subtract(inputData[idx], meanData[b]), invStd);
+                T gradXNorm = numOps.Multiply(gradOutputData[idx], gammaData[f]);
+
+                T term1 = numOps.Multiply(featuresT, gradXNorm);
+                T term2 = sumGradXNorm;
+                T term3 = numOps.Multiply(xNorm, sumGradXNormTimesXNorm);
+
+                gradInputData[idx] = numOps.Multiply(
+                    numOps.Divide(invStd, featuresT),
+                    numOps.Subtract(numOps.Subtract(term1, term2), term3));
+            }
+        });
+
+        gradGamma = new Tensor<T>([features], new Vector<T>(gradGammaData));
+        gradBeta = new Tensor<T>([features], new Vector<T>(gradBetaData));
+        return new Tensor<T>(shape, new Vector<T>(gradInputData));
+    }
+
+    #endregion
+
+    #region Reduction Operations
+
+    public Tensor<T> ReduceMax<T>(Tensor<T> input, int[] axes, bool keepDims, out int[] maxIndices)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = input.Shape;
+        var inputData = input.ToArray();
+
+        // Normalize axes
+        var normalizedAxes = axes.Select(a => a < 0 ? inputShape.Length + a : a).OrderBy(a => a).ToArray();
+
+        // Compute output shape
+        var outputShapeList = new List<int>();
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (normalizedAxes.Contains(i))
+            {
+                if (keepDims) outputShapeList.Add(1);
+            }
+            else
+            {
+                outputShapeList.Add(inputShape[i]);
+            }
+        }
+        var outputShape = outputShapeList.Count > 0 ? outputShapeList.ToArray() : [1];
+
+        int outputSize = outputShape.Aggregate(1, (a, b) => a * b);
+        var outputData = new T[outputSize];
+        maxIndices = new int[outputSize];
+
+        // Initialize with minimum values
+        T minVal = numOps.MinValue;
+        for (int i = 0; i < outputSize; i++)
+        {
+            outputData[i] = minVal;
+            maxIndices[i] = -1;
+        }
+
+        // Compute strides for input and output
+        var inputStrides = ComputeStrides(inputShape);
+        var outputStrides = ComputeStrides(outputShape);
+
+        // Iterate through all input elements
+        for (int i = 0; i < input.Length; i++)
+        {
+            // Compute multi-dimensional index from flat index
+            var multiIndex = FlatToMultiIndex(i, inputShape, inputStrides);
+
+            // Compute output index by removing reduced dimensions
+            var outputMultiIndex = new List<int>();
+            for (int d = 0; d < inputShape.Length; d++)
+            {
+                if (normalizedAxes.Contains(d))
+                {
+                    if (keepDims) outputMultiIndex.Add(0);
+                }
+                else
+                {
+                    outputMultiIndex.Add(multiIndex[d]);
+                }
+            }
+            if (outputMultiIndex.Count == 0) outputMultiIndex.Add(0);
+
+            int outputIdx = MultiToFlatIndex([.. outputMultiIndex], outputShape, outputStrides);
+
+            if (numOps.GreaterThan(inputData[i], outputData[outputIdx]))
+            {
+                outputData[outputIdx] = inputData[i];
+                maxIndices[outputIdx] = i;
+            }
+        }
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    public Tensor<T> ReduceMaxBackward<T>(Tensor<T> gradOutput, int[] maxIndices, int[] inputShape)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int inputSize = inputShape.Aggregate(1, (a, b) => a * b);
+        var gradInputData = new T[inputSize];
+
+        // Initialize with zeros
+        for (int i = 0; i < inputSize; i++)
+            gradInputData[i] = numOps.Zero;
+
+        var gradOutputData = gradOutput.ToArray();
+
+        // Route gradients to max positions
+        for (int i = 0; i < maxIndices.Length; i++)
+        {
+            if (maxIndices[i] >= 0 && maxIndices[i] < inputSize)
+            {
+                gradInputData[maxIndices[i]] = numOps.Add(gradInputData[maxIndices[i]], gradOutputData[i]);
+            }
+        }
+
+        return new Tensor<T>(inputShape, new Vector<T>(gradInputData));
+    }
+
+    public Tensor<T> ReduceMean<T>(Tensor<T> input, int[] axes, bool keepDims)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = input.Shape;
+        var inputData = input.ToArray();
+
+        // Normalize axes
+        var normalizedAxes = axes.Select(a => a < 0 ? inputShape.Length + a : a).OrderBy(a => a).ToArray();
+
+        // Compute output shape
+        var outputShapeList = new List<int>();
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (normalizedAxes.Contains(i))
+            {
+                if (keepDims) outputShapeList.Add(1);
+            }
+            else
+            {
+                outputShapeList.Add(inputShape[i]);
+            }
+        }
+        var outputShape = outputShapeList.Count > 0 ? outputShapeList.ToArray() : [1];
+
+        int outputSize = outputShape.Aggregate(1, (a, b) => a * b);
+        var outputData = new T[outputSize];
+        var counts = new int[outputSize];
+
+        // Initialize
+        for (int i = 0; i < outputSize; i++)
+        {
+            outputData[i] = numOps.Zero;
+            counts[i] = 0;
+        }
+
+        // Compute strides
+        var inputStrides = ComputeStrides(inputShape);
+        var outputStrides = ComputeStrides(outputShape);
+
+        // Sum values
+        for (int i = 0; i < input.Length; i++)
+        {
+            var multiIndex = FlatToMultiIndex(i, inputShape, inputStrides);
+
+            var outputMultiIndex = new List<int>();
+            for (int d = 0; d < inputShape.Length; d++)
+            {
+                if (normalizedAxes.Contains(d))
+                {
+                    if (keepDims) outputMultiIndex.Add(0);
+                }
+                else
+                {
+                    outputMultiIndex.Add(multiIndex[d]);
+                }
+            }
+            if (outputMultiIndex.Count == 0) outputMultiIndex.Add(0);
+
+            int outputIdx = MultiToFlatIndex([.. outputMultiIndex], outputShape, outputStrides);
+            outputData[outputIdx] = numOps.Add(outputData[outputIdx], inputData[i]);
+            counts[outputIdx]++;
+        }
+
+        // Divide by count to get mean
+        for (int i = 0; i < outputSize; i++)
+        {
+            if (counts[i] > 0)
+            {
+                outputData[i] = numOps.Divide(outputData[i], numOps.FromDouble(counts[i]));
+            }
+        }
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    public Tensor<T> ReduceMeanBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] axes)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int inputSize = inputShape.Aggregate(1, (a, b) => a * b);
+        var gradInputData = new T[inputSize];
+
+        // Normalize axes
+        var normalizedAxes = axes.Select(a => a < 0 ? inputShape.Length + a : a).ToArray();
+
+        // Count elements in reduced dimensions
+        int reduceCount = 1;
+        foreach (var ax in normalizedAxes)
+        {
+            reduceCount *= inputShape[ax];
+        }
+        T scale = numOps.Divide(numOps.One, numOps.FromDouble(reduceCount));
+
+        var gradOutputData = gradOutput.ToArray();
+        var gradOutputShape = gradOutput.Shape;
+        var inputStrides = ComputeStrides(inputShape);
+        var outputStrides = ComputeStrides(gradOutputShape);
+
+        // Broadcast gradient to input shape
+        for (int i = 0; i < inputSize; i++)
+        {
+            var multiIndex = FlatToMultiIndex(i, inputShape, inputStrides);
+
+            var outputMultiIndex = new List<int>();
+            int d2 = 0;
+            for (int d = 0; d < inputShape.Length; d++)
+            {
+                if (normalizedAxes.Contains(d))
+                {
+                    if (d2 < gradOutputShape.Length && gradOutputShape[d2] == 1)
+                    {
+                        outputMultiIndex.Add(0);
+                        d2++;
+                    }
+                }
+                else
+                {
+                    if (d2 < gradOutputShape.Length)
+                    {
+                        outputMultiIndex.Add(multiIndex[d]);
+                        d2++;
+                    }
+                }
+            }
+            if (outputMultiIndex.Count == 0) outputMultiIndex.Add(0);
+
+            // Clamp to valid range
+            while (outputMultiIndex.Count < gradOutputShape.Length)
+                outputMultiIndex.Add(0);
+            while (outputMultiIndex.Count > gradOutputShape.Length)
+                outputMultiIndex.RemoveAt(outputMultiIndex.Count - 1);
+
+            int outputIdx = Math.Min(MultiToFlatIndex([.. outputMultiIndex], gradOutputShape, outputStrides), gradOutputData.Length - 1);
+            gradInputData[i] = numOps.Multiply(gradOutputData[outputIdx], scale);
+        }
+
+        return new Tensor<T>(inputShape, new Vector<T>(gradInputData));
+    }
+
+    // Helper methods for reduction operations
+    private static int[] ComputeStrides(int[] shape)
+    {
+        var strides = new int[shape.Length];
+        int stride = 1;
+        for (int i = shape.Length - 1; i >= 0; i--)
+        {
+            strides[i] = stride;
+            stride *= shape[i];
+        }
+        return strides;
+    }
+
+    private static int[] FlatToMultiIndex(int flatIndex, int[] shape, int[] strides)
+    {
+        var multiIndex = new int[shape.Length];
+        for (int i = 0; i < shape.Length; i++)
+        {
+            multiIndex[i] = flatIndex / strides[i];
+            flatIndex %= strides[i];
+        }
+        return multiIndex;
+    }
+
+    private static int MultiToFlatIndex(int[] multiIndex, int[] shape, int[] strides)
+    {
+        int flatIndex = 0;
+        for (int i = 0; i < multiIndex.Length; i++)
+        {
+            flatIndex += multiIndex[i] * strides[i];
+        }
+        return flatIndex;
+    }
+
+    #endregion
+
+    #region Spatial Operations
+
+    public Tensor<T> Upsample<T>(Tensor<T> input, int scaleH, int scaleW)
+    {
+        var shape = input.Shape;
+        if (shape.Length != 4)
+            throw new ArgumentException("Upsample expects 4D tensor [batch, channels, height, width]");
+
+        int batch = shape[0];
+        int channels = shape[1];
+        int height = shape[2];
+        int width = shape[3];
+
+        int newHeight = height * scaleH;
+        int newWidth = width * scaleW;
+
+        var inputData = input.ToArray();
+        var outputData = new T[batch * channels * newHeight * newWidth];
+
+        // Nearest neighbor upsampling
+        Parallel.For(0, batch * channels, bc =>
+        {
+            int b = bc / channels;
+            int c = bc % channels;
+
+            for (int oh = 0; oh < newHeight; oh++)
+            {
+                int ih = oh / scaleH;
+                for (int ow = 0; ow < newWidth; ow++)
+                {
+                    int iw = ow / scaleW;
+                    int inputIdx = ((b * channels + c) * height + ih) * width + iw;
+                    int outputIdx = ((b * channels + c) * newHeight + oh) * newWidth + ow;
+                    outputData[outputIdx] = inputData[inputIdx];
+                }
+            }
+        });
+
+        return new Tensor<T>([batch, channels, newHeight, newWidth], new Vector<T>(outputData));
+    }
+
+    public Tensor<T> UpsampleBackward<T>(Tensor<T> gradOutput, int[] inputShape, int scaleH, int scaleW)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = inputShape[0];
+        int channels = inputShape[1];
+        int height = inputShape[2];
+        int width = inputShape[3];
+
+        int newHeight = height * scaleH;
+        int newWidth = width * scaleW;
+
+        var gradOutputData = gradOutput.ToArray();
+        var gradInputData = new T[batch * channels * height * width];
+
+        // Initialize to zero
+        for (int i = 0; i < gradInputData.Length; i++)
+            gradInputData[i] = numOps.Zero;
+
+        // Sum gradients from all positions that map to each input position
+        Parallel.For(0, batch * channels, bc =>
+        {
+            int b = bc / channels;
+            int c = bc % channels;
+
+            for (int oh = 0; oh < newHeight; oh++)
+            {
+                int ih = oh / scaleH;
+                for (int ow = 0; ow < newWidth; ow++)
+                {
+                    int iw = ow / scaleW;
+                    int gradOutputIdx = ((b * channels + c) * newHeight + oh) * newWidth + ow;
+                    int gradInputIdx = ((b * channels + c) * height + ih) * width + iw;
+
+                    lock (gradInputData)
+                    {
+                        gradInputData[gradInputIdx] = numOps.Add(gradInputData[gradInputIdx], gradOutputData[gradOutputIdx]);
+                    }
+                }
+            }
+        });
+
+        return new Tensor<T>(inputShape, new Vector<T>(gradInputData));
+    }
+
+    public Tensor<T> PixelShuffle<T>(Tensor<T> input, int upscaleFactor)
+    {
+        var shape = input.Shape;
+        if (shape.Length != 4)
+            throw new ArgumentException("PixelShuffle expects 4D tensor [batch, channels, height, width]");
+
+        int batch = shape[0];
+        int channels = shape[1];
+        int height = shape[2];
+        int width = shape[3];
+
+        int r = upscaleFactor;
+        if (channels % (r * r) != 0)
+            throw new ArgumentException($"Number of channels ({channels}) must be divisible by r^2 ({r * r})");
+
+        int newChannels = channels / (r * r);
+        int newHeight = height * r;
+        int newWidth = width * r;
+
+        var inputData = input.ToArray();
+        var outputData = new T[batch * newChannels * newHeight * newWidth];
+
+        // Rearrange channels to spatial dimensions
+        Parallel.For(0, batch, b =>
+        {
+            for (int oc = 0; oc < newChannels; oc++)
+            {
+                for (int oh = 0; oh < newHeight; oh++)
+                {
+                    for (int ow = 0; ow < newWidth; ow++)
+                    {
+                        int ih = oh / r;
+                        int iw = ow / r;
+                        int subH = oh % r;
+                        int subW = ow % r;
+                        int ic = oc * r * r + subH * r + subW;
+
+                        int inputIdx = ((b * channels + ic) * height + ih) * width + iw;
+                        int outputIdx = ((b * newChannels + oc) * newHeight + oh) * newWidth + ow;
+                        outputData[outputIdx] = inputData[inputIdx];
+                    }
+                }
+            }
+        });
+
+        return new Tensor<T>([batch, newChannels, newHeight, newWidth], new Vector<T>(outputData));
+    }
+
+    public Tensor<T> PixelShuffleBackward<T>(Tensor<T> gradOutput, int[] inputShape, int upscaleFactor)
+    {
+        int batch = inputShape[0];
+        int channels = inputShape[1];
+        int height = inputShape[2];
+        int width = inputShape[3];
+
+        int r = upscaleFactor;
+        int newChannels = channels / (r * r);
+        int newHeight = height * r;
+        int newWidth = width * r;
+
+        var gradOutputData = gradOutput.ToArray();
+        var gradInputData = new T[batch * channels * height * width];
+
+        // Reverse the rearrangement
+        Parallel.For(0, batch, b =>
+        {
+            for (int oc = 0; oc < newChannels; oc++)
+            {
+                for (int oh = 0; oh < newHeight; oh++)
+                {
+                    for (int ow = 0; ow < newWidth; ow++)
+                    {
+                        int ih = oh / r;
+                        int iw = ow / r;
+                        int subH = oh % r;
+                        int subW = ow % r;
+                        int ic = oc * r * r + subH * r + subW;
+
+                        int gradInputIdx = ((b * channels + ic) * height + ih) * width + iw;
+                        int gradOutputIdx = ((b * newChannels + oc) * newHeight + oh) * newWidth + ow;
+                        gradInputData[gradInputIdx] = gradOutputData[gradOutputIdx];
+                    }
+                }
+            }
+        });
+
+        return new Tensor<T>(inputShape, new Vector<T>(gradInputData));
+    }
+
+    public Tensor<T> Crop<T>(Tensor<T> input, int top, int left, int height, int width)
+    {
+        var shape = input.Shape;
+        if (shape.Length != 4)
+            throw new ArgumentException("Crop expects 4D tensor [batch, channels, height, width]");
+
+        int batch = shape[0];
+        int channels = shape[1];
+        int inputHeight = shape[2];
+        int inputWidth = shape[3];
+
+        if (top < 0 || left < 0 || top + height > inputHeight || left + width > inputWidth)
+            throw new ArgumentException("Crop region is out of bounds");
+
+        var inputData = input.ToArray();
+        var outputData = new T[batch * channels * height * width];
+
+        Parallel.For(0, batch * channels, bc =>
+        {
+            int b = bc / channels;
+            int c = bc % channels;
+
+            for (int oh = 0; oh < height; oh++)
+            {
+                int ih = top + oh;
+                for (int ow = 0; ow < width; ow++)
+                {
+                    int iw = left + ow;
+                    int inputIdx = ((b * channels + c) * inputHeight + ih) * inputWidth + iw;
+                    int outputIdx = ((b * channels + c) * height + oh) * width + ow;
+                    outputData[outputIdx] = inputData[inputIdx];
+                }
+            }
+        });
+
+        return new Tensor<T>([batch, channels, height, width], new Vector<T>(outputData));
+    }
+
+    public Tensor<T> CropBackward<T>(Tensor<T> gradOutput, int[] inputShape, int top, int left)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = inputShape[0];
+        int channels = inputShape[1];
+        int inputHeight = inputShape[2];
+        int inputWidth = inputShape[3];
+
+        var gradOutputShape = gradOutput.Shape;
+        int cropHeight = gradOutputShape[2];
+        int cropWidth = gradOutputShape[3];
+
+        var gradOutputData = gradOutput.ToArray();
+        var gradInputData = new T[batch * channels * inputHeight * inputWidth];
+
+        // Initialize to zero
+        for (int i = 0; i < gradInputData.Length; i++)
+            gradInputData[i] = numOps.Zero;
+
+        // Copy gradients to the cropped region
+        Parallel.For(0, batch * channels, bc =>
+        {
+            int b = bc / channels;
+            int c = bc % channels;
+
+            for (int oh = 0; oh < cropHeight; oh++)
+            {
+                int ih = top + oh;
+                for (int ow = 0; ow < cropWidth; ow++)
+                {
+                    int iw = left + ow;
+                    int gradOutputIdx = ((b * channels + c) * cropHeight + oh) * cropWidth + ow;
+                    int gradInputIdx = ((b * channels + c) * inputHeight + ih) * inputWidth + iw;
+                    gradInputData[gradInputIdx] = gradOutputData[gradOutputIdx];
+                }
+            }
+        });
+
+        return new Tensor<T>(inputShape, new Vector<T>(gradInputData));
+    }
+
+    public Tensor<T> Pad<T>(Tensor<T> input, int padTop, int padBottom, int padLeft, int padRight, T padValue)
+    {
+        var shape = input.Shape;
+        if (shape.Length < 2)
+            throw new ArgumentException("Pad expects at least 2D tensor");
+
+        // Assume last two dimensions are height and width
+        int rank = shape.Length;
+        int height = shape[rank - 2];
+        int width = shape[rank - 1];
+
+        int newHeight = height + padTop + padBottom;
+        int newWidth = width + padLeft + padRight;
+
+        // Calculate batch dimensions
+        int batchSize = 1;
+        for (int i = 0; i < rank - 2; i++)
+            batchSize *= shape[i];
+
+        var inputData = input.ToArray();
+        var outputData = new T[batchSize * newHeight * newWidth];
+
+        // Initialize with pad value
+        for (int i = 0; i < outputData.Length; i++)
+            outputData[i] = padValue;
+
+        // Copy input data
+        Parallel.For(0, batchSize, b =>
+        {
+            for (int ih = 0; ih < height; ih++)
+            {
+                int oh = ih + padTop;
+                for (int iw = 0; iw < width; iw++)
+                {
+                    int ow = iw + padLeft;
+                    int inputIdx = b * height * width + ih * width + iw;
+                    int outputIdx = b * newHeight * newWidth + oh * newWidth + ow;
+                    outputData[outputIdx] = inputData[inputIdx];
+                }
+            }
+        });
+
+        var newShape = (int[])shape.Clone();
+        newShape[rank - 2] = newHeight;
+        newShape[rank - 1] = newWidth;
+
+        return new Tensor<T>(newShape, new Vector<T>(outputData));
+    }
+
+    public Tensor<T> PadBackward<T>(Tensor<T> gradOutput, int padTop, int padLeft, int[] inputShape)
+    {
+        int rank = inputShape.Length;
+        int height = inputShape[rank - 2];
+        int width = inputShape[rank - 1];
+
+        int batchSize = 1;
+        for (int i = 0; i < rank - 2; i++)
+            batchSize *= inputShape[i];
+
+        var gradOutputShape = gradOutput.Shape;
+        int paddedHeight = gradOutputShape[rank - 2];
+        int paddedWidth = gradOutputShape[rank - 1];
+
+        var gradOutputData = gradOutput.ToArray();
+        var gradInputData = new T[batchSize * height * width];
+
+        // Extract gradient from padded region
+        Parallel.For(0, batchSize, b =>
+        {
+            for (int ih = 0; ih < height; ih++)
+            {
+                int oh = ih + padTop;
+                for (int iw = 0; iw < width; iw++)
+                {
+                    int ow = iw + padLeft;
+                    int gradOutputIdx = b * paddedHeight * paddedWidth + oh * paddedWidth + ow;
+                    int gradInputIdx = b * height * width + ih * width + iw;
+                    gradInputData[gradInputIdx] = gradOutputData[gradOutputIdx];
+                }
+            }
+        });
+
+        return new Tensor<T>(inputShape, new Vector<T>(gradInputData));
+    }
+
+    public Tensor<T> Concat<T>(IReadOnlyList<Tensor<T>> tensors, int axis)
+    {
+        if (tensors == null || tensors.Count == 0)
+            throw new ArgumentException("At least one tensor required for concatenation");
+
+        var firstShape = tensors[0].Shape;
+        int rank = firstShape.Length;
+
+        // Normalize axis
+        if (axis < 0) axis = rank + axis;
+        if (axis < 0 || axis >= rank)
+            throw new ArgumentException($"Invalid axis {axis} for tensor with {rank} dimensions");
+
+        // Validate shapes and compute total size along concatenation axis
+        int totalAxisSize = 0;
+        foreach (var tensor in tensors)
+        {
+            if (tensor.Shape.Length != rank)
+                throw new ArgumentException("All tensors must have the same number of dimensions");
+
+            for (int i = 0; i < rank; i++)
+            {
+                if (i != axis && tensor.Shape[i] != firstShape[i])
+                    throw new ArgumentException($"All tensors must have the same shape except along axis {axis}");
+            }
+
+            totalAxisSize += tensor.Shape[axis];
+        }
+
+        // Build output shape
+        var outputShape = (int[])firstShape.Clone();
+        outputShape[axis] = totalAxisSize;
+
+        int outputSize = outputShape.Aggregate(1, (a, b) => a * b);
+        var outputData = new T[outputSize];
+
+        // Compute strides
+        var outputStrides = ComputeStrides(outputShape);
+
+        // Copy data from each tensor
+        int axisOffset = 0;
+        foreach (var tensor in tensors)
+        {
+            var tensorData = tensor.ToArray();
+            var tensorShape = tensor.Shape;
+            var tensorStrides = ComputeStrides(tensorShape);
+
+            for (int i = 0; i < tensor.Length; i++)
+            {
+                var multiIndex = FlatToMultiIndex(i, tensorShape, tensorStrides);
+                multiIndex[axis] += axisOffset;
+                int outputIdx = MultiToFlatIndex(multiIndex, outputShape, outputStrides);
+                outputData[outputIdx] = tensorData[i];
+            }
+
+            axisOffset += tensor.Shape[axis];
+        }
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    #endregion
+
     #region Activation Functions
 
     public Vector<T> Tanh<T>(Vector<T> vector)
