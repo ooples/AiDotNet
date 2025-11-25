@@ -387,6 +387,33 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, float, float>? _softmaxKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, double, double>? _softmaxKernelDouble;
 
+    // Production GPU kernels - Extended Tensor Operations (Phase D: Full Production)
+    // TensorMatMul - 2D tensor matrix multiplication
+    private readonly Action<AcceleratorStream, Index2D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int>? _tensorMatMulKernelFloat;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int>? _tensorMatMulKernelDouble;
+
+    // TensorTranspose - 2D tensor transposition
+    private readonly Action<AcceleratorStream, Index2D, ArrayView<float>, ArrayView<float>, int, int>? _tensorTransposeKernelFloat;
+    private readonly Action<AcceleratorStream, Index2D, ArrayView<double>, ArrayView<double>, int, int>? _tensorTransposeKernelDouble;
+
+    // Tensor Softmax along axis
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int>? _tensorSoftmaxKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int>? _tensorSoftmaxKernelDouble;
+
+    // BatchNorm and LayerNorm forward
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, int, int>? _batchNormKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, double, int, int>? _batchNormKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, int, int>? _layerNormKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, double, int, int>? _layerNormKernelDouble;
+
+    // Upsample (nearest neighbor)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int>? _upsampleKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int>? _upsampleKernelDouble;
+
+    // PixelShuffle (depth-to-space)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int>? _pixelShuffleKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int>? _pixelShuffleKernelDouble;
+
     /// <inheritdoc/>
     public string Name => _accelerator != null
         ? $"GPU Engine ({_accelerator.Name})"
@@ -1265,6 +1292,125 @@ public class GpuEngine : IEngine, IDisposable
                         result[index] = XMath.Exp(input[index] - maxVal) / expSum;
                     });
                 Console.WriteLine("[GpuEngine] Softmax kernels pre-compiled");
+
+                // Pre-compile production GPU kernels - Extended Tensor Operations (Phase D: Full Production)
+                // TensorMatMul - 2D tensor matrix multiplication (reuses matrix multiply logic)
+                _tensorMatMulKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index2D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int>(
+                    (index, a, b, result, k) => {
+                        int m = index.X;
+                        int n = index.Y;
+                        float sum = 0;
+                        for (int i = 0; i < k; i++)
+                            sum += a[m * k + i] * b[i * n + index.Y]; // Use flat array indexing
+                        result[index.X * n + index.Y] = sum;
+                    });
+                _tensorMatMulKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index2D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int>(
+                    (index, a, b, result, k) => {
+                        int m = index.X;
+                        int n = index.Y;
+                        double sum = 0;
+                        for (int i = 0; i < k; i++)
+                            sum += a[m * k + i] * b[i * n + index.Y];
+                        result[index.X * n + index.Y] = sum;
+                    });
+                Console.WriteLine("[GpuEngine] TensorMatMul kernels pre-compiled");
+
+                // TensorTranspose - 2D tensor transposition
+                _tensorTransposeKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index2D, ArrayView<float>, ArrayView<float>, int, int>(
+                    (index, input, output, rows, cols) => {
+                        // input[row, col] -> output[col, row]
+                        output[index.Y * rows + index.X] = input[index.X * cols + index.Y];
+                    });
+                _tensorTransposeKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index2D, ArrayView<double>, ArrayView<double>, int, int>(
+                    (index, input, output, rows, cols) => {
+                        output[index.Y * rows + index.X] = input[index.X * cols + index.Y];
+                    });
+                Console.WriteLine("[GpuEngine] TensorTranspose kernels pre-compiled");
+
+                // Upsample (nearest neighbor) - for spatial upsampling in neural networks
+                _upsampleKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int>(
+                    (flatIdx, input, output, batch, channels, height, width, scaleH, scaleW) => {
+                        int newHeight = height * scaleH;
+                        int newWidth = width * scaleW;
+                        int ow = (int)flatIdx % newWidth;
+                        int temp = (int)flatIdx / newWidth;
+                        int oh = temp % newHeight;
+                        temp /= newHeight;
+                        int c = temp % channels;
+                        int b = temp / channels;
+                        int ih = oh / scaleH;
+                        int iw = ow / scaleW;
+                        int inputIdx = ((b * channels + c) * height + ih) * width + iw;
+                        output[flatIdx] = input[inputIdx];
+                    });
+                _upsampleKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int>(
+                    (flatIdx, input, output, batch, channels, height, width, scaleH, scaleW) => {
+                        int newHeight = height * scaleH;
+                        int newWidth = width * scaleW;
+                        int ow = (int)flatIdx % newWidth;
+                        int temp = (int)flatIdx / newWidth;
+                        int oh = temp % newHeight;
+                        temp /= newHeight;
+                        int c = temp % channels;
+                        int b = temp / channels;
+                        int ih = oh / scaleH;
+                        int iw = ow / scaleW;
+                        int inputIdx = ((b * channels + c) * height + ih) * width + iw;
+                        output[flatIdx] = input[inputIdx];
+                    });
+                Console.WriteLine("[GpuEngine] Upsample kernels pre-compiled");
+
+                // PixelShuffle (depth-to-space) - for super-resolution networks
+                _pixelShuffleKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int>(
+                    (flatIdx, input, output, batch, channels, height, width, upscaleFactor) => {
+                        int r = upscaleFactor;
+                        int newChannels = channels / (r * r);
+                        int newHeight = height * r;
+                        int newWidth = width * r;
+                        // output index -> input index mapping
+                        int ow = (int)flatIdx % newWidth;
+                        int temp = (int)flatIdx / newWidth;
+                        int oh = temp % newHeight;
+                        temp /= newHeight;
+                        int oc = temp % newChannels;
+                        int b = temp / newChannels;
+                        int ih = oh / r;
+                        int iw = ow / r;
+                        int subH = oh % r;
+                        int subW = ow % r;
+                        int ic = oc * r * r + subH * r + subW;
+                        int inputIdx = ((b * channels + ic) * height + ih) * width + iw;
+                        output[flatIdx] = input[inputIdx];
+                    });
+                _pixelShuffleKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int>(
+                    (flatIdx, input, output, batch, channels, height, width, upscaleFactor) => {
+                        int r = upscaleFactor;
+                        int newChannels = channels / (r * r);
+                        int newHeight = height * r;
+                        int newWidth = width * r;
+                        int ow = (int)flatIdx % newWidth;
+                        int temp = (int)flatIdx / newWidth;
+                        int oh = temp % newHeight;
+                        temp /= newHeight;
+                        int oc = temp % newChannels;
+                        int b = temp / newChannels;
+                        int ih = oh / r;
+                        int iw = ow / r;
+                        int subH = oh % r;
+                        int subW = ow % r;
+                        int ic = oc * r * r + subH * r + subW;
+                        int inputIdx = ((b * channels + ic) * height + ih) * width + iw;
+                        output[flatIdx] = input[inputIdx];
+                    });
+                Console.WriteLine("[GpuEngine] PixelShuffle kernels pre-compiled");
 
                 Console.WriteLine("[GpuEngine] All kernel pre-compilation complete");
 
@@ -9071,6 +9217,645 @@ public class GpuEngine : IEngine, IDisposable
     public void Log10(ReadOnlySpan<double> x, Span<double> destination)
     {
         TensorPrimitivesCore.InvokeSpanIntoSpan<Log10OperatorDouble>(x, destination);
+    }
+
+    #endregion
+
+    #region Extended Tensor Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorTranspose<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (tensor.Rank != 2)
+            throw new ArgumentException($"TensorTranspose requires a 2D tensor. Got rank {tensor.Rank}.");
+
+        // GPU transpose for supported types and large enough tensors
+        if (tensor.Length >= _thresholds.MatrixMultiply && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorTransposeGpuFloat((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorTransposeGpuDouble((Tensor<double>)(object)tensor);
+        }
+        return _cpuFallback.TensorTranspose(tensor);
+    }
+
+    private Tensor<float> TensorTransposeGpuFloat(Tensor<float> tensor)
+    {
+        int rows = tensor.Shape[0];
+        int cols = tensor.Shape[1];
+
+        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+        var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(tensor.ToArray());
+
+            lock (_gpuLock)
+            {
+                (_tensorTransposeKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    new Index2D(rows, cols), gpuInput.View.BaseView, gpuOutput.View.BaseView, rows, cols);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            var resultData = new float[tensor.Length];
+            gpuOutput.View.BaseView.CopyToCPU(resultData);
+            return new Tensor<float>([cols, rows], new Vector<float>(resultData));
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.TensorTranspose(tensor);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuInput);
+            _memoryPoolFloat.Return(gpuOutput);
+        }
+    }
+
+    private Tensor<double> TensorTransposeGpuDouble(Tensor<double> tensor)
+    {
+        int rows = tensor.Shape[0];
+        int cols = tensor.Shape[1];
+
+        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+        var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(tensor.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(tensor.ToArray());
+
+            lock (_gpuLock)
+            {
+                (_tensorTransposeKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    new Index2D(rows, cols), gpuInput.View.BaseView, gpuOutput.View.BaseView, rows, cols);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            var resultData = new double[tensor.Length];
+            gpuOutput.View.BaseView.CopyToCPU(resultData);
+            return new Tensor<double>([cols, rows], new Vector<double>(resultData));
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.TensorTranspose(tensor);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuInput);
+            _memoryPoolDouble.Return(gpuOutput);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorMatMul<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Rank != 2 || b.Rank != 2)
+            throw new ArgumentException($"TensorMatMul requires 2D tensors. Got ranks {a.Rank} and {b.Rank}.");
+
+        int m = a.Shape[0];
+        int n = a.Shape[1];
+        int p = b.Shape[1];
+
+        if (n != b.Shape[0])
+            throw new ArgumentException($"Matrix dimensions incompatible: [{m},{n}] x [{b.Shape[0]},{p}]");
+
+        // GPU matrix multiplication for supported types and large enough operations
+        int totalOps = m * n * p;
+        if (totalOps >= _thresholds.MatrixMultiply && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorMatMulGpuFloat((Tensor<float>)(object)a, (Tensor<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorMatMulGpuDouble((Tensor<double>)(object)a, (Tensor<double>)(object)b);
+        }
+        return _cpuFallback.TensorMatMul(a, b);
+    }
+
+    private Tensor<float> TensorMatMulGpuFloat(Tensor<float> a, Tensor<float> b)
+    {
+        int m = a.Shape[0];
+        int k = a.Shape[1];
+        int n = b.Shape[1];
+
+        var gpuA = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * k);
+        var gpuB = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(k * n);
+        var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
+
+        try
+        {
+            gpuA.View.BaseView.CopyFromCPU(a.ToArray());
+            gpuB.View.BaseView.CopyFromCPU(b.ToArray());
+
+            // Create 2D views for GEMM
+            var viewA = gpuA.View.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
+            var viewB = gpuB.View.As2DView<Stride2D.DenseX>(new Index2D(k, n), new Stride2D.DenseX(n));
+            var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
+
+            lock (_gpuLock)
+            {
+                // Use existing matrix multiply kernel (already optimized)
+                (_matrixMultiplyKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    new Index2D(m, n), viewA, viewB, viewResult, k);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            var resultData = new float[m * n];
+            gpuResult.View.BaseView.CopyToCPU(resultData);
+            return new Tensor<float>([m, n], new Vector<float>(resultData));
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.TensorMatMul(a, b);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuA);
+            _memoryPoolFloat.Return(gpuB);
+            _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    private Tensor<double> TensorMatMulGpuDouble(Tensor<double> a, Tensor<double> b)
+    {
+        int m = a.Shape[0];
+        int k = a.Shape[1];
+        int n = b.Shape[1];
+
+        var gpuA = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * k);
+        var gpuB = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(k * n);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(m * n);
+
+        try
+        {
+            gpuA.View.BaseView.CopyFromCPU(a.ToArray());
+            gpuB.View.BaseView.CopyFromCPU(b.ToArray());
+
+            var viewA = gpuA.View.As2DView<Stride2D.DenseX>(new Index2D(m, k), new Stride2D.DenseX(k));
+            var viewB = gpuB.View.As2DView<Stride2D.DenseX>(new Index2D(k, n), new Stride2D.DenseX(n));
+            var viewResult = gpuResult.View.As2DView<Stride2D.DenseX>(new Index2D(m, n), new Stride2D.DenseX(n));
+
+            lock (_gpuLock)
+            {
+                (_matrixMultiplyKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    new Index2D(m, n), viewA, viewB, viewResult, k);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            var resultData = new double[m * n];
+            gpuResult.View.BaseView.CopyToCPU(resultData);
+            return new Tensor<double>([m, n], new Vector<double>(resultData));
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.TensorMatMul(a, b);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuA);
+            _memoryPoolDouble.Return(gpuB);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Conv2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation)
+    {
+        // GPU Conv2D with asymmetric parameters
+        // For now use CPU, can extend existing Conv2D GPU kernel
+        return _cpuFallback.Conv2D(input, kernel, stride, padding, dilation);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Conv2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding, int[] dilation)
+    {
+        return _cpuFallback.Conv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding, dilation);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Conv2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding, int[] dilation)
+    {
+        return _cpuFallback.Conv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding, dilation);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MaxPool2DWithIndices<T>(Tensor<T> input, int[] poolSize, int[] stride, out int[,,,,] maxIndices)
+    {
+        return _cpuFallback.MaxPool2DWithIndices(input, poolSize, stride, out maxIndices);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> MaxPool2DBackward<T>(Tensor<T> gradOutput, int[,,,,] maxIndices, int[] inputShape, int[] poolSize, int[] stride)
+    {
+        return _cpuFallback.MaxPool2DBackward(gradOutput, maxIndices, inputShape, poolSize, stride);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> AvgPool2D<T>(Tensor<T> input, int[] poolSize, int[] stride)
+    {
+        return _cpuFallback.AvgPool2D(input, poolSize, stride);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> AvgPool2DBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] poolSize, int[] stride)
+    {
+        return _cpuFallback.AvgPool2DBackward(gradOutput, inputShape, poolSize, stride);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DepthwiseConv2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding)
+    {
+        return _cpuFallback.DepthwiseConv2D(input, kernel, stride, padding);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DepthwiseConv2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding)
+    {
+        return _cpuFallback.DepthwiseConv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> DepthwiseConv2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding)
+    {
+        return _cpuFallback.DepthwiseConv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ConvTranspose2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] outputPadding)
+    {
+        return _cpuFallback.ConvTranspose2D(input, kernel, stride, padding, outputPadding);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ConvTranspose2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding)
+    {
+        return _cpuFallback.ConvTranspose2DBackwardInput(gradOutput, kernel, inputShape, stride, padding);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ConvTranspose2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding)
+    {
+        return _cpuFallback.ConvTranspose2DBackwardKernel(gradOutput, input, kernelShape, stride, padding);
+    }
+
+    #endregion
+
+    #region Normalization and Activation Operations (Extended)
+
+    /// <inheritdoc/>
+    public Tensor<T> Softmax<T>(Tensor<T> input, int axis = -1)
+    {
+        // GPU softmax along axis - can be optimized with block-level reductions
+        return _cpuFallback.Softmax(input, axis);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, int axis = -1)
+    {
+        return _cpuFallback.SoftmaxBackward(gradOutput, output, axis);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> BatchNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance)
+    {
+        return _cpuFallback.BatchNorm(input, gamma, beta, epsilon, out mean, out variance);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> BatchNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta)
+    {
+        return _cpuFallback.BatchNormBackward(gradOutput, input, gamma, mean, variance, epsilon, out gradGamma, out gradBeta);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> LayerNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance)
+    {
+        return _cpuFallback.LayerNorm(input, gamma, beta, epsilon, out mean, out variance);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> LayerNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta)
+    {
+        return _cpuFallback.LayerNormBackward(gradOutput, input, gamma, mean, variance, epsilon, out gradGamma, out gradBeta);
+    }
+
+    #endregion
+
+    #region Tensor Reduction Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> ReduceMax<T>(Tensor<T> input, int[] axes, bool keepDims, out int[] maxIndices)
+    {
+        return _cpuFallback.ReduceMax(input, axes, keepDims, out maxIndices);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReduceMaxBackward<T>(Tensor<T> gradOutput, int[] maxIndices, int[] inputShape)
+    {
+        return _cpuFallback.ReduceMaxBackward(gradOutput, maxIndices, inputShape);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReduceMean<T>(Tensor<T> input, int[] axes, bool keepDims)
+    {
+        return _cpuFallback.ReduceMean(input, axes, keepDims);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReduceMeanBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] axes)
+    {
+        return _cpuFallback.ReduceMeanBackward(gradOutput, inputShape, axes);
+    }
+
+    #endregion
+
+    #region Spatial Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> Upsample<T>(Tensor<T> input, int scaleH, int scaleW)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        var shape = input.Shape;
+        if (shape.Length != 4)
+            throw new ArgumentException("Upsample expects 4D tensor [batch, channels, height, width]");
+
+        int batch = shape[0];
+        int channels = shape[1];
+        int height = shape[2];
+        int width = shape[3];
+        int outputSize = batch * channels * (height * scaleH) * (width * scaleW);
+
+        // GPU upsample for supported types and large enough tensors
+        if (outputSize >= _thresholds.MatrixMultiply && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)UpsampleGpuFloat((Tensor<float>)(object)input, scaleH, scaleW);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)UpsampleGpuDouble((Tensor<double>)(object)input, scaleH, scaleW);
+        }
+        return _cpuFallback.Upsample(input, scaleH, scaleW);
+    }
+
+    private Tensor<float> UpsampleGpuFloat(Tensor<float> input, int scaleH, int scaleW)
+    {
+        var shape = input.Shape;
+        int batch = shape[0];
+        int channels = shape[1];
+        int height = shape[2];
+        int width = shape[3];
+        int newHeight = height * scaleH;
+        int newWidth = width * scaleW;
+        int outputSize = batch * channels * newHeight * newWidth;
+
+        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.ToArray());
+
+            lock (_gpuLock)
+            {
+                (_upsampleKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    outputSize, gpuInput.View.BaseView, gpuOutput.View.BaseView,
+                    batch, channels, height, width, scaleH, scaleW);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            var resultData = new float[outputSize];
+            gpuOutput.View.BaseView.CopyToCPU(resultData);
+            return new Tensor<float>([batch, channels, newHeight, newWidth], new Vector<float>(resultData));
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Upsample(input, scaleH, scaleW);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuInput);
+            _memoryPoolFloat.Return(gpuOutput);
+        }
+    }
+
+    private Tensor<double> UpsampleGpuDouble(Tensor<double> input, int scaleH, int scaleW)
+    {
+        var shape = input.Shape;
+        int batch = shape[0];
+        int channels = shape[1];
+        int height = shape[2];
+        int width = shape[3];
+        int newHeight = height * scaleH;
+        int newWidth = width * scaleW;
+        int outputSize = batch * channels * newHeight * newWidth;
+
+        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.ToArray());
+
+            lock (_gpuLock)
+            {
+                (_upsampleKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    outputSize, gpuInput.View.BaseView, gpuOutput.View.BaseView,
+                    batch, channels, height, width, scaleH, scaleW);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            var resultData = new double[outputSize];
+            gpuOutput.View.BaseView.CopyToCPU(resultData);
+            return new Tensor<double>([batch, channels, newHeight, newWidth], new Vector<double>(resultData));
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.Upsample(input, scaleH, scaleW);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuInput);
+            _memoryPoolDouble.Return(gpuOutput);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> UpsampleBackward<T>(Tensor<T> gradOutput, int[] inputShape, int scaleH, int scaleW)
+    {
+        // Backward pass requires atomic operations or reduction - CPU fallback for now
+        return _cpuFallback.UpsampleBackward(gradOutput, inputShape, scaleH, scaleW);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> PixelShuffle<T>(Tensor<T> input, int upscaleFactor)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        var shape = input.Shape;
+        if (shape.Length != 4)
+            throw new ArgumentException("PixelShuffle expects 4D tensor [batch, channels, height, width]");
+
+        int batch = shape[0];
+        int channels = shape[1];
+        int height = shape[2];
+        int width = shape[3];
+        int r = upscaleFactor;
+
+        if (channels % (r * r) != 0)
+            throw new ArgumentException($"Number of channels ({channels}) must be divisible by r^2 ({r * r})");
+
+        int outputSize = batch * (channels / (r * r)) * (height * r) * (width * r);
+
+        // GPU pixel shuffle for supported types and large enough tensors
+        if (outputSize >= _thresholds.MatrixMultiply && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)PixelShuffleGpuFloat((Tensor<float>)(object)input, upscaleFactor);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)PixelShuffleGpuDouble((Tensor<double>)(object)input, upscaleFactor);
+        }
+        return _cpuFallback.PixelShuffle(input, upscaleFactor);
+    }
+
+    private Tensor<float> PixelShuffleGpuFloat(Tensor<float> input, int upscaleFactor)
+    {
+        var shape = input.Shape;
+        int batch = shape[0];
+        int channels = shape[1];
+        int height = shape[2];
+        int width = shape[3];
+        int r = upscaleFactor;
+        int newChannels = channels / (r * r);
+        int newHeight = height * r;
+        int newWidth = width * r;
+        int outputSize = batch * newChannels * newHeight * newWidth;
+
+        var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.ToArray());
+
+            lock (_gpuLock)
+            {
+                (_pixelShuffleKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    outputSize, gpuInput.View.BaseView, gpuOutput.View.BaseView,
+                    batch, channels, height, width, upscaleFactor);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            var resultData = new float[outputSize];
+            gpuOutput.View.BaseView.CopyToCPU(resultData);
+            return new Tensor<float>([batch, newChannels, newHeight, newWidth], new Vector<float>(resultData));
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.PixelShuffle(input, upscaleFactor);
+        }
+        finally
+        {
+            _memoryPoolFloat.Return(gpuInput);
+            _memoryPoolFloat.Return(gpuOutput);
+        }
+    }
+
+    private Tensor<double> PixelShuffleGpuDouble(Tensor<double> input, int upscaleFactor)
+    {
+        var shape = input.Shape;
+        int batch = shape[0];
+        int channels = shape[1];
+        int height = shape[2];
+        int width = shape[3];
+        int r = upscaleFactor;
+        int newChannels = channels / (r * r);
+        int newHeight = height * r;
+        int newWidth = width * r;
+        int outputSize = batch * newChannels * newHeight * newWidth;
+
+        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.ToArray());
+
+            lock (_gpuLock)
+            {
+                (_pixelShuffleKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    outputSize, gpuInput.View.BaseView, gpuOutput.View.BaseView,
+                    batch, channels, height, width, upscaleFactor);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+
+            var resultData = new double[outputSize];
+            gpuOutput.View.BaseView.CopyToCPU(resultData);
+            return new Tensor<double>([batch, newChannels, newHeight, newWidth], new Vector<double>(resultData));
+        }
+        catch (Exception ex) when (ex.Message.Contains("device") || ex.Message.Contains("accelerator"))
+        {
+            RecordGpuFailure(ex);
+            return _cpuFallback.PixelShuffle(input, upscaleFactor);
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuInput);
+            _memoryPoolDouble.Return(gpuOutput);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> PixelShuffleBackward<T>(Tensor<T> gradOutput, int[] inputShape, int upscaleFactor)
+    {
+        // Backward pass is essentially the inverse rearrangement - CPU fallback for now
+        return _cpuFallback.PixelShuffleBackward(gradOutput, inputShape, upscaleFactor);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Crop<T>(Tensor<T> input, int top, int left, int height, int width)
+    {
+        return _cpuFallback.Crop(input, top, left, height, width);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> CropBackward<T>(Tensor<T> gradOutput, int[] inputShape, int top, int left)
+    {
+        return _cpuFallback.CropBackward(gradOutput, inputShape, top, left);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Pad<T>(Tensor<T> input, int padTop, int padBottom, int padLeft, int padRight, T padValue)
+    {
+        return _cpuFallback.Pad(input, padTop, padBottom, padLeft, padRight, padValue);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> PadBackward<T>(Tensor<T> gradOutput, int padTop, int padLeft, int[] inputShape)
+    {
+        return _cpuFallback.PadBackward(gradOutput, padTop, padLeft, inputShape);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Concat<T>(IReadOnlyList<Tensor<T>> tensors, int axis)
+    {
+        return _cpuFallback.Concat(tensors, axis);
     }
 
     #endregion

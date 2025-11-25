@@ -20,7 +20,11 @@ namespace AiDotNet.Engines;
 ///
 /// Your code stays the same - just swap the engine to change where it runs!
 /// </para>
+/// <para><b>DEPRECATED:</b> This interface is being migrated to AiDotNet.Tensors.Engines.IEngine.
+/// New projects should use the AiDotNet.Tensors package for GPU/CPU acceleration.
+/// This interface will be removed in a future version.</para>
 /// </remarks>
+[Obsolete("Use AiDotNet.Tensors.Engines.IEngine from the AiDotNet.Tensors package instead. This interface will be removed in a future version.")]
 public interface IEngine
 {
     /// <summary>
