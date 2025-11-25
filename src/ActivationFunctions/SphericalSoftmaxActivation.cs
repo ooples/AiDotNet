@@ -168,20 +168,17 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
-    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <value>True because TensorOperations.SphericalSoftmax provides full forward and backward pass support.</value>
     /// <remarks>
     /// <para>
-    /// This activation does not yet support JIT compilation because the gradient
-    /// computation (backward pass) has not been implemented in TensorOperations.SphericalSoftmax.
+    /// SphericalSoftmax supports JIT compilation by composing L2 normalization with softmax.
+    /// The backward pass correctly applies the chain rule through both operations.
     /// </para>
     /// <para>
-    /// To enable JIT support:
-    /// 1. Implement the backward pass in TensorOperations.SphericalSoftmax
-    /// 2. Test the gradient computation
-    /// 3. Change SupportsJitCompilation to return true
+    /// Note: Currently implemented for 2D tensors (batch, features) along axis=-1.
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.
@@ -189,11 +186,10 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The computation node to apply the activation to.</param>
     /// <returns>A new computation node with SphericalSoftmax activation applied.</returns>
     /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
     /// <remarks>
     /// <para>
-    /// This method would map the activation to TensorOperations&lt;T&gt;.SphericalSoftmax(input)
-    /// once the gradient computation is implemented.
+    /// This method maps to TensorOperations&lt;T&gt;.SphericalSoftmax(input) which handles both
+    /// forward and backward passes for JIT compilation.
     /// </para>
     /// </remarks>
     public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
@@ -201,9 +197,6 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        throw new NotSupportedException(
-            $"SphericalSoftmaxActivation does not support JIT compilation yet. " +
-            $"The gradient computation (backward pass) has not been implemented in TensorOperations.SphericalSoftmax. " +
-            $"Once gradients are implemented, this activation can be used in JIT-compiled computation graphs.");
+        return TensorOperations<T>.SphericalSoftmax(input);
     }
 }

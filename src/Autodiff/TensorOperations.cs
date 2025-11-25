@@ -9088,6 +9088,505 @@ public static class TensorOperations<T>
             tape.RecordOperation(node);
         return node;
     }
+
+    /// <summary>
+    /// Applies the Maxout activation function which takes maximum over groups of inputs.
+    /// </summary>
+    /// <param name="a">The input computation node (2D: batch × features).</param>
+    /// <param name="numPieces">Number of inputs per group (default 2).</param>
+    /// <returns>A new computation node with Maxout applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// Maxout groups consecutive features and outputs the maximum from each group.
+    /// Input features must be divisible by numPieces.
+    /// Output shape: [batch, features / numPieces].
+    /// </para>
+    /// <para><b>Gradient:</b> Flows only to the maximum element in each group (sparse gradient).</para>
+    /// </remarks>
+    public static ComputationNode<T> Maxout(ComputationNode<T> a, int numPieces = 2)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+
+        if (shape.Length != 2)
+            throw new ArgumentException($"Maxout requires 2D input [batch, features], got {shape.Length}D");
+
+        int batchSize = shape[0];
+        int features = shape[1];
+
+        if (features % numPieces != 0)
+            throw new ArgumentException($"Features ({features}) must be divisible by numPieces ({numPieces})");
+
+        int outputFeatures = features / numPieces;
+        var resultShape = new int[] { batchSize, outputFeatures };
+        var result = new Tensor<T>(resultShape);
+        var maxIndices = new int[batchSize, outputFeatures]; // Track which input was max
+
+        // Forward: find max in each group
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int g = 0; g < outputFeatures; g++)
+            {
+                int startIdx = g * numPieces;
+                var maxVal = a.Value[b, startIdx];
+                int maxIdx = 0;
+
+                for (int p = 1; p < numPieces; p++)
+                {
+                    var val = a.Value[b, startIdx + p];
+                    if (numOps.GreaterThan(val, maxVal))
+                    {
+                        maxVal = val;
+                        maxIdx = p;
+                    }
+                }
+
+                result[b, g] = maxVal;
+                maxIndices[b, g] = startIdx + maxIdx;
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // Gradient flows only to max elements
+                var gradA = new Tensor<T>(shape);
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int g = 0; g < outputFeatures; g++)
+                    {
+                        int maxIdx = maxIndices[b, g];
+                        gradA[b, maxIdx] = numOps.Add(gradA[b, maxIdx], gradient[b, g]);
+                    }
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    a.Gradient = a.Gradient.Add(gradA);
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.Maxout;
+        node.OperationParams = new Dictionary<string, object> { { "NumPieces", numPieces } };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Randomized Leaky ReLU (RReLU) activation function.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="lower">Lower bound for alpha (default 1/8).</param>
+    /// <param name="upper">Upper bound for alpha (default 1/3).</param>
+    /// <param name="isTraining">If true, samples random alpha; if false, uses average (default false for JIT).</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <returns>A new computation node with RReLU applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// RReLU(x) = x if x >= 0, alpha * x otherwise.
+    /// During training, alpha is sampled uniformly from [lower, upper].
+    /// During inference (JIT default), alpha = (lower + upper) / 2.
+    /// </para>
+    /// <para><b>Gradient:</b> 1 for x >= 0, alpha for x &lt; 0.</para>
+    /// </remarks>
+    public static ComputationNode<T> RReLU(ComputationNode<T> a, double lower = 0.125, double upper = 0.333, bool isTraining = false, int? seed = null)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // For JIT, we use a fixed alpha (inference mode) or sample once per forward pass
+        double alpha;
+        if (isTraining)
+        {
+            var rng = seed.HasValue ? new Random(seed.Value) : new Random();
+            alpha = lower + rng.NextDouble() * (upper - lower);
+        }
+        else
+        {
+            alpha = (lower + upper) / 2.0;
+        }
+
+        var alphaT = numOps.FromDouble(alpha);
+
+        // Forward pass
+        var result = a.Value.Transform((x, _) =>
+        {
+            if (numOps.GreaterThanOrEquals(x, numOps.Zero))
+                return x;
+            else
+                return numOps.Multiply(alphaT, x);
+        });
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                var derivative = a.Value.Transform((x, _) =>
+                {
+                    if (numOps.GreaterThanOrEquals(x, numOps.Zero))
+                        return numOps.One;
+                    else
+                        return alphaT;
+                });
+                var gradA = engine.TensorMultiply(gradient, derivative);
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.RReLU;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Lower", lower },
+            { "Upper", upper },
+            { "Alpha", alpha },
+            { "IsTraining", isTraining }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Applies the Spherical Softmax activation function.
+    /// </summary>
+    /// <param name="a">The input computation node (2D: batch × features).</param>
+    /// <param name="axis">Axis along which to apply (default -1, last axis).</param>
+    /// <returns>A new computation node with SphericalSoftmax applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// SphericalSoftmax = softmax(x / ||x||₂)
+    /// First L2-normalizes the input, then applies softmax.
+    /// This improves numerical stability for inputs with varying magnitudes.
+    /// </para>
+    /// <para><b>Gradient:</b> Chain rule through L2 normalization and softmax.</para>
+    /// </remarks>
+    public static ComputationNode<T> SphericalSoftmax(ComputationNode<T> a, int axis = -1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+
+        if (axis < 0)
+            axis = shape.Length + axis;
+
+        if (shape.Length == 2 && axis == 1)
+        {
+            int batchSize = shape[0];
+            int features = shape[1];
+            var result = new Tensor<T>(shape);
+            var norms = new T[batchSize];
+            var normalized = new Tensor<T>(shape);
+            var softmaxOutput = new Tensor<T>(shape);
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Compute L2 norm
+                var sumSquares = numOps.Zero;
+                for (int f = 0; f < features; f++)
+                {
+                    var val = a.Value[b, f];
+                    sumSquares = numOps.Add(sumSquares, numOps.Multiply(val, val));
+                }
+                norms[b] = numOps.Sqrt(sumSquares);
+
+                // Prevent division by zero
+                var norm = numOps.GreaterThan(norms[b], numOps.FromDouble(1e-12))
+                    ? norms[b]
+                    : numOps.FromDouble(1e-12);
+
+                // L2 normalize
+                for (int f = 0; f < features; f++)
+                {
+                    normalized[b, f] = numOps.Divide(a.Value[b, f], norm);
+                }
+
+                // Apply softmax to normalized values
+                var maxVal = normalized[b, 0];
+                for (int f = 1; f < features; f++)
+                {
+                    if (numOps.GreaterThan(normalized[b, f], maxVal))
+                        maxVal = normalized[b, f];
+                }
+
+                var expSum = numOps.Zero;
+                for (int f = 0; f < features; f++)
+                {
+                    var shifted = numOps.Subtract(normalized[b, f], maxVal);
+                    softmaxOutput[b, f] = numOps.Exp(shifted);
+                    expSum = numOps.Add(expSum, softmaxOutput[b, f]);
+                }
+
+                for (int f = 0; f < features; f++)
+                {
+                    result[b, f] = numOps.Divide(softmaxOutput[b, f], expSum);
+                }
+            }
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                if (a.RequiresGradient)
+                {
+                    var gradA = new Tensor<T>(shape);
+
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        var norm = numOps.GreaterThan(norms[b], numOps.FromDouble(1e-12))
+                            ? norms[b]
+                            : numOps.FromDouble(1e-12);
+                        var normCubed = numOps.Multiply(norm, numOps.Multiply(norm, norm));
+
+                        // Softmax Jacobian-vector product
+                        var dotProduct = numOps.Zero;
+                        for (int f = 0; f < features; f++)
+                        {
+                            dotProduct = numOps.Add(dotProduct, numOps.Multiply(gradient[b, f], result[b, f]));
+                        }
+
+                        // Gradient through softmax
+                        var softmaxGrad = new T[features];
+                        for (int f = 0; f < features; f++)
+                        {
+                            softmaxGrad[f] = numOps.Multiply(result[b, f],
+                                numOps.Subtract(gradient[b, f], dotProduct));
+                        }
+
+                        // Gradient through L2 normalization
+                        var dotNorm = numOps.Zero;
+                        for (int f = 0; f < features; f++)
+                        {
+                            dotNorm = numOps.Add(dotNorm,
+                                numOps.Multiply(softmaxGrad[f], a.Value[b, f]));
+                        }
+
+                        for (int f = 0; f < features; f++)
+                        {
+                            var term1 = numOps.Divide(softmaxGrad[f], norm);
+                            var term2 = numOps.Divide(
+                                numOps.Multiply(a.Value[b, f], dotNorm),
+                                normCubed);
+                            gradA[b, f] = numOps.Subtract(term1, term2);
+                        }
+                    }
+
+                    if (a.Gradient == null)
+                    {
+                        a.Gradient = gradA;
+                    }
+                    else
+                    {
+                        a.Gradient = a.Gradient.Add(gradA);
+                    }
+                }
+            }
+
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient,
+                parents: new List<ComputationNode<T>> { a },
+                backwardFunction: BackwardFunction,
+                name: null);
+
+            node.OperationType = OperationType.SphericalSoftmax;
+            node.OperationParams = new Dictionary<string, object> { { "Axis", axis } };
+
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+            return node;
+        }
+        else
+        {
+            throw new NotImplementedException(
+                $"SphericalSoftmax is currently only implemented for 2D tensors along axis=-1. " +
+                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
+        }
+    }
+
+    /// <summary>
+    /// Applies the Taylor Softmax activation function using Taylor series approximation.
+    /// </summary>
+    /// <param name="a">The input computation node (2D: batch × features).</param>
+    /// <param name="order">Order of Taylor series expansion (default 2).</param>
+    /// <param name="axis">Axis along which to apply (default -1, last axis).</param>
+    /// <returns>A new computation node with TaylorSoftmax applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// TaylorSoftmax uses Taylor series approximation of exp(x):
+    /// exp(x) ≈ 1 + x + x²/2! + x³/3! + ... + xⁿ/n!
+    /// Then normalizes like standard softmax.
+    /// More computationally efficient than standard softmax for some hardware.
+    /// </para>
+    /// <para><b>Gradient:</b> Similar to softmax but using polynomial derivatives.</para>
+    /// </remarks>
+    public static ComputationNode<T> TaylorSoftmax(ComputationNode<T> a, int order = 2, int axis = -1)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+
+        if (axis < 0)
+            axis = shape.Length + axis;
+
+        if (shape.Length == 2 && axis == 1)
+        {
+            int batchSize = shape[0];
+            int features = shape[1];
+            var result = new Tensor<T>(shape);
+            var taylorExpValues = new Tensor<T>(shape);
+
+            // Precompute factorials
+            var factorials = new double[order + 1];
+            factorials[0] = 1;
+            for (int i = 1; i <= order; i++)
+                factorials[i] = factorials[i - 1] * i;
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Compute Taylor approximation of exp for each feature
+                var expSum = numOps.Zero;
+                for (int f = 0; f < features; f++)
+                {
+                    var x = a.Value[b, f];
+                    var taylorExp = numOps.One; // Start with 1
+                    var xPower = numOps.One;
+
+                    for (int n = 1; n <= order; n++)
+                    {
+                        xPower = numOps.Multiply(xPower, x);
+                        var term = numOps.Divide(xPower, numOps.FromDouble(factorials[n]));
+                        taylorExp = numOps.Add(taylorExp, term);
+                    }
+
+                    // Ensure non-negative (Taylor can go negative for large negative x)
+                    taylorExp = numOps.GreaterThan(taylorExp, numOps.Zero)
+                        ? taylorExp
+                        : numOps.FromDouble(1e-10);
+
+                    taylorExpValues[b, f] = taylorExp;
+                    expSum = numOps.Add(expSum, taylorExp);
+                }
+
+                // Normalize
+                for (int f = 0; f < features; f++)
+                {
+                    result[b, f] = numOps.Divide(taylorExpValues[b, f], expSum);
+                }
+            }
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                if (a.RequiresGradient)
+                {
+                    var gradA = new Tensor<T>(shape);
+
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        // Compute sum for normalization denominator
+                        var expSum = numOps.Zero;
+                        for (int f = 0; f < features; f++)
+                        {
+                            expSum = numOps.Add(expSum, taylorExpValues[b, f]);
+                        }
+
+                        // Softmax-style Jacobian: s_i * (δ_ij - s_j)
+                        var dotProduct = numOps.Zero;
+                        for (int f = 0; f < features; f++)
+                        {
+                            dotProduct = numOps.Add(dotProduct,
+                                numOps.Multiply(gradient[b, f], result[b, f]));
+                        }
+
+                        for (int f = 0; f < features; f++)
+                        {
+                            // Softmax gradient part
+                            var softmaxGrad = numOps.Multiply(result[b, f],
+                                numOps.Subtract(gradient[b, f], dotProduct));
+
+                            // Taylor exp derivative: d/dx[1 + x + x²/2! + ...] = 1 + x + x²/2! + ... (almost)
+                            // Actually: d/dx[Taylor_n(x)] = Taylor_{n-1}(x) for exp
+                            var x = a.Value[b, f];
+                            var taylorExpDeriv = numOps.One;
+                            var xPower = numOps.One;
+                            for (int n = 1; n < order; n++)
+                            {
+                                xPower = numOps.Multiply(xPower, x);
+                                var term = numOps.Divide(xPower, numOps.FromDouble(factorials[n]));
+                                taylorExpDeriv = numOps.Add(taylorExpDeriv, term);
+                            }
+
+                            // Chain rule: d(softmax)/d(taylorExp) * d(taylorExp)/dx
+                            var normFactor = numOps.Divide(taylorExpDeriv, expSum);
+                            gradA[b, f] = numOps.Multiply(softmaxGrad, normFactor);
+                        }
+                    }
+
+                    if (a.Gradient == null)
+                    {
+                        a.Gradient = gradA;
+                    }
+                    else
+                    {
+                        a.Gradient = a.Gradient.Add(gradA);
+                    }
+                }
+            }
+
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient,
+                parents: new List<ComputationNode<T>> { a },
+                backwardFunction: BackwardFunction,
+                name: null);
+
+            node.OperationType = OperationType.TaylorSoftmax;
+            node.OperationParams = new Dictionary<string, object> { { "Order", order }, { "Axis", axis } };
+
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+            return node;
+        }
+        else
+        {
+            throw new NotImplementedException(
+                $"TaylorSoftmax is currently only implemented for 2D tensors along axis=-1. " +
+                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
+        }
+    }
 }
 
 

@@ -489,5 +489,15 @@ public enum OperationType
     /// <summary>
     /// Randomized Leaky ReLU - LeakyReLU with random alpha during training.
     /// </summary>
-    RReLU
+    RReLU,
+
+    /// <summary>
+    /// Spherical Softmax - L2 normalization followed by softmax.
+    /// </summary>
+    SphericalSoftmax,
+
+    /// <summary>
+    /// Taylor Softmax - softmax using Taylor series approximation of exp.
+    /// </summary>
+    TaylorSoftmax
 }
