@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Regression;
@@ -96,7 +97,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         _options = options;
         _ensemble = [];
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -541,7 +542,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
             return (Tree: tree, Weight: (T)e.Weight);
         })];
 
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

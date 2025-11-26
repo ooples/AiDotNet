@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -23,7 +24,7 @@ public class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
         _eligibilityTraces = new Dictionary<string, Dictionary<int, T>>();
         _activeTraceStates = new HashSet<string>();
         _epsilon = options.EpsilonStart;
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -91,7 +92,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     {
         Options = options ?? throw new ArgumentNullException(nameof(options));
         NumOps = MathHelper.GetNumericOperations<T>();
-        Random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
+        Random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
         
         // Ensure required properties are provided
         if (options.LossFunction is null)

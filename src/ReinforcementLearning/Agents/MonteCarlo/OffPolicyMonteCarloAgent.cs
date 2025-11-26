@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -34,7 +35,7 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _cTable = new Dictionary<string, Dictionary<int, T>>();
         _episode = new List<(Vector<T>, int, T)>();
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

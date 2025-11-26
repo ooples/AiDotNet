@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Regression;
@@ -88,7 +89,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         _options = options;
         _trees = [];
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -383,7 +384,7 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
         })];
 
         // Reinitialize other fields
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

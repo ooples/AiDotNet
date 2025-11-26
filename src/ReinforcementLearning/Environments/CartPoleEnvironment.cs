@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ReinforcementLearning.Interfaces;
 
@@ -77,7 +78,7 @@ public class CartPoleEnvironment<T> : IEnvironment<T>
     public CartPoleEnvironment(int maxSteps = 500, int? seed = null)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         _maxSteps = maxSteps;
         _totalMass = _massCart + _massPole;
         _poleMassLength = _massPole * _length;

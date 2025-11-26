@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -59,7 +60,7 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public RReLUActivation(double lowerBound = 1.0 / 8, double upperBound = 1.0 / 3)
     {
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
         _lowerBound = NumOps.FromDouble(lowerBound);
         _upperBound = NumOps.FromDouble(upperBound);
         _alpha = NumOps.FromDouble((_random.NextDouble() * (upperBound - lowerBound)) + lowerBound);

@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -404,7 +406,7 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
             _trees.Add(tree);
         }
 
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

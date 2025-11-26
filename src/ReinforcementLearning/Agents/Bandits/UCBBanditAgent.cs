@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -21,7 +22,7 @@ public class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
     public UCBBanditAgent(UCBBanditOptions<T> options) : base(options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
         _qValues = new Vector<T>(_options.NumArms);
         _actionCounts = new Vector<int>(_options.NumArms);
         _totalSteps = 0;

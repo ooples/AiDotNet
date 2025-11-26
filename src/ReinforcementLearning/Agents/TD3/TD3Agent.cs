@@ -59,7 +59,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
     {
         _options = options;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
+        _random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
         _stepCount = 0;
         _updateCount = 0;
 

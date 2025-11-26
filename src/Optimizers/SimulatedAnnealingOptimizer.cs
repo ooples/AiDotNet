@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
 /// <summary>
@@ -119,7 +120,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
         _saOptions = options ?? new SimulatedAnnealingOptions<T, TInput, TOutput>();
         _currentTemperature = NumOps.FromDouble(_saOptions.InitialTemperature);
     }

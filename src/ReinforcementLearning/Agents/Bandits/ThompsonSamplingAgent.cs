@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -20,7 +21,7 @@ public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
     public ThompsonSamplingAgent(ThompsonSamplingOptions<T> options) : base(options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
         _successCounts = new Vector<int>(_options.NumArms);
         _failureCounts = new Vector<int>(_options.NumArms);
         for (int i = 0; i < _options.NumArms; i++)

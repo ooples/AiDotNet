@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -191,7 +192,7 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </summary>
     private void InitializeWeights()
     {
-        Random random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < _treeDepth; i++)
         {
             for (int j = 0; j < _numClasses; j++)

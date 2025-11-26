@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -66,7 +67,7 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     public GumbelSoftmaxActivation(double temperature = 1.0, int? seed = null)
     {
         _temperature = NumOps.FromDouble(temperature);
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

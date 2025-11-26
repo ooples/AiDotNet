@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -53,7 +54,7 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         _valueTable = new Dictionary<string, T>();
         _policy = new Dictionary<string, int>();
         _model = new Dictionary<string, Dictionary<int, List<(string, T, T)>>>();
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

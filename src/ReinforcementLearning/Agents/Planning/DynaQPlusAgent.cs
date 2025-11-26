@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -30,7 +31,7 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         _visitedStateActions = new List<(string, int)>();
         _epsilon = options.EpsilonStart;
         _totalSteps = 0;
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
