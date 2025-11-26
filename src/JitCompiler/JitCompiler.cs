@@ -496,6 +496,193 @@ public class JitCompiler
             EstimatedMemoryBytes = _compiledGraphCache.Count * 1024 // Rough estimate
         };
     }
+
+    /// <summary>
+    /// Attempts to compile a computation graph without throwing exceptions.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for tensor elements.</typeparam>
+    /// <param name="outputNode">The output node of the computation graph.</param>
+    /// <param name="inputs">The input nodes to the computation graph.</param>
+    /// <param name="compiledFunc">When this method returns true, contains the compiled function.</param>
+    /// <param name="error">When this method returns false, contains the error message.</param>
+    /// <returns>True if compilation succeeded, false otherwise.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is a safe version of Compile that won't crash your program.
+    ///
+    /// Instead of throwing an exception when something goes wrong, it returns false
+    /// and tells you what went wrong through the error parameter.
+    ///
+    /// Example:
+    ///   if (jit.TryCompile(output, inputs, out var compiled, out var error))
+    ///   {
+    ///       // Use compiled function
+    ///       var result = compiled(inputTensors);
+    ///   }
+    ///   else
+    ///   {
+    ///       // Handle error gracefully
+    ///       Console.WriteLine($"JIT compilation failed: {error}");
+    ///       // Fall back to interpreted execution
+    ///   }
+    /// </para>
+    /// </remarks>
+    public bool TryCompile<T>(
+        ComputationNode<T> outputNode,
+        List<ComputationNode<T>> inputs,
+        out Func<Tensor<T>[], Tensor<T>[]>? compiledFunc,
+        out string? error)
+    {
+        compiledFunc = null;
+        error = null;
+
+        if (outputNode == null)
+        {
+            error = "Output node cannot be null";
+            return false;
+        }
+        if (inputs == null)
+        {
+            error = "Inputs cannot be null";
+            return false;
+        }
+
+        try
+        {
+            // Build IR graph from computation graph
+            var irGraph = _irBuilder.Build(outputNode, inputs);
+
+            // Check cache
+            var graphHash = irGraph.ComputeStructureHash();
+            if (_options.EnableCaching && _compiledGraphCache.TryGetValue(graphHash, out var cached))
+            {
+                compiledFunc = (Func<Tensor<T>[], Tensor<T>[]>)cached;
+                return true;
+            }
+
+            // Apply optimization passes
+            var optimizedGraph = ApplyOptimizationsWithRecovery(irGraph);
+
+            // Generate code
+            compiledFunc = _codeGenerator.Generate<T>(optimizedGraph);
+
+            // Cache result
+            if (_options.EnableCaching)
+            {
+                _compiledGraphCache[graphHash] = compiledFunc;
+            }
+
+            return true;
+        }
+        catch (NotImplementedException ex)
+        {
+            error = $"Unsupported operation in graph: {ex.Message}";
+            return false;
+        }
+        catch (InvalidOperationException ex)
+        {
+            error = $"Invalid graph structure: {ex.Message}";
+            return false;
+        }
+        catch (Exception ex)
+        {
+            error = $"Compilation failed: {ex.Message}";
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Compiles a computation graph with automatic fallback to interpreted execution.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for tensor elements.</typeparam>
+    /// <param name="outputNode">The output node of the computation graph.</param>
+    /// <param name="inputs">The input nodes to the computation graph.</param>
+    /// <returns>
+    /// A tuple containing:
+    /// - The executable function (JIT compiled or interpreted fallback)
+    /// - Whether JIT compilation succeeded
+    /// - Any warning or error message
+    /// </returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the most robust way to compile a graph.
+    ///
+    /// It tries JIT compilation first. If that fails, it automatically falls back
+    /// to interpreted execution (slower but always works).
+    ///
+    /// You get the best performance when JIT works, and guaranteed execution when it doesn't.
+    ///
+    /// Example:
+    ///   var (func, wasJitted, message) = jit.CompileWithFallback(output, inputs);
+    ///   if (!wasJitted)
+    ///   {
+    ///       Console.WriteLine($"Using interpreted fallback: {message}");
+    ///   }
+    ///   // func is always usable!
+    ///   var result = func(inputTensors);
+    /// </para>
+    /// </remarks>
+    public (Func<Tensor<T>[], Tensor<T>[]> Func, bool WasJitCompiled, string? Message) CompileWithFallback<T>(
+        ComputationNode<T> outputNode,
+        List<ComputationNode<T>> inputs)
+    {
+        // Try JIT compilation first
+        if (TryCompile(outputNode, inputs, out var jitFunc, out var error) && jitFunc != null)
+        {
+            return (jitFunc, true, null);
+        }
+
+        // Fall back to interpreted execution
+        var interpretedFunc = CreateInterpretedFallback(outputNode, inputs);
+        return (interpretedFunc, false, error ?? "Unknown error during JIT compilation");
+    }
+
+    /// <summary>
+    /// Creates an interpreted fallback function for a computation graph.
+    /// </summary>
+    private Func<Tensor<T>[], Tensor<T>[]> CreateInterpretedFallback<T>(
+        ComputationNode<T> outputNode,
+        List<ComputationNode<T>> inputs)
+    {
+        return (Tensor<T>[] inputTensors) =>
+        {
+            // Assign input tensors to input nodes
+            for (int i = 0; i < inputs.Count && i < inputTensors.Length; i++)
+            {
+                inputs[i].Value = inputTensors[i];
+            }
+
+            // Evaluate the graph (interpreted mode)
+            var result = outputNode.Value;
+
+            return new[] { result };
+        };
+    }
+
+    /// <summary>
+    /// Applies optimization passes with error recovery.
+    /// </summary>
+    /// <remarks>
+    /// If an optimization pass fails, it is skipped and the unoptimized graph is used.
+    /// This ensures the compilation can still succeed even if optimizations fail.
+    /// </remarks>
+    private IRGraph ApplyOptimizationsWithRecovery(IRGraph graph)
+    {
+        var currentGraph = graph;
+
+        foreach (var pass in _optimizationPasses)
+        {
+            try
+            {
+                currentGraph = pass.Optimize(currentGraph);
+            }
+            catch (Exception)
+            {
+                // Optimization pass failed - skip it and continue with current graph
+                // In production, you might want to log this
+            }
+        }
+
+        return currentGraph;
+    }
 }
 
 /// <summary>

@@ -520,16 +520,24 @@ public static class GradientOps
 
     /// <summary>
     /// Helper: Sum over batch and spatial dimensions for normalization gradients.
+    /// Supports arbitrary dimensions - keeps channel dimension (axis 1) and sums over all others.
     /// </summary>
     private static Tensor<T> SumOverBatchAndSpatial<T>(Tensor<T> input)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = input.Shape;
 
-        if (input.Shape.Length == 2)
+        if (shape.Length == 1)
+        {
+            // Already 1D, return as-is
+            return input;
+        }
+
+        if (shape.Length == 2)
         {
             // [batch, features] -> [features]
-            int batchSize = input.Shape[0];
-            int features = input.Shape[1];
+            int batchSize = shape[0];
+            int features = shape[1];
             var result = new T[features];
             var data = input.ToArray();
 
@@ -545,39 +553,46 @@ public static class GradientOps
 
             return new Tensor<T>(new int[] { features }, new Vector<T>(result));
         }
-        else if (input.Shape.Length == 4)
-        {
-            // [batch, channels, height, width] -> [channels]
-            int batchSize = input.Shape[0];
-            int channels = input.Shape[1];
-            int height = input.Shape[2];
-            int width = input.Shape[3];
-            var result = new T[channels];
-            var data = input.ToArray();
 
-            for (int c = 0; c < channels; c++)
+        // For N-dimensional tensors (N >= 3), sum over all dimensions except channels (axis 1)
+        // Format: [batch, channels, spatial_dims...]
+        int channels = shape[1];
+        var result = new T[channels];
+        var data = input.ToArray();
+
+        // Calculate strides for each dimension
+        var strides = new int[shape.Length];
+        strides[shape.Length - 1] = 1;
+        for (int d = shape.Length - 2; d >= 0; d--)
+        {
+            strides[d] = strides[d + 1] * shape[d + 1];
+        }
+
+        // Calculate total spatial size (excluding batch and channels)
+        int spatialSize = 1;
+        for (int d = 2; d < shape.Length; d++)
+        {
+            spatialSize *= shape[d];
+        }
+
+        int batchSize = shape[0];
+        int channelStride = strides[1];
+
+        // Sum over batch and spatial dimensions for each channel
+        for (int c = 0; c < channels; c++)
+        {
+            T sum = numOps.Zero;
+            for (int n = 0; n < batchSize; n++)
             {
-                T sum = numOps.Zero;
-                for (int n = 0; n < batchSize; n++)
+                int batchOffset = n * strides[0] + c * channelStride;
+                for (int s = 0; s < spatialSize; s++)
                 {
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            int idx = n * channels * height * width + c * height * width + h * width + w;
-                            sum = numOps.Add(sum, data[idx]);
-                        }
-                    }
+                    sum = numOps.Add(sum, data[batchOffset + s]);
                 }
-                result[c] = sum;
             }
+            result[c] = sum;
+        }
 
-            return new Tensor<T>(new int[] { channels }, new Vector<T>(result));
-        }
-        else
-        {
-            // Fallback: return as-is
-            return input;
-        }
+        return new Tensor<T>(new int[] { channels }, new Vector<T>(result));
     }
 }
