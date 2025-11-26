@@ -513,3 +513,412 @@ public class LSTMCellOp : IROp
         return $"t{OutputId} = LSTMCell(t{InputIds[0]}, h=t{InputIds[1]}, c=t{InputIds[2]}, hidden={HiddenSize}) : {OutputType} {OutputShape.ShapeToString()}";
     }
 }
+
+// ============================================================================
+// ADDITIONAL SHAPE OPERATIONS
+// ============================================================================
+
+/// <summary>
+/// Represents split operation in the IR.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Splits a tensor into multiple parts along a specified axis.
+/// </para>
+/// </remarks>
+public class SplitOp : IROp
+{
+    /// <summary>
+    /// The axis along which to split.
+    /// </summary>
+    public int Axis { get; set; }
+
+    /// <summary>
+    /// The sizes of each split section.
+    /// </summary>
+    public int[] SplitSizes { get; set; } = Array.Empty<int>();
+
+    /// <summary>
+    /// Number of equal splits (alternative to SplitSizes).
+    /// </summary>
+    public int NumSplits { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        var sizesStr = SplitSizes.Length > 0 ? $"[{string.Join(",", SplitSizes)}]" : $"num={NumSplits}";
+        return $"t{OutputId} = Split(t{InputIds[0]}, axis={Axis}, {sizesStr}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Represents slice operation in the IR.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Extracts a contiguous slice from a tensor along specified axes.
+/// </para>
+/// </remarks>
+public class SliceOp : IROp
+{
+    /// <summary>
+    /// Start indices for each axis.
+    /// </summary>
+    public int[] Starts { get; set; } = Array.Empty<int>();
+
+    /// <summary>
+    /// End indices for each axis (exclusive).
+    /// </summary>
+    public int[] Ends { get; set; } = Array.Empty<int>();
+
+    /// <summary>
+    /// Step size for each axis.
+    /// </summary>
+    public int[] Steps { get; set; } = Array.Empty<int>();
+
+    /// <summary>
+    /// Axes to slice on.
+    /// </summary>
+    public int[] Axes { get; set; } = Array.Empty<int>();
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = Slice(t{InputIds[0]}, starts=[{string.Join(",", Starts)}], ends=[{string.Join(",", Ends)}]) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Represents square operation in the IR.
+/// </summary>
+public class SquareOp : IROp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        return true;
+    }
+}
+
+/// <summary>
+/// Represents L2 norm operation in the IR.
+/// </summary>
+public class NormOp : IROp
+{
+    /// <summary>
+    /// The axis along which to compute the norm.
+    /// </summary>
+    public int Axis { get; set; } = -1;
+
+    /// <summary>
+    /// Whether to keep the reduced dimension.
+    /// </summary>
+    public bool KeepDims { get; set; } = false;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        return true;
+    }
+}
+
+// ============================================================================
+// EMBEDDING AND ATTENTION OPERATIONS
+// ============================================================================
+
+/// <summary>
+/// Represents embedding lookup operation in the IR.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Looks up embeddings for input indices from an embedding table.
+/// </para>
+/// </remarks>
+public class EmbeddingOp : IROp
+{
+    /// <summary>
+    /// Size of the vocabulary.
+    /// </summary>
+    public int NumEmbeddings { get; set; }
+
+    /// <summary>
+    /// Size of each embedding vector.
+    /// </summary>
+    public int EmbeddingDim { get; set; }
+
+    /// <summary>
+    /// Optional padding index that will output zeros.
+    /// </summary>
+    public int? PaddingIdx { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        // Inputs: indices, embedding_weights
+        if (InputIds.Length != 2) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = Embedding(t{InputIds[0]}, t{InputIds[1]}, dim={EmbeddingDim}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Represents scaled dot-product attention in the IR.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Computes Attention(Q, K, V) = softmax(QK^T / sqrt(d_k)) * V
+/// </para>
+/// </remarks>
+public class ScaledDotProductAttentionOp : IROp
+{
+    /// <summary>
+    /// Optional scaling factor. If not specified, uses 1/sqrt(d_k).
+    /// </summary>
+    public double? Scale { get; set; }
+
+    /// <summary>
+    /// Whether to apply causal (autoregressive) masking.
+    /// </summary>
+    public bool IsCausal { get; set; }
+
+    /// <summary>
+    /// Dropout probability for attention weights.
+    /// </summary>
+    public double DropoutProbability { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        // Inputs: query, key, value, optional mask
+        if (InputIds.Length < 3 || InputIds.Length > 4) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        var causalStr = IsCausal ? ", causal" : "";
+        return $"t{OutputId} = ScaledDotProductAttention(q=t{InputIds[0]}, k=t{InputIds[1]}, v=t{InputIds[2]}{causalStr}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Represents multi-head attention in the IR.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Multi-head attention allows the model to jointly attend to information
+/// from different representation subspaces.
+/// </para>
+/// </remarks>
+public class MultiHeadAttentionOp : IROp
+{
+    /// <summary>
+    /// Number of attention heads.
+    /// </summary>
+    public int NumHeads { get; set; }
+
+    /// <summary>
+    /// Embedding dimension.
+    /// </summary>
+    public int EmbedDim { get; set; }
+
+    /// <summary>
+    /// Key dimension per head.
+    /// </summary>
+    public int KeyDim { get; set; }
+
+    /// <summary>
+    /// Value dimension per head.
+    /// </summary>
+    public int ValueDim { get; set; }
+
+    /// <summary>
+    /// Dropout probability.
+    /// </summary>
+    public double DropoutProbability { get; set; }
+
+    /// <summary>
+    /// Whether this is self-attention (Q=K=V from same source).
+    /// </summary>
+    public bool IsSelfAttention { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        // Inputs: query, key, value, W_q, W_k, W_v, W_o, optional mask
+        if (InputIds.Length < 7) return false;
+        if (NumHeads <= 0) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = MultiHeadAttention(q=t{InputIds[0]}, k=t{InputIds[1]}, v=t{InputIds[2]}, heads={NumHeads}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+// ============================================================================
+// FUSED OPERATIONS
+// ============================================================================
+
+/// <summary>
+/// Represents fused MatMul + Add operation in the IR.
+/// </summary>
+public class FusedMatMulAddOp : IROp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        // Inputs: A, B, bias
+        if (InputIds.Length != 3) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = FusedMatMulAdd(t{InputIds[0]}, t{InputIds[1]}, t{InputIds[2]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Represents fused Linear + ReLU operation in the IR.
+/// </summary>
+public class FusedLinearReLUOp : IROp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        // Inputs: input, weights, bias
+        if (InputIds.Length != 3) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = FusedLinearReLU(t{InputIds[0]}, t{InputIds[1]}, t{InputIds[2]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Represents fused Conv + BatchNorm operation in the IR.
+/// </summary>
+public class FusedConvBatchNormOp : IROp
+{
+    /// <summary>
+    /// Convolution stride.
+    /// </summary>
+    public int[] Stride { get; set; } = new int[] { 1, 1 };
+
+    /// <summary>
+    /// Convolution padding.
+    /// </summary>
+    public int[] Padding { get; set; } = new int[] { 0, 0 };
+
+    /// <summary>
+    /// BatchNorm epsilon.
+    /// </summary>
+    public double Epsilon { get; set; } = 1e-5;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        // Inputs: input, conv_weights, bn_gamma, bn_beta, bn_running_mean, bn_running_var
+        if (InputIds.Length != 6) return false;
+        return true;
+    }
+}
+
+/// <summary>
+/// Represents fused Add + ReLU operation in the IR.
+/// </summary>
+public class FusedAddReLUOp : IROp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = FusedAddReLU(t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+// ============================================================================
+// COMPLEX NUMBER OPERATIONS
+// ============================================================================
+
+/// <summary>
+/// Represents complex matrix multiplication in the IR.
+/// </summary>
+public class ComplexMatMulOp : IROp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        // Inputs: A_real, A_imag, B_real, B_imag
+        if (InputIds.Length != 4) return false;
+        return true;
+    }
+}
+
+/// <summary>
+/// Represents element-wise complex multiplication in the IR.
+/// </summary>
+public class ComplexMultiplyOp : IROp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        // Inputs: A_real, A_imag, B_real, B_imag
+        if (InputIds.Length != 4) return false;
+        return true;
+    }
+}
+
+// ============================================================================
+// DROPOUT OPERATION
+// ============================================================================
+
+/// <summary>
+/// Represents dropout operation in the IR.
+/// </summary>
+public class DropoutOp : IROp
+{
+    /// <summary>
+    /// Dropout probability.
+    /// </summary>
+    public double Probability { get; set; } = 0.5;
+
+    /// <summary>
+    /// Whether in training mode.
+    /// </summary>
+    public bool Training { get; set; } = true;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        return true;
+    }
+}

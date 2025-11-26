@@ -646,4 +646,180 @@ public class JitCompilerTests
     }
 
     #endregion
+
+    #region Extended Operation Support Tests
+
+    [Fact]
+    public void GetSupportedOperationTypes_IncludesExtendedActivations()
+    {
+        // Act
+        var supportedOps = JitCompiler.GetSupportedOperationTypes();
+
+        // Assert - Extended activation functions
+        Assert.Contains(OperationType.ELU, supportedOps);
+        Assert.Contains(OperationType.LeakyReLU, supportedOps);
+        Assert.Contains(OperationType.GELU, supportedOps);
+        Assert.Contains(OperationType.Swish, supportedOps);
+        Assert.Contains(OperationType.Mish, supportedOps);
+        Assert.Contains(OperationType.SoftPlus, supportedOps);
+        Assert.Contains(OperationType.SELU, supportedOps);
+        Assert.Contains(OperationType.HardSigmoid, supportedOps);
+        Assert.Contains(OperationType.HardTanh, supportedOps);
+        Assert.Contains(OperationType.SoftSign, supportedOps);
+        Assert.Contains(OperationType.CELU, supportedOps);
+        Assert.Contains(OperationType.LogSoftmax, supportedOps);
+        Assert.Contains(OperationType.PReLU, supportedOps);
+        Assert.Contains(OperationType.ThresholdedReLU, supportedOps);
+    }
+
+    [Fact]
+    public void GetSupportedOperationTypes_IncludesExtendedShapeOps()
+    {
+        // Act
+        var supportedOps = JitCompiler.GetSupportedOperationTypes();
+
+        // Assert - Shape operations
+        Assert.Contains(OperationType.Split, supportedOps);
+        Assert.Contains(OperationType.Slice, supportedOps);
+        Assert.Contains(OperationType.Square, supportedOps);
+        Assert.Contains(OperationType.Norm, supportedOps);
+    }
+
+    [Fact]
+    public void GetSupportedOperationTypes_IncludesEmbeddingAndAttentionOps()
+    {
+        // Act
+        var supportedOps = JitCompiler.GetSupportedOperationTypes();
+
+        // Assert - Embedding and attention operations
+        Assert.Contains(OperationType.Embedding, supportedOps);
+        Assert.Contains(OperationType.ScaledDotProductAttention, supportedOps);
+        Assert.Contains(OperationType.MultiHeadAttention, supportedOps);
+    }
+
+    [Fact]
+    public void GetSupportedOperationTypes_IncludesFusedOps()
+    {
+        // Act
+        var supportedOps = JitCompiler.GetSupportedOperationTypes();
+
+        // Assert - Fused operations
+        Assert.Contains(OperationType.FusedMatMulAdd, supportedOps);
+        Assert.Contains(OperationType.FusedLinearReLU, supportedOps);
+        Assert.Contains(OperationType.FusedConvBatchNorm, supportedOps);
+        Assert.Contains(OperationType.FusedAddReLU, supportedOps);
+    }
+
+    [Fact]
+    public void GetSupportedOperationTypes_IncludesComplexNumberOps()
+    {
+        // Act
+        var supportedOps = JitCompiler.GetSupportedOperationTypes();
+
+        // Assert - Complex number operations
+        Assert.Contains(OperationType.ComplexMatMul, supportedOps);
+        Assert.Contains(OperationType.ComplexMultiply, supportedOps);
+    }
+
+    [Fact]
+    public void AnalyzeCompatibility_ExtendedActivation_IsSupported()
+    {
+        // Arrange
+        var jit = new JitCompiler();
+        var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
+
+        var gelu = new ComputationNode<float>(
+            new Tensor<float>(new[] { 2, 3 }),
+            parents: new List<ComputationNode<float>> { input })
+        {
+            OperationType = OperationType.GELU
+        };
+
+        // Act
+        var result = jit.AnalyzeCompatibility(gelu, new List<ComputationNode<float>> { input });
+
+        // Assert
+        Assert.True(result.IsFullySupported);
+        Assert.Empty(result.UnsupportedOperations);
+    }
+
+    [Fact]
+    public void AnalyzeCompatibility_AttentionOp_IsSupported()
+    {
+        // Arrange
+        var jit = new JitCompiler();
+        var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
+
+        var attention = new ComputationNode<float>(
+            new Tensor<float>(new[] { 2, 3 }),
+            parents: new List<ComputationNode<float>> { input })
+        {
+            OperationType = OperationType.ScaledDotProductAttention
+        };
+
+        // Act
+        var result = jit.AnalyzeCompatibility(attention, new List<ComputationNode<float>> { input });
+
+        // Assert
+        Assert.True(result.IsFullySupported);
+        Assert.Empty(result.UnsupportedOperations);
+    }
+
+    [Fact]
+    public void AnalyzeCompatibility_EmbeddingOp_IsSupported()
+    {
+        // Arrange
+        var jit = new JitCompiler();
+        var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
+
+        var embedding = new ComputationNode<float>(
+            new Tensor<float>(new[] { 2, 3 }),
+            parents: new List<ComputationNode<float>> { input })
+        {
+            OperationType = OperationType.Embedding
+        };
+
+        // Act
+        var result = jit.AnalyzeCompatibility(embedding, new List<ComputationNode<float>> { input });
+
+        // Assert
+        Assert.True(result.IsFullySupported);
+        Assert.Empty(result.UnsupportedOperations);
+    }
+
+    [Fact]
+    public void AnalyzeCompatibility_FusedOp_IsSupported()
+    {
+        // Arrange
+        var jit = new JitCompiler();
+        var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
+
+        var fusedOp = new ComputationNode<float>(
+            new Tensor<float>(new[] { 2, 3 }),
+            parents: new List<ComputationNode<float>> { input })
+        {
+            OperationType = OperationType.FusedLinearReLU
+        };
+
+        // Act
+        var result = jit.AnalyzeCompatibility(fusedOp, new List<ComputationNode<float>> { input });
+
+        // Assert
+        Assert.True(result.IsFullySupported);
+        Assert.Empty(result.UnsupportedOperations);
+    }
+
+    [Fact]
+    public void GetSupportedOperationTypes_CountIsSignificantlyHigher()
+    {
+        // Act
+        var supportedOps = JitCompiler.GetSupportedOperationTypes();
+
+        // Assert - We should now support many more operations
+        // Originally ~45, now should be ~65+ with the new additions
+        Assert.True(supportedOps.Count >= 60,
+            $"Expected at least 60 supported operations, but got {supportedOps.Count}");
+    }
+
+    #endregion
 }

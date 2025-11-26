@@ -220,11 +220,27 @@ public class CodeGenerator
             LogOp => GenerateUnaryOp<T>("Log", inputVars),
             SqrtOp => GenerateUnaryOp<T>("Sqrt", inputVars),
 
-            // Activations
+            // Activations - Basic
             ReLUOp => GenerateUnaryOp<T>("ReLU", inputVars),
             SigmoidOp => GenerateUnaryOp<T>("Sigmoid", inputVars),
             TanhOp => GenerateUnaryOp<T>("Tanh", inputVars),
             SoftmaxOp softmaxOp => GenerateSoftmaxOp<T>(inputVars[0], softmaxOp.Axis),
+
+            // Activations - Extended
+            ELUOp eluOp => GenerateELUOp<T>(inputVars[0], eluOp.Alpha),
+            LeakyReLUOp leakyReluOp => GenerateLeakyReLUOp<T>(inputVars[0], leakyReluOp.Alpha),
+            GELUOp geluOp => GenerateGELUOp<T>(inputVars[0], geluOp.Approximate),
+            SwishOp => GenerateUnaryOp<T>("Swish", inputVars),
+            MishOp => GenerateUnaryOp<T>("Mish", inputVars),
+            SoftPlusOp softPlusOp => GenerateSoftPlusOp<T>(inputVars[0], softPlusOp.Beta, softPlusOp.Threshold),
+            SELUOp => GenerateUnaryOp<T>("SELU", inputVars),
+            HardSigmoidOp => GenerateUnaryOp<T>("HardSigmoid", inputVars),
+            HardTanhOp hardTanhOp => GenerateHardTanhOp<T>(inputVars[0], hardTanhOp.MinVal, hardTanhOp.MaxVal),
+            SoftSignOp => GenerateUnaryOp<T>("SoftSign", inputVars),
+            CELUOp celuOp => GenerateCELUOp<T>(inputVars[0], celuOp.Alpha),
+            LogSoftmaxOp logSoftmaxOp => GenerateLogSoftmaxOp<T>(inputVars[0], logSoftmaxOp.Axis),
+            PReLUOp => GenerateBinaryOp<T>("PReLU", inputVars),
+            ThresholdedReLUOp threshRelu => GenerateThresholdedReLUOp<T>(inputVars[0], threshRelu.Threshold),
 
             // Matrix operations
             MatMulOp => GenerateBinaryOp<T>("MatrixMultiply", inputVars),
@@ -239,6 +255,10 @@ public class CodeGenerator
             // Shape operations
             ReshapeOp reshapeOp => GenerateReshapeOp<T>(inputVars[0], reshapeOp.NewShape),
             ConcatOp concatOp => GenerateConcatOp<T>(inputVars, concatOp.Axis),
+            SplitOp splitOp => GenerateSplitOp<T>(inputVars[0], splitOp),
+            SliceOp sliceOp => GenerateSliceOp<T>(inputVars[0], sliceOp),
+            SquareOp => GenerateUnaryOp<T>("Square", inputVars),
+            NormOp normOp => GenerateNormOp<T>(inputVars[0], normOp.Axis, normOp.KeepDims),
 
             // Convolution operations
             Conv2DOp conv2dOp => GenerateConv2DOp<T>(inputVars, conv2dOp),
@@ -292,6 +312,24 @@ public class CodeGenerator
             // Recurrent network operations
             GRUCellOp gruCellOp => GenerateGRUCellOp<T>(inputVars, gruCellOp),
             LSTMCellOp lstmCellOp => GenerateLSTMCellOp<T>(inputVars, lstmCellOp),
+
+            // Embedding and attention operations
+            EmbeddingOp embeddingOp => GenerateEmbeddingOp<T>(inputVars, embeddingOp),
+            ScaledDotProductAttentionOp sdpaOp => GenerateScaledDotProductAttentionOp<T>(inputVars, sdpaOp),
+            MultiHeadAttentionOp mhaOp => GenerateMultiHeadAttentionOp<T>(inputVars, mhaOp),
+
+            // Fused operations
+            FusedMatMulAddOp => GenerateFusedMatMulAddOp<T>(inputVars),
+            FusedLinearReLUOp => GenerateFusedLinearReLUOp<T>(inputVars),
+            FusedConvBatchNormOp fusedConvBnOp => GenerateFusedConvBatchNormOp<T>(inputVars, fusedConvBnOp),
+            FusedAddReLUOp => GenerateFusedAddReLUOp<T>(inputVars),
+
+            // Complex number operations
+            ComplexMatMulOp => GenerateComplexMatMulOp<T>(inputVars),
+            ComplexMultiplyOp => GenerateComplexMultiplyOp<T>(inputVars),
+
+            // Dropout
+            DropoutOp dropoutOp => GenerateDropoutOp<T>(inputVars[0], dropoutOp),
 
             // Unrolled operations (from LoopUnrollingPass)
             Operations.UnrolledSequenceOp unrolledSeq => GenerateUnrolledSequenceOp<T>(inputVars, unrolledSeq),
@@ -1036,5 +1074,266 @@ public class CodeGenerator
             inputs[1],
             Expression.Constant(op.VectorWidth),
             Expression.Constant(op.TileSize));
+    }
+
+    // ========== Extended Activation Operation Code Generators ==========
+
+    /// <summary>
+    /// Generates code for ELU activation.
+    /// </summary>
+    private Expression GenerateELUOp<T>(ParameterExpression input, double alpha)
+    {
+        var method = FindMethod("ELU", typeof(ComputationNode<T>), typeof(double));
+        return Expression.Call(method, input, Expression.Constant(alpha));
+    }
+
+    /// <summary>
+    /// Generates code for Leaky ReLU activation.
+    /// </summary>
+    private Expression GenerateLeakyReLUOp<T>(ParameterExpression input, double alpha)
+    {
+        var method = FindMethod("LeakyReLU", typeof(ComputationNode<T>), typeof(double));
+        return Expression.Call(method, input, Expression.Constant(alpha));
+    }
+
+    /// <summary>
+    /// Generates code for GELU activation.
+    /// </summary>
+    private Expression GenerateGELUOp<T>(ParameterExpression input, bool approximate)
+    {
+        var method = FindMethod("GELU", typeof(ComputationNode<T>), typeof(bool));
+        return Expression.Call(method, input, Expression.Constant(approximate));
+    }
+
+    /// <summary>
+    /// Generates code for SoftPlus activation.
+    /// </summary>
+    private Expression GenerateSoftPlusOp<T>(ParameterExpression input, double beta, double threshold)
+    {
+        var method = FindMethod("SoftPlus", typeof(ComputationNode<T>), typeof(double), typeof(double));
+        return Expression.Call(method, input, Expression.Constant(beta), Expression.Constant(threshold));
+    }
+
+    /// <summary>
+    /// Generates code for HardTanh activation.
+    /// </summary>
+    private Expression GenerateHardTanhOp<T>(ParameterExpression input, double minVal, double maxVal)
+    {
+        var method = FindMethod("HardTanh", typeof(ComputationNode<T>), typeof(double), typeof(double));
+        return Expression.Call(method, input, Expression.Constant(minVal), Expression.Constant(maxVal));
+    }
+
+    /// <summary>
+    /// Generates code for CELU activation.
+    /// </summary>
+    private Expression GenerateCELUOp<T>(ParameterExpression input, double alpha)
+    {
+        var method = FindMethod("CELU", typeof(ComputationNode<T>), typeof(double));
+        return Expression.Call(method, input, Expression.Constant(alpha));
+    }
+
+    /// <summary>
+    /// Generates code for LogSoftmax activation.
+    /// </summary>
+    private Expression GenerateLogSoftmaxOp<T>(ParameterExpression input, int axis)
+    {
+        var method = FindMethod("LogSoftmax", typeof(ComputationNode<T>), typeof(int));
+        return Expression.Call(method, input, Expression.Constant(axis));
+    }
+
+    /// <summary>
+    /// Generates code for ThresholdedReLU activation.
+    /// </summary>
+    private Expression GenerateThresholdedReLUOp<T>(ParameterExpression input, double threshold)
+    {
+        var method = FindMethod("ThresholdedReLU", typeof(ComputationNode<T>), typeof(double));
+        return Expression.Call(method, input, Expression.Constant(threshold));
+    }
+
+    // ========== Shape Operation Code Generators ==========
+
+    /// <summary>
+    /// Generates code for split operation.
+    /// </summary>
+    private Expression GenerateSplitOp<T>(ParameterExpression input, SplitOp op)
+    {
+        if (op.SplitSizes.Length > 0)
+        {
+            var method = FindMethod("Split", typeof(ComputationNode<T>), typeof(int[]), typeof(int));
+            return Expression.Call(method, input, Expression.Constant(op.SplitSizes), Expression.Constant(op.Axis));
+        }
+        else
+        {
+            var method = FindMethod("Split", typeof(ComputationNode<T>), typeof(int), typeof(int));
+            return Expression.Call(method, input, Expression.Constant(op.NumSplits), Expression.Constant(op.Axis));
+        }
+    }
+
+    /// <summary>
+    /// Generates code for slice operation.
+    /// </summary>
+    private Expression GenerateSliceOp<T>(ParameterExpression input, SliceOp op)
+    {
+        var method = FindMethod("Slice", typeof(ComputationNode<T>), typeof(int[]), typeof(int[]), typeof(int[]), typeof(int[]));
+        return Expression.Call(method, input,
+            Expression.Constant(op.Starts),
+            Expression.Constant(op.Ends),
+            Expression.Constant(op.Steps),
+            Expression.Constant(op.Axes));
+    }
+
+    /// <summary>
+    /// Generates code for norm operation.
+    /// </summary>
+    private Expression GenerateNormOp<T>(ParameterExpression input, int axis, bool keepDims)
+    {
+        var method = FindMethod("Norm", typeof(ComputationNode<T>), typeof(int), typeof(bool));
+        return Expression.Call(method, input, Expression.Constant(axis), Expression.Constant(keepDims));
+    }
+
+    // ========== Embedding and Attention Code Generators ==========
+
+    /// <summary>
+    /// Generates code for embedding operation.
+    /// </summary>
+    private Expression GenerateEmbeddingOp<T>(ParameterExpression[] inputs, EmbeddingOp op)
+    {
+        var method = FindMethod("Embedding", typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(int?));
+        return Expression.Call(method, inputs[0], inputs[1],
+            op.PaddingIdx.HasValue
+                ? Expression.Constant(op.PaddingIdx, typeof(int?))
+                : Expression.Constant(null, typeof(int?)));
+    }
+
+    /// <summary>
+    /// Generates code for scaled dot-product attention.
+    /// </summary>
+    private Expression GenerateScaledDotProductAttentionOp<T>(ParameterExpression[] inputs, ScaledDotProductAttentionOp op)
+    {
+        var method = FindMethod("ScaledDotProductAttention",
+            typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>),
+            typeof(ComputationNode<T>), typeof(double?), typeof(bool), typeof(double));
+
+        var maskInput = inputs.Length > 3
+            ? inputs[3]
+            : Expression.Constant(null, typeof(Tensor<T>));
+
+        return Expression.Call(method,
+            inputs[0], // query
+            inputs[1], // key
+            inputs[2], // value
+            maskInput,
+            op.Scale.HasValue
+                ? Expression.Constant(op.Scale, typeof(double?))
+                : Expression.Constant(null, typeof(double?)),
+            Expression.Constant(op.IsCausal),
+            Expression.Constant(op.DropoutProbability));
+    }
+
+    /// <summary>
+    /// Generates code for multi-head attention.
+    /// </summary>
+    private Expression GenerateMultiHeadAttentionOp<T>(ParameterExpression[] inputs, MultiHeadAttentionOp op)
+    {
+        var method = FindMethod("MultiHeadAttention",
+            typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>),
+            typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>),
+            typeof(int), typeof(double));
+
+        return Expression.Call(method,
+            inputs[0], // query
+            inputs[1], // key
+            inputs[2], // value
+            inputs[3], // W_q
+            inputs[4], // W_k
+            inputs[5], // W_v
+            inputs[6], // W_o
+            Expression.Constant(op.NumHeads),
+            Expression.Constant(op.DropoutProbability));
+    }
+
+    // ========== Fused Operation Code Generators ==========
+
+    /// <summary>
+    /// Generates code for fused MatMul + Add operation.
+    /// </summary>
+    private Expression GenerateFusedMatMulAddOp<T>(ParameterExpression[] inputs)
+    {
+        var method = FindMethod("FusedMatMulAdd",
+            typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>));
+        return Expression.Call(method, inputs[0], inputs[1], inputs[2]);
+    }
+
+    /// <summary>
+    /// Generates code for fused Linear + ReLU operation.
+    /// </summary>
+    private Expression GenerateFusedLinearReLUOp<T>(ParameterExpression[] inputs)
+    {
+        var method = FindMethod("FusedLinearReLU",
+            typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>));
+        return Expression.Call(method, inputs[0], inputs[1], inputs[2]);
+    }
+
+    /// <summary>
+    /// Generates code for fused Conv + BatchNorm operation.
+    /// </summary>
+    private Expression GenerateFusedConvBatchNormOp<T>(ParameterExpression[] inputs, FusedConvBatchNormOp op)
+    {
+        var method = FindMethod("FusedConvBatchNorm",
+            typeof(ComputationNode<T>), typeof(ComputationNode<T>),
+            typeof(ComputationNode<T>), typeof(ComputationNode<T>),
+            typeof(ComputationNode<T>), typeof(ComputationNode<T>),
+            typeof(int[]), typeof(int[]), typeof(double));
+        return Expression.Call(method,
+            inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5],
+            Expression.Constant(op.Stride),
+            Expression.Constant(op.Padding),
+            Expression.Constant(op.Epsilon));
+    }
+
+    /// <summary>
+    /// Generates code for fused Add + ReLU operation.
+    /// </summary>
+    private Expression GenerateFusedAddReLUOp<T>(ParameterExpression[] inputs)
+    {
+        var method = FindMethod("FusedAddReLU", typeof(ComputationNode<T>), typeof(ComputationNode<T>));
+        return Expression.Call(method, inputs[0], inputs[1]);
+    }
+
+    // ========== Complex Number Operation Code Generators ==========
+
+    /// <summary>
+    /// Generates code for complex matrix multiplication.
+    /// </summary>
+    private Expression GenerateComplexMatMulOp<T>(ParameterExpression[] inputs)
+    {
+        var method = FindMethod("ComplexMatMul",
+            typeof(ComputationNode<T>), typeof(ComputationNode<T>),
+            typeof(ComputationNode<T>), typeof(ComputationNode<T>));
+        return Expression.Call(method, inputs[0], inputs[1], inputs[2], inputs[3]);
+    }
+
+    /// <summary>
+    /// Generates code for complex element-wise multiplication.
+    /// </summary>
+    private Expression GenerateComplexMultiplyOp<T>(ParameterExpression[] inputs)
+    {
+        var method = FindMethod("ComplexMultiply",
+            typeof(ComputationNode<T>), typeof(ComputationNode<T>),
+            typeof(ComputationNode<T>), typeof(ComputationNode<T>));
+        return Expression.Call(method, inputs[0], inputs[1], inputs[2], inputs[3]);
+    }
+
+    // ========== Dropout Operation Code Generator ==========
+
+    /// <summary>
+    /// Generates code for dropout operation.
+    /// </summary>
+    private Expression GenerateDropoutOp<T>(ParameterExpression input, DropoutOp op)
+    {
+        var method = FindMethod("Dropout", typeof(ComputationNode<T>), typeof(double), typeof(bool));
+        return Expression.Call(method, input,
+            Expression.Constant(op.Probability),
+            Expression.Constant(op.Training));
     }
 }

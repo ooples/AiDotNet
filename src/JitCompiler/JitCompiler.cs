@@ -854,13 +854,31 @@ public class JitCompiler : IDisposable
             OperationType.Exp,
             OperationType.Log,
             OperationType.Sqrt,
+            OperationType.Square,
+            OperationType.Norm,
 
-            // Activations
+            // Activations - Basic
             OperationType.ReLU,
             OperationType.Sigmoid,
             OperationType.Tanh,
             OperationType.Softmax,
             OperationType.Activation,
+
+            // Activations - Extended
+            OperationType.ELU,
+            OperationType.LeakyReLU,
+            OperationType.GELU,
+            OperationType.Swish,
+            OperationType.Mish,
+            OperationType.SoftPlus,
+            OperationType.SELU,
+            OperationType.HardSigmoid,
+            OperationType.HardTanh,
+            OperationType.SoftSign,
+            OperationType.CELU,
+            OperationType.LogSoftmax,
+            OperationType.PReLU,
+            OperationType.ThresholdedReLU,
 
             // Matrix operations
             OperationType.MatMul,
@@ -878,6 +896,8 @@ public class JitCompiler : IDisposable
             OperationType.Concat,
             OperationType.Pad,
             OperationType.Crop,
+            OperationType.Split,
+            OperationType.Slice,
             OperationType.Upsample,
             OperationType.PixelShuffle,
 
@@ -896,6 +916,11 @@ public class JitCompiler : IDisposable
             OperationType.LayerNorm,
             OperationType.BatchNorm,
 
+            // Embedding and attention operations
+            OperationType.Embedding,
+            OperationType.ScaledDotProductAttention,
+            OperationType.MultiHeadAttention,
+
             // Advanced operations
             OperationType.GraphConv,
             OperationType.AffineGrid,
@@ -904,7 +929,17 @@ public class JitCompiler : IDisposable
 
             // Recurrent network operations
             OperationType.GRUCell,
-            OperationType.LSTMCell
+            OperationType.LSTMCell,
+
+            // Fused operations (for JIT optimization)
+            OperationType.FusedMatMulAdd,
+            OperationType.FusedLinearReLU,
+            OperationType.FusedConvBatchNorm,
+            OperationType.FusedAddReLU,
+
+            // Complex number operations
+            OperationType.ComplexMatMul,
+            OperationType.ComplexMultiply
         };
     }
 
