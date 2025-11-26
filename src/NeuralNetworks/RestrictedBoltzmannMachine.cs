@@ -1042,7 +1042,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         
         if (hasVectorActivation)
         {
-            writer.Write(_vectorActivation!.GetType().FullName ?? "Unknown");
+            writer.Write(_vectorActivation.GetType().FullName ?? "Unknown");
         }
         else if (_scalarActivation != null)
         {
