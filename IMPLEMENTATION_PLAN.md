@@ -180,22 +180,25 @@ For each block of Q:
 
 ---
 
-### 3.2 Speculative Decoding ⬜
+### 3.2 Speculative Decoding ✅ COMPLETE
 **Priority:** MEDIUM | **Effort:** 1 week | **Impact:** 2-3x inference speedup
 
-#### Files to Create:
-- [ ] `src/Inference/SpeculativeDecoder.cs` - Main decoder
-- [ ] `src/Inference/DraftModel.cs` - Draft model wrapper
-- [ ] `src/Inference/SpeculativeConfig.cs` - Configuration
+#### Files Created:
+- [x] `src/Inference/SpeculativeDecoding/DraftModel.cs` - Draft model interfaces and implementations
+- [x] `src/Inference/SpeculativeDecoding/SpeculativeDecoder.cs` - Main speculative decoder
+- [x] `src/Inference/SpeculativeDecoding/TreeSpeculativeDecoder.cs` - Tree-based speculation
+- [x] `tests/AiDotNet.Tests/UnitTests/Inference/SpeculativeDecodingTests.cs` - Comprehensive tests
 
-#### Implementation Steps:
-- [ ] 3.2.1 Create DraftModel wrapper for small/fast model
-- [ ] 3.2.2 Implement speculative token generation
-- [ ] 3.2.3 Implement verification with target model
-- [ ] 3.2.4 Add acceptance/rejection logic
-- [ ] 3.2.5 Implement tree-based speculation (optional)
-- [ ] 3.2.6 Integrate with KV-Cache
-- [ ] 3.2.7 Write tests and benchmarks
+#### Completed Features:
+- [x] IDraftModel interface for draft models
+- [x] NGramDraftModel for simple n-gram based drafting
+- [x] NeuralDraftModel wrapper for neural network drafts
+- [x] SpeculativeDecoder with acceptance/rejection logic
+- [x] Async generation with cancellation support
+- [x] Tree-based speculative decoding for higher acceptance
+- [x] Comprehensive statistics tracking
+- [x] Temperature-controlled sampling
+- [x] EOS token handling
 
 ---
 
@@ -279,7 +282,7 @@ For each block of Q:
 | 2.2 | Profiler | ✅ | Nov 2025 | Nov 2025 |
 | 2.3 | TensorBoard | ✅ | Nov 2025 | Nov 2025 |
 | 3.1 | PagedAttention | ✅ | Nov 2025 | Nov 2025 |
-| 3.2 | Speculative Decoding | ⬜ | - | - |
+| 3.2 | Speculative Decoding | ✅ | Nov 2025 | Nov 2025 |
 | 3.3 | Sparse Tensors | ⬜ | - | - |
 | 4.1 | Custom Kernel API | ⬜ | - | - |
 | 4.2 | vmap | ⬜ | - | - |
@@ -306,4 +309,4 @@ For each block of Q:
 ---
 
 *Last Updated: Nov 2025*
-*Current Focus: Phase 3.2 - Speculative Decoding*
+*Current Focus: Phase 3.3 - Sparse Tensors*
