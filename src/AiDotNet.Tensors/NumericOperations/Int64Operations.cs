@@ -764,4 +764,10 @@ public class Int64Operations : INumericOperations<long>
     /// <param name="value">The long value to convert.</param>
     /// <returns>The value as a double.</returns>
     public double ToDouble(long value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => true;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => true;
 }

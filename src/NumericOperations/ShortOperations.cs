@@ -677,4 +677,10 @@ public class ShortOperations : INumericOperations<short>
     /// Converts a short value to double (FP64) precision.
     /// </summary>
     public double ToDouble(short value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => false;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => false;
 }

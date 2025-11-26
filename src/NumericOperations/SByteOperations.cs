@@ -716,4 +716,10 @@ public class SByteOperations : INumericOperations<sbyte>
     /// Converts an sbyte value to double (FP64) precision.
     /// </summary>
     public double ToDouble(sbyte value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => false;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => false;
 }

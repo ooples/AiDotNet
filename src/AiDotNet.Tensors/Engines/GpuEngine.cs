@@ -428,6 +428,61 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public bool SupportsGpu => _accelerator != null;
 
+    #region Type Acceleration Support Helpers
+
+    /// <summary>
+    /// Checks if the specified type supports GPU acceleration based on INumericOperations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type to check.</typeparam>
+    /// <returns>True if the type supports GPU acceleration; otherwise, false.</returns>
+    private static bool IsGpuAcceleratedType<T>() where T : unmanaged
+    {
+        // Check common GPU-accelerated types
+        return typeof(T) == typeof(float) ||
+               typeof(T) == typeof(double) ||
+               typeof(T) == typeof(int) ||
+               typeof(T) == typeof(long);
+    }
+
+    /// <summary>
+    /// Checks if a type supports GPU acceleration for basic operations (add, subtract, multiply, divide).
+    /// </summary>
+    private static bool SupportsGpuBasicOps<T>() where T : unmanaged =>
+        typeof(T) == typeof(float) || typeof(T) == typeof(double) ||
+        typeof(T) == typeof(int) || typeof(T) == typeof(long);
+
+    /// <summary>
+    /// Checks if a type supports GPU acceleration for math operations (sqrt, power, exp, log).
+    /// </summary>
+    private static bool SupportsGpuMathOps<T>() where T : unmanaged =>
+        typeof(T) == typeof(float) || typeof(T) == typeof(double);
+
+    /// <summary>
+    /// Checks if a type supports GPU acceleration for activation functions.
+    /// </summary>
+    private static bool SupportsGpuActivations<T>() where T : unmanaged =>
+        typeof(T) == typeof(float) || typeof(T) == typeof(double);
+
+    /// <summary>
+    /// Gets the appropriate memory pool for the specified type.
+    /// </summary>
+    private GpuMemoryPool<T>? GetMemoryPool<T>() where T : unmanaged
+    {
+        if (typeof(T) == typeof(float)) return (GpuMemoryPool<T>?)(object?)_memoryPoolFloat;
+        if (typeof(T) == typeof(double)) return (GpuMemoryPool<T>?)(object?)_memoryPoolDouble;
+        if (typeof(T) == typeof(int)) return (GpuMemoryPool<T>?)(object?)_memoryPoolInt;
+        if (typeof(T) == typeof(long)) return (GpuMemoryPool<T>?)(object?)_memoryPoolLong;
+        return null;
+    }
+
+    /// <summary>
+    /// Determines if GPU acceleration should be used for the given operation size and type.
+    /// </summary>
+    private bool ShouldUseGpu<T>(int size, int threshold) where T : unmanaged =>
+        SupportsGpu && _gpuHealthy && size >= threshold && IsGpuAcceleratedType<T>();
+
+    #endregion
+
     /// <summary>
     /// Initializes a new instance of the GpuEngine class with default adaptive thresholds.
     /// </summary>

@@ -703,4 +703,10 @@ public class UIntOperations : INumericOperations<uint>
     /// Converts a uint value to double (FP64) precision.
     /// </summary>
     public double ToDouble(uint value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => false;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => false;
 }

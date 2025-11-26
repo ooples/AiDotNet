@@ -797,4 +797,14 @@ public class FloatOperations : INumericOperations<float>
     /// </para>
     /// </remarks>
     public double ToDouble(float value) => (double)value;
+
+    /// <summary>
+    /// Indicates that float supports SIMD/CPU-accelerated operations.
+    /// </summary>
+    public bool SupportsCpuAcceleration => true;
+
+    /// <summary>
+    /// Indicates that float supports GPU-accelerated operations.
+    /// </summary>
+    public bool SupportsGpuAcceleration => true;
 }

@@ -737,4 +737,10 @@ public class UInt64Operations : INumericOperations<ulong>
     /// Converts a ulong value to double (FP64) precision.
     /// </summary>
     public double ToDouble(ulong value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => false;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => false;
 }

@@ -385,4 +385,14 @@ public interface INumericOperations<T>
     /// <param name="value">The value to convert.</param>
     /// <returns>The value as a double.</returns>
     double ToDouble(T value);
+
+    /// <summary>
+    /// Indicates whether this numeric type supports SIMD/CPU-accelerated operations.
+    /// </summary>
+    bool SupportsCpuAcceleration { get; }
+
+    /// <summary>
+    /// Indicates whether this numeric type supports GPU-accelerated operations.
+    /// </summary>
+    bool SupportsGpuAcceleration { get; }
 }

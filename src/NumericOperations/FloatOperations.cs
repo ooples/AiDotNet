@@ -794,4 +794,10 @@ public class FloatOperations : INumericOperations<float>
     /// </para>
     /// </remarks>
     public double ToDouble(float value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => true;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => true;
 }

@@ -675,4 +675,10 @@ public class DecimalOperations : INumericOperations<decimal>
     /// Converts a decimal value to double precision.
     /// </summary>
     public double ToDouble(decimal value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => false;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => false;
 }
