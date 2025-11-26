@@ -297,7 +297,7 @@ public static class GradientOps
     /// <para>
     /// Forward: output = conv2d(input, filters)
     /// Backward for input: grad_input = conv2d_transpose(grad_output, filters)
-    /// Backward for filters: grad_filters = conv2d(input, grad_output)
+    /// Backward for filters: grad_filters = conv2d(input^T, grad_output)
     /// </para>
     /// </remarks>
     public static Tensor<T> GradConv2D<T>(Tensor<T> gradOutput, Tensor<T> savedTensor, int inputIndex, int[] stride, int[] padding)
@@ -306,15 +306,145 @@ public static class GradientOps
 
         if (inputIndex == 0)
         {
-            // Gradient for input: use transposed convolution
-            // This is a simplified implementation - full implementation would use conv transpose
-            // For now, we'll use a compatible shape output
-            return gradOutput; // Placeholder - needs proper conv transpose
+            // Gradient for input: transposed convolution
+            // savedTensor contains the filters [outChannels, inChannels, kH, kW]
+            var filters = savedTensor;
+            var filterShape = filters.Shape;
+            var gradShape = gradOutput.Shape;
+
+            int batchSize = gradShape[0];
+            int outChannels = filterShape[0];
+            int inChannels = filterShape[1];
+            int kH = filterShape[2];
+            int kW = filterShape[3];
+            int outH = gradShape[2];
+            int outW = gradShape[3];
+
+            // Calculate input dimensions from output dimensions
+            int inH = (outH - 1) * stride[0] - 2 * padding[0] + kH;
+            int inW = (outW - 1) * stride[1] - 2 * padding[1] + kW;
+
+            var resultData = new T[batchSize * inChannels * inH * inW];
+            for (int i = 0; i < resultData.Length; i++)
+            {
+                resultData[i] = numOps.Zero;
+            }
+
+            var gradData = gradOutput.ToArray();
+            var filterData = filters.ToArray();
+
+            // Transposed convolution: scatter gradients from output to input
+            for (int n = 0; n < batchSize; n++)
+            {
+                for (int oc = 0; oc < outChannels; oc++)
+                {
+                    for (int oh = 0; oh < outH; oh++)
+                    {
+                        for (int ow = 0; ow < outW; ow++)
+                        {
+                            int gradIdx = n * outChannels * outH * outW + oc * outH * outW + oh * outW + ow;
+                            T gradVal = gradData[gradIdx];
+
+                            // Scatter to input positions
+                            for (int ic = 0; ic < inChannels; ic++)
+                            {
+                                for (int fh = 0; fh < kH; fh++)
+                                {
+                                    for (int fw = 0; fw < kW; fw++)
+                                    {
+                                        int ih = oh * stride[0] - padding[0] + fh;
+                                        int iw = ow * stride[1] - padding[1] + fw;
+
+                                        if (ih >= 0 && ih < inH && iw >= 0 && iw < inW)
+                                        {
+                                            int filterIdx = oc * inChannels * kH * kW + ic * kH * kW + fh * kW + fw;
+                                            int inputIdx = n * inChannels * inH * inW + ic * inH * inW + ih * inW + iw;
+
+                                            resultData[inputIdx] = numOps.Add(resultData[inputIdx],
+                                                numOps.Multiply(gradVal, filterData[filterIdx]));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return new Tensor<T>(new int[] { batchSize, inChannels, inH, inW }, new Vector<T>(resultData));
         }
         else if (inputIndex == 1)
         {
             // Gradient for filters: correlate input with grad_output
-            return gradOutput; // Placeholder - needs proper gradient computation
+            // savedTensor contains the input [N, inChannels, H, W]
+            var input = savedTensor;
+            var inputShape = input.Shape;
+            var gradShape = gradOutput.Shape;
+
+            int batchSize = inputShape[0];
+            int inChannels = inputShape[1];
+            int inH = inputShape[2];
+            int inW = inputShape[3];
+            int outChannels = gradShape[1];
+            int outH = gradShape[2];
+            int outW = gradShape[3];
+
+            // Calculate filter dimensions
+            int kH = inH - (outH - 1) * stride[0] + 2 * padding[0];
+            int kW = inW - (outW - 1) * stride[1] + 2 * padding[1];
+
+            // Clamp to reasonable values
+            kH = Math.Max(1, Math.Min(kH, inH));
+            kW = Math.Max(1, Math.Min(kW, inW));
+
+            var resultData = new T[outChannels * inChannels * kH * kW];
+            for (int i = 0; i < resultData.Length; i++)
+            {
+                resultData[i] = numOps.Zero;
+            }
+
+            var inputData = input.ToArray();
+            var gradData = gradOutput.ToArray();
+
+            // Compute filter gradient via correlation
+            for (int n = 0; n < batchSize; n++)
+            {
+                for (int oc = 0; oc < outChannels; oc++)
+                {
+                    for (int ic = 0; ic < inChannels; ic++)
+                    {
+                        for (int fh = 0; fh < kH; fh++)
+                        {
+                            for (int fw = 0; fw < kW; fw++)
+                            {
+                                T sum = numOps.Zero;
+
+                                for (int oh = 0; oh < outH; oh++)
+                                {
+                                    for (int ow = 0; ow < outW; ow++)
+                                    {
+                                        int ih = oh * stride[0] - padding[0] + fh;
+                                        int iw = ow * stride[1] - padding[1] + fw;
+
+                                        if (ih >= 0 && ih < inH && iw >= 0 && iw < inW)
+                                        {
+                                            int inputIdx = n * inChannels * inH * inW + ic * inH * inW + ih * inW + iw;
+                                            int gradIdx = n * outChannels * outH * outW + oc * outH * outW + oh * outW + ow;
+
+                                            sum = numOps.Add(sum, numOps.Multiply(inputData[inputIdx], gradData[gradIdx]));
+                                        }
+                                    }
+                                }
+
+                                int filterIdx = oc * inChannels * kH * kW + ic * kH * kW + fh * kW + fw;
+                                resultData[filterIdx] = numOps.Add(resultData[filterIdx], sum);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return new Tensor<T>(new int[] { outChannels, inChannels, kH, kW }, new Vector<T>(resultData));
         }
         else
         {
@@ -849,6 +979,232 @@ public static class GradientOps
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Gradient of LayerNorm operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Layer normalization normalizes over the last N dimensions.
+    /// The gradient computation involves the Jacobian of the normalization.
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> GradLayerNorm<T>(Tensor<T> gradOutput, Tensor<T> savedTensor, int inputIndex, double epsilon, int[] normalizedShape)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        if (inputIndex == 0)
+        {
+            // Gradient for input
+            // This is the complex case requiring variance and mean
+            var gradData = gradOutput.ToArray();
+            var savedData = savedTensor.ToArray();
+            var shape = gradOutput.Shape;
+
+            // Calculate the size of the normalized dimensions
+            int normalizedSize = normalizedShape.Aggregate(1, (a, b) => a * b);
+            int batchSize = gradData.Length / normalizedSize;
+
+            var resultData = new T[gradData.Length];
+
+            // For each sample in the batch
+            for (int b = 0; b < batchSize; b++)
+            {
+                int offset = b * normalizedSize;
+
+                // Compute mean and variance of gradient * normalized
+                T sumGrad = numOps.Zero;
+                T sumGradNorm = numOps.Zero;
+
+                for (int i = 0; i < normalizedSize; i++)
+                {
+                    sumGrad = numOps.Add(sumGrad, gradData[offset + i]);
+                    sumGradNorm = numOps.Add(sumGradNorm,
+                        numOps.Multiply(gradData[offset + i], savedData[offset + i]));
+                }
+
+                var meanGrad = numOps.Divide(sumGrad, numOps.FromDouble(normalizedSize));
+                var meanGradNorm = numOps.Divide(sumGradNorm, numOps.FromDouble(normalizedSize));
+
+                // Apply the gradient transformation
+                for (int i = 0; i < normalizedSize; i++)
+                {
+                    var g = gradData[offset + i];
+                    var n = savedData[offset + i];
+
+                    // grad_input = (grad - mean(grad) - normalized * mean(grad * normalized)) / sqrt(var + eps)
+                    var term1 = numOps.Subtract(g, meanGrad);
+                    var term2 = numOps.Multiply(n, meanGradNorm);
+                    resultData[offset + i] = numOps.Subtract(term1, term2);
+                }
+            }
+
+            return new Tensor<T>(shape, new Vector<T>(resultData));
+        }
+        else if (inputIndex == 1)
+        {
+            // Gradient for gamma (scale): sum of grad_output * normalized_input
+            var result = Tensor<T>.ElementwiseMultiply(gradOutput, savedTensor);
+            return SumOverNonNormalizedDims(result, normalizedShape);
+        }
+        else
+        {
+            // Gradient for beta (bias): sum of grad_output
+            return SumOverNonNormalizedDims(gradOutput, normalizedShape);
+        }
+    }
+
+    /// <summary>
+    /// Gradient of Embedding operation.
+    /// Forward: y = embedding[indices]
+    /// Backward: grad_embedding = scatter_add(grad_y, indices, embedding_shape)
+    /// </summary>
+    public static Tensor<T> GradEmbedding<T>(Tensor<T> gradOutput, Tensor<T> indices, int[] embeddingShape)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Create zero tensor for embedding gradients
+        var totalSize = embeddingShape.Aggregate(1, (a, b) => a * b);
+        var resultData = new T[totalSize];
+        for (int i = 0; i < totalSize; i++)
+        {
+            resultData[i] = numOps.Zero;
+        }
+
+        var gradData = gradOutput.ToArray();
+        var indexData = indices.ToArray();
+        var embeddingDim = embeddingShape[^1];
+
+        // Scatter add: accumulate gradients at each index
+        for (int i = 0; i < indexData.Length; i++)
+        {
+            // Get the embedding index (convert to int)
+            var idx = Convert.ToInt32(indexData[i]);
+            if (idx < 0 || idx >= embeddingShape[0])
+                continue;
+
+            // Add gradient to the corresponding row
+            var gradOffset = i * embeddingDim;
+            var embOffset = idx * embeddingDim;
+
+            for (int d = 0; d < embeddingDim; d++)
+            {
+                if (gradOffset + d < gradData.Length && embOffset + d < resultData.Length)
+                {
+                    resultData[embOffset + d] = numOps.Add(resultData[embOffset + d], gradData[gradOffset + d]);
+                }
+            }
+        }
+
+        return new Tensor<T>(embeddingShape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Gradient of Gather operation.
+    /// Forward: y = gather(x, indices, axis)
+    /// Backward: grad_x = scatter(grad_y, indices, axis, input_shape)
+    /// </summary>
+    public static Tensor<T> GradGather<T>(Tensor<T> gradOutput, Tensor<T> indices, int axis, int[] inputShape)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Create zero tensor for input gradients
+        var totalSize = inputShape.Aggregate(1, (a, b) => a * b);
+        var resultData = new T[totalSize];
+        for (int i = 0; i < totalSize; i++)
+        {
+            resultData[i] = numOps.Zero;
+        }
+
+        var gradData = gradOutput.ToArray();
+        var indexData = indices.ToArray();
+        var gradShape = gradOutput.Shape;
+
+        // Calculate strides for input shape
+        var inputStrides = new int[inputShape.Length];
+        inputStrides[inputShape.Length - 1] = 1;
+        for (int d = inputShape.Length - 2; d >= 0; d--)
+        {
+            inputStrides[d] = inputStrides[d + 1] * inputShape[d + 1];
+        }
+
+        // Calculate strides for gradient shape
+        var gradStrides = new int[gradShape.Length];
+        gradStrides[gradShape.Length - 1] = 1;
+        for (int d = gradShape.Length - 2; d >= 0; d--)
+        {
+            gradStrides[d] = gradStrides[d + 1] * gradShape[d + 1];
+        }
+
+        // Scatter gradients back to input positions
+        for (int i = 0; i < gradData.Length; i++)
+        {
+            // Calculate multi-dimensional index for gradient
+            var gradIndices = new int[gradShape.Length];
+            int remaining = i;
+            for (int d = gradShape.Length - 1; d >= 0; d--)
+            {
+                gradIndices[d] = remaining % gradShape[d];
+                remaining /= gradShape[d];
+            }
+
+            // Get the gather index
+            int gatherIdx = Convert.ToInt32(indexData[gradIndices[axis]]);
+            if (gatherIdx < 0 || gatherIdx >= inputShape[axis])
+                continue;
+
+            // Calculate the input position
+            var inputIndices = (int[])gradIndices.Clone();
+            inputIndices[axis] = gatherIdx;
+
+            int inputIdx = 0;
+            for (int d = 0; d < inputShape.Length; d++)
+            {
+                inputIdx += inputIndices[d] * inputStrides[d];
+            }
+
+            // Accumulate gradient
+            if (inputIdx < resultData.Length)
+            {
+                resultData[inputIdx] = numOps.Add(resultData[inputIdx], gradData[i]);
+            }
+        }
+
+        return new Tensor<T>(inputShape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Helper: Sum over dimensions that are not part of the normalized shape.
+    /// </summary>
+    private static Tensor<T> SumOverNonNormalizedDims<T>(Tensor<T> input, int[] normalizedShape)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = input.Shape;
+        var inputData = input.ToArray();
+
+        // Calculate how many leading dimensions to sum over
+        int normalizedSize = normalizedShape.Aggregate(1, (a, b) => a * b);
+        int batchSize = inputData.Length / normalizedSize;
+
+        // Result has shape of normalizedShape
+        var resultData = new T[normalizedSize];
+        for (int i = 0; i < normalizedSize; i++)
+        {
+            resultData[i] = numOps.Zero;
+        }
+
+        // Sum over batch dimensions
+        for (int b = 0; b < batchSize; b++)
+        {
+            int offset = b * normalizedSize;
+            for (int i = 0; i < normalizedSize; i++)
+            {
+                resultData[i] = numOps.Add(resultData[i], inputData[offset + i]);
+            }
+        }
+
+        return new Tensor<T>(normalizedShape, new Vector<T>(resultData));
     }
 
     // ========== Helper Methods ==========

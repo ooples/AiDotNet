@@ -487,7 +487,7 @@ public class GPUCodeGenerator
     }
 
     /// <summary>
-    /// Generates CUDA matrix multiplication code (calls library kernel).
+    /// Generates CUDA matrix multiplication code.
     /// </summary>
     private string GenerateMatMulCUDA<T>(MatMulOp op)
     {
@@ -496,9 +496,30 @@ public class GPUCodeGenerator
         var a = GetTensorName(op.InputIds[0]);
         var b = GetTensorName(op.InputIds[1]);
 
-        // For inline element-wise kernel, we delegate to the tiled matmul kernel
-        // This generates a placeholder - actual impl uses GPUKernelLibrary.GenerateTiledMatMulKernel
-        return $"    // MatMul: {outputName} = {a} @ {b} - delegated to matmul_tiled kernel";
+        // Get dimensions from output shape
+        var outShape = op.OutputShape;
+        if (outShape.Length < 2)
+        {
+            return $"    // MatMul: Invalid output shape for {outputName}";
+        }
+
+        var M = outShape[^2]; // rows of output
+        var N = outShape[^1]; // cols of output
+        var K = op.InputIds.Length > 0 ? op.OutputShape[^1] : 1; // shared dim
+
+        // For the element-wise kernel, compute matrix element at idx
+        return $@"    // MatMul: {outputName} = {a} @ {b}
+    {{
+        int out_row = idx / {N};
+        int out_col = idx % {N};
+        {dataType} sum = 0.0f;
+        if (out_row < {M} && out_col < {N}) {{
+            for (int k = 0; k < {K}; k++) {{
+                sum += {a}[out_row * {K} + k] * {b}[k * {N} + out_col];
+            }}
+        }}
+        {dataType} {outputName} = sum;
+    }}";
     }
 
     /// <summary>
@@ -675,10 +696,39 @@ public class GPUCodeGenerator
     {
         var dataType = GetDataTypeString<T>();
         var outputName = EnsureTensorName(op.OutputId);
+        var hiddenSize = op.HiddenSize;
 
-        return $@"    // LSTMCell [hidden={op.HiddenSize}]
-    // Full LSTM requires separate kernel - this is placeholder
-    {dataType} {outputName} = 0.0f; // LSTM output delegated to specialized kernel";
+        // Get input tensor names
+        var x = op.InputIds.Length > 0 ? GetTensorName(op.InputIds[0]) : "x";
+        var h = op.InputIds.Length > 1 ? GetTensorName(op.InputIds[1]) : "h";
+        var c = op.InputIds.Length > 2 ? GetTensorName(op.InputIds[2]) : "c";
+        var wIh = op.InputIds.Length > 3 ? GetTensorName(op.InputIds[3]) : "w_ih";
+        var wHh = op.InputIds.Length > 4 ? GetTensorName(op.InputIds[4]) : "w_hh";
+
+        return $@"    // LSTMCell [hidden={hiddenSize}]
+    {{
+        // Each thread processes one hidden unit
+        int hidden_idx = idx % {hiddenSize};
+        int batch_idx = idx / {hiddenSize};
+
+        // Compute gates: i, f, g, o
+        {dataType} gate_i = 0.0f, gate_f = 0.0f, gate_g = 0.0f, gate_o = 0.0f;
+
+        // Input contribution to gates (simplified - assumes pre-computed W_ih @ x)
+        int gate_base = batch_idx * {hiddenSize * 4};
+        gate_i = cuda_sigmoid({wIh}[gate_base + hidden_idx] + {wHh}[gate_base + hidden_idx]);
+        gate_f = cuda_sigmoid({wIh}[gate_base + {hiddenSize} + hidden_idx] + {wHh}[gate_base + {hiddenSize} + hidden_idx]);
+        gate_g = cuda_tanh({wIh}[gate_base + {hiddenSize * 2} + hidden_idx] + {wHh}[gate_base + {hiddenSize * 2} + hidden_idx]);
+        gate_o = cuda_sigmoid({wIh}[gate_base + {hiddenSize * 3} + hidden_idx] + {wHh}[gate_base + {hiddenSize * 3} + hidden_idx]);
+
+        // Update cell state: c_new = f * c + i * g
+        int cell_idx = batch_idx * {hiddenSize} + hidden_idx;
+        {dataType} c_old = {c}[cell_idx];
+        {dataType} c_new = gate_f * c_old + gate_i * gate_g;
+
+        // Compute hidden state: h_new = o * tanh(c_new)
+        {dataType} {outputName} = gate_o * cuda_tanh(c_new);
+    }}";
     }
 
     /// <summary>
@@ -688,10 +738,41 @@ public class GPUCodeGenerator
     {
         var dataType = GetDataTypeString<T>();
         var outputName = EnsureTensorName(op.OutputId);
+        var hiddenSize = op.HiddenSize;
 
-        return $@"    // GRUCell [hidden={op.HiddenSize}]
-    // Full GRU requires separate kernel - this is placeholder
-    {dataType} {outputName} = 0.0f; // GRU output delegated to specialized kernel";
+        // Get input tensor names
+        var x = op.InputIds.Length > 0 ? GetTensorName(op.InputIds[0]) : "x";
+        var h = op.InputIds.Length > 1 ? GetTensorName(op.InputIds[1]) : "h";
+        var wIh = op.InputIds.Length > 2 ? GetTensorName(op.InputIds[2]) : "w_ih";
+        var wHh = op.InputIds.Length > 3 ? GetTensorName(op.InputIds[3]) : "w_hh";
+
+        return $@"    // GRUCell [hidden={hiddenSize}]
+    {{
+        // Each thread processes one hidden unit
+        int hidden_idx = idx % {hiddenSize};
+        int batch_idx = idx / {hiddenSize};
+
+        // Compute gates: z (update), r (reset), n (candidate)
+        {dataType} gate_z = 0.0f, gate_r = 0.0f, gate_n = 0.0f;
+
+        // Gate computations (simplified - assumes pre-computed gate contributions)
+        int gate_base = batch_idx * {hiddenSize * 3};
+        int h_idx = batch_idx * {hiddenSize} + hidden_idx;
+
+        // z = sigmoid(z_ih + z_hh)
+        gate_z = cuda_sigmoid({wIh}[gate_base + hidden_idx] + {wHh}[gate_base + hidden_idx]);
+
+        // r = sigmoid(r_ih + r_hh)
+        gate_r = cuda_sigmoid({wIh}[gate_base + {hiddenSize} + hidden_idx] + {wHh}[gate_base + {hiddenSize} + hidden_idx]);
+
+        // n = tanh(n_ih + r * n_hh)
+        {dataType} n_hh = {wHh}[gate_base + {hiddenSize * 2} + hidden_idx];
+        gate_n = cuda_tanh({wIh}[gate_base + {hiddenSize * 2} + hidden_idx] + gate_r * n_hh);
+
+        // h_new = (1 - z) * h + z * n
+        {dataType} h_old = {h}[h_idx];
+        {dataType} {outputName} = (1.0f - gate_z) * h_old + gate_z * gate_n;
+    }}";
     }
 
     /// <summary>
