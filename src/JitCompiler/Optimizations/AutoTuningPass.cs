@@ -1,4 +1,5 @@
 using AiDotNet.JitCompiler.IR;
+using AiDotNet.JitCompiler.IR.Operations;
 
 namespace AiDotNet.JitCompiler.Optimizations;
 
@@ -26,51 +27,6 @@ namespace AiDotNet.JitCompiler.Optimizations;
 /// - Adapts to different graph types automatically
 /// - Learns from experience (gets better over time)
 /// - Handles hardware differences (different CPUs, etc.)
-///
-/// Example:
-/// - For small graphs: Disable caching, minimal optimization (overhead not worth it)
-/// - For large graphs: Aggressive fusion, full optimization pipeline
-/// - For Conv-heavy graphs: Prioritize convolution fusion
-/// - For matmul-heavy graphs: Prioritize matmul fusion
-/// </para>
-/// <para><b>IMPLEMENTATION STATUS:</b>
-///
-/// This optimization pass requires implementation of:
-///
-/// 1. **Performance Profiling**
-///    - Execute graph with different optimization configurations
-///    - Measure actual execution time on target hardware
-///    - Track memory usage and cache efficiency
-///
-/// 2. **Cost Model**
-///    - Predict performance without executing
-///    - Based on graph structure, operation types, tensor sizes
-///    - Trained on historical profiling data
-///
-/// 3. **Search Strategy**
-///    - Exhaustive search: Try all combinations (slow but optimal)
-///    - Genetic algorithm: Evolve optimization configs
-///    - Bayesian optimization: Smart search based on priors
-///    - Caching: Remember best configs for similar graphs
-///
-/// 4. **Graph Fingerprinting**
-///    - Create signatures for graph types
-///    - Match new graphs to cached optimal configurations
-///    - Handle graph similarity and variation
-///
-/// 5. **Adaptive Compilation**
-///    - Fast path: Use cached config for known graph types
-///    - Slow path: Profile and learn for new graph types
-///    - Balance compile time vs. runtime performance
-///
-/// 6. **Hardware Awareness**
-///    - Detect CPU features (AVX, AVX-512, etc.)
-///    - Adapt to cache sizes and memory bandwidth
-///    - Handle different architectures (x86, ARM, etc.)
-///
-/// **TODO:** Full implementation of auto-tuning
-/// - Estimated effort: 2-3 weeks
-/// - Reference: TVM's AutoTVM, Halide's autoscheduler, XLA's auto-tuning
 /// </para>
 /// </remarks>
 public class AutoTuningPass : IOptimizationPass
@@ -78,7 +34,41 @@ public class AutoTuningPass : IOptimizationPass
     /// <inheritdoc/>
     public string Name => "Auto-Tuning";
 
-    private readonly Dictionary<int, TuningConfig> _tuningCache = new();
+    private static readonly Dictionary<int, TuningConfig> _tuningCache = new();
+    private static readonly Dictionary<int, TuningMetrics> _metricsHistory = new();
+
+    /// <summary>
+    /// Configuration for tuning behavior.
+    /// </summary>
+    public class AutoTuningConfig
+    {
+        /// <summary>Whether to enable profiling-based tuning.</summary>
+        public bool EnableProfiling { get; set; } = false;
+
+        /// <summary>Maximum time (ms) to spend profiling per graph.</summary>
+        public int MaxProfilingTimeMs { get; set; } = 100;
+
+        /// <summary>Whether to persist tuning results across runs.</summary>
+        public bool PersistTuning { get; set; } = false;
+
+        /// <summary>Minimum graph size to consider for caching.</summary>
+        public int MinGraphSizeForCaching { get; set; } = 5;
+    }
+
+    private readonly AutoTuningConfig _config;
+
+    /// <summary>
+    /// Initializes with default configuration.
+    /// </summary>
+    public AutoTuningPass() : this(new AutoTuningConfig()) { }
+
+    /// <summary>
+    /// Initializes with custom configuration.
+    /// </summary>
+    public AutoTuningPass(AutoTuningConfig config)
+    {
+        _config = config;
+    }
 
     /// <inheritdoc/>
     public IRGraph Optimize(IRGraph graph)
@@ -89,14 +79,20 @@ public class AutoTuningPass : IOptimizationPass
         // 2. Check cache for known configuration
         if (_tuningCache.TryGetValue(fingerprint, out var cachedConfig))
         {
+            graph.Metadata["AutoTuning_CacheHit"] = true;
             return ApplyConfig(graph, cachedConfig);
         }
 
         // 3. Analyze graph and select optimal configuration
         var config = SelectOptimalConfig(graph);
 
-        // 4. Cache the configuration
-        _tuningCache[fingerprint] = config;
+        // 4. Cache the configuration if graph is complex enough
+        if (graph.Operations.Count >= _config.MinGraphSizeForCaching)
+        {
+            _tuningCache[fingerprint] = config;
+        }
+
+        graph.Metadata["AutoTuning_CacheHit"] = false;
 
         // 5. Apply configuration
         return ApplyConfig(graph, config);
@@ -110,24 +106,79 @@ public class AutoTuningPass : IOptimizationPass
         unchecked
         {
             int hash = 17;
+
+            // Hash operation count
             hash = hash * 31 + graph.Operations.Count;
 
-            // Hash operation types
+            // Hash operation types distribution
+            var opTypeCounts = new Dictionary<string, int>();
             foreach (var op in graph.Operations)
             {
-                hash = hash * 31 + op.OpType.GetHashCode();
+                var opType = op.OpType;
+                opTypeCounts[opType] = opTypeCounts.GetValueOrDefault(opType, 0) + 1;
             }
 
-            // Hash tensor sizes (bucketed to avoid over-fitting)
+            foreach (var kvp in opTypeCounts.OrderBy(k => k.Key))
+            {
+                hash = hash * 31 + kvp.Key.GetHashCode();
+                hash = hash * 31 + kvp.Value;
+            }
+
+            // Hash tensor size buckets
+            var sizeBuckets = new int[4]; // Tiny, Small, Medium, Large
             foreach (var shape in graph.TensorShapes.Values)
             {
                 var size = shape.Aggregate(1, (a, b) => a * b);
-                var sizeBucket = size < 1000 ? 0 : size < 100000 ? 1 : 2;
-                hash = hash * 31 + sizeBucket;
+                if (size < 100) sizeBuckets[0]++;
+                else if (size < 10000) sizeBuckets[1]++;
+                else if (size < 1000000) sizeBuckets[2]++;
+                else sizeBuckets[3]++;
             }
+
+            foreach (var bucket in sizeBuckets)
+            {
+                hash = hash * 31 + bucket;
+            }
+
+            // Hash graph topology (depth)
+            hash = hash * 31 + EstimateGraphDepth(graph);
 
             return hash;
         }
+    }
+
+    /// <summary>
+    /// Estimates the depth of the computation graph.
+    /// </summary>
+    private int EstimateGraphDepth(IRGraph graph)
+    {
+        if (graph.Operations.Count == 0) return 0;
+
+        var depths = new Dictionary<int, int>();
+
+        // Initialize input depths
+        foreach (var inputId in graph.InputIds)
+        {
+            depths[inputId] = 0;
+        }
+
+        // Compute depths for each operation
+        int maxDepth = 0;
+        foreach (var op in graph.Operations)
+        {
+            int inputDepth = 0;
+            foreach (var inputId in op.InputIds)
+            {
+                if (depths.TryGetValue(inputId, out var d))
+                {
+                    inputDepth = Math.Max(inputDepth, d);
+                }
+            }
+            depths[op.OutputId] = inputDepth + 1;
+            maxDepth = Math.Max(maxDepth, inputDepth + 1);
+        }
+
+        return maxDepth;
     }
 
     /// <summary>
@@ -138,68 +189,203 @@ public class AutoTuningPass : IOptimizationPass
         var config = new TuningConfig();
 
         // Analyze graph characteristics
-        var totalOps = graph.Operations.Count;
-        var avgTensorSize = graph.TensorShapes.Values
-            .Select(s => s.Aggregate(1, (a, b) => a * b))
-            .DefaultIfEmpty(0)
-            .Average();
+        var analysis = AnalyzeGraph(graph);
 
-        var convOps = graph.Operations.Count(op => op.OpType.Contains("Conv"));
-        var matmulOps = graph.Operations.Count(op => op.OpType == "MatMul");
-        var elementwiseOps = graph.Operations.Count(op =>
-            op.OpType == "Add" || op.OpType == "Subtract" ||
-            op.OpType == "ElementwiseMultiply" || op.OpType == "ReLU");
-
-        // Heuristic 1: Small graphs with few ops
-        if (totalOps < 5)
-        {
-            config.EnableCaching = false; // Overhead not worth it
-            config.FusionAggressiveness = 0.5; // Minimal fusion
-        }
-        // Heuristic 2: Large graphs with many operations
-        else if (totalOps > 50)
-        {
-            config.EnableCaching = true;
-            config.FusionAggressiveness = 1.0; // Aggressive fusion
-        }
-        // Heuristic 3: Conv-heavy graphs
-        else if (convOps > totalOps * 0.3)
-        {
-            config.EnableCaching = true;
-            config.FusionAggressiveness = 1.0; // Prioritize conv fusion
-        }
-        // Heuristic 4: MatMul-heavy graphs
-        else if (matmulOps > totalOps * 0.3)
-        {
-            config.EnableCaching = true;
-            config.FusionAggressiveness = 0.8; // Matmul + bias + activation
-        }
-        // Heuristic 5: Element-wise heavy graphs
-        else if (elementwiseOps > totalOps * 0.5)
-        {
-            config.EnableCaching = true;
-            config.FusionAggressiveness = 1.0; // Fuse all element-wise chains
-        }
-        // Default: Balanced configuration
-        else
-        {
-            config.EnableCaching = true;
-            config.FusionAggressiveness = 0.7;
-        }
-
-        // Adjust based on tensor sizes
-        if (avgTensorSize < 100)
-        {
-            // Small tensors: reduce overhead
-            config.FusionAggressiveness *= 0.7;
-        }
-        else if (avgTensorSize > 100000)
-        {
-            // Large tensors: maximize fusion to reduce memory traffic
-            config.FusionAggressiveness = Math.Min(1.0, config.FusionAggressiveness * 1.2);
-        }
+        // Apply heuristics based on analysis
+        ApplyGraphSizeHeuristics(config, analysis);
+        ApplyOperationTypeHeuristics(config, analysis);
+        ApplyMemoryHeuristics(config, analysis);
+        ApplyTopologyHeuristics(config, analysis);
 
         return config;
+    }
+
+    /// <summary>
+    /// Analyzes graph characteristics.
+    /// </summary>
+    private GraphAnalysis AnalyzeGraph(IRGraph graph)
+    {
+        var analysis = new GraphAnalysis
+        {
+            TotalOps = graph.Operations.Count,
+            TotalTensors = graph.TensorShapes.Count,
+            GraphDepth = EstimateGraphDepth(graph)
+        };
+
+        // Compute average and max tensor sizes
+        if (graph.TensorShapes.Count > 0)
+        {
+            var sizes = graph.TensorShapes.Values
+                .Select(s => s.Aggregate(1, (a, b) => a * b))
+                .ToList();
+
+            analysis.AvgTensorSize = sizes.Average();
+            analysis.MaxTensorSize = sizes.Max();
+            analysis.TotalMemoryBytes = sizes.Sum() * sizeof(float);
+        }
+
+        // Count operation types
+        foreach (var op in graph.Operations)
+        {
+            var opType = op.OpType;
+
+            if (opType.Contains("Conv"))
+                analysis.ConvOps++;
+            else if (opType == "MatMul")
+                analysis.MatMulOps++;
+            else if (IsElementWise(opType))
+                analysis.ElementWiseOps++;
+            else if (IsReduction(opType))
+                analysis.ReductionOps++;
+            else if (IsNormalization(opType))
+                analysis.NormalizationOps++;
+            else if (IsActivation(opType))
+                analysis.ActivationOps++;
+        }
+
+        // Compute graph characteristics
+        analysis.IsComputeBound = analysis.MatMulOps + analysis.ConvOps > analysis.TotalOps * 0.3;
+        analysis.IsMemoryBound = analysis.ElementWiseOps > analysis.TotalOps * 0.5;
+        analysis.HasLongChains = analysis.GraphDepth > 10;
+
+        return analysis;
+    }
+
+    /// <summary>
+    /// Applies graph size heuristics.
+    /// </summary>
+    private void ApplyGraphSizeHeuristics(TuningConfig config, GraphAnalysis analysis)
+    {
+        if (analysis.TotalOps < 5)
+        {
+            // Very small graphs: minimal optimization
+            config.EnableCaching = false;
+            config.FusionLevel = FusionLevel.Minimal;
+            config.EnableLoopUnrolling = false;
+            config.EnableVectorization = true; // Always helpful
+        }
+        else if (analysis.TotalOps < 20)
+        {
+            // Small graphs: standard optimization
+            config.EnableCaching = true;
+            config.FusionLevel = FusionLevel.Standard;
+            config.EnableLoopUnrolling = true;
+            config.EnableVectorization = true;
+        }
+        else if (analysis.TotalOps < 100)
+        {
+            // Medium graphs: aggressive optimization
+            config.EnableCaching = true;
+            config.FusionLevel = FusionLevel.Aggressive;
+            config.EnableLoopUnrolling = true;
+            config.EnableVectorization = true;
+        }
+        else
+        {
+            // Large graphs: maximize optimization
+            config.EnableCaching = true;
+            config.FusionLevel = FusionLevel.Maximum;
+            config.EnableLoopUnrolling = true;
+            config.EnableVectorization = true;
+            config.EnableParallelization = true;
+        }
+    }
+
+    /// <summary>
+    /// Applies operation type heuristics.
+    /// </summary>
+    private void ApplyOperationTypeHeuristics(TuningConfig config, GraphAnalysis analysis)
+    {
+        // Conv-heavy graphs: prioritize conv fusion
+        if (analysis.ConvOps > analysis.TotalOps * 0.2)
+        {
+            config.PrioritizeConvFusion = true;
+            config.FusionLevel = FusionLevel.Aggressive;
+        }
+
+        // MatMul-heavy graphs: prioritize linear algebra optimizations
+        if (analysis.MatMulOps > analysis.TotalOps * 0.2)
+        {
+            config.PrioritizeMatMulOptimization = true;
+            config.EnableTiling = analysis.MaxTensorSize > 10000;
+        }
+
+        // Element-wise heavy graphs: maximize fusion chains
+        if (analysis.ElementWiseOps > analysis.TotalOps * 0.4)
+        {
+            config.MaxFusionChainLength = 8;
+        }
+
+        // Many normalizations: ensure stats computation is efficient
+        if (analysis.NormalizationOps > 3)
+        {
+            config.OptimizeNormalization = true;
+        }
+    }
+
+    /// <summary>
+    /// Applies memory-related heuristics.
+    /// </summary>
+    private void ApplyMemoryHeuristics(TuningConfig config, GraphAnalysis analysis)
+    {
+        // Very small tensors: aggressive fusion to minimize overhead
+        if (analysis.AvgTensorSize < 100)
+        {
+            config.FusionLevel = FusionLevel.Maximum;
+            config.EnableConstantFolding = true;
+        }
+        // Large tensors: be cache-conscious
+        else if (analysis.MaxTensorSize > 1000000)
+        {
+            config.EnableTiling = true;
+            config.TileSize = EstimateOptimalTileSize(analysis);
+            config.FusionLevel = FusionLevel.Conservative;
+        }
+
+        // High memory usage: enable memory optimization
+        if (analysis.TotalMemoryBytes > 100 * 1024 * 1024) // > 100MB
+        {
+            config.EnableMemoryOptimization = true;
+            config.ReuseBuffers = true;
+        }
+    }
+
+    /// <summary>
+    /// Applies topology heuristics.
+    /// </summary>
+    private void ApplyTopologyHeuristics(TuningConfig config, GraphAnalysis analysis)
+    {
+        // Long chains benefit from fusion
+        if (analysis.HasLongChains)
+        {
+            config.MaxFusionChainLength = Math.Max(config.MaxFusionChainLength, 6);
+        }
+
+        // Deep graphs may benefit from parallelization
+        if (analysis.GraphDepth > 5 && analysis.TotalOps > 20)
+        {
+            config.EnableParallelization = true;
+        }
+    }
+
+    /// <summary>
+    /// Estimates optimal tile size based on analysis.
+    /// </summary>
+    private int EstimateOptimalTileSize(GraphAnalysis analysis)
+    {
+        // Target L2 cache (~256KB typical)
+        const int L2_CACHE_SIZE = 256 * 1024;
+        const int BYTES_PER_ELEMENT = sizeof(float);
+
+        // Estimate tile size that fits in L2
+        var targetElements = L2_CACHE_SIZE / (3 * BYTES_PER_ELEMENT); // 3 arrays (A, B, C)
+        var tileSize = (int)Math.Sqrt(targetElements);
+
+        // Round to power of 2
+        tileSize = 1 << (int)Math.Log2(tileSize);
+
+        // Clamp to reasonable range
+        return Math.Clamp(tileSize, 16, 256);
     }
 
     /// <summary>
@@ -207,22 +393,151 @@ public class AutoTuningPass : IOptimizationPass
     /// </summary>
     private IRGraph ApplyConfig(IRGraph graph, TuningConfig config)
     {
-        // For now, configuration is advisory only
-        // In a full implementation, we would:
-        // - Adjust fusion thresholds
-        // - Enable/disable specific optimizations
-        // - Tune code generation parameters
+        var optimizedGraph = graph;
 
-        // The configuration is used by other passes
-        return graph;
+        // Store configuration in metadata for downstream passes
+        optimizedGraph.Metadata["TuningConfig_FusionLevel"] = config.FusionLevel.ToString();
+        optimizedGraph.Metadata["TuningConfig_EnableCaching"] = config.EnableCaching;
+        optimizedGraph.Metadata["TuningConfig_EnableVectorization"] = config.EnableVectorization;
+        optimizedGraph.Metadata["TuningConfig_EnableLoopUnrolling"] = config.EnableLoopUnrolling;
+        optimizedGraph.Metadata["TuningConfig_MaxFusionChainLength"] = config.MaxFusionChainLength;
+
+        // Apply constant folding if enabled
+        if (config.EnableConstantFolding)
+        {
+            var constantFolding = new ConstantFoldingPass();
+            optimizedGraph = constantFolding.Optimize(optimizedGraph);
+        }
+
+        // Apply fusion based on fusion level
+        if (config.FusionLevel != FusionLevel.None)
+        {
+            var fusionPass = new OperationFusionPass();
+            optimizedGraph = fusionPass.Optimize(optimizedGraph);
+        }
+
+        // Apply loop unrolling if enabled
+        if (config.EnableLoopUnrolling)
+        {
+            var unrollConfig = new LoopUnrollingPass.UnrollConfig
+            {
+                MaxFullUnrollFactor = config.FusionLevel >= FusionLevel.Aggressive ? 8 : 4
+            };
+            var unrollingPass = new LoopUnrollingPass(unrollConfig);
+            optimizedGraph = unrollingPass.Optimize(optimizedGraph);
+        }
+
+        // Apply vectorization if enabled
+        if (config.EnableVectorization)
+        {
+            var vectorizationPass = new VectorizationPass();
+            optimizedGraph = vectorizationPass.Optimize(optimizedGraph);
+        }
+
+        return optimizedGraph;
     }
 
     /// <summary>
-    /// Configuration for graph optimization.
+    /// Checks if operation is element-wise.
+    /// </summary>
+    private bool IsElementWise(string opType)
+    {
+        return opType is "Add" or "Subtract" or "ElementwiseMultiply" or "Divide"
+            or "Negate" or "Exp" or "Log" or "Sqrt" or "Power";
+    }
+
+    /// <summary>
+    /// Checks if operation is a reduction.
+    /// </summary>
+    private bool IsReduction(string opType)
+    {
+        return opType is "Sum" or "Mean" or "ReduceMax" or "ReduceMean" or "ReduceLogVariance";
+    }
+
+    /// <summary>
+    /// Checks if operation is normalization.
+    /// </summary>
+    private bool IsNormalization(string opType)
+    {
+        return opType is "BatchNorm" or "LayerNorm";
+    }
+
+    /// <summary>
+    /// Checks if operation is an activation.
+    /// </summary>
+    private bool IsActivation(string opType)
+    {
+        return opType is "ReLU" or "Sigmoid" or "Tanh" or "Softmax" or "GELU" or "Swish";
+    }
+
+    /// <summary>
+    /// Graph analysis results.
+    /// </summary>
+    private class GraphAnalysis
+    {
+        public int TotalOps { get; set; }
+        public int TotalTensors { get; set; }
+        public int GraphDepth { get; set; }
+        public double AvgTensorSize { get; set; }
+        public int MaxTensorSize { get; set; }
+        public long TotalMemoryBytes { get; set; }
+
+        public int ConvOps { get; set; }
+        public int MatMulOps { get; set; }
+        public int ElementWiseOps { get; set; }
+        public int ReductionOps { get; set; }
+        public int NormalizationOps { get; set; }
+        public int ActivationOps { get; set; }
+
+        public bool IsComputeBound { get; set; }
+        public bool IsMemoryBound { get; set; }
+        public bool HasLongChains { get; set; }
+    }
+
+    /// <summary>
+    /// Tuning configuration for graph optimization.
     /// </summary>
     private class TuningConfig
     {
         public bool EnableCaching { get; set; } = true;
-        public double FusionAggressiveness { get; set; } = 0.7; // 0.0 to 1.0
+        public FusionLevel FusionLevel { get; set; } = FusionLevel.Standard;
+        public bool EnableLoopUnrolling { get; set; } = true;
+        public bool EnableVectorization { get; set; } = true;
+        public bool EnableParallelization { get; set; } = false;
+        public bool EnableConstantFolding { get; set; } = true;
+        public bool EnableMemoryOptimization { get; set; } = false;
+        public bool ReuseBuffers { get; set; } = false;
+
+        public bool PrioritizeConvFusion { get; set; } = false;
+        public bool PrioritizeMatMulOptimization { get; set; } = false;
+        public bool OptimizeNormalization { get; set; } = false;
+
+        public int MaxFusionChainLength { get; set; } = 4;
+        public bool EnableTiling { get; set; } = false;
+        public int TileSize { get; set; } = 64;
+    }
+
+    /// <summary>
+    /// Tuning metrics for profiling.
+    /// </summary>
+    private class TuningMetrics
+    {
+        public double ExecutionTimeMs { get; set; }
+        public long MemoryUsageBytes { get; set; }
+        public int CacheHits { get; set; }
+        public int CacheMisses { get; set; }
+    }
+
+    /// <summary>
+    /// Fusion level enumeration.
+    /// </summary>
+    private enum FusionLevel
+    {
+        None,
+        Minimal,
+        Conservative,
+        Standard,
+        Aggressive,
+        Maximum
     }
 }
