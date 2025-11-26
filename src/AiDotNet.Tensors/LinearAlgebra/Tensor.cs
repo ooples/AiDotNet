@@ -1345,17 +1345,145 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     /// </remarks>
     public Tensor<T> MatrixMultiply(Tensor<T> other)
     {
-        if (this.Rank != 2 || other.Rank != 2)
+        if (this.Rank < 2 || other.Rank < 2)
         {
-            throw new ArgumentException("MatMul is only defined for 2D tensors (matrices).");
+            throw new ArgumentException("MatMul requires tensors with at least 2 dimensions.");
         }
 
-        if (this.Shape[1] != other.Shape[0])
+        // Get matrix dimensions (last 2 dims)
+        int M = this.Shape[^2];
+        int K1 = this.Shape[^1];
+        int K2 = other.Shape[^2];
+        int N = other.Shape[^1];
+
+        if (K1 != K2)
         {
-            throw new ArgumentException("Incompatible matrix dimensions for multiplication.");
+            throw new ArgumentException($"Incompatible matrix dimensions for multiplication: {K1} vs {K2}.");
         }
 
-        return this.Multiply(other);
+        // Handle simple 2D case
+        if (this.Rank == 2 && other.Rank == 2)
+        {
+            return this.Multiply(other);
+        }
+
+        // Handle batched matrix multiplication
+        return BatchedMatrixMultiply(other);
+    }
+
+    /// <summary>
+    /// Performs batched matrix multiplication for N-dimensional tensors.
+    /// </summary>
+    /// <param name="other">The other tensor to multiply with.</param>
+    /// <returns>The result of batched matrix multiplication.</returns>
+    private Tensor<T> BatchedMatrixMultiply(Tensor<T> other)
+    {
+        int M = this.Shape[^2];
+        int K = this.Shape[^1];
+        int N = other.Shape[^1];
+
+        // Calculate batch dimensions (all but last 2)
+        var thisBatchShape = this.Shape.Take(this.Rank - 2).ToArray();
+        var otherBatchShape = other.Shape.Take(other.Rank - 2).ToArray();
+
+        // Calculate broadcasted batch shape
+        var maxBatchRank = Math.Max(thisBatchShape.Length, otherBatchShape.Length);
+        var batchShape = new int[maxBatchRank];
+
+        // Pad shorter batch shape with 1s from the left
+        var paddedThis = new int[maxBatchRank];
+        var paddedOther = new int[maxBatchRank];
+        for (int i = 0; i < maxBatchRank; i++)
+        {
+            paddedThis[i] = i < maxBatchRank - thisBatchShape.Length ? 1 : thisBatchShape[i - (maxBatchRank - thisBatchShape.Length)];
+            paddedOther[i] = i < maxBatchRank - otherBatchShape.Length ? 1 : otherBatchShape[i - (maxBatchRank - otherBatchShape.Length)];
+
+            // Broadcasting: dimension must be equal or one of them must be 1
+            if (paddedThis[i] != paddedOther[i] && paddedThis[i] != 1 && paddedOther[i] != 1)
+            {
+                throw new ArgumentException($"Cannot broadcast batch dimensions: {string.Join(",", thisBatchShape)} vs {string.Join(",", otherBatchShape)}");
+            }
+            batchShape[i] = Math.Max(paddedThis[i], paddedOther[i]);
+        }
+
+        // Calculate total batch size
+        var totalBatchSize = batchShape.Length > 0 ? batchShape.Aggregate(1, (a, b) => a * b) : 1;
+
+        // Result shape
+        var resultShape = batchShape.Concat(new[] { M, N }).ToArray();
+        var result = new Tensor<T>(resultShape);
+
+        // Flatten batch dimensions for iteration
+        var thisMatrixStride = M * K;
+        var otherMatrixStride = K * N;
+        var resultMatrixStride = M * N;
+
+        // Calculate strides for each tensor
+        var thisStrides = CalculateBatchStrides(paddedThis);
+        var otherStrides = CalculateBatchStrides(paddedOther);
+
+        var thisData = this._data;
+        var otherData = other._data;
+        var resultData = result._data;
+
+        for (int batchIdx = 0; batchIdx < totalBatchSize; batchIdx++)
+        {
+            // Calculate batch indices
+            var batchIndices = new int[maxBatchRank];
+            int remaining = batchIdx;
+            for (int d = maxBatchRank - 1; d >= 0; d--)
+            {
+                batchIndices[d] = remaining % batchShape[d];
+                remaining /= batchShape[d];
+            }
+
+            // Calculate source indices with broadcasting
+            int thisOffset = 0;
+            int otherOffset = 0;
+            for (int d = 0; d < maxBatchRank; d++)
+            {
+                int thisIdx = paddedThis[d] == 1 ? 0 : batchIndices[d];
+                int otherIdx = paddedOther[d] == 1 ? 0 : batchIndices[d];
+                thisOffset += thisIdx * thisStrides[d] * thisMatrixStride;
+                otherOffset += otherIdx * otherStrides[d] * otherMatrixStride;
+            }
+
+            int resultOffset = batchIdx * resultMatrixStride;
+
+            // Perform matrix multiplication for this batch
+            for (int i = 0; i < M; i++)
+            {
+                for (int j = 0; j < N; j++)
+                {
+                    T sum = _numOps.Zero;
+                    for (int k = 0; k < K; k++)
+                    {
+                        var a = thisData[thisOffset + i * K + k];
+                        var b = otherData[otherOffset + k * N + j];
+                        sum = _numOps.Add(sum, _numOps.Multiply(a, b));
+                    }
+                    resultData[resultOffset + i * N + j] = sum;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Calculates the strides for batch dimensions.
+    /// </summary>
+    private static int[] CalculateBatchStrides(int[] shape)
+    {
+        var strides = new int[shape.Length];
+        if (shape.Length == 0) return strides;
+
+        strides[shape.Length - 1] = 1;
+        for (int i = shape.Length - 2; i >= 0; i--)
+        {
+            strides[i] = strides[i + 1] * shape[i + 1];
+        }
+        return strides;
     }
 
     /// <summary>
@@ -2116,22 +2244,59 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     /// </remarks>
     public Tensor<T> Transpose()
     {
-        if (Shape.Length != 2)
+        if (Shape.Length == 1)
         {
-            throw new NotSupportedException("Transpose is currently only supported for 2D tensors (matrices).");
+            // 1D tensor: return a copy (transpose has no effect)
+            return Clone();
         }
-
-        var result = new Tensor<T>([Shape[1], Shape[0]]);
-
-        for (int i = 0; i < Shape[0]; i++)
+        else if (Shape.Length == 2)
         {
-            for (int j = 0; j < Shape[1]; j++)
+            // 2D tensor: swap rows and columns
+            var result = new Tensor<T>([Shape[1], Shape[0]]);
+
+            for (int i = 0; i < Shape[0]; i++)
             {
-                result[j, i] = this[i, j];
+                for (int j = 0; j < Shape[1]; j++)
+                {
+                    result[j, i] = this[i, j];
+                }
             }
+
+            return result;
+        }
+        else
+        {
+            // N-dimensional tensor: reverse all dimensions (default behavior)
+            // For example, [2,3,4] becomes [4,3,2]
+            var permutation = Enumerable.Range(0, Rank).Reverse().ToArray();
+            return Transpose(permutation);
+        }
+    }
+
+    /// <summary>
+    /// Swaps the last two dimensions of the tensor.
+    /// </summary>
+    /// <returns>A new tensor with the last two dimensions swapped.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is commonly used in batch matrix operations where
+    /// you want to transpose the matrix part of a tensor while keeping batch dimensions intact.
+    ///
+    /// For example, for a tensor with shape [batch, rows, cols], this will produce
+    /// a tensor with shape [batch, cols, rows].</para>
+    /// </remarks>
+    public Tensor<T> TransposeLast2D()
+    {
+        if (Rank < 2)
+        {
+            throw new InvalidOperationException("Tensor must have at least 2 dimensions to transpose last 2D.");
         }
 
-        return result;
+        // Create permutation that swaps only the last two dimensions
+        var permutation = Enumerable.Range(0, Rank).ToArray();
+        permutation[Rank - 2] = Rank - 1;
+        permutation[Rank - 1] = Rank - 2;
+
+        return Transpose(permutation);
     }
 
     /// <summary>
