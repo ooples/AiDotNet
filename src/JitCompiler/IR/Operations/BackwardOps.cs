@@ -453,3 +453,529 @@ public class GradBatchNormOp : BackwardOp
         return $"t{OutputId} = GradBatchNorm[input={InputIndex}](...) : {OutputType} {OutputShape.ShapeToString()}";
     }
 }
+
+/// <summary>
+/// Backward operation for ReshapeOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = reshape(x, new_shape)
+/// Backward: grad_x = reshape(grad_y, original_shape)
+/// Reshape doesn't change data, just view, so gradient just reshapes back.
+/// </para>
+/// </remarks>
+public class GradReshapeOp : BackwardOp
+{
+    /// <summary>Original shape before reshape.</summary>
+    public int[] OriginalShape { get; set; } = Array.Empty<int>();
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        if (OriginalShape.Length == 0) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradReshape[shape={string.Join(",", OriginalShape)}](t{InputIds[0]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for TransposeOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = transpose(x) or permute(x, axes)
+/// Backward: grad_x = transpose(grad_y, inverse_axes)
+/// </para>
+/// </remarks>
+public class GradTransposeOp : BackwardOp
+{
+    /// <summary>Axes used in forward transpose.</summary>
+    public int[]? Axes { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        var axesStr = Axes != null ? string.Join(",", Axes) : "default";
+        return $"t{OutputId} = GradTranspose[axes={axesStr}](t{InputIds[0]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for ConcatOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = concat([x1, x2, ...], axis)
+/// Backward: grad_xi = slice(grad_y, start_i, end_i, axis)
+/// Each input gets a slice of the output gradient.
+/// </para>
+/// </remarks>
+public class GradConcatOp : BackwardOp
+{
+    /// <summary>Which input are we computing gradient for.</summary>
+    public int InputIndex { get; set; }
+
+    /// <summary>Concatenation axis.</summary>
+    public int Axis { get; set; }
+
+    /// <summary>Start index along axis for this input's gradient.</summary>
+    public int StartIndex { get; set; }
+
+    /// <summary>Size along axis for this input.</summary>
+    public int Size { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradConcat[input={InputIndex}, axis={Axis}, start={StartIndex}](t{InputIds[0]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for SplitOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: [y1, y2, ...] = split(x, sizes, axis)
+/// Backward: grad_x = concat([grad_y1, grad_y2, ...], axis)
+/// </para>
+/// </remarks>
+public class GradSplitOp : BackwardOp
+{
+    /// <summary>Split axis.</summary>
+    public int Axis { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length < 1) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradSplit[axis={Axis}]({string.Join(", ", InputIds.Select(id => $"t{id}"))}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for DivideOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: c = a / b
+/// Backward: grad_a = grad_c / b, grad_b = -grad_c * a / (b^2)
+/// </para>
+/// </remarks>
+public class GradDivideOp : BackwardOp
+{
+    /// <summary>Which input: 0 = numerator, 1 = denominator.</summary>
+    public int InputIndex { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        // Needs grad_output and original inputs
+        return InputIds.Length >= 2;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradDivide[input={InputIndex}](...) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for PowerOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = x^p
+/// Backward: grad_x = grad_y * p * x^(p-1)
+/// </para>
+/// </remarks>
+public class GradPowerOp : BackwardOp
+{
+    /// <summary>Exponent used in forward pass.</summary>
+    public double Exponent { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradPower[exp={Exponent}](t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for SqrtOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = sqrt(x)
+/// Backward: grad_x = grad_y / (2 * sqrt(x)) = grad_y / (2 * y)
+/// </para>
+/// </remarks>
+public class GradSqrtOp : BackwardOp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward output (y)
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradSqrt(t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for SumOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = sum(x, axes)
+/// Backward: grad_x = broadcast(grad_y, original_shape)
+/// Gradient is broadcasted back to original shape.
+/// </para>
+/// </remarks>
+public class GradSumOp : BackwardOp
+{
+    /// <summary>Original input shape.</summary>
+    public int[] OriginalShape { get; set; } = Array.Empty<int>();
+
+    /// <summary>Axes that were reduced.</summary>
+    public int[]? Axes { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        var axesStr = Axes != null ? string.Join(",", Axes) : "all";
+        return $"t{OutputId} = GradSum[axes={axesStr}](t{InputIds[0]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for MeanOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = mean(x, axes)
+/// Backward: grad_x = broadcast(grad_y / count, original_shape)
+/// Similar to sum but divided by number of elements.
+/// </para>
+/// </remarks>
+public class GradMeanOp : BackwardOp
+{
+    /// <summary>Original input shape.</summary>
+    public int[] OriginalShape { get; set; } = Array.Empty<int>();
+
+    /// <summary>Axes that were reduced.</summary>
+    public int[]? Axes { get; set; }
+
+    /// <summary>Number of elements that were averaged.</summary>
+    public int Count { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradMean[count={Count}](t{InputIds[0]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for SliceOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = slice(x, start, end)
+/// Backward: grad_x = pad_with_zeros(grad_y, original_shape, start_indices)
+/// Gradient is zero everywhere except the sliced region.
+/// </para>
+/// </remarks>
+public class GradSliceOp : BackwardOp
+{
+    /// <summary>Original input shape.</summary>
+    public int[] OriginalShape { get; set; } = Array.Empty<int>();
+
+    /// <summary>Start indices for the slice.</summary>
+    public int[] StartIndices { get; set; } = Array.Empty<int>();
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradSlice[start={string.Join(",", StartIndices)}](t{InputIds[0]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for PadOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = pad(x, padding)
+/// Backward: grad_x = slice(grad_y, unpad)
+/// Gradient comes from the center (unpadded) region.
+/// </para>
+/// </remarks>
+public class GradPadOp : BackwardOp
+{
+    /// <summary>Padding that was applied.</summary>
+    public int[] Padding { get; set; } = Array.Empty<int>();
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradPad[padding={string.Join(",", Padding)}](t{InputIds[0]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for DropoutOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = dropout(x, p, mask)
+/// Backward: grad_x = grad_y * mask / (1 - p) (using same mask from forward)
+/// </para>
+/// </remarks>
+public class GradDropoutOp : BackwardOp
+{
+    /// <summary>Dropout probability.</summary>
+    public double Probability { get; set; } = 0.5;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and dropout mask
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradDropout[p={Probability}](t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for LayerNormOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Layer normalization gradient is complex, involving variance and mean.
+/// Computes gradients for input, gamma, and beta.
+/// </para>
+/// </remarks>
+public class GradLayerNormOp : BackwardOp
+{
+    /// <summary>Which input: 0 = input, 1 = gamma, 2 = beta.</summary>
+    public int InputIndex { get; set; }
+
+    /// <summary>Epsilon for numerical stability.</summary>
+    public double Epsilon { get; set; } = 1e-5;
+
+    /// <summary>Normalized shape.</summary>
+    public int[] NormalizedShape { get; set; } = Array.Empty<int>();
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        return InputIds.Length >= 2;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradLayerNorm[input={InputIndex}](...) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for EmbeddingOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = embedding[indices]
+/// Backward: grad_embedding = scatter_add(grad_y, indices, embedding_shape)
+/// Gradients are scattered back to embedding table positions.
+/// </para>
+/// </remarks>
+public class GradEmbeddingOp : BackwardOp
+{
+    /// <summary>Shape of the embedding table.</summary>
+    public int[] EmbeddingShape { get; set; } = Array.Empty<int>();
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and indices
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradEmbedding[shape={string.Join(",", EmbeddingShape)}](...) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for GatherOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = gather(x, indices, axis)
+/// Backward: grad_x = scatter(grad_y, indices, axis, shape)
+/// </para>
+/// </remarks>
+public class GradGatherOp : BackwardOp
+{
+    /// <summary>Gather axis.</summary>
+    public int Axis { get; set; }
+
+    /// <summary>Original input shape.</summary>
+    public int[] InputShape { get; set; } = Array.Empty<int>();
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and indices
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradGather[axis={Axis}](...) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for LeakyReLUOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = max(alpha * x, x)
+/// Backward: grad_x = grad_y * (1 if x > 0 else alpha)
+/// </para>
+/// </remarks>
+public class GradLeakyReLUOp : BackwardOp
+{
+    /// <summary>Negative slope.</summary>
+    public double Alpha { get; set; } = 0.01;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradLeakyReLU[alpha={Alpha}](t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for GELUOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// GELU gradient is computed using the derivative of the GELU function.
+/// grad_x = grad_y * (0.5 * (1 + tanh(...)) + 0.5 * x * sech^2(...) * derivative_of_inner)
+/// </para>
+/// </remarks>
+public class GradGELUOp : BackwardOp
+{
+    /// <summary>Whether approximate GELU was used.</summary>
+    public bool Approximate { get; set; } = true;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradGELU[approx={Approximate}](t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for BroadcastOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = broadcast(x, target_shape)
+/// Backward: grad_x = reduce_sum(grad_y, broadcasted_axes)
+/// Sum over axes that were broadcasted.
+/// </para>
+/// </remarks>
+public class GradBroadcastOp : BackwardOp
+{
+    /// <summary>Original shape before broadcast.</summary>
+    public int[] OriginalShape { get; set; } = Array.Empty<int>();
+
+    /// <summary>Axes that were broadcasted.</summary>
+    public int[] BroadcastedAxes { get; set; } = Array.Empty<int>();
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradBroadcast[axes={string.Join(",", BroadcastedAxes)}](t{InputIds[0]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}

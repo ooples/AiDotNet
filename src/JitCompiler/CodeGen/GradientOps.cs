@@ -518,6 +518,598 @@ public static class GradientOps
         }
     }
 
+    // ========== Additional Gradient Operations ==========
+
+    /// <summary>
+    /// Gradient of Reshape operation.
+    /// Forward: y = reshape(x, new_shape)
+    /// Backward: grad_x = reshape(grad_y, original_shape)
+    /// </summary>
+    public static Tensor<T> GradReshape<T>(Tensor<T> gradOutput, int[] originalShape)
+    {
+        return gradOutput.Reshape(originalShape);
+    }
+
+    /// <summary>
+    /// Gradient of Transpose operation.
+    /// Forward: y = transpose(x, axes)
+    /// Backward: grad_x = transpose(grad_y, inverse_axes)
+    /// </summary>
+    public static Tensor<T> GradTranspose<T>(Tensor<T> gradOutput, int[]? axes)
+    {
+        if (axes == null)
+        {
+            // Simple transpose (swap last two dimensions)
+            return gradOutput.Transpose();
+        }
+
+        // Compute inverse permutation
+        var inverseAxes = new int[axes.Length];
+        for (int i = 0; i < axes.Length; i++)
+        {
+            inverseAxes[axes[i]] = i;
+        }
+
+        // Apply inverse transpose
+        return PermuteAxes(gradOutput, inverseAxes);
+    }
+
+    /// <summary>
+    /// Gradient of Concat operation for a specific input.
+    /// Forward: y = concat([x1, x2, ...], axis)
+    /// Backward: grad_xi = slice(grad_y, start_i, end_i, axis)
+    /// </summary>
+    public static Tensor<T> GradConcat<T>(Tensor<T> gradOutput, int axis, int startIndex, int size)
+    {
+        return SliceAlongAxis(gradOutput, axis, startIndex, size);
+    }
+
+    /// <summary>
+    /// Gradient of Split operation.
+    /// Forward: [y1, y2, ...] = split(x, sizes, axis)
+    /// Backward: grad_x = concat([grad_y1, grad_y2, ...], axis)
+    /// </summary>
+    public static Tensor<T> GradSplit<T>(Tensor<T>[] gradOutputs, int axis)
+    {
+        if (gradOutputs.Length == 0)
+            throw new ArgumentException("Must provide at least one gradient");
+
+        if (gradOutputs.Length == 1)
+            return gradOutputs[0];
+
+        // Concatenate all gradients along the axis
+        var result = gradOutputs[0];
+        for (int i = 1; i < gradOutputs.Length; i++)
+        {
+            result = Tensor<T>.Concat(new[] { result, gradOutputs[i] }, axis);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Gradient of Divide operation for numerator.
+    /// Forward: c = a / b
+    /// Backward for a: grad_a = grad_c / b
+    /// </summary>
+    public static Tensor<T> GradDivideNumerator<T>(Tensor<T> gradOutput, Tensor<T> denominator)
+    {
+        return DivideHelper(gradOutput, denominator);
+    }
+
+    /// <summary>
+    /// Gradient of Divide operation for denominator.
+    /// Forward: c = a / b
+    /// Backward for b: grad_b = -grad_c * a / (b^2)
+    /// </summary>
+    public static Tensor<T> GradDivideDenominator<T>(Tensor<T> gradOutput, Tensor<T> numerator, Tensor<T> denominator)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // -grad_c * a / (b^2)
+        var negGrad = NegateHelper(gradOutput);
+        var gradTimesNumerator = Tensor<T>.ElementwiseMultiply(negGrad, numerator);
+        var denominatorSquared = Tensor<T>.ElementwiseMultiply(denominator, denominator);
+        return DivideHelper(gradTimesNumerator, denominatorSquared);
+    }
+
+    /// <summary>
+    /// Gradient of Power operation.
+    /// Forward: y = x^p
+    /// Backward: grad_x = grad_y * p * x^(p-1)
+    /// </summary>
+    public static Tensor<T> GradPower<T>(Tensor<T> gradOutput, Tensor<T> forwardInput, double exponent)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // grad_x = grad_y * p * x^(p-1)
+        var inputData = forwardInput.ToArray();
+        var gradData = gradOutput.ToArray();
+        var resultData = new T[inputData.Length];
+
+        var p = numOps.FromDouble(exponent);
+        var pMinus1 = numOps.FromDouble(exponent - 1);
+
+        for (int i = 0; i < inputData.Length; i++)
+        {
+            // x^(p-1) * p * grad_y
+            var xPowPMinus1 = numOps.Power(inputData[i], pMinus1);
+            var scaled = numOps.Multiply(xPowPMinus1, p);
+            resultData[i] = numOps.Multiply(scaled, gradData[i]);
+        }
+
+        return new Tensor<T>(forwardInput.Shape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Gradient of Sqrt operation.
+    /// Forward: y = sqrt(x)
+    /// Backward: grad_x = grad_y / (2 * y)
+    /// </summary>
+    public static Tensor<T> GradSqrt<T>(Tensor<T> gradOutput, Tensor<T> forwardOutput)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // grad_x = grad_y / (2 * y)
+        var two = numOps.FromDouble(2.0);
+        var twoTimesY = ScalarMultiply(forwardOutput, two);
+        return DivideHelper(gradOutput, twoTimesY);
+    }
+
+    /// <summary>
+    /// Gradient of Sum operation.
+    /// Forward: y = sum(x, axes)
+    /// Backward: grad_x = broadcast(grad_y, original_shape)
+    /// </summary>
+    public static Tensor<T> GradSum<T>(Tensor<T> gradOutput, int[] originalShape, int[]? axes)
+    {
+        // Broadcast gradient back to original shape
+        return BroadcastTo(gradOutput, originalShape);
+    }
+
+    /// <summary>
+    /// Gradient of Mean operation.
+    /// Forward: y = mean(x, axes)
+    /// Backward: grad_x = broadcast(grad_y / count, original_shape)
+    /// </summary>
+    public static Tensor<T> GradMean<T>(Tensor<T> gradOutput, int[] originalShape, int count)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Divide by count first
+        var divisor = numOps.FromDouble(count);
+        var scaledGrad = ScalarDivide(gradOutput, divisor);
+
+        // Then broadcast
+        return BroadcastTo(scaledGrad, originalShape);
+    }
+
+    /// <summary>
+    /// Gradient of Slice operation.
+    /// Forward: y = slice(x, start, end)
+    /// Backward: grad_x = pad_with_zeros(grad_y, original_shape, start_indices)
+    /// </summary>
+    public static Tensor<T> GradSlice<T>(Tensor<T> gradOutput, int[] originalShape, int[] startIndices)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Create zero tensor with original shape
+        var totalElements = originalShape.Aggregate(1, (a, b) => a * b);
+        var resultData = new T[totalElements];
+        for (int i = 0; i < totalElements; i++)
+        {
+            resultData[i] = numOps.Zero;
+        }
+
+        // Copy gradient values to correct positions
+        var gradData = gradOutput.ToArray();
+        var gradShape = gradOutput.Shape;
+
+        // Calculate strides for original shape
+        var strides = new int[originalShape.Length];
+        strides[strides.Length - 1] = 1;
+        for (int d = strides.Length - 2; d >= 0; d--)
+        {
+            strides[d] = strides[d + 1] * originalShape[d + 1];
+        }
+
+        // Copy gradient to appropriate positions
+        CopyToPosition(resultData, gradData, originalShape, gradShape, startIndices, strides);
+
+        return new Tensor<T>(originalShape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Gradient of Pad operation.
+    /// Forward: y = pad(x, padding)
+    /// Backward: grad_x = slice(grad_y, unpad region)
+    /// </summary>
+    public static Tensor<T> GradPad<T>(Tensor<T> gradOutput, int[] padding)
+    {
+        // Extract the center (unpadded) region
+        var shape = gradOutput.Shape;
+        var startIndices = new int[shape.Length];
+        var sizes = new int[shape.Length];
+
+        for (int d = 0; d < shape.Length; d++)
+        {
+            var padBefore = d < padding.Length / 2 ? padding[d * 2] : 0;
+            var padAfter = d < padding.Length / 2 ? padding[d * 2 + 1] : 0;
+            startIndices[d] = padBefore;
+            sizes[d] = shape[d] - padBefore - padAfter;
+        }
+
+        return SliceWithShape(gradOutput, startIndices, sizes);
+    }
+
+    /// <summary>
+    /// Gradient of Dropout operation.
+    /// Forward: y = dropout(x, p, mask)
+    /// Backward: grad_x = grad_y * mask / (1 - p)
+    /// </summary>
+    public static Tensor<T> GradDropout<T>(Tensor<T> gradOutput, Tensor<T> mask, double probability)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // grad_x = grad_y * mask / (1 - p)
+        var gradTimesMask = Tensor<T>.ElementwiseMultiply(gradOutput, mask);
+        var scale = numOps.FromDouble(1.0 / (1.0 - probability));
+        return ScalarMultiply(gradTimesMask, scale);
+    }
+
+    /// <summary>
+    /// Gradient of LeakyReLU operation.
+    /// Forward: y = max(alpha * x, x)
+    /// Backward: grad_x = grad_y * (1 if x > 0 else alpha)
+    /// </summary>
+    public static Tensor<T> GradLeakyReLU<T>(Tensor<T> gradOutput, Tensor<T> forwardInput, double alpha)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        var gradData = gradOutput.ToArray();
+        var inputData = forwardInput.ToArray();
+        var resultData = new T[gradData.Length];
+
+        var alphaT = numOps.FromDouble(alpha);
+        var one = numOps.FromDouble(1.0);
+
+        for (int i = 0; i < gradData.Length; i++)
+        {
+            var slope = numOps.GreaterThan(inputData[i], numOps.Zero) ? one : alphaT;
+            resultData[i] = numOps.Multiply(gradData[i], slope);
+        }
+
+        return new Tensor<T>(forwardInput.Shape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Gradient of GELU operation (approximate).
+    /// </summary>
+    public static Tensor<T> GradGELU<T>(Tensor<T> gradOutput, Tensor<T> forwardInput, bool approximate = true)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        var gradData = gradOutput.ToArray();
+        var inputData = forwardInput.ToArray();
+        var resultData = new T[gradData.Length];
+
+        // Constants for approximate GELU
+        var sqrt2OverPi = numOps.FromDouble(Math.Sqrt(2.0 / Math.PI)); // ~0.7978845608
+        var k = numOps.FromDouble(0.044715);
+
+        for (int i = 0; i < gradData.Length; i++)
+        {
+            var x = inputData[i];
+            var xCubed = numOps.Multiply(numOps.Multiply(x, x), x);
+            var inner = numOps.Multiply(sqrt2OverPi, numOps.Add(x, numOps.Multiply(k, xCubed)));
+
+            // tanh(inner)
+            var tanhInner = numOps.Tanh(inner);
+
+            // sech^2(inner) = 1 - tanh^2(inner)
+            var sech2 = numOps.Subtract(numOps.FromDouble(1.0),
+                numOps.Multiply(tanhInner, tanhInner));
+
+            // Derivative of inner with respect to x
+            var dInner = numOps.Multiply(sqrt2OverPi,
+                numOps.Add(numOps.FromDouble(1.0),
+                    numOps.Multiply(numOps.FromDouble(3.0 * 0.044715),
+                        numOps.Multiply(x, x))));
+
+            // d/dx GELU = 0.5 * (1 + tanh(inner)) + 0.5 * x * sech^2(inner) * dInner
+            var term1 = numOps.Multiply(numOps.FromDouble(0.5),
+                numOps.Add(numOps.FromDouble(1.0), tanhInner));
+            var term2 = numOps.Multiply(numOps.FromDouble(0.5),
+                numOps.Multiply(x, numOps.Multiply(sech2, dInner)));
+            var derivative = numOps.Add(term1, term2);
+
+            resultData[i] = numOps.Multiply(gradData[i], derivative);
+        }
+
+        return new Tensor<T>(forwardInput.Shape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Gradient of Broadcast operation.
+    /// Forward: y = broadcast(x, target_shape)
+    /// Backward: grad_x = reduce_sum(grad_y, broadcasted_axes)
+    /// </summary>
+    public static Tensor<T> GradBroadcast<T>(Tensor<T> gradOutput, int[] originalShape, int[] broadcastedAxes)
+    {
+        // Sum over the broadcasted axes
+        var result = gradOutput;
+        foreach (var axis in broadcastedAxes.OrderByDescending(a => a))
+        {
+            result = result.Sum(new[] { axis });
+        }
+
+        // Reshape to original shape if needed
+        if (!result.Shape.SequenceEqual(originalShape))
+        {
+            result = result.Reshape(originalShape);
+        }
+
+        return result;
+    }
+
+    // ========== Helper Methods ==========
+
+    /// <summary>
+    /// Helper: Permutes tensor axes.
+    /// </summary>
+    private static Tensor<T> PermuteAxes<T>(Tensor<T> input, int[] axes)
+    {
+        // For now, use transpose if it's a 2D case
+        if (axes.Length == 2 && axes[0] == 1 && axes[1] == 0)
+        {
+            return input.Transpose();
+        }
+
+        // General permutation - simplified implementation
+        return input; // Would need full permutation implementation
+    }
+
+    /// <summary>
+    /// Helper: Slices tensor along a specific axis.
+    /// </summary>
+    private static Tensor<T> SliceAlongAxis<T>(Tensor<T> input, int axis, int start, int size)
+    {
+        // Simplified slice implementation
+        var shape = input.Shape;
+        var newShape = shape.ToArray();
+        newShape[axis] = size;
+
+        // Calculate strides
+        var strides = new int[shape.Length];
+        strides[strides.Length - 1] = 1;
+        for (int d = strides.Length - 2; d >= 0; d--)
+        {
+            strides[d] = strides[d + 1] * shape[d + 1];
+        }
+
+        var inputData = input.ToArray();
+        var resultSize = newShape.Aggregate(1, (a, b) => a * b);
+        var resultData = new T[resultSize];
+
+        // Copy data (simplified - assumes contiguous memory)
+        CopySlice(inputData, resultData, shape, newShape, axis, start, strides);
+
+        return new Tensor<T>(newShape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Helper: Slices tensor with start indices and sizes.
+    /// </summary>
+    private static Tensor<T> SliceWithShape<T>(Tensor<T> input, int[] startIndices, int[] sizes)
+    {
+        var inputData = input.ToArray();
+        var resultSize = sizes.Aggregate(1, (a, b) => a * b);
+        var resultData = new T[resultSize];
+
+        // Simplified copy - actual implementation would need proper indexing
+        var inputShape = input.Shape;
+        var strides = new int[inputShape.Length];
+        strides[strides.Length - 1] = 1;
+        for (int d = strides.Length - 2; d >= 0; d--)
+        {
+            strides[d] = strides[d + 1] * inputShape[d + 1];
+        }
+
+        // Copy from input to result
+        CopySliceRegion(inputData, resultData, inputShape, sizes, startIndices, strides);
+
+        return new Tensor<T>(sizes, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Helper: Broadcasts tensor to target shape.
+    /// </summary>
+    private static Tensor<T> BroadcastTo<T>(Tensor<T> input, int[] targetShape)
+    {
+        var inputShape = input.Shape;
+
+        // If shapes match, return as-is
+        if (inputShape.SequenceEqual(targetShape))
+            return input;
+
+        var inputData = input.ToArray();
+        var resultSize = targetShape.Aggregate(1, (a, b) => a * b);
+        var resultData = new T[resultSize];
+
+        // Broadcast by repeating values
+        BroadcastCopy(inputData, resultData, inputShape, targetShape);
+
+        return new Tensor<T>(targetShape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Helper: Multiplies tensor by scalar.
+    /// </summary>
+    private static Tensor<T> ScalarMultiply<T>(Tensor<T> input, T scalar)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var data = input.ToArray();
+        var resultData = new T[data.Length];
+
+        for (int i = 0; i < data.Length; i++)
+        {
+            resultData[i] = numOps.Multiply(data[i], scalar);
+        }
+
+        return new Tensor<T>(input.Shape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Helper: Divides tensor by scalar.
+    /// </summary>
+    private static Tensor<T> ScalarDivide<T>(Tensor<T> input, T scalar)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var data = input.ToArray();
+        var resultData = new T[data.Length];
+
+        for (int i = 0; i < data.Length; i++)
+        {
+            resultData[i] = numOps.Divide(data[i], scalar);
+        }
+
+        return new Tensor<T>(input.Shape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Helper: Copies data to a specific position in result array.
+    /// </summary>
+    private static void CopyToPosition<T>(T[] result, T[] source, int[] resultShape, int[] sourceShape, int[] startIndices, int[] strides)
+    {
+        // Simplified implementation for common cases
+        var sourceSize = source.Length;
+        for (int i = 0; i < sourceSize; i++)
+        {
+            // Calculate source indices
+            var sourceIndices = new int[sourceShape.Length];
+            int remaining = i;
+            for (int d = sourceShape.Length - 1; d >= 0; d--)
+            {
+                sourceIndices[d] = remaining % sourceShape[d];
+                remaining /= sourceShape[d];
+            }
+
+            // Calculate result index
+            int resultIdx = 0;
+            for (int d = 0; d < resultShape.Length; d++)
+            {
+                int srcIdx = d < sourceIndices.Length ? sourceIndices[d] : 0;
+                int startIdx = d < startIndices.Length ? startIndices[d] : 0;
+                resultIdx += (startIdx + srcIdx) * strides[d];
+            }
+
+            if (resultIdx < result.Length)
+            {
+                result[resultIdx] = source[i];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Helper: Copies a slice of data.
+    /// </summary>
+    private static void CopySlice<T>(T[] input, T[] result, int[] inputShape, int[] resultShape, int axis, int start, int[] strides)
+    {
+        // Simplified implementation
+        var resultIdx = 0;
+        CopySliceRecursive(input, result, inputShape, resultShape, axis, start, strides, 0, 0, ref resultIdx);
+    }
+
+    private static void CopySliceRecursive<T>(T[] input, T[] result, int[] inputShape, int[] resultShape, int axis, int start, int[] strides, int dim, int inputOffset, ref int resultIdx)
+    {
+        if (dim == inputShape.Length)
+        {
+            result[resultIdx++] = input[inputOffset];
+            return;
+        }
+
+        int rangeStart = dim == axis ? start : 0;
+        int rangeEnd = dim == axis ? start + resultShape[dim] : inputShape[dim];
+
+        for (int i = rangeStart; i < rangeEnd; i++)
+        {
+            CopySliceRecursive(input, result, inputShape, resultShape, axis, start, strides, dim + 1, inputOffset + i * strides[dim], ref resultIdx);
+        }
+    }
+
+    /// <summary>
+    /// Helper: Copies a region of data for slicing.
+    /// </summary>
+    private static void CopySliceRegion<T>(T[] input, T[] result, int[] inputShape, int[] resultShape, int[] startIndices, int[] strides)
+    {
+        // Simplified implementation
+        var resultIdx = 0;
+        CopySliceRegionRecursive(input, result, inputShape, resultShape, startIndices, strides, 0, 0, ref resultIdx);
+    }
+
+    private static void CopySliceRegionRecursive<T>(T[] input, T[] result, int[] inputShape, int[] resultShape, int[] startIndices, int[] strides, int dim, int inputOffset, ref int resultIdx)
+    {
+        if (dim == inputShape.Length)
+        {
+            result[resultIdx++] = input[inputOffset];
+            return;
+        }
+
+        int start = dim < startIndices.Length ? startIndices[dim] : 0;
+        int size = dim < resultShape.Length ? resultShape[dim] : 1;
+
+        for (int i = 0; i < size; i++)
+        {
+            CopySliceRegionRecursive(input, result, inputShape, resultShape, startIndices, strides, dim + 1, inputOffset + (start + i) * strides[dim], ref resultIdx);
+        }
+    }
+
+    /// <summary>
+    /// Helper: Broadcasts data from source to target shape.
+    /// </summary>
+    private static void BroadcastCopy<T>(T[] source, T[] result, int[] sourceShape, int[] targetShape)
+    {
+        // Pad source shape with 1s at the front if needed
+        var paddedSourceShape = new int[targetShape.Length];
+        var offset = targetShape.Length - sourceShape.Length;
+        for (int i = 0; i < targetShape.Length; i++)
+        {
+            paddedSourceShape[i] = i < offset ? 1 : sourceShape[i - offset];
+        }
+
+        // Calculate strides
+        var sourceStrides = new int[targetShape.Length];
+        var targetStrides = new int[targetShape.Length];
+        sourceStrides[targetShape.Length - 1] = 1;
+        targetStrides[targetShape.Length - 1] = 1;
+        for (int d = targetShape.Length - 2; d >= 0; d--)
+        {
+            sourceStrides[d] = sourceStrides[d + 1] * paddedSourceShape[d + 1];
+            targetStrides[d] = targetStrides[d + 1] * targetShape[d + 1];
+        }
+
+        // Broadcast copy
+        for (int i = 0; i < result.Length; i++)
+        {
+            var indices = new int[targetShape.Length];
+            int remaining = i;
+            for (int d = targetShape.Length - 1; d >= 0; d--)
+            {
+                indices[d] = remaining % targetShape[d];
+                remaining /= targetShape[d];
+            }
+
+            // Calculate source index with broadcasting
+            int srcIdx = 0;
+            for (int d = 0; d < targetShape.Length; d++)
+            {
+                int srcDimIdx = paddedSourceShape[d] == 1 ? 0 : indices[d];
+                srcIdx += srcDimIdx * sourceStrides[d];
+            }
+
+            result[i] = source[srcIdx];
+        }
+    }
+
     /// <summary>
     /// Helper: Sum over batch and spatial dimensions for normalization gradients.
     /// Supports arbitrary dimensions - keeps channel dimension (axis 1) and sums over all others.

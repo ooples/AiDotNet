@@ -19,7 +19,7 @@ namespace AiDotNet.JitCompiler.Optimizations;
 ///
 /// Instead of:
 /// <code>
-/// for (int i = 0; i < 4; i++) {
+/// for (int i = 0; i &lt; 4; i++) {
 ///     result[i] = input[i] * 2;
 /// }
 /// </code>
@@ -42,45 +42,6 @@ namespace AiDotNet.JitCompiler.Optimizations;
 /// - Small batch processing
 /// - Vectorized operations
 /// </para>
-/// <para><b>IMPLEMENTATION STATUS:</b>
-///
-/// This optimization pass requires implementation of:
-///
-/// 1. **Loop Detection**
-///    - Identify operations that represent loops in the IR
-///    - Determine loop bounds and iteration count
-///    - Check if loop is unrollable (fixed, small iteration count)
-///
-/// 2. **Unrolling Strategy**
-///    - Full unrolling: Replace entire loop with copies
-///    - Partial unrolling: Unroll by factor N (e.g., 4x)
-///    - Adaptive unrolling: Choose factor based on loop size
-///
-/// 3. **Code Duplication**
-///    - Duplicate loop body IR operations
-///    - Update tensor IDs and dependencies
-///    - Maintain correctness of data flow
-///
-/// 4. **Heuristics**
-///    - Only unroll loops with < 16 iterations (avoid code bloat)
-///    - Prefer unrolling innermost loops
-///    - Consider register pressure and cache effects
-///
-/// 5. **Integration**
-///    - Works with other optimizations (fusion, DCE)
-///    - May enable additional optimizations after unrolling
-///    - Must preserve graph semantics
-///
-/// **Examples of unrollable operations:**
-/// - Element-wise operations on small tensors
-/// - Matrix-vector multiplication with small dimensions
-/// - Batch normalization over small batches
-/// - Attention mechanisms with fixed sequence length
-///
-/// **TODO:** Full implementation of loop unrolling
-/// - Estimated effort: 1 week
-/// - Reference: LLVM's LoopUnrollPass, GCC's loop-unroll optimization
-/// </para>
 /// </remarks>
 public class LoopUnrollingPass : IOptimizationPass
 {
@@ -88,8 +49,48 @@ public class LoopUnrollingPass : IOptimizationPass
     public string Name => "Loop Unrolling";
 
     private int _nextTensorId;
-    private const int MAX_UNROLL_FACTOR = 8;      // Maximum times to unroll
-    private const int MAX_OPS_TO_UNROLL = 100;     // Don't unroll if it creates too many ops
+
+    /// <summary>
+    /// Configuration for loop unrolling behavior.
+    /// </summary>
+    public class UnrollConfig
+    {
+        /// <summary>Maximum times to fully unroll a loop.</summary>
+        public int MaxFullUnrollFactor { get; set; } = 8;
+
+        /// <summary>Partial unroll factor for larger loops.</summary>
+        public int PartialUnrollFactor { get; set; } = 4;
+
+        /// <summary>Maximum operations to unroll (prevents code bloat).</summary>
+        public int MaxOpsToUnroll { get; set; } = 100;
+
+        /// <summary>Minimum tensor size to consider for unrolling.</summary>
+        public int MinTensorSize { get; set; } = 4;
+
+        /// <summary>Maximum tensor size for full unrolling.</summary>
+        public int MaxTensorSizeForFullUnroll { get; set; } = 64;
+
+        /// <summary>Whether to unroll sequential operations.</summary>
+        public bool UnrollSequential { get; set; } = true;
+
+        /// <summary>Whether to create unrolled fused operations.</summary>
+        public bool CreateFusedUnrolled { get; set; } = true;
+    }
+
+    private readonly UnrollConfig _config;
+
+    /// <summary>
+    /// Initializes a new instance with default configuration.
+    /// </summary>
+    public LoopUnrollingPass() : this(new UnrollConfig()) { }
+
+    /// <summary>
+    /// Initializes a new instance with custom configuration.
+    /// </summary>
+    public LoopUnrollingPass(UnrollConfig config)
+    {
+        _config = config;
+    }
 
     /// <inheritdoc/>
     public IRGraph Optimize(IRGraph graph)
@@ -99,150 +100,419 @@ public class LoopUnrollingPass : IOptimizationPass
             ? graph.Operations.Max(op => op.OutputId) + 1
             : graph.InputIds.Any() ? graph.InputIds.Max() + 1 : 0;
 
-        // Identify sequential repeated operations (simple loop patterns)
-        var unrolledOps = new List<IROp>();
-        var processedOps = new HashSet<IROp>();
+        var optimizedOps = new List<IROp>();
+        var processedOps = new HashSet<int>(); // Track processed operations by output ID
+        var tensorMapping = new Dictionary<int, int>();
 
-        foreach (var op in graph.Operations)
+        for (int i = 0; i < graph.Operations.Count; i++)
         {
-            if (processedOps.Contains(op))
+            var op = graph.Operations[i];
+
+            if (processedOps.Contains(op.OutputId))
                 continue;
 
-            // Find repeating patterns starting from this operation
-            var pattern = FindRepeatingPattern(graph.Operations, op);
+            // Check for unrollable patterns
+            var unrolled = TryUnrollOperation(graph.Operations, i, processedOps, tensorMapping);
 
-            if (pattern.Count > 1 && ShouldUnroll(pattern))
+            if (unrolled != null && unrolled.Count > 0)
             {
-                // Unroll the pattern
-                var unrolled = UnrollPattern(pattern);
-                unrolledOps.AddRange(unrolled);
-                foreach (var p in pattern)
-                {
-                    processedOps.Add(p);
-                }
+                optimizedOps.AddRange(unrolled);
             }
             else
             {
-                // Keep operation as-is
-                unrolledOps.Add(op);
-                processedOps.Add(op);
+                // Keep operation as-is but remap inputs
+                var remappedOp = RemapInputs(op, tensorMapping);
+                optimizedOps.Add(remappedOp);
+                processedOps.Add(op.OutputId);
             }
         }
 
-        // Create new graph with unrolled operations
+        // Create optimized graph
         var newGraph = new IRGraph
         {
-            InputIds = graph.InputIds,
-            OutputIds = graph.OutputIds,
-            Operations = unrolledOps,
-            TensorShapes = new Dictionary<int, int[]>(graph.TensorShapes)
+            InputIds = new List<int>(graph.InputIds),
+            OutputIds = RemapOutputIds(graph.OutputIds, tensorMapping),
+            Operations = optimizedOps,
+            TensorShapes = new Dictionary<int, int[]>(graph.TensorShapes),
+            Metadata = new Dictionary<string, object>(graph.Metadata)
         };
+
+        // Add unrolling metadata
+        newGraph.Metadata["LoopUnrolling_OriginalOps"] = graph.Operations.Count;
+        newGraph.Metadata["LoopUnrolling_OptimizedOps"] = optimizedOps.Count;
 
         return newGraph;
     }
 
     /// <summary>
-    /// Finds repeating operation patterns suitable for unrolling.
+    /// Attempts to unroll an operation or sequence of operations.
     /// </summary>
-    private List<IROp> FindRepeatingPattern(List<IROp> allOps, IROp startOp)
+    private List<IROp>? TryUnrollOperation(
+        List<IROp> allOps,
+        int startIndex,
+        HashSet<int> processedOps,
+        Dictionary<int, int> tensorMapping)
     {
-        var pattern = new List<IROp> { startOp };
+        var op = allOps[startIndex];
 
-        // Look for identical operations following this one
-        var startIdx = allOps.IndexOf(startOp);
-        if (startIdx < 0) return pattern;
-
-        // Check next few operations for repetition
-        for (int i = startIdx + 1; i < allOps.Count && i < startIdx + MAX_UNROLL_FACTOR; i++)
+        // Strategy 1: Unroll small repeated element-wise operations
+        if (_config.UnrollSequential && IsUnrollableElementWise(op))
         {
-            var op = allOps[i];
-
-            // Check if this operation has the same type
-            if (op.GetType() == startOp.GetType() &&
-                AreSimilarOperations(startOp, op))
+            var sequence = FindUnrollableSequence(allOps, startIndex, processedOps);
+            if (sequence.Count >= 2 && ShouldUnroll(sequence))
             {
-                pattern.Add(op);
-            }
-            else
-            {
-                // Pattern broken
-                break;
+                return UnrollSequence(sequence, processedOps, tensorMapping);
             }
         }
 
-        return pattern;
+        // Strategy 2: Create unrolled operations for small tensors
+        if (_config.CreateFusedUnrolled && CanCreateUnrolledOp(op))
+        {
+            return CreateUnrolledOperation(op, processedOps, tensorMapping);
+        }
+
+        // Strategy 3: Unroll reduction operations
+        if (IsSmallReduction(op))
+        {
+            return UnrollReduction(op, processedOps, tensorMapping);
+        }
+
+        return null;
     }
 
     /// <summary>
-    /// Checks if two operations are similar enough to be considered a pattern.
+    /// Finds a sequence of operations that can be unrolled together.
     /// </summary>
-    private bool AreSimilarOperations(IROp op1, IROp op2)
+    private List<IROp> FindUnrollableSequence(
+        List<IROp> allOps,
+        int startIndex,
+        HashSet<int> processedOps)
     {
-        // Must be same operation type
-        if (op1.OpType != op2.OpType) return false;
+        var sequence = new List<IROp>();
+        var startOp = allOps[startIndex];
 
-        // For element-wise operations, we can always unroll
-        if (IsElementWiseOp(op1)) return true;
+        if (processedOps.Contains(startOp.OutputId))
+            return sequence;
 
-        // For other operations, be conservative
-        return false;
+        sequence.Add(startOp);
+
+        // Look for sequential operations that can be unrolled together
+        var currentOutput = startOp.OutputId;
+
+        for (int i = startIndex + 1; i < allOps.Count && sequence.Count < _config.MaxFullUnrollFactor; i++)
+        {
+            var nextOp = allOps[i];
+
+            if (processedOps.Contains(nextOp.OutputId))
+                continue;
+
+            // Check if this operation uses the current output
+            if (!nextOp.InputIds.Contains(currentOutput))
+                break;
+
+            // Check if it's an unrollable element-wise operation
+            if (!IsUnrollableElementWise(nextOp))
+                break;
+
+            // Check if the output is only used by the next operation (single consumer)
+            if (CountUsages(allOps, currentOutput, processedOps) > 1)
+                break;
+
+            sequence.Add(nextOp);
+            currentOutput = nextOp.OutputId;
+        }
+
+        return sequence;
     }
 
     /// <summary>
-    /// Checks if an operation is element-wise.
+    /// Checks if an operation is element-wise and unrollable.
     /// </summary>
-    private bool IsElementWiseOp(IROp op)
+    private bool IsUnrollableElementWise(IROp op)
     {
-        return op is Operations.AddOp ||
-               op is Operations.SubtractOp ||
-               op is Operations.ElementwiseMultiplyOp ||
-               op is Operations.DivideOp ||
-               op is Operations.NegateOp ||
-               op is Operations.ReLUOp ||
-               op is Operations.SigmoidOp ||
-               op is Operations.TanhOp ||
-               op is Operations.ExpOp ||
-               op is Operations.LogOp;
+        return op is Operations.AddOp or
+               Operations.SubtractOp or
+               Operations.ElementwiseMultiplyOp or
+               Operations.DivideOp or
+               Operations.NegateOp or
+               Operations.ReLUOp or
+               Operations.SigmoidOp or
+               Operations.TanhOp or
+               Operations.ExpOp or
+               Operations.LogOp or
+               Operations.SqrtOp;
     }
 
     /// <summary>
-    /// Determines if a pattern should be unrolled based on cost/benefit.
+    /// Determines if a sequence should be unrolled.
     /// </summary>
-    private bool ShouldUnroll(List<IROp> pattern)
+    private bool ShouldUnroll(List<IROp> sequence)
     {
-        // Need at least 2 operations to unroll
-        if (pattern.Count < 2) return false;
+        if (sequence.Count < 2)
+            return false;
 
-        // Don't unroll if it would create too many operations
-        if (pattern.Count > MAX_UNROLL_FACTOR) return false;
+        // Check total output size
+        var totalSize = sequence.Sum(op => op.OutputShape.Aggregate(1, (a, b) => a * b));
 
-        // Don't unroll very large operations (matrix operations)
-        if (pattern.Any(op => !IsElementWiseOp(op))) return false;
+        // Don't unroll very large sequences
+        if (totalSize > _config.MaxTensorSizeForFullUnroll * sequence.Count)
+            return false;
 
-        // Check if output shapes are small (good for unrolling)
-        var totalElements = pattern.Sum(op => op.OutputShape.Aggregate(1, (a, b) => a * b));
-        if (totalElements > 10000) return false; // Don't unroll for large tensors
+        // Don't create too many operations
+        if (sequence.Count * _config.MaxFullUnrollFactor > _config.MaxOpsToUnroll)
+            return false;
 
         return true;
     }
 
     /// <summary>
-    /// Unrolls a pattern of operations by inlining them.
+    /// Unrolls a sequence of operations.
     /// </summary>
-    private List<IROp> UnrollPattern(List<IROp> pattern)
+    private List<IROp> UnrollSequence(
+        List<IROp> sequence,
+        HashSet<int> processedOps,
+        Dictionary<int, int> tensorMapping)
     {
-        // For now, keep the operations but mark them as unrolled
-        // In a full implementation, we would:
-        // 1. Fuse the operations into a single combined operation
-        // 2. Generate specialized code for the unrolled loop
-        // 3. Eliminate loop overhead
+        var result = new List<IROp>();
 
-        // This is a simplified implementation that prepares for unrolling
-        var result = new List<IROp>(pattern);
+        // Create an unrolled fused operation
+        var fusedOp = new Operations.UnrolledSequenceOp
+        {
+            OutputId = sequence[^1].OutputId,
+            InputIds = sequence[0].InputIds,
+            OutputType = sequence[^1].OutputType,
+            OutputShape = sequence[^1].OutputShape,
+            Operations = sequence.Select(op => op.OpType).ToList(),
+            OriginalOperations = sequence.Select(op => CloneOperation(op)).ToList(),
+            UnrollFactor = _config.MaxFullUnrollFactor
+        };
 
-        // Could add metadata to indicate these operations should be
-        // compiled together without function call overhead
+        result.Add(fusedOp);
+
+        // Mark all operations as processed
+        foreach (var op in sequence)
+        {
+            processedOps.Add(op.OutputId);
+            if (op != sequence[^1])
+            {
+                tensorMapping[op.OutputId] = sequence[^1].OutputId;
+            }
+        }
 
         return result;
+    }
+
+    /// <summary>
+    /// Checks if an operation can have an unrolled version created.
+    /// </summary>
+    private bool CanCreateUnrolledOp(IROp op)
+    {
+        // Only unroll small tensors
+        var totalSize = op.OutputShape.Aggregate(1, (a, b) => a * b);
+
+        if (totalSize < _config.MinTensorSize || totalSize > _config.MaxTensorSizeForFullUnroll)
+            return false;
+
+        // Must be element-wise
+        return IsUnrollableElementWise(op);
+    }
+
+    /// <summary>
+    /// Creates an unrolled version of an operation.
+    /// </summary>
+    private List<IROp>? CreateUnrolledOperation(
+        IROp op,
+        HashSet<int> processedOps,
+        Dictionary<int, int> tensorMapping)
+    {
+        var totalSize = op.OutputShape.Aggregate(1, (a, b) => a * b);
+        var unrollFactor = Math.Min(totalSize, _config.MaxFullUnrollFactor);
+
+        var unrolledOp = new Operations.UnrolledElementwiseOp
+        {
+            OutputId = op.OutputId,
+            InputIds = op.InputIds,
+            OutputType = op.OutputType,
+            OutputShape = op.OutputShape,
+            BaseOperation = op.OpType,
+            UnrollFactor = unrollFactor,
+            TotalElements = totalSize
+        };
+
+        processedOps.Add(op.OutputId);
+
+        return new List<IROp> { unrolledOp };
+    }
+
+    /// <summary>
+    /// Checks if an operation is a small reduction that can be unrolled.
+    /// </summary>
+    private bool IsSmallReduction(IROp op)
+    {
+        if (op is not (Operations.SumOp or Operations.MeanOp or Operations.ReduceMaxOp or Operations.ReduceMeanOp))
+            return false;
+
+        var inputSize = op.InputIds.Length > 0 ? op.OutputShape.Aggregate(1, (a, b) => a * b) : 0;
+
+        // Only unroll small reductions
+        return inputSize > 0 && inputSize <= _config.MaxTensorSizeForFullUnroll;
+    }
+
+    /// <summary>
+    /// Unrolls a reduction operation.
+    /// </summary>
+    private List<IROp>? UnrollReduction(
+        IROp op,
+        HashSet<int> processedOps,
+        Dictionary<int, int> tensorMapping)
+    {
+        var unrolledOp = new Operations.UnrolledReductionOp
+        {
+            OutputId = op.OutputId,
+            InputIds = op.InputIds,
+            OutputType = op.OutputType,
+            OutputShape = op.OutputShape,
+            ReductionType = op.OpType,
+            UnrollFactor = Math.Min(
+                op.OutputShape.Aggregate(1, (a, b) => a * b),
+                _config.MaxFullUnrollFactor)
+        };
+
+        processedOps.Add(op.OutputId);
+
+        return new List<IROp> { unrolledOp };
+    }
+
+    /// <summary>
+    /// Counts how many operations use a tensor as input.
+    /// </summary>
+    private int CountUsages(List<IROp> allOps, int tensorId, HashSet<int> processedOps)
+    {
+        return allOps.Count(op => !processedOps.Contains(op.OutputId) && op.InputIds.Contains(tensorId));
+    }
+
+    /// <summary>
+    /// Remaps input tensor IDs according to the mapping.
+    /// </summary>
+    private IROp RemapInputs(IROp op, Dictionary<int, int> tensorMapping)
+    {
+        var newInputIds = op.InputIds
+            .Select(id => tensorMapping.TryGetValue(id, out var newId) ? newId : id)
+            .ToArray();
+
+        op.InputIds = newInputIds;
+        return op;
+    }
+
+    /// <summary>
+    /// Remaps output IDs according to the mapping.
+    /// </summary>
+    private List<int> RemapOutputIds(List<int> outputIds, Dictionary<int, int> tensorMapping)
+    {
+        return outputIds
+            .Select(id => tensorMapping.TryGetValue(id, out var newId) ? newId : id)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Creates a shallow clone of an operation.
+    /// </summary>
+    private IROp CloneOperation(IROp op)
+    {
+        // Use MemberwiseClone via reflection or create new instance
+        var clone = (IROp)Activator.CreateInstance(op.GetType())!;
+        clone.OutputId = op.OutputId;
+        clone.InputIds = op.InputIds.ToArray();
+        clone.OutputType = op.OutputType;
+        clone.OutputShape = op.OutputShape.ToArray();
+        return clone;
+    }
+}
+
+namespace AiDotNet.JitCompiler.IR.Operations
+{
+    /// <summary>
+    /// Represents an unrolled sequence of operations.
+    /// </summary>
+    public class UnrolledSequenceOp : IROp
+    {
+        /// <summary>Gets or sets the list of operation types in the sequence.</summary>
+        public List<string> Operations { get; set; } = new();
+
+        /// <summary>Gets or sets the original operations.</summary>
+        public List<IROp> OriginalOperations { get; set; } = new();
+
+        /// <summary>Gets or sets the unroll factor.</summary>
+        public int UnrollFactor { get; set; } = 4;
+
+        /// <summary>Validates the operation.</summary>
+        public override bool Validate()
+        {
+            if (!base.Validate()) return false;
+            if (Operations.Count < 2) return false;
+            return true;
+        }
+
+        /// <summary>Returns a string representation.</summary>
+        public override string ToString()
+        {
+            return $"t{OutputId} = UnrolledSequence[{string.Join("->", Operations)}] x{UnrollFactor}";
+        }
+    }
+
+    /// <summary>
+    /// Represents an unrolled element-wise operation.
+    /// </summary>
+    public class UnrolledElementwiseOp : IROp
+    {
+        /// <summary>Gets or sets the base operation type.</summary>
+        public string BaseOperation { get; set; } = "";
+
+        /// <summary>Gets or sets the unroll factor.</summary>
+        public int UnrollFactor { get; set; } = 4;
+
+        /// <summary>Gets or sets the total number of elements.</summary>
+        public int TotalElements { get; set; }
+
+        /// <summary>Validates the operation.</summary>
+        public override bool Validate()
+        {
+            if (!base.Validate()) return false;
+            if (string.IsNullOrEmpty(BaseOperation)) return false;
+            if (UnrollFactor < 2) return false;
+            return true;
+        }
+
+        /// <summary>Returns a string representation.</summary>
+        public override string ToString()
+        {
+            return $"t{OutputId} = Unrolled{BaseOperation}[factor={UnrollFactor}, elements={TotalElements}]";
+        }
+    }
+
+    /// <summary>
+    /// Represents an unrolled reduction operation.
+    /// </summary>
+    public class UnrolledReductionOp : IROp
+    {
+        /// <summary>Gets or sets the reduction type (Sum, Mean, Max, etc.).</summary>
+        public string ReductionType { get; set; } = "Sum";
+
+        /// <summary>Gets or sets the unroll factor.</summary>
+        public int UnrollFactor { get; set; } = 4;
+
+        /// <summary>Validates the operation.</summary>
+        public override bool Validate()
+        {
+            if (!base.Validate()) return false;
+            if (string.IsNullOrEmpty(ReductionType)) return false;
+            return true;
+        }
+
+        /// <summary>Returns a string representation.</summary>
+        public override string ToString()
+        {
+            return $"t{OutputId} = UnrolledReduce{ReductionType}[factor={UnrollFactor}]";
+        }
     }
 }
