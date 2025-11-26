@@ -103,8 +103,44 @@ public class EpsilonGreedyBanditAgent<T> : ReinforcementLearningAgentBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _options.NumArms;
     public override int FeatureCount => 1;
-    public override byte[] Serialize() => throw new NotImplementedException();
-    public override void Deserialize(byte[] data) => throw new NotImplementedException();
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Write options
+        writer.Write(_options.NumArms);
+        writer.Write(_options.Epsilon);
+
+        // Write state
+        for (int i = 0; i < _options.NumArms; i++)
+        {
+            writer.Write(NumOps.ToDouble(_qValues[i]));
+            writer.Write(_actionCounts[i]);
+        }
+
+        return ms.ToArray();
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read and validate options
+        var numArms = reader.ReadInt32();
+        var epsilon = reader.ReadDouble();
+
+        if (numArms != _options.NumArms)
+            throw new InvalidOperationException($"Serialized NumArms ({numArms}) doesn't match current options ({_options.NumArms})");
+
+        // Read state
+        for (int i = 0; i < _options.NumArms; i++)
+        {
+            _qValues[i] = NumOps.FromDouble(reader.ReadDouble());
+            _actionCounts[i] = reader.ReadInt32();
+        }
+    }
     public override Vector<T> GetParameters() => _qValues;
     public override void SetParameters(Vector<T> parameters) { for (int i = 0; i < _options.NumArms && i < parameters.Length; i++) _qValues[i] = parameters[i]; }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()

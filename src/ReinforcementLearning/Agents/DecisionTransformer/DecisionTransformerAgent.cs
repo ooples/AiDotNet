@@ -327,12 +327,51 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override byte[] Serialize()
     {
-        throw new NotImplementedException("DecisionTransformer serialization not yet implemented");
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Write metadata
+        writer.Write(_options.StateSize);
+        writer.Write(_options.ActionSize);
+        writer.Write(_options.ContextLength);
+        writer.Write(_options.EmbeddingDim);
+        writer.Write(_options.NumHeads);
+        writer.Write(_options.NumLayers);
+
+        // Write training state
+        writer.Write(_updateCount);
+
+        // Write transformer network
+        var networkBytes = _transformerNetwork.Serialize();
+        writer.Write(networkBytes.Length);
+        writer.Write(networkBytes);
+
+        return ms.ToArray();
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotImplementedException("DecisionTransformer deserialization not yet implemented");
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read and validate metadata
+        var stateSize = reader.ReadInt32();
+        var actionSize = reader.ReadInt32();
+        var contextLength = reader.ReadInt32();
+        var embeddingDim = reader.ReadInt32();
+        var numHeads = reader.ReadInt32();
+        var numLayers = reader.ReadInt32();
+
+        if (stateSize != _options.StateSize || actionSize != _options.ActionSize)
+            throw new InvalidOperationException("Serialized network dimensions don't match current options");
+
+        // Read training state
+        _updateCount = reader.ReadInt32();
+
+        // Read transformer network
+        var networkLength = reader.ReadInt32();
+        var networkBytes = reader.ReadBytes(networkLength);
+        _transformerNetwork.Deserialize(networkBytes);
     }
 
     public override Vector<T> GetParameters()

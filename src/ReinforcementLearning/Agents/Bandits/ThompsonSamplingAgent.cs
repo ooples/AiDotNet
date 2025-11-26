@@ -139,8 +139,42 @@ public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _options.NumArms * 2;
     public override int FeatureCount => 1;
-    public override byte[] Serialize() => throw new NotImplementedException();
-    public override void Deserialize(byte[] data) => throw new NotImplementedException();
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Write options
+        writer.Write(_options.NumArms);
+
+        // Write state
+        for (int i = 0; i < _options.NumArms; i++)
+        {
+            writer.Write(_successCounts[i]);
+            writer.Write(_failureCounts[i]);
+        }
+
+        return ms.ToArray();
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read and validate options
+        var numArms = reader.ReadInt32();
+
+        if (numArms != _options.NumArms)
+            throw new InvalidOperationException($"Serialized NumArms ({numArms}) doesn't match current options ({_options.NumArms})");
+
+        // Read state
+        for (int i = 0; i < _options.NumArms; i++)
+        {
+            _successCounts[i] = reader.ReadInt32();
+            _failureCounts[i] = reader.ReadInt32();
+        }
+    }
     public override Vector<T> GetParameters()
     {
         int paramCount = _options.NumArms * 2; // success and failure counts for each arm
