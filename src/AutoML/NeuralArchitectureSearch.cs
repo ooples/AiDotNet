@@ -38,7 +38,7 @@ namespace AiDotNet.AutoML
             _strategy = strategy;
             _searchSpace = new SearchSpace<T>();
             _maxEpochs = maxEpochs;
-            _random = new Random();
+            _random = RandomHelper.CreateSecureRandom();
             BestScore = _ops.Zero;
         }
 

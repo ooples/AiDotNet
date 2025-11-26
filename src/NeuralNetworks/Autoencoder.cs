@@ -1,4 +1,5 @@
 global using AiDotNet.LossFunctions;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -818,7 +819,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     public Tensor<T> GenerateSamples(int count, double mean = 0, double stdDev = 1)
     {
         // Create a random normal distribution in the latent space
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         var latentSamples = new Matrix<T>(count, EncodedSize);
     
         // Generate random points in the latent space

@@ -372,7 +372,7 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
             throw new ArgumentException("Dimensions cannot be null or empty.", nameof(dimensions));
 
         var tensor = new Tensor<T>(dimensions);
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // Flatten the tensor into a 1D array for easier iteration

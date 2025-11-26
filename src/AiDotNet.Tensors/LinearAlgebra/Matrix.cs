@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Helpers;
 namespace AiDotNet.Tensors.LinearAlgebra;
 
 /// <summary>
@@ -516,7 +517,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
         if (min >= max)
             throw new ArgumentException("Minimum value must be less than maximum value");
     
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         var matrix = new Matrix<T>(rows, columns);
 
         for (int i = 0; i < rows; i++)

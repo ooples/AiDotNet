@@ -165,7 +165,7 @@ public class CartPoleEnvironment<T> : IEnvironment<T>
     /// <inheritdoc/>
     public void Seed(int seed)
     {
-        _random = new Random(seed);
+        _random = RandomHelper.CreateSeededRandom(seed);
     }
 
     /// <inheritdoc/>

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using System;
 
@@ -56,7 +57,7 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
         _momentumDecay = momentumDecay;
         _secondMomentDecay = secondMomentDecay;
         _useAdaptiveLearningRate = useAdaptiveLearningRate;
-        _random = new Random(seed);
+        _random = RandomHelper.CreateSeededRandom(seed);
 
         int outputSize = GetOutputShape()[0];
         _compressedMomentum = new Matrix<T>(rank, outputSize);

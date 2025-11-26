@@ -236,7 +236,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
     {
         lock (_initLock)
         {
-            Random rng = seed.HasValue ? new Random(seed.Value) : new Random();
+            Random rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
             var ops = MathHelper.GetNumericOperations<T>();
 
             // Initialize matrix A (inputSize × rank) with Gaussian random values

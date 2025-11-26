@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -259,7 +260,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private void InitializeSparseWeights()
     {
-        Random random = new Random();
+        Random random = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < _sparseWeights.Rows; i++)
         {
             for (int j = 0; j < _sparseWeights.Columns; j++)

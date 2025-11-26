@@ -131,7 +131,7 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     {
         _options = options;
         _trees = [];
-        _random = new Random(_options.Seed ?? Environment.TickCount);
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

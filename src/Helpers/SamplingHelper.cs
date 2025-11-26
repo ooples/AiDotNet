@@ -136,7 +136,7 @@ public static class SamplingHelper
     /// </remarks>
     public static void SetSeed(int seed)
     {
-        _seededRandom = new Random(seed);
+        _seededRandom = RandomHelper.CreateSeededRandom(seed);
     }
 
     /// <summary>

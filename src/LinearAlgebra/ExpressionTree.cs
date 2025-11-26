@@ -132,7 +132,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// Each thread gets its own Random instance, avoiding issues with multiple threads
     /// accessing a shared Random instance or multiple instances created with the same seed.
     /// </remarks>
-    private static readonly ThreadLocal<Random> _random = new ThreadLocal<Random>(() => new Random());
+    private static readonly ThreadLocal<Random> _random = new ThreadLocal<Random>(() => RandomHelper.CreateSecureRandom());
 
     /// <summary>
     /// Creates a new expression tree node with the specified properties.

@@ -84,7 +84,7 @@ namespace AiDotNet.NeuralNetworks
             _searchSpace = searchSpace;
             _numNodes = numNodes;
             _numOperations = searchSpace.Operations?.Count ?? 5; // Default operations: identity, conv3x3, conv5x5, maxpool, avgpool
-            _random = new Random(42); // Initialize with seed for reproducibility
+            _random = RandomHelper.CreateSeededRandom(42); // Initialize with seed for reproducibility
 
             // Initialize architecture parameters (alpha) with small random values
             _architectureParams = new List<Matrix<T>>();

@@ -198,7 +198,7 @@ public class MMDDomainAdapter<T> : IDomainAdapter<T>
         // Sample a subset of pairwise distances
         int sampleSize = Math.Min(100, Math.Min(data1.Rows, data2.Rows));
         var distances = new List<T>();
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < sampleSize; i++)
         {

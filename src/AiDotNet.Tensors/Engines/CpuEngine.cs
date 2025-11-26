@@ -1349,7 +1349,7 @@ public class CpuEngine : IEngine
     public Vector<T> GenerateDropoutMask<T>(int length, T dropoutRate, T scale, int? seed = null)
     {
         if (length < 0) throw new ArgumentException("Length must be non-negative.", nameof(length));
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         var numOps = MathHelper.GetNumericOperations<T>();
         double dropoutRateDouble = Convert.ToDouble(dropoutRate);
         var mask = new Vector<T>(length);
@@ -1379,7 +1379,7 @@ public class CpuEngine : IEngine
     public Vector<T> GenerateGaussianNoise<T>(int length, T mean, T standardDeviation, int? seed = null)
     {
         if (length < 0) throw new ArgumentException("Length must be non-negative.", nameof(length));
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         var numOps = MathHelper.GetNumericOperations<T>();
         var noise = new Vector<T>(length);
         for (int i = 0; i < length; i++)

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -163,7 +164,7 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
 
         _dropoutRate = dropoutRate;
         _isTraining = true; // Default to training mode
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         // Initialize dropout mask (will be regenerated on each forward pass during training)
         int outputSize = GetOutputShape()[0];

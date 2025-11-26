@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -103,7 +104,7 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Random number generator for matrix reinitialization.
     /// </summary>
-    private static readonly Random _rng = new Random();
+    private static readonly Random _rng = RandomHelper.CreateSecureRandom();
 
     /// <summary>
     /// Whether to use warmup after each restart.

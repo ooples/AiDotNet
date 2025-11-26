@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -147,7 +149,7 @@ public class NBEATSBlock<T>
     /// </remarks>
     private void InitializeWeights()
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         // First layer: lookbackWindow -> hiddenLayerSize
         int inputSize = _lookbackWindow;

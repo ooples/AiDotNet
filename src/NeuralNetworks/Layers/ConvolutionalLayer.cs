@@ -353,7 +353,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         _biases = new Vector<T>(OutputDepth);
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
 
         InitializeWeights();
     }
@@ -404,7 +404,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         _biases = new Vector<T>(OutputDepth);
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
 
         InitializeWeights();
     }

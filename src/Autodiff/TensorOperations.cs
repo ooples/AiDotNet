@@ -7311,7 +7311,7 @@ public static class TensorOperations<T>
 
         // Add Gumbel noise: -log(-log(U)) where U ~ Uniform(0, 1)
         var gumbel = new Tensor<T>(shape);
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < gumbel.Length; i++)
         {
             var u = random.NextDouble();
@@ -8630,7 +8630,7 @@ public static class TensorOperations<T>
         double alpha;
         if (isTraining)
         {
-            var rng = seed.HasValue ? new Random(seed.Value) : new Random();
+            var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
             alpha = lower + rng.NextDouble() * (upper - lower);
         }
         else

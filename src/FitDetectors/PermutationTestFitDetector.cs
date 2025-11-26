@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.FitDetectors;
 
 /// <summary>
@@ -39,7 +41,7 @@ public class PermutationTestFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// </remarks>
     public PermutationTestFitDetector(PermutationTestFitDetectorOptions? options = null)
     {
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
         _options = options ?? new PermutationTestFitDetectorOptions();
     }
 

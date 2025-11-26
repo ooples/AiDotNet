@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.TimeSeries;
 
@@ -1674,7 +1675,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         T irregularStdDev = _irregular.StandardDeviation();
     
         // Create a random number generator
-        Random random = new Random();
+        Random random = RandomHelper.CreateSecureRandom();
     
         // Damping factor to reduce irregular component over time
         T dampingFactor = NumOps.FromDouble(0.9);

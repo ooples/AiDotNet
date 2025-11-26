@@ -601,7 +601,7 @@ public static class MathHelper
         if (numOps.LessThan(stdDev, numOps.Zero))
             throw new ArgumentException("Standard deviation must be non-negative.", nameof(stdDev));
 
-        var rng = random ?? new Random();
+        var rng = random ?? RandomHelper.CreateSecureRandom();
 
         // Box-Muller transform
         double u1 = 1.0 - rng.NextDouble(); // Uniform(0,1] random numbers
