@@ -11,9 +11,22 @@ namespace AiDotNet.Helpers;
 public static class SamplingHelper
 {
     /// <summary>
-    /// Random number generator used for all sampling operations.
+    /// Thread-local random instance for thread-safe random number generation.
+    /// Each thread gets its own Random instance to avoid thread-safety issues.
     /// </summary>
-    private static Random _random = new Random();
+    private static readonly ThreadLocal<Random> _threadLocalRandom = new(
+        () => new Random(Guid.NewGuid().GetHashCode()));
+
+    /// <summary>
+    /// Seeded random instance for reproducible sampling. When null, uses thread-local random.
+    /// </summary>
+    private static Random? _seededRandom;
+
+    /// <summary>
+    /// Gets the random number generator used for all sampling operations.
+    /// Uses thread-local random by default (thread-safe), or a seeded instance if SetSeed was called.
+    /// </summary>
+    private static Random CurrentRandom => _seededRandom ?? _threadLocalRandom.Value ?? new Random(Guid.NewGuid().GetHashCode());
 
     /// <summary>
     /// Performs sampling without replacement, meaning once an item is selected, 
@@ -40,7 +53,7 @@ public static class SamplingHelper
         var result = new int[sampleSize];
         for (int i = 0; i < sampleSize; i++)
         {
-            int index = _random.Next(indices.Count);
+            int index = CurrentRandom.Next(indices.Count);
             result[i] = indices[index];
             indices.RemoveAt(index);
         }
@@ -67,7 +80,7 @@ public static class SamplingHelper
         var result = new int[sampleSize];
         for (int i = 0; i < sampleSize; i++)
         {
-            result[i] = _random.Next(populationSize);
+            result[i] = CurrentRandom.Next(populationSize);
         }
         return result;
     }
@@ -114,19 +127,34 @@ public static class SamplingHelper
     /// </summary>
     /// <param name="seed">The seed value to initialize the random number generator.</param>
     /// <remarks>
-    /// <b>For Beginners:</b> Random number generators aren't truly random - they follow mathematical 
-    /// formulas that produce numbers that appear random. The "seed" is the starting point for 
+    /// <b>For Beginners:</b> Random number generators aren't truly random - they follow mathematical
+    /// formulas that produce numbers that appear random. The "seed" is the starting point for
     /// this formula.
-    /// 
+    ///
     /// Setting a specific seed means you'll get the same sequence of "random" numbers every time.
     /// This is crucial in AI/ML when you want your experiments to be reproducible - so you can
     /// get the same results when you run your code again, or when someone else runs your code.
-    /// 
+    ///
     /// For example, setting seed=42 before training a model ensures that random operations like
     /// data shuffling happen the same way each time.
+    ///
+    /// Note: Setting a seed overrides the thread-safe behavior. Call ClearSeed() to restore
+    /// thread-safe random generation.
     /// </remarks>
     public static void SetSeed(int seed)
     {
-        _random = new Random(seed);
+        _seededRandom = new Random(seed);
+    }
+
+    /// <summary>
+    /// Clears the seed and restores thread-safe random number generation.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> After calling SetSeed for reproducible experiments, you can call this
+    /// method to go back to using the default thread-safe random generation.
+    /// </remarks>
+    public static void ClearSeed()
+    {
+        _seededRandom = null;
     }
 }

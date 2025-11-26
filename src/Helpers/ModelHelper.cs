@@ -11,13 +11,20 @@ namespace AiDotNet.Helpers;
 public static class ModelHelper<T, TInput, TOutput>
 {
     /// <summary>
-    /// Random number generator for creating randomized models.
+    /// Thread-local random instance for thread-safe random number generation.
+    /// Each thread gets its own Random instance to avoid thread-safety issues.
+    /// </summary>
+    private static readonly ThreadLocal<Random> _threadLocalRandom = new(
+        () => new Random(Guid.NewGuid().GetHashCode()));
+
+    /// <summary>
+    /// Gets the thread-safe random number generator for creating randomized models.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> This is used to generate random values when creating models.
-    /// Using a single random generator ensures consistent randomness across all methods.</para>
+    /// Using thread-local storage ensures thread safety and consistent randomness per thread.</para>
     /// </remarks>
-    private static readonly Random _random = new();
+    private static Random _random => _threadLocalRandom.Value ?? new Random(Guid.NewGuid().GetHashCode());
     
     /// <summary>
     /// Numeric operations provider for type T.

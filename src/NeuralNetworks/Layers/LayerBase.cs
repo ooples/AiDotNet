@@ -116,24 +116,33 @@ public abstract class LayerBase<T> : ILayer<T>
     protected INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
 
     /// <summary>
-    /// Gets a random number generator.
+    /// Thread-local random instance for thread-safe random number generation.
+    /// Each thread gets its own Random instance to avoid thread-safety issues.
+    /// </summary>
+    private static readonly ThreadLocal<Random> _threadLocalRandom = new(
+        () => new Random(Guid.NewGuid().GetHashCode()));
+
+    /// <summary>
+    /// Gets the thread-safe random number generator.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This property provides access to a random number generator, which is used for initializing weights
-    /// and other parameters that require randomization.
+    /// This property provides access to a thread-safe random number generator using ThreadLocal,
+    /// which is used for initializing weights and other parameters that require randomization.
+    /// Each thread gets its own Random instance, ensuring thread safety without locking.
     /// </para>
     /// <para><b>For Beginners:</b> This provides random numbers for initializing the layer.
-    /// 
+    ///
     /// Random numbers are needed to:
     /// - Set starting values for weights and biases
     /// - Add randomness to avoid symmetry problems
     /// - Help the network learn diverse patterns
-    /// 
+    ///
     /// Good initialization with proper randomness is important for neural networks to learn effectively.
+    /// Using thread-local storage ensures thread safety and good performance.
     /// </para>
     /// </remarks>
-    protected Random Random => new();
+    protected static Random Random => _threadLocalRandom.Value ?? new Random(Guid.NewGuid().GetHashCode());
 
     /// <summary>
     /// The trainable parameters of this layer.

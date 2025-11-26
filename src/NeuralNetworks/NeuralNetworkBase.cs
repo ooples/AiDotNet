@@ -105,9 +105,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected Dictionary<int, Tensor<T>> _layerOutputs = [];
 
     /// <summary>
-    /// Random number generator for initialization.
+    /// Thread-local random instance for thread-safe random number generation.
+    /// Each thread gets its own Random instance to avoid thread-safety issues.
     /// </summary>
-    protected readonly Random Random = new();
+    private static readonly ThreadLocal<Random> _threadLocalRandom = new(
+        () => new Random(Guid.NewGuid().GetHashCode()));
+
+    /// <summary>
+    /// Gets the thread-safe random number generator for initialization.
+    /// </summary>
+    /// <remarks>
+    /// Uses ThreadLocal&lt;Random&gt; which is thread-safe and avoids creating multiple instances per thread.
+    /// </remarks>
+    protected static Random Random => _threadLocalRandom.Value ?? new Random(Guid.NewGuid().GetHashCode());
 
     /// <summary>
     /// The loss function used to calculate error during training.
