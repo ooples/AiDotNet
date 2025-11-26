@@ -3,6 +3,7 @@ using System.Reflection;
 using AiDotNet.Autodiff;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
+using AiDotNet.JitCompiler.Runtime;
 using Operations = AiDotNet.JitCompiler.IR.Operations;
 
 namespace AiDotNet.JitCompiler.CodeGen;
@@ -291,6 +292,17 @@ public class CodeGenerator
             // Recurrent network operations
             GRUCellOp gruCellOp => GenerateGRUCellOp<T>(inputVars, gruCellOp),
             LSTMCellOp lstmCellOp => GenerateLSTMCellOp<T>(inputVars, lstmCellOp),
+
+            // Unrolled operations (from LoopUnrollingPass)
+            Operations.UnrolledSequenceOp unrolledSeq => GenerateUnrolledSequenceOp<T>(inputVars, unrolledSeq),
+            Operations.UnrolledElementwiseOp unrolledElem => GenerateUnrolledElementwiseOp<T>(inputVars, unrolledElem),
+            Operations.UnrolledReductionOp unrolledRed => GenerateUnrolledReductionOp<T>(inputVars, unrolledRed),
+
+            // Vectorized operations (from VectorizationPass)
+            Operations.VectorizedBinaryOp vecBinary => GenerateVectorizedBinaryOp<T>(inputVars, vecBinary),
+            Operations.VectorizedUnaryOp vecUnary => GenerateVectorizedUnaryOp<T>(inputVars, vecUnary),
+            Operations.VectorizedReductionOp vecReduce => GenerateVectorizedReductionOp<T>(inputVars, vecReduce),
+            Operations.VectorizedMatMulOp vecMatMul => GenerateVectorizedMatMulOp<T>(inputVars, vecMatMul),
 
             _ => throw new NotImplementedException($"Code generation for {op.OpType} not yet implemented")
         };
@@ -884,5 +896,145 @@ public class CodeGenerator
             inputs[0],
             Expression.Constant(op.OriginalShape),
             Expression.Constant(op.BroadcastedAxes));
+    }
+
+    // ========== Unrolled Operation Code Generators ==========
+
+    /// <summary>
+    /// Generates code for an unrolled sequence of operations.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Unrolled sequences combine multiple element-wise operations into a single fused kernel.
+    /// The sequence is executed inline without loop overhead, improving instruction-level parallelism.
+    /// </para>
+    /// </remarks>
+    private Expression GenerateUnrolledSequenceOp<T>(ParameterExpression[] inputs, Operations.UnrolledSequenceOp op)
+    {
+        var method = typeof(UnrolledOps).GetMethod("ExecuteUnrolledSequence")!.MakeGenericMethod(typeof(T));
+        var operationsArray = Expression.Constant(op.Operations.ToArray());
+        return Expression.Call(method,
+            inputs[0],
+            operationsArray,
+            Expression.Constant(op.UnrollFactor));
+    }
+
+    /// <summary>
+    /// Generates code for an unrolled element-wise operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Processes small tensors with loop unrolling to reduce loop overhead and enable
+    /// better instruction pipelining. Particularly effective for tensors up to 64 elements.
+    /// </para>
+    /// </remarks>
+    private Expression GenerateUnrolledElementwiseOp<T>(ParameterExpression[] inputs, Operations.UnrolledElementwiseOp op)
+    {
+        var method = typeof(UnrolledOps).GetMethod("ExecuteUnrolledElementwise")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method,
+            inputs[0],
+            Expression.Constant(op.BaseOperation),
+            Expression.Constant(op.UnrollFactor),
+            Expression.Constant(op.TotalElements));
+    }
+
+    /// <summary>
+    /// Generates code for an unrolled reduction operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Performs reductions (sum, mean, max) with loop unrolling for small tensor sizes.
+    /// Uses tree reduction pattern for better parallelism.
+    /// </para>
+    /// </remarks>
+    private Expression GenerateUnrolledReductionOp<T>(ParameterExpression[] inputs, Operations.UnrolledReductionOp op)
+    {
+        var method = typeof(UnrolledOps).GetMethod("ExecuteUnrolledReduction")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method,
+            inputs[0],
+            Expression.Constant(op.ReductionType),
+            Expression.Constant(op.UnrollFactor));
+    }
+
+    // ========== Vectorized Operation Code Generators ==========
+
+    /// <summary>
+    /// Generates code for a vectorized binary operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Uses SIMD instructions (SSE/AVX) to process multiple elements in parallel.
+    /// Handles both the vectorized portion and any scalar remainder.
+    /// </para>
+    /// </remarks>
+    private Expression GenerateVectorizedBinaryOp<T>(ParameterExpression[] inputs, Operations.VectorizedBinaryOp op)
+    {
+        var method = typeof(VectorizedOps).GetMethod("ExecuteVectorizedBinary")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method,
+            inputs[0],
+            inputs[1],
+            Expression.Constant(op.Operation),
+            Expression.Constant(op.VectorWidth),
+            Expression.Constant(op.NumVectors),
+            Expression.Constant(op.Remainder));
+    }
+
+    /// <summary>
+    /// Generates code for a vectorized unary operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Applies unary operations (Negate, Exp, Log, ReLU, etc.) using SIMD instructions.
+    /// Significantly faster than scalar operations for large tensors.
+    /// </para>
+    /// </remarks>
+    private Expression GenerateVectorizedUnaryOp<T>(ParameterExpression[] inputs, Operations.VectorizedUnaryOp op)
+    {
+        var method = typeof(VectorizedOps).GetMethod("ExecuteVectorizedUnary")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method,
+            inputs[0],
+            Expression.Constant(op.Operation),
+            Expression.Constant(op.VectorWidth),
+            Expression.Constant(op.NumVectors),
+            Expression.Constant(op.Remainder));
+    }
+
+    /// <summary>
+    /// Generates code for a vectorized reduction operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Performs reductions (sum, mean, max) using SIMD instructions with horizontal
+    /// reduction for combining vector lanes at the end.
+    /// </para>
+    /// </remarks>
+    private Expression GenerateVectorizedReductionOp<T>(ParameterExpression[] inputs, Operations.VectorizedReductionOp op)
+    {
+        var method = typeof(VectorizedOps).GetMethod("ExecuteVectorizedReduction")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method,
+            inputs[0],
+            Expression.Constant(op.ReductionType),
+            Expression.Constant(op.VectorWidth),
+            Expression.Constant(op.Axes, typeof(int[])),
+            Expression.Constant(op.KeepDims));
+    }
+
+    /// <summary>
+    /// Generates code for a vectorized matrix multiplication.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Uses tiled matrix multiplication with SIMD instructions for the inner loops.
+    /// Optimized for cache locality and instruction-level parallelism.
+    /// </para>
+    /// </remarks>
+    private Expression GenerateVectorizedMatMulOp<T>(ParameterExpression[] inputs, Operations.VectorizedMatMulOp op)
+    {
+        var method = typeof(VectorizedOps).GetMethod("ExecuteVectorizedMatMul")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method,
+            inputs[0],
+            inputs[1],
+            Expression.Constant(op.VectorWidth),
+            Expression.Constant(op.TileSize));
     }
 }

@@ -788,15 +788,16 @@ public class JitCompilerOptions
 
     /// <summary>
     /// Gets or sets a value indicating whether to enable loop unrolling optimization.
-    /// Default: false (not yet fully implemented).
+    /// Default: true.
     /// </summary>
     /// <remarks>
-    /// <para><b>Status:</b> Architecture implemented, full implementation pending.
-    /// Loop unrolling can improve performance for small, fixed-size loops by eliminating
-    /// loop overhead and enabling better instruction pipelining.
+    /// <para>
+    /// Loop unrolling improves performance for small, fixed-size loops by eliminating
+    /// loop overhead and enabling better instruction pipelining. The optimizer automatically
+    /// determines which loops benefit from unrolling based on tensor size and operation type.
     /// </para>
     /// </remarks>
-    public bool EnableLoopUnrolling { get; set; } = false;
+    public bool EnableLoopUnrolling { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether to enable adaptive fusion strategies.
@@ -812,15 +813,16 @@ public class JitCompilerOptions
 
     /// <summary>
     /// Gets or sets a value indicating whether to enable auto-tuning of optimizations.
-    /// Default: false (not yet fully implemented).
+    /// Default: true.
     /// </summary>
     /// <remarks>
-    /// <para><b>Status:</b> Architecture implemented, full implementation pending.
+    /// <para>
     /// Auto-tuning automatically determines the best optimization configuration for
-    /// each graph by profiling and learning from previous compilations.
+    /// each graph based on graph analysis, tensor sizes, and operation types. It selects
+    /// the optimal combination of fusion, unrolling, and vectorization strategies.
     /// </para>
     /// </remarks>
-    public bool EnableAutoTuning { get; set; } = false;
+    public bool EnableAutoTuning { get; set; } = true;
 
     /// <summary>
     /// Gets or sets a value indicating whether to enable SIMD vectorization hints.

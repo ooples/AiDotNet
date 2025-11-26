@@ -979,3 +979,364 @@ public class GradBroadcastOp : BackwardOp
         return $"t{OutputId} = GradBroadcast[axes={string.Join(",", BroadcastedAxes)}](t{InputIds[0]}) : {OutputType} {OutputShape.ShapeToString()}";
     }
 }
+
+// ============================================================================
+// LSTM BACKWARD OPERATIONS
+// ============================================================================
+
+/// <summary>
+/// Backward operation for LSTMCellOp - computes gradient for input.
+/// </summary>
+/// <remarks>
+/// <para>
+/// LSTM backward pass uses the chain rule through the gate computations:
+/// - grad flows back through output gate, cell state, forget/input gates
+/// - Requires saved forward activations for correct gradient computation
+/// </para>
+/// <para><b>For Beginners:</b> LSTM has multiple paths for gradients to flow:
+///
+/// The LSTM has 4 gates (input, forget, cell candidate, output) and 2 states (hidden, cell).
+/// During backpropagation, we need to compute how the loss changes when we change:
+/// 1. The input at this timestep
+/// 2. The hidden state from previous timestep
+/// 3. The cell state from previous timestep
+/// 4. All the weights (W_ih, W_hh) and biases
+///
+/// This complexity is what makes LSTM training work well for sequences!
+/// </para>
+/// </remarks>
+public class GradLSTMCellInputOp : BackwardOp
+{
+    /// <summary>Hidden state size.</summary>
+    public int HiddenSize { get; set; }
+
+    /// <summary>Which gradient: 0 = input, 1 = hidden, 2 = cell, 3 = W_ih, 4 = W_hh, 5 = bias.</summary>
+    public int InputIndex { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        // Needs: grad_h_out, grad_c_out, plus saved forward tensors
+        if (InputIds.Length < 2) return false;
+        if (HiddenSize <= 0) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        var inputName = InputIndex switch
+        {
+            0 => "input",
+            1 => "h_prev",
+            2 => "c_prev",
+            3 => "W_ih",
+            4 => "W_hh",
+            5 => "bias",
+            _ => $"input[{InputIndex}]"
+        };
+        return $"t{OutputId} = GradLSTMCell[{inputName}, hidden={HiddenSize}](...) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for full LSTM sequence.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Computes gradients for all timesteps of an LSTM sequence.
+/// Uses truncated backpropagation through time (TBPTT) if specified.
+/// </para>
+/// </remarks>
+public class GradLSTMSequenceOp : BackwardOp
+{
+    /// <summary>Hidden state size.</summary>
+    public int HiddenSize { get; set; }
+
+    /// <summary>Sequence length.</summary>
+    public int SequenceLength { get; set; }
+
+    /// <summary>Number of layers (for stacked LSTM).</summary>
+    public int NumLayers { get; set; } = 1;
+
+    /// <summary>Whether LSTM is bidirectional.</summary>
+    public bool Bidirectional { get; set; } = false;
+
+    /// <summary>Truncation length for TBPTT (0 = no truncation).</summary>
+    public int TruncationLength { get; set; } = 0;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length < 1) return false;
+        if (HiddenSize <= 0) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        var bidirStr = Bidirectional ? ", bidirectional" : "";
+        return $"t{OutputId} = GradLSTMSeq[hidden={HiddenSize}, len={SequenceLength}, layers={NumLayers}{bidirStr}](...) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+// ============================================================================
+// GRU BACKWARD OPERATIONS
+// ============================================================================
+
+/// <summary>
+/// Backward operation for GRUCellOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// GRU backward pass computes gradients through:
+/// - Update gate (z)
+/// - Reset gate (r)
+/// - Candidate hidden state (h_tilde)
+/// </para>
+/// <para><b>For Beginners:</b> GRU is simpler than LSTM with just 2 gates instead of 4.
+/// The gradient computation is:
+/// 1. Gradient through output combination: h = (1-z)*h_prev + z*h_tilde
+/// 2. Gradient through candidate: h_tilde = tanh(W_h @ x + U_h @ (r * h_prev))
+/// 3. Gradient through gates: z = sigmoid(...), r = sigmoid(...)
+/// </para>
+/// </remarks>
+public class GradGRUCellOp : BackwardOp
+{
+    /// <summary>Hidden state size.</summary>
+    public int HiddenSize { get; set; }
+
+    /// <summary>Which gradient: 0 = input, 1 = hidden, 2 = W_ih, 3 = W_hh, 4 = bias.</summary>
+    public int InputIndex { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length < 2) return false;
+        if (HiddenSize <= 0) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        var inputName = InputIndex switch
+        {
+            0 => "input",
+            1 => "h_prev",
+            2 => "W_ih",
+            3 => "W_hh",
+            4 => "bias",
+            _ => $"input[{InputIndex}]"
+        };
+        return $"t{OutputId} = GradGRUCell[{inputName}, hidden={HiddenSize}](...) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for full GRU sequence.
+/// </summary>
+public class GradGRUSequenceOp : BackwardOp
+{
+    /// <summary>Hidden state size.</summary>
+    public int HiddenSize { get; set; }
+
+    /// <summary>Sequence length.</summary>
+    public int SequenceLength { get; set; }
+
+    /// <summary>Number of layers.</summary>
+    public int NumLayers { get; set; } = 1;
+
+    /// <summary>Whether GRU is bidirectional.</summary>
+    public bool Bidirectional { get; set; } = false;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length < 1) return false;
+        if (HiddenSize <= 0) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        var bidirStr = Bidirectional ? ", bidirectional" : "";
+        return $"t{OutputId} = GradGRUSeq[hidden={HiddenSize}, len={SequenceLength}, layers={NumLayers}{bidirStr}](...) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+// ============================================================================
+// ATTENTION BACKWARD OPERATIONS
+// ============================================================================
+
+/// <summary>
+/// Backward operation for attention (Q*K^T + softmax + matmul V).
+/// </summary>
+/// <remarks>
+/// <para>
+/// Attention backward computes gradients for Q, K, V through:
+/// 1. grad_V = attention_weights^T @ grad_output
+/// 2. grad_attention_weights = grad_output @ V^T
+/// 3. grad_scores = softmax_backward(grad_attention_weights)
+/// 4. grad_Q = grad_scores @ K
+/// 5. grad_K = grad_scores^T @ Q
+/// </para>
+/// </remarks>
+public class GradAttentionOp : BackwardOp
+{
+    /// <summary>Which input: 0 = Q, 1 = K, 2 = V.</summary>
+    public int InputIndex { get; set; }
+
+    /// <summary>Scaling factor used in forward.</summary>
+    public double Scale { get; set; } = 1.0;
+
+    /// <summary>Whether causal masking was used.</summary>
+    public bool CausalMask { get; set; } = false;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        // Needs grad_output and saved attention weights
+        if (InputIds.Length < 2) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        var inputName = InputIndex switch { 0 => "Q", 1 => "K", 2 => "V", _ => $"input[{InputIndex}]" };
+        return $"t{OutputId} = GradAttention[{inputName}, scale={Scale}](...) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for multi-head attention.
+/// </summary>
+public class GradMultiHeadAttentionOp : BackwardOp
+{
+    /// <summary>Number of attention heads.</summary>
+    public int NumHeads { get; set; } = 8;
+
+    /// <summary>Dimension per head.</summary>
+    public int HeadDim { get; set; } = 64;
+
+    /// <summary>Which input: 0 = query, 1 = key, 2 = value, 3 = output_projection.</summary>
+    public int InputIndex { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length < 2) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradMHA[heads={NumHeads}, dim={HeadDim}, input={InputIndex}](...) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+// ============================================================================
+// CONVOLUTION TRANSPOSE BACKWARD OPERATIONS
+// ============================================================================
+
+/// <summary>
+/// Backward operation for ConvTranspose2DOp.
+/// </summary>
+public class GradConvTranspose2DOp : BackwardOp
+{
+    /// <summary>Which input: 0 = input, 1 = weight, 2 = bias.</summary>
+    public int InputIndex { get; set; }
+
+    /// <summary>Stride used in forward.</summary>
+    public int[] Stride { get; set; } = new int[] { 1, 1 };
+
+    /// <summary>Padding used in forward.</summary>
+    public int[] Padding { get; set; } = new int[] { 0, 0 };
+
+    /// <summary>Output padding used in forward.</summary>
+    public int[] OutputPadding { get; set; } = new int[] { 0, 0 };
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        return InputIds.Length >= 2;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradConvTranspose2D[input={InputIndex}](...) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for DepthwiseConv2DOp.
+/// </summary>
+public class GradDepthwiseConv2DOp : BackwardOp
+{
+    /// <summary>Which input: 0 = input, 1 = weight.</summary>
+    public int InputIndex { get; set; }
+
+    /// <summary>Stride used in forward.</summary>
+    public int[] Stride { get; set; } = new int[] { 1, 1 };
+
+    /// <summary>Padding used in forward.</summary>
+    public int[] Padding { get; set; } = new int[] { 0, 0 };
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        return InputIds.Length >= 2;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradDepthwiseConv2D[input={InputIndex}](...) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for UpsampleOp.
+/// </summary>
+public class GradUpsampleOp : BackwardOp
+{
+    /// <summary>Upsampling scale factor.</summary>
+    public int Scale { get; set; }
+
+    /// <summary>Interpolation mode used.</summary>
+    public string Mode { get; set; } = "nearest";
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        if (Scale <= 0) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradUpsample[scale={Scale}, mode={Mode}](t{InputIds[0]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for CropOp.
+/// </summary>
+public class GradCropOp : BackwardOp
+{
+    /// <summary>Original shape before cropping.</summary>
+    public int[] OriginalShape { get; set; } = Array.Empty<int>();
+
+    /// <summary>Crop offsets used in forward.</summary>
+    public int[] CropOffsets { get; set; } = Array.Empty<int>();
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 1) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradCrop[offsets={string.Join(",", CropOffsets)}](t{InputIds[0]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
