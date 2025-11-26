@@ -1531,17 +1531,28 @@ public class GPUCodeGenerator
         var dataType = typeof(T) == typeof(float) ? "float" : "half";
         var outputName = EnsureTensorName(op.OutputId);
         var input = GetTensorName(op.InputIds[0]);
-        return $@"    // MaxPool2D [{op.PoolSize[0]}x{op.PoolSize[1]}]
+
+        // Calculate input spatial dimensions from output and pooling params
+        var inH = (op.OutputShape[2] - 1) * op.Stride[0] + op.PoolSize[0] - 2 * op.Padding[0];
+        var inW = (op.OutputShape[3] - 1) * op.Stride[1] + op.PoolSize[1] - 2 * op.Padding[1];
+        var inC = op.OutputShape[1];
+
+        return $@"    // MaxPool2D [{op.PoolSize[0]}x{op.PoolSize[1]}] stride=[{op.Stride[0]},{op.Stride[1]}]
     {{
-        int pw = idx % {op.OutputShape[3]}, ph = (idx / {op.OutputShape[3]}) % {op.OutputShape[2]};
+        int pw = idx % {op.OutputShape[3]};
+        int ph = (idx / {op.OutputShape[3]}) % {op.OutputShape[2]};
         int c = (idx / ({op.OutputShape[2]} * {op.OutputShape[3]})) % {op.OutputShape[1]};
         int n = idx / ({op.OutputShape[1]} * {op.OutputShape[2]} * {op.OutputShape[3]});
+
         {dataType} max_val = -INFINITY;
         for (int kh = 0; kh < {op.PoolSize[0]}; kh++) {{
             for (int kw = 0; kw < {op.PoolSize[1]}; kw++) {{
                 int ih = ph * {op.Stride[0]} + kh - {op.Padding[0]};
                 int iw = pw * {op.Stride[1]} + kw - {op.Padding[1]};
-                if (ih >= 0 && iw >= 0) max_val = max(max_val, {input}[n * 0 + c * 0 + ih * 0 + iw]);
+                if (ih >= 0 && ih < {inH} && iw >= 0 && iw < {inW}) {{
+                    int input_idx = n * {inC * inH * inW} + c * {inH * inW} + ih * {inW} + iw;
+                    max_val = max(max_val, {input}[input_idx]);
+                }}
             }}
         }}
         {dataType} {outputName} = max_val;
@@ -1554,17 +1565,33 @@ public class GPUCodeGenerator
         var outputName = EnsureTensorName(op.OutputId);
         var input = GetTensorName(op.InputIds[0]);
         var poolArea = op.PoolSize[0] * op.PoolSize[1];
-        return $@"    // AvgPool2D [{op.PoolSize[0]}x{op.PoolSize[1]}]
+
+        // Calculate input spatial dimensions from output and pooling params
+        var inH = (op.OutputShape[2] - 1) * op.Stride[0] + op.PoolSize[0] - 2 * op.Padding[0];
+        var inW = (op.OutputShape[3] - 1) * op.Stride[1] + op.PoolSize[1] - 2 * op.Padding[1];
+        var inC = op.OutputShape[1];
+
+        return $@"    // AvgPool2D [{op.PoolSize[0]}x{op.PoolSize[1]}] stride=[{op.Stride[0]},{op.Stride[1]}]
     {{
-        int pw = idx % {op.OutputShape[3]}, ph = (idx / {op.OutputShape[3]}) % {op.OutputShape[2]};
-        {dataType} sum = 0;
+        int pw = idx % {op.OutputShape[3]};
+        int ph = (idx / {op.OutputShape[3]}) % {op.OutputShape[2]};
+        int c = (idx / ({op.OutputShape[2]} * {op.OutputShape[3]})) % {op.OutputShape[1]};
+        int n = idx / ({op.OutputShape[1]} * {op.OutputShape[2]} * {op.OutputShape[3]});
+
+        {dataType} sum = 0.0;
+        int count = 0;
         for (int kh = 0; kh < {op.PoolSize[0]}; kh++) {{
             for (int kw = 0; kw < {op.PoolSize[1]}; kw++) {{
-                int ih = ph * {op.Stride[0]} + kh, iw = pw * {op.Stride[1]} + kw;
-                sum += {input}[ih * 0 + iw];
+                int ih = ph * {op.Stride[0]} + kh - {op.Padding[0]};
+                int iw = pw * {op.Stride[1]} + kw - {op.Padding[1]};
+                if (ih >= 0 && ih < {inH} && iw >= 0 && iw < {inW}) {{
+                    int input_idx = n * {inC * inH * inW} + c * {inH * inW} + ih * {inW} + iw;
+                    sum += {input}[input_idx];
+                    count++;
+                }}
             }}
         }}
-        {dataType} {outputName} = sum / ({dataType}){poolArea};
+        {dataType} {outputName} = sum / ({dataType})max(count, 1);
     }}";
     }
 
@@ -1574,12 +1601,35 @@ public class GPUCodeGenerator
         var outputName = EnsureTensorName(op.OutputId);
         var input = GetTensorName(op.InputIds[0]);
         var kernel = GetTensorName(op.InputIds[1]);
-        return $@"    // Conv2D stride=[{op.Stride[0]},{op.Stride[1]}] pad=[{op.Padding[0]},{op.Padding[1]}]
+
+        var kH = op.KernelSize[0];
+        var kW = op.KernelSize[1];
+        var strideH = op.Stride[0];
+        var strideW = op.Stride[1];
+        var padH = op.Padding[0];
+        var padW = op.Padding[1];
+
+        return $@"    // Conv2D [{kH}x{kW}] stride=[{strideH},{strideW}] pad=[{padH},{padW}]
     {{
-        int w_out = idx % {op.OutputShape[3]}, h_out = (idx / {op.OutputShape[3]}) % {op.OutputShape[2]};
+        int w_out = idx % {op.OutputShape[3]};
+        int h_out = (idx / {op.OutputShape[3]}) % {op.OutputShape[2]};
         int c_out = (idx / ({op.OutputShape[2]} * {op.OutputShape[3]})) % {op.OutputShape[1]};
-        {dataType} sum = 0;
-        // Convolution loop (simplified)
+        int n = idx / ({op.OutputShape[1]} * {op.OutputShape[2]} * {op.OutputShape[3]});
+
+        {dataType} sum = 0.0;
+        for (int c_in = 0; c_in < {op.InputShape[1]}; c_in++) {{
+            for (int kh = 0; kh < {kH}; kh++) {{
+                for (int kw = 0; kw < {kW}; kw++) {{
+                    int h_in = h_out * {strideH} - {padH} + kh;
+                    int w_in = w_out * {strideW} - {padW} + kw;
+                    if (h_in >= 0 && h_in < {op.InputShape[2]} && w_in >= 0 && w_in < {op.InputShape[3]}) {{
+                        int input_idx = n * {op.InputShape[1] * op.InputShape[2] * op.InputShape[3]} + c_in * {op.InputShape[2] * op.InputShape[3]} + h_in * {op.InputShape[3]} + w_in;
+                        int kernel_idx = c_out * {op.InputShape[1] * kH * kW} + c_in * {kH * kW} + kh * {kW} + kw;
+                        sum += {input}[input_idx] * {kernel}[kernel_idx];
+                    }}
+                }}
+            }}
+        }}
         {dataType} {outputName} = sum;
     }}";
     }
@@ -1588,14 +1638,77 @@ public class GPUCodeGenerator
     {
         var dataType = typeof(T) == typeof(float) ? "float" : "half";
         var outputName = EnsureTensorName(op.OutputId);
-        return $"    {dataType} {outputName} = 0; // Depthwise conv placeholder";
+        var input = GetTensorName(op.InputIds[0]);
+        var kernel = GetTensorName(op.InputIds[1]);
+
+        var kH = op.KernelSize[0];
+        var kW = op.KernelSize[1];
+        var strideH = op.Stride[0];
+        var strideW = op.Stride[1];
+        var padH = op.Padding[0];
+        var padW = op.Padding[1];
+
+        return $@"    // DepthwiseConv2D [{kH}x{kW}] stride=[{strideH},{strideW}] pad=[{padH},{padW}]
+    {{
+        int w_out = idx % {op.OutputShape[3]};
+        int h_out = (idx / {op.OutputShape[3]}) % {op.OutputShape[2]};
+        int c = (idx / ({op.OutputShape[2]} * {op.OutputShape[3]})) % {op.OutputShape[1]};
+        int n = idx / ({op.OutputShape[1]} * {op.OutputShape[2]} * {op.OutputShape[3]});
+
+        {dataType} sum = 0.0;
+        for (int kh = 0; kh < {kH}; kh++) {{
+            for (int kw = 0; kw < {kW}; kw++) {{
+                int h_in = h_out * {strideH} - {padH} + kh;
+                int w_in = w_out * {strideW} - {padW} + kw;
+                if (h_in >= 0 && h_in < {op.InputShape[2]} && w_in >= 0 && w_in < {op.InputShape[3]}) {{
+                    int input_idx = n * {op.InputShape[1] * op.InputShape[2] * op.InputShape[3]} + c * {op.InputShape[2] * op.InputShape[3]} + h_in * {op.InputShape[3]} + w_in;
+                    int kernel_idx = c * {kH * kW} + kh * {kW} + kw;
+                    sum += {input}[input_idx] * {kernel}[kernel_idx];
+                }}
+            }}
+        }}
+        {dataType} {outputName} = sum;
+    }}";
     }
 
     private string GenerateConvTranspose2DMetal<T>(ConvTranspose2DOp op)
     {
         var dataType = typeof(T) == typeof(float) ? "float" : "half";
         var outputName = EnsureTensorName(op.OutputId);
-        return $"    {dataType} {outputName} = 0; // ConvTranspose placeholder";
+        var input = GetTensorName(op.InputIds[0]);
+        var kernel = GetTensorName(op.InputIds[1]);
+
+        var kH = op.KernelSize[0];
+        var kW = op.KernelSize[1];
+        var strideH = op.Stride[0];
+        var strideW = op.Stride[1];
+        var padH = op.Padding[0];
+        var padW = op.Padding[1];
+
+        return $@"    // ConvTranspose2D [{kH}x{kW}] stride=[{strideH},{strideW}] pad=[{padH},{padW}]
+    {{
+        int w_out = idx % {op.OutputShape[3]};
+        int h_out = (idx / {op.OutputShape[3]}) % {op.OutputShape[2]};
+        int c_out = (idx / ({op.OutputShape[2]} * {op.OutputShape[3]})) % {op.OutputShape[1]};
+        int n = idx / ({op.OutputShape[1]} * {op.OutputShape[2]} * {op.OutputShape[3]});
+
+        {dataType} sum = 0.0;
+        for (int c_in = 0; c_in < {op.InputShape[1]}; c_in++) {{
+            for (int kh = 0; kh < {kH}; kh++) {{
+                for (int kw = 0; kw < {kW}; kw++) {{
+                    int h_in = (h_out + {padH} - kh) / {strideH};
+                    int w_in = (w_out + {padW} - kw) / {strideW};
+                    if ((h_out + {padH} - kh) % {strideH} == 0 && (w_out + {padW} - kw) % {strideW} == 0 &&
+                        h_in >= 0 && h_in < {op.InputShape[2]} && w_in >= 0 && w_in < {op.InputShape[3]}) {{
+                        int input_idx = n * {op.InputShape[1] * op.InputShape[2] * op.InputShape[3]} + c_in * {op.InputShape[2] * op.InputShape[3]} + h_in * {op.InputShape[3]} + w_in;
+                        int kernel_idx = c_in * {op.OutputShape[1] * kH * kW} + c_out * {kH * kW} + kh * {kW} + kw;
+                        sum += {input}[input_idx] * {kernel}[kernel_idx];
+                    }}
+                }}
+            }}
+        }}
+        {dataType} {outputName} = sum;
+    }}";
     }
 
     private string GeneratePadMetal<T>(PadOp op)
