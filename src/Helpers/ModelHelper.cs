@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-
 namespace AiDotNet.Helpers;
 
 /// <summary>
@@ -13,35 +11,13 @@ namespace AiDotNet.Helpers;
 public static class ModelHelper<T, TInput, TOutput>
 {
     /// <summary>
-    /// Thread-local random instance for thread-safe random number generation.
-    /// Each thread gets its own Random instance to avoid thread-safety issues.
-    /// </summary>
-    private static readonly ThreadLocal<Random> _threadLocalRandom = new(
-        () => new Random(GenerateCryptographicSeed()));
-
-    /// <summary>
-    /// Generates a cryptographically secure seed for Random initialization.
-    /// Uses RandomNumberGenerator to avoid birthday paradox collisions from GetHashCode().
-    /// </summary>
-    /// <returns>A cryptographically random integer seed.</returns>
-    private static int GenerateCryptographicSeed()
-    {
-        byte[] bytes = new byte[4];
-        using (var rng = RandomNumberGenerator.Create())
-        {
-            rng.GetBytes(bytes);
-        }
-        return BitConverter.ToInt32(bytes, 0);
-    }
-
-    /// <summary>
     /// Gets the thread-safe random number generator for creating randomized models.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> This is used to generate random values when creating models.
-    /// Using thread-local storage ensures thread safety and consistent randomness per thread.</para>
+    /// Uses the centralized RandomHelper for thread safety and consistent randomness.</para>
     /// </remarks>
-    private static Random _random => _threadLocalRandom.Value ?? new Random(GenerateCryptographicSeed());
+    private static Random _random => RandomHelper.ThreadSafeRandom;
     
     /// <summary>
     /// Numeric operations provider for type T.

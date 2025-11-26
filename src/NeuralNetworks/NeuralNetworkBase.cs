@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+using AiDotNet.Helpers;
 using AiDotNet.Interpretability;
 using AiDotNet.Interfaces;
 using AiDotNet.MixedPrecision;
@@ -106,34 +106,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected Dictionary<int, Tensor<T>> _layerOutputs = [];
 
     /// <summary>
-    /// Thread-local random instance for thread-safe random number generation.
-    /// Each thread gets its own Random instance to avoid thread-safety issues.
-    /// </summary>
-    private static readonly ThreadLocal<Random> _threadLocalRandom = new(
-        () => new Random(GenerateCryptographicSeed()));
-
-    /// <summary>
-    /// Generates a cryptographically secure seed for Random initialization.
-    /// Uses RandomNumberGenerator to avoid birthday paradox collisions from GetHashCode().
-    /// </summary>
-    /// <returns>A cryptographically random integer seed.</returns>
-    private static int GenerateCryptographicSeed()
-    {
-        byte[] bytes = new byte[4];
-        using (var rng = RandomNumberGenerator.Create())
-        {
-            rng.GetBytes(bytes);
-        }
-        return BitConverter.ToInt32(bytes, 0);
-    }
-
-    /// <summary>
     /// Gets the thread-safe random number generator for initialization.
     /// </summary>
     /// <remarks>
-    /// Uses ThreadLocal&lt;Random&gt; which is thread-safe and avoids creating multiple instances per thread.
+    /// Uses the centralized RandomHelper which is thread-safe and avoids creating multiple instances per thread.
     /// </remarks>
-    protected static Random Random => _threadLocalRandom.Value ?? new Random(GenerateCryptographicSeed());
+    protected static Random Random => RandomHelper.ThreadSafeRandom;
 
     /// <summary>
     /// The loss function used to calculate error during training.

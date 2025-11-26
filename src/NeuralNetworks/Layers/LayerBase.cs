@@ -1,5 +1,5 @@
-using System.Security.Cryptography;
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -118,35 +118,12 @@ public abstract class LayerBase<T> : ILayer<T>
     protected INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
 
     /// <summary>
-    /// Thread-local random instance for thread-safe random number generation.
-    /// Each thread gets its own Random instance to avoid thread-safety issues.
-    /// </summary>
-    private static readonly ThreadLocal<Random> _threadLocalRandom = new(
-        () => new Random(GenerateCryptographicSeed()));
-
-    /// <summary>
-    /// Generates a cryptographically secure seed for Random initialization.
-    /// Uses RandomNumberGenerator to avoid birthday paradox collisions from GetHashCode().
-    /// </summary>
-    /// <returns>A cryptographically random integer seed.</returns>
-    private static int GenerateCryptographicSeed()
-    {
-        byte[] bytes = new byte[4];
-        using (var rng = RandomNumberGenerator.Create())
-        {
-            rng.GetBytes(bytes);
-        }
-        return BitConverter.ToInt32(bytes, 0);
-    }
-
-    /// <summary>
     /// Gets the thread-safe random number generator.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This property provides access to a thread-safe random number generator using ThreadLocal,
+    /// This property provides access to the centralized thread-safe random number generator,
     /// which is used for initializing weights and other parameters that require randomization.
-    /// Each thread gets its own Random instance, ensuring thread safety without locking.
     /// </para>
     /// <para><b>For Beginners:</b> This provides random numbers for initializing the layer.
     ///
@@ -156,10 +133,9 @@ public abstract class LayerBase<T> : ILayer<T>
     /// - Help the network learn diverse patterns
     ///
     /// Good initialization with proper randomness is important for neural networks to learn effectively.
-    /// Using thread-local storage ensures thread safety and good performance.
     /// </para>
     /// </remarks>
-    protected static Random Random => _threadLocalRandom.Value ?? new Random(GenerateCryptographicSeed());
+    protected static Random Random => RandomHelper.ThreadSafeRandom;
 
     /// <summary>
     /// The trainable parameters of this layer.
