@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.NumericOperations;
@@ -9,16 +10,22 @@ namespace AiDotNet.Tensors.Helpers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> This helper class contains various mathematical functions that are commonly 
-/// used in AI and machine learning algorithms. These functions work with different numeric types 
+/// <b>For Beginners:</b> This helper class contains various mathematical functions that are commonly
+/// used in AI and machine learning algorithms. These functions work with different numeric types
 /// (like double, float, decimal) and handle the calculations in a consistent way.
-/// 
-/// Think of this class as a mathematical toolbox that provides specialized tools beyond what's 
+///
+/// Think of this class as a mathematical toolbox that provides specialized tools beyond what's
 /// available in the standard Math class.
 /// </para>
 /// </remarks>
 public static class MathHelper
 {
+    // Cache for numeric operations instances - avoids creating new objects on every call
+    private static readonly ConcurrentDictionary<Type, object> _operationsCache = new();
+
+    // Cache for acceleration support flags - avoids repeated type checks
+    private static readonly ConcurrentDictionary<Type, (bool Cpu, bool Gpu)> _accelerationCache = new();
+
     /// <summary>
     /// Gets the appropriate numeric operations implementation for the specified type.
     /// </summary>
@@ -27,24 +34,36 @@ public static class MathHelper
     /// <exception cref="NotSupportedException">Thrown when the specified type is not supported.</exception>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This method determines how to perform basic math operations (like addition, 
-    /// multiplication) based on what type of number you're working with. 
-    /// 
+    /// <b>For Beginners:</b> This method determines how to perform basic math operations (like addition,
+    /// multiplication) based on what type of number you're working with.
+    ///
     /// For example, adding two doubles is different from adding two integers at the computer level.
     /// This method returns the right "calculator" for your number type.
     /// </para>
+    /// <para>
+    /// <b>Performance:</b> This method caches the operations instances, so calling it multiple times
+    /// for the same type T is very fast after the first call.
+    /// </para>
     /// </remarks>
-    public static AiDotNet.Tensors.Interfaces.INumericOperations<T> GetNumericOperations<T>()
+    public static INumericOperations<T> GetNumericOperations<T>()
+    {
+        return (INumericOperations<T>)_operationsCache.GetOrAdd(typeof(T), _ => CreateNumericOperations<T>());
+    }
+
+    /// <summary>
+    /// Creates a new numeric operations instance for the specified type.
+    /// </summary>
+    private static object CreateNumericOperations<T>()
     {
         if (typeof(T) == typeof(double))
-            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new DoubleOperations();
-        else if (typeof(T) == typeof(float))
-            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new FloatOperations();
-        else if (typeof(T) == typeof(Half))
-            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new HalfOperations();
-        else if (typeof(T) == typeof(decimal))
-            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new DecimalOperations();
-        else if (typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Complex<>))
+            return new DoubleOperations();
+        if (typeof(T) == typeof(float))
+            return new FloatOperations();
+        if (typeof(T) == typeof(Half))
+            return new HalfOperations();
+        if (typeof(T) == typeof(decimal))
+            return new DecimalOperations();
+        if (typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Complex<>))
         {
             var innerType = typeof(T).GetGenericArguments()[0];
             var complexOpsType = typeof(ComplexOperations<>).MakeGenericType(innerType);
@@ -53,26 +72,122 @@ public static class MathHelper
             {
                 throw new InvalidOperationException($"Failed to create ComplexOperations instance for type {typeof(T)}");
             }
-            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)instance;
+            return instance;
         }
-        else if (typeof(T) == typeof(byte))
-            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new ByteOperations();
-        else if (typeof(T) == typeof(sbyte))
-            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new SByteOperations();
-        else if (typeof(T) == typeof(short))
-            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new ShortOperations();
-        else if (typeof(T) == typeof(ushort))
-            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new UInt16Operations();
-        else if (typeof(T) == typeof(int))
-            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new Int32Operations();
-        else if (typeof(T) == typeof(uint))
-            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new UInt32Operations();
-        else if (typeof(T) == typeof(long))
-            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new Int64Operations();
-        else if (typeof(T) == typeof(ulong))
-            return (AiDotNet.Tensors.Interfaces.INumericOperations<T>)new UInt64Operations();
-        else
-            throw new NotSupportedException($"Numeric operations for type {typeof(T)} are not supported.");
+        if (typeof(T) == typeof(byte))
+            return new ByteOperations();
+        if (typeof(T) == typeof(sbyte))
+            return new SByteOperations();
+        if (typeof(T) == typeof(short))
+            return new ShortOperations();
+        if (typeof(T) == typeof(ushort))
+            return new UInt16Operations();
+        if (typeof(T) == typeof(int))
+            return new Int32Operations();
+        if (typeof(T) == typeof(uint))
+            return new UInt32Operations();
+        if (typeof(T) == typeof(long))
+            return new Int64Operations();
+        if (typeof(T) == typeof(ulong))
+            return new UInt64Operations();
+
+        throw new NotSupportedException($"Numeric operations for type {typeof(T)} are not supported.");
+    }
+
+    /// <summary>
+    /// Checks if the specified numeric type supports SIMD/CPU acceleration.
+    /// </summary>
+    /// <typeparam name="T">The numeric type to check.</typeparam>
+    /// <returns>True if the type supports CPU acceleration; otherwise, false.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SIMD (Single Instruction Multiple Data) allows the CPU to perform
+    /// the same operation on multiple values at once, making vector operations much faster.
+    /// Types like float, double, int, and long typically support SIMD acceleration.
+    /// </para>
+    /// <para>
+    /// This method caches the result for performance - use it instead of checking
+    /// typeof(T) == typeof(float) patterns in hot paths.
+    /// </para>
+    /// </remarks>
+    public static bool SupportsCpuAcceleration<T>()
+    {
+        return GetAccelerationSupport<T>().Cpu;
+    }
+
+    /// <summary>
+    /// Checks if the specified numeric type supports GPU acceleration.
+    /// </summary>
+    /// <typeparam name="T">The numeric type to check.</typeparam>
+    /// <returns>True if the type supports GPU acceleration; otherwise, false.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GPU acceleration uses the graphics card to perform many calculations
+    /// in parallel, which can be orders of magnitude faster for large datasets.
+    /// Types like float and double are typically supported on GPUs, while decimal and
+    /// complex types may only run on CPU.
+    /// </para>
+    /// <para>
+    /// This method caches the result for performance - use it instead of checking
+    /// typeof(T) == typeof(float) patterns in hot paths.
+    /// </para>
+    /// </remarks>
+    public static bool SupportsGpuAcceleration<T>()
+    {
+        return GetAccelerationSupport<T>().Gpu;
+    }
+
+    /// <summary>
+    /// Gets both CPU and GPU acceleration support for the specified numeric type.
+    /// </summary>
+    /// <typeparam name="T">The numeric type to check.</typeparam>
+    /// <returns>A tuple containing (SupportsCpu, SupportsGpu) flags.</returns>
+    public static (bool Cpu, bool Gpu) GetAccelerationSupport<T>()
+    {
+        return _accelerationCache.GetOrAdd(typeof(T), _ =>
+        {
+            var ops = GetNumericOperations<T>();
+            return (ops.SupportsCpuAcceleration, ops.SupportsGpuAcceleration);
+        });
+    }
+
+    /// <summary>
+    /// Checks if the type T is float or double (the types that support TensorPrimitives operations).
+    /// </summary>
+    /// <typeparam name="T">The numeric type to check.</typeparam>
+    /// <returns>True if T is float or double; otherwise, false.</returns>
+    /// <remarks>
+    /// <para>
+    /// Many SIMD-optimized operations in .NET's TensorPrimitives only support float and double.
+    /// Use this method to check if you can use TensorPrimitives instead of generic fallback code.
+    /// </para>
+    /// </remarks>
+    public static bool IsTensorPrimitivesSupported<T>()
+    {
+        return typeof(T) == typeof(float) || typeof(T) == typeof(double);
+    }
+
+    /// <summary>
+    /// Checks if the type T is a floating-point type (float, double, or Half).
+    /// </summary>
+    /// <typeparam name="T">The numeric type to check.</typeparam>
+    /// <returns>True if T is float, double, or Half; otherwise, false.</returns>
+    public static bool IsFloatingPoint<T>()
+    {
+        return typeof(T) == typeof(float) || typeof(T) == typeof(double) || typeof(T) == typeof(Half);
+    }
+
+    /// <summary>
+    /// Checks if the type T is an integer type.
+    /// </summary>
+    /// <typeparam name="T">The numeric type to check.</typeparam>
+    /// <returns>True if T is an integer type; otherwise, false.</returns>
+    public static bool IsIntegerType<T>()
+    {
+        return typeof(T) == typeof(byte) || typeof(T) == typeof(sbyte) ||
+               typeof(T) == typeof(short) || typeof(T) == typeof(ushort) ||
+               typeof(T) == typeof(int) || typeof(T) == typeof(uint) ||
+               typeof(T) == typeof(long) || typeof(T) == typeof(ulong);
     }
 
     /// <summary>

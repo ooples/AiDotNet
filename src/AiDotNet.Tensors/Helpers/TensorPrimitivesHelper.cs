@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using System.Numerics.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Interfaces;
@@ -7,14 +8,13 @@ namespace AiDotNet.Tensors.Helpers;
 
 /// <summary>
 /// Provides type-safe wrappers around TensorPrimitives for generic type T operations.
-/// Uses SIMD-optimized implementations when available (float only), falls back to manual loops otherwise.
+/// Uses SIMD-optimized implementations when available, falls back to manual loops otherwise.
 /// </summary>
-/// <typeparam name="T">The numeric type for tensor operations (typically float or double).</typeparam>
+/// <typeparam name="T">The numeric type for tensor operations.</typeparam>
 /// <remarks>
 /// <para>
 /// TensorPrimitives provides hardware-accelerated SIMD operations (SSE, AVX, AVX2, AVX-512) for
-/// high-performance tensor computations. This helper class bridges the gap between generic type T
-/// and TensorPrimitives' float-only implementation (in System.Numerics.Tensors 10.0.0).
+/// high-performance tensor computations.
 /// </para>
 /// <para><b>Performance Characteristics (float only):</b>
 /// - Element-wise operations: 5-10ÃƒÆ’Ã¢â‚¬â€ speedup with AVX2
@@ -41,6 +41,12 @@ public static class TensorPrimitivesHelper<T>
     /// </summary>
     private const int MinSizeForVectorization = 16;
 
+    /// <summary>
+    /// Cached flag indicating whether TensorPrimitives supports type T (float or double).
+    /// TensorPrimitives provides SIMD-optimized operations for float and double only.
+    /// </summary>
+    private static readonly bool UseGenericTensorPrimitives = MathHelper.IsTensorPrimitivesSupported<T>();
+
     #region Vector Operations
 
     /// <summary>
@@ -55,12 +61,9 @@ public static class TensorPrimitivesHelper<T>
         var yArray = y.ToArray();
         var result = new T[xArray.Length];
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (xArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var xFloat = (float[])(object)xArray;
-            var yFloat = (float[])(object)yArray;
-            var resultFloat = (float[])(object)result;
-            TensorPrimitives.Add(xFloat, yFloat, resultFloat);
+            TensorPrimitivesDispatcher.Add(xArray, yArray, result);
         }
         else
         {
@@ -83,12 +86,9 @@ public static class TensorPrimitivesHelper<T>
         var yArray = y.ToArray();
         var result = new T[xArray.Length];
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (xArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var xFloat = (float[])(object)xArray;
-            var yFloat = (float[])(object)yArray;
-            var resultFloat = (float[])(object)result;
-            TensorPrimitives.Subtract(xFloat, yFloat, resultFloat);
+            TensorPrimitivesDispatcher.Subtract(xArray, yArray, result);
         }
         else
         {
@@ -111,12 +111,9 @@ public static class TensorPrimitivesHelper<T>
         var yArray = y.ToArray();
         var result = new T[xArray.Length];
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (xArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var xFloat = (float[])(object)xArray;
-            var yFloat = (float[])(object)yArray;
-            var resultFloat = (float[])(object)result;
-            TensorPrimitives.Multiply(xFloat, yFloat, resultFloat);
+            TensorPrimitivesDispatcher.Multiply(xArray, yArray, result);
         }
         else
         {
@@ -139,12 +136,9 @@ public static class TensorPrimitivesHelper<T>
         var yArray = y.ToArray();
         var result = new T[xArray.Length];
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (xArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var xFloat = (float[])(object)xArray;
-            var yFloat = (float[])(object)yArray;
-            var resultFloat = (float[])(object)result;
-            TensorPrimitives.Divide(xFloat, yFloat, resultFloat);
+            TensorPrimitivesDispatcher.Divide(xArray, yArray, result);
         }
         else
         {
@@ -166,20 +160,16 @@ public static class TensorPrimitivesHelper<T>
         var xArray = x.ToArray();
         var yArray = y.ToArray();
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (xArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var xFloat = (float[])(object)xArray;
-            var yFloat = (float[])(object)yArray;
-            float result = TensorPrimitives.Dot(xFloat, yFloat);
-            return (T)(object)result;
+            return TensorPrimitivesDispatcher.Dot(xArray, yArray);
         }
-        else
-        {
-            T result = NumOps.Zero;
-            for (int i = 0; i < xArray.Length; i++)
-                result = NumOps.Add(result, NumOps.Multiply(xArray[i], yArray[i]));
-            return result;
-        }
+
+        // Fallback for non-accelerated types
+        T fallbackResult = NumOps.Zero;
+        for (int i = 0; i < xArray.Length; i++)
+            fallbackResult = NumOps.Add(fallbackResult, NumOps.Multiply(xArray[i], yArray[i]));
+        return fallbackResult;
     }
 
     /// <summary>
@@ -189,19 +179,16 @@ public static class TensorPrimitivesHelper<T>
     {
         var xArray = x.ToArray();
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (xArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var xFloat = (float[])(object)xArray;
-            float result = TensorPrimitives.Sum(xFloat);
-            return (T)(object)result;
+            return TensorPrimitivesDispatcher.Sum(xArray);
         }
-        else
-        {
-            T result = NumOps.Zero;
-            for (int i = 0; i < xArray.Length; i++)
-                result = NumOps.Add(result, xArray[i]);
-            return result;
-        }
+
+        // Fallback for non-accelerated types
+        T fallbackResult = NumOps.Zero;
+        for (int i = 0; i < xArray.Length; i++)
+            fallbackResult = NumOps.Add(fallbackResult, xArray[i]);
+        return fallbackResult;
     }
 
     /// <summary>
@@ -214,20 +201,17 @@ public static class TensorPrimitivesHelper<T>
 
         var xArray = x.ToArray();
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (xArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var xFloat = (float[])(object)xArray;
-            float result = TensorPrimitives.Max(xFloat);
-            return (T)(object)result;
+            return TensorPrimitivesDispatcher.Max(xArray);
         }
-        else
-        {
-            T max = xArray[0];
-            for (int i = 1; i < xArray.Length; i++)
-                if (NumOps.GreaterThan(xArray[i], max))
-                    max = xArray[i];
-            return max;
-        }
+
+        // Fallback for non-accelerated types
+        T max = xArray[0];
+        for (int i = 1; i < xArray.Length; i++)
+            if (NumOps.GreaterThan(xArray[i], max))
+                max = xArray[i];
+        return max;
     }
 
     /// <summary>
@@ -240,20 +224,17 @@ public static class TensorPrimitivesHelper<T>
 
         var xArray = x.ToArray();
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (xArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var xFloat = (float[])(object)xArray;
-            float result = TensorPrimitives.Min(xFloat);
-            return (T)(object)result;
+            return TensorPrimitivesDispatcher.Min(xArray);
         }
-        else
-        {
-            T min = xArray[0];
-            for (int i = 1; i < xArray.Length; i++)
-                if (NumOps.LessThan(xArray[i], min))
-                    min = xArray[i];
-            return min;
-        }
+
+        // Fallback for non-accelerated types
+        T min = xArray[0];
+        for (int i = 1; i < xArray.Length; i++)
+            if (NumOps.LessThan(xArray[i], min))
+                min = xArray[i];
+        return min;
     }
 
     /// <summary>
@@ -264,11 +245,9 @@ public static class TensorPrimitivesHelper<T>
         var xArray = x.ToArray();
         var result = new T[xArray.Length];
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (xArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var xFloat = (float[])(object)xArray;
-            var resultFloat = (float[])(object)result;
-            TensorPrimitives.Exp(xFloat, resultFloat);
+            TensorPrimitivesDispatcher.Exp(xArray, result);
         }
         else
         {
@@ -287,11 +266,9 @@ public static class TensorPrimitivesHelper<T>
         var xArray = x.ToArray();
         var result = new T[xArray.Length];
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (xArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var xFloat = (float[])(object)xArray;
-            var resultFloat = (float[])(object)result;
-            TensorPrimitives.Log(xFloat, resultFloat);
+            TensorPrimitivesDispatcher.Log(xArray, result);
         }
         else
         {
@@ -330,11 +307,9 @@ public static class TensorPrimitivesHelper<T>
         var xArray = x.ToArray();
         var result = new T[xArray.Length];
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (xArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var xFloat = (float[])(object)xArray;
-            var resultFloat = (float[])(object)result;
-            TensorPrimitives.Tanh(xFloat, resultFloat);
+            TensorPrimitivesDispatcher.Tanh(xArray, result);
         }
         else
         {
@@ -360,11 +335,9 @@ public static class TensorPrimitivesHelper<T>
         var xArray = x.ToArray();
         var result = new T[xArray.Length];
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (xArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var xFloat = (float[])(object)xArray;
-            var resultFloat = (float[])(object)result;
-            TensorPrimitives.Sigmoid(xFloat, resultFloat);
+            TensorPrimitivesDispatcher.Sigmoid(xArray, result);
         }
         else
         {
@@ -479,28 +452,13 @@ public static class TensorPrimitivesHelper<T>
         var xArray = x.ToArray();
         var result = new T[xArray.Length];
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        // Swish = x * sigmoid(x), compute sigmoid first then multiply
+        for (int i = 0; i < xArray.Length; i++)
         {
-            // Use vectorized operations for float
-            var xFloat = (float[])(object)xArray;
-            var resultFloat = (float[])(object)result;
-
-            // Compute sigmoid first, then multiply by x
-            for (int i = 0; i < xFloat.Length; i++)
-            {
-                float sigmoid = 1.0f / (1.0f + MathF.Exp(-xFloat[i]));
-                resultFloat[i] = xFloat[i] * sigmoid;
-            }
-        }
-        else
-        {
-            for (int i = 0; i < xArray.Length; i++)
-            {
-                T neg_x = NumOps.Negate(xArray[i]);
-                T exp_neg_x = NumOps.Exp(neg_x);
-                T sigmoid = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, exp_neg_x));
-                result[i] = NumOps.Multiply(xArray[i], sigmoid);
-            }
+            T neg_x = NumOps.Negate(xArray[i]);
+            T exp_neg_x = NumOps.Exp(neg_x);
+            T sigmoid = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, exp_neg_x));
+            result[i] = NumOps.Multiply(xArray[i], sigmoid);
         }
 
         return new Vector<T>(result);
@@ -542,11 +500,9 @@ public static class TensorPrimitivesHelper<T>
         var xArray = x.ToArray();
         var result = new T[xArray.Length];
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (xArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var xFloat = (float[])(object)xArray;
-            var resultFloat = (float[])(object)result;
-            TensorPrimitives.Log2(xFloat, resultFloat);
+            TensorPrimitivesDispatcher.Log2(xArray, result);
         }
         else
         {
@@ -570,11 +526,9 @@ public static class TensorPrimitivesHelper<T>
 
         var result = new T[xArray.Length];
 
-        if (xArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (xArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var xFloat = (float[])(object)xArray;
-            var resultFloat = (float[])(object)result;
-            TensorPrimitives.SoftMax(xFloat, resultFloat);
+            TensorPrimitivesDispatcher.SoftMax(xArray, result);
         }
         else
         {
@@ -612,12 +566,9 @@ public static class TensorPrimitivesHelper<T>
         var aArray = a.ToArray();
         var bArray = b.ToArray();
 
-        if (aArray.Length >= MinSizeForVectorization && typeof(T) == typeof(float))
+        if (aArray.Length >= MinSizeForVectorization && UseGenericTensorPrimitives)
         {
-            var aFloat = (float[])(object)aArray;
-            var bFloat = (float[])(object)bArray;
-            float result = TensorPrimitives.CosineSimilarity(aFloat, bFloat);
-            return (T)(object)result;
+            return TensorPrimitivesDispatcher.CosineSimilarity(aArray, bArray);
         }
         else
         {
