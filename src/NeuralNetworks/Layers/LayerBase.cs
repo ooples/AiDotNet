@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -120,7 +122,22 @@ public abstract class LayerBase<T> : ILayer<T>
     /// Each thread gets its own Random instance to avoid thread-safety issues.
     /// </summary>
     private static readonly ThreadLocal<Random> _threadLocalRandom = new(
-        () => new Random(Guid.NewGuid().GetHashCode()));
+        () => new Random(GenerateCryptographicSeed()));
+
+    /// <summary>
+    /// Generates a cryptographically secure seed for Random initialization.
+    /// Uses RandomNumberGenerator to avoid birthday paradox collisions from GetHashCode().
+    /// </summary>
+    /// <returns>A cryptographically random integer seed.</returns>
+    private static int GenerateCryptographicSeed()
+    {
+        byte[] bytes = new byte[4];
+        using (var rng = RandomNumberGenerator.Create())
+        {
+            rng.GetBytes(bytes);
+        }
+        return BitConverter.ToInt32(bytes, 0);
+    }
 
     /// <summary>
     /// Gets the thread-safe random number generator.
@@ -142,7 +159,7 @@ public abstract class LayerBase<T> : ILayer<T>
     /// Using thread-local storage ensures thread safety and good performance.
     /// </para>
     /// </remarks>
-    protected static Random Random => _threadLocalRandom.Value ?? new Random(Guid.NewGuid().GetHashCode());
+    protected static Random Random => _threadLocalRandom.Value ?? new Random(GenerateCryptographicSeed());
 
     /// <summary>
     /// The trainable parameters of this layer.

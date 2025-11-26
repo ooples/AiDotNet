@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace AiDotNet.Helpers;
 
 /// <summary>
@@ -15,7 +17,7 @@ public static class SamplingHelper
     /// Each thread gets its own Random instance to avoid thread-safety issues.
     /// </summary>
     private static readonly ThreadLocal<Random> _threadLocalRandom = new(
-        () => new Random(Guid.NewGuid().GetHashCode()));
+        () => new Random(GenerateCryptographicSeed()));
 
     /// <summary>
     /// Seeded random instance for reproducible sampling. When null, uses thread-local random.
@@ -23,10 +25,25 @@ public static class SamplingHelper
     private static Random? _seededRandom;
 
     /// <summary>
+    /// Generates a cryptographically secure seed for Random initialization.
+    /// Uses RandomNumberGenerator to avoid birthday paradox collisions from GetHashCode().
+    /// </summary>
+    /// <returns>A cryptographically random integer seed.</returns>
+    private static int GenerateCryptographicSeed()
+    {
+        byte[] bytes = new byte[4];
+        using (var rng = RandomNumberGenerator.Create())
+        {
+            rng.GetBytes(bytes);
+        }
+        return BitConverter.ToInt32(bytes, 0);
+    }
+
+    /// <summary>
     /// Gets the random number generator used for all sampling operations.
     /// Uses thread-local random by default (thread-safe), or a seeded instance if SetSeed was called.
     /// </summary>
-    private static Random CurrentRandom => _seededRandom ?? _threadLocalRandom.Value ?? new Random(Guid.NewGuid().GetHashCode());
+    private static Random CurrentRandom => _seededRandom ?? _threadLocalRandom.Value ?? new Random(GenerateCryptographicSeed());
 
     /// <summary>
     /// Performs sampling without replacement, meaning once an item is selected, 
