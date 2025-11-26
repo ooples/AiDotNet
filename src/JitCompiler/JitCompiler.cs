@@ -1038,20 +1038,291 @@ public class JitCompiler : IDisposable
         List<ComputationNode<T>> inputs,
         JitCompatibilityResult compatibility)
     {
-        // For now, we use a simplified approach:
-        // If there are unsupported ops, we fall back to full interpretation
-        // A full hybrid implementation would require graph partitioning
-        // which is a significant undertaking
+        // Partition graph into JIT-able subgraphs and unsupported nodes
+        var partitioning = PartitionGraph(outputNode, inputs, compatibility);
 
-        // TODO: Implement true hybrid execution with graph partitioning
-        // This would involve:
-        // 1. Partition graph into JIT-able subgraphs
-        // 2. Compile each subgraph independently
-        // 3. Create execution plan that switches between JIT and interpreted
-        // 4. Handle tensor passing between execution modes
+        // If no JIT-able partitions found, fall back to interpreted
+        if (partitioning.JitPartitions.Count == 0)
+        {
+            return CreateInterpretedFallback(outputNode, inputs);
+        }
 
-        // For now, return interpreted with a note about future hybrid support
-        return CreateInterpretedFallback(outputNode, inputs);
+        // Compile each JIT-able partition
+        var compiledPartitions = new List<HybridPartition<T>>();
+        foreach (var partition in partitioning.JitPartitions)
+        {
+            try
+            {
+                var compiledFunc = CompilePartition<T>(partition);
+                compiledPartitions.Add(new HybridPartition<T>
+                {
+                    Partition = partition,
+                    CompiledFunc = compiledFunc,
+                    IsJitCompiled = true
+                });
+            }
+            catch
+            {
+                // If compilation fails for a partition, use interpreted for that partition
+                compiledPartitions.Add(new HybridPartition<T>
+                {
+                    Partition = partition,
+                    IsJitCompiled = false
+                });
+            }
+        }
+
+        // Create the hybrid execution function
+        return CreateHybridExecutionFunction(outputNode, inputs, partitioning, compiledPartitions);
+    }
+
+    /// <summary>
+    /// Partitions the computation graph into JIT-able and non-JIT-able segments.
+    /// </summary>
+    private GraphPartitioning<T> PartitionGraph<T>(
+        ComputationNode<T> outputNode,
+        List<ComputationNode<T>> inputs,
+        JitCompatibilityResult compatibility)
+    {
+        var result = new GraphPartitioning<T>();
+        var supportedOps = GetSupportedOperationTypes();
+        var unsupportedNodeSet = new HashSet<object>();
+        var nodeExecutionOrder = new List<ComputationNode<T>>();
+        var visited = new HashSet<object>();
+
+        // First pass: identify all unsupported nodes
+        void MarkUnsupported(ComputationNode<T> node)
+        {
+            if (visited.Contains(node)) return;
+            visited.Add(node);
+
+            foreach (var parent in node.Parents.Cast<ComputationNode<T>>())
+            {
+                MarkUnsupported(parent);
+            }
+
+            if (node.OperationType == null || !supportedOps.Contains(node.OperationType.Value))
+            {
+                unsupportedNodeSet.Add(node);
+            }
+
+            nodeExecutionOrder.Add(node);
+        }
+
+        MarkUnsupported(outputNode);
+        result.ExecutionOrder = nodeExecutionOrder;
+        result.UnsupportedNodes = unsupportedNodeSet;
+
+        // Second pass: identify maximal JIT-able subgraphs
+        // A partition is a contiguous subgraph of supported operations
+        var inputSet = new HashSet<object>(inputs.Cast<object>());
+        var currentPartition = new List<ComputationNode<T>>();
+        var partitionInputs = new HashSet<object>();
+        var partitionOutputs = new HashSet<object>();
+
+        foreach (var node in nodeExecutionOrder)
+        {
+            if (inputSet.Contains(node))
+            {
+                // Input nodes - not part of any partition
+                if (currentPartition.Count > 0)
+                {
+                    result.JitPartitions.Add(new GraphPartition<T>
+                    {
+                        Nodes = new List<ComputationNode<T>>(currentPartition),
+                        PartitionInputs = new HashSet<object>(partitionInputs),
+                        PartitionOutputs = new HashSet<object>(partitionOutputs)
+                    });
+                    currentPartition.Clear();
+                    partitionInputs.Clear();
+                    partitionOutputs.Clear();
+                }
+            }
+            else if (unsupportedNodeSet.Contains(node))
+            {
+                // Unsupported node - end current partition and start fresh
+                if (currentPartition.Count > 0)
+                {
+                    // Mark the last nodes as partition outputs
+                    partitionOutputs.UnionWith(currentPartition.Where(n =>
+                        n.Children.Any(c => unsupportedNodeSet.Contains(c) || c == outputNode)));
+
+                    result.JitPartitions.Add(new GraphPartition<T>
+                    {
+                        Nodes = new List<ComputationNode<T>>(currentPartition),
+                        PartitionInputs = new HashSet<object>(partitionInputs),
+                        PartitionOutputs = new HashSet<object>(partitionOutputs)
+                    });
+                    currentPartition.Clear();
+                    partitionInputs.Clear();
+                    partitionOutputs.Clear();
+                }
+
+                result.InterpretedNodes.Add(node);
+
+                // The unsupported node's output becomes input to the next partition
+                partitionInputs.Add(node);
+            }
+            else
+            {
+                // Supported node - add to current partition
+                currentPartition.Add(node);
+
+                // Check if any parent is an input or unsupported (partition input)
+                foreach (var parent in node.Parents.Cast<ComputationNode<T>>())
+                {
+                    if (inputSet.Contains(parent) || unsupportedNodeSet.Contains(parent))
+                    {
+                        partitionInputs.Add(parent);
+                    }
+                }
+            }
+        }
+
+        // Don't forget the final partition
+        if (currentPartition.Count > 0)
+        {
+            // The output node should be a partition output
+            if (currentPartition.Contains(outputNode))
+            {
+                partitionOutputs.Add(outputNode);
+            }
+            else
+            {
+                partitionOutputs.UnionWith(currentPartition.Where(n => n == outputNode || n.Children.Count == 0));
+            }
+
+            result.JitPartitions.Add(new GraphPartition<T>
+            {
+                Nodes = new List<ComputationNode<T>>(currentPartition),
+                PartitionInputs = new HashSet<object>(partitionInputs),
+                PartitionOutputs = new HashSet<object>(partitionOutputs)
+            });
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Compiles a single graph partition.
+    /// </summary>
+    private Func<Tensor<T>[], Tensor<T>[]>? CompilePartition<T>(GraphPartition<T> partition)
+    {
+        if (partition.Nodes.Count == 0) return null;
+
+        // Find the output node of this partition
+        var outputNode = partition.Nodes.LastOrDefault();
+        if (outputNode == null) return null;
+
+        // Find all input nodes for this partition
+        var inputNodes = partition.PartitionInputs.Cast<ComputationNode<T>>().ToList();
+
+        // Try to compile this partition
+        if (TryCompile(outputNode, inputNodes, out var compiled, out _))
+        {
+            return compiled;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Creates the hybrid execution function that orchestrates JIT and interpreted execution.
+    /// </summary>
+    private Func<Tensor<T>[], Tensor<T>[]> CreateHybridExecutionFunction<T>(
+        ComputationNode<T> outputNode,
+        List<ComputationNode<T>> inputs,
+        GraphPartitioning<T> partitioning,
+        List<HybridPartition<T>> compiledPartitions)
+    {
+        return (Tensor<T>[] inputTensors) =>
+        {
+            // Map to store intermediate results
+            var tensorCache = new Dictionary<object, Tensor<T>>();
+
+            // Assign input tensors
+            for (int i = 0; i < inputs.Count && i < inputTensors.Length; i++)
+            {
+                tensorCache[inputs[i]] = inputTensors[i];
+                inputs[i].Value = inputTensors[i];
+            }
+
+            // Execute each partition in order
+            int partitionIdx = 0;
+            foreach (var node in partitioning.ExecutionOrder)
+            {
+                if (inputs.Contains(node))
+                {
+                    // Input node - already in cache
+                    continue;
+                }
+
+                if (partitioning.UnsupportedNodes.Contains(node))
+                {
+                    // Execute interpreted
+                    ExecuteNodeInterpreted(node, tensorCache);
+                }
+                else
+                {
+                    // Check if this node starts a JIT partition
+                    var partition = compiledPartitions.FirstOrDefault(p =>
+                        p.Partition.Nodes.Contains(node) && p.Partition.Nodes[0] == node);
+
+                    if (partition != null && partition.IsJitCompiled && partition.CompiledFunc != null)
+                    {
+                        // Execute the entire JIT partition at once
+                        var partitionInputs = partition.Partition.PartitionInputs
+                            .Cast<ComputationNode<T>>()
+                            .Select(n => tensorCache.TryGetValue(n, out var t) ? t : n.Value)
+                            .ToArray();
+
+                        var partitionOutputs = partition.CompiledFunc(partitionInputs);
+
+                        // Store outputs in cache
+                        var outputNodes = partition.Partition.PartitionOutputs.Cast<ComputationNode<T>>().ToList();
+                        for (int i = 0; i < outputNodes.Count && i < partitionOutputs.Length; i++)
+                        {
+                            tensorCache[outputNodes[i]] = partitionOutputs[i];
+                            outputNodes[i].Value = partitionOutputs[i];
+                        }
+
+                        // Skip remaining nodes in this partition
+                        // (they were executed by JIT)
+                    }
+                    else if (partition == null || !partition.IsJitCompiled)
+                    {
+                        // Execute interpreted if JIT compilation failed
+                        ExecuteNodeInterpreted(node, tensorCache);
+                    }
+                }
+            }
+
+            // Return the final output
+            return tensorCache.TryGetValue(outputNode, out var result)
+                ? new[] { result }
+                : new[] { outputNode.Value };
+        };
+    }
+
+    /// <summary>
+    /// Executes a single node using interpreted execution.
+    /// </summary>
+    private void ExecuteNodeInterpreted<T>(ComputationNode<T> node, Dictionary<object, Tensor<T>> tensorCache)
+    {
+        // Ensure parent values are populated from cache
+        foreach (var parent in node.Parents.Cast<ComputationNode<T>>())
+        {
+            if (tensorCache.TryGetValue(parent, out var parentTensor))
+            {
+                parent.Value = parentTensor;
+            }
+        }
+
+        // Compute this node's value
+        node.ComputeValue();
+
+        // Store in cache
+        tensorCache[node] = node.Value;
     }
 
     /// <summary>
@@ -1072,6 +1343,37 @@ public class JitCompiler : IDisposable
         // A true skip implementation would require careful handling
         // to not corrupt the tensor graph
         return CreateInterpretedFallback(outputNode, inputs);
+    }
+
+    /// <summary>
+    /// Represents a partitioned computation graph for hybrid execution.
+    /// </summary>
+    private class GraphPartitioning<T>
+    {
+        public List<ComputationNode<T>> ExecutionOrder { get; set; } = new();
+        public HashSet<object> UnsupportedNodes { get; set; } = new();
+        public List<GraphPartition<T>> JitPartitions { get; set; } = new();
+        public List<ComputationNode<T>> InterpretedNodes { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Represents a single JIT-able partition of the computation graph.
+    /// </summary>
+    private class GraphPartition<T>
+    {
+        public List<ComputationNode<T>> Nodes { get; set; } = new();
+        public HashSet<object> PartitionInputs { get; set; } = new();
+        public HashSet<object> PartitionOutputs { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Represents a compiled or interpreted partition for hybrid execution.
+    /// </summary>
+    private class HybridPartition<T>
+    {
+        public GraphPartition<T> Partition { get; set; } = new();
+        public Func<Tensor<T>[], Tensor<T>[]>? CompiledFunc { get; set; }
+        public bool IsJitCompiled { get; set; }
     }
 
     /// <summary>
