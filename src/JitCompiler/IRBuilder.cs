@@ -863,6 +863,509 @@ public class IRBuilder
                 }
                 break;
 
+            case OperationType.Divide:
+                // grad_a = grad_c / b, grad_b = -grad_c * a / (b^2)
+                for (int i = 0; i < 2; i++)
+                {
+                    ops.Add(new Operations.GradDivideOp
+                    {
+                        OutputId = _nextTensorId++,
+                        InputIds = new[] { outputGradId, forwardInputIds[0], forwardInputIds[1] },
+                        InputIndex = i,
+                        OutputType = irType,
+                        OutputShape = node.Parents[i].Value.Shape
+                    });
+                }
+                break;
+
+            case OperationType.Power:
+                // grad_x = grad_y * p * x^(p-1)
+                var exponent = GetParam<double>(node, "Exponent", 2.0);
+                ops.Add(new Operations.GradPowerOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds[0] },
+                    Exponent = exponent,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape,
+                    SavedForwardTensorId = forwardInputIds[0]
+                });
+                break;
+
+            case OperationType.Negate:
+                // grad_x = -grad_y
+                ops.Add(new Operations.GradSubtractOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId },
+                    InputIndex = 1, // Use subtrahend path which negates
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape
+                });
+                break;
+
+            case OperationType.Sqrt:
+                // grad_x = grad_y / (2 * sqrt(x)) = grad_y / (2 * y)
+                ops.Add(new Operations.GradSqrtOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardOutputId },
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape,
+                    SavedForwardTensorId = forwardOutputId
+                });
+                break;
+
+            case OperationType.Reshape:
+                // grad_x = reshape(grad_y, original_shape)
+                ops.Add(new Operations.GradReshapeOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId },
+                    OriginalShape = node.Parents[0].Value.Shape,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape
+                });
+                break;
+
+            case OperationType.Transpose:
+                // grad_x = transpose(grad_y, inverse_axes)
+                var transposeAxes = GetParam<int[]?>(node, "Axes", null);
+                ops.Add(new Operations.GradTransposeOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId },
+                    Axes = transposeAxes,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape
+                });
+                break;
+
+            case OperationType.Concat:
+                // grad_xi = slice(grad_y, start_i, end_i, axis)
+                var concatAxis = GetParam<int>(node, "Axis", 0);
+                int startIndex = 0;
+                for (int i = 0; i < node.Parents.Count; i++)
+                {
+                    var parentShape = node.Parents[i].Value.Shape;
+                    var sizeAlongAxis = parentShape[concatAxis < 0 ? parentShape.Length + concatAxis : concatAxis];
+                    ops.Add(new Operations.GradConcatOp
+                    {
+                        OutputId = _nextTensorId++,
+                        InputIds = new[] { outputGradId },
+                        InputIndex = i,
+                        Axis = concatAxis,
+                        StartIndex = startIndex,
+                        Size = sizeAlongAxis,
+                        OutputType = irType,
+                        OutputShape = parentShape
+                    });
+                    startIndex += sizeAlongAxis;
+                }
+                break;
+
+            case OperationType.Pad:
+                // grad_x = slice(grad_y, unpad)
+                var padding = GetParam<int[]>(node, "Padding", Array.Empty<int>());
+                ops.Add(new Operations.GradPadOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId },
+                    Padding = padding,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape
+                });
+                break;
+
+            case OperationType.Crop:
+                // grad_x = pad_with_zeros(grad_y, original_shape)
+                var cropOffsets = GetParam<int[]>(node, "Offsets", Array.Empty<int>());
+                ops.Add(new Operations.GradCropOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId },
+                    OriginalShape = node.Parents[0].Value.Shape,
+                    CropOffsets = cropOffsets,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape
+                });
+                break;
+
+            case OperationType.Upsample:
+                // grad_x = downsample(grad_y)
+                var upsampleScale = GetParam<int>(node, "Scale", 2);
+                var upsampleMode = GetParam<string>(node, "Mode", "nearest");
+                ops.Add(new Operations.GradUpsampleOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId },
+                    Scale = upsampleScale,
+                    Mode = upsampleMode,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape
+                });
+                break;
+
+            case OperationType.LayerNorm:
+                // Gradients for input, gamma, beta
+                var lnEpsilon = GetParam<double>(node, "Epsilon", 1e-5);
+                var normalizedShape = GetParam<int[]>(node, "NormalizedShape", Array.Empty<int>());
+                for (int i = 0; i < node.Parents.Count && i < 3; i++)
+                {
+                    ops.Add(new Operations.GradLayerNormOp
+                    {
+                        OutputId = _nextTensorId++,
+                        InputIds = new[] { outputGradId, forwardOutputId },
+                        InputIndex = i,
+                        Epsilon = lnEpsilon,
+                        NormalizedShape = normalizedShape,
+                        OutputType = irType,
+                        OutputShape = node.Parents[i].Value.Shape
+                    });
+                }
+                break;
+
+            case OperationType.ConvTranspose2D:
+                // Gradients for input, weight, bias
+                var ctStride = GetParam<int[]>(node, "Stride", new[] { 1, 1 });
+                var ctPadding = GetParam<int[]>(node, "Padding", new[] { 0, 0 });
+                var ctOutPadding = GetParam<int[]>(node, "OutputPadding", new[] { 0, 0 });
+                for (int i = 0; i < node.Parents.Count && i < 3; i++)
+                {
+                    ops.Add(new Operations.GradConvTranspose2DOp
+                    {
+                        OutputId = _nextTensorId++,
+                        InputIds = new[] { outputGradId, forwardInputIds[i == 0 ? 1 : 0] },
+                        InputIndex = i,
+                        Stride = ctStride,
+                        Padding = ctPadding,
+                        OutputPadding = ctOutPadding,
+                        OutputType = irType,
+                        OutputShape = node.Parents[i].Value.Shape
+                    });
+                }
+                break;
+
+            case OperationType.DepthwiseConv2D:
+                // Gradients for input and weight
+                var dwStride = GetParam<int[]>(node, "Stride", new[] { 1, 1 });
+                var dwPadding = GetParam<int[]>(node, "Padding", new[] { 0, 0 });
+                for (int i = 0; i < node.Parents.Count && i < 2; i++)
+                {
+                    ops.Add(new Operations.GradDepthwiseConv2DOp
+                    {
+                        OutputId = _nextTensorId++,
+                        InputIds = new[] { outputGradId, forwardInputIds[i == 0 ? 1 : 0] },
+                        InputIndex = i,
+                        Stride = dwStride,
+                        Padding = dwPadding,
+                        OutputType = irType,
+                        OutputShape = node.Parents[i].Value.Shape
+                    });
+                }
+                break;
+
+            case OperationType.ReduceSum:
+            case OperationType.Mean:
+            case OperationType.ReduceMean:
+                // grad_x = broadcast(grad_y / count_if_mean, original_shape)
+                var reduceAxes = GetParam<int[]?>(node, "Axes", null);
+                var originalShape = node.Parents[0].Value.Shape;
+                var isMean = node.OperationType.Value == OperationType.Mean ||
+                             node.OperationType.Value == OperationType.ReduceMean;
+                if (isMean)
+                {
+                    // Calculate count of elements reduced
+                    int count = 1;
+                    if (reduceAxes == null)
+                    {
+                        count = originalShape.Aggregate(1, (a, b) => a * b);
+                    }
+                    else
+                    {
+                        foreach (var ax in reduceAxes)
+                        {
+                            var normalizedAxis = ax < 0 ? originalShape.Length + ax : ax;
+                            count *= originalShape[normalizedAxis];
+                        }
+                    }
+                    ops.Add(new Operations.GradMeanOp
+                    {
+                        OutputId = _nextTensorId++,
+                        InputIds = new[] { outputGradId },
+                        OriginalShape = originalShape,
+                        Axes = reduceAxes,
+                        Count = count,
+                        OutputType = irType,
+                        OutputShape = originalShape
+                    });
+                }
+                else
+                {
+                    ops.Add(new Operations.GradSumOp
+                    {
+                        OutputId = _nextTensorId++,
+                        InputIds = new[] { outputGradId },
+                        OriginalShape = originalShape,
+                        Axes = reduceAxes,
+                        OutputType = irType,
+                        OutputShape = originalShape
+                    });
+                }
+                break;
+
+            case OperationType.LSTMCell:
+                // LSTM backward - gradients for input, hidden state, cell state, and weights
+                var lstmHiddenSize = GetParam<int>(node, "HiddenSize", 128);
+                // LSTM typically has: input, h_prev, c_prev, weights...
+                var lstmInputCount = Math.Min(node.Parents.Count, 6);
+                for (int i = 0; i < lstmInputCount; i++)
+                {
+                    ops.Add(new Operations.GradLSTMCellInputOp
+                    {
+                        OutputId = _nextTensorId++,
+                        InputIds = new[] { outputGradId, forwardOutputId },
+                        HiddenSize = lstmHiddenSize,
+                        InputIndex = i,
+                        OutputType = irType,
+                        OutputShape = node.Parents[i].Value.Shape
+                    });
+                }
+                break;
+
+            case OperationType.GRUCell:
+                // GRU backward - gradients for input, hidden state, and weights
+                var gruHiddenSize = GetParam<int>(node, "HiddenSize", 128);
+                var gruInputCount = Math.Min(node.Parents.Count, 5);
+                for (int i = 0; i < gruInputCount; i++)
+                {
+                    ops.Add(new Operations.GradGRUCellOp
+                    {
+                        OutputId = _nextTensorId++,
+                        InputIds = new[] { outputGradId, forwardOutputId },
+                        HiddenSize = gruHiddenSize,
+                        InputIndex = i,
+                        OutputType = irType,
+                        OutputShape = node.Parents[i].Value.Shape
+                    });
+                }
+                break;
+
+            case OperationType.Activation:
+                // Generic activation - try to get activation type and handle accordingly
+                var activationType = GetParam<string>(node, "ActivationType", "relu");
+                switch (activationType.ToLowerInvariant())
+                {
+                    case "relu":
+                        ops.Add(new Operations.GradReLUOp
+                        {
+                            OutputId = _nextTensorId++,
+                            InputIds = new[] { outputGradId, forwardInputIds[0] },
+                            OutputType = irType,
+                            OutputShape = node.Parents[0].Value.Shape,
+                            SavedForwardTensorId = forwardInputIds[0]
+                        });
+                        break;
+                    case "sigmoid":
+                        ops.Add(new Operations.GradSigmoidOp
+                        {
+                            OutputId = _nextTensorId++,
+                            InputIds = new[] { outputGradId, forwardOutputId },
+                            OutputType = irType,
+                            OutputShape = node.Parents[0].Value.Shape,
+                            SavedForwardTensorId = forwardOutputId
+                        });
+                        break;
+                    case "tanh":
+                        ops.Add(new Operations.GradTanhOp
+                        {
+                            OutputId = _nextTensorId++,
+                            InputIds = new[] { outputGradId, forwardOutputId },
+                            OutputType = irType,
+                            OutputShape = node.Parents[0].Value.Shape,
+                            SavedForwardTensorId = forwardOutputId
+                        });
+                        break;
+                    case "leakyrelu":
+                        var alpha = GetParam<double>(node, "Alpha", 0.01);
+                        ops.Add(new Operations.GradLeakyReLUOp
+                        {
+                            OutputId = _nextTensorId++,
+                            InputIds = new[] { outputGradId, forwardInputIds[0] },
+                            Alpha = alpha,
+                            OutputType = irType,
+                            OutputShape = node.Parents[0].Value.Shape,
+                            SavedForwardTensorId = forwardInputIds[0]
+                        });
+                        break;
+                    case "gelu":
+                        var approximate = GetParam<bool>(node, "Approximate", true);
+                        ops.Add(new Operations.GradGELUOp
+                        {
+                            OutputId = _nextTensorId++,
+                            InputIds = new[] { outputGradId, forwardInputIds[0] },
+                            Approximate = approximate,
+                            OutputType = irType,
+                            OutputShape = node.Parents[0].Value.Shape,
+                            SavedForwardTensorId = forwardInputIds[0]
+                        });
+                        break;
+                    default:
+                        // Unknown activation - gradient flow stops
+                        break;
+                }
+                break;
+
+            case OperationType.Dropout:
+                // grad_x = grad_y * mask / (1 - p)
+                var dropoutProb = GetParam<double>(node, "Probability", 0.5);
+                ops.Add(new Operations.GradDropoutOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds.Length > 1 ? forwardInputIds[1] : forwardOutputId },
+                    Probability = dropoutProb,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape
+                });
+                break;
+
+            case OperationType.Embedding:
+                // grad_embedding = scatter_add(grad_y, indices, embedding_shape)
+                var embeddingShape = node.Parents[0].Value.Shape;
+                ops.Add(new Operations.GradEmbeddingOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds.Length > 1 ? forwardInputIds[1] : forwardInputIds[0] },
+                    EmbeddingShape = embeddingShape,
+                    OutputType = irType,
+                    OutputShape = embeddingShape
+                });
+                break;
+
+            case OperationType.Gather:
+                // grad_x = scatter(grad_y, indices, axis, input_shape)
+                var gatherAxis = GetParam<int>(node, "Axis", 0);
+                var gatherInputShape = node.Parents[0].Value.Shape;
+                ops.Add(new Operations.GradGatherOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds.Length > 1 ? forwardInputIds[1] : forwardInputIds[0] },
+                    Axis = gatherAxis,
+                    InputShape = gatherInputShape,
+                    OutputType = irType,
+                    OutputShape = gatherInputShape
+                });
+                break;
+
+            case OperationType.Slice:
+                // grad_x = pad_with_zeros(grad_y, original_shape, start_indices)
+                var sliceStartIndices = GetParam<int[]>(node, "StartIndices", Array.Empty<int>());
+                var sliceOriginalShape = node.Parents[0].Value.Shape;
+                ops.Add(new Operations.GradSliceOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId },
+                    OriginalShape = sliceOriginalShape,
+                    StartIndices = sliceStartIndices,
+                    OutputType = irType,
+                    OutputShape = sliceOriginalShape
+                });
+                break;
+
+            case OperationType.Broadcast:
+                // grad_x = reduce_sum(grad_y, broadcasted_axes)
+                var broadcastOriginalShape = GetParam<int[]>(node, "OriginalShape", node.Parents[0].Value.Shape);
+                var broadcastedAxes = GetParam<int[]>(node, "BroadcastedAxes", Array.Empty<int>());
+                ops.Add(new Operations.GradBroadcastOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId },
+                    OriginalShape = broadcastOriginalShape,
+                    BroadcastedAxes = broadcastedAxes,
+                    OutputType = irType,
+                    OutputShape = broadcastOriginalShape
+                });
+                break;
+
+            case OperationType.Attention:
+                // Gradient for Q, K, V in attention
+                var attentionScale = GetParam<double>(node, "Scale", 1.0);
+                var causalMask = GetParam<bool>(node, "CausalMask", false);
+                for (int i = 0; i < Math.Min(node.Parents.Count, 3); i++)
+                {
+                    ops.Add(new Operations.GradAttentionOp
+                    {
+                        OutputId = _nextTensorId++,
+                        InputIds = new[] { outputGradId, forwardOutputId },
+                        InputIndex = i,
+                        Scale = attentionScale,
+                        CausalMask = causalMask,
+                        OutputType = irType,
+                        OutputShape = node.Parents[i].Value.Shape
+                    });
+                }
+                break;
+
+            case OperationType.MultiHeadAttention:
+                // Gradient for multi-head attention
+                var mhaNumHeads = GetParam<int>(node, "NumHeads", 8);
+                var mhaHeadDim = GetParam<int>(node, "HeadDim", 64);
+                for (int i = 0; i < Math.Min(node.Parents.Count, 4); i++)
+                {
+                    ops.Add(new Operations.GradMultiHeadAttentionOp
+                    {
+                        OutputId = _nextTensorId++,
+                        InputIds = new[] { outputGradId, forwardOutputId },
+                        InputIndex = i,
+                        NumHeads = mhaNumHeads,
+                        HeadDim = mhaHeadDim,
+                        OutputType = irType,
+                        OutputShape = node.Parents[i].Value.Shape
+                    });
+                }
+                break;
+
+            case OperationType.LeakyReLU:
+                // grad_x = grad_y * (1 if x > 0 else alpha)
+                var leakyAlpha = GetParam<double>(node, "Alpha", 0.01);
+                ops.Add(new Operations.GradLeakyReLUOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds[0] },
+                    Alpha = leakyAlpha,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape,
+                    SavedForwardTensorId = forwardInputIds[0]
+                });
+                break;
+
+            case OperationType.GELU:
+                // grad_x = grad_y * gelu_derivative(x)
+                var geluApproximate = GetParam<bool>(node, "Approximate", true);
+                ops.Add(new Operations.GradGELUOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds[0] },
+                    Approximate = geluApproximate,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape,
+                    SavedForwardTensorId = forwardInputIds[0]
+                });
+                break;
+
+            case OperationType.Split:
+                // grad_x = concat([grad_y1, grad_y2, ...], axis)
+                var splitAxis = GetParam<int>(node, "Axis", 0);
+                ops.Add(new Operations.GradSplitOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId },
+                    Axis = splitAxis,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape
+                });
+                break;
+
             // For unsupported operations, return empty list (gradient won't flow)
             default:
                 // Unsupported operation - gradient flow stops here

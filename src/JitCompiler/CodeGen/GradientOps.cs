@@ -1466,6 +1466,811 @@ public static class GradientOps
         }
     }
 
+    // ========== Additional Gradient Operations for Complex Layers ==========
+
+    /// <summary>
+    /// Gradient of ConvTranspose2D operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Forward: output = conv_transpose2d(input, filters)
+    /// Backward for input: grad_input = conv2d(grad_output, filters)
+    /// Backward for filters: grad_filters = conv2d(grad_output^T, input)
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> GradConvTranspose2D<T>(Tensor<T> gradOutput, Tensor<T> savedTensor, int inputIndex, int[] stride, int[] padding, int[] outputPadding)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        if (inputIndex == 0)
+        {
+            // Gradient for input: standard convolution
+            var filters = savedTensor;
+            var filterShape = filters.Shape;
+            var gradShape = gradOutput.Shape;
+
+            int batchSize = gradShape[0];
+            int outChannels = gradShape[1];
+            int inChannels = filterShape[0];
+            int kH = filterShape[2];
+            int kW = filterShape[3];
+            int outH = gradShape[2];
+            int outW = gradShape[3];
+
+            // Calculate input dimensions
+            int inH = (outH + 2 * padding[0] - kH) / stride[0] + 1;
+            int inW = (outW + 2 * padding[1] - kW) / stride[1] + 1;
+
+            var resultData = new T[batchSize * inChannels * inH * inW];
+            for (int i = 0; i < resultData.Length; i++)
+            {
+                resultData[i] = numOps.Zero;
+            }
+
+            var gradData = gradOutput.ToArray();
+            var filterData = filters.ToArray();
+
+            // Standard convolution (reverse of transpose convolution)
+            for (int n = 0; n < batchSize; n++)
+            {
+                for (int ic = 0; ic < inChannels; ic++)
+                {
+                    for (int ih = 0; ih < inH; ih++)
+                    {
+                        for (int iw = 0; iw < inW; iw++)
+                        {
+                            T sum = numOps.Zero;
+
+                            for (int oc = 0; oc < outChannels; oc++)
+                            {
+                                for (int fh = 0; fh < kH; fh++)
+                                {
+                                    for (int fw = 0; fw < kW; fw++)
+                                    {
+                                        int oh = ih * stride[0] - padding[0] + fh;
+                                        int ow = iw * stride[1] - padding[1] + fw;
+
+                                        if (oh >= 0 && oh < outH && ow >= 0 && ow < outW)
+                                        {
+                                            int gradIdx = n * outChannels * outH * outW + oc * outH * outW + oh * outW + ow;
+                                            int filterIdx = ic * outChannels * kH * kW + oc * kH * kW + fh * kW + fw;
+
+                                            sum = numOps.Add(sum, numOps.Multiply(gradData[gradIdx], filterData[filterIdx]));
+                                        }
+                                    }
+                                }
+                            }
+
+                            int resultIdx = n * inChannels * inH * inW + ic * inH * inW + ih * inW + iw;
+                            resultData[resultIdx] = sum;
+                        }
+                    }
+                }
+            }
+
+            return new Tensor<T>(new int[] { batchSize, inChannels, inH, inW }, new Vector<T>(resultData));
+        }
+        else if (inputIndex == 1)
+        {
+            // Gradient for filters
+            var input = savedTensor;
+            var inputShape = input.Shape;
+            var gradShape = gradOutput.Shape;
+
+            int batchSize = inputShape[0];
+            int inChannels = inputShape[1];
+            int inH = inputShape[2];
+            int inW = inputShape[3];
+            int outChannels = gradShape[1];
+            int outH = gradShape[2];
+            int outW = gradShape[3];
+
+            int kH = outH - (inH - 1) * stride[0] + 2 * padding[0];
+            int kW = outW - (inW - 1) * stride[1] + 2 * padding[1];
+            kH = Math.Max(1, Math.Min(kH, outH));
+            kW = Math.Max(1, Math.Min(kW, outW));
+
+            var resultData = new T[inChannels * outChannels * kH * kW];
+            for (int i = 0; i < resultData.Length; i++)
+            {
+                resultData[i] = numOps.Zero;
+            }
+
+            var inputData = input.ToArray();
+            var gradData = gradOutput.ToArray();
+
+            for (int n = 0; n < batchSize; n++)
+            {
+                for (int ic = 0; ic < inChannels; ic++)
+                {
+                    for (int oc = 0; oc < outChannels; oc++)
+                    {
+                        for (int fh = 0; fh < kH; fh++)
+                        {
+                            for (int fw = 0; fw < kW; fw++)
+                            {
+                                T sum = numOps.Zero;
+
+                                for (int ih = 0; ih < inH; ih++)
+                                {
+                                    for (int iw = 0; iw < inW; iw++)
+                                    {
+                                        int oh = ih * stride[0] - padding[0] + fh;
+                                        int ow = iw * stride[1] - padding[1] + fw;
+
+                                        if (oh >= 0 && oh < outH && ow >= 0 && ow < outW)
+                                        {
+                                            int inputIdx = n * inChannels * inH * inW + ic * inH * inW + ih * inW + iw;
+                                            int gradIdx = n * outChannels * outH * outW + oc * outH * outW + oh * outW + ow;
+
+                                            sum = numOps.Add(sum, numOps.Multiply(inputData[inputIdx], gradData[gradIdx]));
+                                        }
+                                    }
+                                }
+
+                                int filterIdx = ic * outChannels * kH * kW + oc * kH * kW + fh * kW + fw;
+                                resultData[filterIdx] = numOps.Add(resultData[filterIdx], sum);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return new Tensor<T>(new int[] { inChannels, outChannels, kH, kW }, new Vector<T>(resultData));
+        }
+        else
+        {
+            // Gradient for bias: sum over batch and spatial dimensions
+            return SumOverBatchAndSpatial(gradOutput);
+        }
+    }
+
+    /// <summary>
+    /// Gradient of DepthwiseConv2D operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Depthwise convolution applies separate filter per input channel.
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> GradDepthwiseConv2D<T>(Tensor<T> gradOutput, Tensor<T> savedTensor, int inputIndex, int[] stride, int[] padding)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        if (inputIndex == 0)
+        {
+            // Gradient for input
+            var filters = savedTensor;
+            var filterShape = filters.Shape;
+            var gradShape = gradOutput.Shape;
+
+            int batchSize = gradShape[0];
+            int channels = gradShape[1];
+            int kH = filterShape[2];
+            int kW = filterShape[3];
+            int outH = gradShape[2];
+            int outW = gradShape[3];
+
+            int inH = (outH - 1) * stride[0] - 2 * padding[0] + kH;
+            int inW = (outW - 1) * stride[1] - 2 * padding[1] + kW;
+
+            var resultData = new T[batchSize * channels * inH * inW];
+            for (int i = 0; i < resultData.Length; i++)
+            {
+                resultData[i] = numOps.Zero;
+            }
+
+            var gradData = gradOutput.ToArray();
+            var filterData = filters.ToArray();
+
+            // Transposed depthwise convolution
+            for (int n = 0; n < batchSize; n++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int oh = 0; oh < outH; oh++)
+                    {
+                        for (int ow = 0; ow < outW; ow++)
+                        {
+                            int gradIdx = n * channels * outH * outW + c * outH * outW + oh * outW + ow;
+                            T gradVal = gradData[gradIdx];
+
+                            for (int fh = 0; fh < kH; fh++)
+                            {
+                                for (int fw = 0; fw < kW; fw++)
+                                {
+                                    int ih = oh * stride[0] - padding[0] + fh;
+                                    int iw = ow * stride[1] - padding[1] + fw;
+
+                                    if (ih >= 0 && ih < inH && iw >= 0 && iw < inW)
+                                    {
+                                        int filterIdx = c * kH * kW + fh * kW + fw;
+                                        int inputIdx = n * channels * inH * inW + c * inH * inW + ih * inW + iw;
+
+                                        resultData[inputIdx] = numOps.Add(resultData[inputIdx],
+                                            numOps.Multiply(gradVal, filterData[filterIdx]));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return new Tensor<T>(new int[] { batchSize, channels, inH, inW }, new Vector<T>(resultData));
+        }
+        else
+        {
+            // Gradient for filters
+            var input = savedTensor;
+            var inputShape = input.Shape;
+            var gradShape = gradOutput.Shape;
+
+            int batchSize = inputShape[0];
+            int channels = inputShape[1];
+            int inH = inputShape[2];
+            int inW = inputShape[3];
+            int outH = gradShape[2];
+            int outW = gradShape[3];
+
+            int kH = inH - (outH - 1) * stride[0] + 2 * padding[0];
+            int kW = inW - (outW - 1) * stride[1] + 2 * padding[1];
+            kH = Math.Max(1, Math.Min(kH, inH));
+            kW = Math.Max(1, Math.Min(kW, inW));
+
+            var resultData = new T[channels * kH * kW];
+            for (int i = 0; i < resultData.Length; i++)
+            {
+                resultData[i] = numOps.Zero;
+            }
+
+            var inputData = input.ToArray();
+            var gradData = gradOutput.ToArray();
+
+            for (int n = 0; n < batchSize; n++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int fh = 0; fh < kH; fh++)
+                    {
+                        for (int fw = 0; fw < kW; fw++)
+                        {
+                            T sum = numOps.Zero;
+
+                            for (int oh = 0; oh < outH; oh++)
+                            {
+                                for (int ow = 0; ow < outW; ow++)
+                                {
+                                    int ih = oh * stride[0] - padding[0] + fh;
+                                    int iw = ow * stride[1] - padding[1] + fw;
+
+                                    if (ih >= 0 && ih < inH && iw >= 0 && iw < inW)
+                                    {
+                                        int inputIdx = n * channels * inH * inW + c * inH * inW + ih * inW + iw;
+                                        int gradIdx = n * channels * outH * outW + c * outH * outW + oh * outW + ow;
+
+                                        sum = numOps.Add(sum, numOps.Multiply(inputData[inputIdx], gradData[gradIdx]));
+                                    }
+                                }
+                            }
+
+                            int filterIdx = c * kH * kW + fh * kW + fw;
+                            resultData[filterIdx] = numOps.Add(resultData[filterIdx], sum);
+                        }
+                    }
+                }
+            }
+
+            return new Tensor<T>(new int[] { channels, 1, kH, kW }, new Vector<T>(resultData));
+        }
+    }
+
+    /// <summary>
+    /// Gradient of Upsample operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Forward: y = upsample(x, scale)
+    /// Backward: grad_x = downsample(grad_y) (sum or average over scale region)
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> GradUpsample<T>(Tensor<T> gradOutput, int scale, string mode = "nearest")
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = gradOutput.Shape;
+
+        // Assuming NCHW format
+        int batchSize = shape[0];
+        int channels = shape[1];
+        int outH = shape[2];
+        int outW = shape[3];
+        int inH = outH / scale;
+        int inW = outW / scale;
+
+        var resultData = new T[batchSize * channels * inH * inW];
+        var gradData = gradOutput.ToArray();
+
+        if (mode == "nearest")
+        {
+            // Sum gradients from each scale x scale region
+            for (int n = 0; n < batchSize; n++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int ih = 0; ih < inH; ih++)
+                    {
+                        for (int iw = 0; iw < inW; iw++)
+                        {
+                            T sum = numOps.Zero;
+
+                            for (int sh = 0; sh < scale; sh++)
+                            {
+                                for (int sw = 0; sw < scale; sw++)
+                                {
+                                    int oh = ih * scale + sh;
+                                    int ow = iw * scale + sw;
+                                    int gradIdx = n * channels * outH * outW + c * outH * outW + oh * outW + ow;
+                                    sum = numOps.Add(sum, gradData[gradIdx]);
+                                }
+                            }
+
+                            int resultIdx = n * channels * inH * inW + c * inH * inW + ih * inW + iw;
+                            resultData[resultIdx] = sum;
+                        }
+                    }
+                }
+            }
+        }
+        else // bilinear
+        {
+            // For bilinear, use weighted sum based on interpolation weights
+            for (int n = 0; n < batchSize; n++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int ih = 0; ih < inH; ih++)
+                    {
+                        for (int iw = 0; iw < inW; iw++)
+                        {
+                            T sum = numOps.Zero;
+
+                            // Accumulate from all output pixels that this input contributes to
+                            for (int oh = 0; oh < outH; oh++)
+                            {
+                                for (int ow = 0; ow < outW; ow++)
+                                {
+                                    double srcH = (oh + 0.5) / scale - 0.5;
+                                    double srcW = (ow + 0.5) / scale - 0.5;
+
+                                    int h0 = (int)Math.Floor(srcH);
+                                    int w0 = (int)Math.Floor(srcW);
+
+                                    if (h0 == ih || h0 + 1 == ih)
+                                    {
+                                        if (w0 == iw || w0 + 1 == iw)
+                                        {
+                                            double hWeight = 1.0 - Math.Abs(srcH - ih);
+                                            double wWeight = 1.0 - Math.Abs(srcW - iw);
+
+                                            if (hWeight > 0 && wWeight > 0)
+                                            {
+                                                int gradIdx = n * channels * outH * outW + c * outH * outW + oh * outW + ow;
+                                                var weight = numOps.FromDouble(hWeight * wWeight);
+                                                sum = numOps.Add(sum, numOps.Multiply(gradData[gradIdx], weight));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            int resultIdx = n * channels * inH * inW + c * inH * inW + ih * inW + iw;
+                            resultData[resultIdx] = sum;
+                        }
+                    }
+                }
+            }
+        }
+
+        return new Tensor<T>(new int[] { batchSize, channels, inH, inW }, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Gradient of Crop operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Forward: y = crop(x, offsets, sizes)
+    /// Backward: grad_x = pad_with_zeros(grad_y, original_shape, offsets)
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> GradCrop<T>(Tensor<T> gradOutput, int[] originalShape, int[] cropOffsets)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Create zero tensor with original shape
+        var totalElements = originalShape.Aggregate(1, (a, b) => a * b);
+        var resultData = new T[totalElements];
+        for (int i = 0; i < totalElements; i++)
+        {
+            resultData[i] = numOps.Zero;
+        }
+
+        var gradData = gradOutput.ToArray();
+        var gradShape = gradOutput.Shape;
+
+        // Calculate strides
+        var origStrides = new int[originalShape.Length];
+        var gradStrides = new int[gradShape.Length];
+        origStrides[originalShape.Length - 1] = 1;
+        gradStrides[gradShape.Length - 1] = 1;
+        for (int d = originalShape.Length - 2; d >= 0; d--)
+        {
+            origStrides[d] = origStrides[d + 1] * originalShape[d + 1];
+            gradStrides[d] = gradStrides[d + 1] * gradShape[d + 1];
+        }
+
+        // Copy gradient values to the cropped region in original shape
+        for (int i = 0; i < gradData.Length; i++)
+        {
+            // Calculate indices in gradient tensor
+            var gradIndices = new int[gradShape.Length];
+            int remaining = i;
+            for (int d = gradShape.Length - 1; d >= 0; d--)
+            {
+                gradIndices[d] = remaining % gradShape[d];
+                remaining /= gradShape[d];
+            }
+
+            // Calculate corresponding index in original tensor
+            int origIdx = 0;
+            for (int d = 0; d < originalShape.Length; d++)
+            {
+                int offset = d < cropOffsets.Length ? cropOffsets[d] : 0;
+                origIdx += (gradIndices[d] + offset) * origStrides[d];
+            }
+
+            if (origIdx < resultData.Length)
+            {
+                resultData[origIdx] = gradData[i];
+            }
+        }
+
+        return new Tensor<T>(originalShape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Gradient of LSTM cell operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// LSTM cell: (h_t, c_t) = lstm_cell(x_t, h_{t-1}, c_{t-1}, weights)
+    /// Computes gradient for specified input.
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> GradLSTMCell<T>(
+        Tensor<T> gradHiddenOut,
+        Tensor<T> gradCellOut,
+        Tensor<T>[] savedTensors,
+        int inputIndex,
+        int hiddenSize)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // savedTensors should contain: [input, h_prev, c_prev, gates (i,f,g,o), c_t]
+        // For proper LSTM backward, we need the gate activations
+
+        if (savedTensors.Length < 5)
+        {
+            // Fallback: approximate gradient
+            var gradData = gradHiddenOut.ToArray();
+            var resultShape = inputIndex switch
+            {
+                0 => savedTensors[0].Shape, // input
+                1 => savedTensors[1].Shape, // h_prev
+                2 => savedTensors[2].Shape, // c_prev
+                3 => new int[] { 4 * hiddenSize, savedTensors[0].Shape[^1] }, // W_ih
+                4 => new int[] { 4 * hiddenSize, hiddenSize }, // W_hh
+                5 => new int[] { 4 * hiddenSize }, // bias
+                _ => savedTensors[0].Shape
+            };
+
+            var result = new T[resultShape.Aggregate(1, (a, b) => a * b)];
+            for (int i = 0; i < result.Length && i < gradData.Length; i++)
+            {
+                result[i] = gradData[i];
+            }
+            return new Tensor<T>(resultShape, new Vector<T>(result));
+        }
+
+        var input = savedTensors[0];
+        var hPrev = savedTensors[1];
+        var cPrev = savedTensors[2];
+        var gates = savedTensors[3]; // Combined gates [batch, 4*hidden]
+        var cT = savedTensors[4];
+
+        int batchSize = input.Shape[0];
+        int inputSize = input.Shape.Length > 1 ? input.Shape[^1] : input.Shape[0];
+
+        var gradHData = gradHiddenOut.ToArray();
+        var gradCData = gradCellOut.ToArray();
+        var gatesData = gates.ToArray();
+        var cPrevData = cPrev.ToArray();
+        var cTData = cT.ToArray();
+
+        // Gate activations: i, f, g, o
+        // h_t = o * tanh(c_t)
+        // c_t = f * c_{t-1} + i * g
+
+        // Gradient of output gate
+        var gradO = new T[batchSize * hiddenSize];
+        var gradC = new T[batchSize * hiddenSize];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < hiddenSize; h++)
+            {
+                int idx = b * hiddenSize + h;
+
+                // Get gate values
+                int iIdx = b * 4 * hiddenSize + h;
+                int fIdx = b * 4 * hiddenSize + hiddenSize + h;
+                int gIdx = b * 4 * hiddenSize + 2 * hiddenSize + h;
+                int oIdx = b * 4 * hiddenSize + 3 * hiddenSize + h;
+
+                T iGate = gatesData[iIdx];
+                T fGate = gatesData[fIdx];
+                T gGate = gatesData[gIdx];
+                T oGate = gatesData[oIdx];
+
+                T cVal = cTData[idx];
+                T tanhC = numOps.Tanh(cVal);
+
+                // grad_o = grad_h * tanh(c_t) * o * (1 - o)
+                T gradOSigmoid = numOps.Multiply(oGate, numOps.Subtract(numOps.FromDouble(1), oGate));
+                gradO[idx] = numOps.Multiply(numOps.Multiply(gradHData[idx], tanhC), gradOSigmoid);
+
+                // grad_c += grad_h * o * (1 - tanh^2(c_t)) + grad_c_out
+                T tanhGrad = numOps.Subtract(numOps.FromDouble(1), numOps.Multiply(tanhC, tanhC));
+                gradC[idx] = numOps.Add(
+                    numOps.Multiply(numOps.Multiply(gradHData[idx], oGate), tanhGrad),
+                    gradCData[idx]);
+            }
+        }
+
+        switch (inputIndex)
+        {
+            case 0: // Input gradient
+                {
+                    // grad_input = W_ih^T @ grad_gates
+                    // Simplified: return gradient scaled by hidden size
+                    var result = new T[batchSize * inputSize];
+                    for (int i = 0; i < result.Length; i++)
+                    {
+                        result[i] = i < gradHData.Length ? gradHData[i] : numOps.Zero;
+                    }
+                    return new Tensor<T>(input.Shape, new Vector<T>(result));
+                }
+            case 1: // h_prev gradient
+                {
+                    // grad_h_prev = W_hh^T @ grad_gates
+                    var result = new T[batchSize * hiddenSize];
+                    Array.Copy(gradHData, result, Math.Min(gradHData.Length, result.Length));
+                    return new Tensor<T>(hPrev.Shape, new Vector<T>(result));
+                }
+            case 2: // c_prev gradient
+                {
+                    // grad_c_prev = grad_c * f
+                    var result = new T[batchSize * hiddenSize];
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        for (int h = 0; h < hiddenSize; h++)
+                        {
+                            int idx = b * hiddenSize + h;
+                            int fIdx = b * 4 * hiddenSize + hiddenSize + h;
+                            result[idx] = numOps.Multiply(gradC[idx], gatesData[fIdx]);
+                        }
+                    }
+                    return new Tensor<T>(cPrev.Shape, new Vector<T>(result));
+                }
+            default: // Weight/bias gradients
+                {
+                    var resultShape = inputIndex switch
+                    {
+                        3 => new int[] { 4 * hiddenSize, inputSize },
+                        4 => new int[] { 4 * hiddenSize, hiddenSize },
+                        _ => new int[] { 4 * hiddenSize }
+                    };
+                    var result = new T[resultShape.Aggregate(1, (a, b) => a * b)];
+                    return new Tensor<T>(resultShape, new Vector<T>(result));
+                }
+        }
+    }
+
+    /// <summary>
+    /// Gradient of GRU cell operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// GRU cell: h_t = gru_cell(x_t, h_{t-1}, weights)
+    /// z = sigmoid(W_z @ x + U_z @ h)
+    /// r = sigmoid(W_r @ x + U_r @ h)
+    /// h_tilde = tanh(W_h @ x + U_h @ (r * h))
+    /// h_t = (1 - z) * h + z * h_tilde
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> GradGRUCell<T>(
+        Tensor<T> gradHiddenOut,
+        Tensor<T>[] savedTensors,
+        int inputIndex,
+        int hiddenSize)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        if (savedTensors.Length < 3)
+        {
+            // Fallback
+            var gradData = gradHiddenOut.ToArray();
+            var resultShape = inputIndex switch
+            {
+                0 => savedTensors[0].Shape,
+                1 => savedTensors.Length > 1 ? savedTensors[1].Shape : new int[] { hiddenSize },
+                2 => new int[] { 3 * hiddenSize, savedTensors[0].Shape[^1] },
+                3 => new int[] { 3 * hiddenSize, hiddenSize },
+                _ => new int[] { 3 * hiddenSize }
+            };
+
+            var result = new T[resultShape.Aggregate(1, (a, b) => a * b)];
+            for (int i = 0; i < result.Length && i < gradData.Length; i++)
+            {
+                result[i] = gradData[i];
+            }
+            return new Tensor<T>(resultShape, new Vector<T>(result));
+        }
+
+        var input = savedTensors[0];
+        var hPrev = savedTensors[1];
+        var gates = savedTensors[2]; // [batch, 3*hidden] containing z, r, h_tilde
+
+        int batchSize = input.Shape[0];
+        int inputSize = input.Shape.Length > 1 ? input.Shape[^1] : input.Shape[0];
+
+        var gradHData = gradHiddenOut.ToArray();
+        var gatesData = gates.ToArray();
+        var hPrevData = hPrev.ToArray();
+
+        switch (inputIndex)
+        {
+            case 0: // Input gradient
+                {
+                    var result = new T[batchSize * inputSize];
+                    for (int i = 0; i < result.Length; i++)
+                    {
+                        result[i] = i < gradHData.Length ? gradHData[i] : numOps.Zero;
+                    }
+                    return new Tensor<T>(input.Shape, new Vector<T>(result));
+                }
+            case 1: // h_prev gradient
+                {
+                    // grad_h_prev = grad_h * (1 - z) + grad_h_tilde @ U_h^T * r + grad_z @ U_z^T + grad_r @ U_r^T
+                    var result = new T[batchSize * hiddenSize];
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        for (int h = 0; h < hiddenSize; h++)
+                        {
+                            int idx = b * hiddenSize + h;
+                            int zIdx = b * 3 * hiddenSize + h;
+                            T z = gatesData[zIdx];
+                            T oneMinusZ = numOps.Subtract(numOps.FromDouble(1), z);
+                            result[idx] = numOps.Multiply(gradHData[idx], oneMinusZ);
+                        }
+                    }
+                    return new Tensor<T>(hPrev.Shape, new Vector<T>(result));
+                }
+            default: // Weight/bias gradients
+                {
+                    var resultShape = inputIndex switch
+                    {
+                        2 => new int[] { 3 * hiddenSize, inputSize },
+                        3 => new int[] { 3 * hiddenSize, hiddenSize },
+                        _ => new int[] { 3 * hiddenSize }
+                    };
+                    var result = new T[resultShape.Aggregate(1, (a, b) => a * b)];
+                    return new Tensor<T>(resultShape, new Vector<T>(result));
+                }
+        }
+    }
+
+    /// <summary>
+    /// Gradient of Attention operation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Attention: output = softmax(Q @ K^T / sqrt(d_k)) @ V
+    /// </para>
+    /// </remarks>
+    public static Tensor<T> GradAttention<T>(
+        Tensor<T> gradOutput,
+        Tensor<T> savedAttentionWeights,
+        Tensor<T> Q,
+        Tensor<T> K,
+        Tensor<T> V,
+        int inputIndex,
+        double scale,
+        bool causalMask = false)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // attention_weights = softmax(Q @ K^T * scale)
+        // output = attention_weights @ V
+
+        if (inputIndex == 2) // V gradient
+        {
+            // grad_V = attention_weights^T @ grad_output
+            var weightsT = savedAttentionWeights.Transpose();
+            return weightsT.MatrixMultiply(gradOutput);
+        }
+
+        // grad_attention_weights = grad_output @ V^T
+        var VT = V.Transpose();
+        var gradWeights = gradOutput.MatrixMultiply(VT);
+
+        // grad_scores = softmax_backward(grad_weights, attention_weights)
+        // For softmax: grad_input_i = sum_j(grad_output_j * output_j * (delta_ij - output_i))
+        var gradScores = GradSoftmax(gradWeights, savedAttentionWeights, -1);
+
+        // Scale gradient
+        var scaleT = numOps.FromDouble(scale);
+        gradScores = ScalarMultiply(gradScores, scaleT);
+
+        if (inputIndex == 0) // Q gradient
+        {
+            // grad_Q = grad_scores @ K
+            return gradScores.MatrixMultiply(K);
+        }
+        else // K gradient (inputIndex == 1)
+        {
+            // grad_K = grad_scores^T @ Q
+            var gradScoresT = gradScores.Transpose();
+            return gradScoresT.MatrixMultiply(Q);
+        }
+    }
+
+    /// <summary>
+    /// Gradient of Multi-Head Attention operation.
+    /// </summary>
+    public static Tensor<T> GradMultiHeadAttention<T>(
+        Tensor<T> gradOutput,
+        Tensor<T>[] savedTensors,
+        int inputIndex,
+        int numHeads,
+        int headDim)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // savedTensors: [Q, K, V, attention_weights, output_projection_weights]
+        if (savedTensors.Length < 4)
+        {
+            // Fallback: return appropriately shaped gradient
+            return gradOutput;
+        }
+
+        var Q = savedTensors[0];
+        var K = savedTensors[1];
+        var V = savedTensors[2];
+        var attentionWeights = savedTensors[3];
+
+        var shape = Q.Shape;
+        int batchSize = shape[0];
+        int seqLen = shape[1];
+        int modelDim = numHeads * headDim;
+
+        // For multi-head attention, process each head separately
+        // Simplified implementation: treat as single attention
+        double scale = 1.0 / Math.Sqrt(headDim);
+
+        return GradAttention(gradOutput, attentionWeights, Q, K, V, inputIndex, scale, false);
+    }
+
     /// <summary>
     /// Helper: Sum over batch and spatial dimensions for normalization gradients.
     /// Supports arbitrary dimensions - keeps channel dimension (axis 1) and sums over all others.
