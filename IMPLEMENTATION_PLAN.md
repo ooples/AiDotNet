@@ -62,23 +62,25 @@ For each block of Q:
 
 ---
 
-### 1.3 Continuous Batching ⬜
+### 1.3 Continuous Batching ✅ COMPLETE
 **Priority:** HIGH | **Effort:** 1 week | **Impact:** 2-3x throughput
 
-#### Files to Create:
-- [ ] `src/Serving/ContinuousBatcher.cs` - Dynamic batch management
-- [ ] `src/Serving/SequenceState.cs` - Per-sequence state tracking
-- [ ] `src/Serving/BatchScheduler.cs` - Scheduling logic
-- [ ] Update `src/AiDotNet.Serving/Services/RequestBatcher.cs`
+#### Files Created:
+- [x] `src/Serving/ContinuousBatching/SequenceState.cs` - Per-sequence state tracking
+- [x] `src/Serving/ContinuousBatching/BatchScheduler.cs` - Priority-based scheduling
+- [x] `src/Serving/ContinuousBatching/ContinuousBatcher.cs` - Main batching engine
+- [x] `tests/AiDotNet.Tests/UnitTests/Serving/ContinuousBatchingTests.cs` - Tests
 
-#### Implementation Steps:
-- [ ] 1.3.1 Create SequenceState to track each request's progress
-- [ ] 1.3.2 Implement iteration-level batching (not request-level)
-- [ ] 1.3.3 Add sequence completion detection
-- [ ] 1.3.4 Implement request insertion into running batches
-- [ ] 1.3.5 Handle variable sequence lengths in same batch
-- [ ] 1.3.6 Integrate with KV-Cache for state management
-- [ ] 1.3.7 Write tests and benchmarks
+#### Completed Features:
+- [x] SequenceState class tracking tokens, status, priority, timing
+- [x] Priority-based batch scheduling with preemption support
+- [x] Memory-aware resource management
+- [x] Async generation API with cancellation support
+- [x] Token streaming events for real-time output
+- [x] Integration with KV-Cache
+- [x] Prefill and decode separation
+- [x] Top-p and top-k sampling
+- [x] Model presets (LLaMA-7B/13B/70B, GPT-2)
 
 ---
 
@@ -260,10 +262,10 @@ For each block of Q:
 
 | Phase | Task | Status | Started | Completed |
 |-------|------|--------|---------|-----------|
-| 1.1 | Flash Attention | ⬜ | - | - |
-| 1.2 | KV-Cache | ⬜ | - | - |
-| 1.3 | Continuous Batching | ⬜ | - | - |
-| 2.1 | NCCL Backend | ⬜ | - | - |
+| 1.1 | Flash Attention | ✅ | Nov 2025 | Nov 2025 |
+| 1.2 | KV-Cache | ✅ | Nov 2025 | Nov 2025 |
+| 1.3 | Continuous Batching | ✅ | Nov 2025 | Nov 2025 |
+| 2.1 | NCCL Backend | 🟡 | Nov 2025 | - |
 | 2.2 | Profiler | ⬜ | - | - |
 | 2.3 | TensorBoard | ⬜ | - | - |
 | 3.1 | PagedAttention | ⬜ | - | - |
@@ -293,5 +295,5 @@ For each block of Q:
 
 ---
 
-*Last Updated: Session Start*
-*Current Focus: Phase 1.1 - Flash Attention*
+*Last Updated: Nov 2025*
+*Current Focus: Phase 2.1 - NCCL Backend*
