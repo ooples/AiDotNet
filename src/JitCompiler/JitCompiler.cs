@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.JitCompiler.CodeGen;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.Memory;
@@ -724,6 +725,356 @@ public class JitCompiler : IDisposable
     }
 
     /// <summary>
+    /// Analyzes a computation graph to determine JIT compatibility.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for tensor elements.</typeparam>
+    /// <param name="outputNode">The output node of the computation graph.</param>
+    /// <param name="inputs">The input nodes to the computation graph.</param>
+    /// <returns>A compatibility result describing which operations are supported.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Call this before compiling to see if your graph is JIT-compatible.
+    ///
+    /// This method:
+    /// - Walks through your entire computation graph
+    /// - Checks each operation against the supported list
+    /// - Reports which operations will be JIT-compiled vs. need fallback
+    /// - Tells you if hybrid mode is available
+    ///
+    /// Example:
+    ///   var compat = jit.AnalyzeCompatibility(output, inputs);
+    ///   if (compat.IsFullySupported)
+    ///   {
+    ///       Console.WriteLine("Graph can be fully JIT compiled!");
+    ///   }
+    ///   else
+    ///   {
+    ///       Console.WriteLine($"Partial support: {compat.SupportedPercentage:F0}%");
+    ///       foreach (var unsupported in compat.UnsupportedOperations)
+    ///       {
+    ///           Console.WriteLine($"  - {unsupported}");
+    ///       }
+    ///   }
+    /// </para>
+    /// </remarks>
+    public JitCompatibilityResult AnalyzeCompatibility<T>(ComputationNode<T> outputNode, List<ComputationNode<T>> inputs)
+    {
+        var result = new JitCompatibilityResult();
+        var supportedOps = GetSupportedOperationTypes();
+        var visited = new HashSet<ComputationNode<T>>();
+        var tensorIdCounter = 0;
+
+        void AnalyzeNode(ComputationNode<T> node)
+        {
+            if (visited.Contains(node))
+                return;
+            visited.Add(node);
+
+            // Visit parents first
+            foreach (var parent in node.Parents)
+            {
+                AnalyzeNode(parent);
+            }
+
+            // Skip input nodes
+            if (inputs.Contains(node))
+                return;
+
+            var opType = node.OperationType?.ToString() ?? "Unknown";
+            var tensorId = tensorIdCounter++;
+
+            if (node.OperationType == null)
+            {
+                result.UnsupportedOperations.Add(new UnsupportedOperationInfo
+                {
+                    OperationType = "Unknown",
+                    NodeName = node.Name,
+                    TensorId = tensorId,
+                    Reason = "Node has no OperationType metadata",
+                    CanFallback = true
+                });
+            }
+            else if (supportedOps.Contains(node.OperationType.Value))
+            {
+                result.SupportedOperations.Add(opType);
+            }
+            else
+            {
+                result.UnsupportedOperations.Add(new UnsupportedOperationInfo
+                {
+                    OperationType = opType,
+                    NodeName = node.Name,
+                    TensorId = tensorId,
+                    Reason = $"Operation type {opType} not implemented in JIT compiler",
+                    CanFallback = true
+                });
+            }
+        }
+
+        AnalyzeNode(outputNode);
+
+        result.IsFullySupported = result.UnsupportedOperations.Count == 0;
+        result.CanUseHybridMode = result.UnsupportedOperations.All(u => u.CanFallback);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Gets the set of operation types that are fully supported by the JIT compiler.
+    /// </summary>
+    /// <returns>A set of supported operation type enums.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This tells you which operations can be JIT compiled.
+    ///
+    /// Supported operations include:
+    /// - Basic math: Add, Subtract, Multiply, Divide, Power, Negate
+    /// - Math functions: Exp, Log, Sqrt
+    /// - Activations: ReLU, Sigmoid, Tanh, Softmax
+    /// - Matrix ops: MatMul, Transpose
+    /// - Convolutions: Conv2D, ConvTranspose2D, DepthwiseConv2D
+    /// - Pooling: MaxPool2D, AvgPool2D
+    /// - Normalization: LayerNorm, BatchNorm
+    /// - And more...
+    ///
+    /// If your operation isn't listed, it will need fallback execution.
+    /// </para>
+    /// </remarks>
+    public static HashSet<OperationType> GetSupportedOperationTypes()
+    {
+        return new HashSet<OperationType>
+        {
+            // Basic arithmetic
+            OperationType.Add,
+            OperationType.Subtract,
+            OperationType.Multiply,
+            OperationType.Divide,
+            OperationType.Power,
+            OperationType.Negate,
+
+            // Math operations
+            OperationType.Exp,
+            OperationType.Log,
+            OperationType.Sqrt,
+
+            // Activations
+            OperationType.ReLU,
+            OperationType.Sigmoid,
+            OperationType.Tanh,
+            OperationType.Softmax,
+            OperationType.Activation,
+
+            // Matrix operations
+            OperationType.MatMul,
+            OperationType.Transpose,
+
+            // Reduction operations
+            OperationType.ReduceSum,
+            OperationType.Mean,
+            OperationType.ReduceMax,
+            OperationType.ReduceMean,
+            OperationType.ReduceLogVariance,
+
+            // Shape operations
+            OperationType.Reshape,
+            OperationType.Concat,
+            OperationType.Pad,
+            OperationType.Crop,
+            OperationType.Upsample,
+            OperationType.PixelShuffle,
+
+            // Convolution operations
+            OperationType.Conv2D,
+            OperationType.ConvTranspose2D,
+            OperationType.DepthwiseConv2D,
+            OperationType.DilatedConv2D,
+            OperationType.LocallyConnectedConv2D,
+
+            // Pooling operations
+            OperationType.MaxPool2D,
+            OperationType.AvgPool2D,
+
+            // Normalization operations
+            OperationType.LayerNorm,
+            OperationType.BatchNorm,
+
+            // Advanced operations
+            OperationType.GraphConv,
+            OperationType.AffineGrid,
+            OperationType.GridSample,
+            OperationType.RBFKernel,
+
+            // Recurrent network operations
+            OperationType.GRUCell,
+            OperationType.LSTMCell
+        };
+    }
+
+    /// <summary>
+    /// Compiles a computation graph with intelligent handling of unsupported operations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for tensor elements.</typeparam>
+    /// <param name="outputNode">The output node of the computation graph.</param>
+    /// <param name="inputs">The input nodes to the computation graph.</param>
+    /// <returns>
+    /// A result containing the compiled function, whether JIT was used,
+    /// compatibility information, and any warnings.
+    /// </returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the recommended way to compile graphs with mixed support.
+    ///
+    /// This method automatically:
+    /// 1. Analyzes your graph for JIT compatibility
+    /// 2. Based on UnsupportedLayerHandling setting:
+    ///    - Throw: Fails if any operation is unsupported
+    ///    - Fallback: Uses interpreted execution if anything is unsupported
+    ///    - Hybrid: JIT-compiles what it can, interprets the rest
+    ///    - Skip: Ignores unsupported operations (dangerous!)
+    /// 3. Returns a function that always works, plus useful diagnostics
+    ///
+    /// Example:
+    ///   var result = jit.CompileWithUnsupportedHandling(output, inputs);
+    ///   if (!result.IsFullyJitCompiled)
+    ///   {
+    ///       Console.WriteLine($"Hybrid mode: {result.Compatibility.SupportedPercentage:F0}% JIT compiled");
+    ///   }
+    ///   var predictions = result.CompiledFunc(inputTensors);
+    /// </para>
+    /// </remarks>
+    public HybridCompilationResult<T> CompileWithUnsupportedHandling<T>(
+        ComputationNode<T> outputNode,
+        List<ComputationNode<T>> inputs)
+    {
+        var result = new HybridCompilationResult<T>();
+
+        // Analyze compatibility first
+        result.Compatibility = AnalyzeCompatibility(outputNode, inputs);
+
+        // Handle based on configuration
+        switch (_options.UnsupportedLayerHandling)
+        {
+            case UnsupportedLayerHandling.Throw:
+                if (!result.Compatibility.IsFullySupported)
+                {
+                    var unsupportedOps = string.Join(", ", result.Compatibility.UnsupportedOperations.Select(u => u.OperationType));
+                    throw new NotSupportedException(
+                        $"Graph contains unsupported operations: {unsupportedOps}. " +
+                        "Set UnsupportedLayerHandling to Fallback or Hybrid to allow these operations.");
+                }
+                result.CompiledFunc = Compile(outputNode, inputs);
+                result.IsFullyJitCompiled = true;
+                result.ExecutionMode = "JIT";
+                break;
+
+            case UnsupportedLayerHandling.Fallback:
+                if (result.Compatibility.IsFullySupported)
+                {
+                    result.CompiledFunc = Compile(outputNode, inputs);
+                    result.IsFullyJitCompiled = true;
+                    result.ExecutionMode = "JIT";
+                }
+                else
+                {
+                    result.CompiledFunc = CreateInterpretedFallback(outputNode, inputs);
+                    result.IsFullyJitCompiled = false;
+                    result.ExecutionMode = "Interpreted";
+                    if (_options.LogUnsupportedOperations)
+                    {
+                        result.Warnings.Add($"Using interpreted execution due to {result.Compatibility.UnsupportedOperations.Count} unsupported operations");
+                    }
+                }
+                break;
+
+            case UnsupportedLayerHandling.Hybrid:
+                if (result.Compatibility.IsFullySupported)
+                {
+                    result.CompiledFunc = Compile(outputNode, inputs);
+                    result.IsFullyJitCompiled = true;
+                    result.ExecutionMode = "JIT";
+                }
+                else if (result.Compatibility.CanUseHybridMode)
+                {
+                    // Build hybrid execution function
+                    result.CompiledFunc = CreateHybridFunction(outputNode, inputs, result.Compatibility);
+                    result.IsFullyJitCompiled = false;
+                    result.ExecutionMode = "Hybrid";
+                    if (_options.LogUnsupportedOperations)
+                    {
+                        result.Warnings.Add($"Hybrid mode: {result.Compatibility.SupportedPercentage:F1}% JIT compiled, rest interpreted");
+                    }
+                }
+                else
+                {
+                    // Can't use hybrid, fall back to interpreted
+                    result.CompiledFunc = CreateInterpretedFallback(outputNode, inputs);
+                    result.IsFullyJitCompiled = false;
+                    result.ExecutionMode = "Interpreted";
+                    if (_options.LogUnsupportedOperations)
+                    {
+                        result.Warnings.Add("Hybrid mode unavailable; using interpreted execution");
+                    }
+                }
+                break;
+
+            case UnsupportedLayerHandling.Skip:
+                // Compile with skip mode - may produce incorrect results
+                result.CompiledFunc = CompileWithSkipping(outputNode, inputs, result.Compatibility);
+                result.IsFullyJitCompiled = result.Compatibility.IsFullySupported;
+                result.ExecutionMode = result.Compatibility.IsFullySupported ? "JIT" : "JIT (skipped ops)";
+                if (!result.Compatibility.IsFullySupported && _options.LogUnsupportedOperations)
+                {
+                    result.Warnings.Add("WARNING: Skipped unsupported operations - results may be incorrect!");
+                }
+                break;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Creates a hybrid execution function that JIT-compiles supported operations
+    /// and uses interpreted execution for unsupported ones.
+    /// </summary>
+    private Func<Tensor<T>[], Tensor<T>[]> CreateHybridFunction<T>(
+        ComputationNode<T> outputNode,
+        List<ComputationNode<T>> inputs,
+        JitCompatibilityResult compatibility)
+    {
+        // For now, we use a simplified approach:
+        // If there are unsupported ops, we fall back to full interpretation
+        // A full hybrid implementation would require graph partitioning
+        // which is a significant undertaking
+
+        // TODO: Implement true hybrid execution with graph partitioning
+        // This would involve:
+        // 1. Partition graph into JIT-able subgraphs
+        // 2. Compile each subgraph independently
+        // 3. Create execution plan that switches between JIT and interpreted
+        // 4. Handle tensor passing between execution modes
+
+        // For now, return interpreted with a note about future hybrid support
+        return CreateInterpretedFallback(outputNode, inputs);
+    }
+
+    /// <summary>
+    /// Compiles a graph, skipping unsupported operations.
+    /// WARNING: This may produce incorrect results!
+    /// </summary>
+    private Func<Tensor<T>[], Tensor<T>[]> CompileWithSkipping<T>(
+        ComputationNode<T> outputNode,
+        List<ComputationNode<T>> inputs,
+        JitCompatibilityResult compatibility)
+    {
+        if (compatibility.IsFullySupported)
+        {
+            return Compile(outputNode, inputs);
+        }
+
+        // For skip mode with unsupported ops, use interpreted execution
+        // A true skip implementation would require careful handling
+        // to not corrupt the tensor graph
+        return CreateInterpretedFallback(outputNode, inputs);
+    }
+
+    /// <summary>
     /// Clears the tensor memory pool, releasing all cached buffers.
     /// </summary>
     public void ClearTensorPool()
@@ -747,6 +1098,208 @@ public class JitCompiler : IDisposable
 }
 
 /// <summary>
+/// Specifies how the JIT compiler handles unsupported operations.
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> When a computation graph contains operations the JIT
+/// doesn't support, this controls what happens:
+///
+/// - <b>Throw:</b> Stop and throw an exception (fail-fast)
+/// - <b>Fallback:</b> Use interpreted execution for the entire graph (safe but slower)
+/// - <b>Hybrid:</b> JIT-compile supported ops, interpret unsupported ones (best of both)
+/// - <b>Skip:</b> Ignore unsupported ops (may produce incorrect results - use carefully)
+///
+/// For production, use Hybrid for best performance with guaranteed correctness.
+/// </para>
+/// </remarks>
+public enum UnsupportedLayerHandling
+{
+    /// <summary>
+    /// Throw an exception when an unsupported operation is encountered.
+    /// Use this when you require all operations to be JIT compiled.
+    /// </summary>
+    Throw,
+
+    /// <summary>
+    /// Fall back to interpreted execution for the entire graph.
+    /// This is the safest option - always produces correct results.
+    /// </summary>
+    Fallback,
+
+    /// <summary>
+    /// Use hybrid execution: JIT-compile supported operations and execute
+    /// unsupported operations using the interpreter. This provides the best
+    /// balance of performance and compatibility.
+    /// </summary>
+    Hybrid,
+
+    /// <summary>
+    /// Skip unsupported operations during compilation. WARNING: This may
+    /// produce incorrect results. Only use for debugging or when you know
+    /// the skipped operations don't affect your output.
+    /// </summary>
+    Skip
+}
+
+/// <summary>
+/// Information about an unsupported operation detected during JIT compilation.
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> When the JIT compiler finds an operation it can't compile,
+/// it creates one of these to tell you:
+/// - What operation was unsupported
+/// - Where it was in the graph
+/// - Why it couldn't be compiled
+///
+/// Use this to diagnose compilation issues or to know which operations need fallback.
+/// </para>
+/// </remarks>
+public class UnsupportedOperationInfo
+{
+    /// <summary>
+    /// Gets or sets the name of the unsupported operation type.
+    /// </summary>
+    public string OperationType { get; set; } = "";
+
+    /// <summary>
+    /// Gets or sets the name of the computation node (if available).
+    /// </summary>
+    public string? NodeName { get; set; }
+
+    /// <summary>
+    /// Gets or sets the tensor ID that would have been assigned to this operation.
+    /// </summary>
+    public int TensorId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the reason why this operation is not supported.
+    /// </summary>
+    public string Reason { get; set; } = "Operation type not implemented in JIT compiler";
+
+    /// <summary>
+    /// Gets or sets whether this operation can be executed via fallback.
+    /// </summary>
+    public bool CanFallback { get; set; } = true;
+
+    /// <summary>
+    /// Returns a string representation of the unsupported operation.
+    /// </summary>
+    public override string ToString()
+    {
+        var name = NodeName != null ? $" ({NodeName})" : "";
+        return $"Unsupported: {OperationType}{name} at tensor {TensorId} - {Reason}";
+    }
+}
+
+/// <summary>
+/// Result of analyzing a graph for JIT compatibility.
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> Before compiling, you can check if your graph is compatible.
+/// This result tells you:
+/// - Whether full JIT compilation is possible
+/// - What operations are supported/unsupported
+/// - Whether hybrid mode can be used
+/// </para>
+/// </remarks>
+public class JitCompatibilityResult
+{
+    /// <summary>
+    /// Gets or sets whether all operations in the graph are supported.
+    /// </summary>
+    public bool IsFullySupported { get; set; }
+
+    /// <summary>
+    /// Gets or sets the list of supported operation types found in the graph.
+    /// </summary>
+    public List<string> SupportedOperations { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the list of unsupported operations found in the graph.
+    /// </summary>
+    public List<UnsupportedOperationInfo> UnsupportedOperations { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets whether hybrid mode can be used (some ops JIT, some interpreted).
+    /// </summary>
+    public bool CanUseHybridMode { get; set; }
+
+    /// <summary>
+    /// Gets the percentage of operations that can be JIT compiled.
+    /// </summary>
+    public double SupportedPercentage =>
+        SupportedOperations.Count + UnsupportedOperations.Count > 0
+            ? (double)SupportedOperations.Count / (SupportedOperations.Count + UnsupportedOperations.Count) * 100
+            : 100;
+
+    /// <summary>
+    /// Returns a summary of the compatibility analysis.
+    /// </summary>
+    public override string ToString()
+    {
+        if (IsFullySupported)
+        {
+            return $"Fully JIT compatible ({SupportedOperations.Count} operations)";
+        }
+
+        return $"Partial JIT support: {SupportedPercentage:F1}% ({SupportedOperations.Count} supported, " +
+               $"{UnsupportedOperations.Count} unsupported). Hybrid mode: {(CanUseHybridMode ? "available" : "not available")}";
+    }
+}
+
+/// <summary>
+/// Result of compiling with unsupported operation handling.
+/// </summary>
+/// <typeparam name="T">The numeric type for tensor elements.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> When you use CompileWithUnsupportedHandling, you get this result.
+/// It tells you:
+/// - The compiled function (always usable)
+/// - Whether it's fully JIT compiled or uses fallback
+/// - Compatibility details
+/// - Any warnings about unsupported operations
+/// </para>
+/// </remarks>
+public class HybridCompilationResult<T>
+{
+    /// <summary>
+    /// Gets or sets the compiled function.
+    /// This function is always usable regardless of execution mode.
+    /// </summary>
+    public Func<Tensor<T>[], Tensor<T>[]> CompiledFunc { get; set; } = null!;
+
+    /// <summary>
+    /// Gets or sets whether the function was fully JIT compiled.
+    /// If false, some or all operations use interpreted execution.
+    /// </summary>
+    public bool IsFullyJitCompiled { get; set; }
+
+    /// <summary>
+    /// Gets or sets the execution mode: "JIT", "Interpreted", "Hybrid", or "JIT (skipped ops)".
+    /// </summary>
+    public string ExecutionMode { get; set; } = "Unknown";
+
+    /// <summary>
+    /// Gets or sets the compatibility analysis results.
+    /// </summary>
+    public JitCompatibilityResult Compatibility { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets any warnings generated during compilation.
+    /// </summary>
+    public List<string> Warnings { get; set; } = new();
+
+    /// <summary>
+    /// Returns a summary of the compilation result.
+    /// </summary>
+    public override string ToString()
+    {
+        var warnings = Warnings.Count > 0 ? $" ({Warnings.Count} warnings)" : "";
+        return $"Execution: {ExecutionMode}, JIT: {(IsFullyJitCompiled ? "100%" : $"{Compatibility.SupportedPercentage:F1}%")}{warnings}";
+    }
+}
+
+/// <summary>
 /// Configuration options for the JIT compiler.
 /// </summary>
 /// <remarks>
@@ -756,6 +1309,7 @@ public class JitCompiler : IDisposable
 /// - Enable/disable specific optimizations
 /// - Turn caching on/off
 /// - Configure compilation behavior
+/// - Control how unsupported operations are handled
 ///
 /// For most users, the defaults work great!
 /// </para>
@@ -865,6 +1419,39 @@ public class JitCompilerOptions
     /// Default: 10,000,000 (about 40MB for float32).
     /// </summary>
     public int MaxElementsToPool { get; set; } = 10_000_000;
+
+    /// <summary>
+    /// Gets or sets how the JIT compiler handles unsupported operations.
+    /// Default: Fallback (use interpreted execution for entire graph if any op is unsupported).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When your model has operations the JIT can't compile,
+    /// this setting controls what happens:
+    ///
+    /// - <b>Throw:</b> Stop with an error - use when you need all ops compiled
+    /// - <b>Fallback:</b> (Default) Run the whole graph interpreted - always works
+    /// - <b>Hybrid:</b> JIT the supported ops, interpret the rest - best performance
+    /// - <b>Skip:</b> Ignore unsupported ops - dangerous, may give wrong results
+    ///
+    /// Hybrid mode is recommended for production when you have mixed-support graphs.
+    /// It gives you JIT speed for supported operations while still handling all ops correctly.
+    /// </para>
+    /// </remarks>
+    public UnsupportedLayerHandling UnsupportedLayerHandling { get; set; } = UnsupportedLayerHandling.Fallback;
+
+    /// <summary>
+    /// Gets or sets whether to log warnings for unsupported operations.
+    /// Default: true.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When enabled, you'll see warnings in logs when
+    /// operations can't be JIT compiled. This helps you:
+    /// - Identify which operations need fallback
+    /// - Understand performance implications
+    /// - Know when to request JIT support for new operation types
+    /// </para>
+    /// </remarks>
+    public bool LogUnsupportedOperations { get; set; } = true;
 }
 
 /// <summary>

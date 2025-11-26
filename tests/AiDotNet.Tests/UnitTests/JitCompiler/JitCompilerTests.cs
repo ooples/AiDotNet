@@ -1,5 +1,6 @@
 using Xunit;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.JitCompiler;
 
 namespace AiDotNet.Tests.UnitTests.JitCompiler;
@@ -302,4 +303,347 @@ public class JitCompilerTests
         Assert.Contains("5", str);
         Assert.Contains("10.00", str);  // KB
     }
+
+    #region Unsupported Layer Handling Tests
+
+    [Fact]
+    public void GetSupportedOperationTypes_ReturnsExpectedOperations()
+    {
+        // Act
+        var supportedOps = JitCompiler.GetSupportedOperationTypes();
+
+        // Assert
+        Assert.Contains(OperationType.Add, supportedOps);
+        Assert.Contains(OperationType.Subtract, supportedOps);
+        Assert.Contains(OperationType.Multiply, supportedOps);
+        Assert.Contains(OperationType.ReLU, supportedOps);
+        Assert.Contains(OperationType.Sigmoid, supportedOps);
+        Assert.Contains(OperationType.MatMul, supportedOps);
+        Assert.Contains(OperationType.Conv2D, supportedOps);
+        Assert.Contains(OperationType.MaxPool2D, supportedOps);
+        Assert.Contains(OperationType.BatchNorm, supportedOps);
+        Assert.Contains(OperationType.LSTMCell, supportedOps);
+        Assert.Contains(OperationType.GRUCell, supportedOps);
+    }
+
+    [Fact]
+    public void AnalyzeCompatibility_FullySupportedGraph_ReturnsFullySupported()
+    {
+        // Arrange
+        var jit = new JitCompiler();
+        var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
+        {
+            OperationType = OperationType.MatMul  // Just for testing, Input doesn't need OperationType
+        };
+
+        var relu = new ComputationNode<float>(
+            new Tensor<float>(new[] { 2, 3 }),
+            parents: new List<ComputationNode<float>> { input })
+        {
+            OperationType = OperationType.ReLU
+        };
+
+        // Act
+        var result = jit.AnalyzeCompatibility(relu, new List<ComputationNode<float>> { input });
+
+        // Assert
+        Assert.True(result.IsFullySupported);
+        Assert.Empty(result.UnsupportedOperations);
+        Assert.Single(result.SupportedOperations);
+        Assert.Equal(100.0, result.SupportedPercentage);
+        Assert.True(result.CanUseHybridMode);
+    }
+
+    [Fact]
+    public void AnalyzeCompatibility_GraphWithUnsupportedOp_ReturnsPartialSupport()
+    {
+        // Arrange
+        var jit = new JitCompiler();
+        var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
+        {
+            Name = "input"
+        };
+
+        // Create a node with an unsupported operation type (no OperationType set)
+        var unsupportedNode = new ComputationNode<float>(
+            new Tensor<float>(new[] { 2, 3 }),
+            parents: new List<ComputationNode<float>> { input })
+        {
+            Name = "unsupported_op",
+            OperationType = null  // Unsupported - no operation type
+        };
+
+        // Act
+        var result = jit.AnalyzeCompatibility(unsupportedNode, new List<ComputationNode<float>> { input });
+
+        // Assert
+        Assert.False(result.IsFullySupported);
+        Assert.Single(result.UnsupportedOperations);
+        Assert.Contains("Unknown", result.UnsupportedOperations[0].OperationType);
+        Assert.True(result.CanUseHybridMode);  // Can still fallback
+    }
+
+    [Fact]
+    public void CompileWithUnsupportedHandling_ThrowMode_FullySupported_Succeeds()
+    {
+        // Arrange
+        var options = new JitCompilerOptions
+        {
+            UnsupportedLayerHandling = UnsupportedLayerHandling.Throw
+        };
+        var jit = new JitCompiler(options);
+
+        var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
+        var relu = new ComputationNode<float>(
+            new Tensor<float>(new[] { 2, 3 }),
+            parents: new List<ComputationNode<float>> { input })
+        {
+            OperationType = OperationType.ReLU
+        };
+
+        // Act
+        var result = jit.CompileWithUnsupportedHandling(relu, new List<ComputationNode<float>> { input });
+
+        // Assert
+        Assert.NotNull(result.CompiledFunc);
+        Assert.True(result.IsFullyJitCompiled);
+        Assert.Equal("JIT", result.ExecutionMode);
+        Assert.Empty(result.Warnings);
+    }
+
+    [Fact]
+    public void CompileWithUnsupportedHandling_ThrowMode_UnsupportedOp_ThrowsException()
+    {
+        // Arrange
+        var options = new JitCompilerOptions
+        {
+            UnsupportedLayerHandling = UnsupportedLayerHandling.Throw
+        };
+        var jit = new JitCompiler(options);
+
+        var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
+        var unsupportedNode = new ComputationNode<float>(
+            new Tensor<float>(new[] { 2, 3 }),
+            parents: new List<ComputationNode<float>> { input })
+        {
+            OperationType = null  // No operation type = unsupported
+        };
+
+        // Act & Assert
+        Assert.Throws<NotSupportedException>(() =>
+            jit.CompileWithUnsupportedHandling(unsupportedNode, new List<ComputationNode<float>> { input }));
+    }
+
+    [Fact]
+    public void CompileWithUnsupportedHandling_FallbackMode_UnsupportedOp_FallsBackToInterpreted()
+    {
+        // Arrange
+        var options = new JitCompilerOptions
+        {
+            UnsupportedLayerHandling = UnsupportedLayerHandling.Fallback,
+            LogUnsupportedOperations = true
+        };
+        var jit = new JitCompiler(options);
+
+        var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
+        var unsupportedNode = new ComputationNode<float>(
+            new Tensor<float>(new[] { 2, 3 }),
+            parents: new List<ComputationNode<float>> { input })
+        {
+            OperationType = null  // No operation type = unsupported
+        };
+
+        // Act
+        var result = jit.CompileWithUnsupportedHandling(unsupportedNode, new List<ComputationNode<float>> { input });
+
+        // Assert
+        Assert.NotNull(result.CompiledFunc);
+        Assert.False(result.IsFullyJitCompiled);
+        Assert.Equal("Interpreted", result.ExecutionMode);
+        Assert.NotEmpty(result.Warnings);
+        Assert.Contains(result.Warnings, w => w.Contains("interpreted"));
+    }
+
+    [Fact]
+    public void CompileWithUnsupportedHandling_HybridMode_UnsupportedOp_UsesHybridExecution()
+    {
+        // Arrange
+        var options = new JitCompilerOptions
+        {
+            UnsupportedLayerHandling = UnsupportedLayerHandling.Hybrid,
+            LogUnsupportedOperations = true
+        };
+        var jit = new JitCompiler(options);
+
+        var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
+        var unsupportedNode = new ComputationNode<float>(
+            new Tensor<float>(new[] { 2, 3 }),
+            parents: new List<ComputationNode<float>> { input })
+        {
+            OperationType = null  // No operation type = unsupported
+        };
+
+        // Act
+        var result = jit.CompileWithUnsupportedHandling(unsupportedNode, new List<ComputationNode<float>> { input });
+
+        // Assert
+        Assert.NotNull(result.CompiledFunc);
+        Assert.False(result.IsFullyJitCompiled);
+        Assert.Equal("Hybrid", result.ExecutionMode);
+        Assert.True(result.Compatibility.CanUseHybridMode);
+    }
+
+    [Fact]
+    public void CompileWithUnsupportedHandling_SkipMode_UnsupportedOp_SkipsWithWarning()
+    {
+        // Arrange
+        var options = new JitCompilerOptions
+        {
+            UnsupportedLayerHandling = UnsupportedLayerHandling.Skip,
+            LogUnsupportedOperations = true
+        };
+        var jit = new JitCompiler(options);
+
+        var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
+        var unsupportedNode = new ComputationNode<float>(
+            new Tensor<float>(new[] { 2, 3 }),
+            parents: new List<ComputationNode<float>> { input })
+        {
+            OperationType = null  // No operation type = unsupported
+        };
+
+        // Act
+        var result = jit.CompileWithUnsupportedHandling(unsupportedNode, new List<ComputationNode<float>> { input });
+
+        // Assert
+        Assert.NotNull(result.CompiledFunc);
+        Assert.NotEmpty(result.Warnings);
+        Assert.Contains(result.Warnings, w => w.Contains("WARNING") || w.Contains("skipped"));
+    }
+
+    [Fact]
+    public void UnsupportedOperationInfo_ToString_FormatsCorrectly()
+    {
+        // Arrange
+        var info = new UnsupportedOperationInfo
+        {
+            OperationType = "CustomOp",
+            NodeName = "my_layer",
+            TensorId = 42,
+            Reason = "Not implemented"
+        };
+
+        // Act
+        var str = info.ToString();
+
+        // Assert
+        Assert.Contains("CustomOp", str);
+        Assert.Contains("my_layer", str);
+        Assert.Contains("42", str);
+        Assert.Contains("Not implemented", str);
+    }
+
+    [Fact]
+    public void JitCompatibilityResult_SupportedPercentage_CalculatesCorrectly()
+    {
+        // Arrange
+        var result = new JitCompatibilityResult
+        {
+            SupportedOperations = new List<string> { "Add", "ReLU", "MatMul" },
+            UnsupportedOperations = new List<UnsupportedOperationInfo>
+            {
+                new() { OperationType = "CustomOp1" },
+                new() { OperationType = "CustomOp2" }
+            }
+        };
+
+        // Act
+        var percentage = result.SupportedPercentage;
+
+        // Assert
+        Assert.Equal(60.0, percentage);  // 3 out of 5 = 60%
+    }
+
+    [Fact]
+    public void JitCompatibilityResult_ToString_FullySupported()
+    {
+        // Arrange
+        var result = new JitCompatibilityResult
+        {
+            IsFullySupported = true,
+            SupportedOperations = new List<string> { "Add", "ReLU" }
+        };
+
+        // Act
+        var str = result.ToString();
+
+        // Assert
+        Assert.Contains("Fully JIT compatible", str);
+        Assert.Contains("2 operations", str);
+    }
+
+    [Fact]
+    public void JitCompatibilityResult_ToString_PartialSupport()
+    {
+        // Arrange
+        var result = new JitCompatibilityResult
+        {
+            IsFullySupported = false,
+            CanUseHybridMode = true,
+            SupportedOperations = new List<string> { "Add" },
+            UnsupportedOperations = new List<UnsupportedOperationInfo>
+            {
+                new() { OperationType = "CustomOp" }
+            }
+        };
+
+        // Act
+        var str = result.ToString();
+
+        // Assert
+        Assert.Contains("Partial JIT support", str);
+        Assert.Contains("50.0%", str);
+        Assert.Contains("Hybrid mode: available", str);
+    }
+
+    [Fact]
+    public void HybridCompilationResult_ToString_FormatsCorrectly()
+    {
+        // Arrange
+        var result = new HybridCompilationResult<float>
+        {
+            IsFullyJitCompiled = false,
+            ExecutionMode = "Hybrid",
+            Compatibility = new JitCompatibilityResult
+            {
+                SupportedOperations = new List<string> { "Add", "ReLU", "MatMul" },
+                UnsupportedOperations = new List<UnsupportedOperationInfo>
+                {
+                    new() { OperationType = "CustomOp" }
+                }
+            },
+            Warnings = new List<string> { "Some operations use fallback" }
+        };
+
+        // Act
+        var str = result.ToString();
+
+        // Assert
+        Assert.Contains("Hybrid", str);
+        Assert.Contains("75.0%", str);
+        Assert.Contains("1 warnings", str);
+    }
+
+    [Fact]
+    public void JitCompilerOptions_UnsupportedLayerHandling_DefaultIsFallback()
+    {
+        // Arrange
+        var options = new JitCompilerOptions();
+
+        // Assert
+        Assert.Equal(UnsupportedLayerHandling.Fallback, options.UnsupportedLayerHandling);
+        Assert.True(options.LogUnsupportedOperations);
+    }
+
+    #endregion
 }
