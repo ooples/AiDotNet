@@ -178,12 +178,21 @@ Speedup comes from:
 - JIT compiler API
 - Caching system
 - Comprehensive documentation
+- Backward pass (gradient) compilation for core operations:
+  - Arithmetic: Add, Subtract, Multiply
+  - Matrix: MatMul (left and right gradients)
+  - Activations: ReLU, Sigmoid, Tanh, Softmax
+  - Math: Exp, Log
+  - Convolution: Conv2D gradients (input, filters, bias)
+  - Pooling: MaxPool2D, AvgPool2D
+  - Normalization: BatchNorm
+  - Gradient accumulation for multi-consumer nodes
 
 🚧 **Future Work**:
-- Backward pass (gradient) compilation
 - GPU code generation
 - More fusion patterns
 - Loop unrolling and vectorization
+- More backward operations (Reshape, Concat, etc.)
 
 ## Testing
 

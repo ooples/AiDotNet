@@ -263,6 +263,10 @@ public class CodeGenerator
             Operations.GradExpOp => GenerateGradExpOp<T>(inputVars),
             Operations.GradLogOp => GenerateGradLogOp<T>(inputVars),
             Operations.GradSoftmaxOp gradSoftmaxOp => GenerateGradSoftmaxOp<T>(inputVars, gradSoftmaxOp.Axis),
+            Operations.GradConv2DOp gradConv2dOp => GenerateGradConv2DOp<T>(inputVars, gradConv2dOp),
+            Operations.GradMaxPool2DOp gradMaxPoolOp => GenerateGradMaxPool2DOp<T>(inputVars, gradMaxPoolOp),
+            Operations.GradAvgPool2DOp gradAvgPoolOp => GenerateGradAvgPool2DOp<T>(inputVars, gradAvgPoolOp),
+            Operations.GradBatchNormOp gradBatchNormOp => GenerateGradBatchNormOp<T>(inputVars, gradBatchNormOp),
 
             _ => throw new NotImplementedException($"Code generation for {op.OpType} not yet implemented")
         };
@@ -562,5 +566,58 @@ public class CodeGenerator
     {
         var method = typeof(GradientOps).GetMethod("GradSoftmax")!.MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1], Expression.Constant(axis));
+    }
+
+    /// <summary>
+    /// Generates code for GradConv2D operation.
+    /// </summary>
+    private Expression GenerateGradConv2DOp<T>(ParameterExpression[] inputs, Operations.GradConv2DOp op)
+    {
+        var method = typeof(GradientOps).GetMethod("GradConv2D")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method,
+            inputs[0], // gradOutput
+            inputs[1], // input or filters depending on InputIndex
+            Expression.Constant(op.InputIndex),
+            Expression.Constant(op.Stride),
+            Expression.Constant(op.Padding));
+    }
+
+    /// <summary>
+    /// Generates code for GradMaxPool2D operation.
+    /// </summary>
+    private Expression GenerateGradMaxPool2DOp<T>(ParameterExpression[] inputs, Operations.GradMaxPool2DOp op)
+    {
+        var method = typeof(GradientOps).GetMethod("GradMaxPool2D")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method,
+            inputs[0], // gradOutput
+            inputs[1], // forward input
+            Expression.Constant(op.PoolSize),
+            Expression.Constant(op.Stride));
+    }
+
+    /// <summary>
+    /// Generates code for GradAvgPool2D operation.
+    /// </summary>
+    private Expression GenerateGradAvgPool2DOp<T>(ParameterExpression[] inputs, Operations.GradAvgPool2DOp op)
+    {
+        var method = typeof(GradientOps).GetMethod("GradAvgPool2D")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method,
+            inputs[0], // gradOutput
+            Expression.Constant(op.PoolSize),
+            Expression.Constant(op.Stride),
+            Expression.Constant(op.OutputShape)); // original input shape
+    }
+
+    /// <summary>
+    /// Generates code for GradBatchNorm operation.
+    /// </summary>
+    private Expression GenerateGradBatchNormOp<T>(ParameterExpression[] inputs, Operations.GradBatchNormOp op)
+    {
+        var method = typeof(GradientOps).GetMethod("GradBatchNorm")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method,
+            inputs[0], // gradOutput
+            inputs[1], // normalized input or gamma/beta
+            Expression.Constant(op.InputIndex),
+            Expression.Constant(op.Epsilon));
     }
 }

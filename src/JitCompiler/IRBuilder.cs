@@ -784,7 +784,73 @@ public class IRBuilder
                 });
                 break;
 
-            // TODO: Add more operation types as needed
+            case OperationType.Conv2D:
+                // Gradients for input, filters, and bias
+                var convStride = GetParam<int[]>(node, "Stride", new[] { 1, 1 });
+                var convPadding = GetParam<int[]>(node, "Padding", new[] { 0, 0 });
+                for (int i = 0; i < node.Parents.Count && i < 3; i++)
+                {
+                    ops.Add(new Operations.GradConv2DOp
+                    {
+                        OutputId = _nextTensorId++,
+                        InputIds = new[] { outputGradId, forwardInputIds[i == 0 ? 1 : 0] },
+                        InputIndex = i,
+                        Stride = convStride,
+                        Padding = convPadding,
+                        OutputType = irType,
+                        OutputShape = node.Parents[i].Value.Shape
+                    });
+                }
+                break;
+
+            case OperationType.MaxPool2D:
+                // grad_input routes gradient to max elements
+                var maxPoolSize = GetParam<int[]>(node, "PoolSize", new[] { 2, 2 });
+                var maxPoolStride = GetParam<int[]>(node, "Stride", new[] { 2, 2 });
+                ops.Add(new Operations.GradMaxPool2DOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds[0] },
+                    PoolSize = maxPoolSize,
+                    Stride = maxPoolStride,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape,
+                    SavedForwardTensorId = forwardInputIds[0]
+                });
+                break;
+
+            case OperationType.AvgPool2D:
+                // grad_input distributes gradient equally to all window elements
+                var avgPoolSize = GetParam<int[]>(node, "PoolSize", new[] { 2, 2 });
+                var avgPoolStride = GetParam<int[]>(node, "Stride", new[] { 2, 2 });
+                ops.Add(new Operations.GradAvgPool2DOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId },
+                    PoolSize = avgPoolSize,
+                    Stride = avgPoolStride,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape
+                });
+                break;
+
+            case OperationType.BatchNorm:
+                // Gradients for input, gamma, beta
+                var bnEpsilon = GetParam<double>(node, "Epsilon", 1e-5);
+                for (int i = 0; i < node.Parents.Count && i < 3; i++)
+                {
+                    ops.Add(new Operations.GradBatchNormOp
+                    {
+                        OutputId = _nextTensorId++,
+                        InputIds = new[] { outputGradId, forwardOutputId },
+                        InputIndex = i,
+                        Epsilon = bnEpsilon,
+                        OutputType = irType,
+                        OutputShape = node.Parents[i].Value.Shape
+                    });
+                }
+                break;
+
             // For unsupported operations, return empty list (gradient won't flow)
             default:
                 // Unsupported operation - gradient flow stops here
