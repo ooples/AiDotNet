@@ -179,13 +179,14 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
             uniform[i] = NumOps.FromDouble(_random.NextDouble());
         }
 
-        return uniform.Transform(u => 
+        return uniform.Transform(u =>
             NumOps.Multiply(
                 NumOps.Negate(
-                    NumOps.Log(
+                    NumericalStabilityHelper.SafeLog(
                         NumOps.Negate(
-                            NumOps.Log(u)
-                        )
+                            NumericalStabilityHelper.SafeLog(u, NumOps)
+                        ),
+                        NumOps
                     )
                 ),
                 _temperature

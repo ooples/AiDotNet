@@ -674,7 +674,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             mean = (Vector<T>)Engine.Add(mean, row);
         }
 
-        return mean.Divide(NumOps.FromDouble(batchSize));
+        T batchSizeDivisor = NumOps.FromDouble(batchSize);
+        return mean.Transform(x => NumericalStabilityHelper.SafeDiv(x, batchSizeDivisor, NumOps));
     }
 
     /// <summary>
@@ -722,7 +723,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             variance = (Vector<T>)Engine.Add(variance, squaredDiff);
         }
 
-        return variance.Divide(NumOps.FromDouble(batchSize));
+        T batchSizeDivisor = NumOps.FromDouble(batchSize);
+        return variance.Transform(x => NumericalStabilityHelper.SafeDiv(x, batchSizeDivisor, NumOps));
     }
 
     /// <summary>

@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -183,7 +185,7 @@ public class AvgPoolingLayer<T> : LayerBase<T>
                     }
 
                     // Compute average
-                    output[c, h, w] = NumOps.Divide(sum, poolSizeSquared);
+                    output[c, h, w] = NumericalStabilityHelper.SafeDiv(sum, poolSizeSquared, NumOps);
                 }
             }
         }
@@ -241,7 +243,7 @@ public class AvgPoolingLayer<T> : LayerBase<T>
                 for (int w = 0; w < outputGradient.Shape[2]; w++)
                 {
                     // Distribute gradient equally to all positions in the pooling window
-                    T gradValue = NumOps.Divide(outputGradient[c, h, w], poolSizeSquared);
+                    T gradValue = NumericalStabilityHelper.SafeDiv(outputGradient[c, h, w], poolSizeSquared, NumOps);
 
                     for (int ph = 0; ph < PoolSize; ph++)
                     {

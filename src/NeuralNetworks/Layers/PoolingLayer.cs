@@ -1,4 +1,5 @@
 using AiDotNet.Engines;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -420,7 +421,7 @@ public class PoolingLayer<T> : LayerBase<T>
                         else if (Type == PoolingType.Average)
                         {
                             T gradValue = outputGradient[b, c, h, w];
-                            gradValue = NumOps.Divide(gradValue, NumOps.FromDouble(PoolSize * PoolSize));
+                            gradValue = NumericalStabilityHelper.SafeDiv(gradValue, NumOps.FromDouble(PoolSize * PoolSize), NumOps);
                             for (int ph = 0; ph < PoolSize; ph++)
                             {
                                 for (int pw = 0; pw < PoolSize; pw++)

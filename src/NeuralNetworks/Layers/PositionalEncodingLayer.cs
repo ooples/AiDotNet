@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -156,7 +158,8 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         {
             for (int i = 0; i < embeddingSize; i++)
             {
-                double angle = pos / Math.Pow(10000, (2 * (i / 2)) / (double)embeddingSize);
+                double exponent = NumericalStabilityHelper.SafeDiv(2.0 * (i / 2), embeddingSize, NumOps);
+                double angle = pos / Math.Pow(10000, exponent);
                 if (i % 2 == 0)
                 {
                     encodings[pos, i] = NumOps.FromDouble(Math.Sin(angle));

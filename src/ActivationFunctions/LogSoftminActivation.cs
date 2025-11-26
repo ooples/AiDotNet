@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -61,7 +62,7 @@ public class LogSoftminActivation<T> : ActivationFunctionBase<T>
         T minInput = input.Min();
         Vector<T> shiftedExp = input.Transform(x => NumOps.Exp(NumOps.Subtract(minInput, x)));
         T sumExp = shiftedExp.Sum();
-        T logSumExp = NumOps.Add(NumOps.Log(sumExp), NumOps.Negate(minInput));
+        T logSumExp = NumOps.Add(NumericalStabilityHelper.SafeLog(sumExp, NumOps), NumOps.Negate(minInput));
 
         return input.Transform(x => NumOps.Subtract(NumOps.Negate(x), logSumExp));
     }

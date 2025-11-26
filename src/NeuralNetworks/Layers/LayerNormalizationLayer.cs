@@ -381,7 +381,7 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
             // Scalar calculation for dvariance
             T dvariance = NumOps.Zero;
             T std3 = NumOps.Multiply(_lastStd[i], NumOps.Multiply(_lastStd[i], _lastStd[i]));
-            T dvarianceCoeff = NumOps.Multiply(NumOps.FromDouble(-0.5), NumOps.Divide(NumOps.One, std3));
+            T dvarianceCoeff = NumOps.Multiply(NumOps.FromDouble(-0.5), NumericalStabilityHelper.SafeDiv(NumOps.One, std3, NumOps));
 
             var dxhatScaled = (Vector<T>)Engine.Multiply(dxhat, dvarianceCoeff);
             var dxhatTimesInput = (Vector<T>)Engine.Multiply(dxhatScaled, inputMinusMean);
@@ -389,7 +389,7 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
 
             // Scalar calculation for dmean (first part)
             T dmean = NumOps.Zero;
-            T dmeanCoeff = NumOps.Divide(NumOps.FromDouble(-1.0), _lastStd[i]);
+            T dmeanCoeff = NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(-1.0), _lastStd[i], NumOps);
 
             T dxhatSum = Engine.Sum(dxhat);
             dmean = NumOps.Multiply(dxhatSum, dmeanCoeff);

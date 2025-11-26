@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -393,7 +395,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             if (pairCount > 0)
             {
-                diversityPenalty = NumOps.Divide(diversityPenalty, NumOps.FromDouble(pairCount));
+                diversityPenalty = NumericalStabilityHelper.SafeDiv(diversityPenalty, NumOps.FromDouble(pairCount), NumOps);
             }
 
             _lastDiversityLoss = diversityPenalty;
@@ -424,10 +426,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         T normB = NumOps.Sqrt(Engine.Sum(normBVec));
 
         T denominator = NumOps.Multiply(normA, normB);
-        if (NumOps.Equals(denominator, NumOps.Zero))
-            return NumOps.Zero;
-
-        return NumOps.Divide(dotProduct, denominator);
+        return NumericalStabilityHelper.SafeDiv(dotProduct, denominator, NumOps);
     }
 
     /// <summary>
@@ -528,7 +527,9 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         values = values.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
 
         var attentionScores = queries.Multiply(keys.Transpose([0, 1, 3, 2]));
-        attentionScores = attentionScores.Multiply(NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension)));
+        T scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_headDimension));
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor, NumOps);
+        attentionScores = attentionScores.Multiply(scaleValue);
 
         var softmaxActivation = new SoftmaxActivation<T>();
         var attentionWeights = softmaxActivation.Activate(attentionScores);

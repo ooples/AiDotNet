@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -967,7 +969,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Average the auxiliary losses if any were computed
         if (auxLayerCount > 0)
         {
-            totalAuxLoss = NumOps.Divide(totalAuxLoss, NumOps.FromDouble(auxLayerCount));
+            totalAuxLoss = NumericalStabilityHelper.SafeDiv(totalAuxLoss, NumOps.FromDouble(auxLayerCount), NumOps);
         }
 
         _lastAuxiliaryLoss = totalAuxLoss;

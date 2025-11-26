@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -726,7 +727,7 @@ public class LSTMLayer<T> : LayerBase<T>
     private void InitializeWeights()
     {
         // Xavier/Glorot initialization
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputSize + _hiddenSize)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (_inputSize + _hiddenSize), NumOps)));
 
         InitializeWeight(_weightsFi, scale);
         InitializeWeight(_weightsIi, scale);

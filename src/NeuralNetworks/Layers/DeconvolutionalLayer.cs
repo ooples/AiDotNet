@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -443,7 +444,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     private void InitializeParameters()
     {
         // Xavier/Glorot initialization
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (InputDepth + OutputDepth)));
+        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputDepth + OutputDepth), NumOps));
         for (int i = 0; i < _kernels.Length; i++)
         {
             _kernels[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);

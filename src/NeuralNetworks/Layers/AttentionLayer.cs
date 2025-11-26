@@ -1,4 +1,5 @@
 using System.Linq;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -187,7 +188,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _inputSize = inputSize;
         _attentionSize = attentionSize;
-        T scale = NumOps.Sqrt(NumOps.FromDouble(1.0 / _attentionSize));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _attentionSize, NumOps)));
         _Wq = InitializeTensor(new[] { _attentionSize, _inputSize }, scale);
         _Wk = InitializeTensor(new[] { _attentionSize, _inputSize }, scale);
         _Wv = InitializeTensor(new[] { _attentionSize, _inputSize }, scale);
@@ -217,7 +218,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _inputSize = inputSize;
         _attentionSize = attentionSize;
-        T scale = NumOps.Sqrt(NumOps.FromDouble(1.0 / _attentionSize));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _attentionSize, NumOps)));
         _Wq = InitializeTensor(new[] { _attentionSize, _inputSize }, scale);
         _Wk = InitializeTensor(new[] { _attentionSize, _inputSize }, scale);
         _Wv = InitializeTensor(new[] { _attentionSize, _inputSize }, scale);
@@ -285,7 +286,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var attentionScores = Q.Multiply(K.Transpose([1, 0]));
         var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(K.Shape[K.Shape.Length - 1]));
-        attentionScores = attentionScores.Scale(NumOps.Divide(NumOps.One, scaleFactor));
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor, NumOps);
+        attentionScores = attentionScores.Scale(scaleValue);
 
         _lastAttentionWeights = ApplyActivation(attentionScores);
 
@@ -383,11 +385,12 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var V = input.Multiply(_Wv);
 
         var attentionScores = Q.Multiply(K.Transpose([1, 0]));
-    
+
         // Apply scaling factor
         var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(K.Shape[K.Shape.Length - 1]));
-        attentionScores = attentionScores.Scale(NumOps.Divide(NumOps.One, scaleFactor));
-    
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor, NumOps);
+        attentionScores = attentionScores.Scale(scaleValue);
+
         // Apply mask - typically mask values are 0 for positions to attend to and very negative (e.g., -10000) for positions to ignore
         attentionScores = attentionScores.Add(mask);
 
@@ -416,11 +419,12 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var V = keyValueInput.Multiply(_Wv);
 
         var attentionScores = Q.Multiply(K.Transpose([1, 0]));
-    
+
         // Apply scaling factor
         var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(K.Shape[K.Shape.Length - 1]));
-        attentionScores = attentionScores.Scale(NumOps.Divide(NumOps.One, scaleFactor));
-    
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor, NumOps);
+        attentionScores = attentionScores.Scale(scaleValue);
+
         // Apply mask if provided
         if (mask != null)
         {
@@ -480,7 +484,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         );
 
         var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_Wk.Shape[_Wk.Shape.Length - 1]));
-        dAttentionScores = dAttentionScores.Scale(NumOps.Divide(NumOps.One, scaleFactor));
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor, NumOps);
+        dAttentionScores = dAttentionScores.Scale(scaleValue);
 
         var dK = _lastInput.Transpose([1, 0]).Multiply(dAttentionScores);
         var dQ = dAttentionScores.Multiply(_lastInput);
@@ -533,7 +538,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Apply scaling
         var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_Wk.Shape[_Wk.Shape.Length - 1]));
-        var scale = NumOps.Divide(NumOps.One, scaleFactor);
+        var scale = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor, NumOps);
         var scaleTensor = CreateScalarTensor(scale, attentionScores.Value.Shape);
         var scaleNode = Autodiff.TensorOperations<T>.Variable(scaleTensor, "scale", requiresGradient: false);
         var scaledScores = Autodiff.TensorOperations<T>.ElementwiseMultiply(attentionScores, scaleNode);
@@ -791,7 +796,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         T entropy = NumOps.Negate(sumPLogP);
 
         // Average entropy over all attention weights
-        entropy = NumOps.Divide(entropy, NumOps.FromDouble(_lastAttentionWeights.Length));
+        entropy = NumericalStabilityHelper.SafeDiv(entropy, NumOps.FromDouble(_lastAttentionWeights.Length), NumOps);
 
         // Store for diagnostics
         _lastAttentionEntropy = entropy;

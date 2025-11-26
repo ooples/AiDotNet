@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -31,16 +33,10 @@ namespace AiDotNet.LossFunctions;
 public class KullbackLeiblerDivergence<T> : LossFunctionBase<T>
 {
     /// <summary>
-    /// Small value to prevent numerical instability with log(0).
-    /// </summary>
-    private readonly T _epsilon;
-    
-    /// <summary>
     /// Initializes a new instance of the KullbackLeiblerDivergence class.
     /// </summary>
     public KullbackLeiblerDivergence()
     {
-        _epsilon = NumOps.FromDouble(1e-15);
     }
     
     /// <summary>
@@ -56,12 +52,9 @@ public class KullbackLeiblerDivergence<T> : LossFunctionBase<T>
         T sum = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
-            // Clamp predicted values to prevent division by zero or log(0)
-            T p = MathHelper.Clamp(predicted[i], _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
-            T a = MathHelper.Clamp(actual[i], _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
-            
             // KL(P||Q) = sum(P(i) * log(P(i)/Q(i))
-            sum = NumOps.Add(sum, NumOps.Multiply(a, NumOps.Log(NumOps.Divide(a, p))));
+            T ratio = NumericalStabilityHelper.SafeDiv(actual[i], predicted[i], NumericalStabilityHelper.SmallEpsilon);
+            sum = NumOps.Add(sum, NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(ratio, NumericalStabilityHelper.SmallEpsilon)));
         }
         
         return sum;
@@ -80,11 +73,8 @@ public class KullbackLeiblerDivergence<T> : LossFunctionBase<T>
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
-            // Clamp predicted values to prevent division by zero
-            T p = MathHelper.Clamp(predicted[i], _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
-            
             // The derivative of KL(P||Q) with respect to Q is -P/Q
-            derivative[i] = NumOps.Negate(NumOps.Divide(actual[i], p));
+            derivative[i] = NumOps.Negate(NumericalStabilityHelper.SafeDiv(actual[i], predicted[i], NumericalStabilityHelper.SmallEpsilon));
         }
         
         return derivative;

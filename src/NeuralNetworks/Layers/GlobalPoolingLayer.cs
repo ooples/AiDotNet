@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -309,7 +311,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
 
                 if (_poolingType == PoolingType.Average)
                 {
-                    pooledValue = NumOps.Divide(pooledValue, NumOps.FromDouble(height * width));
+                    pooledValue = NumericalStabilityHelper.SafeDiv(pooledValue, NumOps.FromDouble(height * width), NumOps);
                 }
 
                 output[b, 0, 0, c] = pooledValue;
@@ -390,7 +392,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
 
                 if (_poolingType == PoolingType.Average)
                 {
-                    T averageGradient = NumOps.Divide(gradientValue, NumOps.FromDouble(height * width));
+                    T averageGradient = NumericalStabilityHelper.SafeDiv(gradientValue, NumOps.FromDouble(height * width), NumOps);
                     for (int h = 0; h < height; h++)
                     {
                         for (int w = 0; w < width; w++)

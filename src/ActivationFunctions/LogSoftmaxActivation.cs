@@ -73,7 +73,7 @@ public class LogSoftmaxActivation<T> : ActivationFunctionBase<T>
 
         // Use SIMD-optimized Sum (8-12Ã— speedup for float)
         T sumExp = TensorPrimitivesHelper<T>.Sum(shiftedExp);
-        T logSumExp = NumOps.Add(NumOps.Log(sumExp), maxInput);
+        T logSumExp = NumOps.Add(NumericalStabilityHelper.SafeLog(sumExp, NumOps), maxInput);
 
         // Subtract logSumExp from each element using SIMD
         var logSumExpVector = new Vector<T>(Enumerable.Repeat(logSumExp, input.Length).ToArray());

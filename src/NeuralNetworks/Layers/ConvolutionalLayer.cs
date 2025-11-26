@@ -697,7 +697,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeWeights()
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (InputDepth * KernelSize * KernelSize + OutputDepth)));
+        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputDepth * KernelSize * KernelSize + OutputDepth), NumOps));
     
         for (int i = 0; i < OutputDepth; i++)
         {
