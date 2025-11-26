@@ -368,6 +368,11 @@ public enum OperationType
     /// </summary>
     GRUCell,
 
+    /// <summary>
+    /// LSTM cell operation for recurrent networks.
+    /// </summary>
+    LSTMCell,
+
     // Complex Number Operations
 
     /// <summary>

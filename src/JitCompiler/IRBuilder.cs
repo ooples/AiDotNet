@@ -304,6 +304,18 @@ public class IRBuilder
                 Gamma = GetParam<double>(node, "Gamma", 1.0)
             },
 
+            // Recurrent network operations
+            OperationType.GRUCell => new GRUCellOp
+            {
+                HiddenSize = GetParam<int>(node, "HiddenSize", 128),
+                HasBias = GetParam<bool>(node, "HasBias", true)
+            },
+            OperationType.LSTMCell => new LSTMCellOp
+            {
+                HiddenSize = GetParam<int>(node, "HiddenSize", 128),
+                HasBias = GetParam<bool>(node, "HasBias", true)
+            },
+
             _ => throw new InvalidOperationException($"Unsupported operation type: {node.OperationType}")
         };
 

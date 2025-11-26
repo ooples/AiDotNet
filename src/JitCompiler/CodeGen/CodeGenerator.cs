@@ -268,6 +268,10 @@ public class CodeGenerator
             Operations.GradAvgPool2DOp gradAvgPoolOp => GenerateGradAvgPool2DOp<T>(inputVars, gradAvgPoolOp),
             Operations.GradBatchNormOp gradBatchNormOp => GenerateGradBatchNormOp<T>(inputVars, gradBatchNormOp),
 
+            // Recurrent network operations
+            GRUCellOp gruCellOp => GenerateGRUCellOp<T>(inputVars, gruCellOp),
+            LSTMCellOp lstmCellOp => GenerateLSTMCellOp<T>(inputVars, lstmCellOp),
+
             _ => throw new NotImplementedException($"Code generation for {op.OpType} not yet implemented")
         };
 
@@ -619,5 +623,46 @@ public class CodeGenerator
             inputs[1], // normalized input or gamma/beta
             Expression.Constant(op.InputIndex),
             Expression.Constant(op.Epsilon));
+    }
+
+    /// <summary>
+    /// Generates code for GRU cell operation.
+    /// </summary>
+    /// <remarks>
+    /// GRU cell inputs: x, h, W_ih, W_hh, [b_ih, b_hh]
+    /// Outputs: new hidden state h_new
+    /// </remarks>
+    private Expression GenerateGRUCellOp<T>(ParameterExpression[] inputs, GRUCellOp op)
+    {
+        var method = typeof(RecurrentOps).GetMethod("GRUCell")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method,
+            inputs[0], // x (input)
+            inputs[1], // h (hidden state)
+            inputs[2], // W_ih (input-hidden weights)
+            inputs[3], // W_hh (hidden-hidden weights)
+            inputs.Length > 4 ? inputs[4] : Expression.Constant(null, typeof(Tensor<T>)), // b_ih
+            inputs.Length > 5 ? inputs[5] : Expression.Constant(null, typeof(Tensor<T>))  // b_hh
+        );
+    }
+
+    /// <summary>
+    /// Generates code for LSTM cell operation.
+    /// </summary>
+    /// <remarks>
+    /// LSTM cell inputs: x, h, c, W_ih, W_hh, [b_ih, b_hh]
+    /// Outputs: tuple of (new hidden state h_new, new cell state c_new)
+    /// </remarks>
+    private Expression GenerateLSTMCellOp<T>(ParameterExpression[] inputs, LSTMCellOp op)
+    {
+        var method = typeof(RecurrentOps).GetMethod("LSTMCell")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method,
+            inputs[0], // x (input)
+            inputs[1], // h (hidden state)
+            inputs[2], // c (cell state)
+            inputs[3], // W_ih (input-hidden weights)
+            inputs[4], // W_hh (hidden-hidden weights)
+            inputs.Length > 5 ? inputs[5] : Expression.Constant(null, typeof(Tensor<T>)), // b_ih
+            inputs.Length > 6 ? inputs[6] : Expression.Constant(null, typeof(Tensor<T>))  // b_hh
+        );
     }
 }
