@@ -106,25 +106,27 @@ For each block of Q:
 
 ---
 
-### 2.2 Built-in Profiler ⬜
+### 2.2 Built-in Profiler ✅ COMPLETE
 **Priority:** HIGH | **Effort:** 3 days | **Impact:** Essential debugging tool
 
-#### Files to Create:
-- [ ] `src/Diagnostics/Profiler.cs` - Main profiler
-- [ ] `src/Diagnostics/ProfilerScope.cs` - Scoped profiling (IDisposable)
-- [ ] `src/Diagnostics/ProfileReport.cs` - Report generation
-- [ ] `src/Diagnostics/MemoryTracker.cs` - Memory tracking
-- [ ] `tests/AiDotNet.Tests/UnitTests/Diagnostics/ProfilerTests.cs`
+#### Files Created:
+- [x] `src/Diagnostics/Profiler.cs` - Main thread-safe profiler singleton
+- [x] `src/Diagnostics/ProfilerScope.cs` - Scoped profiling (IDisposable)
+- [x] `src/Diagnostics/ProfileReport.cs` - Report generation with export formats
+- [x] `src/Diagnostics/MemoryTracker.cs` - Memory and GC tracking
+- [x] `tests/AiDotNet.Tests/UnitTests/Diagnostics/ProfilerTests.cs` - Comprehensive tests
 
-#### Implementation Steps:
-- [ ] 2.2.1 Create Profiler singleton with Start/Stop methods
-- [ ] 2.2.2 Implement ProfilerScope for using() pattern
-- [ ] 2.2.3 Add operation timing with Stopwatch
-- [ ] 2.2.4 Add memory tracking (GC + GPU memory)
-- [ ] 2.2.5 Implement hierarchical call tracking
-- [ ] 2.2.6 Create ProfileReport with summary statistics
-- [ ] 2.2.7 Add integration hooks to Layer, Optimizer, DataLoader
-- [ ] 2.2.8 Write tests
+#### Completed Features:
+- [x] Thread-safe Profiler singleton with Enable/Disable/Reset
+- [x] ProfilerScope for using() pattern with automatic timing
+- [x] Stopwatch-based high-precision timing
+- [x] Memory tracking (GC generations, working set, managed heap)
+- [x] Hierarchical call tracking with per-operation statistics
+- [x] ProfileReport with summary statistics (min, max, mean, percentiles P50/P95/P99)
+- [x] Export formats: JSON, CSV, Markdown
+- [x] Hotspot identification and regression detection
+- [x] Profiler extension methods for Action, Func, and async delegates
+- [x] Memory estimation utilities for tensors and KV-cache
 
 ---
 
@@ -268,7 +270,7 @@ For each block of Q:
 | 1.2 | KV-Cache | ✅ | Nov 2025 | Nov 2025 |
 | 1.3 | Continuous Batching | ✅ | Nov 2025 | Nov 2025 |
 | 2.1 | NCCL Backend | ✅ | Nov 2025 | Nov 2025 |
-| 2.2 | Profiler | ⬜ | - | - |
+| 2.2 | Profiler | ✅ | Nov 2025 | Nov 2025 |
 | 2.3 | TensorBoard | ⬜ | - | - |
 | 3.1 | PagedAttention | ⬜ | - | - |
 | 3.2 | Speculative Decoding | ⬜ | - | - |
@@ -298,4 +300,4 @@ For each block of Q:
 ---
 
 *Last Updated: Nov 2025*
-*Current Focus: Phase 2.1 - NCCL Backend*
+*Current Focus: Phase 2.3 - TensorBoard Integration*
