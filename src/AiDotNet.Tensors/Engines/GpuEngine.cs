@@ -432,39 +432,40 @@ public class GpuEngine : IEngine, IDisposable
 
     /// <summary>
     /// Checks if the specified type supports GPU acceleration based on INumericOperations.
+    /// Uses cached acceleration support from MathHelper to avoid repeated type checks.
     /// </summary>
     /// <typeparam name="T">The numeric type to check.</typeparam>
     /// <returns>True if the type supports GPU acceleration; otherwise, false.</returns>
     private static bool IsGpuAcceleratedType<T>() where T : unmanaged
     {
-        // Check common GPU-accelerated types
-        return typeof(T) == typeof(float) ||
-               typeof(T) == typeof(double) ||
-               typeof(T) == typeof(int) ||
-               typeof(T) == typeof(long);
+        // Use the cached acceleration support from INumericOperations
+        return MathHelper.SupportsGpuAcceleration<T>();
     }
 
     /// <summary>
     /// Checks if a type supports GPU acceleration for basic operations (add, subtract, multiply, divide).
+    /// Basic operations are supported for all GPU-accelerated types (float, double, int, long).
     /// </summary>
     private static bool SupportsGpuBasicOps<T>() where T : unmanaged =>
-        typeof(T) == typeof(float) || typeof(T) == typeof(double) ||
-        typeof(T) == typeof(int) || typeof(T) == typeof(long);
+        MathHelper.SupportsGpuAcceleration<T>();
 
     /// <summary>
     /// Checks if a type supports GPU acceleration for math operations (sqrt, power, exp, log).
+    /// Math operations require floating-point types (float, double).
     /// </summary>
     private static bool SupportsGpuMathOps<T>() where T : unmanaged =>
-        typeof(T) == typeof(float) || typeof(T) == typeof(double);
+        MathHelper.SupportsGpuAcceleration<T>() && MathHelper.IsFloatingPoint<T>();
 
     /// <summary>
     /// Checks if a type supports GPU acceleration for activation functions.
+    /// Activation functions require floating-point types (float, double).
     /// </summary>
     private static bool SupportsGpuActivations<T>() where T : unmanaged =>
-        typeof(T) == typeof(float) || typeof(T) == typeof(double);
+        MathHelper.SupportsGpuAcceleration<T>() && MathHelper.IsFloatingPoint<T>();
 
     /// <summary>
     /// Gets the appropriate memory pool for the specified type.
+    /// Memory pools are cached per-type for efficient GPU memory management.
     /// </summary>
     private GpuMemoryPool<T>? GetMemoryPool<T>() where T : unmanaged
     {
@@ -477,6 +478,7 @@ public class GpuEngine : IEngine, IDisposable
 
     /// <summary>
     /// Determines if GPU acceleration should be used for the given operation size and type.
+    /// Considers GPU health, minimum size threshold, and type support.
     /// </summary>
     private bool ShouldUseGpu<T>(int size, int threshold) where T : unmanaged =>
         SupportsGpu && _gpuHealthy && size >= threshold && IsGpuAcceleratedType<T>();
