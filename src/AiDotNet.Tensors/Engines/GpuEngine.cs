@@ -254,6 +254,12 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _sinhKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _coshKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _tanhKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _sigmoidKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _reluKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _geluKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _mishKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _swishKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, double, ArrayView<double>>? _eluKernelDouble;
 
     // Kernel cache for double operations (Phase B: US-GPU-005)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>? _addKernelDouble;
@@ -602,6 +608,51 @@ public class GpuEngine : IEngine, IDisposable
                     (index, input, result) => result[index] = XMath.Log(input[index]));
 
                 Console.WriteLine("[GpuEngine] Float kernels pre-compiled");
+
+                // Double activation function kernels
+                _sigmoidKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>>(
+                    (index, input, result) => {
+                        double x = input[index];
+                        result[index] = 1.0 / (1.0 + XMath.Exp(-x));
+                    });
+
+                _reluKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>>(
+                    (index, input, result) => {
+                        result[index] = XMath.Max(0.0, input[index]);
+                    });
+
+                _geluKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>>(
+                    (index, input, result) => {
+                        double x = input[index];
+                        result[index] = 0.5 * x * (1.0 + XMath.Tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)));
+                    });
+
+                _mishKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>>(
+                    (index, input, result) => {
+                        double x = input[index];
+                        double softplus = XMath.Log(1.0 + XMath.Exp(x));
+                        result[index] = x * XMath.Tanh(softplus);
+                    });
+
+                _swishKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>>(
+                    (index, input, result) => {
+                        double x = input[index];
+                        result[index] = x / (1.0 + XMath.Exp(-x));
+                    });
+
+                _eluKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, double, ArrayView<double>>(
+                    (index, input, alpha, result) => {
+                        double x = input[index];
+                        result[index] = x > 0.0 ? x : alpha * (XMath.Exp(x) - 1.0);
+                    });
+
+                Console.WriteLine("[GpuEngine] Double activation kernels pre-compiled");
 
                 // Pre-compile kernels for double operations (Phase B: US-GPU-005)
                 _addKernelDouble = _accelerator.LoadAutoGroupedKernel<
@@ -1461,9 +1512,16 @@ public class GpuEngine : IEngine, IDisposable
         if (a.Length < _thresholds.VectorSubtract)
             return _cpuFallback.Subtract(a, b);
 
-        if (typeof(T) == typeof(float) && SupportsGpu)
+        if (SupportsGpu && _gpuHealthy)
         {
-            return (Vector<T>)(object)SubtractGpu((Vector<float>)(object)a, (Vector<float>)(object)b);
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)SubtractGpu((Vector<float>)(object)a, (Vector<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)SubtractGpuDouble((Vector<double>)(object)a, (Vector<double>)(object)b);
+            if (typeof(T) == typeof(int))
+                return (Vector<T>)(object)SubtractGpuInt((Vector<int>)(object)a, (Vector<int>)(object)b);
+            if (typeof(T) == typeof(long))
+                return (Vector<T>)(object)SubtractGpuLong((Vector<long>)(object)a, (Vector<long>)(object)b);
         }
 
         return _cpuFallback.Subtract(a, b);
@@ -1475,9 +1533,16 @@ public class GpuEngine : IEngine, IDisposable
         if (a.Length < _thresholds.VectorMultiply)
             return _cpuFallback.Multiply(a, b);
 
-        if (typeof(T) == typeof(float) && SupportsGpu)
+        if (SupportsGpu && _gpuHealthy)
         {
-            return (Vector<T>)(object)MultiplyGpu((Vector<float>)(object)a, (Vector<float>)(object)b);
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)MultiplyGpu((Vector<float>)(object)a, (Vector<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)MultiplyGpuDouble((Vector<double>)(object)a, (Vector<double>)(object)b);
+            if (typeof(T) == typeof(int))
+                return (Vector<T>)(object)MultiplyGpuInt((Vector<int>)(object)a, (Vector<int>)(object)b);
+            if (typeof(T) == typeof(long))
+                return (Vector<T>)(object)MultiplyGpuLong((Vector<long>)(object)a, (Vector<long>)(object)b);
         }
 
         return _cpuFallback.Multiply(a, b);
@@ -1489,9 +1554,16 @@ public class GpuEngine : IEngine, IDisposable
         if (vector.Length < _thresholds.VectorMultiply)
             return _cpuFallback.Multiply(vector, scalar);
 
-        if (typeof(T) == typeof(float) && SupportsGpu)
+        if (SupportsGpu && _gpuHealthy)
         {
-            return (Vector<T>)(object)MultiplyScalarGpu((Vector<float>)(object)vector, (float)(object)scalar!);
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)MultiplyScalarGpu((Vector<float>)(object)vector, (float)(object)scalar!);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)MultiplyScalarGpuDouble((Vector<double>)(object)vector, (double)(object)scalar!);
+            if (typeof(T) == typeof(int))
+                return (Vector<T>)(object)MultiplyScalarGpuInt((Vector<int>)(object)vector, (int)(object)scalar!);
+            if (typeof(T) == typeof(long))
+                return (Vector<T>)(object)MultiplyScalarGpuLong((Vector<long>)(object)vector, (long)(object)scalar!);
         }
 
         return _cpuFallback.Multiply(vector, scalar);
@@ -1503,9 +1575,16 @@ public class GpuEngine : IEngine, IDisposable
         if (a.Length < _thresholds.VectorDivide)
             return _cpuFallback.Divide(a, b);
 
-        if (typeof(T) == typeof(float) && SupportsGpu)
+        if (SupportsGpu && _gpuHealthy)
         {
-            return (Vector<T>)(object)DivideGpu((Vector<float>)(object)a, (Vector<float>)(object)b);
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)DivideGpu((Vector<float>)(object)a, (Vector<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)DivideGpuDouble((Vector<double>)(object)a, (Vector<double>)(object)b);
+            if (typeof(T) == typeof(int))
+                return (Vector<T>)(object)DivideGpuInt((Vector<int>)(object)a, (Vector<int>)(object)b);
+            if (typeof(T) == typeof(long))
+                return (Vector<T>)(object)DivideGpuLong((Vector<long>)(object)a, (Vector<long>)(object)b);
         }
 
         return _cpuFallback.Divide(a, b);
@@ -1517,9 +1596,16 @@ public class GpuEngine : IEngine, IDisposable
         if (vector.Length < _thresholds.VectorDivide)
             return _cpuFallback.Divide(vector, scalar);
 
-        if (typeof(T) == typeof(float) && SupportsGpu)
+        if (SupportsGpu && _gpuHealthy)
         {
-            return (Vector<T>)(object)DivideScalarGpu((Vector<float>)(object)vector, (float)(object)scalar!);
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)DivideScalarGpu((Vector<float>)(object)vector, (float)(object)scalar!);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)DivideScalarGpuDouble((Vector<double>)(object)vector, (double)(object)scalar!);
+            if (typeof(T) == typeof(int))
+                return (Vector<T>)(object)DivideScalarGpuInt((Vector<int>)(object)vector, (int)(object)scalar!);
+            if (typeof(T) == typeof(long))
+                return (Vector<T>)(object)DivideScalarGpuLong((Vector<long>)(object)vector, (long)(object)scalar!);
         }
 
         return _cpuFallback.Divide(vector, scalar);
@@ -1531,9 +1617,12 @@ public class GpuEngine : IEngine, IDisposable
         if (vector.Length < _thresholds.VectorSqrt)
             return _cpuFallback.Sqrt(vector);
 
-        if (typeof(T) == typeof(float) && SupportsGpu)
+        if (SupportsGpu && _gpuHealthy)
         {
-            return (Vector<T>)(object)SqrtGpu((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)SqrtGpu((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)SqrtGpuDouble((Vector<double>)(object)vector);
         }
 
         return _cpuFallback.Sqrt(vector);
@@ -1545,9 +1634,12 @@ public class GpuEngine : IEngine, IDisposable
         if (vector.Length < _thresholds.VectorPower)
             return _cpuFallback.Power(vector, exponent);
 
-        if (typeof(T) == typeof(float) && SupportsGpu)
+        if (SupportsGpu && _gpuHealthy)
         {
-            return (Vector<T>)(object)PowerGpu((Vector<float>)(object)vector, (float)(object)exponent!);
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)PowerGpu((Vector<float>)(object)vector, (float)(object)exponent!);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)PowerGpuDouble((Vector<double>)(object)vector, (double)(object)exponent!);
         }
 
         return _cpuFallback.Power(vector, exponent);
@@ -2166,11 +2258,12 @@ public class GpuEngine : IEngine, IDisposable
         if (vector.Length < _thresholds.VectorSqrt)
             return _cpuFallback.Tanh(vector);
 
-        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        if (SupportsGpu && _gpuHealthy)
         {
-            var vectorFloat = (Vector<float>)(object)vector;
-            var resultFloat = TanhGpu(vectorFloat);
-            return (Vector<T>)(object)resultFloat;
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)TanhGpu((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)TanhGpuDouble((Vector<double>)(object)vector);
         }
 
         return _cpuFallback.Tanh(vector);
@@ -2182,11 +2275,12 @@ public class GpuEngine : IEngine, IDisposable
         if (vector.Length < _thresholds.VectorSqrt)
             return _cpuFallback.Sigmoid(vector);
 
-        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        if (SupportsGpu && _gpuHealthy)
         {
-            var vectorFloat = (Vector<float>)(object)vector;
-            var resultFloat = SigmoidGpu(vectorFloat);
-            return (Vector<T>)(object)resultFloat;
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)SigmoidGpu((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)SigmoidGpuDouble((Vector<double>)(object)vector);
         }
 
         return _cpuFallback.Sigmoid(vector);
@@ -2198,11 +2292,12 @@ public class GpuEngine : IEngine, IDisposable
         if (vector.Length < _thresholds.VectorSqrt)
             return _cpuFallback.ReLU(vector);
 
-        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        if (SupportsGpu && _gpuHealthy)
         {
-            var vectorFloat = (Vector<float>)(object)vector;
-            var resultFloat = ReLUGpu(vectorFloat);
-            return (Vector<T>)(object)resultFloat;
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)ReLUGpu((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)ReLUGpuDouble((Vector<double>)(object)vector);
         }
 
         return _cpuFallback.ReLU(vector);
@@ -2214,14 +2309,19 @@ public class GpuEngine : IEngine, IDisposable
         if (tensor.Length < _thresholds.MatrixMultiply)
             return _cpuFallback.Tanh(tensor);
 
-        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        if (SupportsGpu && _gpuHealthy)
         {
-            // Convert tensor to flat vector, process on GPU, convert back
             var flatVector = tensor.ToVector();
-            var flatVectorFloat = (Vector<float>)(object)flatVector;
-            var resultVectorFloat = TanhGpu(flatVectorFloat);
-            var resultVector = (Vector<T>)(object)resultVectorFloat;
-            return new Tensor<T>(tensor.Shape, resultVector);
+            if (typeof(T) == typeof(float))
+            {
+                var result = TanhGpu((Vector<float>)(object)flatVector);
+                return new Tensor<T>(tensor.Shape, (Vector<T>)(object)result);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var result = TanhGpuDouble((Vector<double>)(object)flatVector);
+                return new Tensor<T>(tensor.Shape, (Vector<T>)(object)result);
+            }
         }
 
         return _cpuFallback.Tanh(tensor);
@@ -2233,13 +2333,19 @@ public class GpuEngine : IEngine, IDisposable
         if (tensor.Length < _thresholds.MatrixMultiply)
             return _cpuFallback.Sigmoid(tensor);
 
-        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        if (SupportsGpu && _gpuHealthy)
         {
             var flatVector = tensor.ToVector();
-            var flatVectorFloat = (Vector<float>)(object)flatVector;
-            var resultVectorFloat = SigmoidGpu(flatVectorFloat);
-            var resultVector = (Vector<T>)(object)resultVectorFloat;
-            return new Tensor<T>(tensor.Shape, resultVector);
+            if (typeof(T) == typeof(float))
+            {
+                var result = SigmoidGpu((Vector<float>)(object)flatVector);
+                return new Tensor<T>(tensor.Shape, (Vector<T>)(object)result);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var result = SigmoidGpuDouble((Vector<double>)(object)flatVector);
+                return new Tensor<T>(tensor.Shape, (Vector<T>)(object)result);
+            }
         }
 
         return _cpuFallback.Sigmoid(tensor);
@@ -2251,13 +2357,19 @@ public class GpuEngine : IEngine, IDisposable
         if (tensor.Length < _thresholds.MatrixMultiply)
             return _cpuFallback.ReLU(tensor);
 
-        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        if (SupportsGpu && _gpuHealthy)
         {
             var flatVector = tensor.ToVector();
-            var flatVectorFloat = (Vector<float>)(object)flatVector;
-            var resultVectorFloat = ReLUGpu(flatVectorFloat);
-            var resultVector = (Vector<T>)(object)resultVectorFloat;
-            return new Tensor<T>(tensor.Shape, resultVector);
+            if (typeof(T) == typeof(float))
+            {
+                var result = ReLUGpu((Vector<float>)(object)flatVector);
+                return new Tensor<T>(tensor.Shape, (Vector<T>)(object)result);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var result = ReLUGpuDouble((Vector<double>)(object)flatVector);
+                return new Tensor<T>(tensor.Shape, (Vector<T>)(object)result);
+            }
         }
 
         return _cpuFallback.ReLU(tensor);
@@ -2269,11 +2381,12 @@ public class GpuEngine : IEngine, IDisposable
         if (vector.Length < _thresholds.VectorSqrt)
             return _cpuFallback.GELU(vector);
 
-        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        if (SupportsGpu && _gpuHealthy)
         {
-            var vectorFloat = (Vector<float>)(object)vector;
-            var resultFloat = GELUGpu(vectorFloat);
-            return (Vector<T>)(object)resultFloat;
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)GELUGpu((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)GELUGpuDouble((Vector<double>)(object)vector);
         }
 
         return _cpuFallback.GELU(vector);
@@ -2285,13 +2398,19 @@ public class GpuEngine : IEngine, IDisposable
         if (tensor.Length < _thresholds.MatrixMultiply)
             return _cpuFallback.GELU(tensor);
 
-        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        if (SupportsGpu && _gpuHealthy)
         {
             var flatVector = tensor.ToVector();
-            var flatVectorFloat = (Vector<float>)(object)flatVector;
-            var resultVectorFloat = GELUGpu(flatVectorFloat);
-            var resultVector = (Vector<T>)(object)resultVectorFloat;
-            return new Tensor<T>(tensor.Shape, resultVector);
+            if (typeof(T) == typeof(float))
+            {
+                var result = GELUGpu((Vector<float>)(object)flatVector);
+                return new Tensor<T>(tensor.Shape, (Vector<T>)(object)result);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var result = GELUGpuDouble((Vector<double>)(object)flatVector);
+                return new Tensor<T>(tensor.Shape, (Vector<T>)(object)result);
+            }
         }
 
         return _cpuFallback.GELU(tensor);
@@ -2303,11 +2422,12 @@ public class GpuEngine : IEngine, IDisposable
         if (vector.Length < _thresholds.VectorSqrt)
             return _cpuFallback.Mish(vector);
 
-        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        if (SupportsGpu && _gpuHealthy)
         {
-            var vectorFloat = (Vector<float>)(object)vector;
-            var resultFloat = MishGpu(vectorFloat);
-            return (Vector<T>)(object)resultFloat;
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)MishGpu((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)MishGpuDouble((Vector<double>)(object)vector);
         }
 
         return _cpuFallback.Mish(vector);
@@ -2319,13 +2439,19 @@ public class GpuEngine : IEngine, IDisposable
         if (tensor.Length < _thresholds.MatrixMultiply)
             return _cpuFallback.Mish(tensor);
 
-        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        if (SupportsGpu && _gpuHealthy)
         {
             var flatVector = tensor.ToVector();
-            var flatVectorFloat = (Vector<float>)(object)flatVector;
-            var resultVectorFloat = MishGpu(flatVectorFloat);
-            var resultVector = (Vector<T>)(object)resultVectorFloat;
-            return new Tensor<T>(tensor.Shape, resultVector);
+            if (typeof(T) == typeof(float))
+            {
+                var result = MishGpu((Vector<float>)(object)flatVector);
+                return new Tensor<T>(tensor.Shape, (Vector<T>)(object)result);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var result = MishGpuDouble((Vector<double>)(object)flatVector);
+                return new Tensor<T>(tensor.Shape, (Vector<T>)(object)result);
+            }
         }
 
         return _cpuFallback.Mish(tensor);
@@ -2337,11 +2463,12 @@ public class GpuEngine : IEngine, IDisposable
         if (vector.Length < _thresholds.VectorSqrt)
             return _cpuFallback.Swish(vector);
 
-        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        if (SupportsGpu && _gpuHealthy)
         {
-            var vectorFloat = (Vector<float>)(object)vector;
-            var resultFloat = SwishGpu(vectorFloat);
-            return (Vector<T>)(object)resultFloat;
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)SwishGpu((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)SwishGpuDouble((Vector<double>)(object)vector);
         }
 
         return _cpuFallback.Swish(vector);
@@ -2353,13 +2480,19 @@ public class GpuEngine : IEngine, IDisposable
         if (tensor.Length < _thresholds.MatrixMultiply)
             return _cpuFallback.Swish(tensor);
 
-        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        if (SupportsGpu && _gpuHealthy)
         {
             var flatVector = tensor.ToVector();
-            var flatVectorFloat = (Vector<float>)(object)flatVector;
-            var resultVectorFloat = SwishGpu(flatVectorFloat);
-            var resultVector = (Vector<T>)(object)resultVectorFloat;
-            return new Tensor<T>(tensor.Shape, resultVector);
+            if (typeof(T) == typeof(float))
+            {
+                var result = SwishGpu((Vector<float>)(object)flatVector);
+                return new Tensor<T>(tensor.Shape, (Vector<T>)(object)result);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var result = SwishGpuDouble((Vector<double>)(object)flatVector);
+                return new Tensor<T>(tensor.Shape, (Vector<T>)(object)result);
+            }
         }
 
         return _cpuFallback.Swish(tensor);
@@ -2371,12 +2504,12 @@ public class GpuEngine : IEngine, IDisposable
         if (vector.Length < _thresholds.VectorSqrt)
             return _cpuFallback.ELU(vector, alpha);
 
-        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        if (SupportsGpu && _gpuHealthy)
         {
-            var vectorFloat = (Vector<float>)(object)vector;
-            var alphaFloat = (float)alpha;
-            var resultFloat = ELUGpu(vectorFloat, alphaFloat);
-            return (Vector<T>)(object)resultFloat;
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)ELUGpu((Vector<float>)(object)vector, (float)alpha);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)ELUGpuDouble((Vector<double>)(object)vector, alpha);
         }
 
         return _cpuFallback.ELU(vector, alpha);
@@ -2388,14 +2521,19 @@ public class GpuEngine : IEngine, IDisposable
         if (tensor.Length < _thresholds.MatrixMultiply)
             return _cpuFallback.ELU(tensor, alpha);
 
-        if (SupportsGpu && _gpuHealthy && typeof(T) == typeof(float))
+        if (SupportsGpu && _gpuHealthy)
         {
             var flatVector = tensor.ToVector();
-            var flatVectorFloat = (Vector<float>)(object)flatVector;
-            var alphaFloat = (float)alpha;
-            var resultVectorFloat = ELUGpu(flatVectorFloat, alphaFloat);
-            var resultVector = (Vector<T>)(object)resultVectorFloat;
-            return new Tensor<T>(tensor.Shape, resultVector);
+            if (typeof(T) == typeof(float))
+            {
+                var result = ELUGpu((Vector<float>)(object)flatVector, (float)alpha);
+                return new Tensor<T>(tensor.Shape, (Vector<T>)(object)result);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var result = ELUGpuDouble((Vector<double>)(object)flatVector, alpha);
+                return new Tensor<T>(tensor.Shape, (Vector<T>)(object)result);
+            }
         }
 
         return _cpuFallback.ELU(tensor, alpha);
@@ -3193,6 +3331,189 @@ public class GpuEngine : IEngine, IDisposable
         {
             _memoryPoolFloat.Return(gpuInput);
             _memoryPoolFloat.Return(gpuResult);
+        }
+    }
+
+    // Double activation function GPU implementations
+    private Vector<double> TanhGpuDouble(Vector<double> input)
+    {
+        var result = new Vector<double>(input.Length);
+        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+            lock (_gpuLock)
+            {
+                (_tanhKernelDouble ?? throw new InvalidOperationException("Tanh kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length, gpuInput.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuInput);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> SigmoidGpuDouble(Vector<double> input)
+    {
+        var result = new Vector<double>(input.Length);
+        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+            lock (_gpuLock)
+            {
+                (_sigmoidKernelDouble ?? throw new InvalidOperationException("Sigmoid kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length, gpuInput.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuInput);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> ReLUGpuDouble(Vector<double> input)
+    {
+        var result = new Vector<double>(input.Length);
+        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+            lock (_gpuLock)
+            {
+                (_reluKernelDouble ?? throw new InvalidOperationException("ReLU kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length, gpuInput.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuInput);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> GELUGpuDouble(Vector<double> input)
+    {
+        var result = new Vector<double>(input.Length);
+        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+            lock (_gpuLock)
+            {
+                (_geluKernelDouble ?? throw new InvalidOperationException("GELU kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length, gpuInput.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuInput);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> MishGpuDouble(Vector<double> input)
+    {
+        var result = new Vector<double>(input.Length);
+        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+            lock (_gpuLock)
+            {
+                (_mishKernelDouble ?? throw new InvalidOperationException("Mish kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length, gpuInput.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuInput);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> SwishGpuDouble(Vector<double> input)
+    {
+        var result = new Vector<double>(input.Length);
+        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+            lock (_gpuLock)
+            {
+                (_swishKernelDouble ?? throw new InvalidOperationException("Swish kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length, gpuInput.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuInput);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> ELUGpuDouble(Vector<double> input, double alpha)
+    {
+        var result = new Vector<double>(input.Length);
+        var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+        try
+        {
+            gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+            lock (_gpuLock)
+            {
+                (_eluKernelDouble ?? throw new InvalidOperationException("ELU kernel not initialized"))(
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                    input.Length, gpuInput.View, alpha, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuInput);
+            _memoryPoolDouble.Return(gpuResult);
         }
     }
 
@@ -5055,6 +5376,192 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+    private Vector<double> SubtractGpuDouble(Vector<double> a, Vector<double> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<double>(a.Length);
+        var gpuA = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(a.Length);
+        var gpuB = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(b.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(a.Length);
+
+        try
+        {
+            gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+            gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+            lock (_gpuLock)
+            {
+                (_subtractKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuA);
+            _memoryPoolDouble.Return(gpuB);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> MultiplyGpuDouble(Vector<double> a, Vector<double> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<double>(a.Length);
+        var gpuA = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(a.Length);
+        var gpuB = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(b.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(a.Length);
+
+        try
+        {
+            gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+            gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+            lock (_gpuLock)
+            {
+                (_multiplyKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuA);
+            _memoryPoolDouble.Return(gpuB);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> MultiplyScalarGpuDouble(Vector<double> vector, double scalar)
+    {
+        var result = new Vector<double>(vector.Length);
+        var gpuVector = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(vector.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(vector.Length);
+
+        try
+        {
+            gpuVector.View.BaseView.CopyFromCPU(vector.AsSpan());
+            lock (_gpuLock)
+            {
+                (_multiplyScalarKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuVector);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> DivideGpuDouble(Vector<double> a, Vector<double> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<double>(a.Length);
+        var gpuA = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(a.Length);
+        var gpuB = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(b.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(a.Length);
+
+        try
+        {
+            gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+            gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+            lock (_gpuLock)
+            {
+                (_divideKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuA);
+            _memoryPoolDouble.Return(gpuB);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> DivideScalarGpuDouble(Vector<double> vector, double scalar)
+    {
+        var result = new Vector<double>(vector.Length);
+        var gpuVector = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(vector.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(vector.Length);
+
+        try
+        {
+            gpuVector.View.BaseView.CopyFromCPU(vector.AsSpan());
+            lock (_gpuLock)
+            {
+                (_divideScalarKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuVector);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> SqrtGpuDouble(Vector<double> vector)
+    {
+        var result = new Vector<double>(vector.Length);
+        var gpuVector = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(vector.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(vector.Length);
+
+        try
+        {
+            gpuVector.View.BaseView.CopyFromCPU(vector.AsSpan());
+            lock (_gpuLock)
+            {
+                (_sqrtKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuVector);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
+    private Vector<double> PowerGpuDouble(Vector<double> vector, double exponent)
+    {
+        var result = new Vector<double>(vector.Length);
+        var gpuVector = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(vector.Length);
+        var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(vector.Length);
+
+        try
+        {
+            gpuVector.View.BaseView.CopyFromCPU(vector.AsSpan());
+            lock (_gpuLock)
+            {
+                (_powerKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, exponent, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolDouble.Return(gpuVector);
+            _memoryPoolDouble.Return(gpuResult);
+        }
+    }
+
     private Vector<double> MaxGpuDouble(Vector<double> a, Vector<double> b)
     {
         if (a.Length != b.Length)
@@ -6222,6 +6729,284 @@ public class GpuEngine : IEngine, IDisposable
         {
             _memoryPoolLong.Return(gpuA);
             _memoryPoolLong.Return(gpuB);
+            _memoryPoolLong.Return(gpuResult);
+        }
+    }
+
+    // Int GPU operations for Subtract, Multiply, Divide
+    private Vector<int> SubtractGpuInt(Vector<int> a, Vector<int> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<int>(a.Length);
+        var gpuA = _memoryPoolInt!.Rent(a.Length);
+        var gpuB = _memoryPoolInt.Rent(b.Length);
+        var gpuResult = _memoryPoolInt.Rent(a.Length);
+
+        try
+        {
+            gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+            gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+            lock (_gpuLock)
+            {
+                (_subtractKernelInt ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolInt.Return(gpuA);
+            _memoryPoolInt.Return(gpuB);
+            _memoryPoolInt.Return(gpuResult);
+        }
+    }
+
+    private Vector<int> MultiplyGpuInt(Vector<int> a, Vector<int> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<int>(a.Length);
+        var gpuA = _memoryPoolInt!.Rent(a.Length);
+        var gpuB = _memoryPoolInt.Rent(b.Length);
+        var gpuResult = _memoryPoolInt.Rent(a.Length);
+
+        try
+        {
+            gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+            gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+            lock (_gpuLock)
+            {
+                (_multiplyKernelInt ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolInt.Return(gpuA);
+            _memoryPoolInt.Return(gpuB);
+            _memoryPoolInt.Return(gpuResult);
+        }
+    }
+
+    private Vector<int> MultiplyScalarGpuInt(Vector<int> vector, int scalar)
+    {
+        var result = new Vector<int>(vector.Length);
+        var gpuVector = _memoryPoolInt!.Rent(vector.Length);
+        var gpuResult = _memoryPoolInt.Rent(vector.Length);
+
+        try
+        {
+            gpuVector.View.BaseView.CopyFromCPU(vector.AsSpan());
+            lock (_gpuLock)
+            {
+                (_multiplyScalarKernelInt ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolInt.Return(gpuVector);
+            _memoryPoolInt.Return(gpuResult);
+        }
+    }
+
+    private Vector<int> DivideGpuInt(Vector<int> a, Vector<int> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<int>(a.Length);
+        var gpuA = _memoryPoolInt!.Rent(a.Length);
+        var gpuB = _memoryPoolInt.Rent(b.Length);
+        var gpuResult = _memoryPoolInt.Rent(a.Length);
+
+        try
+        {
+            gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+            gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+            lock (_gpuLock)
+            {
+                (_divideKernelInt ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolInt.Return(gpuA);
+            _memoryPoolInt.Return(gpuB);
+            _memoryPoolInt.Return(gpuResult);
+        }
+    }
+
+    private Vector<int> DivideScalarGpuInt(Vector<int> vector, int scalar)
+    {
+        var result = new Vector<int>(vector.Length);
+        var gpuVector = _memoryPoolInt!.Rent(vector.Length);
+        var gpuResult = _memoryPoolInt.Rent(vector.Length);
+
+        try
+        {
+            gpuVector.View.BaseView.CopyFromCPU(vector.AsSpan());
+            lock (_gpuLock)
+            {
+                (_divideScalarKernelInt ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolInt.Return(gpuVector);
+            _memoryPoolInt.Return(gpuResult);
+        }
+    }
+
+    // Long GPU operations for Subtract, Multiply, Divide
+    private Vector<long> SubtractGpuLong(Vector<long> a, Vector<long> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<long>(a.Length);
+        var gpuA = _memoryPoolLong!.Rent(a.Length);
+        var gpuB = _memoryPoolLong.Rent(b.Length);
+        var gpuResult = _memoryPoolLong.Rent(a.Length);
+
+        try
+        {
+            gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+            gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+            lock (_gpuLock)
+            {
+                (_subtractKernelLong ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolLong.Return(gpuA);
+            _memoryPoolLong.Return(gpuB);
+            _memoryPoolLong.Return(gpuResult);
+        }
+    }
+
+    private Vector<long> MultiplyGpuLong(Vector<long> a, Vector<long> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<long>(a.Length);
+        var gpuA = _memoryPoolLong!.Rent(a.Length);
+        var gpuB = _memoryPoolLong.Rent(b.Length);
+        var gpuResult = _memoryPoolLong.Rent(a.Length);
+
+        try
+        {
+            gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+            gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+            lock (_gpuLock)
+            {
+                (_multiplyKernelLong ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolLong.Return(gpuA);
+            _memoryPoolLong.Return(gpuB);
+            _memoryPoolLong.Return(gpuResult);
+        }
+    }
+
+    private Vector<long> MultiplyScalarGpuLong(Vector<long> vector, long scalar)
+    {
+        var result = new Vector<long>(vector.Length);
+        var gpuVector = _memoryPoolLong!.Rent(vector.Length);
+        var gpuResult = _memoryPoolLong.Rent(vector.Length);
+
+        try
+        {
+            gpuVector.View.BaseView.CopyFromCPU(vector.AsSpan());
+            lock (_gpuLock)
+            {
+                (_multiplyScalarKernelLong ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolLong.Return(gpuVector);
+            _memoryPoolLong.Return(gpuResult);
+        }
+    }
+
+    private Vector<long> DivideGpuLong(Vector<long> a, Vector<long> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vector lengths must match");
+
+        var result = new Vector<long>(a.Length);
+        var gpuA = _memoryPoolLong!.Rent(a.Length);
+        var gpuB = _memoryPoolLong.Rent(b.Length);
+        var gpuResult = _memoryPoolLong.Rent(a.Length);
+
+        try
+        {
+            gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+            gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+            lock (_gpuLock)
+            {
+                (_divideKernelLong ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, a.Length, gpuA.View, gpuB.View, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolLong.Return(gpuA);
+            _memoryPoolLong.Return(gpuB);
+            _memoryPoolLong.Return(gpuResult);
+        }
+    }
+
+    private Vector<long> DivideScalarGpuLong(Vector<long> vector, long scalar)
+    {
+        var result = new Vector<long>(vector.Length);
+        var gpuVector = _memoryPoolLong!.Rent(vector.Length);
+        var gpuResult = _memoryPoolLong.Rent(vector.Length);
+
+        try
+        {
+            gpuVector.View.BaseView.CopyFromCPU(vector.AsSpan());
+            lock (_gpuLock)
+            {
+                (_divideScalarKernelLong ?? throw new InvalidOperationException("Kernel not initialized"))((_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream, vector.Length, gpuVector.View, scalar, gpuResult.View);
+                (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+            }
+            gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+            return result;
+        }
+        finally
+        {
+            _memoryPoolLong.Return(gpuVector);
             _memoryPoolLong.Return(gpuResult);
         }
     }
