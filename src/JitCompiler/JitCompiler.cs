@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using AiDotNet.Autodiff;
 using AiDotNet.JitCompiler.CodeGen;
 using AiDotNet.JitCompiler.IR;
+using AiDotNet.JitCompiler.Memory;
 using AiDotNet.JitCompiler.Optimizations;
 using IOptimizationPass = AiDotNet.JitCompiler.Optimizations.IOptimizationPass;
 
@@ -46,13 +47,15 @@ namespace AiDotNet.JitCompiler;
 /// Expected speedup: 5-10x for typical neural networks
 /// </para>
 /// </remarks>
-public class JitCompiler
+public class JitCompiler : IDisposable
 {
     private readonly ConcurrentDictionary<int, object> _compiledGraphCache = new();
     private readonly IRBuilder _irBuilder = new();
     private readonly CodeGenerator _codeGenerator = new();
     private readonly List<IOptimizationPass> _optimizationPasses = new();
     private readonly JitCompilerOptions _options;
+    private readonly TensorPool? _tensorPool;
+    private bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="JitCompiler"/> class with default options.
@@ -100,6 +103,12 @@ public class JitCompiler
     public JitCompiler(JitCompilerOptions options)
     {
         _options = options;
+
+        // Initialize memory pooling if enabled
+        if (_options.EnableMemoryPooling)
+        {
+            _tensorPool = new TensorPool(_options.MaxPoolSizePerShape, _options.MaxElementsToPool);
+        }
 
         // Register optimization passes based on options
         if (_options.EnableConstantFolding)
@@ -683,6 +692,58 @@ public class JitCompiler
 
         return currentGraph;
     }
+
+    /// <summary>
+    /// Gets the tensor memory pool if memory pooling is enabled.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Access the memory pool for manual buffer management.
+    ///
+    /// Usually you don't need to use this directly - the JIT compiler manages memory
+    /// automatically. But if you want fine-grained control over memory allocation
+    /// in your code, you can use this pool.
+    ///
+    /// Example:
+    ///   if (jit.TensorPool != null)
+    ///   {
+    ///       var buffer = jit.TensorPool.Rent&lt;float&gt;(1000);
+    ///       // Use buffer...
+    ///       jit.TensorPool.Return(buffer);
+    ///   }
+    /// </para>
+    /// </remarks>
+    public TensorPool? TensorPool => _tensorPool;
+
+    /// <summary>
+    /// Gets statistics about the tensor memory pool.
+    /// </summary>
+    /// <returns>Pool statistics, or null if memory pooling is disabled.</returns>
+    public TensorPoolStats? GetTensorPoolStats()
+    {
+        return _tensorPool?.GetStats();
+    }
+
+    /// <summary>
+    /// Clears the tensor memory pool, releasing all cached buffers.
+    /// </summary>
+    public void ClearTensorPool()
+    {
+        _tensorPool?.Clear();
+    }
+
+    /// <summary>
+    /// Releases all resources used by the JIT compiler.
+    /// </summary>
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            _tensorPool?.Dispose();
+            ClearCache();
+            _disposed = true;
+        }
+        GC.SuppressFinalize(this);
+    }
 }
 
 /// <summary>
@@ -772,6 +833,36 @@ public class JitCompilerOptions
     /// </para>
     /// </remarks>
     public bool EnableSIMDHints { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to enable memory pooling for tensors.
+    /// Default: true.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Reuses tensor memory to reduce allocations.
+    ///
+    /// Memory pooling improves performance by:
+    /// - Reducing garbage collection pauses
+    /// - Avoiding repeated memory allocations
+    /// - Improving cache locality
+    ///
+    /// This is especially beneficial for training loops that create many temporary tensors.
+    /// </para>
+    /// </remarks>
+    public bool EnableMemoryPooling { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the maximum number of tensor buffers to keep per shape.
+    /// Default: 10.
+    /// </summary>
+    public int MaxPoolSizePerShape { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets the maximum total elements in a tensor to pool.
+    /// Tensors larger than this will not be pooled.
+    /// Default: 10,000,000 (about 40MB for float32).
+    /// </summary>
+    public int MaxElementsToPool { get; set; } = 10_000_000;
 }
 
 /// <summary>

@@ -194,6 +194,12 @@ Speedup comes from:
 - Loop unrolling and vectorization
 - More backward operations (Reshape, Concat, etc.)
 
+✅ **Memory Management**:
+- TensorPool for efficient buffer reuse
+- Automatic memory pooling in JIT compiler
+- Configurable pool sizes and limits
+- TensorRental for scoped buffer management
+
 ## Testing
 
 ```bash
