@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -258,10 +260,10 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// - Running statistics (mean and variance) initialized to 0.0 and 1.0
     /// </para>
     /// </remarks>
-    public BatchNormalizationLayer(int featureSize, double epsilon = 1e-5, double momentum = 0.9)
+    public BatchNormalizationLayer(int featureSize, double epsilon = NumericalStabilityHelper.LargeEpsilon, double momentum = 0.9)
         : base([featureSize], [featureSize])
     {
-        _epsilon = NumOps.FromDouble(epsilon);
+        _epsilon = NumericalStabilityHelper.GetEpsilon<T>(epsilon);
         _momentum = NumOps.FromDouble(momentum);
         _gamma = Vector<T>.CreateDefault(featureSize, NumOps.One);
         _beta = new Vector<T>(featureSize);

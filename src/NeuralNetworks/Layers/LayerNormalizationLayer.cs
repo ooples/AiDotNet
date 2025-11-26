@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -209,10 +211,10 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// For example, if your data has 128 features, you would use featureSize=128.
     /// </para>
     /// </remarks>
-    public LayerNormalizationLayer(int featureSize, double epsilon = 1e-5)
+    public LayerNormalizationLayer(int featureSize, double epsilon = NumericalStabilityHelper.LargeEpsilon)
         : base([featureSize], [featureSize])
     {
-        _epsilon = NumOps.FromDouble(epsilon);
+        _epsilon = NumericalStabilityHelper.GetEpsilon<T>(epsilon);
         _gamma = Vector<T>.CreateDefault(featureSize, NumOps.One);
         _beta = new Vector<T>(featureSize);
     }
