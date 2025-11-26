@@ -8684,96 +8684,117 @@ public static class TensorOperations<T>
         if (axis < 0)
             axis = shape.Length + axis;
 
-        if (shape.Length == 2 && axis == 1)
-        {
-            int batchSize = shape[0];
-            int features = shape[1];
-            var result = new Tensor<T>(shape);
-            var softmaxOutput = new Tensor<T>(shape);
+        if (axis < 0 || axis >= shape.Length)
+            throw new ArgumentOutOfRangeException(nameof(axis), $"Axis {axis} is out of range for tensor with {shape.Length} dimensions.");
 
-            for (int b = 0; b < batchSize; b++)
+        // Compute strides for N-dimensional iteration
+        int axisSize = shape[axis];
+        int outerSize = 1;
+        int innerSize = 1;
+        for (int i = 0; i < axis; i++)
+            outerSize *= shape[i];
+        for (int i = axis + 1; i < shape.Length; i++)
+            innerSize *= shape[i];
+
+        var result = new Tensor<T>(shape);
+        var softmaxOutput = new Tensor<T>(shape);
+
+        // Iterate over all positions in the non-axis dimensions
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int inner = 0; inner < innerSize; inner++)
             {
                 // Find max for numerical stability
-                var maxVal = a.Value[b, 0];
-                for (int f = 1; f < features; f++)
+                var maxVal = a.Value.GetValue(outer * axisSize * innerSize + inner);
+                for (int i = 1; i < axisSize; i++)
                 {
-                    if (numOps.GreaterThan(a.Value[b, f], maxVal))
-                        maxVal = a.Value[b, f];
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    var val = a.Value.GetValue(flatIdx);
+                    if (numOps.GreaterThan(val, maxVal))
+                        maxVal = val;
                 }
 
                 // Compute log-sum-exp
                 var logSumExp = numOps.Zero;
-                for (int f = 0; f < features; f++)
+                for (int i = 0; i < axisSize; i++)
                 {
-                    var shifted = numOps.Subtract(a.Value[b, f], maxVal);
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    var shifted = numOps.Subtract(a.Value.GetValue(flatIdx), maxVal);
                     logSumExp = numOps.Add(logSumExp, numOps.Exp(shifted));
                 }
                 logSumExp = numOps.Add(numOps.Log(logSumExp), maxVal);
 
                 // Compute log-softmax: x - log-sum-exp
-                for (int f = 0; f < features; f++)
+                for (int i = 0; i < axisSize; i++)
                 {
-                    result[b, f] = numOps.Subtract(a.Value[b, f], logSumExp);
-                    softmaxOutput[b, f] = numOps.Exp(result[b, f]);
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    var logSoftmaxVal = numOps.Subtract(a.Value.GetValue(flatIdx), logSumExp);
+                    result.SetValue(flatIdx, logSoftmaxVal);
+                    softmaxOutput.SetValue(flatIdx, numOps.Exp(logSoftmaxVal));
                 }
             }
+        }
 
-            void BackwardFunction(Tensor<T> gradient)
+        // Capture values for backward pass
+        int capturedAxis = axis;
+        int capturedAxisSize = axisSize;
+        int capturedOuterSize = outerSize;
+        int capturedInnerSize = innerSize;
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
             {
-                if (a.RequiresGradient)
+                var gradA = new Tensor<T>(shape);
+                for (int outer = 0; outer < capturedOuterSize; outer++)
                 {
-                    var gradA = new Tensor<T>(shape);
-                    for (int b = 0; b < batchSize; b++)
+                    for (int inner = 0; inner < capturedInnerSize; inner++)
                     {
-                        // Sum of gradients * softmax for this batch
+                        // Sum of gradients * softmax along axis
                         var gradSum = numOps.Zero;
-                        for (int f = 0; f < features; f++)
+                        for (int i = 0; i < capturedAxisSize; i++)
                         {
-                            gradSum = numOps.Add(gradSum, numOps.Multiply(gradient[b, f], softmaxOutput[b, f]));
+                            int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
+                            gradSum = numOps.Add(gradSum, numOps.Multiply(gradient.GetValue(flatIdx), softmaxOutput.GetValue(flatIdx)));
                         }
                         // Gradient: gradient - softmax * sum(gradient)
-                        for (int f = 0; f < features; f++)
+                        for (int i = 0; i < capturedAxisSize; i++)
                         {
-                            gradA[b, f] = numOps.Subtract(gradient[b, f],
-                                numOps.Multiply(softmaxOutput[b, f], gradSum));
-                        }
-                    }
-                    if (a.Gradient == null)
-                    {
-                        a.Gradient = gradA;
-                    }
-                    else
-                    {
-                        var existingGradient = a.Gradient;
-                        if (existingGradient != null)
-                        {
-                            a.Gradient = existingGradient.Add(gradA);
+                            int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
+                            gradA.SetValue(flatIdx, numOps.Subtract(gradient.GetValue(flatIdx),
+                                numOps.Multiply(softmaxOutput.GetValue(flatIdx), gradSum)));
                         }
                     }
                 }
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradA);
+                    }
+                }
             }
-
-            var node = new ComputationNode<T>(
-                value: result,
-                requiresGradient: a.RequiresGradient,
-                parents: new List<ComputationNode<T>> { a },
-                backwardFunction: BackwardFunction,
-                name: null);
-
-            node.OperationType = OperationType.LogSoftmax;
-            node.OperationParams = new Dictionary<string, object> { { "Axis", axis } };
-
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
-            return node;
         }
-        else
-        {
-            throw new NotImplementedException(
-                $"LogSoftmax is currently only implemented for 2D tensors along axis=-1. " +
-                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
-        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.LogSoftmax;
+        node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
     }
 
     /// <summary>
@@ -8797,97 +8818,116 @@ public static class TensorOperations<T>
         if (axis < 0)
             axis = shape.Length + axis;
 
-        if (shape.Length == 2 && axis == 1)
-        {
-            int batchSize = shape[0];
-            int features = shape[1];
-            var result = new Tensor<T>(shape);
+        if (axis < 0 || axis >= shape.Length)
+            throw new ArgumentOutOfRangeException(nameof(axis), $"Axis {axis} is out of range for tensor with {shape.Length} dimensions.");
 
-            for (int b = 0; b < batchSize; b++)
+        // Compute strides for N-dimensional iteration
+        int axisSize = shape[axis];
+        int outerSize = 1;
+        int innerSize = 1;
+        for (int i = 0; i < axis; i++)
+            outerSize *= shape[i];
+        for (int i = axis + 1; i < shape.Length; i++)
+            innerSize *= shape[i];
+
+        var result = new Tensor<T>(shape);
+
+        // Iterate over all positions in the non-axis dimensions
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int inner = 0; inner < innerSize; inner++)
             {
                 // Find max of -x for numerical stability (which is -min of x)
-                var maxNegVal = numOps.Negate(a.Value[b, 0]);
-                for (int f = 1; f < features; f++)
+                var maxNegVal = numOps.Negate(a.Value.GetValue(outer * axisSize * innerSize + inner));
+                for (int i = 1; i < axisSize; i++)
                 {
-                    var negVal = numOps.Negate(a.Value[b, f]);
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    var negVal = numOps.Negate(a.Value.GetValue(flatIdx));
                     if (numOps.GreaterThan(negVal, maxNegVal))
                         maxNegVal = negVal;
                 }
 
                 // Compute exp(-x - max(-x)) and sum
                 var expSum = numOps.Zero;
-                var expValues = new T[features];
-                for (int f = 0; f < features; f++)
+                var expValues = new T[axisSize];
+                for (int i = 0; i < axisSize; i++)
                 {
-                    var shifted = numOps.Subtract(numOps.Negate(a.Value[b, f]), maxNegVal);
-                    expValues[f] = numOps.Exp(shifted);
-                    expSum = numOps.Add(expSum, expValues[f]);
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    var shifted = numOps.Subtract(numOps.Negate(a.Value.GetValue(flatIdx)), maxNegVal);
+                    expValues[i] = numOps.Exp(shifted);
+                    expSum = numOps.Add(expSum, expValues[i]);
                 }
 
                 // Normalize
-                for (int f = 0; f < features; f++)
+                for (int i = 0; i < axisSize; i++)
                 {
-                    result[b, f] = numOps.Divide(expValues[f], expSum);
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    result.SetValue(flatIdx, numOps.Divide(expValues[i], expSum));
                 }
             }
+        }
 
-            void BackwardFunction(Tensor<T> gradient)
+        // Capture values for backward pass
+        int capturedAxis = axis;
+        int capturedAxisSize = axisSize;
+        int capturedOuterSize = outerSize;
+        int capturedInnerSize = innerSize;
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
             {
-                if (a.RequiresGradient)
+                // Same as softmax gradient but with negation
+                var gradA = new Tensor<T>(shape);
+                for (int outer = 0; outer < capturedOuterSize; outer++)
                 {
-                    // Same as softmax gradient but with negation
-                    var gradA = new Tensor<T>(shape);
-                    for (int b = 0; b < batchSize; b++)
+                    for (int inner = 0; inner < capturedInnerSize; inner++)
                     {
                         var dotProduct = numOps.Zero;
-                        for (int f = 0; f < features; f++)
+                        for (int i = 0; i < capturedAxisSize; i++)
                         {
+                            int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
                             dotProduct = numOps.Add(dotProduct,
-                                numOps.Multiply(gradient[b, f], result[b, f]));
+                                numOps.Multiply(gradient.GetValue(flatIdx), result.GetValue(flatIdx)));
                         }
-                        for (int f = 0; f < features; f++)
+                        for (int i = 0; i < capturedAxisSize; i++)
                         {
-                            var gradMinusDot = numOps.Subtract(gradient[b, f], dotProduct);
+                            int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
+                            var gradMinusDot = numOps.Subtract(gradient.GetValue(flatIdx), dotProduct);
                             // Negate because d(softmax(-x))/dx = -softmax(-x) * (gradient - dot)
-                            gradA[b, f] = numOps.Negate(numOps.Multiply(result[b, f], gradMinusDot));
-                        }
-                    }
-                    if (a.Gradient == null)
-                    {
-                        a.Gradient = gradA;
-                    }
-                    else
-                    {
-                        var existingGradient = a.Gradient;
-                        if (existingGradient != null)
-                        {
-                            a.Gradient = existingGradient.Add(gradA);
+                            gradA.SetValue(flatIdx, numOps.Negate(numOps.Multiply(result.GetValue(flatIdx), gradMinusDot)));
                         }
                     }
                 }
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradA);
+                    }
+                }
             }
-
-            var node = new ComputationNode<T>(
-                value: result,
-                requiresGradient: a.RequiresGradient,
-                parents: new List<ComputationNode<T>> { a },
-                backwardFunction: BackwardFunction,
-                name: null);
-
-            node.OperationType = OperationType.Softmin;
-            node.OperationParams = new Dictionary<string, object> { { "Axis", axis } };
-
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
-            return node;
         }
-        else
-        {
-            throw new NotImplementedException(
-                $"Softmin is currently only implemented for 2D tensors along axis=-1. " +
-                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
-        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.Softmin;
+        node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
     }
 
     /// <summary>
@@ -8910,96 +8950,116 @@ public static class TensorOperations<T>
         if (axis < 0)
             axis = shape.Length + axis;
 
-        if (shape.Length == 2 && axis == 1)
-        {
-            int batchSize = shape[0];
-            int features = shape[1];
-            var result = new Tensor<T>(shape);
-            var softminOutput = new Tensor<T>(shape);
+        if (axis < 0 || axis >= shape.Length)
+            throw new ArgumentOutOfRangeException(nameof(axis), $"Axis {axis} is out of range for tensor with {shape.Length} dimensions.");
 
-            for (int b = 0; b < batchSize; b++)
+        // Compute strides for N-dimensional iteration
+        int axisSize = shape[axis];
+        int outerSize = 1;
+        int innerSize = 1;
+        for (int i = 0; i < axis; i++)
+            outerSize *= shape[i];
+        for (int i = axis + 1; i < shape.Length; i++)
+            innerSize *= shape[i];
+
+        var result = new Tensor<T>(shape);
+        var softminOutput = new Tensor<T>(shape);
+
+        // Iterate over all positions in the non-axis dimensions
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int inner = 0; inner < innerSize; inner++)
             {
                 // Find max of -x for numerical stability
-                var maxNegVal = numOps.Negate(a.Value[b, 0]);
-                for (int f = 1; f < features; f++)
+                var maxNegVal = numOps.Negate(a.Value.GetValue(outer * axisSize * innerSize + inner));
+                for (int i = 1; i < axisSize; i++)
                 {
-                    var negVal = numOps.Negate(a.Value[b, f]);
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    var negVal = numOps.Negate(a.Value.GetValue(flatIdx));
                     if (numOps.GreaterThan(negVal, maxNegVal))
                         maxNegVal = negVal;
                 }
 
                 // Compute log-sum-exp of -x
                 var logSumExp = numOps.Zero;
-                for (int f = 0; f < features; f++)
+                for (int i = 0; i < axisSize; i++)
                 {
-                    var shifted = numOps.Subtract(numOps.Negate(a.Value[b, f]), maxNegVal);
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    var shifted = numOps.Subtract(numOps.Negate(a.Value.GetValue(flatIdx)), maxNegVal);
                     logSumExp = numOps.Add(logSumExp, numOps.Exp(shifted));
                 }
                 logSumExp = numOps.Add(numOps.Log(logSumExp), maxNegVal);
 
                 // Compute log-softmin: -x - log-sum-exp(-x)
-                for (int f = 0; f < features; f++)
+                for (int i = 0; i < axisSize; i++)
                 {
-                    result[b, f] = numOps.Subtract(numOps.Negate(a.Value[b, f]), logSumExp);
-                    softminOutput[b, f] = numOps.Exp(result[b, f]);
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    var logSoftminVal = numOps.Subtract(numOps.Negate(a.Value.GetValue(flatIdx)), logSumExp);
+                    result.SetValue(flatIdx, logSoftminVal);
+                    softminOutput.SetValue(flatIdx, numOps.Exp(logSoftminVal));
                 }
             }
+        }
 
-            void BackwardFunction(Tensor<T> gradient)
+        // Capture values for backward pass
+        int capturedAxis = axis;
+        int capturedAxisSize = axisSize;
+        int capturedOuterSize = outerSize;
+        int capturedInnerSize = innerSize;
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
             {
-                if (a.RequiresGradient)
+                var gradA = new Tensor<T>(shape);
+                for (int outer = 0; outer < capturedOuterSize; outer++)
                 {
-                    var gradA = new Tensor<T>(shape);
-                    for (int b = 0; b < batchSize; b++)
+                    for (int inner = 0; inner < capturedInnerSize; inner++)
                     {
                         var gradSum = numOps.Zero;
-                        for (int f = 0; f < features; f++)
+                        for (int i = 0; i < capturedAxisSize; i++)
                         {
-                            gradSum = numOps.Add(gradSum, numOps.Multiply(gradient[b, f], softminOutput[b, f]));
+                            int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
+                            gradSum = numOps.Add(gradSum, numOps.Multiply(gradient.GetValue(flatIdx), softminOutput.GetValue(flatIdx)));
                         }
-                        for (int f = 0; f < features; f++)
+                        for (int i = 0; i < capturedAxisSize; i++)
                         {
+                            int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
                             // Gradient: -(gradient - softmin * sum(gradient))
-                            gradA[b, f] = numOps.Negate(numOps.Subtract(gradient[b, f],
-                                numOps.Multiply(softminOutput[b, f], gradSum)));
-                        }
-                    }
-                    if (a.Gradient == null)
-                    {
-                        a.Gradient = gradA;
-                    }
-                    else
-                    {
-                        var existingGradient = a.Gradient;
-                        if (existingGradient != null)
-                        {
-                            a.Gradient = existingGradient.Add(gradA);
+                            gradA.SetValue(flatIdx, numOps.Negate(numOps.Subtract(gradient.GetValue(flatIdx),
+                                numOps.Multiply(softminOutput.GetValue(flatIdx), gradSum))));
                         }
                     }
                 }
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradA);
+                    }
+                }
             }
-
-            var node = new ComputationNode<T>(
-                value: result,
-                requiresGradient: a.RequiresGradient,
-                parents: new List<ComputationNode<T>> { a },
-                backwardFunction: BackwardFunction,
-                name: null);
-
-            node.OperationType = OperationType.LogSoftmin;
-            node.OperationParams = new Dictionary<string, object> { { "Axis", axis } };
-
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
-            return node;
         }
-        else
-        {
-            throw new NotImplementedException(
-                $"LogSoftmin is currently only implemented for 2D tensors along axis=-1. " +
-                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
-        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.LogSoftmin;
+        node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
     }
 
     /// <summary>
@@ -9289,137 +9349,164 @@ public static class TensorOperations<T>
         if (axis < 0)
             axis = shape.Length + axis;
 
-        if (shape.Length == 2 && axis == 1)
-        {
-            int batchSize = shape[0];
-            int features = shape[1];
-            var result = new Tensor<T>(shape);
-            var norms = new T[batchSize];
-            var normalized = new Tensor<T>(shape);
-            var softmaxOutput = new Tensor<T>(shape);
+        if (axis < 0 || axis >= shape.Length)
+            throw new ArgumentOutOfRangeException(nameof(axis), $"Axis {axis} is out of range for tensor with {shape.Length} dimensions.");
 
-            for (int b = 0; b < batchSize; b++)
+        // Compute strides for N-dimensional iteration
+        int axisSize = shape[axis];
+        int outerSize = 1;
+        int innerSize = 1;
+        for (int i = 0; i < axis; i++)
+            outerSize *= shape[i];
+        for (int i = axis + 1; i < shape.Length; i++)
+            innerSize *= shape[i];
+
+        var result = new Tensor<T>(shape);
+        var norms = new T[outerSize * innerSize];
+        var normalized = new Tensor<T>(shape);
+
+        // Iterate over all positions in the non-axis dimensions
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int inner = 0; inner < innerSize; inner++)
             {
+                int normIdx = outer * innerSize + inner;
+
                 // Compute L2 norm
                 var sumSquares = numOps.Zero;
-                for (int f = 0; f < features; f++)
+                for (int i = 0; i < axisSize; i++)
                 {
-                    var val = a.Value[b, f];
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    var val = a.Value.GetValue(flatIdx);
                     sumSquares = numOps.Add(sumSquares, numOps.Multiply(val, val));
                 }
-                norms[b] = numOps.Sqrt(sumSquares);
+                norms[normIdx] = numOps.Sqrt(sumSquares);
 
                 // Prevent division by zero
-                var norm = numOps.GreaterThan(norms[b], numOps.FromDouble(1e-12))
-                    ? norms[b]
+                var norm = numOps.GreaterThan(norms[normIdx], numOps.FromDouble(1e-12))
+                    ? norms[normIdx]
                     : numOps.FromDouble(1e-12);
 
                 // L2 normalize
-                for (int f = 0; f < features; f++)
+                for (int i = 0; i < axisSize; i++)
                 {
-                    normalized[b, f] = numOps.Divide(a.Value[b, f], norm);
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    normalized.SetValue(flatIdx, numOps.Divide(a.Value.GetValue(flatIdx), norm));
                 }
 
                 // Apply softmax to normalized values
-                var maxVal = normalized[b, 0];
-                for (int f = 1; f < features; f++)
+                var maxVal = normalized.GetValue(outer * axisSize * innerSize + inner);
+                for (int i = 1; i < axisSize; i++)
                 {
-                    if (numOps.GreaterThan(normalized[b, f], maxVal))
-                        maxVal = normalized[b, f];
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    var val = normalized.GetValue(flatIdx);
+                    if (numOps.GreaterThan(val, maxVal))
+                        maxVal = val;
                 }
 
                 var expSum = numOps.Zero;
-                for (int f = 0; f < features; f++)
+                var expValues = new T[axisSize];
+                for (int i = 0; i < axisSize; i++)
                 {
-                    var shifted = numOps.Subtract(normalized[b, f], maxVal);
-                    softmaxOutput[b, f] = numOps.Exp(shifted);
-                    expSum = numOps.Add(expSum, softmaxOutput[b, f]);
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    var shifted = numOps.Subtract(normalized.GetValue(flatIdx), maxVal);
+                    expValues[i] = numOps.Exp(shifted);
+                    expSum = numOps.Add(expSum, expValues[i]);
                 }
 
-                for (int f = 0; f < features; f++)
+                for (int i = 0; i < axisSize; i++)
                 {
-                    result[b, f] = numOps.Divide(softmaxOutput[b, f], expSum);
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    result.SetValue(flatIdx, numOps.Divide(expValues[i], expSum));
                 }
             }
+        }
 
-            void BackwardFunction(Tensor<T> gradient)
+        // Capture values for backward pass
+        int capturedAxis = axis;
+        int capturedAxisSize = axisSize;
+        int capturedOuterSize = outerSize;
+        int capturedInnerSize = innerSize;
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
             {
-                if (a.RequiresGradient)
-                {
-                    var gradA = new Tensor<T>(shape);
+                var gradA = new Tensor<T>(shape);
 
-                    for (int b = 0; b < batchSize; b++)
+                for (int outer = 0; outer < capturedOuterSize; outer++)
+                {
+                    for (int inner = 0; inner < capturedInnerSize; inner++)
                     {
-                        var norm = numOps.GreaterThan(norms[b], numOps.FromDouble(1e-12))
-                            ? norms[b]
+                        int normIdx = outer * capturedInnerSize + inner;
+                        var norm = numOps.GreaterThan(norms[normIdx], numOps.FromDouble(1e-12))
+                            ? norms[normIdx]
                             : numOps.FromDouble(1e-12);
                         var normCubed = numOps.Multiply(norm, numOps.Multiply(norm, norm));
 
                         // Softmax Jacobian-vector product
                         var dotProduct = numOps.Zero;
-                        for (int f = 0; f < features; f++)
+                        for (int i = 0; i < capturedAxisSize; i++)
                         {
-                            dotProduct = numOps.Add(dotProduct, numOps.Multiply(gradient[b, f], result[b, f]));
+                            int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
+                            dotProduct = numOps.Add(dotProduct, numOps.Multiply(gradient.GetValue(flatIdx), result.GetValue(flatIdx)));
                         }
 
                         // Gradient through softmax
-                        var softmaxGrad = new T[features];
-                        for (int f = 0; f < features; f++)
+                        var softmaxGrad = new T[capturedAxisSize];
+                        for (int i = 0; i < capturedAxisSize; i++)
                         {
-                            softmaxGrad[f] = numOps.Multiply(result[b, f],
-                                numOps.Subtract(gradient[b, f], dotProduct));
+                            int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
+                            softmaxGrad[i] = numOps.Multiply(result.GetValue(flatIdx),
+                                numOps.Subtract(gradient.GetValue(flatIdx), dotProduct));
                         }
 
                         // Gradient through L2 normalization
                         var dotNorm = numOps.Zero;
-                        for (int f = 0; f < features; f++)
+                        for (int i = 0; i < capturedAxisSize; i++)
                         {
+                            int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
                             dotNorm = numOps.Add(dotNorm,
-                                numOps.Multiply(softmaxGrad[f], a.Value[b, f]));
+                                numOps.Multiply(softmaxGrad[i], a.Value.GetValue(flatIdx)));
                         }
 
-                        for (int f = 0; f < features; f++)
+                        for (int i = 0; i < capturedAxisSize; i++)
                         {
-                            var term1 = numOps.Divide(softmaxGrad[f], norm);
+                            int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
+                            var term1 = numOps.Divide(softmaxGrad[i], norm);
                             var term2 = numOps.Divide(
-                                numOps.Multiply(a.Value[b, f], dotNorm),
+                                numOps.Multiply(a.Value.GetValue(flatIdx), dotNorm),
                                 normCubed);
-                            gradA[b, f] = numOps.Subtract(term1, term2);
+                            gradA.SetValue(flatIdx, numOps.Subtract(term1, term2));
                         }
-                    }
-
-                    if (a.Gradient == null)
-                    {
-                        a.Gradient = gradA;
-                    }
-                    else
-                    {
-                        a.Gradient = a.Gradient.Add(gradA);
                     }
                 }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    a.Gradient = a.Gradient.Add(gradA);
+                }
             }
-
-            var node = new ComputationNode<T>(
-                value: result,
-                requiresGradient: a.RequiresGradient,
-                parents: new List<ComputationNode<T>> { a },
-                backwardFunction: BackwardFunction,
-                name: null);
-
-            node.OperationType = OperationType.SphericalSoftmax;
-            node.OperationParams = new Dictionary<string, object> { { "Axis", axis } };
-
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
-            return node;
         }
-        else
-        {
-            throw new NotImplementedException(
-                $"SphericalSoftmax is currently only implemented for 2D tensors along axis=-1. " +
-                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
-        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.SphericalSoftmax;
+        node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
     }
 
     /// <summary>
@@ -9446,26 +9533,38 @@ public static class TensorOperations<T>
         if (axis < 0)
             axis = shape.Length + axis;
 
-        if (shape.Length == 2 && axis == 1)
+        if (axis < 0 || axis >= shape.Length)
+            throw new ArgumentOutOfRangeException(nameof(axis), $"Axis {axis} is out of range for tensor with {shape.Length} dimensions.");
+
+        // Compute strides for N-dimensional iteration
+        int axisSize = shape[axis];
+        int outerSize = 1;
+        int innerSize = 1;
+        for (int i = 0; i < axis; i++)
+            outerSize *= shape[i];
+        for (int i = axis + 1; i < shape.Length; i++)
+            innerSize *= shape[i];
+
+        var result = new Tensor<T>(shape);
+        var taylorExpValues = new Tensor<T>(shape);
+
+        // Precompute factorials
+        var factorials = new double[order + 1];
+        factorials[0] = 1;
+        for (int i = 1; i <= order; i++)
+            factorials[i] = factorials[i - 1] * i;
+
+        // Iterate over all positions in the non-axis dimensions
+        for (int outer = 0; outer < outerSize; outer++)
         {
-            int batchSize = shape[0];
-            int features = shape[1];
-            var result = new Tensor<T>(shape);
-            var taylorExpValues = new Tensor<T>(shape);
-
-            // Precompute factorials
-            var factorials = new double[order + 1];
-            factorials[0] = 1;
-            for (int i = 1; i <= order; i++)
-                factorials[i] = factorials[i - 1] * i;
-
-            for (int b = 0; b < batchSize; b++)
+            for (int inner = 0; inner < innerSize; inner++)
             {
-                // Compute Taylor approximation of exp for each feature
+                // Compute Taylor approximation of exp for each position along axis
                 var expSum = numOps.Zero;
-                for (int f = 0; f < features; f++)
+                for (int i = 0; i < axisSize; i++)
                 {
-                    var x = a.Value[b, f];
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    var x = a.Value.GetValue(flatIdx);
                     var taylorExp = numOps.One; // Start with 1
                     var xPower = numOps.One;
 
@@ -9481,52 +9580,66 @@ public static class TensorOperations<T>
                         ? taylorExp
                         : numOps.FromDouble(1e-10);
 
-                    taylorExpValues[b, f] = taylorExp;
+                    taylorExpValues.SetValue(flatIdx, taylorExp);
                     expSum = numOps.Add(expSum, taylorExp);
                 }
 
                 // Normalize
-                for (int f = 0; f < features; f++)
+                for (int i = 0; i < axisSize; i++)
                 {
-                    result[b, f] = numOps.Divide(taylorExpValues[b, f], expSum);
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    result.SetValue(flatIdx, numOps.Divide(taylorExpValues.GetValue(flatIdx), expSum));
                 }
             }
+        }
 
-            void BackwardFunction(Tensor<T> gradient)
+        // Capture values for backward pass
+        int capturedAxis = axis;
+        int capturedOrder = order;
+        int capturedAxisSize = axisSize;
+        int capturedOuterSize = outerSize;
+        int capturedInnerSize = innerSize;
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
             {
-                if (a.RequiresGradient)
-                {
-                    var gradA = new Tensor<T>(shape);
+                var gradA = new Tensor<T>(shape);
 
-                    for (int b = 0; b < batchSize; b++)
+                for (int outer = 0; outer < capturedOuterSize; outer++)
+                {
+                    for (int inner = 0; inner < capturedInnerSize; inner++)
                     {
                         // Compute sum for normalization denominator
                         var expSum = numOps.Zero;
-                        for (int f = 0; f < features; f++)
+                        for (int i = 0; i < capturedAxisSize; i++)
                         {
-                            expSum = numOps.Add(expSum, taylorExpValues[b, f]);
+                            int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
+                            expSum = numOps.Add(expSum, taylorExpValues.GetValue(flatIdx));
                         }
 
                         // Softmax-style Jacobian: s_i * (δ_ij - s_j)
                         var dotProduct = numOps.Zero;
-                        for (int f = 0; f < features; f++)
+                        for (int i = 0; i < capturedAxisSize; i++)
                         {
+                            int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
                             dotProduct = numOps.Add(dotProduct,
-                                numOps.Multiply(gradient[b, f], result[b, f]));
+                                numOps.Multiply(gradient.GetValue(flatIdx), result.GetValue(flatIdx)));
                         }
 
-                        for (int f = 0; f < features; f++)
+                        for (int i = 0; i < capturedAxisSize; i++)
                         {
+                            int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
                             // Softmax gradient part
-                            var softmaxGrad = numOps.Multiply(result[b, f],
-                                numOps.Subtract(gradient[b, f], dotProduct));
+                            var softmaxGrad = numOps.Multiply(result.GetValue(flatIdx),
+                                numOps.Subtract(gradient.GetValue(flatIdx), dotProduct));
 
                             // Taylor exp derivative: d/dx[1 + x + x²/2! + ...] = 1 + x + x²/2! + ... (almost)
                             // Actually: d/dx[Taylor_n(x)] = Taylor_{n-1}(x) for exp
-                            var x = a.Value[b, f];
+                            var x = a.Value.GetValue(flatIdx);
                             var taylorExpDeriv = numOps.One;
                             var xPower = numOps.One;
-                            for (int n = 1; n < order; n++)
+                            for (int n = 1; n < capturedOrder; n++)
                             {
                                 xPower = numOps.Multiply(xPower, x);
                                 var term = numOps.Divide(xPower, numOps.FromDouble(factorials[n]));
@@ -9535,42 +9648,36 @@ public static class TensorOperations<T>
 
                             // Chain rule: d(softmax)/d(taylorExp) * d(taylorExp)/dx
                             var normFactor = numOps.Divide(taylorExpDeriv, expSum);
-                            gradA[b, f] = numOps.Multiply(softmaxGrad, normFactor);
+                            gradA.SetValue(flatIdx, numOps.Multiply(softmaxGrad, normFactor));
                         }
                     }
+                }
 
-                    if (a.Gradient == null)
-                    {
-                        a.Gradient = gradA;
-                    }
-                    else
-                    {
-                        a.Gradient = a.Gradient.Add(gradA);
-                    }
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    a.Gradient = a.Gradient.Add(gradA);
                 }
             }
-
-            var node = new ComputationNode<T>(
-                value: result,
-                requiresGradient: a.RequiresGradient,
-                parents: new List<ComputationNode<T>> { a },
-                backwardFunction: BackwardFunction,
-                name: null);
-
-            node.OperationType = OperationType.TaylorSoftmax;
-            node.OperationParams = new Dictionary<string, object> { { "Order", order }, { "Axis", axis } };
-
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
-            return node;
         }
-        else
-        {
-            throw new NotImplementedException(
-                $"TaylorSoftmax is currently only implemented for 2D tensors along axis=-1. " +
-                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
-        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.TaylorSoftmax;
+        node.OperationParams = new Dictionary<string, object> { { "Order", capturedOrder }, { "Axis", capturedAxis } };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
     }
 
     /// <summary>
@@ -9595,20 +9702,32 @@ public static class TensorOperations<T>
         if (axis < 0)
             axis = shape.Length + axis;
 
-        if (shape.Length == 2 && axis == 1)
-        {
-            int batchSize = shape[0];
-            int features = shape[1];
-            var result = new Tensor<T>(shape);
-            var supportMasks = new bool[batchSize, features]; // Track support set for backward
+        if (axis < 0 || axis >= shape.Length)
+            throw new ArgumentOutOfRangeException(nameof(axis), $"Axis {axis} is out of range for tensor with {shape.Length} dimensions.");
 
-            for (int b = 0; b < batchSize; b++)
+        // Compute strides for N-dimensional iteration
+        int axisSize = shape[axis];
+        int outerSize = 1;
+        int innerSize = 1;
+        for (int i = 0; i < axis; i++)
+            outerSize *= shape[i];
+        for (int i = axis + 1; i < shape.Length; i++)
+            innerSize *= shape[i];
+
+        var result = new Tensor<T>(shape);
+        var supportMasks = new bool[outerSize * innerSize * axisSize]; // Track support set for backward
+
+        // Iterate over all positions in the non-axis dimensions
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int inner = 0; inner < innerSize; inner++)
             {
-                // Extract row and sort indices by value (descending)
+                // Extract values along axis and sort indices by value (descending)
                 var indexed = new List<(T value, int idx)>();
-                for (int f = 0; f < features; f++)
+                for (int i = 0; i < axisSize; i++)
                 {
-                    indexed.Add((a.Value[b, f], f));
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    indexed.Add((a.Value.GetValue(flatIdx), i));
                 }
 
                 // Sort by value descending
@@ -9624,7 +9743,7 @@ public static class TensorOperations<T>
                 int k = 0;
                 var tau = numOps.Zero;
 
-                for (int i = 0; i < features; i++)
+                for (int i = 0; i < axisSize; i++)
                 {
                     cumSum = numOps.Add(cumSum, indexed[i].value);
                     var avg = numOps.Divide(
@@ -9643,48 +9762,59 @@ public static class TensorOperations<T>
                 }
 
                 // If we didn't break early, recalculate tau with all elements
-                if (k == features)
+                if (k == axisSize)
                 {
                     tau = numOps.Divide(
                         numOps.Subtract(cumSum, numOps.One),
-                        numOps.FromDouble(features));
+                        numOps.FromDouble(axisSize));
                 }
 
                 // Compute output and support mask
-                for (int f = 0; f < features; f++)
+                for (int i = 0; i < axisSize; i++)
                 {
-                    var diff = numOps.Subtract(a.Value[b, f], tau);
+                    int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
+                    var diff = numOps.Subtract(a.Value.GetValue(flatIdx), tau);
                     if (numOps.GreaterThan(diff, numOps.Zero))
                     {
-                        result[b, f] = diff;
-                        supportMasks[b, f] = true;
+                        result.SetValue(flatIdx, diff);
+                        supportMasks[flatIdx] = true;
                     }
                     else
                     {
-                        result[b, f] = numOps.Zero;
-                        supportMasks[b, f] = false;
+                        result.SetValue(flatIdx, numOps.Zero);
+                        supportMasks[flatIdx] = false;
                     }
                 }
             }
+        }
 
-            void BackwardFunction(Tensor<T> gradient)
+        // Capture values for backward pass
+        int capturedAxis = axis;
+        int capturedAxisSize = axisSize;
+        int capturedOuterSize = outerSize;
+        int capturedInnerSize = innerSize;
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
             {
-                if (a.RequiresGradient)
-                {
-                    var gradA = new Tensor<T>(shape);
+                var gradA = new Tensor<T>(shape);
 
-                    for (int b = 0; b < batchSize; b++)
+                for (int outer = 0; outer < capturedOuterSize; outer++)
+                {
+                    for (int inner = 0; inner < capturedInnerSize; inner++)
                     {
                         // Count support size and compute mean of gradients on support
                         int supportSize = 0;
                         var gradSum = numOps.Zero;
 
-                        for (int f = 0; f < features; f++)
+                        for (int i = 0; i < capturedAxisSize; i++)
                         {
-                            if (supportMasks[b, f])
+                            int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
+                            if (supportMasks[flatIdx])
                             {
                                 supportSize++;
-                                gradSum = numOps.Add(gradSum, gradient[b, f]);
+                                gradSum = numOps.Add(gradSum, gradient.GetValue(flatIdx));
                             }
                         }
 
@@ -9693,52 +9823,47 @@ public static class TensorOperations<T>
                         {
                             var gradMean = numOps.Divide(gradSum, numOps.FromDouble(supportSize));
 
-                            for (int f = 0; f < features; f++)
+                            for (int i = 0; i < capturedAxisSize; i++)
                             {
-                                if (supportMasks[b, f])
+                                int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
+                                if (supportMasks[flatIdx])
                                 {
-                                    gradA[b, f] = numOps.Subtract(gradient[b, f], gradMean);
+                                    gradA.SetValue(flatIdx, numOps.Subtract(gradient.GetValue(flatIdx), gradMean));
                                 }
                                 else
                                 {
-                                    gradA[b, f] = numOps.Zero;
+                                    gradA.SetValue(flatIdx, numOps.Zero);
                                 }
                             }
                         }
                     }
+                }
 
-                    if (a.Gradient == null)
-                    {
-                        a.Gradient = gradA;
-                    }
-                    else
-                    {
-                        a.Gradient = a.Gradient.Add(gradA);
-                    }
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    a.Gradient = a.Gradient.Add(gradA);
                 }
             }
-
-            var node = new ComputationNode<T>(
-                value: result,
-                requiresGradient: a.RequiresGradient,
-                parents: new List<ComputationNode<T>> { a },
-                backwardFunction: BackwardFunction,
-                name: null);
-
-            node.OperationType = OperationType.Sparsemax;
-            node.OperationParams = new Dictionary<string, object> { { "Axis", axis } };
-
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
-            return node;
         }
-        else
-        {
-            throw new NotImplementedException(
-                $"Sparsemax is currently only implemented for 2D tensors along axis=-1. " +
-                $"Got shape=[{string.Join(", ", shape)}], axis={axis}");
-        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.Sparsemax;
+        node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
     }
 
     /// <summary>
