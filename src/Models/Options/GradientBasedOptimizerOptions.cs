@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
@@ -67,4 +69,81 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// </para>
     /// </remarks>
     public IRegularization<T, TInput, TOutput> Regularization { get; set; } = new L2Regularization<T, TInput, TOutput>();
+
+    /// <summary>
+    /// Gets or sets whether gradient clipping is enabled.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Gradient clipping helps prevent exploding gradients during training by limiting the magnitude
+    /// of gradients. This is particularly important for deep networks and recurrent neural networks.
+    /// </para>
+    /// <para><b>For Beginners:</b> Sometimes during training, gradients can become extremely large,
+    /// causing the model to take huge steps that destabilize learning. Gradient clipping is like
+    /// putting a speed limit on these updates to keep training stable.
+    /// </para>
+    /// </remarks>
+    public bool EnableGradientClipping { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the gradient clipping method to use.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two main methods are available:
+    /// - <see cref="GradientClippingMethod.ByNorm"/>: Scales the entire gradient vector if its norm exceeds a threshold (recommended)
+    /// - <see cref="GradientClippingMethod.ByValue"/>: Clips each gradient element independently to a range
+    /// </para>
+    /// <para><b>For Beginners:</b> ClipByNorm is generally preferred because it preserves the direction
+    /// of the gradient while only reducing its magnitude. ClipByValue is simpler but can change the
+    /// gradient direction.
+    /// </para>
+    /// </remarks>
+    public GradientClippingMethod GradientClippingMethod { get; set; } = GradientClippingMethod.ByNorm;
+
+    /// <summary>
+    /// Gets or sets the maximum gradient norm for norm-based clipping.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When using <see cref="GradientClippingMethod.ByNorm"/>, gradients are scaled down if their
+    /// L2 norm exceeds this value. A typical value is 1.0, but this may need to be tuned for your model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the "speed limit" for the total gradient magnitude.
+    /// If the gradient vector is longer than this value, it gets scaled down proportionally.
+    /// </para>
+    /// </remarks>
+    public double MaxGradientNorm { get; set; } = GradientClippingHelper.DefaultMaxNorm;
+
+    /// <summary>
+    /// Gets or sets the maximum gradient value for value-based clipping.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When using <see cref="GradientClippingMethod.ByValue"/>, each gradient element is clipped
+    /// to the range [-MaxGradientValue, MaxGradientValue].
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the "speed limit" for each individual gradient component.
+    /// Any gradient value larger than this gets capped at this value.
+    /// </para>
+    /// </remarks>
+    public double MaxGradientValue { get; set; } = GradientClippingHelper.DefaultMaxValue;
+}
+
+/// <summary>
+/// Specifies the method used for gradient clipping.
+/// </summary>
+public enum GradientClippingMethod
+{
+    /// <summary>
+    /// Clips gradients by scaling the entire gradient vector if its L2 norm exceeds a threshold.
+    /// This preserves the gradient direction and is generally the preferred method.
+    /// </summary>
+    ByNorm,
+
+    /// <summary>
+    /// Clips each gradient element independently to a fixed range.
+    /// Simpler but may change the gradient direction.
+    /// </summary>
+    ByValue
 }
