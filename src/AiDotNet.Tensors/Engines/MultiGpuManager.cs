@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Tensors.Engines;
 
 /// <summary>

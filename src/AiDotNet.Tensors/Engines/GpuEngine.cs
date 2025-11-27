@@ -11213,18 +11213,6 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
-    public Vector<T> Exp2<T>(Vector<T> vector)
-    {
-        return _cpuFallback.Exp2(vector);
-    }
-
-    /// <inheritdoc/>
-    public Vector<T> Exp10<T>(Vector<T> vector)
-    {
-        return _cpuFallback.Exp10(vector);
-    }
-
-    /// <inheritdoc/>
     public void Reciprocal(ReadOnlySpan<float> x, Span<float> destination)
     {
         TensorPrimitivesCore.InvokeSpanIntoSpan<ReciprocalOperatorFloat>(x, destination);

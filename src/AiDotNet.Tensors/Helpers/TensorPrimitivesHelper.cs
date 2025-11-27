@@ -1,5 +1,5 @@
 using System;
-using System.Numerics;
+using SystemVector = System.Numerics.Vector;
 using System.Numerics.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Interfaces;
