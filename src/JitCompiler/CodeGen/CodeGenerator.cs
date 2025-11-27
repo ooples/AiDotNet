@@ -361,6 +361,12 @@ public class CodeGenerator
             Operations.VectorizedReductionOp vecReduce => GenerateVectorizedReductionOp<T>(inputVars, vecReduce),
             Operations.VectorizedMatMulOp vecMatMul => GenerateVectorizedMatMulOp<T>(inputVars, vecMatMul),
 
+            // Differentiable approximation operations
+            Operations.SoftSplitOp softSplit => GenerateSoftSplitOp<T>(inputVars, softSplit),
+            Operations.SoftKNNOp softKnn => GenerateSoftKNNOp<T>(inputVars, softKnn),
+            Operations.SoftLocallyWeightedOp softLw => GenerateSoftLocallyWeightedOp<T>(inputVars, softLw),
+            Operations.FakeQuantizationOp fakeQuant => GenerateFakeQuantizationOp<T>(inputVars, fakeQuant),
+
             _ => throw new NotImplementedException($"Code generation for {op.OpType} not yet implemented")
         };
 
@@ -1446,5 +1452,92 @@ public class CodeGenerator
     {
         var method = FindMethod("HierarchicalSoftmax", typeof(ComputationNode<T>), typeof(int[]));
         return Expression.Call(method, input, Expression.Constant(treeStructure));
+    }
+
+    // ========================================================================
+    // Differentiable Approximation Operation Code Generators
+    // ========================================================================
+
+    /// <summary>
+    /// Generates code for SoftSplit operation (differentiable decision tree split).
+    /// </summary>
+    private Expression GenerateSoftSplitOp<T>(ParameterExpression[] inputs, Operations.SoftSplitOp op)
+    {
+        // inputs[0] = input features, inputs[1] = leftValue, inputs[2] = rightValue
+        var method = typeof(TensorOperations<T>).GetMethod("SoftSplit",
+            new[] { typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>),
+                    typeof(int), typeof(T), typeof(T) });
+
+        if (method == null)
+            throw new InvalidOperationException("SoftSplit method not found on TensorOperations");
+
+        return Expression.Call(method,
+            inputs[0],
+            inputs[1],
+            inputs[2],
+            Expression.Constant(op.FeatureIndex),
+            Expression.Constant((T)(object)op.Threshold, typeof(T)),
+            Expression.Constant((T)(object)op.Temperature, typeof(T)));
+    }
+
+    /// <summary>
+    /// Generates code for SoftKNN operation (differentiable k-nearest neighbors).
+    /// </summary>
+    private Expression GenerateSoftKNNOp<T>(ParameterExpression[] inputs, Operations.SoftKNNOp op)
+    {
+        // inputs[0] = input, inputs[1] = supportVectors, inputs[2] = labels
+        var method = typeof(TensorOperations<T>).GetMethod("SoftKNN",
+            new[] { typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(T) });
+
+        if (method == null)
+            throw new InvalidOperationException("SoftKNN method not found on TensorOperations");
+
+        return Expression.Call(method,
+            inputs[0],
+            inputs[1],
+            inputs[2],
+            Expression.Constant((T)(object)op.Temperature, typeof(T)));
+    }
+
+    /// <summary>
+    /// Generates code for SoftLocallyWeighted operation (differentiable locally-weighted regression).
+    /// </summary>
+    private Expression GenerateSoftLocallyWeightedOp<T>(ParameterExpression[] inputs, Operations.SoftLocallyWeightedOp op)
+    {
+        // inputs[0] = input, inputs[1] = xTrain, inputs[2] = yTrain
+        var method = typeof(TensorOperations<T>).GetMethod("SoftLocallyWeighted",
+            new[] { typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(T) });
+
+        if (method == null)
+            throw new InvalidOperationException("SoftLocallyWeighted method not found on TensorOperations");
+
+        return Expression.Call(method,
+            inputs[0],
+            inputs[1],
+            inputs[2],
+            Expression.Constant((T)(object)op.Bandwidth, typeof(T)));
+    }
+
+    /// <summary>
+    /// Generates code for FakeQuantization operation (differentiable quantization with STE).
+    /// </summary>
+    private Expression GenerateFakeQuantizationOp<T>(ParameterExpression[] inputs, Operations.FakeQuantizationOp op)
+    {
+        // inputs[0] = input
+        var method = typeof(TensorOperations<T>).GetMethod("FakeQuantize",
+            new[] { typeof(ComputationNode<T>), typeof(int), typeof(T), typeof(T), typeof(bool) });
+
+        if (method == null)
+            throw new InvalidOperationException("FakeQuantize method not found on TensorOperations");
+
+        var scale = op.Scale.HasValue ? (T)(object)op.Scale.Value : default(T);
+        var zeroPoint = (T)(object)op.ZeroPoint;
+
+        return Expression.Call(method,
+            inputs[0],
+            Expression.Constant(op.NumBits),
+            Expression.Constant(scale, typeof(T)),
+            Expression.Constant(zeroPoint, typeof(T)),
+            Expression.Constant(op.Symmetric));
     }
 }

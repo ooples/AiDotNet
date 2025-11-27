@@ -10351,6 +10351,480 @@ public static class TensorOperations<T>
             tape.RecordOperation(node);
         return node;
     }
+
+    // ============================================================================
+    // Differentiable Approximation Operations
+    // These operations enable JIT compilation for traditionally non-differentiable
+    // models like decision trees, KNN, and locally-weighted regression.
+    // ============================================================================
+
+    /// <summary>
+    /// Performs a soft split operation for differentiable decision trees.
+    /// </summary>
+    /// <param name="input">The input features tensor.</param>
+    /// <param name="leftValue">The value to return if going left.</param>
+    /// <param name="rightValue">The value to return if going right.</param>
+    /// <param name="featureIndex">The index of the feature to split on.</param>
+    /// <param name="threshold">The threshold value for the split.</param>
+    /// <param name="temperature">Temperature parameter controlling split sharpness (default: 1.0).</param>
+    /// <returns>A weighted combination of left and right values based on soft split.</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes: p_left = σ((threshold - x[featureIndex]) / temperature)
+    ///           output = p_left * leftValue + (1 - p_left) * rightValue
+    /// </para>
+    /// <para><b>For Beginners:</b> This makes decision tree splits differentiable by using
+    /// a smooth sigmoid function instead of a hard if-then-else. Lower temperature makes
+    /// the split sharper (more like a hard decision), while higher temperature makes it softer.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> SoftSplit(
+        ComputationNode<T> input,
+        ComputationNode<T> leftValue,
+        ComputationNode<T> rightValue,
+        int featureIndex,
+        T threshold,
+        T? temperature = default)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var temp = temperature ?? numOps.FromDouble(1.0);
+
+        // Extract the feature value at featureIndex
+        // Compute p_left = σ((threshold - x[featureIndex]) / temperature)
+        var inputData = input.Value.Data;
+        var featureValue = featureIndex < inputData.Length ? inputData[featureIndex] : numOps.Zero;
+        var diff = numOps.Subtract(threshold, featureValue);
+        var scaled = numOps.Divide(diff, temp);
+        var pLeft = numOps.Divide(numOps.One, numOps.Add(numOps.One, numOps.Exp(numOps.Negate(scaled))));
+        var pRight = numOps.Subtract(numOps.One, pLeft);
+
+        // output = p_left * leftValue + p_right * rightValue
+        var leftScaled = leftValue.Value.Transform((x, _) => numOps.Multiply(x, pLeft));
+        var rightScaled = rightValue.Value.Transform((x, _) => numOps.Multiply(x, pRight));
+        var result = leftScaled.Add(rightScaled);
+
+        // Store values needed for backward pass
+        var storedPLeft = pLeft;
+        var storedDiff = diff;
+        var storedTemp = temp;
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // ∂output/∂leftValue = p_left
+            // ∂output/∂rightValue = (1 - p_left) = p_right
+            // ∂output/∂input[featureIndex] = (rightValue - leftValue) * p_left * (1 - p_left) / temperature
+
+            if (leftValue.RequiresGradient)
+            {
+                var gradLeft = gradient.Transform((g, _) => numOps.Multiply(g, storedPLeft));
+                if (leftValue.Gradient == null)
+                    leftValue.Gradient = gradLeft;
+                else
+                    leftValue.Gradient = leftValue.Gradient.Add(gradLeft);
+            }
+
+            if (rightValue.RequiresGradient)
+            {
+                var pR = numOps.Subtract(numOps.One, storedPLeft);
+                var gradRight = gradient.Transform((g, _) => numOps.Multiply(g, pR));
+                if (rightValue.Gradient == null)
+                    rightValue.Gradient = gradRight;
+                else
+                    rightValue.Gradient = rightValue.Gradient.Add(gradRight);
+            }
+
+            if (input.RequiresGradient)
+            {
+                // Gradient w.r.t. input feature
+                // ∂σ(z)/∂z = σ(z) * (1 - σ(z)) where z = (threshold - x[feature]) / temp
+                // ∂z/∂x[feature] = -1/temp
+                // ∂output/∂x[feature] = (rightValue - leftValue) * σ(z) * (1 - σ(z)) * (-1/temp)
+                var pR = numOps.Subtract(numOps.One, storedPLeft);
+                var sigmoidGrad = numOps.Multiply(storedPLeft, pR);
+                var tempFactor = numOps.Negate(numOps.Divide(numOps.One, storedTemp));
+
+                var valueDiff = rightValue.Value.Subtract(leftValue.Value);
+                var gradScale = numOps.Multiply(sigmoidGrad, tempFactor);
+
+                // Sum over output dimensions to get scalar gradient for the feature
+                var gradSum = numOps.Zero;
+                for (int i = 0; i < gradient.Data.Length && i < valueDiff.Data.Length; i++)
+                {
+                    gradSum = numOps.Add(gradSum, numOps.Multiply(gradient.Data[i],
+                        numOps.Multiply(valueDiff.Data[i], gradScale)));
+                }
+
+                // Create gradient tensor with gradient at featureIndex
+                var inputGrad = new T[input.Value.Data.Length];
+                for (int i = 0; i < inputGrad.Length; i++)
+                    inputGrad[i] = numOps.Zero;
+                if (featureIndex < inputGrad.Length)
+                    inputGrad[featureIndex] = gradSum;
+
+                var gradInput = new Tensor<T>(input.Value.Shape, new Vector<T>(inputGrad));
+                if (input.Gradient == null)
+                    input.Gradient = gradInput;
+                else
+                    input.Gradient = input.Gradient.Add(gradInput);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient || leftValue.RequiresGradient || rightValue.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input, leftValue, rightValue },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.SoftSplit;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "FeatureIndex", featureIndex },
+            { "Threshold", threshold! },
+            { "Temperature", temp! }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Performs a soft K-Nearest Neighbors operation for differentiable instance-based learning.
+    /// </summary>
+    /// <param name="input">The query input tensor.</param>
+    /// <param name="supportVectors">Matrix of support vectors (training points) [n_samples, n_features].</param>
+    /// <param name="labels">Labels for each support vector [n_samples] or [n_samples, n_outputs].</param>
+    /// <param name="temperature">Temperature for softmax attention (default: 1.0).</param>
+    /// <returns>Attention-weighted sum of labels.</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes: distances[i] = ||input - supportVectors[i]||²
+    ///           weights = softmax(-distances / temperature)
+    ///           output = Σ weights[i] * labels[i]
+    /// </para>
+    /// <para><b>For Beginners:</b> Instead of finding exactly k nearest neighbors, this
+    /// computes attention weights for ALL neighbors based on distance. Closer neighbors
+    /// get higher attention. This makes KNN differentiable and JIT-compilable.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> SoftKNN(
+        ComputationNode<T> input,
+        ComputationNode<T> supportVectors,
+        ComputationNode<T> labels,
+        T? temperature = default)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var temp = temperature ?? numOps.FromDouble(1.0);
+
+        var inputData = input.Value.Data;
+        var svData = supportVectors.Value.Data;
+        var labelData = labels.Value.Data;
+
+        // Determine number of support vectors and features
+        var svShape = supportVectors.Value.Shape;
+        var nSamples = svShape.Length > 0 ? svShape[0] : svData.Length;
+        var nFeatures = svShape.Length > 1 ? svShape[1] : 1;
+
+        // Compute squared distances to each support vector
+        var distances = new T[nSamples];
+        for (int i = 0; i < nSamples; i++)
+        {
+            var dist = numOps.Zero;
+            for (int j = 0; j < nFeatures && j < inputData.Length; j++)
+            {
+                var svIdx = i * nFeatures + j;
+                if (svIdx < svData.Length)
+                {
+                    var diff = numOps.Subtract(inputData[j], svData[svIdx]);
+                    dist = numOps.Add(dist, numOps.Multiply(diff, diff));
+                }
+            }
+            distances[i] = dist;
+        }
+
+        // Compute softmax attention weights: softmax(-distances / temperature)
+        var scaledDists = distances.Select(d => numOps.Negate(numOps.Divide(d, temp))).ToArray();
+        var maxScaled = scaledDists.Aggregate(scaledDists[0], (a, b) => numOps.GreaterThan(a, b) ? a : b);
+        var expDists = scaledDists.Select(d => numOps.Exp(numOps.Subtract(d, maxScaled))).ToArray();
+        var sumExp = expDists.Aggregate(numOps.Zero, (a, b) => numOps.Add(a, b));
+        var weights = expDists.Select(e => numOps.Divide(e, sumExp)).ToArray();
+
+        // Compute weighted sum of labels
+        var outputSize = labelData.Length / nSamples;
+        if (outputSize < 1) outputSize = 1;
+        var output = new T[outputSize];
+        for (int i = 0; i < outputSize; i++)
+            output[i] = numOps.Zero;
+
+        for (int i = 0; i < nSamples; i++)
+        {
+            for (int j = 0; j < outputSize; j++)
+            {
+                var labelIdx = i * outputSize + j;
+                if (labelIdx < labelData.Length)
+                {
+                    output[j] = numOps.Add(output[j], numOps.Multiply(weights[i], labelData[labelIdx]));
+                }
+            }
+        }
+
+        var resultTensor = new Tensor<T>(new[] { outputSize }, new Vector<T>(output));
+
+        // Store for backward pass
+        var storedWeights = weights;
+        var storedDistances = distances;
+        var storedNSamples = nSamples;
+        var storedNFeatures = nFeatures;
+        var storedOutputSize = outputSize;
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // Gradient computation for SoftKNN
+            // This is complex - involves gradients through softmax and distance computation
+
+            if (labels.RequiresGradient)
+            {
+                // ∂output/∂labels[i] = weights[i]
+                var gradLabels = new T[labelData.Length];
+                for (int i = 0; i < storedNSamples; i++)
+                {
+                    for (int j = 0; j < storedOutputSize; j++)
+                    {
+                        var idx = i * storedOutputSize + j;
+                        if (idx < gradLabels.Length && j < gradient.Data.Length)
+                        {
+                            gradLabels[idx] = numOps.Multiply(storedWeights[i], gradient.Data[j]);
+                        }
+                    }
+                }
+                var gradLabelsTensor = new Tensor<T>(labels.Value.Shape, new Vector<T>(gradLabels));
+                if (labels.Gradient == null)
+                    labels.Gradient = gradLabelsTensor;
+                else
+                    labels.Gradient = labels.Gradient.Add(gradLabelsTensor);
+            }
+
+            if (input.RequiresGradient)
+            {
+                // ∂output/∂input involves softmax Jacobian and distance gradients
+                // Simplified: gradient flows through distance computation
+                var gradInput = new T[inputData.Length];
+                for (int i = 0; i < gradInput.Length; i++)
+                    gradInput[i] = numOps.Zero;
+
+                // For each output dimension and each support vector
+                for (int j = 0; j < storedOutputSize && j < gradient.Data.Length; j++)
+                {
+                    for (int i = 0; i < storedNSamples; i++)
+                    {
+                        // Softmax Jacobian contribution
+                        var labelIdx = i * storedOutputSize + j;
+                        var labelVal = labelIdx < labelData.Length ? labelData[labelIdx] : numOps.Zero;
+
+                        for (int i2 = 0; i2 < storedNSamples; i2++)
+                        {
+                            var labelIdx2 = i2 * storedOutputSize + j;
+                            var labelVal2 = labelIdx2 < labelData.Length ? labelData[labelIdx2] : numOps.Zero;
+
+                            var jacobian = i == i2
+                                ? numOps.Multiply(storedWeights[i], numOps.Subtract(numOps.One, storedWeights[i]))
+                                : numOps.Negate(numOps.Multiply(storedWeights[i], storedWeights[i2]));
+
+                            // Distance gradient: ∂dist/∂input = 2 * (input - sv)
+                            for (int f = 0; f < storedNFeatures && f < gradInput.Length; f++)
+                            {
+                                var svIdx = i2 * storedNFeatures + f;
+                                var svVal = svIdx < svData.Length ? svData[svIdx] : numOps.Zero;
+                                var inputVal = f < inputData.Length ? inputData[f] : numOps.Zero;
+                                var distGrad = numOps.Multiply(numOps.FromDouble(2.0), numOps.Subtract(inputVal, svVal));
+
+                                var scaleFactor = numOps.Negate(numOps.Divide(numOps.One, temp));
+                                var contrib = numOps.Multiply(gradient.Data[j],
+                                    numOps.Multiply(labelVal2,
+                                        numOps.Multiply(jacobian,
+                                            numOps.Multiply(scaleFactor, distGrad))));
+                                gradInput[f] = numOps.Add(gradInput[f], contrib);
+                            }
+                        }
+                    }
+                }
+
+                var gradInputTensor = new Tensor<T>(input.Value.Shape, new Vector<T>(gradInput));
+                if (input.Gradient == null)
+                    input.Gradient = gradInputTensor;
+                else
+                    input.Gradient = input.Gradient.Add(gradInputTensor);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: resultTensor,
+            requiresGradient: input.RequiresGradient || labels.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input, supportVectors, labels },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.SoftKNN;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Temperature", temp! }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Performs soft locally-weighted regression for differentiable instance-based learning.
+    /// </summary>
+    /// <param name="input">The query input tensor.</param>
+    /// <param name="xTrain">Training feature matrix [n_samples, n_features].</param>
+    /// <param name="yTrain">Training target values [n_samples] or [n_samples, n_outputs].</param>
+    /// <param name="bandwidth">Bandwidth parameter controlling locality (default: 1.0).</param>
+    /// <returns>Attention-weighted prediction.</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes: distances[i] = ||input - xTrain[i]||²
+    ///           weights = softmax(-distances / bandwidth)
+    ///           output = Σ weights[i] * yTrain[i]
+    /// </para>
+    /// <para><b>For Beginners:</b> This is similar to SoftKNN but specifically designed for
+    /// regression with a bandwidth parameter that controls how local the weighting is.
+    /// Smaller bandwidth = more local predictions.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> SoftLocallyWeighted(
+        ComputationNode<T> input,
+        ComputationNode<T> xTrain,
+        ComputationNode<T> yTrain,
+        T? bandwidth = default)
+    {
+        // This is essentially the same as SoftKNN with bandwidth instead of temperature
+        return SoftKNN(input, xTrain, yTrain, bandwidth);
+    }
+
+    /// <summary>
+    /// Performs fake quantization with Straight-Through Estimator (STE) for differentiable quantization.
+    /// </summary>
+    /// <param name="input">The input tensor to quantize.</param>
+    /// <param name="numBits">Number of quantization bits (default: 8).</param>
+    /// <param name="scale">Scale factor (if null, computed from input range).</param>
+    /// <param name="zeroPoint">Zero point for asymmetric quantization (default: 0).</param>
+    /// <param name="symmetric">Whether to use symmetric quantization (default: true).</param>
+    /// <returns>Fake-quantized tensor (quantized forward, STE backward).</returns>
+    /// <remarks>
+    /// <para>
+    /// Forward: output = round(input / scale) * scale (clipped to valid range)
+    /// Backward: gradient passes through unchanged (Straight-Through Estimator)
+    /// </para>
+    /// <para><b>For Beginners:</b> This simulates quantization during training while allowing
+    /// gradients to flow back for optimization. The forward pass applies real quantization,
+    /// but the backward pass pretends it didn't happen - this trick (STE) lets us train
+    /// models that will be quantized for deployment.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> FakeQuantize(
+        ComputationNode<T> input,
+        int numBits = 8,
+        T? scale = default,
+        T? zeroPoint = default,
+        bool symmetric = true)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputData = input.Value.Data;
+
+        // Compute quantization parameters
+        var qMin = symmetric ? numOps.FromDouble(-(1 << (numBits - 1))) : numOps.Zero;
+        var qMax = symmetric ? numOps.FromDouble((1 << (numBits - 1)) - 1) : numOps.FromDouble((1 << numBits) - 1);
+
+        // Compute scale from data if not provided
+        T actualScale;
+        if (scale != null && !numOps.Equals(scale, numOps.Zero))
+        {
+            actualScale = scale;
+        }
+        else
+        {
+            // Find min/max of input
+            var minVal = inputData.Aggregate(inputData[0], (a, b) => numOps.LessThan(a, b) ? a : b);
+            var maxVal = inputData.Aggregate(inputData[0], (a, b) => numOps.GreaterThan(a, b) ? a : b);
+
+            if (symmetric)
+            {
+                var absMax = numOps.GreaterThan(numOps.Abs(minVal), numOps.Abs(maxVal))
+                    ? numOps.Abs(minVal) : numOps.Abs(maxVal);
+                actualScale = numOps.Divide(absMax, qMax);
+            }
+            else
+            {
+                actualScale = numOps.Divide(numOps.Subtract(maxVal, minVal),
+                    numOps.Subtract(qMax, qMin));
+            }
+
+            // Avoid division by zero
+            if (numOps.Equals(actualScale, numOps.Zero))
+                actualScale = numOps.One;
+        }
+
+        var actualZeroPoint = zeroPoint ?? numOps.Zero;
+
+        // Apply fake quantization
+        var outputData = new T[inputData.Length];
+        for (int i = 0; i < inputData.Length; i++)
+        {
+            // Quantize: q = round(x / scale) + zeroPoint
+            var scaled = numOps.Divide(inputData[i], actualScale);
+            var rounded = numOps.FromDouble(Math.Round(numOps.ToDouble(scaled)));
+            var shifted = numOps.Add(rounded, actualZeroPoint);
+
+            // Clamp to valid range
+            if (numOps.LessThan(shifted, qMin)) shifted = qMin;
+            if (numOps.GreaterThan(shifted, qMax)) shifted = qMax;
+
+            // Dequantize: x' = (q - zeroPoint) * scale
+            var unshifted = numOps.Subtract(shifted, actualZeroPoint);
+            outputData[i] = numOps.Multiply(unshifted, actualScale);
+        }
+
+        var result = new Tensor<T>(input.Value.Shape, new Vector<T>(outputData));
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // Straight-Through Estimator: gradient passes through unchanged
+            if (input.RequiresGradient)
+            {
+                if (input.Gradient == null)
+                    input.Gradient = gradient;
+                else
+                    input.Gradient = input.Gradient.Add(gradient);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        node.OperationType = OperationType.FakeQuantization;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "NumBits", numBits },
+            { "Scale", actualScale! },
+            { "ZeroPoint", actualZeroPoint! },
+            { "Symmetric", symmetric }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
 }
 
 

@@ -965,7 +965,14 @@ public class JitCompiler : IDisposable
 
             // Complex number operations
             OperationType.ComplexMatMul,
-            OperationType.ComplexMultiply
+            OperationType.ComplexMultiply,
+
+            // Differentiable approximation operations
+            // These enable JIT compilation for traditionally non-differentiable models
+            OperationType.SoftSplit,          // Differentiable decision tree splits
+            OperationType.SoftKNN,            // Differentiable k-nearest neighbors
+            OperationType.SoftLocallyWeighted, // Differentiable locally-weighted regression
+            OperationType.FakeQuantization    // Differentiable quantization with STE
         };
     }
 

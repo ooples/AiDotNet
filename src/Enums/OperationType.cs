@@ -519,5 +519,35 @@ public enum OperationType
     /// <summary>
     /// Hierarchical Softmax - tree-based efficient softmax for large vocabularies.
     /// </summary>
-    HierarchicalSoftmax
+    HierarchicalSoftmax,
+
+    // Differentiable Approximation Operations
+
+    /// <summary>
+    /// Soft split operation for differentiable decision trees.
+    /// Uses sigmoid gating: p_left = σ((threshold - x[feature]) / temperature)
+    /// output = p_left * left_value + (1 - p_left) * right_value
+    /// </summary>
+    SoftSplit,
+
+    /// <summary>
+    /// Soft K-Nearest Neighbors operation for differentiable instance-based learning.
+    /// Uses attention-weighted contributions from all support vectors instead of hard k-selection.
+    /// weights = softmax(-distances / temperature), output = Σ weights * labels
+    /// </summary>
+    SoftKNN,
+
+    /// <summary>
+    /// Soft locally-weighted regression operation for differentiable instance-based learning.
+    /// Uses attention-weighted linear combination of training targets based on distance.
+    /// weights = softmax(-||x - X_train||² / bandwidth), output = weights @ y_train
+    /// </summary>
+    SoftLocallyWeighted,
+
+    /// <summary>
+    /// Fake quantization operation with Straight-Through Estimator (STE) for differentiable quantization.
+    /// Forward: quantized = round(x / scale) * scale
+    /// Backward: gradient passes through unchanged (STE)
+    /// </summary>
+    FakeQuantization
 }

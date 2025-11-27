@@ -204,6 +204,7 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
         FeatureImportances = new Vector<T>(0);
         Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
         _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        SoftTreeTemperature = NumOps.One; // Default temperature = 1.0
     }
     
     /// <summary>
@@ -1141,18 +1142,56 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
         Deserialize(data);
     }
 
+    // ===== Soft Decision Tree Support for JIT Compilation =====
+
+    /// <summary>
+    /// Gets or sets whether to use soft (differentiable) tree mode for JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> to enable soft tree mode with sigmoid gating for JIT support;
+    /// <c>false</c> (default) for traditional hard decision tree.
+    /// </value>
+    /// <remarks>
+    /// <para><b>Soft Decision Trees:</b> Instead of hard branching (if-then-else), soft trees use
+    /// sigmoid gating to compute a smooth probability of going left or right at each node.
+    /// This makes the tree differentiable and JIT-compilable.</para>
+    /// <para><b>Formula:</b> p_left = σ((threshold - x[feature]) / temperature)</para>
+    /// <para><b>Output:</b> weighted_output = p_left * left_value + (1 - p_left) * right_value</para>
+    /// <para><b>Trade-offs:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Soft trees are differentiable and JIT-compilable</description></item>
+    /// <item><description>Results are smooth approximations of hard decisions</description></item>
+    /// <item><description>Lower temperature = sharper (closer to hard) decisions</description></item>
+    /// <item><description>Higher temperature = softer (more averaged) decisions</description></item>
+    /// </list>
+    /// </remarks>
+    public bool UseSoftTree { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the temperature parameter for soft decision tree mode.
+    /// </summary>
+    /// <value>
+    /// The temperature for sigmoid gating. Lower values produce sharper decisions.
+    /// Default is 1.0.
+    /// </value>
+    public T SoftTreeTemperature { get; set; }
+
     /// <summary>
     /// Gets a value indicating whether this model supports JIT (Just-In-Time) compilation.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Decision tree models do not support JIT compilation because they use branching logic
-    /// with dynamic conditions that cannot be represented as a static computation graph.
-    /// JIT compilation is designed for models with fixed tensor operations (like neural networks),
-    /// not tree-based conditional logic.
+    /// When <see cref="UseSoftTree"/> is enabled, the decision tree can be exported as a
+    /// differentiable computation graph using soft (sigmoid-based) gating. This enables
+    /// JIT compilation for optimized inference.
+    /// </para>
+    /// <para>
+    /// When <see cref="UseSoftTree"/> is disabled, JIT compilation is not supported because
+    /// traditional hard decision trees use branching logic that cannot be represented as
+    /// a static computation graph.
     /// </para>
     /// </remarks>
-    public virtual bool SupportsJitCompilation => false;
+    public virtual bool SupportsJitCompilation => UseSoftTree && Root != null;
 
     /// <summary>
     /// Exports the model's computation as a graph of operations.
@@ -1160,16 +1199,93 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     /// <param name="inputNodes">The input nodes for the computation graph.</param>
     /// <returns>The root node of the exported computation graph.</returns>
     /// <exception cref="NotSupportedException">
-    /// Always throws because decision tree models do not support JIT compilation.
+    /// Thrown when <see cref="UseSoftTree"/> is false.
     /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the tree has not been trained (Root is null).
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// When soft tree mode is enabled, this exports the tree as a differentiable computation
+    /// graph using <see cref="Autodiff.TensorOperations{T}.SoftSplit"/> operations. Each internal
+    /// node becomes a soft split operation that computes sigmoid-weighted combinations of
+    /// left and right subtree outputs.
+    /// </para>
+    /// </remarks>
     public virtual AiDotNet.Autodiff.ComputationNode<T> ExportComputationGraph(List<AiDotNet.Autodiff.ComputationNode<T>> inputNodes)
     {
-        throw new NotSupportedException(
-            "Decision tree regression models do not support JIT compilation because they use:\n" +
-            "- Tree-based branching logic with dynamic conditions\n" +
-            "- Recursive tree traversal that depends on input values\n" +
-            "- Conditional splits that cannot be represented as static tensor operations\n\n" +
-            "JIT compilation is designed for models with fixed computation graphs (e.g., neural networks), " +
-            "not for tree-based models with data-dependent control flow.");
+        if (!UseSoftTree)
+        {
+            throw new NotSupportedException(
+                "Decision tree regression models do not support JIT compilation in hard tree mode because they use:\n" +
+                "- Tree-based branching logic with dynamic conditions\n" +
+                "- Recursive tree traversal that depends on input values\n" +
+                "- Conditional splits that cannot be represented as static tensor operations\n\n" +
+                "To enable JIT compilation, set UseSoftTree = true to use soft (differentiable) decision trees " +
+                "with sigmoid-based gating.");
+        }
+
+        if (Root == null)
+        {
+            throw new InvalidOperationException(
+                "Cannot export computation graph: the decision tree has not been trained. " +
+                "Call Train() first to build the tree structure.");
+        }
+
+        // Get the number of features from the tree structure
+        int numFeatures = GetMaxFeatureIndexFromTree(Root) + 1;
+
+        // Create input variable node
+        var inputTensor = new Autodiff.Tensor<T>(new[] { numFeatures });
+        var input = Autodiff.TensorOperations<T>.Variable(inputTensor, "input");
+        inputNodes.Add(input);
+
+        // Recursively export the tree as soft split operations
+        return ExportNodeAsComputationGraph(Root, input);
+    }
+
+    /// <summary>
+    /// Recursively exports a tree node as a computation graph.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ExportNodeAsComputationGraph(
+        DecisionTreeNode<T> node,
+        Autodiff.ComputationNode<T> input)
+    {
+        if (node.IsLeaf)
+        {
+            // Leaf node: return constant prediction value
+            var leafTensor = new Autodiff.Tensor<T>(new[] { 1 });
+            leafTensor[0] = node.Prediction;
+            return Autodiff.TensorOperations<T>.Constant(leafTensor, $"leaf_{node.GetHashCode()}");
+        }
+
+        // Internal node: export as SoftSplit operation
+        // Recursively export left and right subtrees
+        var leftOutput = ExportNodeAsComputationGraph(node.Left!, input);
+        var rightOutput = ExportNodeAsComputationGraph(node.Right!, input);
+
+        // Use SoftSplit operation: output = sigmoid((threshold - x[feature]) / temp) * left + (1 - sigmoid) * right
+        return Autodiff.TensorOperations<T>.SoftSplit(
+            input,
+            leftOutput,
+            rightOutput,
+            node.FeatureIndex,
+            node.SplitValue,
+            SoftTreeTemperature);
+    }
+
+    /// <summary>
+    /// Gets the maximum feature index used in the tree.
+    /// </summary>
+    private int GetMaxFeatureIndexFromTree(DecisionTreeNode<T>? node)
+    {
+        if (node == null || node.IsLeaf)
+            return -1;
+
+        int maxIndex = node.FeatureIndex;
+        int leftMax = GetMaxFeatureIndexFromTree(node.Left);
+        int rightMax = GetMaxFeatureIndexFromTree(node.Right);
+
+        return Math.Max(maxIndex, Math.Max(leftMax, rightMax));
     }
 }
