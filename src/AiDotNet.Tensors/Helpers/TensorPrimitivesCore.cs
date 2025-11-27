@@ -157,6 +157,559 @@ public static class TensorPrimitivesCore
         }
     }
 
+    #region Binary Operations
+
+    /// <summary>
+    /// Applies a binary operator to two spans of double values using the best available SIMD instructions.
+    /// </summary>
+    /// <typeparam name="TOperator">The binary operator to apply.</typeparam>
+    /// <param name="x">The first input span.</param>
+    /// <param name="y">The second input span.</param>
+    /// <param name="destination">The destination span to write results to.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void InvokeSpanSpanIntoSpan<TOperator>(ReadOnlySpan<double> x, ReadOnlySpan<double> y, Span<double> destination)
+        where TOperator : struct, IBinaryOperator<double, double>
+    {
+        if (x.Length != y.Length || x.Length != destination.Length)
+            throw new ArgumentException("All spans must have the same length.");
+
+        TOperator op = default;
+        int i = 0;
+
+#if NET5_0_OR_GREATER
+        // AVX-512: Process 8 doubles at a time
+        if (Vector512.IsHardwareAccelerated && x.Length >= Vector512<double>.Count)
+        {
+            int vectorCount = x.Length - (x.Length % Vector512<double>.Count);
+            for (; i < vectorCount; i += Vector512<double>.Count)
+            {
+                var vecX = Vector512.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector512.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                var result = op.Invoke(vecX, vecY);
+                result.StoreUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(destination), (nuint)i);
+            }
+        }
+        // AVX2: Process 4 doubles at a time
+        else if (Vector256.IsHardwareAccelerated && x.Length >= Vector256<double>.Count)
+        {
+            int vectorCount = x.Length - (x.Length % Vector256<double>.Count);
+            for (; i < vectorCount; i += Vector256<double>.Count)
+            {
+                var vecX = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                var result = op.Invoke(vecX, vecY);
+                result.StoreUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(destination), (nuint)i);
+            }
+        }
+        // SSE/NEON: Process 2 doubles at a time
+        else if (Vector128.IsHardwareAccelerated && x.Length >= Vector128<double>.Count)
+        {
+            int vectorCount = x.Length - (x.Length % Vector128<double>.Count);
+            for (; i < vectorCount; i += Vector128<double>.Count)
+            {
+                var vecX = Vector128.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector128.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                var result = op.Invoke(vecX, vecY);
+                result.StoreUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(destination), (nuint)i);
+            }
+        }
+#endif
+
+        // Scalar fallback for remaining elements
+        for (; i < x.Length; i++)
+        {
+            destination[i] = op.Invoke(x[i], y[i]);
+        }
+    }
+
+    /// <summary>
+    /// Applies a binary operator to two spans of float values using the best available SIMD instructions.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void InvokeSpanSpanIntoSpan<TOperator>(ReadOnlySpan<float> x, ReadOnlySpan<float> y, Span<float> destination)
+        where TOperator : struct, IBinaryOperator<float, float>
+    {
+        if (x.Length != y.Length || x.Length != destination.Length)
+            throw new ArgumentException("All spans must have the same length.");
+
+        TOperator op = default;
+        int i = 0;
+
+#if NET5_0_OR_GREATER
+        if (Vector512.IsHardwareAccelerated && x.Length >= Vector512<float>.Count)
+        {
+            int vectorCount = x.Length - (x.Length % Vector512<float>.Count);
+            for (; i < vectorCount; i += Vector512<float>.Count)
+            {
+                var vecX = Vector512.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector512.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                var result = op.Invoke(vecX, vecY);
+                result.StoreUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(destination), (nuint)i);
+            }
+        }
+        else if (Vector256.IsHardwareAccelerated && x.Length >= Vector256<float>.Count)
+        {
+            int vectorCount = x.Length - (x.Length % Vector256<float>.Count);
+            for (; i < vectorCount; i += Vector256<float>.Count)
+            {
+                var vecX = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                var result = op.Invoke(vecX, vecY);
+                result.StoreUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(destination), (nuint)i);
+            }
+        }
+        else if (Vector128.IsHardwareAccelerated && x.Length >= Vector128<float>.Count)
+        {
+            int vectorCount = x.Length - (x.Length % Vector128<float>.Count);
+            for (; i < vectorCount; i += Vector128<float>.Count)
+            {
+                var vecX = Vector128.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector128.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                var result = op.Invoke(vecX, vecY);
+                result.StoreUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(destination), (nuint)i);
+            }
+        }
+#endif
+
+        for (; i < x.Length; i++)
+        {
+            destination[i] = op.Invoke(x[i], y[i]);
+        }
+    }
+
+    /// <summary>
+    /// Applies a binary operator to two spans of int values using the best available SIMD instructions.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void InvokeSpanSpanIntoSpan<TOperator>(ReadOnlySpan<int> x, ReadOnlySpan<int> y, Span<int> destination)
+        where TOperator : struct, IBinaryOperator<int, int>
+    {
+        if (x.Length != y.Length || x.Length != destination.Length)
+            throw new ArgumentException("All spans must have the same length.");
+
+        TOperator op = default;
+        int i = 0;
+
+#if NET5_0_OR_GREATER
+        if (Vector512.IsHardwareAccelerated && x.Length >= Vector512<int>.Count)
+        {
+            int vectorCount = x.Length - (x.Length % Vector512<int>.Count);
+            for (; i < vectorCount; i += Vector512<int>.Count)
+            {
+                var vecX = Vector512.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector512.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                var result = op.Invoke(vecX, vecY);
+                result.StoreUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(destination), (nuint)i);
+            }
+        }
+        else if (Vector256.IsHardwareAccelerated && x.Length >= Vector256<int>.Count)
+        {
+            int vectorCount = x.Length - (x.Length % Vector256<int>.Count);
+            for (; i < vectorCount; i += Vector256<int>.Count)
+            {
+                var vecX = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                var result = op.Invoke(vecX, vecY);
+                result.StoreUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(destination), (nuint)i);
+            }
+        }
+        else if (Vector128.IsHardwareAccelerated && x.Length >= Vector128<int>.Count)
+        {
+            int vectorCount = x.Length - (x.Length % Vector128<int>.Count);
+            for (; i < vectorCount; i += Vector128<int>.Count)
+            {
+                var vecX = Vector128.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector128.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                var result = op.Invoke(vecX, vecY);
+                result.StoreUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(destination), (nuint)i);
+            }
+        }
+#endif
+
+        for (; i < x.Length; i++)
+        {
+            destination[i] = op.Invoke(x[i], y[i]);
+        }
+    }
+
+    /// <summary>
+    /// Applies a binary operator to two spans of long values using the best available SIMD instructions.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void InvokeSpanSpanIntoSpan<TOperator>(ReadOnlySpan<long> x, ReadOnlySpan<long> y, Span<long> destination)
+        where TOperator : struct, IBinaryOperator<long, long>
+    {
+        if (x.Length != y.Length || x.Length != destination.Length)
+            throw new ArgumentException("All spans must have the same length.");
+
+        TOperator op = default;
+        int i = 0;
+
+#if NET5_0_OR_GREATER
+        if (Vector512.IsHardwareAccelerated && x.Length >= Vector512<long>.Count)
+        {
+            int vectorCount = x.Length - (x.Length % Vector512<long>.Count);
+            for (; i < vectorCount; i += Vector512<long>.Count)
+            {
+                var vecX = Vector512.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector512.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                var result = op.Invoke(vecX, vecY);
+                result.StoreUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(destination), (nuint)i);
+            }
+        }
+        else if (Vector256.IsHardwareAccelerated && x.Length >= Vector256<long>.Count)
+        {
+            int vectorCount = x.Length - (x.Length % Vector256<long>.Count);
+            for (; i < vectorCount; i += Vector256<long>.Count)
+            {
+                var vecX = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                var result = op.Invoke(vecX, vecY);
+                result.StoreUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(destination), (nuint)i);
+            }
+        }
+        else if (Vector128.IsHardwareAccelerated && x.Length >= Vector128<long>.Count)
+        {
+            int vectorCount = x.Length - (x.Length % Vector128<long>.Count);
+            for (; i < vectorCount; i += Vector128<long>.Count)
+            {
+                var vecX = Vector128.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector128.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                var result = op.Invoke(vecX, vecY);
+                result.StoreUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(destination), (nuint)i);
+            }
+        }
+#endif
+
+        for (; i < x.Length; i++)
+        {
+            destination[i] = op.Invoke(x[i], y[i]);
+        }
+    }
+
+    #endregion
+
+    #region Reduction Operations
+
+    /// <summary>
+    /// Computes the sum of all elements in a span of doubles using SIMD acceleration.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double Sum(ReadOnlySpan<double> x)
+    {
+        double sum = 0;
+        int i = 0;
+
+#if NET5_0_OR_GREATER
+        if (Vector256.IsHardwareAccelerated && x.Length >= Vector256<double>.Count)
+        {
+            var vSum = Vector256<double>.Zero;
+            int vectorCount = x.Length - (x.Length % Vector256<double>.Count);
+            for (; i < vectorCount; i += Vector256<double>.Count)
+            {
+                var vec = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                vSum = Vector256.Add(vSum, vec);
+            }
+            sum = Vector256.Sum(vSum);
+        }
+        else if (Vector128.IsHardwareAccelerated && x.Length >= Vector128<double>.Count)
+        {
+            var vSum = Vector128<double>.Zero;
+            int vectorCount = x.Length - (x.Length % Vector128<double>.Count);
+            for (; i < vectorCount; i += Vector128<double>.Count)
+            {
+                var vec = Vector128.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                vSum = Vector128.Add(vSum, vec);
+            }
+            sum = Vector128.Sum(vSum);
+        }
+#endif
+
+        for (; i < x.Length; i++)
+            sum += x[i];
+
+        return sum;
+    }
+
+    /// <summary>
+    /// Computes the sum of all elements in a span of floats using SIMD acceleration.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Sum(ReadOnlySpan<float> x)
+    {
+        float sum = 0;
+        int i = 0;
+
+#if NET5_0_OR_GREATER
+        if (Vector256.IsHardwareAccelerated && x.Length >= Vector256<float>.Count)
+        {
+            var vSum = Vector256<float>.Zero;
+            int vectorCount = x.Length - (x.Length % Vector256<float>.Count);
+            for (; i < vectorCount; i += Vector256<float>.Count)
+            {
+                var vec = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                vSum = Vector256.Add(vSum, vec);
+            }
+            sum = Vector256.Sum(vSum);
+        }
+        else if (Vector128.IsHardwareAccelerated && x.Length >= Vector128<float>.Count)
+        {
+            var vSum = Vector128<float>.Zero;
+            int vectorCount = x.Length - (x.Length % Vector128<float>.Count);
+            for (; i < vectorCount; i += Vector128<float>.Count)
+            {
+                var vec = Vector128.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                vSum = Vector128.Add(vSum, vec);
+            }
+            sum = Vector128.Sum(vSum);
+        }
+#endif
+
+        for (; i < x.Length; i++)
+            sum += x[i];
+
+        return sum;
+    }
+
+    /// <summary>
+    /// Computes the dot product of two spans of doubles using SIMD acceleration.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double Dot(ReadOnlySpan<double> x, ReadOnlySpan<double> y)
+    {
+        if (x.Length != y.Length)
+            throw new ArgumentException("Spans must have the same length.");
+
+        double sum = 0;
+        int i = 0;
+
+#if NET5_0_OR_GREATER
+        if (Vector256.IsHardwareAccelerated && x.Length >= Vector256<double>.Count)
+        {
+            var vSum = Vector256<double>.Zero;
+            int vectorCount = x.Length - (x.Length % Vector256<double>.Count);
+            for (; i < vectorCount; i += Vector256<double>.Count)
+            {
+                var vecX = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                vSum = Vector256.Add(vSum, Vector256.Multiply(vecX, vecY));
+            }
+            sum = Vector256.Sum(vSum);
+        }
+        else if (Vector128.IsHardwareAccelerated && x.Length >= Vector128<double>.Count)
+        {
+            var vSum = Vector128<double>.Zero;
+            int vectorCount = x.Length - (x.Length % Vector128<double>.Count);
+            for (; i < vectorCount; i += Vector128<double>.Count)
+            {
+                var vecX = Vector128.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector128.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                vSum = Vector128.Add(vSum, Vector128.Multiply(vecX, vecY));
+            }
+            sum = Vector128.Sum(vSum);
+        }
+#endif
+
+        for (; i < x.Length; i++)
+            sum += x[i] * y[i];
+
+        return sum;
+    }
+
+    /// <summary>
+    /// Computes the dot product of two spans of floats using SIMD acceleration.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Dot(ReadOnlySpan<float> x, ReadOnlySpan<float> y)
+    {
+        if (x.Length != y.Length)
+            throw new ArgumentException("Spans must have the same length.");
+
+        float sum = 0;
+        int i = 0;
+
+#if NET5_0_OR_GREATER
+        if (Vector256.IsHardwareAccelerated && x.Length >= Vector256<float>.Count)
+        {
+            var vSum = Vector256<float>.Zero;
+            int vectorCount = x.Length - (x.Length % Vector256<float>.Count);
+            for (; i < vectorCount; i += Vector256<float>.Count)
+            {
+                var vecX = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                vSum = Vector256.Add(vSum, Vector256.Multiply(vecX, vecY));
+            }
+            sum = Vector256.Sum(vSum);
+        }
+        else if (Vector128.IsHardwareAccelerated && x.Length >= Vector128<float>.Count)
+        {
+            var vSum = Vector128<float>.Zero;
+            int vectorCount = x.Length - (x.Length % Vector128<float>.Count);
+            for (; i < vectorCount; i += Vector128<float>.Count)
+            {
+                var vecX = Vector128.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                var vecY = Vector128.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(y), (nuint)i);
+                vSum = Vector128.Add(vSum, Vector128.Multiply(vecX, vecY));
+            }
+            sum = Vector128.Sum(vSum);
+        }
+#endif
+
+        for (; i < x.Length; i++)
+            sum += x[i] * y[i];
+
+        return sum;
+    }
+
+    /// <summary>
+    /// Finds the maximum value in a span of doubles using SIMD acceleration.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double Max(ReadOnlySpan<double> x)
+    {
+        if (x.Length == 0)
+            throw new ArgumentException("Span cannot be empty.");
+
+        double max = x[0];
+        int i = 1;
+
+#if NET5_0_OR_GREATER
+        if (Vector256.IsHardwareAccelerated && x.Length >= Vector256<double>.Count)
+        {
+            var vMax = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), 0);
+            int vectorCount = x.Length - (x.Length % Vector256<double>.Count);
+            for (i = Vector256<double>.Count; i < vectorCount; i += Vector256<double>.Count)
+            {
+                var vec = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                vMax = Vector256.Max(vMax, vec);
+            }
+            // Reduce vector to scalar
+            Span<double> temp = stackalloc double[Vector256<double>.Count];
+            vMax.CopyTo(temp);
+            max = temp[0];
+            for (int j = 1; j < temp.Length; j++)
+                if (temp[j] > max) max = temp[j];
+        }
+#endif
+
+        for (; i < x.Length; i++)
+            if (x[i] > max) max = x[i];
+
+        return max;
+    }
+
+    /// <summary>
+    /// Finds the maximum value in a span of floats using SIMD acceleration.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Max(ReadOnlySpan<float> x)
+    {
+        if (x.Length == 0)
+            throw new ArgumentException("Span cannot be empty.");
+
+        float max = x[0];
+        int i = 1;
+
+#if NET5_0_OR_GREATER
+        if (Vector256.IsHardwareAccelerated && x.Length >= Vector256<float>.Count)
+        {
+            var vMax = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), 0);
+            int vectorCount = x.Length - (x.Length % Vector256<float>.Count);
+            for (i = Vector256<float>.Count; i < vectorCount; i += Vector256<float>.Count)
+            {
+                var vec = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                vMax = Vector256.Max(vMax, vec);
+            }
+            Span<float> temp = stackalloc float[Vector256<float>.Count];
+            vMax.CopyTo(temp);
+            max = temp[0];
+            for (int j = 1; j < temp.Length; j++)
+                if (temp[j] > max) max = temp[j];
+        }
+#endif
+
+        for (; i < x.Length; i++)
+            if (x[i] > max) max = x[i];
+
+        return max;
+    }
+
+    /// <summary>
+    /// Finds the minimum value in a span of doubles using SIMD acceleration.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double Min(ReadOnlySpan<double> x)
+    {
+        if (x.Length == 0)
+            throw new ArgumentException("Span cannot be empty.");
+
+        double min = x[0];
+        int i = 1;
+
+#if NET5_0_OR_GREATER
+        if (Vector256.IsHardwareAccelerated && x.Length >= Vector256<double>.Count)
+        {
+            var vMin = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), 0);
+            int vectorCount = x.Length - (x.Length % Vector256<double>.Count);
+            for (i = Vector256<double>.Count; i < vectorCount; i += Vector256<double>.Count)
+            {
+                var vec = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                vMin = Vector256.Min(vMin, vec);
+            }
+            Span<double> temp = stackalloc double[Vector256<double>.Count];
+            vMin.CopyTo(temp);
+            min = temp[0];
+            for (int j = 1; j < temp.Length; j++)
+                if (temp[j] < min) min = temp[j];
+        }
+#endif
+
+        for (; i < x.Length; i++)
+            if (x[i] < min) min = x[i];
+
+        return min;
+    }
+
+    /// <summary>
+    /// Finds the minimum value in a span of floats using SIMD acceleration.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Min(ReadOnlySpan<float> x)
+    {
+        if (x.Length == 0)
+            throw new ArgumentException("Span cannot be empty.");
+
+        float min = x[0];
+        int i = 1;
+
+#if NET5_0_OR_GREATER
+        if (Vector256.IsHardwareAccelerated && x.Length >= Vector256<float>.Count)
+        {
+            var vMin = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), 0);
+            int vectorCount = x.Length - (x.Length % Vector256<float>.Count);
+            for (i = Vector256<float>.Count; i < vectorCount; i += Vector256<float>.Count)
+            {
+                var vec = Vector256.LoadUnsafe(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(x), (nuint)i);
+                vMin = Vector256.Min(vMin, vec);
+            }
+            Span<float> temp = stackalloc float[Vector256<float>.Count];
+            vMin.CopyTo(temp);
+            min = temp[0];
+            for (int j = 1; j < temp.Length; j++)
+                if (temp[j] < min) min = temp[j];
+        }
+#endif
+
+        for (; i < x.Length; i++)
+            if (x[i] < min) min = x[i];
+
+        return min;
+    }
+
+    #endregion
+
+    #region Diagnostics
+
     /// <summary>
     /// Gets diagnostic information about available SIMD instruction sets.
     /// </summary>
