@@ -1,5 +1,5 @@
 using System;
-using System.Numerics.Tensors;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -725,127 +725,100 @@ public class DoubleOperations : INumericOperations<double>
     /// <inheritdoc/>
     public bool SupportsGpuAcceleration => true;
 
-    #region IVectorizedOperations<double> Implementation - SIMD via TensorPrimitives
+    #region IVectorizedOperations<double> Implementation - Sequential Fallback
 
     /// <summary>
-    /// Performs element-wise addition using SIMD-optimized TensorPrimitives.
+    /// Performs element-wise addition using sequential loops.
     /// </summary>
+    /// <remarks>
+    /// TensorPrimitives only has float overloads in the base API, so double uses the fallback implementation.
+    /// </remarks>
     public void Add(ReadOnlySpan<double> x, ReadOnlySpan<double> y, Span<double> destination)
-    {
-        TensorPrimitives.Add(x, y, destination);
-    }
+        => VectorizedOperationsFallback.Add(this, x, y, destination);
 
     /// <summary>
-    /// Performs element-wise subtraction using SIMD-optimized TensorPrimitives.
+    /// Performs element-wise subtraction using sequential loops.
     /// </summary>
     public void Subtract(ReadOnlySpan<double> x, ReadOnlySpan<double> y, Span<double> destination)
-    {
-        TensorPrimitives.Subtract(x, y, destination);
-    }
+        => VectorizedOperationsFallback.Subtract(this, x, y, destination);
 
     /// <summary>
-    /// Performs element-wise multiplication using SIMD-optimized TensorPrimitives.
+    /// Performs element-wise multiplication using sequential loops.
     /// </summary>
     public void Multiply(ReadOnlySpan<double> x, ReadOnlySpan<double> y, Span<double> destination)
-    {
-        TensorPrimitives.Multiply(x, y, destination);
-    }
+        => VectorizedOperationsFallback.Multiply(this, x, y, destination);
 
     /// <summary>
-    /// Performs element-wise division using SIMD-optimized TensorPrimitives.
+    /// Performs element-wise division using sequential loops.
     /// </summary>
     public void Divide(ReadOnlySpan<double> x, ReadOnlySpan<double> y, Span<double> destination)
-    {
-        TensorPrimitives.Divide(x, y, destination);
-    }
+        => VectorizedOperationsFallback.Divide(this, x, y, destination);
 
     /// <summary>
-    /// Computes dot product using SIMD-optimized TensorPrimitives.
+    /// Computes dot product using sequential loops.
     /// </summary>
     public double Dot(ReadOnlySpan<double> x, ReadOnlySpan<double> y)
-    {
-        return TensorPrimitives.Dot(x, y);
-    }
+        => VectorizedOperationsFallback.Dot(this, x, y);
 
     /// <summary>
-    /// Computes sum using SIMD-optimized TensorPrimitives.
+    /// Computes sum using sequential loops.
     /// </summary>
     public double Sum(ReadOnlySpan<double> x)
-    {
-        return TensorPrimitives.Sum(x);
-    }
+        => VectorizedOperationsFallback.Sum(this, x);
 
     /// <summary>
-    /// Finds maximum using SIMD-optimized TensorPrimitives.
+    /// Finds maximum using sequential loops.
     /// </summary>
     public double Max(ReadOnlySpan<double> x)
-    {
-        return TensorPrimitives.Max(x);
-    }
+        => VectorizedOperationsFallback.Max(this, x);
 
     /// <summary>
-    /// Finds minimum using SIMD-optimized TensorPrimitives.
+    /// Finds minimum using sequential loops.
     /// </summary>
     public double Min(ReadOnlySpan<double> x)
-    {
-        return TensorPrimitives.Min(x);
-    }
+        => VectorizedOperationsFallback.Min(this, x);
 
     /// <summary>
-    /// Computes exponential using SIMD-optimized TensorPrimitives.
+    /// Computes exponential using sequential loops.
     /// </summary>
     public void Exp(ReadOnlySpan<double> x, Span<double> destination)
-    {
-        TensorPrimitives.Exp(x, destination);
-    }
+        => VectorizedOperationsFallback.Exp(this, x, destination);
 
     /// <summary>
-    /// Computes natural logarithm using SIMD-optimized TensorPrimitives.
+    /// Computes natural logarithm using sequential loops.
     /// </summary>
     public void Log(ReadOnlySpan<double> x, Span<double> destination)
-    {
-        TensorPrimitives.Log(x, destination);
-    }
+        => VectorizedOperationsFallback.Log(this, x, destination);
 
     /// <summary>
-    /// Computes hyperbolic tangent using SIMD-optimized TensorPrimitives.
+    /// Computes hyperbolic tangent using sequential loops.
     /// </summary>
     public void Tanh(ReadOnlySpan<double> x, Span<double> destination)
-    {
-        TensorPrimitives.Tanh(x, destination);
-    }
+        => VectorizedOperationsFallback.Tanh(this, x, destination);
 
     /// <summary>
-    /// Computes sigmoid using SIMD-optimized TensorPrimitives.
+    /// Computes sigmoid using sequential loops.
     /// </summary>
     public void Sigmoid(ReadOnlySpan<double> x, Span<double> destination)
-    {
-        TensorPrimitives.Sigmoid(x, destination);
-    }
+        => VectorizedOperationsFallback.Sigmoid(this, x, destination);
 
     /// <summary>
-    /// Computes base-2 logarithm using SIMD-optimized TensorPrimitives.
+    /// Computes base-2 logarithm using sequential loops.
     /// </summary>
     public void Log2(ReadOnlySpan<double> x, Span<double> destination)
-    {
-        TensorPrimitives.Log2(x, destination);
-    }
+        => VectorizedOperationsFallback.Log2(this, x, destination);
 
     /// <summary>
-    /// Computes softmax using SIMD-optimized TensorPrimitives.
+    /// Computes softmax using sequential loops.
     /// </summary>
     public void SoftMax(ReadOnlySpan<double> x, Span<double> destination)
-    {
-        TensorPrimitives.SoftMax(x, destination);
-    }
+        => VectorizedOperationsFallback.SoftMax(this, x, destination);
 
     /// <summary>
-    /// Computes cosine similarity using SIMD-optimized TensorPrimitives.
+    /// Computes cosine similarity using sequential loops.
     /// </summary>
     public double CosineSimilarity(ReadOnlySpan<double> x, ReadOnlySpan<double> y)
-    {
-        return TensorPrimitives.CosineSimilarity(x, y);
-    }
+        => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
 
     #endregion
 }
