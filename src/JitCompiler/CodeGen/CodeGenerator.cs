@@ -242,6 +242,24 @@ public class CodeGenerator
             PReLUOp => GenerateBinaryOp<T>("PReLU", inputVars),
             ThresholdedReLUOp threshRelu => GenerateThresholdedReLUOp<T>(inputVars[0], threshRelu.Threshold),
 
+            // Activations - Additional Extended Set
+            LiSHTOp => GenerateUnaryOp<T>("LiSHT", inputVars),
+            BentIdentityOp => GenerateUnaryOp<T>("BentIdentity", inputVars),
+            GaussianOp => GenerateUnaryOp<T>("Gaussian", inputVars),
+            ScaledTanhOp scaledTanh => GenerateScaledTanhOp<T>(inputVars[0], scaledTanh.Beta),
+            SquashOp => GenerateUnaryOp<T>("Squash", inputVars),
+            ISRUOp isru => GenerateISRUOp<T>(inputVars[0], isru.Alpha),
+            SignOp => GenerateUnaryOp<T>("Sign", inputVars),
+            SoftminOp softmin => GenerateSoftminOp<T>(inputVars[0], softmin.Axis),
+            LogSoftminOp logSoftmin => GenerateLogSoftminOp<T>(inputVars[0], logSoftmin.Axis),
+            SQRBFOp => GenerateUnaryOp<T>("SQRBF", inputVars),
+            MaxoutOp maxout => GenerateMaxoutOp<T>(inputVars[0], maxout.NumPieces),
+            RReLUOp rrelu => GenerateRReLUOp<T>(inputVars[0], rrelu.Lower, rrelu.Upper),
+            SphericalSoftmaxOp spherical => GenerateSphericalSoftmaxOp<T>(inputVars[0], spherical.Axis),
+            TaylorSoftmaxOp taylor => GenerateTaylorSoftmaxOp<T>(inputVars[0], taylor.Axis, taylor.Order),
+            SparsemaxOp sparsemax => GenerateSparsemaxOp<T>(inputVars[0], sparsemax.Axis),
+            HierarchicalSoftmaxOp hierarchical => GenerateHierarchicalSoftmaxOp<T>(inputVars[0], hierarchical.TreeStructure),
+
             // Matrix operations
             MatMulOp => GenerateBinaryOp<T>("MatrixMultiply", inputVars),
             TransposeOp => GenerateUnaryOp<T>("Transpose", inputVars),
@@ -1335,5 +1353,97 @@ public class CodeGenerator
         return Expression.Call(method, input,
             Expression.Constant(op.Probability),
             Expression.Constant(op.Training));
+    }
+
+    // ========== Additional Extended Activation Operation Code Generators ==========
+
+    /// <summary>
+    /// Generates code for ScaledTanh activation.
+    /// </summary>
+    private Expression GenerateScaledTanhOp<T>(ParameterExpression input, double beta)
+    {
+        var method = FindMethod("ScaledTanh", typeof(ComputationNode<T>), typeof(double));
+        return Expression.Call(method, input, Expression.Constant(beta));
+    }
+
+    /// <summary>
+    /// Generates code for ISRU activation.
+    /// </summary>
+    private Expression GenerateISRUOp<T>(ParameterExpression input, double alpha)
+    {
+        var method = FindMethod("ISRU", typeof(ComputationNode<T>), typeof(double));
+        return Expression.Call(method, input, Expression.Constant(alpha));
+    }
+
+    /// <summary>
+    /// Generates code for Softmin activation.
+    /// </summary>
+    private Expression GenerateSoftminOp<T>(ParameterExpression input, int axis)
+    {
+        var method = FindMethod("Softmin", typeof(ComputationNode<T>), typeof(int));
+        return Expression.Call(method, input, Expression.Constant(axis));
+    }
+
+    /// <summary>
+    /// Generates code for LogSoftmin activation.
+    /// </summary>
+    private Expression GenerateLogSoftminOp<T>(ParameterExpression input, int axis)
+    {
+        var method = FindMethod("LogSoftmin", typeof(ComputationNode<T>), typeof(int));
+        return Expression.Call(method, input, Expression.Constant(axis));
+    }
+
+    /// <summary>
+    /// Generates code for Maxout activation.
+    /// </summary>
+    private Expression GenerateMaxoutOp<T>(ParameterExpression input, int numPieces)
+    {
+        var method = FindMethod("Maxout", typeof(ComputationNode<T>), typeof(int));
+        return Expression.Call(method, input, Expression.Constant(numPieces));
+    }
+
+    /// <summary>
+    /// Generates code for RReLU activation.
+    /// </summary>
+    private Expression GenerateRReLUOp<T>(ParameterExpression input, double lower, double upper)
+    {
+        var method = FindMethod("RReLU", typeof(ComputationNode<T>), typeof(double), typeof(double));
+        return Expression.Call(method, input, Expression.Constant(lower), Expression.Constant(upper));
+    }
+
+    /// <summary>
+    /// Generates code for SphericalSoftmax activation.
+    /// </summary>
+    private Expression GenerateSphericalSoftmaxOp<T>(ParameterExpression input, int axis)
+    {
+        var method = FindMethod("SphericalSoftmax", typeof(ComputationNode<T>), typeof(int));
+        return Expression.Call(method, input, Expression.Constant(axis));
+    }
+
+    /// <summary>
+    /// Generates code for TaylorSoftmax activation.
+    /// </summary>
+    private Expression GenerateTaylorSoftmaxOp<T>(ParameterExpression input, int axis, int order)
+    {
+        var method = FindMethod("TaylorSoftmax", typeof(ComputationNode<T>), typeof(int), typeof(int));
+        return Expression.Call(method, input, Expression.Constant(axis), Expression.Constant(order));
+    }
+
+    /// <summary>
+    /// Generates code for Sparsemax activation.
+    /// </summary>
+    private Expression GenerateSparsemaxOp<T>(ParameterExpression input, int axis)
+    {
+        var method = FindMethod("Sparsemax", typeof(ComputationNode<T>), typeof(int));
+        return Expression.Call(method, input, Expression.Constant(axis));
+    }
+
+    /// <summary>
+    /// Generates code for HierarchicalSoftmax activation.
+    /// </summary>
+    private Expression GenerateHierarchicalSoftmaxOp<T>(ParameterExpression input, int[] treeStructure)
+    {
+        var method = FindMethod("HierarchicalSoftmax", typeof(ComputationNode<T>), typeof(int[]));
+        return Expression.Call(method, input, Expression.Constant(treeStructure));
     }
 }

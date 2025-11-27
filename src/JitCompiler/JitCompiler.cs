@@ -880,6 +880,31 @@ public class JitCompiler : IDisposable
             OperationType.PReLU,
             OperationType.ThresholdedReLU,
 
+            // Activations - Additional Extended Set
+            OperationType.LiSHT,
+            OperationType.BentIdentity,
+            OperationType.Gaussian,
+            OperationType.ScaledTanh,
+            OperationType.Squash,
+            OperationType.ISRU,
+            OperationType.Sign,
+            OperationType.Softmin,
+            OperationType.LogSoftmin,
+            OperationType.SQRBF,
+            OperationType.Maxout,
+            OperationType.RReLU,
+            OperationType.SphericalSoftmax,
+            OperationType.TaylorSoftmax,
+            OperationType.Sparsemax,
+            OperationType.HierarchicalSoftmax,
+
+            // Regularization
+            OperationType.Dropout,
+
+            // Tensor operations
+            OperationType.Gather,
+            OperationType.Broadcast,
+
             // Matrix operations
             OperationType.MatMul,
             OperationType.Transpose,

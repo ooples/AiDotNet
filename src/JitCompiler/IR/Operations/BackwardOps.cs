@@ -1340,3 +1340,500 @@ public class GradCropOp : BackwardOp
         return $"t{OutputId} = GradCrop[offsets={string.Join(",", CropOffsets)}](t{InputIds[0]}) : {OutputType} {OutputShape.ShapeToString()}";
     }
 }
+
+// ============================================================================
+// EXTENDED ACTIVATION BACKWARD OPERATIONS
+// ============================================================================
+
+/// <summary>
+/// Backward operation for ELUOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = x if x > 0, alpha * (exp(x) - 1) otherwise
+/// Backward: grad_x = grad_y if x > 0, grad_y * alpha * exp(x) otherwise
+/// </para>
+/// </remarks>
+public class GradELUOp : BackwardOp
+{
+    /// <summary>The alpha parameter.</summary>
+    public double Alpha { get; set; } = 1.0;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradELU[alpha={Alpha}](t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for SwishOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = x * sigmoid(x)
+/// Backward: grad_x = grad_y * (y + sigmoid(x) * (1 - y))
+/// </para>
+/// </remarks>
+public class GradSwishOp : BackwardOp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradSwish(t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for MishOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = x * tanh(softplus(x))
+/// Backward: Complex derivative involving sech^2 and other terms
+/// </para>
+/// </remarks>
+public class GradMishOp : BackwardOp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradMish(t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for SoftPlusOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = ln(1 + exp(x))
+/// Backward: grad_x = grad_y * sigmoid(x)
+/// </para>
+/// </remarks>
+public class GradSoftPlusOp : BackwardOp
+{
+    /// <summary>Scaling factor used in forward.</summary>
+    public double Beta { get; set; } = 1.0;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradSoftPlus[beta={Beta}](t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for SELUOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = scale * (max(0, x) + min(0, alpha * (exp(x) - 1)))
+/// Backward: grad_x = grad_y * scale if x > 0, grad_y * scale * alpha * exp(x) otherwise
+/// </para>
+/// </remarks>
+public class GradSELUOp : BackwardOp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradSELU(t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for HardSigmoidOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = clip((x + 3) / 6, 0, 1)
+/// Backward: grad_x = grad_y / 6 if -3 < x < 3, else 0
+/// </para>
+/// </remarks>
+public class GradHardSigmoidOp : BackwardOp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradHardSigmoid(t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for HardTanhOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = clip(x, min_val, max_val)
+/// Backward: grad_x = grad_y if min_val < x < max_val, else 0
+/// </para>
+/// </remarks>
+public class GradHardTanhOp : BackwardOp
+{
+    /// <summary>Minimum value used in forward.</summary>
+    public double MinVal { get; set; } = -1.0;
+
+    /// <summary>Maximum value used in forward.</summary>
+    public double MaxVal { get; set; } = 1.0;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradHardTanh[min={MinVal}, max={MaxVal}](t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for SoftSignOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = x / (1 + |x|)
+/// Backward: grad_x = grad_y / (1 + |x|)^2
+/// </para>
+/// </remarks>
+public class GradSoftSignOp : BackwardOp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradSoftSign(t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for CELUOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = max(0, x) + min(0, alpha * (exp(x/alpha) - 1))
+/// Backward: grad_x = grad_y if x > 0, grad_y * exp(x/alpha) otherwise
+/// </para>
+/// </remarks>
+public class GradCELUOp : BackwardOp
+{
+    /// <summary>The alpha parameter.</summary>
+    public double Alpha { get; set; } = 1.0;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradCELU[alpha={Alpha}](t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for LogSoftmaxOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = log(softmax(x))
+/// Backward: grad_x = grad_y - sum(grad_y) * softmax(x)
+/// </para>
+/// </remarks>
+public class GradLogSoftmaxOp : BackwardOp
+{
+    /// <summary>Axis used in forward.</summary>
+    public int Axis { get; set; } = -1;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward output
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradLogSoftmax[axis={Axis}](t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for PReLUOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = max(0, x) + alpha * min(0, x)
+/// Backward for x: grad_x = grad_y if x > 0, grad_y * alpha otherwise
+/// Backward for alpha: grad_alpha = grad_y * min(0, x)
+/// </para>
+/// </remarks>
+public class GradPReLUOp : BackwardOp
+{
+    /// <summary>Which input: 0 = input x, 1 = alpha parameter.</summary>
+    public int InputIndex { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 3) return false; // grad_output, forward input, alpha
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradPReLU[input={InputIndex}](t{InputIds[0]}, t{InputIds[1]}, t{InputIds[2]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for ThresholdedReLUOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = x if x > threshold, 0 otherwise
+/// Backward: grad_x = grad_y if x > threshold, 0 otherwise
+/// </para>
+/// </remarks>
+public class GradThresholdedReLUOp : BackwardOp
+{
+    /// <summary>Threshold used in forward.</summary>
+    public double Threshold { get; set; } = 1.0;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradThresholdedReLU[threshold={Threshold}](t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for LiSHTOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = x * tanh(x)
+/// Backward: grad_x = grad_y * (tanh(x) + x * sech^2(x))
+/// </para>
+/// </remarks>
+public class GradLiSHTOp : BackwardOp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradLiSHT(t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for BentIdentityOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = (sqrt(x^2 + 1) - 1) / 2 + x
+/// Backward: grad_x = grad_y * (x / (2 * sqrt(x^2 + 1)) + 1)
+/// </para>
+/// </remarks>
+public class GradBentIdentityOp : BackwardOp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradBentIdentity(t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for GaussianOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = exp(-x^2)
+/// Backward: grad_x = grad_y * (-2 * x * exp(-x^2)) = -2 * x * y * grad_y
+/// </para>
+/// </remarks>
+public class GradGaussianOp : BackwardOp
+{
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradGaussian(t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for ScaledTanhOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = tanh(beta * x)
+/// Backward: grad_x = grad_y * beta * (1 - y^2)
+/// </para>
+/// </remarks>
+public class GradScaledTanhOp : BackwardOp
+{
+    /// <summary>Beta parameter used in forward.</summary>
+    public double Beta { get; set; } = 1.0;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward output
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradScaledTanh[beta={Beta}](t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for ISRUOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = x / sqrt(1 + alpha * x^2)
+/// Backward: grad_x = grad_y / (1 + alpha * x^2)^(3/2)
+/// </para>
+/// </remarks>
+public class GradISRUOp : BackwardOp
+{
+    /// <summary>Alpha parameter used in forward.</summary>
+    public double Alpha { get; set; } = 1.0;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradISRU[alpha={Alpha}](t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for SparsemaxOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Sparsemax gradient is computed using the support set (non-zero outputs).
+/// More complex than softmax gradient due to sparsity.
+/// </para>
+/// </remarks>
+public class GradSparsemaxOp : BackwardOp
+{
+    /// <summary>Axis used in forward.</summary>
+    public int Axis { get; set; } = -1;
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward output
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradSparsemax[axis={Axis}](t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Backward operation for RReLUOp.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Forward: y = x if x >= 0, alpha * x otherwise (alpha is random during training)
+/// Backward: grad_x = grad_y if x >= 0, grad_y * alpha otherwise
+/// </para>
+/// </remarks>
+public class GradRReLUOp : BackwardOp
+{
+    /// <summary>The random negative slope used during forward pass.</summary>
+    public double SampledAlpha { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        if (InputIds.Length != 2) return false; // grad_output and forward input
+        return true;
+    }
+
+    public override string ToString()
+    {
+        return $"t{OutputId} = GradRReLU[alpha={SampledAlpha}](t{InputIds[0]}, t{InputIds[1]}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}

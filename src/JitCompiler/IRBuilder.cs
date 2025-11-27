@@ -190,12 +190,60 @@ public class IRBuilder
             OperationType.Log => new LogOp(),
             OperationType.Sqrt => new SqrtOp(),
 
-            // Activations
+            // Activations - Basic
             OperationType.ReLU => new ReLUOp(),
             OperationType.Sigmoid => new SigmoidOp(),
             OperationType.Tanh => new TanhOp(),
             OperationType.Softmax => new SoftmaxOp { Axis = GetParam<int>(node, "Axis", -1) },
             OperationType.Activation => new ApplyActivationOp { ActivationName = GetParam<string>(node, "ActivationName", "") },
+
+            // Activations - Extended
+            OperationType.ELU => new ELUOp { Alpha = GetParam<double>(node, "Alpha", 1.0) },
+            OperationType.LeakyReLU => new LeakyReLUOp { Alpha = GetParam<double>(node, "Alpha", 0.01) },
+            OperationType.GELU => new GELUOp { Approximate = GetParam<bool>(node, "Approximate", false) },
+            OperationType.Swish => new SwishOp(),
+            OperationType.Mish => new MishOp(),
+            OperationType.SoftPlus => new SoftPlusOp
+            {
+                Beta = GetParam<double>(node, "Beta", 1.0),
+                Threshold = GetParam<double>(node, "Threshold", 20.0)
+            },
+            OperationType.SELU => new SELUOp(),
+            OperationType.HardSigmoid => new HardSigmoidOp(),
+            OperationType.HardTanh => new HardTanhOp
+            {
+                MinVal = GetParam<double>(node, "MinVal", -1.0),
+                MaxVal = GetParam<double>(node, "MaxVal", 1.0)
+            },
+            OperationType.SoftSign => new SoftSignOp(),
+            OperationType.CELU => new CELUOp { Alpha = GetParam<double>(node, "Alpha", 1.0) },
+            OperationType.LogSoftmax => new LogSoftmaxOp { Axis = GetParam<int>(node, "Axis", -1) },
+            OperationType.PReLU => new PReLUOp(),
+            OperationType.ThresholdedReLU => new ThresholdedReLUOp { Threshold = GetParam<double>(node, "Threshold", 1.0) },
+            OperationType.LiSHT => new LiSHTOp(),
+            OperationType.BentIdentity => new BentIdentityOp(),
+            OperationType.Gaussian => new GaussianOp(),
+            OperationType.ScaledTanh => new ScaledTanhOp { Beta = GetParam<double>(node, "Beta", 1.0) },
+            OperationType.Squash => new SquashOp(),
+            OperationType.ISRU => new ISRUOp { Alpha = GetParam<double>(node, "Alpha", 1.0) },
+            OperationType.Sign => new SignOp(),
+            OperationType.Softmin => new SoftminOp { Axis = GetParam<int>(node, "Axis", -1) },
+            OperationType.LogSoftmin => new LogSoftminOp { Axis = GetParam<int>(node, "Axis", -1) },
+            OperationType.SQRBF => new SQRBFOp(),
+            OperationType.Maxout => new MaxoutOp { NumPieces = GetParam<int>(node, "NumPieces", 2) },
+            OperationType.RReLU => new RReLUOp
+            {
+                Lower = GetParam<double>(node, "Lower", 0.125),
+                Upper = GetParam<double>(node, "Upper", 0.333)
+            },
+            OperationType.SphericalSoftmax => new SphericalSoftmaxOp { Axis = GetParam<int>(node, "Axis", -1) },
+            OperationType.TaylorSoftmax => new TaylorSoftmaxOp
+            {
+                Axis = GetParam<int>(node, "Axis", -1),
+                Order = GetParam<int>(node, "Order", 2)
+            },
+            OperationType.Sparsemax => new SparsemaxOp { Axis = GetParam<int>(node, "Axis", -1) },
+            OperationType.HierarchicalSoftmax => new HierarchicalSoftmaxOp(),
 
             // Matrix operations
             OperationType.MatMul => new MatMulOp(),
