@@ -7595,7 +7595,185 @@ public static class TensorOperations<T>
             return node;
         }
 
-        throw new NotImplementedException($"Complex matrix multiplication format '{format}' not implemented.");
+        if (format == "interleaved")
+        {
+            // For interleaved format: [batch, m, k*2] and [batch, k*2, n]
+            // Complex numbers stored as [r,i,r,i,...] in last dimension
+            int batch = shapeA.Length > 2 ? shapeA[0] : 1;
+            int m = shapeA[shapeA.Length - 2];
+            int kTimesTwo = shapeA[shapeA.Length - 1];
+            int k = kTimesTwo / 2;
+            int n = shapeB[shapeB.Length - 1];
+
+            var resultShape = batch > 1 ? new[] { batch, m, 2 * n } : new[] { m, 2 * n };
+            var result = new Tensor<T>(resultShape);
+
+            for (int b_idx = 0; b_idx < (batch > 1 ? batch : 1); b_idx++)
+            {
+                // Compute: (A_real + i*A_imag) @ (B_real + i*B_imag)
+                // = (A_real @ B_real - A_imag @ B_imag) + i(A_real @ B_imag + A_imag @ B_real)
+
+                for (int i = 0; i < m; i++)
+                {
+                    for (int j = 0; j < n; j++)
+                    {
+                        T realPart = numOps.Zero;
+                        T imagPart = numOps.Zero;
+
+                        for (int k_idx = 0; k_idx < k; k_idx++)
+                        {
+                            // Get A components - interleaved: [r0, i0, r1, i1, ...]
+                            var aIdxReal = batch > 1 ? new[] { b_idx, i, 2 * k_idx } : new[] { i, 2 * k_idx };
+                            var aIdxImag = batch > 1 ? new[] { b_idx, i, 2 * k_idx + 1 } : new[] { i, 2 * k_idx + 1 };
+                            T a_real = a.Value[aIdxReal];
+                            T a_imag = a.Value[aIdxImag];
+
+                            // Get B components - interleaved: [r0, i0, r1, i1, ...]
+                            var bIdxReal = batch > 1 ? new[] { b_idx, 2 * k_idx, j } : new[] { 2 * k_idx, j };
+                            var bIdxImag = batch > 1 ? new[] { b_idx, 2 * k_idx + 1, j } : new[] { 2 * k_idx + 1, j };
+                            T b_real = b.Value[bIdxReal];
+                            T b_imag = b.Value[bIdxImag];
+
+                            // (a_real + i*a_imag) * (b_real + i*b_imag)
+                            // = (a_real*b_real - a_imag*b_imag) + i(a_real*b_imag + a_imag*b_real)
+                            T rr = numOps.Multiply(a_real, b_real);
+                            T ii = numOps.Multiply(a_imag, b_imag);
+                            T ri = numOps.Multiply(a_real, b_imag);
+                            T ir = numOps.Multiply(a_imag, b_real);
+
+                            realPart = numOps.Add(realPart, numOps.Subtract(rr, ii));
+                            imagPart = numOps.Add(imagPart, numOps.Add(ri, ir));
+                        }
+
+                        // Store result in interleaved format
+                        var resIdxReal = batch > 1 ? new[] { b_idx, i, 2 * j } : new[] { i, 2 * j };
+                        var resIdxImag = batch > 1 ? new[] { b_idx, i, 2 * j + 1 } : new[] { i, 2 * j + 1 };
+                        result[resIdxReal] = realPart;
+                        result[resIdxImag] = imagPart;
+                    }
+                }
+            }
+
+            void BackwardFunctionInterleaved(Tensor<T> gradient)
+            {
+                // Complex matrix multiplication gradient with interleaved format
+                // For C = A @ B (complex), dL/dA = dL/dC @ B^H, dL/dB = A^H @ dL/dC
+                // Where ^H is conjugate transpose
+
+                if (a.RequiresGradient)
+                {
+                    var gradA = new Tensor<T>(shapeA);
+                    // Compute gradient @ conjugate(B)^T
+                    // For now, initialize to zeros (proper implementation requires conjugate transpose)
+                    for (int b_idx = 0; b_idx < (batch > 1 ? batch : 1); b_idx++)
+                    {
+                        for (int i = 0; i < m; i++)
+                        {
+                            for (int k_idx = 0; k_idx < k; k_idx++)
+                            {
+                                T gradRealSum = numOps.Zero;
+                                T gradImagSum = numOps.Zero;
+
+                                for (int j = 0; j < n; j++)
+                                {
+                                    // Get gradient components
+                                    var gradIdxReal = batch > 1 ? new[] { b_idx, i, 2 * j } : new[] { i, 2 * j };
+                                    var gradIdxImag = batch > 1 ? new[] { b_idx, i, 2 * j + 1 } : new[] { i, 2 * j + 1 };
+                                    T g_real = gradient[gradIdxReal];
+                                    T g_imag = gradient[gradIdxImag];
+
+                                    // Get B conjugate components (b_real, -b_imag)
+                                    var bIdxReal = batch > 1 ? new[] { b_idx, 2 * k_idx, j } : new[] { 2 * k_idx, j };
+                                    var bIdxImag = batch > 1 ? new[] { b_idx, 2 * k_idx + 1, j } : new[] { 2 * k_idx + 1, j };
+                                    T b_real = b.Value[bIdxReal];
+                                    T b_imag = numOps.Negate(b.Value[bIdxImag]); // Conjugate
+
+                                    // (g_real + i*g_imag) * (b_real + i*b_imag)
+                                    T rr = numOps.Multiply(g_real, b_real);
+                                    T ii = numOps.Multiply(g_imag, b_imag);
+                                    T ri = numOps.Multiply(g_real, b_imag);
+                                    T ir = numOps.Multiply(g_imag, b_real);
+
+                                    gradRealSum = numOps.Add(gradRealSum, numOps.Subtract(rr, ii));
+                                    gradImagSum = numOps.Add(gradImagSum, numOps.Add(ri, ir));
+                                }
+
+                                var aIdxReal = batch > 1 ? new[] { b_idx, i, 2 * k_idx } : new[] { i, 2 * k_idx };
+                                var aIdxImag = batch > 1 ? new[] { b_idx, i, 2 * k_idx + 1 } : new[] { i, 2 * k_idx + 1 };
+                                gradA[aIdxReal] = gradRealSum;
+                                gradA[aIdxImag] = gradImagSum;
+                            }
+                        }
+                    }
+                    a.Gradient = a.Gradient == null ? gradA : a.Gradient.Add(gradA);
+                }
+
+                if (b.RequiresGradient)
+                {
+                    var gradB = new Tensor<T>(shapeB);
+                    // Compute conjugate(A)^T @ gradient
+                    for (int b_idx = 0; b_idx < (batch > 1 ? batch : 1); b_idx++)
+                    {
+                        for (int k_idx = 0; k_idx < k; k_idx++)
+                        {
+                            for (int j = 0; j < n; j++)
+                            {
+                                T gradRealSum = numOps.Zero;
+                                T gradImagSum = numOps.Zero;
+
+                                for (int i = 0; i < m; i++)
+                                {
+                                    // Get A conjugate components
+                                    var aIdxReal = batch > 1 ? new[] { b_idx, i, 2 * k_idx } : new[] { i, 2 * k_idx };
+                                    var aIdxImag = batch > 1 ? new[] { b_idx, i, 2 * k_idx + 1 } : new[] { i, 2 * k_idx + 1 };
+                                    T a_real = a.Value[aIdxReal];
+                                    T a_imag = numOps.Negate(a.Value[aIdxImag]); // Conjugate
+
+                                    // Get gradient components
+                                    var gradIdxReal = batch > 1 ? new[] { b_idx, i, 2 * j } : new[] { i, 2 * j };
+                                    var gradIdxImag = batch > 1 ? new[] { b_idx, i, 2 * j + 1 } : new[] { i, 2 * j + 1 };
+                                    T g_real = gradient[gradIdxReal];
+                                    T g_imag = gradient[gradIdxImag];
+
+                                    // (a_real + i*a_imag) * (g_real + i*g_imag)
+                                    T rr = numOps.Multiply(a_real, g_real);
+                                    T ii = numOps.Multiply(a_imag, g_imag);
+                                    T ri = numOps.Multiply(a_real, g_imag);
+                                    T ir = numOps.Multiply(a_imag, g_real);
+
+                                    gradRealSum = numOps.Add(gradRealSum, numOps.Subtract(rr, ii));
+                                    gradImagSum = numOps.Add(gradImagSum, numOps.Add(ri, ir));
+                                }
+
+                                var bIdxReal = batch > 1 ? new[] { b_idx, 2 * k_idx, j } : new[] { 2 * k_idx, j };
+                                var bIdxImag = batch > 1 ? new[] { b_idx, 2 * k_idx + 1, j } : new[] { 2 * k_idx + 1, j };
+                                gradB[bIdxReal] = gradRealSum;
+                                gradB[bIdxImag] = gradImagSum;
+                            }
+                        }
+                    }
+                    b.Gradient = b.Gradient == null ? gradB : b.Gradient.Add(gradB);
+                }
+            }
+
+            var nodeInterleaved = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient || b.RequiresGradient,
+                parents: new List<ComputationNode<T>> { a, b },
+                backwardFunction: BackwardFunctionInterleaved,
+                name: null);
+
+            nodeInterleaved.OperationType = OperationType.ComplexMatMul;
+            nodeInterleaved.OperationParams = new Dictionary<string, object> { { "Format", format } };
+
+            var tapeInterleaved = GradientTape<T>.Current;
+            if (tapeInterleaved != null && tapeInterleaved.IsRecording)
+                tapeInterleaved.RecordOperation(nodeInterleaved);
+
+            return nodeInterleaved;
+        }
+
+        throw new NotImplementedException($"Complex matrix multiplication format '{format}' not implemented. Supported formats: 'split', 'interleaved'.");
     }
 
     /// <summary>
