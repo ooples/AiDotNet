@@ -33,7 +33,7 @@ public class ContextFlow<T> : IContextFlow<T>
 
     private void InitializeContextFlow()
     {
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < _numLevels; i++)
         {

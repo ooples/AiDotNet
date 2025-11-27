@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Genetics;
 
 /// <summary>
@@ -31,7 +33,7 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
     public TreeIndividual(NodeGene rootNode)
     {
         _rootNode = rootNode;
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

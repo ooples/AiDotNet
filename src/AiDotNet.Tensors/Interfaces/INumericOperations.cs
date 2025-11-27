@@ -385,4 +385,24 @@ public interface INumericOperations<T>
     /// <param name="value">The value to convert.</param>
     /// <returns>The value as a double.</returns>
     double ToDouble(T value);
+
+    /// <summary>
+    /// Indicates whether this numeric type supports SIMD/CPU-accelerated operations.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> SIMD (Single Instruction Multiple Data) allows the CPU to perform
+    /// the same operation on multiple values at once, making vector operations much faster.
+    /// Types like float, double, int, and long typically support SIMD acceleration.
+    /// </remarks>
+    bool SupportsCpuAcceleration { get; }
+
+    /// <summary>
+    /// Indicates whether this numeric type supports GPU-accelerated operations.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> GPU acceleration uses the graphics card to perform many calculations
+    /// in parallel, which can be orders of magnitude faster for large datasets.
+    /// Types like float, double, int, and long are typically supported on GPUs.
+    /// </remarks>
+    bool SupportsGpuAcceleration { get; }
 }

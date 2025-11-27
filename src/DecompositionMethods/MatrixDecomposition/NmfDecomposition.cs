@@ -228,7 +228,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// <returns>A randomly initialized matrix.</returns>
     private Matrix<T> InitializeRandomMatrix(int rows, int cols)
     {
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         var matrix = new Matrix<T>(rows, cols);
 
         for (int i = 0; i < rows; i++)

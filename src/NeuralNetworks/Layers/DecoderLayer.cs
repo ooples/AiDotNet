@@ -443,4 +443,49 @@ public class DecoderLayer<T> : LayerBase<T>
         _norm1.ParameterCount +
         _norm2.ParameterCount +
         _norm3.ParameterCount;
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        // DecoderLayer requires TWO inputs: decoder input and encoder output
+        if (inputNodes.Count < 2)
+            throw new ArgumentException(
+                "DecoderLayer requires at least two input nodes: decoder input and encoder output.",
+                nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var decoderInput = inputNodes[0];
+        var encoderOutput = inputNodes[1];
+
+        // Self-attention on decoder input
+        var selfAttentionOutput = _selfAttention.ExportComputationGraph([decoderInput]);
+        var residual1 = TensorOperations<T>.Add(decoderInput, selfAttentionOutput);
+        var normalized1 = _norm1.ExportComputationGraph([residual1]);
+
+        // Cross-attention with encoder output
+        var crossAttentionOutput = _crossAttention.ExportComputationGraph([normalized1, encoderOutput]);
+        var residual2 = TensorOperations<T>.Add(normalized1, crossAttentionOutput);
+        var normalized2 = _norm2.ExportComputationGraph([residual2]);
+
+        // Feed-forward network
+        var feedForwardOutput = _feedForward.ExportComputationGraph([normalized2]);
+        var residual3 = TensorOperations<T>.Add(normalized2, feedForwardOutput);
+        var output = _norm3.ExportComputationGraph([residual3]);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> because DecoderLayer can be compiled with multiple input nodes representing
+    /// the decoder input and encoder output. The computation graph supports multiple inputs.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
+
 }

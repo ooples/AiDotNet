@@ -513,4 +513,31 @@ public class MultiplyLayer<T> : LayerBase<T>
         _lastInputs = null;
         _lastOutput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        if (inputNodes.Count > 1)
+        {
+            var result = inputNodes[0];
+            for (int i = 1; i < inputNodes.Count; i++)
+            {
+                result = TensorOperations<T>.ElementwiseMultiply(result, inputNodes[i]);
+            }
+            return result;
+        }
+
+        return inputNode;
+    }
+
+    public override bool SupportsJitCompilation => true;
 }

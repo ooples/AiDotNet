@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -87,7 +89,7 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
     {
         _options = options;
         _trees = [];
-        _random = new Random(_options.Seed ?? Environment.TickCount);
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -404,7 +406,7 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
             _trees.Add(tree);
         }
 
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -457,7 +459,7 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
         // Initialize the random number generator with the same seed if available
         if (_options.Seed.HasValue)
         {
-            newModel._random = new Random(_options.Seed.Value);
+            newModel._random = RandomHelper.CreateSeededRandom(_options.Seed.Value);
         }
         
         return newModel;

@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -136,5 +138,41 @@ public class SwishActivation<T> : ActivationFunctionBase<T>
             NumOps.One,
             NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(x)))
         );
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>True because gradient computation is fully implemented in TensorOperations.Swish.</value>
+    /// <remarks>
+    /// <para>
+    /// Swish supports JIT compilation because:
+    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
+    /// - The operation uses IEngine for GPU acceleration
+    /// - It can be represented as a static computation graph node
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with Swish activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method maps the Swish activation to TensorOperations&lt;T&gt;.Swish(input),
+    /// which handles both forward and backward passes for JIT compilation.
+    /// Swish (also known as SiLU) is used in EfficientNet and other modern architectures.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        return TensorOperations<T>.Swish(input);
     }
 }

@@ -660,7 +660,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         if (min >= max)
             throw new ArgumentException("Minimum value must be less than maximum value");
         
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         var vector = new Vector<T>(size);
     
         for (int i = 0; i < size; i++)

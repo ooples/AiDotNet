@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -37,16 +39,10 @@ namespace AiDotNet.LossFunctions;
 public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
-    /// Small value to prevent numerical instability with log(0).
-    /// </summary>
-    private readonly T _epsilon;
-
-    /// <summary>
     /// Initializes a new instance of the SparseCategoricalCrossEntropyLoss class.
     /// </summary>
     public SparseCategoricalCrossEntropyLoss()
     {
-        _epsilon = NumOps.FromDouble(1e-15);
     }
 
     /// <summary>
@@ -97,11 +93,11 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
             // Get predicted probability for the true class
             T predictedProb = predicted[classIndex];
 
-            // Clamp to prevent log(0)
-            predictedProb = MathHelper.Clamp(predictedProb, _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
+            // Clamp to prevent log(0) using NumericalStabilityHelper
+            predictedProb = NumericalStabilityHelper.ClampProbability(predictedProb, NumericalStabilityHelper.SmallEpsilon);
 
-            // Compute -log(predicted_probability)
-            sum = NumOps.Add(sum, NumOps.Negate(NumOps.Log(predictedProb)));
+            // Compute -log(predicted_probability) with safe log
+            sum = NumOps.Add(sum, NumOps.Negate(NumericalStabilityHelper.SafeLog(predictedProb, NumericalStabilityHelper.SmallEpsilon)));
             sampleCount++;
         }
 
@@ -151,14 +147,13 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
                     $"Expected value between 0 and {predicted.Length - 1}.");
             }
 
-            // Clamp to prevent division by zero
-            T predictedProb = MathHelper.Clamp(
+            // Clamp to prevent division by zero using NumericalStabilityHelper
+            T predictedProb = NumericalStabilityHelper.ClampProbability(
                 predicted[classIndex],
-                _epsilon,
-                NumOps.Subtract(NumOps.One, _epsilon));
+                NumericalStabilityHelper.SmallEpsilon);
 
-            // Derivative for the correct class: -1 / predicted[correct_class]
-            T derivative = NumOps.Negate(NumOps.Divide(NumOps.One, predictedProb));
+            // Derivative for the correct class: -1 / predicted[correct_class] with safe division
+            T derivative = NumOps.Negate(NumericalStabilityHelper.SafeDiv(NumOps.One, predictedProb, NumericalStabilityHelper.SmallEpsilon));
 
             // Accumulate gradient (in case multiple samples point to the same class)
             gradient[classIndex] = NumOps.Add(gradient[classIndex], derivative);

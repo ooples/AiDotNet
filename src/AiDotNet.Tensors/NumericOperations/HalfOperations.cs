@@ -228,4 +228,10 @@ public class HalfOperations : INumericOperations<Half>
     /// This is lossless - all Half values can be exactly represented in double.
     /// </remarks>
     public double ToDouble(Half value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => true;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => false;
 }

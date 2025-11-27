@@ -132,7 +132,7 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         _bestMonitoredMetric = double.MaxValue;
         _patienceCounter = 0;
         NumOps = MathHelper.GetNumericOperations<T>();
-        Random = seed.HasValue ? new Random(seed.Value) : new Random();
+        Random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         _lastTrainingLoss = NumOps.Zero;
         _lastValidationLoss = double.MaxValue;
     }

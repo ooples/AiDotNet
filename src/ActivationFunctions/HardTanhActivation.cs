@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -103,5 +105,41 @@ public class HardTanhActivation<T> : ActivationFunctionBase<T>
         }
 
         return NumOps.Zero;
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>True because gradient computation is fully implemented in TensorOperations.HardTanh.</value>
+    /// <remarks>
+    /// <para>
+    /// HardTanh supports JIT compilation because:
+    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
+    /// - The gradient is 1 when -1 &lt; x &lt; 1, and 0 otherwise
+    /// - It's computationally efficient and useful for bounded outputs
+    /// - It can be represented as a static computation graph node
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with HardTanh activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method maps the HardTanh activation to TensorOperations&lt;T&gt;.HardTanh(input),
+    /// which handles both forward and backward passes for JIT compilation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        return TensorOperations<T>.HardTanh(input);
     }
 }

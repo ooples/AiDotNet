@@ -648,4 +648,10 @@ public class ByteOperations : INumericOperations<byte>
     /// <param name="value">The byte value to convert.</param>
     /// <returns>The value as a double.</returns>
     public double ToDouble(byte value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => false;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => false;
 }

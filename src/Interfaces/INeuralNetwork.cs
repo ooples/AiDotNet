@@ -84,4 +84,64 @@ public interface INeuralNetwork<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </remarks>
     /// <param name="isTrainingMode">True to set the network to training mode; false to set it to inference mode.</param>
     void SetTrainingMode(bool isTrainingMode);
+
+    /// <summary>
+    /// Performs a forward pass while storing intermediate activations for backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// This method processes input through the network while caching layer activations,
+    /// enabling gradient computation during backpropagation.
+    ///
+    /// <b>For Beginners:</b> This is like the regular forward pass, but it remembers
+    /// what happened at each step so the network can learn from its mistakes.
+    ///
+    /// During training:
+    /// 1. Input flows forward through layers (this method)
+    /// 2. Each layer's output is saved in memory
+    /// 3. After seeing the error, we go backwards (Backpropagate)
+    /// 4. The saved outputs help calculate how to improve each layer
+    /// </remarks>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor from the network.</returns>
+    Tensor<T> ForwardWithMemory(Tensor<T> input);
+
+    /// <summary>
+    /// Performs backpropagation to compute gradients for all parameters.
+    /// </summary>
+    /// <remarks>
+    /// This method propagates error gradients backward through the network,
+    /// computing how much each parameter contributed to the error.
+    ///
+    /// <b>For Beginners:</b> This is how the network learns from its mistakes.
+    ///
+    /// After making a prediction:
+    /// 1. We calculate the error (how wrong was the prediction?)
+    /// 2. Backpropagate sends this error backwards through layers
+    /// 3. Each layer calculates "how much did I contribute to this error?"
+    /// 4. These calculations (gradients) tell us how to adjust each weight
+    ///
+    /// This must be called after ForwardWithMemory() to have activations available.
+    /// </remarks>
+    /// <param name="outputGradients">Gradients of the loss with respect to network outputs.</param>
+    /// <returns>Gradients with respect to the input (for chaining networks).</returns>
+    Tensor<T> Backpropagate(Tensor<T> outputGradients);
+
+    /// <summary>
+    /// Gets the gradients computed during the most recent backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// This method returns the accumulated gradients for all trainable parameters
+    /// after a backpropagation pass.
+    ///
+    /// <b>For Beginners:</b> After backpropagation figures out how to improve,
+    /// this method retrieves those improvement instructions.
+    ///
+    /// The returned gradients tell the optimizer:
+    /// - Which direction to adjust each weight
+    /// - How strongly to adjust it
+    ///
+    /// The optimizer then uses these gradients to update the parameters.
+    /// </remarks>
+    /// <returns>A vector containing gradients for all trainable parameters.</returns>
+    Vector<T> GetParameterGradients();
 }

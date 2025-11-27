@@ -682,4 +682,10 @@ public class UInt16Operations : INumericOperations<ushort>
     /// Converts a ushort value to double (FP64) precision.
     /// </summary>
     public double ToDouble(ushort value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => false;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => false;
 }

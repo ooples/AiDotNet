@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -338,7 +340,7 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// optimizes two coefficients at a time.
     /// </para>
     /// </remarks>
-    private readonly Random _random = new();
+    private readonly Random _random = RandomHelper.CreateSecureRandom();
 
     private int SelectSecondAlpha(int i, int m)
     {

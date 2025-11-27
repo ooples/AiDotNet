@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -273,7 +274,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private void InitializeTTCores()
     {
-        Random random = new Random(42);
+        Random random = RandomHelper.CreateSeededRandom(42);
 
         for (int k = 0; k < _numCores; k++)
         {

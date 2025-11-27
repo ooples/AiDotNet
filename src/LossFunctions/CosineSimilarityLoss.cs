@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -9,9 +11,9 @@ namespace AiDotNet.LossFunctions;
 /// <b>For Beginners:</b> Cosine Similarity measures how similar two vectors are in terms of their orientation,
 /// regardless of their magnitude (size).
 /// 
-/// The formula for cosine similarity is: cos(?) = (A·B)/(||A||·||B||)
+/// The formula for cosine similarity is: cos(?) = (Aï¿½B)/(||A||ï¿½||B||)
 /// Where:
-/// - A·B is the dot product of vectors A and B
+/// - Aï¿½B is the dot product of vectors A and B
 /// - ||A|| and ||B|| are the magnitudes (lengths) of vectors A and B
 /// - ? is the angle between vectors A and B
 /// 
@@ -32,16 +34,10 @@ namespace AiDotNet.LossFunctions;
 public class CosineSimilarityLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
-    /// Small value to prevent division by zero.
-    /// </summary>
-    private readonly T _epsilon;
-    
-    /// <summary>
     /// Initializes a new instance of the CosineSimilarityLoss class.
     /// </summary>
     public CosineSimilarityLoss()
     {
-        _epsilon = NumOps.FromDouble(1e-15);
     }
     
     /// <summary>
@@ -64,14 +60,11 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
             normPredicted = NumOps.Add(normPredicted, NumOps.Multiply(predicted[i], predicted[i]));
             normActual = NumOps.Add(normActual, NumOps.Multiply(actual[i], actual[i]));
         }
-        
-        // Add epsilon to prevent division by zero
-        normPredicted = NumOps.Add(normPredicted, _epsilon);
-        normActual = NumOps.Add(normActual, _epsilon);
-        
-        T cosineSimilarity = NumOps.Divide(
+
+        T cosineSimilarity = NumericalStabilityHelper.SafeDiv(
             dotProduct,
-            NumOps.Multiply(NumOps.Sqrt(normPredicted), NumOps.Sqrt(normActual))
+            NumOps.Multiply(NumOps.Sqrt(normPredicted), NumOps.Sqrt(normActual)),
+            NumericalStabilityHelper.SmallEpsilon
         );
         
         // Loss is 1 - similarity
@@ -98,27 +91,23 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
             normPredicted = NumOps.Add(normPredicted, NumOps.Multiply(predicted[i], predicted[i]));
             normActual = NumOps.Add(normActual, NumOps.Multiply(actual[i], actual[i]));
         }
-        
-        // Add epsilon to prevent division by zero
-        normPredicted = NumOps.Add(normPredicted, _epsilon);
-        normActual = NumOps.Add(normActual, _epsilon);
-        
+
         T normPredSqrt = NumOps.Sqrt(normPredicted);
         T normProduct = NumOps.Multiply(normPredSqrt, NumOps.Sqrt(normActual));
-        
+
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
-            // ?(cos similarity)/?p_i = (a_i*||p||^2 - p_i*(p·a)) / (||p||^3 * ||a||)
+            // ?(cos similarity)/?p_i = (a_i*||p||^2 - p_i*(pï¿½a)) / (||p||^3 * ||a||)
             T numerator = NumOps.Subtract(
                 NumOps.Multiply(actual[i], normPredicted),
                 NumOps.Multiply(predicted[i], dotProduct)
             );
-            
+
             T denominator = NumOps.Multiply(normProduct, normPredSqrt);
-            
+
             // Derivative of the loss is negative of the derivative of cosine similarity
-            derivative[i] = NumOps.Negate(NumOps.Divide(numerator, denominator));
+            derivative[i] = NumOps.Negate(NumericalStabilityHelper.SafeDiv(numerator, denominator, NumericalStabilityHelper.SmallEpsilon));
         }
         
         return derivative;

@@ -716,4 +716,10 @@ public class DoubleOperations : INumericOperations<double>
     /// Converts a double value to double (identity operation).
     /// </summary>
     public double ToDouble(double value) => value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => true;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => true;
 }

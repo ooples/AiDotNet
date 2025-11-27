@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -10,13 +12,13 @@ namespace AiDotNet.ActivationFunctions;
 /// hyperbolic tangent function. Like the standard tanh, it outputs values between -1 and 1, making
 /// it useful for neural networks where you want the output to be centered around zero.
 /// 
-/// The mathematical formula is: f(x) = (1 - e^(-ßx)) / (1 + e^(-ßx))
+/// The mathematical formula is: f(x) = (1 - e^(-ÃŸx)) / (1 + e^(-ÃŸx))
 /// 
-/// This is equivalent to the standard tanh function when ß = 2, and has these key properties:
+/// This is equivalent to the standard tanh function when ÃŸ = 2, and has these key properties:
 /// - Outputs values between -1 and 1
 /// - Is symmetric around the origin (f(-x) = -f(x))
-/// - The parameter ß (beta) controls the steepness of the curve
-/// - When ß = 2, this is exactly equivalent to the standard tanh function
+/// - The parameter ÃŸ (beta) controls the steepness of the curve
+/// - When ÃŸ = 2, this is exactly equivalent to the standard tanh function
 /// 
 /// When to use it:
 /// - When you need outputs centered around zero
@@ -67,7 +69,7 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method transforms an input value using the formula:
-    /// f(x) = (1 - e^(-ßx)) / (1 + e^(-ßx))
+    /// f(x) = (1 - e^(-ÃŸx)) / (1 + e^(-ÃŸx))
     /// 
     /// No matter how large or small the input is, the output will always be between -1 and 1:
     /// - Large positive inputs produce values close to 1
@@ -75,12 +77,12 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// - An input of 0 produces an output of 0
     /// 
     /// This "squashing" property makes the Scaled Tanh useful for normalizing outputs.
-    /// When ß = 2, this function is mathematically identical to the standard tanh function.
+    /// When ÃŸ = 2, this function is mathematically identical to the standard tanh function.
     /// </para>
     /// </remarks>
     public override T Activate(T input)
     {
-        // f(x) = (1 - exp(-ßx)) / (1 + exp(-ßx))
+        // f(x) = (1 - exp(-ÃŸx)) / (1 + exp(-ÃŸx))
         T negBetaX = NumOps.Negate(NumOps.Multiply(_beta, input));
         T expNegBetaX = NumOps.Exp(negBetaX);
         T numerator = NumOps.Subtract(NumOps.One, expNegBetaX);
@@ -100,7 +102,7 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// when its input changes slightly. This is used during neural network training to determine
     /// how to adjust weights.
     /// 
-    /// The derivative formula is: f'(x) = ß * (1 - f(x)²)
+    /// The derivative formula is: f'(x) = ÃŸ * (1 - f(x)Â²)
     /// 
     /// Key properties of this derivative:
     /// - It's highest at x = 0 (where the function is steepest)
@@ -113,11 +115,48 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Derivative(T input)
     {
-        // f'(x) = ß * (1 - f(x)^2)
+        // f'(x) = ÃŸ * (1 - f(x)^2)
         T activationValue = Activate(input);
         T squaredActivation = NumOps.Multiply(activationValue, activationValue);
         T oneMinus = NumOps.Subtract(NumOps.One, squaredActivation);
 
         return NumOps.Multiply(_beta, oneMinus);
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>True because gradient computation is fully implemented in TensorOperations.ScaledTanh.</value>
+    /// <remarks>
+    /// <para>
+    /// ScaledTanh supports JIT compilation because:
+    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
+    /// - The gradient is Î² * (1 - f(x)Â²)
+    /// - The steepness parameter Î² allows tuning network behavior
+    /// - It can be represented as a static computation graph node
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with ScaledTanh activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method maps the ScaledTanh activation to TensorOperations&lt;T&gt;.ScaledTanh(input, beta),
+    /// which handles both forward and backward passes for JIT compilation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        double betaDouble = Convert.ToDouble(_beta);
+        return TensorOperations<T>.ScaledTanh(input, betaDouble);
     }
 }

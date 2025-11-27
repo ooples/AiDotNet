@@ -1123,4 +1123,86 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         return diagnostics;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_keyWeights == null || _valueWeights == null || _outputWeights == null || _outputBias == null)
+            throw new InvalidOperationException("Layer not initialized. Call Initialize() first.");
+
+        // MemoryReadLayer requires TWO inputs: input and memory
+        // Input 0: Query input [batch, inputDim]
+        var inputTensor = new Tensor<T>(new int[] { 1, _keyWeights.Rows });
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputTensor, "input");
+        inputNodes.Add(inputNode);
+
+        // Input 1: Memory [memorySize, memoryDim]
+        var memoryTensor = new Tensor<T>(new int[] { 10, _keyWeights.Columns }); // Placeholder size
+        var memoryNode = Autodiff.TensorOperations<T>.Variable(memoryTensor, "memory");
+        inputNodes.Add(memoryNode);
+
+        // Convert weights to tensors
+        var keyWeightsTensor = new Tensor<T>(new int[] { _keyWeights.Rows, _keyWeights.Columns });
+        for (int i = 0; i < _keyWeights.Rows; i++)
+            for (int j = 0; j < _keyWeights.Columns; j++)
+                keyWeightsTensor[i, j] = _keyWeights[i, j];
+        var keyWeightsNode = Autodiff.TensorOperations<T>.Constant(keyWeightsTensor, "keyWeights");
+
+        var valueWeightsTensor = new Tensor<T>(new int[] { _valueWeights.Rows, _valueWeights.Columns });
+        for (int i = 0; i < _valueWeights.Rows; i++)
+            for (int j = 0; j < _valueWeights.Columns; j++)
+                valueWeightsTensor[i, j] = _valueWeights[i, j];
+        var valueWeightsNode = Autodiff.TensorOperations<T>.Constant(valueWeightsTensor, "valueWeights");
+
+        var outputWeightsTensor = new Tensor<T>(new int[] { _outputWeights.Rows, _outputWeights.Columns });
+        for (int i = 0; i < _outputWeights.Rows; i++)
+            for (int j = 0; j < _outputWeights.Columns; j++)
+                outputWeightsTensor[i, j] = _outputWeights[i, j];
+        var outputWeightsNode = Autodiff.TensorOperations<T>.Constant(outputWeightsTensor, "outputWeights");
+
+        var biasTensor = new Tensor<T>(new int[] { _outputBias.Length });
+        for (int i = 0; i < _outputBias.Length; i++)
+            biasTensor[i] = _outputBias[i];
+        var biasNode = Autodiff.TensorOperations<T>.Constant(biasTensor, "outputBias");
+
+        // Build attention computation graph
+        // Step 1: keys = input @ keyWeights
+        var keys = Autodiff.TensorOperations<T>.MatMul(inputNode, keyWeightsNode);
+
+        // Step 2: scores = keys @ memory.T
+        var memoryT = Autodiff.TensorOperations<T>.Transpose(memoryNode);
+        var scores = Autodiff.TensorOperations<T>.MatMul(keys, memoryT);
+
+        // Step 3: attention = softmax(scores)
+        var attention = Autodiff.TensorOperations<T>.Softmax(scores, axis: -1);
+
+        // Step 4: readout = attention @ memory
+        var readout = Autodiff.TensorOperations<T>.MatMul(attention, memoryNode);
+
+        // Step 5: transformed = readout @ valueWeights
+        var transformed = Autodiff.TensorOperations<T>.MatMul(readout, valueWeightsNode);
+
+        // Step 6: projected = transformed @ outputWeights
+        var projected = Autodiff.TensorOperations<T>.MatMul(transformed, outputWeightsNode);
+
+        // Step 7: output = projected + bias
+        var output = Autodiff.TensorOperations<T>.Add(projected, biasNode);
+
+        // Step 8: Apply activation if needed
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+            output = ScalarActivation.ApplyToGraph(output);
+        else if (VectorActivation != null && VectorActivation.SupportsJitCompilation)
+            output = VectorActivation.ApplyToGraph(output);
+
+        return output;
+    }
+
+    public override bool SupportsJitCompilation => _keyWeights != null && _valueWeights != null &&
+                                                     _outputWeights != null && _outputBias != null;
+
 }

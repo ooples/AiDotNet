@@ -889,4 +889,10 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
         }
         return _ops.ToDouble(value.Real);
     }
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => false;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => false;
 }

@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -1671,5 +1673,75 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     
         // Return the single prediction
         return predictions[0];
+    }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Returns <c>true</c> when the model has estimated components.
+    /// Prediction uses the point estimates from Bayesian inference.
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> While BSTS training uses MCMC sampling,
+    /// prediction uses point estimates and can be JIT compiled.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => !NumOps.Equals(_level, NumOps.Zero) || !NumOps.Equals(_trend, NumOps.Zero);
+
+    /// <summary>
+    /// Exports the BSTS model as a computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">A list to which input nodes will be added.</param>
+    /// <returns>The output computation node representing the forecast.</returns>
+    /// <remarks>
+    /// <para>
+    /// The computation graph represents: forecast = level + trend + seasonal
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+        {
+            throw new ArgumentNullException(nameof(inputNodes), "Input nodes list cannot be null.");
+        }
+
+        // Create input node for time index
+        var timeIndexTensor = new Tensor<T>(new[] { 1 });
+        var timeIndexNode = TensorOperations<T>.Variable(timeIndexTensor, "time_index", requiresGradient: false);
+        inputNodes.Add(timeIndexNode);
+
+        // Start with level
+        var levelTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { _level }));
+        var resultNode = TensorOperations<T>.Constant(levelTensor, "level");
+
+        // Add trend
+        var trendTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { _trend }));
+        var trendNode = TensorOperations<T>.Constant(trendTensor, "trend");
+        resultNode = TensorOperations<T>.Add(resultNode, trendNode);
+
+        // Add average seasonal effect
+        if (_seasonalComponents != null && _seasonalComponents.Count > 0)
+        {
+            T avgSeasonal = NumOps.Zero;
+            int count = 0;
+            foreach (var component in _seasonalComponents)
+            {
+                for (int i = 0; i < component.Length; i++)
+                {
+                    avgSeasonal = NumOps.Add(avgSeasonal, component[i]);
+                    count++;
+                }
+            }
+            if (count > 0)
+            {
+                avgSeasonal = NumOps.Divide(avgSeasonal, NumOps.FromDouble(count));
+            }
+            var seasonalTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { avgSeasonal }));
+            var seasonalNode = TensorOperations<T>.Constant(seasonalTensor, "seasonal");
+            resultNode = TensorOperations<T>.Add(resultNode, seasonalNode);
+        }
+
+        return resultNode;
     }
 }

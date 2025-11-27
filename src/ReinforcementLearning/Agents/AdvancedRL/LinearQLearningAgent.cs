@@ -155,8 +155,71 @@ public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _options.ActionSize * _options.FeatureSize;
     public override int FeatureCount => _options.FeatureSize;
-    public override byte[] Serialize() => throw new NotImplementedException();
-    public override void Deserialize(byte[] data) => throw new NotImplementedException();
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Write options
+        writer.Write(_options.ActionSize);
+        writer.Write(_options.FeatureSize);
+        writer.Write(_options.EpsilonStart);
+        writer.Write(_options.EpsilonEnd);
+        writer.Write(_options.EpsilonDecay);
+
+        // Write current epsilon
+        writer.Write(_epsilon);
+
+        // Write weights matrix
+        writer.Write(_weights.Rows);
+        writer.Write(_weights.Columns);
+        for (int a = 0; a < _weights.Rows; a++)
+        {
+            for (int f = 0; f < _weights.Columns; f++)
+            {
+                writer.Write(NumOps.ToDouble(_weights[a, f]));
+            }
+        }
+
+        return ms.ToArray();
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read options
+        int actionSize = reader.ReadInt32();
+        int featureSize = reader.ReadInt32();
+        double epsilonStart = reader.ReadDouble();
+        double epsilonEnd = reader.ReadDouble();
+        double epsilonDecay = reader.ReadDouble();
+
+        _options = new LinearQLearningOptions<T>
+        {
+            ActionSize = actionSize,
+            FeatureSize = featureSize,
+            EpsilonStart = epsilonStart,
+            EpsilonEnd = epsilonEnd,
+            EpsilonDecay = epsilonDecay
+        };
+
+        // Read current epsilon
+        _epsilon = reader.ReadDouble();
+
+        // Read weights matrix
+        int rows = reader.ReadInt32();
+        int cols = reader.ReadInt32();
+        _weights = new Matrix<T>(rows, cols);
+        for (int a = 0; a < rows; a++)
+        {
+            for (int f = 0; f < cols; f++)
+            {
+                _weights[a, f] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+    }
 
     public override Vector<T> GetParameters()
     {

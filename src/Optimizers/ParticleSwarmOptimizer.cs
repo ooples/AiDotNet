@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -65,7 +66,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         ParticleSwarmOptimizationOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
         _psoOptions = options ?? new ParticleSwarmOptimizationOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();

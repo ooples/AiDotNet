@@ -68,7 +68,7 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
         
         // Generate deterministic features from text
         var hash = text.GetHashCode();
-        var random = new Random(hash);
+        var random = RandomHelper.CreateSeededRandom(hash);
 
         // Character-based features
         var charFreqs = CalculateCharacterFrequencies(text);

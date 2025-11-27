@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -162,5 +164,45 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
         }
 
         return jacobian;
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <remarks>
+    /// <para>
+    /// This activation does not yet support JIT compilation because the gradient
+    /// computation (backward pass) has not been implemented in TensorOperations.LeakyReLU.
+    /// </para>
+    /// <para>
+    /// To enable JIT support:
+    /// 1. Implement the backward pass in TensorOperations.LeakyReLU
+    /// 2. Test the gradient computation
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with LeakyReLU activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method maps the LeakyReLU activation to TensorOperations&lt;T&gt;.LeakyReLU(input, alpha),
+    /// which handles both forward and backward passes for JIT compilation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        // Convert alpha to double for TensorOperations
+        double alphaDouble = Convert.ToDouble(_alpha);
+        return TensorOperations<T>.LeakyReLU(input, alphaDouble);
     }
 }

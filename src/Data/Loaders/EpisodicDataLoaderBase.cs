@@ -119,7 +119,7 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> : IEpisodicData
         NWay = nWay;
         KShot = kShot;
         QueryShots = queryShots;
-        Random = seed.HasValue ? new Random(seed.Value) : new Random();
+        Random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         // Preprocess: Build class-to-indices mapping
         ClassToIndices = BuildClassIndex(datasetY);

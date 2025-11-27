@@ -398,7 +398,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         var vector = new Vector<T>(dim);
 
         // Initialize with random values
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < dim; i++)
         {
             vector[i] = NumOps.FromDouble(random.NextDouble() - 0.5);

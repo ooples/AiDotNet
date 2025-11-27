@@ -48,6 +48,24 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// parameters to train, but they do support the training process by allowing gradients
     /// to flow backward through them.
     /// </remarks>
+    /// <summary>
+    /// Gets the pool size for the pooling operation.
+    /// </summary>
+    /// <returns>An array containing the pool size for height and width dimensions.</returns>
+    public int[] GetPoolSize()
+    {
+        return new int[] { PoolSize, PoolSize };
+    }
+
+    /// <summary>
+    /// Gets the stride for the pooling operation.
+    /// </summary>
+    /// <returns>An array containing the stride for height and width dimensions.</returns>
+    public int[] GetStride()
+    {
+        return new int[] { Strides, Strides };
+    }
+
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -432,5 +450,32 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward pass
         _maxIndices = new Tensor<int>(OutputShape);
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        var poolSize = GetPoolSize();
+        var strides = GetStride();
+
+        var maxPoolNode = TensorOperations<T>.MaxPool2D(inputNode, poolSize: poolSize, strides: strides);
+        return maxPoolNode;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            return InputShape != null && InputShape.Length > 0;
+        }
     }
 }

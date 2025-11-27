@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -42,6 +43,42 @@ public class CurriculumTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
     /// <param name="input">The input data.</param>
     /// <returns>Raw logits from the base teacher.</returns>
     public override Vector<T> GetLogits(Vector<T> input) => _baseTeacher.GetLogits(input);
+
+    /// <summary>
+    /// Gets whether this teacher supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> if the base teacher implements IJitCompilable and supports JIT; otherwise, <c>false</c>.
+    /// </value>
+    public override bool SupportsJitCompilation =>
+        _baseTeacher is IJitCompilable<T> jitCompilable && jitCompilable.SupportsJitCompilation;
+
+    /// <summary>
+    /// Exports the computation graph by delegating to the base teacher.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node from the base teacher.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the base teacher does not support JIT compilation.
+    /// </exception>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (_baseTeacher is not IJitCompilable<T> jitCompilable)
+        {
+            throw new NotSupportedException(
+                $"CurriculumTeacherModel cannot export computation graph because the base teacher " +
+                $"({_baseTeacher.GetType().Name}) does not implement IJitCompilable<T>.");
+        }
+
+        if (!jitCompilable.SupportsJitCompilation)
+        {
+            throw new NotSupportedException(
+                $"CurriculumTeacherModel cannot export computation graph because the base teacher " +
+                $"({_baseTeacher.GetType().Name}) does not support JIT compilation.");
+        }
+
+        return jitCompilable.ExportComputationGraph(inputNodes);
+    }
 }
 
 /// <summary>

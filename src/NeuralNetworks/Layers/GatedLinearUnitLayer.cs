@@ -983,4 +983,33 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         _linearBiasGradient = null;
         _gateBiasGradient = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_linearWeights == null || _gateWeights == null)
+            throw new InvalidOperationException("Layer weights not initialized.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        var linearWeightsNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _linearWeights.Rows, _linearWeights.Columns }, _linearWeights.ToArray()), "linear_weights");
+        var gateWeightsNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _gateWeights.Rows, _gateWeights.Columns }, _gateWeights.ToArray()), "gate_weights");
+        var linearBiasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _linearBias.Length }, _linearBias.ToArray()), "linear_bias");
+        var gateBiasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _gateBias.Length }, _gateBias.ToArray()), "gate_bias");
+
+        var linearOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(inputNode, linearWeightsNode), linearBiasNode);
+        var gateOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(inputNode, gateWeightsNode), gateBiasNode);
+        var sigmoid = TensorOperations<T>.Sigmoid(gateOutput);
+
+        return TensorOperations<T>.ElementwiseMultiply(linearOutput, sigmoid);
+    }
+
+    public override bool SupportsJitCompilation => _linearWeights != null && _gateWeights != null && _linearBias != null && _gateBias != null;
 }

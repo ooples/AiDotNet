@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -50,7 +52,7 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
     /// with sharp transitions (like ReLU).
     /// 
     /// The mathematical formula used is an approximation:
-    /// GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/p) * (x + 0.044715 * x³)))
+    /// GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/p) * (x + 0.044715 * xÂ³)))
     /// </para>
     /// </remarks>
     public override T Activate(T input)
@@ -85,10 +87,10 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
     /// can become permanently inactive during training.
     /// 
     /// The mathematical formula is complex but has been simplified to:
-    /// d/dx GELU(x) = 0.5 * tanh(0.0356774 * x³ + 0.797885 * x) + 
-    ///                (0.0535161 * x³ + 0.398942 * x) * sech²(0.0356774 * x³ + 0.797885 * x) + 0.5
+    /// d/dx GELU(x) = 0.5 * tanh(0.0356774 * xÂ³ + 0.797885 * x) + 
+    ///                (0.0535161 * xÂ³ + 0.398942 * x) * sechÂ²(0.0356774 * xÂ³ + 0.797885 * x) + 0.5
     /// 
-    /// Where sech²(x) = 1 - tanh²(x)
+    /// Where sechÂ²(x) = 1 - tanhÂ²(x)
     /// </para>
     /// </remarks>
     public override T Derivative(T input)
@@ -118,5 +120,44 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
             ),
             NumOps.FromDouble(0.5)
         );
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <remarks>
+    /// <para>
+    /// This activation does not yet support JIT compilation because the gradient
+    /// computation (backward pass) has not been implemented in TensorOperations.GELU.
+    /// </para>
+    /// <para>
+    /// To enable JIT support:
+    /// 1. Implement the backward pass in TensorOperations.GELU
+    /// 2. Test the gradient computation
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with GELU activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method maps the GELU activation to TensorOperations&lt;T&gt;.GELU(input),
+    /// which handles both forward and backward passes for JIT compilation.
+    /// GELU is widely used in transformers (BERT, GPT) and modern architectures.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        return TensorOperations<T>.GELU(input);
     }
 }

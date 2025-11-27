@@ -168,7 +168,7 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
 
         // Use a simple random projection with normalization
         // In a full implementation, this would use SVD or PCA
-        var random = new Random(42); // Fixed seed for reproducibility
+        var random = RandomHelper.CreateSeededRandom(42); // Fixed seed for reproducibility
 
         for (int i = 0; i < inputDim; i++)
         {

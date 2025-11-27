@@ -718,4 +718,10 @@ public class Int32Operations : INumericOperations<int>
     /// <param name="value">The int value to convert.</param>
     /// <returns>The value as a double.</returns>
     public double ToDouble(int value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => true;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => true;
 }
