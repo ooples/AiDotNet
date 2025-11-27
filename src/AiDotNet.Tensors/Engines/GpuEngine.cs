@@ -434,6 +434,10 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>, int, int, int, int, int, int>? _maxPool2DBackwardKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<int>, ArrayView<double>, int, int, int, int, int, int>? _maxPool2DBackwardKernelDouble;
 
+    // MaxPool2D with indices (input -> output, maxIndices)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<int>, int, int, int, int, int, int, int, int, int>? _maxPool2DWithIndicesKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<int>, int, int, int, int, int, int, int, int, int>? _maxPool2DWithIndicesKernelDouble;
+
     // AvgPool2D backward (gradOutput -> gradInput)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int>? _avgPool2DBackwardKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int>? _avgPool2DBackwardKernelDouble;
@@ -475,6 +479,22 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _acoshKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _atanhKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>>? _atanhKernelDouble;
+
+    // DepthwiseConv2D kernels (input -> output)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int>? _depthwiseConv2DKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int>? _depthwiseConv2DKernelDouble;
+
+    // DepthwiseConv2D backward input kernels
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int>? _depthwiseConv2DBackwardInputKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int>? _depthwiseConv2DBackwardInputKernelDouble;
+
+    // DepthwiseConv2D backward kernel kernels
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int>? _depthwiseConv2DBackwardKernelKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int>? _depthwiseConv2DBackwardKernelKernelDouble;
+
+    // ConvTranspose2D kernels
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int, int>? _convTranspose2DKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int, int>? _convTranspose2DKernelDouble;
 
     /// <inheritdoc/>
     public string Name => _accelerator != null
@@ -1870,6 +1890,82 @@ public class GpuEngine : IEngine, IDisposable
                     });
                 Console.WriteLine("[GpuEngine] MaxPool2DBackward kernels pre-compiled");
 
+                // MaxPool2D with indices kernel
+                _maxPool2DWithIndicesKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<int>, int, int, int, int, int, int, int, int, int>(
+                    (flatIdx, input, output, maxIndices, batch, channels, inH, inW, outH, outW, poolH, poolW, stride) => {
+                        // Each thread processes one output element
+                        int ow = (int)flatIdx % outW;
+                        int temp = (int)flatIdx / outW;
+                        int oh = temp % outH;
+                        temp /= outH;
+                        int c = temp % channels;
+                        int b = temp / channels;
+
+                        float maxVal = float.MinValue;
+                        int maxIdx = 0;
+                        int ihStart = oh * stride;
+                        int iwStart = ow * stride;
+
+                        for (int ph = 0; ph < poolH; ph++)
+                        {
+                            for (int pw = 0; pw < poolW; pw++)
+                            {
+                                int ih = ihStart + ph;
+                                int iw = iwStart + pw;
+                                if (ih < inH && iw < inW)
+                                {
+                                    int inputIdx = ((b * channels + c) * inH + ih) * inW + iw;
+                                    float val = input[inputIdx];
+                                    if (val > maxVal)
+                                    {
+                                        maxVal = val;
+                                        maxIdx = inputIdx;
+                                    }
+                                }
+                            }
+                        }
+                        output[flatIdx] = maxVal;
+                        maxIndices[flatIdx] = maxIdx;
+                    });
+                _maxPool2DWithIndicesKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<int>, int, int, int, int, int, int, int, int, int>(
+                    (flatIdx, input, output, maxIndices, batch, channels, inH, inW, outH, outW, poolH, poolW, stride) => {
+                        int ow = (int)flatIdx % outW;
+                        int temp = (int)flatIdx / outW;
+                        int oh = temp % outH;
+                        temp /= outH;
+                        int c = temp % channels;
+                        int b = temp / channels;
+
+                        double maxVal = double.MinValue;
+                        int maxIdx = 0;
+                        int ihStart = oh * stride;
+                        int iwStart = ow * stride;
+
+                        for (int ph = 0; ph < poolH; ph++)
+                        {
+                            for (int pw = 0; pw < poolW; pw++)
+                            {
+                                int ih = ihStart + ph;
+                                int iw = iwStart + pw;
+                                if (ih < inH && iw < inW)
+                                {
+                                    int inputIdx = ((b * channels + c) * inH + ih) * inW + iw;
+                                    double val = input[inputIdx];
+                                    if (val > maxVal)
+                                    {
+                                        maxVal = val;
+                                        maxIdx = inputIdx;
+                                    }
+                                }
+                            }
+                        }
+                        output[flatIdx] = maxVal;
+                        maxIndices[flatIdx] = maxIdx;
+                    });
+                Console.WriteLine("[GpuEngine] MaxPool2DWithIndices kernels pre-compiled");
+
                 // AvgPool2D backward kernel
                 _avgPool2DBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int>(
@@ -1928,6 +2024,262 @@ public class GpuEngine : IEngine, IDisposable
                         gradInput[flatIdx] = sum;
                     });
                 Console.WriteLine("[GpuEngine] AvgPool2DBackward kernels pre-compiled");
+
+                // DepthwiseConv2D kernel
+                _depthwiseConv2DKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int>(
+                    (flatIdx, input, kernel, output, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) => {
+                        int ow = (int)flatIdx % outW;
+                        int temp = (int)flatIdx / outW;
+                        int oh = temp % outH;
+                        temp /= outH;
+                        int c = temp % channels;
+                        int b = temp / channels;
+
+                        float sum = 0;
+                        for (int kh = 0; kh < kH; kh++)
+                        {
+                            for (int kw = 0; kw < kW; kw++)
+                            {
+                                int ih = oh * stride + kh - padding;
+                                int iw = ow * stride + kw - padding;
+                                if (ih >= 0 && ih < inH && iw >= 0 && iw < inW)
+                                {
+                                    int inputIdx = ((b * channels + c) * inH + ih) * inW + iw;
+                                    int kernelIdx = (c * kH + kh) * kW + kw;
+                                    sum += input[inputIdx] * kernel[kernelIdx];
+                                }
+                            }
+                        }
+                        output[flatIdx] = sum;
+                    });
+                _depthwiseConv2DKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int>(
+                    (flatIdx, input, kernel, output, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) => {
+                        int ow = (int)flatIdx % outW;
+                        int temp = (int)flatIdx / outW;
+                        int oh = temp % outH;
+                        temp /= outH;
+                        int c = temp % channels;
+                        int b = temp / channels;
+
+                        double sum = 0;
+                        for (int kh = 0; kh < kH; kh++)
+                        {
+                            for (int kw = 0; kw < kW; kw++)
+                            {
+                                int ih = oh * stride + kh - padding;
+                                int iw = ow * stride + kw - padding;
+                                if (ih >= 0 && ih < inH && iw >= 0 && iw < inW)
+                                {
+                                    int inputIdx = ((b * channels + c) * inH + ih) * inW + iw;
+                                    int kernelIdx = (c * kH + kh) * kW + kw;
+                                    sum += input[inputIdx] * kernel[kernelIdx];
+                                }
+                            }
+                        }
+                        output[flatIdx] = sum;
+                    });
+                Console.WriteLine("[GpuEngine] DepthwiseConv2D kernels pre-compiled");
+
+                // DepthwiseConv2D backward input kernel
+                _depthwiseConv2DBackwardInputKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int>(
+                    (flatIdx, gradOutput, kernel, gradInput, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) => {
+                        int iw = (int)flatIdx % inW;
+                        int temp = (int)flatIdx / inW;
+                        int ih = temp % inH;
+                        temp /= inH;
+                        int c = temp % channels;
+                        int b = temp / channels;
+
+                        float sum = 0;
+                        for (int kh = 0; kh < kH; kh++)
+                        {
+                            for (int kw = 0; kw < kW; kw++)
+                            {
+                                int oh = ih + padding - kh;
+                                int ow = iw + padding - kw;
+                                if (oh >= 0 && oh % stride == 0 && ow >= 0 && ow % stride == 0)
+                                {
+                                    oh /= stride;
+                                    ow /= stride;
+                                    if (oh < outH && ow < outW)
+                                    {
+                                        int gradOutIdx = ((b * channels + c) * outH + oh) * outW + ow;
+                                        int kernelIdx = (c * kH + kh) * kW + kw;
+                                        sum += gradOutput[gradOutIdx] * kernel[kernelIdx];
+                                    }
+                                }
+                            }
+                        }
+                        gradInput[flatIdx] = sum;
+                    });
+                _depthwiseConv2DBackwardInputKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int>(
+                    (flatIdx, gradOutput, kernel, gradInput, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) => {
+                        int iw = (int)flatIdx % inW;
+                        int temp = (int)flatIdx / inW;
+                        int ih = temp % inH;
+                        temp /= inH;
+                        int c = temp % channels;
+                        int b = temp / channels;
+
+                        double sum = 0;
+                        for (int kh = 0; kh < kH; kh++)
+                        {
+                            for (int kw = 0; kw < kW; kw++)
+                            {
+                                int oh = ih + padding - kh;
+                                int ow = iw + padding - kw;
+                                if (oh >= 0 && oh % stride == 0 && ow >= 0 && ow % stride == 0)
+                                {
+                                    oh /= stride;
+                                    ow /= stride;
+                                    if (oh < outH && ow < outW)
+                                    {
+                                        int gradOutIdx = ((b * channels + c) * outH + oh) * outW + ow;
+                                        int kernelIdx = (c * kH + kh) * kW + kw;
+                                        sum += gradOutput[gradOutIdx] * kernel[kernelIdx];
+                                    }
+                                }
+                            }
+                        }
+                        gradInput[flatIdx] = sum;
+                    });
+                Console.WriteLine("[GpuEngine] DepthwiseConv2DBackwardInput kernels pre-compiled");
+
+                // DepthwiseConv2D backward kernel kernel
+                _depthwiseConv2DBackwardKernelKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int>(
+                    (flatIdx, gradOutput, input, gradKernel, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) => {
+                        int kw = (int)flatIdx % kW;
+                        int temp = (int)flatIdx / kW;
+                        int kh = temp % kH;
+                        int c = temp / kH;
+
+                        float sum = 0;
+                        for (int b = 0; b < batch; b++)
+                        {
+                            for (int oh = 0; oh < outH; oh++)
+                            {
+                                for (int ow = 0; ow < outW; ow++)
+                                {
+                                    int ih = oh * stride + kh - padding;
+                                    int iw = ow * stride + kw - padding;
+                                    if (ih >= 0 && ih < inH && iw >= 0 && iw < inW)
+                                    {
+                                        int inputIdx = ((b * channels + c) * inH + ih) * inW + iw;
+                                        int gradOutIdx = ((b * channels + c) * outH + oh) * outW + ow;
+                                        sum += input[inputIdx] * gradOutput[gradOutIdx];
+                                    }
+                                }
+                            }
+                        }
+                        gradKernel[flatIdx] = sum;
+                    });
+                _depthwiseConv2DBackwardKernelKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int>(
+                    (flatIdx, gradOutput, input, gradKernel, batch, channels, inH, inW, outH, outW, kH, kW, stride, padding) => {
+                        int kw = (int)flatIdx % kW;
+                        int temp = (int)flatIdx / kW;
+                        int kh = temp % kH;
+                        int c = temp / kH;
+
+                        double sum = 0;
+                        for (int b = 0; b < batch; b++)
+                        {
+                            for (int oh = 0; oh < outH; oh++)
+                            {
+                                for (int ow = 0; ow < outW; ow++)
+                                {
+                                    int ih = oh * stride + kh - padding;
+                                    int iw = ow * stride + kw - padding;
+                                    if (ih >= 0 && ih < inH && iw >= 0 && iw < inW)
+                                    {
+                                        int inputIdx = ((b * channels + c) * inH + ih) * inW + iw;
+                                        int gradOutIdx = ((b * channels + c) * outH + oh) * outW + ow;
+                                        sum += input[inputIdx] * gradOutput[gradOutIdx];
+                                    }
+                                }
+                            }
+                        }
+                        gradKernel[flatIdx] = sum;
+                    });
+                Console.WriteLine("[GpuEngine] DepthwiseConv2DBackwardKernel kernels pre-compiled");
+
+                // ConvTranspose2D kernel
+                _convTranspose2DKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int, int, int, int, int, int, int, int>(
+                    (flatIdx, input, kernel, output, batch, channels, inH, inW, outH, outW, outChannels, kH, kW, stride, padding) => {
+                        int ow = (int)flatIdx % outW;
+                        int temp = (int)flatIdx / outW;
+                        int oh = temp % outH;
+                        temp /= outH;
+                        int oc = temp % outChannels;
+                        int b = temp / outChannels;
+
+                        float sum = 0;
+                        for (int ic = 0; ic < channels; ic++)
+                        {
+                            for (int kh = 0; kh < kH; kh++)
+                            {
+                                for (int kw = 0; kw < kW; kw++)
+                                {
+                                    int ih = (oh + padding - kh);
+                                    int iw = (ow + padding - kw);
+                                    if (ih >= 0 && ih % stride == 0 && iw >= 0 && iw % stride == 0)
+                                    {
+                                        ih /= stride;
+                                        iw /= stride;
+                                        if (ih < inH && iw < inW)
+                                        {
+                                            int inputIdx = ((b * channels + ic) * inH + ih) * inW + iw;
+                                            int kernelIdx = ((ic * outChannels + oc) * kH + kh) * kW + kw;
+                                            sum += input[inputIdx] * kernel[kernelIdx];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        output[flatIdx] = sum;
+                    });
+                _convTranspose2DKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int, int, int>(
+                    (flatIdx, input, kernel, output, batch, channels, inH, inW, outH, outW, outChannels, kH, kW, stride, padding) => {
+                        int ow = (int)flatIdx % outW;
+                        int temp = (int)flatIdx / outW;
+                        int oh = temp % outH;
+                        temp /= outH;
+                        int oc = temp % outChannels;
+                        int b = temp / outChannels;
+
+                        double sum = 0;
+                        for (int ic = 0; ic < channels; ic++)
+                        {
+                            for (int kh = 0; kh < kH; kh++)
+                            {
+                                for (int kw = 0; kw < kW; kw++)
+                                {
+                                    int ih = (oh + padding - kh);
+                                    int iw = (ow + padding - kw);
+                                    if (ih >= 0 && ih % stride == 0 && iw >= 0 && iw % stride == 0)
+                                    {
+                                        ih /= stride;
+                                        iw /= stride;
+                                        if (ih < inH && iw < inW)
+                                        {
+                                            int inputIdx = ((b * channels + ic) * inH + ih) * inW + iw;
+                                            int kernelIdx = ((ic * outChannels + oc) * kH + kh) * kW + kw;
+                                            sum += input[inputIdx] * kernel[kernelIdx];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        output[flatIdx] = sum;
+                    });
+                Console.WriteLine("[GpuEngine] ConvTranspose2D kernels pre-compiled");
 
                 // Softmax backward kernel
                 _softmaxBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
@@ -2905,22 +3257,82 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Vector<T> Asinh<T>(Vector<T> vector)
     {
-        // Asinh not available in XMath, use CPU
+        if (vector.Length >= _thresholds.VectorSqrt && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)AsinhGpuVectorFloat((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)AsinhGpuVectorDouble((Vector<double>)(object)vector);
+        }
         return _cpuFallback.Asinh(vector);
+    }
+
+    private Vector<float> AsinhGpuVectorFloat(Vector<float> vector)
+    {
+        var result = new float[vector.Length];
+        AsinhGpuFloat(vector.AsSpan(), result);
+        return new Vector<float>(result);
+    }
+
+    private Vector<double> AsinhGpuVectorDouble(Vector<double> vector)
+    {
+        var result = new double[vector.Length];
+        AsinhGpuDouble(vector.AsSpan(), result);
+        return new Vector<double>(result);
     }
 
     /// <inheritdoc/>
     public Vector<T> Acosh<T>(Vector<T> vector)
     {
-        // Acosh not available in XMath, use CPU
+        if (vector.Length >= _thresholds.VectorSqrt && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)AcoshGpuVectorFloat((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)AcoshGpuVectorDouble((Vector<double>)(object)vector);
+        }
         return _cpuFallback.Acosh(vector);
+    }
+
+    private Vector<float> AcoshGpuVectorFloat(Vector<float> vector)
+    {
+        var result = new float[vector.Length];
+        AcoshGpuFloat(vector.AsSpan(), result);
+        return new Vector<float>(result);
+    }
+
+    private Vector<double> AcoshGpuVectorDouble(Vector<double> vector)
+    {
+        var result = new double[vector.Length];
+        AcoshGpuDouble(vector.AsSpan(), result);
+        return new Vector<double>(result);
     }
 
     /// <inheritdoc/>
     public Vector<T> Atanh<T>(Vector<T> vector)
     {
-        // Atanh not available in XMath, use CPU
+        if (vector.Length >= _thresholds.VectorSqrt && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Vector<T>)(object)AtanhGpuVectorFloat((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (Vector<T>)(object)AtanhGpuVectorDouble((Vector<double>)(object)vector);
+        }
         return _cpuFallback.Atanh(vector);
+    }
+
+    private Vector<float> AtanhGpuVectorFloat(Vector<float> vector)
+    {
+        var result = new float[vector.Length];
+        AtanhGpuFloat(vector.AsSpan(), result);
+        return new Vector<float>(result);
+    }
+
+    private Vector<double> AtanhGpuVectorDouble(Vector<double> vector)
+    {
+        var result = new double[vector.Length];
+        AtanhGpuDouble(vector.AsSpan(), result);
+        return new Vector<double>(result);
     }
 
     /// <inheritdoc/>
@@ -11702,16 +12114,279 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> MaxPool2DWithIndices<T>(Tensor<T> input, int[] poolSize, int[] stride, out int[,,,,] maxIndices)
     {
-        // MaxPool2DWithIndices needs special handling for indices, use CPU for now
-        // GPU implementation would require a separate kernel that tracks indices
+        if (input.Length < _thresholds.VectorAdd)
+            return _cpuFallback.MaxPool2DWithIndices(input, poolSize, stride, out maxIndices);
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)MaxPool2DWithIndicesGpu(
+                    (Tensor<float>)(object)input, poolSize, stride, out maxIndices);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)MaxPool2DWithIndicesGpuDouble(
+                    (Tensor<double>)(object)input, poolSize, stride, out maxIndices);
+        }
         return _cpuFallback.MaxPool2DWithIndices(input, poolSize, stride, out maxIndices);
+    }
+
+    private Tensor<float> MaxPool2DWithIndicesGpu(Tensor<float> input, int[] poolSize, int[] stride, out int[,,,,] maxIndices)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int batch = shape[0], channels = shape[1], inH = shape[2], inW = shape[3];
+            int poolH = poolSize[0], poolW = poolSize[1];
+            int strideVal = stride[0];
+            int outH = (inH - poolH) / strideVal + 1;
+            int outW = (inW - poolW) / strideVal + 1;
+
+            var outputShape = new int[] { batch, channels, outH, outW };
+            var output = new Tensor<float>(outputShape);
+            int outputLength = batch * channels * outH * outW;
+
+            // Initialize 5D maxIndices array (batch, channels, 1, outH, outW)
+            maxIndices = new int[batch, channels, 1, outH, outW];
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputLength);
+            var gpuMaxIndices = (_memoryPoolInt ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputLength);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_maxPool2DWithIndicesKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputLength, gpuInput.View, gpuOutput.View, gpuMaxIndices.View,
+                        batch, channels, inH, inW, outH, outW, poolH, poolW, strideVal);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
+
+                // Copy flat indices to 5D array
+                var flatIndices = new int[outputLength];
+                gpuMaxIndices.View.BaseView.CopyToCPU(flatIndices);
+                int idx = 0;
+                for (int b = 0; b < batch; b++)
+                    for (int c = 0; c < channels; c++)
+                        for (int oh = 0; oh < outH; oh++)
+                            for (int ow = 0; ow < outW; ow++)
+                                maxIndices[b, c, 0, oh, ow] = flatIndices[idx++];
+
+                return output;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+                _memoryPoolInt.Return(gpuMaxIndices);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU MaxPool2DWithIndices failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MaxPool2DWithIndices(input, poolSize, stride, out maxIndices);
+        }
+    }
+
+    private Tensor<double> MaxPool2DWithIndicesGpuDouble(Tensor<double> input, int[] poolSize, int[] stride, out int[,,,,] maxIndices)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int batch = shape[0], channels = shape[1], inH = shape[2], inW = shape[3];
+            int poolH = poolSize[0], poolW = poolSize[1];
+            int strideVal = stride[0];
+            int outH = (inH - poolH) / strideVal + 1;
+            int outW = (inW - poolW) / strideVal + 1;
+
+            var outputShape = new int[] { batch, channels, outH, outW };
+            var output = new Tensor<double>(outputShape);
+            int outputLength = batch * channels * outH * outW;
+
+            // Initialize 5D maxIndices array (batch, channels, 1, outH, outW)
+            maxIndices = new int[batch, channels, 1, outH, outW];
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputLength);
+            var gpuMaxIndices = (_memoryPoolInt ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputLength);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_maxPool2DWithIndicesKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputLength, gpuInput.View, gpuOutput.View, gpuMaxIndices.View,
+                        batch, channels, inH, inW, outH, outW, poolH, poolW, strideVal);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
+
+                // Copy flat indices to 5D array
+                var flatIndices = new int[outputLength];
+                gpuMaxIndices.View.BaseView.CopyToCPU(flatIndices);
+                int idx = 0;
+                for (int b = 0; b < batch; b++)
+                    for (int c = 0; c < channels; c++)
+                        for (int oh = 0; oh < outH; oh++)
+                            for (int ow = 0; ow < outW; ow++)
+                                maxIndices[b, c, 0, oh, ow] = flatIndices[idx++];
+
+                return output;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+                _memoryPoolInt.Return(gpuMaxIndices);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU MaxPool2DWithIndices (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MaxPool2DWithIndices(input, poolSize, stride, out maxIndices);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> MaxPool2DBackward<T>(Tensor<T> gradOutput, int[,,,,] maxIndices, int[] inputShape, int[] poolSize, int[] stride)
     {
-        // MaxPool2D backward uses indices from forward pass, needs careful GPU implementation
+        if (gradOutput.Length < _thresholds.VectorAdd)
+            return _cpuFallback.MaxPool2DBackward(gradOutput, maxIndices, inputShape, poolSize, stride);
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)MaxPool2DBackwardGpu(
+                    (Tensor<float>)(object)gradOutput, maxIndices, inputShape, poolSize, stride);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)MaxPool2DBackwardGpuDouble(
+                    (Tensor<double>)(object)gradOutput, maxIndices, inputShape, poolSize, stride);
+        }
         return _cpuFallback.MaxPool2DBackward(gradOutput, maxIndices, inputShape, poolSize, stride);
+    }
+
+    private Tensor<float> MaxPool2DBackwardGpu(Tensor<float> gradOutput, int[,,,,] maxIndices, int[] inputShape, int[] poolSize, int[] stride)
+    {
+        try
+        {
+            int batch = inputShape[0], channels = inputShape[1], inH = inputShape[2], inW = inputShape[3];
+            int outH = gradOutput.Shape[2], outW = gradOutput.Shape[3];
+
+            var gradInput = new Tensor<float>(inputShape);
+            int inputLength = batch * channels * inH * inW;
+            int outputLength = gradOutput.Length;
+
+            // Flatten maxIndices to 1D array for GPU
+            var flatMaxIndices = new int[outputLength];
+            int idx = 0;
+            for (int b = 0; b < batch; b++)
+                for (int c = 0; c < channels; c++)
+                    for (int oh = 0; oh < outH; oh++)
+                        for (int ow = 0; ow < outW; ow++)
+                            flatMaxIndices[idx++] = maxIndices[b, c, 0, oh, ow];
+
+            var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputLength);
+            var gpuGradInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(inputLength);
+            var gpuMaxIndices = (_memoryPoolInt ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputLength);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuMaxIndices.View.BaseView.CopyFromCPU(flatMaxIndices);
+                // Initialize gradInput to zero
+                var zeros = new float[inputLength];
+                gpuGradInput.View.BaseView.CopyFromCPU(zeros);
+
+                lock (_gpuLock)
+                {
+                    (_maxPool2DBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputLength, gpuGradOutput.View, gpuMaxIndices.View, gpuGradInput.View,
+                        batch, channels, inH, inW, outH, outW);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
+                return gradInput;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGradOutput);
+                _memoryPoolFloat.Return(gpuGradInput);
+                _memoryPoolInt.Return(gpuMaxIndices);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU MaxPool2DBackward failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MaxPool2DBackward(gradOutput, maxIndices, inputShape, poolSize, stride);
+        }
+    }
+
+    private Tensor<double> MaxPool2DBackwardGpuDouble(Tensor<double> gradOutput, int[,,,,] maxIndices, int[] inputShape, int[] poolSize, int[] stride)
+    {
+        try
+        {
+            int batch = inputShape[0], channels = inputShape[1], inH = inputShape[2], inW = inputShape[3];
+            int outH = gradOutput.Shape[2], outW = gradOutput.Shape[3];
+
+            var gradInput = new Tensor<double>(inputShape);
+            int inputLength = batch * channels * inH * inW;
+            int outputLength = gradOutput.Length;
+
+            // Flatten maxIndices to 1D array for GPU
+            var flatMaxIndices = new int[outputLength];
+            int idx = 0;
+            for (int b = 0; b < batch; b++)
+                for (int c = 0; c < channels; c++)
+                    for (int oh = 0; oh < outH; oh++)
+                        for (int ow = 0; ow < outW; ow++)
+                            flatMaxIndices[idx++] = maxIndices[b, c, 0, oh, ow];
+
+            var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputLength);
+            var gpuGradInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(inputLength);
+            var gpuMaxIndices = (_memoryPoolInt ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputLength);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuMaxIndices.View.BaseView.CopyFromCPU(flatMaxIndices);
+                // Initialize gradInput to zero
+                var zeros = new double[inputLength];
+                gpuGradInput.View.BaseView.CopyFromCPU(zeros);
+
+                lock (_gpuLock)
+                {
+                    (_maxPool2DBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputLength, gpuGradOutput.View, gpuMaxIndices.View, gpuGradInput.View,
+                        batch, channels, inH, inW, outH, outW);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
+                return gradInput;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGradOutput);
+                _memoryPoolDouble.Return(gpuGradInput);
+                _memoryPoolInt.Return(gpuMaxIndices);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU MaxPool2DBackward (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MaxPool2DBackward(gradOutput, maxIndices, inputShape, poolSize, stride);
+        }
     }
 
     /// <inheritdoc/>
@@ -11830,36 +12505,475 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> DepthwiseConv2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding)
     {
+        if (input.Length < _thresholds.VectorAdd)
+            return _cpuFallback.DepthwiseConv2D(input, kernel, stride, padding);
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)DepthwiseConv2DGpu(
+                    (Tensor<float>)(object)input, (Tensor<float>)(object)kernel, stride, padding);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)DepthwiseConv2DGpuDouble(
+                    (Tensor<double>)(object)input, (Tensor<double>)(object)kernel, stride, padding);
+        }
         return _cpuFallback.DepthwiseConv2D(input, kernel, stride, padding);
+    }
+
+    private Tensor<float> DepthwiseConv2DGpu(Tensor<float> input, Tensor<float> kernel, int[] stride, int[] padding)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int batch = shape[0], channels = shape[1], inH = shape[2], inW = shape[3];
+            int kH = kernel.Shape[1], kW = kernel.Shape[2];
+            int strideVal = stride[0], paddingVal = padding[0];
+            int outH = (inH + 2 * paddingVal - kH) / strideVal + 1;
+            int outW = (inW + 2 * paddingVal - kW) / strideVal + 1;
+
+            var output = new Tensor<float>([batch, channels, outH, outW]);
+            int outputLength = batch * channels * outH * outW;
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuKernel = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(kernel.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputLength);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuKernel.View.BaseView.CopyFromCPU(kernel.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_depthwiseConv2DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputLength, gpuInput.View, gpuKernel.View, gpuOutput.View,
+                        batch, channels, inH, inW, outH, outW, kH, kW, strideVal, paddingVal);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
+                return output;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuKernel);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU DepthwiseConv2D failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.DepthwiseConv2D(input, kernel, stride, padding);
+        }
+    }
+
+    private Tensor<double> DepthwiseConv2DGpuDouble(Tensor<double> input, Tensor<double> kernel, int[] stride, int[] padding)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int batch = shape[0], channels = shape[1], inH = shape[2], inW = shape[3];
+            int kH = kernel.Shape[1], kW = kernel.Shape[2];
+            int strideVal = stride[0], paddingVal = padding[0];
+            int outH = (inH + 2 * paddingVal - kH) / strideVal + 1;
+            int outW = (inW + 2 * paddingVal - kW) / strideVal + 1;
+
+            var output = new Tensor<double>([batch, channels, outH, outW]);
+            int outputLength = batch * channels * outH * outW;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuKernel = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(kernel.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputLength);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuKernel.View.BaseView.CopyFromCPU(kernel.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_depthwiseConv2DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputLength, gpuInput.View, gpuKernel.View, gpuOutput.View,
+                        batch, channels, inH, inW, outH, outW, kH, kW, strideVal, paddingVal);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
+                return output;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuKernel);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU DepthwiseConv2D (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.DepthwiseConv2D(input, kernel, stride, padding);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> DepthwiseConv2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding)
     {
+        if (gradOutput.Length < _thresholds.VectorAdd)
+            return _cpuFallback.DepthwiseConv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding);
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)DepthwiseConv2DBackwardInputGpu(
+                    (Tensor<float>)(object)gradOutput, (Tensor<float>)(object)kernel, inputShape, stride, padding);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)DepthwiseConv2DBackwardInputGpuDouble(
+                    (Tensor<double>)(object)gradOutput, (Tensor<double>)(object)kernel, inputShape, stride, padding);
+        }
         return _cpuFallback.DepthwiseConv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding);
+    }
+
+    private Tensor<float> DepthwiseConv2DBackwardInputGpu(Tensor<float> gradOutput, Tensor<float> kernel, int[] inputShape, int[] stride, int[] padding)
+    {
+        try
+        {
+            int batch = inputShape[0], channels = inputShape[1], inH = inputShape[2], inW = inputShape[3];
+            int kH = kernel.Shape[1], kW = kernel.Shape[2];
+            int outH = gradOutput.Shape[2], outW = gradOutput.Shape[3];
+            int strideVal = stride[0], paddingVal = padding[0];
+
+            var gradInput = new Tensor<float>(inputShape);
+            int inputLength = batch * channels * inH * inW;
+
+            var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuKernel = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(kernel.Length);
+            var gpuGradInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(inputLength);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuKernel.View.BaseView.CopyFromCPU(kernel.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_depthwiseConv2DBackwardInputKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        inputLength, gpuGradOutput.View, gpuKernel.View, gpuGradInput.View,
+                        batch, channels, inH, inW, outH, outW, kH, kW, strideVal, paddingVal);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
+                return gradInput;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGradOutput);
+                _memoryPoolFloat.Return(gpuKernel);
+                _memoryPoolFloat.Return(gpuGradInput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU DepthwiseConv2DBackwardInput failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.DepthwiseConv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding);
+        }
+    }
+
+    private Tensor<double> DepthwiseConv2DBackwardInputGpuDouble(Tensor<double> gradOutput, Tensor<double> kernel, int[] inputShape, int[] stride, int[] padding)
+    {
+        try
+        {
+            int batch = inputShape[0], channels = inputShape[1], inH = inputShape[2], inW = inputShape[3];
+            int kH = kernel.Shape[1], kW = kernel.Shape[2];
+            int outH = gradOutput.Shape[2], outW = gradOutput.Shape[3];
+            int strideVal = stride[0], paddingVal = padding[0];
+
+            var gradInput = new Tensor<double>(inputShape);
+            int inputLength = batch * channels * inH * inW;
+
+            var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuKernel = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(kernel.Length);
+            var gpuGradInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(inputLength);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuKernel.View.BaseView.CopyFromCPU(kernel.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_depthwiseConv2DBackwardInputKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        inputLength, gpuGradOutput.View, gpuKernel.View, gpuGradInput.View,
+                        batch, channels, inH, inW, outH, outW, kH, kW, strideVal, paddingVal);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradInput.View.BaseView.CopyToCPU(gradInput.AsWritableSpan());
+                return gradInput;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGradOutput);
+                _memoryPoolDouble.Return(gpuKernel);
+                _memoryPoolDouble.Return(gpuGradInput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU DepthwiseConv2DBackwardInput (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.DepthwiseConv2DBackwardInput(gradOutput, kernel, inputShape, stride, padding);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> DepthwiseConv2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding)
     {
+        if (gradOutput.Length < _thresholds.VectorAdd)
+            return _cpuFallback.DepthwiseConv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding);
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)DepthwiseConv2DBackwardKernelGpu(
+                    (Tensor<float>)(object)gradOutput, (Tensor<float>)(object)input, kernelShape, stride, padding);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)DepthwiseConv2DBackwardKernelGpuDouble(
+                    (Tensor<double>)(object)gradOutput, (Tensor<double>)(object)input, kernelShape, stride, padding);
+        }
         return _cpuFallback.DepthwiseConv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding);
+    }
+
+    private Tensor<float> DepthwiseConv2DBackwardKernelGpu(Tensor<float> gradOutput, Tensor<float> input, int[] kernelShape, int[] stride, int[] padding)
+    {
+        try
+        {
+            var inputShape = input.Shape;
+            int batch = inputShape[0], channels = inputShape[1], inH = inputShape[2], inW = inputShape[3];
+            int kH = kernelShape[1], kW = kernelShape[2];
+            int outH = gradOutput.Shape[2], outW = gradOutput.Shape[3];
+            int strideVal = stride[0], paddingVal = padding[0];
+
+            var gradKernel = new Tensor<float>(kernelShape);
+            int kernelLength = channels * kH * kW;
+
+            var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuGradKernel = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(kernelLength);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_depthwiseConv2DBackwardKernelKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        kernelLength, gpuGradOutput.View, gpuInput.View, gpuGradKernel.View,
+                        batch, channels, inH, inW, outH, outW, kH, kW, strideVal, paddingVal);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradKernel.View.BaseView.CopyToCPU(gradKernel.AsWritableSpan());
+                return gradKernel;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGradOutput);
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuGradKernel);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU DepthwiseConv2DBackwardKernel failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.DepthwiseConv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding);
+        }
+    }
+
+    private Tensor<double> DepthwiseConv2DBackwardKernelGpuDouble(Tensor<double> gradOutput, Tensor<double> input, int[] kernelShape, int[] stride, int[] padding)
+    {
+        try
+        {
+            var inputShape = input.Shape;
+            int batch = inputShape[0], channels = inputShape[1], inH = inputShape[2], inW = inputShape[3];
+            int kH = kernelShape[1], kW = kernelShape[2];
+            int outH = gradOutput.Shape[2], outW = gradOutput.Shape[3];
+            int strideVal = stride[0], paddingVal = padding[0];
+
+            var gradKernel = new Tensor<double>(kernelShape);
+            int kernelLength = channels * kH * kW;
+
+            var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuGradKernel = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(kernelLength);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_depthwiseConv2DBackwardKernelKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        kernelLength, gpuGradOutput.View, gpuInput.View, gpuGradKernel.View,
+                        batch, channels, inH, inW, outH, outW, kH, kW, strideVal, paddingVal);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradKernel.View.BaseView.CopyToCPU(gradKernel.AsWritableSpan());
+                return gradKernel;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGradOutput);
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuGradKernel);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU DepthwiseConv2DBackwardKernel (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.DepthwiseConv2DBackwardKernel(gradOutput, input, kernelShape, stride, padding);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> ConvTranspose2D<T>(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] outputPadding)
     {
+        if (input.Length < _thresholds.VectorAdd)
+            return _cpuFallback.ConvTranspose2D(input, kernel, stride, padding, outputPadding);
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)ConvTranspose2DGpu(
+                    (Tensor<float>)(object)input, (Tensor<float>)(object)kernel, stride, padding, outputPadding);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)ConvTranspose2DGpuDouble(
+                    (Tensor<double>)(object)input, (Tensor<double>)(object)kernel, stride, padding, outputPadding);
+        }
         return _cpuFallback.ConvTranspose2D(input, kernel, stride, padding, outputPadding);
+    }
+
+    private Tensor<float> ConvTranspose2DGpu(Tensor<float> input, Tensor<float> kernel, int[] stride, int[] padding, int[] outputPadding)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int batch = shape[0], channels = shape[1], inH = shape[2], inW = shape[3];
+            var kshape = kernel.Shape;
+            int outChannels = kshape[1], kH = kshape[2], kW = kshape[3];
+            int strideVal = stride[0], paddingVal = padding[0];
+            int outH = (inH - 1) * strideVal - 2 * paddingVal + kH + outputPadding[0];
+            int outW = (inW - 1) * strideVal - 2 * paddingVal + kW + outputPadding[1];
+
+            var output = new Tensor<float>([batch, outChannels, outH, outW]);
+            int outputLength = batch * outChannels * outH * outW;
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuKernel = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(kernel.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputLength);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuKernel.View.BaseView.CopyFromCPU(kernel.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_convTranspose2DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputLength, gpuInput.View, gpuKernel.View, gpuOutput.View,
+                        batch, channels, inH, inW, outH, outW, outChannels, kH, kW, strideVal, paddingVal);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
+                return output;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuKernel);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU ConvTranspose2D failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.ConvTranspose2D(input, kernel, stride, padding, outputPadding);
+        }
+    }
+
+    private Tensor<double> ConvTranspose2DGpuDouble(Tensor<double> input, Tensor<double> kernel, int[] stride, int[] padding, int[] outputPadding)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int batch = shape[0], channels = shape[1], inH = shape[2], inW = shape[3];
+            var kshape = kernel.Shape;
+            int outChannels = kshape[1], kH = kshape[2], kW = kshape[3];
+            int strideVal = stride[0], paddingVal = padding[0];
+            int outH = (inH - 1) * strideVal - 2 * paddingVal + kH + outputPadding[0];
+            int outW = (inW - 1) * strideVal - 2 * paddingVal + kW + outputPadding[1];
+
+            var output = new Tensor<double>([batch, outChannels, outH, outW]);
+            int outputLength = batch * outChannels * outH * outW;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuKernel = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(kernel.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputLength);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuKernel.View.BaseView.CopyFromCPU(kernel.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_convTranspose2DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputLength, gpuInput.View, gpuKernel.View, gpuOutput.View,
+                        batch, channels, inH, inW, outH, outW, outChannels, kH, kW, strideVal, paddingVal);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(output.AsWritableSpan());
+                return output;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuKernel);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU ConvTranspose2D (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.ConvTranspose2D(input, kernel, stride, padding, outputPadding);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> ConvTranspose2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding)
     {
+        // ConvTranspose2D backward w.r.t. input is essentially a regular Conv2D
+        // For now use CPU - GPU implementation would require Conv2D kernel
         return _cpuFallback.ConvTranspose2DBackwardInput(gradOutput, kernel, inputShape, stride, padding);
     }
 
     /// <inheritdoc/>
     public Tensor<T> ConvTranspose2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding)
     {
+        // ConvTranspose2D backward w.r.t. kernel is complex - use CPU
         return _cpuFallback.ConvTranspose2DBackwardKernel(gradOutput, input, kernelShape, stride, padding);
     }
 
