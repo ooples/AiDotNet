@@ -2590,7 +2590,8 @@ public class CpuEngine : IEngine
         int outputWidth = (width - poolW) / strideW + 1;
 
         var result = new Tensor<T>([batch, channels, outputHeight, outputWidth]);
-        maxIndices = new int[batch, channels, outputHeight, outputWidth, 2];
+        // Use local variable to avoid capturing out parameter in lambda
+        var indices = new int[batch, channels, outputHeight, outputWidth, 2];
 
         var inputData = input.ToArray();
         var outputData = result.ToArray();
@@ -2628,12 +2629,14 @@ public class CpuEngine : IEngine
 
                     int outputIdx = ((b * channels + c) * outputHeight + oh) * outputWidth + ow;
                     outputData[outputIdx] = maxVal;
-                    maxIndices[b, c, oh, ow, 0] = maxH;
-                    maxIndices[b, c, oh, ow, 1] = maxW;
+                    indices[b, c, oh, ow, 0] = maxH;
+                    indices[b, c, oh, ow, 1] = maxW;
                 }
             }
         });
 
+        // Assign local variable to out parameter after parallel section
+        maxIndices = indices;
         return new Tensor<T>([batch, channels, outputHeight, outputWidth], new Vector<T>(outputData));
     }
 

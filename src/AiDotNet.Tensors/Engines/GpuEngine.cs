@@ -402,13 +402,15 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index2D, ArrayView<float>, ArrayView<float>, int, int>? _tensorTransposeKernelFloat;
     private readonly Action<AcceleratorStream, Index2D, ArrayView<double>, ArrayView<double>, int, int>? _tensorTransposeKernelDouble;
 
-    // Tensor Softmax along axis
+    // Tensor Softmax along axis (outerSize, axisSize, innerSize)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int>? _tensorSoftmaxKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int>? _tensorSoftmaxKernelDouble;
 
-    // BatchNorm and LayerNorm forward
+    // BatchNorm forward (input, output, gamma, beta, mean, variance, epsilon, batch, features)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, int, int>? _batchNormKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, double, int, int>? _batchNormKernelDouble;
+
+    // LayerNorm forward (input, output, gamma, beta, mean, variance, epsilon, batch, features)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, int, int>? _layerNormKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, double, int, int>? _layerNormKernelDouble;
 
@@ -1519,6 +1521,128 @@ public class GpuEngine : IEngine, IDisposable
                         output[flatIdx] = input[inputIdx];
                     });
                 Console.WriteLine("[GpuEngine] PixelShuffle kernels pre-compiled");
+
+                // TensorSoftmax along axis - processes softmax with strided memory layout
+                // Parameters: input, output, outerSize, axisSize, innerSize
+                // Each thread handles one (outer, inner) pair and computes softmax across axis
+                _tensorSoftmaxKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, int, int, int>(
+                    (flatIdx, input, output, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        // Find max for numerical stability
+                        float maxVal = float.MinValue;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            if (input[idx] > maxVal) maxVal = input[idx];
+                        }
+
+                        // Compute exp and sum
+                        float sum = 0.0f;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            float expVal = XMath.Exp(input[idx] - maxVal);
+                            output[idx] = expVal;
+                            sum += expVal;
+                        }
+
+                        // Normalize
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            output[idx] /= sum;
+                        }
+                    });
+                _tensorSoftmaxKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, int, int, int>(
+                    (flatIdx, input, output, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        double maxVal = double.MinValue;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            if (input[idx] > maxVal) maxVal = input[idx];
+                        }
+
+                        double sum = 0.0;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            double expVal = XMath.Exp(input[idx] - maxVal);
+                            output[idx] = expVal;
+                            sum += expVal;
+                        }
+
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            output[idx] /= sum;
+                        }
+                    });
+                Console.WriteLine("[GpuEngine] TensorSoftmax kernels pre-compiled");
+
+                // BatchNorm forward - normalizes across batch dimension
+                // Parameters: input, output, gamma, beta, mean, variance, epsilon, batch, features
+                // Each thread processes one element: output = gamma * (input - mean) / sqrt(var + eps) + beta
+                _batchNormKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>,
+                    ArrayView<float>, ArrayView<float>, float, int, int>(
+                    (flatIdx, input, output, gamma, beta, mean, variance, epsilon, batch, features) => {
+                        int b = (int)flatIdx / features;
+                        int f = (int)flatIdx % features;
+                        if (b >= batch) return;
+
+                        float normalized = (input[flatIdx] - mean[f]) / XMath.Sqrt(variance[f] + epsilon);
+                        output[flatIdx] = gamma[f] * normalized + beta[f];
+                    });
+                _batchNormKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>,
+                    ArrayView<double>, ArrayView<double>, double, int, int>(
+                    (flatIdx, input, output, gamma, beta, mean, variance, epsilon, batch, features) => {
+                        int b = (int)flatIdx / features;
+                        int f = (int)flatIdx % features;
+                        if (b >= batch) return;
+
+                        double normalized = (input[flatIdx] - mean[f]) / XMath.Sqrt(variance[f] + epsilon);
+                        output[flatIdx] = gamma[f] * normalized + beta[f];
+                    });
+                Console.WriteLine("[GpuEngine] BatchNorm kernels pre-compiled");
+
+                // LayerNorm forward - normalizes across feature dimension per sample
+                // Parameters: input, output, gamma, beta, mean, variance, epsilon, batch, features
+                // Each thread processes one element: output = gamma * (input - mean) / sqrt(var + eps) + beta
+                // Note: mean/variance are per-batch (computed over features), gamma/beta are per-feature
+                _layerNormKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>,
+                    ArrayView<float>, ArrayView<float>, float, int, int>(
+                    (flatIdx, input, output, gamma, beta, mean, variance, epsilon, batch, features) => {
+                        int b = (int)flatIdx / features;
+                        int f = (int)flatIdx % features;
+                        if (b >= batch) return;
+
+                        // LayerNorm: mean/variance indexed by batch, gamma/beta indexed by feature
+                        float normalized = (input[flatIdx] - mean[b]) / XMath.Sqrt(variance[b] + epsilon);
+                        output[flatIdx] = gamma[f] * normalized + beta[f];
+                    });
+                _layerNormKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>,
+                    ArrayView<double>, ArrayView<double>, double, int, int>(
+                    (flatIdx, input, output, gamma, beta, mean, variance, epsilon, batch, features) => {
+                        int b = (int)flatIdx / features;
+                        int f = (int)flatIdx % features;
+                        if (b >= batch) return;
+
+                        double normalized = (input[flatIdx] - mean[b]) / XMath.Sqrt(variance[b] + epsilon);
+                        output[flatIdx] = gamma[f] * normalized + beta[f];
+                    });
+                Console.WriteLine("[GpuEngine] LayerNorm kernels pre-compiled");
 
                 Console.WriteLine("[GpuEngine] All kernel pre-compilation complete");
 
@@ -10359,37 +10483,520 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> Softmax<T>(Tensor<T> input, int axis = -1)
     {
-        // GPU softmax along axis - can be optimized with block-level reductions
+        // Normalize axis
+        int rank = input.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        // Threshold check - small tensors use CPU
+        if (input.Length < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.Softmax(input, axis);
+        }
+
+        // GPU acceleration for supported types
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)SoftmaxGpu((Tensor<float>)(object)input, axis);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)SoftmaxGpuDouble((Tensor<double>)(object)input, axis);
+        }
+
         return _cpuFallback.Softmax(input, axis);
+    }
+
+    private Tensor<float> SoftmaxGpu(Tensor<float> input, int axis)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int rank = shape.Length;
+
+            // Compute outerSize, axisSize, innerSize for strided memory access
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<float>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_tensorSoftmaxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuInput.View, gpuOutput.View, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU softmax failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Softmax(input, axis);
+        }
+    }
+
+    private Tensor<double> SoftmaxGpuDouble(Tensor<double> input, int axis)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<double>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_tensorSoftmaxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuInput.View, gpuOutput.View, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU softmax (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Softmax(input, axis);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> SoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, int axis = -1)
     {
+        // Backward pass is complex - use CPU implementation
         return _cpuFallback.SoftmaxBackward(gradOutput, output, axis);
     }
 
     /// <inheritdoc/>
     public Tensor<T> BatchNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance)
     {
+        // Compute statistics on CPU, then apply normalization on GPU if beneficial
+        if (input.Length < _thresholds.VectorAdd || input.Rank != 2)
+        {
+            return _cpuFallback.BatchNorm(input, gamma, beta, epsilon, out mean, out variance);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var result = BatchNormGpu((Tensor<float>)(object)input, (Tensor<float>)(object)gamma,
+                    (Tensor<float>)(object)beta, (float)epsilon, out var meanF, out var varF);
+                mean = (Tensor<T>)(object)meanF;
+                variance = (Tensor<T>)(object)varF;
+                return (Tensor<T>)(object)result;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var result = BatchNormGpuDouble((Tensor<double>)(object)input, (Tensor<double>)(object)gamma,
+                    (Tensor<double>)(object)beta, epsilon, out var meanD, out var varD);
+                mean = (Tensor<T>)(object)meanD;
+                variance = (Tensor<T>)(object)varD;
+                return (Tensor<T>)(object)result;
+            }
+        }
+
         return _cpuFallback.BatchNorm(input, gamma, beta, epsilon, out mean, out variance);
+    }
+
+    private Tensor<float> BatchNormGpu(Tensor<float> input, Tensor<float> gamma, Tensor<float> beta, float epsilon, out Tensor<float> mean, out Tensor<float> variance)
+    {
+        int batch = input.Shape[0];
+        int features = input.Shape[1];
+
+        // Compute mean and variance on CPU (reduction operations)
+        var meanData = new float[features];
+        var varData = new float[features];
+        var inputData = input.AsSpan().ToArray();
+
+        for (int f = 0; f < features; f++)
+        {
+            float sum = 0;
+            for (int b = 0; b < batch; b++)
+                sum += inputData[b * features + f];
+            meanData[f] = sum / batch;
+        }
+
+        for (int f = 0; f < features; f++)
+        {
+            float sumSq = 0;
+            for (int b = 0; b < batch; b++)
+            {
+                float diff = inputData[b * features + f] - meanData[f];
+                sumSq += diff * diff;
+            }
+            varData[f] = sumSq / batch;
+        }
+
+        mean = new Tensor<float>([features], new Vector<float>(meanData));
+        variance = new Tensor<float>([features], new Vector<float>(varData));
+
+        try
+        {
+            var result = new Tensor<float>(input.Shape);
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuGamma = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(features);
+            var gpuBeta = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(features);
+            var gpuMean = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(features);
+            var gpuVar = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(features);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuGamma.View.BaseView.CopyFromCPU(gamma.AsSpan());
+                gpuBeta.View.BaseView.CopyFromCPU(beta.AsSpan());
+                gpuMean.View.BaseView.CopyFromCPU(meanData);
+                gpuVar.View.BaseView.CopyFromCPU(varData);
+
+                lock (_gpuLock)
+                {
+                    (_batchNormKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        input.Length, gpuInput.View, gpuOutput.View, gpuGamma.View, gpuBeta.View,
+                        gpuMean.View, gpuVar.View, epsilon, batch, features);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+                _memoryPoolFloat.Return(gpuGamma);
+                _memoryPoolFloat.Return(gpuBeta);
+                _memoryPoolFloat.Return(gpuMean);
+                _memoryPoolFloat.Return(gpuVar);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU batch norm failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.BatchNorm(input, gamma, beta, epsilon, out mean, out variance);
+        }
+    }
+
+    private Tensor<double> BatchNormGpuDouble(Tensor<double> input, Tensor<double> gamma, Tensor<double> beta, double epsilon, out Tensor<double> mean, out Tensor<double> variance)
+    {
+        int batch = input.Shape[0];
+        int features = input.Shape[1];
+
+        var meanData = new double[features];
+        var varData = new double[features];
+        var inputData = input.AsSpan().ToArray();
+
+        for (int f = 0; f < features; f++)
+        {
+            double sum = 0;
+            for (int b = 0; b < batch; b++)
+                sum += inputData[b * features + f];
+            meanData[f] = sum / batch;
+        }
+
+        for (int f = 0; f < features; f++)
+        {
+            double sumSq = 0;
+            for (int b = 0; b < batch; b++)
+            {
+                double diff = inputData[b * features + f] - meanData[f];
+                sumSq += diff * diff;
+            }
+            varData[f] = sumSq / batch;
+        }
+
+        mean = new Tensor<double>([features], new Vector<double>(meanData));
+        variance = new Tensor<double>([features], new Vector<double>(varData));
+
+        try
+        {
+            var result = new Tensor<double>(input.Shape);
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuGamma = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(features);
+            var gpuBeta = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(features);
+            var gpuMean = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(features);
+            var gpuVar = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(features);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuGamma.View.BaseView.CopyFromCPU(gamma.AsSpan());
+                gpuBeta.View.BaseView.CopyFromCPU(beta.AsSpan());
+                gpuMean.View.BaseView.CopyFromCPU(meanData);
+                gpuVar.View.BaseView.CopyFromCPU(varData);
+
+                lock (_gpuLock)
+                {
+                    (_batchNormKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        input.Length, gpuInput.View, gpuOutput.View, gpuGamma.View, gpuBeta.View,
+                        gpuMean.View, gpuVar.View, epsilon, batch, features);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+                _memoryPoolDouble.Return(gpuGamma);
+                _memoryPoolDouble.Return(gpuBeta);
+                _memoryPoolDouble.Return(gpuMean);
+                _memoryPoolDouble.Return(gpuVar);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU batch norm (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.BatchNorm(input, gamma, beta, epsilon, out mean, out variance);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> BatchNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta)
     {
+        // Backward pass is complex - use CPU implementation
         return _cpuFallback.BatchNormBackward(gradOutput, input, gamma, mean, variance, epsilon, out gradGamma, out gradBeta);
     }
 
     /// <inheritdoc/>
     public Tensor<T> LayerNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance)
     {
+        if (input.Length < _thresholds.VectorAdd || input.Rank != 2)
+        {
+            return _cpuFallback.LayerNorm(input, gamma, beta, epsilon, out mean, out variance);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var result = LayerNormGpu((Tensor<float>)(object)input, (Tensor<float>)(object)gamma,
+                    (Tensor<float>)(object)beta, (float)epsilon, out var meanF, out var varF);
+                mean = (Tensor<T>)(object)meanF;
+                variance = (Tensor<T>)(object)varF;
+                return (Tensor<T>)(object)result;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var result = LayerNormGpuDouble((Tensor<double>)(object)input, (Tensor<double>)(object)gamma,
+                    (Tensor<double>)(object)beta, epsilon, out var meanD, out var varD);
+                mean = (Tensor<T>)(object)meanD;
+                variance = (Tensor<T>)(object)varD;
+                return (Tensor<T>)(object)result;
+            }
+        }
+
         return _cpuFallback.LayerNorm(input, gamma, beta, epsilon, out mean, out variance);
+    }
+
+    private Tensor<float> LayerNormGpu(Tensor<float> input, Tensor<float> gamma, Tensor<float> beta, float epsilon, out Tensor<float> mean, out Tensor<float> variance)
+    {
+        int batch = input.Shape[0];
+        int features = input.Shape[1];
+
+        // Compute mean and variance per sample on CPU
+        var meanData = new float[batch];
+        var varData = new float[batch];
+        var inputData = input.AsSpan().ToArray();
+
+        for (int b = 0; b < batch; b++)
+        {
+            float sum = 0;
+            for (int f = 0; f < features; f++)
+                sum += inputData[b * features + f];
+            meanData[b] = sum / features;
+        }
+
+        for (int b = 0; b < batch; b++)
+        {
+            float sumSq = 0;
+            for (int f = 0; f < features; f++)
+            {
+                float diff = inputData[b * features + f] - meanData[b];
+                sumSq += diff * diff;
+            }
+            varData[b] = sumSq / features;
+        }
+
+        mean = new Tensor<float>([batch], new Vector<float>(meanData));
+        variance = new Tensor<float>([batch], new Vector<float>(varData));
+
+        try
+        {
+            var result = new Tensor<float>(input.Shape);
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuGamma = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(features);
+            var gpuBeta = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(features);
+            var gpuMean = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(batch);
+            var gpuVar = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(batch);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuGamma.View.BaseView.CopyFromCPU(gamma.AsSpan());
+                gpuBeta.View.BaseView.CopyFromCPU(beta.AsSpan());
+                gpuMean.View.BaseView.CopyFromCPU(meanData);
+                gpuVar.View.BaseView.CopyFromCPU(varData);
+
+                lock (_gpuLock)
+                {
+                    (_layerNormKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        input.Length, gpuInput.View, gpuOutput.View, gpuGamma.View, gpuBeta.View,
+                        gpuMean.View, gpuVar.View, epsilon, batch, features);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+                _memoryPoolFloat.Return(gpuGamma);
+                _memoryPoolFloat.Return(gpuBeta);
+                _memoryPoolFloat.Return(gpuMean);
+                _memoryPoolFloat.Return(gpuVar);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU layer norm failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.LayerNorm(input, gamma, beta, epsilon, out mean, out variance);
+        }
+    }
+
+    private Tensor<double> LayerNormGpuDouble(Tensor<double> input, Tensor<double> gamma, Tensor<double> beta, double epsilon, out Tensor<double> mean, out Tensor<double> variance)
+    {
+        int batch = input.Shape[0];
+        int features = input.Shape[1];
+
+        var meanData = new double[batch];
+        var varData = new double[batch];
+        var inputData = input.AsSpan().ToArray();
+
+        for (int b = 0; b < batch; b++)
+        {
+            double sum = 0;
+            for (int f = 0; f < features; f++)
+                sum += inputData[b * features + f];
+            meanData[b] = sum / features;
+        }
+
+        for (int b = 0; b < batch; b++)
+        {
+            double sumSq = 0;
+            for (int f = 0; f < features; f++)
+            {
+                double diff = inputData[b * features + f] - meanData[b];
+                sumSq += diff * diff;
+            }
+            varData[b] = sumSq / features;
+        }
+
+        mean = new Tensor<double>([batch], new Vector<double>(meanData));
+        variance = new Tensor<double>([batch], new Vector<double>(varData));
+
+        try
+        {
+            var result = new Tensor<double>(input.Shape);
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuGamma = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(features);
+            var gpuBeta = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(features);
+            var gpuMean = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(batch);
+            var gpuVar = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(batch);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuGamma.View.BaseView.CopyFromCPU(gamma.AsSpan());
+                gpuBeta.View.BaseView.CopyFromCPU(beta.AsSpan());
+                gpuMean.View.BaseView.CopyFromCPU(meanData);
+                gpuVar.View.BaseView.CopyFromCPU(varData);
+
+                lock (_gpuLock)
+                {
+                    (_layerNormKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        input.Length, gpuInput.View, gpuOutput.View, gpuGamma.View, gpuBeta.View,
+                        gpuMean.View, gpuVar.View, epsilon, batch, features);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+                _memoryPoolDouble.Return(gpuGamma);
+                _memoryPoolDouble.Return(gpuBeta);
+                _memoryPoolDouble.Return(gpuMean);
+                _memoryPoolDouble.Return(gpuVar);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU layer norm (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.LayerNorm(input, gamma, beta, epsilon, out mean, out variance);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> LayerNormBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> gamma, Tensor<T> mean, Tensor<T> variance, double epsilon, out Tensor<T> gradGamma, out Tensor<T> gradBeta)
     {
+        // Backward pass is complex - use CPU implementation
         return _cpuFallback.LayerNormBackward(gradOutput, input, gamma, mean, variance, epsilon, out gradGamma, out gradBeta);
     }
 
