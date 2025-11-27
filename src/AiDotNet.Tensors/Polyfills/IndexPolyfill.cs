@@ -222,16 +222,4 @@ namespace System
     }
 }
 
-namespace System.Runtime.CompilerServices
-{
-    /// <summary>
-    /// Reserved for use by a compiler for tracking metadata.
-    /// This class should not be used by developers in source code.
-    /// </summary>
-    [AttributeUsage(AttributeTargets.All, Inherited = false)]
-    internal sealed class IsExternalInit : Attribute
-    {
-    }
-}
-
 #endif
