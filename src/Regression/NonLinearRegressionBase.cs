@@ -1151,20 +1151,22 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// Non-linear regression models support JIT compilation with certain limitations:
-    /// - Linear kernel: Fully supported
-    /// - RBF kernel: Fully supported
-    /// - Sigmoid kernel: Fully supported
-    /// - Polynomial kernel: Not yet supported (requires Power operation)
-    /// - Laplacian kernel: Not yet supported (requires Abs operation)
+    /// Non-linear regression models support JIT compilation for all kernel types:
+    /// - Linear kernel: Fully supported (dot product)
+    /// - RBF kernel: Fully supported (Gaussian similarity)
+    /// - Sigmoid kernel: Fully supported (tanh-based similarity)
+    /// - Polynomial kernel: Fully supported (power operation)
+    /// - Laplacian kernel: Fully supported (L1 norm using sqrt(x^2) approximation)
     /// </para>
     /// <para><b>For Beginners:</b> JIT (Just-In-Time) compilation can speed up kernel-based models.
     ///
     /// Non-linear models use kernel functions to capture complex patterns. JIT compilation
-    /// optimizes these computations for faster predictions. Currently supports:
+    /// optimizes these computations for faster predictions. All kernel types are supported:
     /// - Linear kernels (simple dot products)
-    /// - RBF kernels (Gaussian similarity)
+    /// - RBF kernels (Gaussian similarity based on distance)
     /// - Sigmoid kernels (tanh-based similarity)
+    /// - Polynomial kernels (captures polynomial relationships)
+    /// - Laplacian kernels (L1 distance-based similarity)
     ///
     /// For large models with many support vectors, JIT can provide 3-5x speedup.
     /// </para>

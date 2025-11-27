@@ -13,14 +13,14 @@ This document tracks the implementation status of JIT compilation support across
 - **Expected Speedup**: 5-10x for inference
 
 ### 2. NonLinearRegressionBase ✓
-- **Status**: Partial implementation
+- **Status**: Fully implemented
 - **File**: `src/Regression/NonLinearRegressionBase.cs`
 - **Supported Kernels**:
   - Linear ✓
   - RBF (Radial Basis Function) ✓
   - Sigmoid ✓
-  - Polynomial ✗ (requires Power operation)
-  - Laplacian ✗ (requires Abs operation)
+  - Polynomial ✓ (power operation)
+  - Laplacian ✓ (L1 norm using sqrt(x^2) approximation)
 - **Graph Export**: `output = B + sum(alpha[i] * kernel(input, sv[i]))`
 - **Expected Speedup**: 3-5x for inference with many support vectors
 
@@ -37,6 +37,55 @@ This document tracks the implementation status of JIT compilation support across
 - **Functionality**: Linear time series forecasting (AR, ARMA, etc.)
 - **Graph Export**: `output = input @ model_parameters`
 - **Expected Speedup**: 3-7x for real-time forecasting
+
+### 5. Advanced Time Series Models ✓ (NEW)
+The following time series models now support JIT compilation:
+
+| Model | JIT Approach | Details |
+|-------|-------------|---------|
+| **NBEATSModel** ✓ | Neural network delegation | Delegates to underlying NeuralNetworkBase JIT |
+| **TBATSModel** ✓ | Differentiable approximation | Fourier basis + seasonality estimation |
+| **ProphetModel** ✓ | Trend/seasonality decomposition | Logistic growth + Fourier seasonality |
+| **BayesianStructuralTimeSeriesModel** ✓ | Variational inference | Local linear trend + regression components |
+| **STLDecomposition** ✓ | Differentiable LOESS | Neural approximation of LOESS smoother |
+| **UnobservedComponentsModel** ✓ | Kalman filtering | Differentiable state-space transitions |
+| **StateSpaceModel** ✓ | Differentiable transitions | State prediction + observation model |
+| **SpectralAnalysisModel** ✓ | Differentiable FFT | Frequency domain transformation |
+| **NeuralNetworkARIMAModel** ✓ | Hybrid approach | Combines neural network with ARIMA residuals |
+
+### 6. Knowledge Distillation Teacher Models
+The following teacher models have been evaluated for JIT support:
+
+#### Supported (Conditional) ✓
+| Model | Condition | Details |
+|-------|-----------|---------|
+| **EnsembleTeacherModel** ✓ | All ensemble members support JIT | Weighted combination of ensemble outputs |
+| **DistributedTeacherModel** ✓ | Average aggregation + all workers support JIT | Distributed inference with worker graphs |
+| **MultiModalTeacherModel** ✓ | All modality teachers support JIT | Weighted multi-modal combination |
+
+#### Not Supported (Architectural Limitations)
+| Model | Reason |
+|-------|--------|
+| **TransformerTeacherModel** | Uses `Func<>` delegate for forward pass |
+| **PretrainedTeacherModel** | Uses `Func<>` delegate for forward pass |
+| **SelfTeacherModel** | Uses runtime cached predictions |
+| **QuantizedTeacherModel** | Runtime min/max value quantization |
+| **OnlineTeacherModel** | Uses `Func<>` delegate for forward pass |
+
+### 7. Models That Cannot Support JIT
+The following model types are architecturally incompatible with JIT compilation:
+
+#### Instance-Based Learning
+- **LocallyWeightedRegression** - Requires distance calculations to all training instances
+- **KNearestNeighborsRegression** - Requires k-nearest neighbor search at runtime
+
+#### Tree-Based Models
+- **DecisionTreeRegressionBase** - Discrete branching decisions cannot be differentiated
+- **TransferRandomForest** - Random Forest ensemble of decision trees
+
+#### Dynamic Architectures
+- **SuperNet** - DARTS architecture with dynamic softmax-weighted operation mixing
+- **ReinforcementLearningAgentBase** - Complex RL pipeline with exploration, multiple networks, and dynamic branching
 
 ## Neural Network Layer Support
 
@@ -342,6 +391,21 @@ All layers now have JIT support through:
 - Mean-field inference for Boltzmann machines
 - Forward algorithm for CRFs
 - TopK selection for mixture-of-experts
+
+### Layers with Conditional JIT Support
+The following layers support JIT when their sub-components support JIT:
+
+| Layer | Condition | Details |
+|-------|-----------|---------|
+| **ExpertLayer** | All inner layers support JIT | Sequential chain of inner layer graphs |
+| **TimeDistributedLayer** | Inner layer supports JIT | Delegates to inner layer per timestep |
+| **ResidualLayer** | Activation + inner layer (if present) support JIT | Residual connection: input + inner(input) |
+| **MixtureOfExpertsLayer** | Router + all experts support JIT | TopKSoftmax routing with expert weighted sum |
+| **BidirectionalLayer** | Forward and backward layers support JIT | Concatenated forward/backward outputs |
+
+### Additional Model Categories with JIT Support
+- **Time Series Models**: 9 advanced models (NBEATS, Prophet, BSTS, STL, etc.)
+- **Knowledge Distillation Teachers**: 3 models with conditional support (Ensemble, Distributed, MultiModal)
 
 ## Related Files
 

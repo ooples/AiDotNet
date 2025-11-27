@@ -98,32 +98,78 @@ public class MultiModalTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
     /// Gets whether this teacher supports JIT compilation.
     /// </summary>
     /// <value>
-    /// Always <c>false</c>. MultiModalTeacherModel combines predictions from multiple modality
-    /// teachers, and combining computation graphs across modalities is not currently supported.
+    /// Returns <c>true</c> if all modality teachers support JIT compilation; otherwise, <c>false</c>.
     /// </value>
-    public override bool SupportsJitCompilation => false;
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Multi-modal JIT compilation is supported when all modality
+    /// teachers implement IJitCompilable and support JIT. The combined computation graph
+    /// weights and sums each modality's contribution.</para>
+    /// </remarks>
+    public override bool SupportsJitCompilation =>
+        _modalityTeachers.All(t => t is IJitCompilable<T> jit && jit.SupportsJitCompilation);
 
     /// <summary>
-    /// Not supported for MultiModalTeacherModel.
+    /// Exports the multi-modal computation graph for JIT compilation.
     /// </summary>
-    /// <param name="inputNodes">Not used.</param>
-    /// <returns>Never returns normally.</returns>
-    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the weighted multi-modal output.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when any modality teacher does not support JIT.
+    /// </exception>
     /// <remarks>
     /// <para>
-    /// MultiModalTeacherModel combines predictions from multiple modality-specific teachers
-    /// (e.g., vision, text, audio). Each modality may have different input representations
-    /// and computation graphs, making it complex to combine them into a single JIT-compiled graph.
+    /// The multi-modal graph combines each modality teacher's computation graph using weighted sum:
+    /// output = w1 * modality1_output + w2 * modality2_output + ... + wN * modalityN_output
     /// </para>
-    /// <para>
-    /// To use JIT compilation with multi-modal models, JIT compile each modality teacher
-    /// separately and combine their outputs at runtime.
-    /// </para>
+    /// <para><b>Note:</b> All modality teachers must support JIT compilation. The combined graph
+    /// enables optimized inference across all modalities in a single execution.</para>
     /// </remarks>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        return ThrowJitNotSupported(
-            nameof(MultiModalTeacherModel<T>),
-            "it combines multiple modality teachers and combining computation graphs is not supported");
+        // Check all modality teachers support JIT
+        for (int i = 0; i < _modalityTeachers.Length; i++)
+        {
+            if (_modalityTeachers[i] is not IJitCompilable<T> jit || !jit.SupportsJitCompilation)
+            {
+                return ThrowJitNotSupported(
+                    nameof(MultiModalTeacherModel<T>),
+                    $"modality teacher at index {i} ({_modalityTeachers[i].GetType().Name}) does not support JIT compilation");
+            }
+        }
+
+        // Create shared input node
+        var inputShape = new int[] { OutputDimension };
+        var inputTensor = new Tensor<T>(inputShape);
+        var sharedInputNode = TensorOperations<T>.Variable(inputTensor, "multimodal_input", requiresGradient: false);
+        inputNodes.Add(sharedInputNode);
+
+        // Combine modality teacher graphs with weighted sum
+        ComputationNode<T>? resultNode = null;
+
+        for (int i = 0; i < _modalityTeachers.Length; i++)
+        {
+            var jitTeacher = (IJitCompilable<T>)_modalityTeachers[i];
+
+            // Get modality teacher's computation graph
+            var teacherInputNodes = new List<ComputationNode<T>>();
+            var teacherOutput = jitTeacher.ExportComputationGraph(teacherInputNodes);
+
+            // Scale by modality weight
+            var weightTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(_modalityWeights[i]) }));
+            var weightNode = TensorOperations<T>.Constant(weightTensor, $"modality_{i}_weight");
+            var scaledOutput = TensorOperations<T>.ElementwiseMultiply(teacherOutput, weightNode);
+
+            // Add to result
+            if (resultNode == null)
+            {
+                resultNode = scaledOutput;
+            }
+            else
+            {
+                resultNode = TensorOperations<T>.Add(resultNode, scaledOutput);
+            }
+        }
+
+        return resultNode!;
     }
 }
