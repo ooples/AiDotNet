@@ -214,6 +214,7 @@ public class CodeGenerator
             DivideOp => GenerateBinaryOp<T>("Divide", inputVars),
             PowerOp powerOp => GeneratePowerOp<T>(inputVars[0], powerOp.Exponent),
             NegateOp => GenerateUnaryOp<T>("Negate", inputVars),
+            AbsOp => GenerateUnaryOp<T>("Abs", inputVars),
 
             // Math operations
             ExpOp => GenerateUnaryOp<T>("Exp", inputVars),

@@ -967,6 +967,85 @@ public static class TensorOperations<T>
             tape.RecordOperation(node);
         return node;
     }
+
+    /// <summary>
+    /// Computes the absolute value of each element in a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <returns>A new computation node containing the absolute values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes |x| for each element and records the operation.
+    /// The backward function uses the sign of the original values for gradient computation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This makes all values positive (removes the sign).
+    ///
+    /// For absolute value (c = |a|):
+    /// - The forward pass removes the sign of each element
+    /// - The backward pass uses sign(a) to route gradients correctly
+    /// - For positive values, gradient passes through unchanged
+    /// - For negative values, gradient is negated
+    ///
+    /// Note: At x = 0, the gradient is technically undefined, but we use 0 as a convention.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Abs(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = a.Value.Transform((x, _) => numOps.Abs(x));
+
+        // Store the original values for backward pass
+        var originalValues = a.Value;
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // ∂|a|/∂a = sign(a) = 1 if a > 0, -1 if a < 0, 0 if a = 0
+                var gradA = gradient.Transform((g, indices) =>
+                {
+                    var origVal = originalValues[indices];
+                    // sign(x): 1 if x > 0, -1 if x < 0, 0 if x = 0
+                    if (numOps.GreaterThan(origVal, numOps.Zero))
+                        return g;
+                    else if (numOps.LessThan(origVal, numOps.Zero))
+                        return numOps.Negate(g);
+                    else
+                        return numOps.Zero; // Gradient at 0 is undefined, use 0
+                });
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradA);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Abs;
+        node.OperationParams = null;
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
     /// <summary>
     /// Performs matrix multiplication on two computation nodes.
     /// </summary>

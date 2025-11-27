@@ -849,6 +849,7 @@ public class JitCompiler : IDisposable
             OperationType.Divide,
             OperationType.Power,
             OperationType.Negate,
+            OperationType.Abs,
 
             // Math operations
             OperationType.Exp,

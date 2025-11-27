@@ -60,6 +60,11 @@ public enum OperationType
     /// </summary>
     Negate,
 
+    /// <summary>
+    /// Element-wise absolute value - |x| for each element.
+    /// </summary>
+    Abs,
+
     // Mathematical Functions
 
     /// <summary>
