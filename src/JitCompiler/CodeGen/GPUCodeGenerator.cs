@@ -689,7 +689,7 @@ public class GPUCodeGenerator
 
         return $@"    // BatchNorm
     {{
-        int c = (idx / ({op.OutputShape.Length >= 3 ? op.OutputShape[2] * op.OutputShape[3] : 1})) % {op.OutputShape[1]};
+        int c = (idx / {(op.OutputShape.Length >= 3 ? op.OutputShape[2] * op.OutputShape[3] : 1)}) % {op.OutputShape[1]};
         {dataType} x_norm = ({input}[idx] - {mean}[c]) * rsqrtf({variance}[c] + {epsilon}f);
         {dataType} {outputName} = {gamma}[c] * x_norm + {beta}[c];
     }}";

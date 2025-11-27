@@ -89,4 +89,9 @@
 	  <None Remove="AiDotNet.Tensors\**\*" />
 	</ItemGroup>
 
+	<!-- Add project reference to AiDotNet.Tensors -->
+	<ItemGroup>
+	  <ProjectReference Include="AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
+	</ItemGroup>
+
 </Project>
