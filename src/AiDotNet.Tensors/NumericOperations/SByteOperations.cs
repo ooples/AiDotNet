@@ -1,5 +1,7 @@
 using System;
-
+#if NET8_0_OR_GREATER
+using System.Numerics.Tensors;
+#endif
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -727,94 +729,142 @@ public class SByteOperations : INumericOperations<sbyte>
     /// <inheritdoc/>
     public bool SupportsGpuAcceleration => false;
 
-    #region IVectorizedOperations<sbyte> Implementation - Fallback using sequential loops
+    #region IVectorizedOperations<sbyte> Implementation
 
     /// <summary>
-    /// Performs element-wise addition using sequential loops (fallback, no SIMD).
+    /// Performs element-wise addition. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
     /// </summary>
     public void Add(ReadOnlySpan<sbyte> x, ReadOnlySpan<sbyte> y, Span<sbyte> destination)
-        => VectorizedOperationsFallback.Add(this, x, y, destination);
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Add(x, y, destination);
+#else
+        VectorizedOperationsFallback.Add(this, x, y, destination);
+#endif
+    }
 
     /// <summary>
-    /// Performs element-wise subtraction using sequential loops (fallback, no SIMD).
+    /// Performs element-wise subtraction. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
     /// </summary>
     public void Subtract(ReadOnlySpan<sbyte> x, ReadOnlySpan<sbyte> y, Span<sbyte> destination)
-        => VectorizedOperationsFallback.Subtract(this, x, y, destination);
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Subtract(x, y, destination);
+#else
+        VectorizedOperationsFallback.Subtract(this, x, y, destination);
+#endif
+    }
 
     /// <summary>
-    /// Performs element-wise multiplication using sequential loops (fallback, no SIMD).
+    /// Performs element-wise multiplication. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
     /// </summary>
     public void Multiply(ReadOnlySpan<sbyte> x, ReadOnlySpan<sbyte> y, Span<sbyte> destination)
-        => VectorizedOperationsFallback.Multiply(this, x, y, destination);
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Multiply(x, y, destination);
+#else
+        VectorizedOperationsFallback.Multiply(this, x, y, destination);
+#endif
+    }
 
     /// <summary>
-    /// Performs element-wise division using sequential loops (fallback, no SIMD).
+    /// Performs element-wise division. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
     /// </summary>
     public void Divide(ReadOnlySpan<sbyte> x, ReadOnlySpan<sbyte> y, Span<sbyte> destination)
-        => VectorizedOperationsFallback.Divide(this, x, y, destination);
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Divide(x, y, destination);
+#else
+        VectorizedOperationsFallback.Divide(this, x, y, destination);
+#endif
+    }
 
     /// <summary>
-    /// Computes dot product using sequential loops (fallback, no SIMD).
+    /// Computes dot product. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
     /// </summary>
     public sbyte Dot(ReadOnlySpan<sbyte> x, ReadOnlySpan<sbyte> y)
-        => VectorizedOperationsFallback.Dot(this, x, y);
+    {
+#if NET8_0_OR_GREATER
+        return TensorPrimitives.Dot(x, y);
+#else
+        return VectorizedOperationsFallback.Dot(this, x, y);
+#endif
+    }
 
     /// <summary>
-    /// Computes sum using sequential loops (fallback, no SIMD).
+    /// Computes sum. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
     /// </summary>
     public sbyte Sum(ReadOnlySpan<sbyte> x)
-        => VectorizedOperationsFallback.Sum(this, x);
+    {
+#if NET8_0_OR_GREATER
+        return TensorPrimitives.Sum(x);
+#else
+        return VectorizedOperationsFallback.Sum(this, x);
+#endif
+    }
 
     /// <summary>
-    /// Finds maximum using sequential loops (fallback, no SIMD).
+    /// Finds maximum. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
     /// </summary>
     public sbyte Max(ReadOnlySpan<sbyte> x)
-        => VectorizedOperationsFallback.Max(this, x);
+    {
+#if NET8_0_OR_GREATER
+        return TensorPrimitives.Max(x);
+#else
+        return VectorizedOperationsFallback.Max(this, x);
+#endif
+    }
 
     /// <summary>
-    /// Finds minimum using sequential loops (fallback, no SIMD).
+    /// Finds minimum. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
     /// </summary>
     public sbyte Min(ReadOnlySpan<sbyte> x)
-        => VectorizedOperationsFallback.Min(this, x);
+    {
+#if NET8_0_OR_GREATER
+        return TensorPrimitives.Min(x);
+#else
+        return VectorizedOperationsFallback.Min(this, x);
+#endif
+    }
 
     /// <summary>
-    /// Computes exponential using sequential loops (fallback, no SIMD).
+    /// Computes exponential using sequential loops (integers don't support transcendental SIMD).
     /// </summary>
     public void Exp(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
         => VectorizedOperationsFallback.Exp(this, x, destination);
 
     /// <summary>
-    /// Computes natural logarithm using sequential loops (fallback, no SIMD).
+    /// Computes natural logarithm using sequential loops (integers don't support transcendental SIMD).
     /// </summary>
     public void Log(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
         => VectorizedOperationsFallback.Log(this, x, destination);
 
     /// <summary>
-    /// Computes hyperbolic tangent using sequential loops (fallback, no SIMD).
+    /// Computes hyperbolic tangent using sequential loops (integers don't support transcendental SIMD).
     /// </summary>
     public void Tanh(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
         => VectorizedOperationsFallback.Tanh(this, x, destination);
 
     /// <summary>
-    /// Computes sigmoid using sequential loops (fallback, no SIMD).
+    /// Computes sigmoid using sequential loops (integers don't support transcendental SIMD).
     /// </summary>
     public void Sigmoid(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
         => VectorizedOperationsFallback.Sigmoid(this, x, destination);
 
     /// <summary>
-    /// Computes base-2 logarithm using sequential loops (fallback, no SIMD).
+    /// Computes base-2 logarithm using sequential loops (integers don't support transcendental SIMD).
     /// </summary>
     public void Log2(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
         => VectorizedOperationsFallback.Log2(this, x, destination);
 
     /// <summary>
-    /// Computes softmax using sequential loops (fallback, no SIMD).
+    /// Computes softmax using sequential loops (integers don't support transcendental SIMD).
     /// </summary>
     public void SoftMax(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
         => VectorizedOperationsFallback.SoftMax(this, x, destination);
 
     /// <summary>
-    /// Computes cosine similarity using sequential loops (fallback, no SIMD).
+    /// Computes cosine similarity using sequential loops (integers don't support this SIMD operation).
     /// </summary>
     public sbyte CosineSimilarity(ReadOnlySpan<sbyte> x, ReadOnlySpan<sbyte> y)
         => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
