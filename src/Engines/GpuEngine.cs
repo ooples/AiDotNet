@@ -4895,6 +4895,46 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
+
+    public Tensor<T> TensorTranspose<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        
+        // Verify tensor is 2D
+        if (tensor.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"TensorTranspose requires a 2D tensor, but got {tensor.Shape.Length}D tensor.",
+                nameof(tensor));
+        }
+
+        // For now, use CPU fallback for transpose (GPU implementation can be added in Phase C)
+        return _cpuFallback.TensorTranspose(tensor);
+    }
+
+    public Tensor<T> TensorMatMul<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        
+        // Verify both tensors are 2D
+        if (a.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"TensorMatMul requires 2D tensors, but first tensor is {a.Shape.Length}D.",
+                nameof(a));
+        }
+        if (b.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"TensorMatMul requires 2D tensors, but second tensor is {b.Shape.Length}D.",
+                nameof(b));
+        }
+
+        // For now, use CPU fallback for matrix multiplication (GPU implementation can be added in Phase C)
+        return _cpuFallback.TensorMatMul(a, b);
+    }
+
     #endregion
 
     /// <summary>

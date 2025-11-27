@@ -1,3 +1,5 @@
+using AiDotNet.Engines;
+
 namespace AiDotNet.Autodiff;
 /// <summary>
 /// Provides automatic differentiation support for tensor operations.
@@ -895,14 +897,15 @@ public static class TensorOperations<T>
     /// </remarks>
     public static ComputationNode<T> MatrixMultiply(ComputationNode<T> a, ComputationNode<T> b)
     {
-        var result = a.Value.MatrixMultiply(b.Value);
+        var engine = AiDotNetEngine.Current;
+        var result = engine.TensorMatMul(a.Value, b.Value);
         void BackwardFunction(Tensor<T> gradient)
         {
             // ∂(A·B)/∂A = gradOut·B^T
             if (a.RequiresGradient)
             {
-                var bTransposed = b.Value.Transpose();
-                var gradA = gradient.MatrixMultiply(bTransposed);
+                var bTransposed = engine.TensorTranspose(b.Value);
+                var gradA = engine.TensorMatMul(gradient, bTransposed);
                 if (a.Gradient == null)
                 {
                     a.Gradient = gradA;
@@ -912,15 +915,15 @@ public static class TensorOperations<T>
                     var existingGradient = a.Gradient;
                     if (existingGradient != null)
                     {
-                        a.Gradient = existingGradient.Add(gradA);
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
                     }
                 }
             }
             // ∂(A·B)/∂B = A^T·gradOut
             if (b.RequiresGradient)
             {
-                var aTransposed = a.Value.Transpose();
-                var gradB = aTransposed.MatrixMultiply(gradient);
+                var aTransposed = engine.TensorTranspose(a.Value);
+                var gradB = engine.TensorMatMul(aTransposed, gradient);
                 if (b.Gradient == null)
                 {
                     b.Gradient = gradB;
@@ -930,7 +933,7 @@ public static class TensorOperations<T>
                     var existingGradient = b.Gradient;
                     if (existingGradient != null)
                     {
-                        b.Gradient = existingGradient.Add(gradB);
+                        b.Gradient = engine.TensorAdd(existingGradient, gradB);
                     }
                 }
             }
@@ -961,13 +964,14 @@ public static class TensorOperations<T>
     /// </remarks>
     public static ComputationNode<T> Transpose(ComputationNode<T> a)
     {
-        var result = a.Value.Transpose();
+        var engine = AiDotNetEngine.Current;
+        var result = engine.TensorTranspose(a.Value);
         void BackwardFunction(Tensor<T> gradient)
         {
             if (a.RequiresGradient)
             {
                 // ∂(A^T)/∂A = gradOut^T
-                var gradA = gradient.Transpose();
+                var gradA = engine.TensorTranspose(gradient);
                 if (a.Gradient == null)
                 {
                     a.Gradient = gradA;
@@ -977,7 +981,7 @@ public static class TensorOperations<T>
                     var existingGradient = a.Gradient;
                     if (existingGradient != null)
                     {
-                        a.Gradient = existingGradient.Add(gradA);
+                        a.Gradient = engine.TensorAdd(existingGradient, gradA);
                     }
                 }
             }
