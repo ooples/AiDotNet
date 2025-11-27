@@ -1414,6 +1414,125 @@ public class IRBuilder
                 });
                 break;
 
+            // Extended activation operations
+            case OperationType.ELU:
+                // grad_x = grad_y * (x > 0 ? 1 : alpha * exp(x))
+                var eluAlpha = GetParam<double>(node, "Alpha", 1.0);
+                ops.Add(new Operations.GradELUOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds[0], forwardOutputId },
+                    Alpha = eluAlpha,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape,
+                    SavedForwardTensorId = forwardInputIds[0]
+                });
+                break;
+
+            case OperationType.Swish:
+                // grad_x = grad_y * (swish(x) + sigmoid(x) * (1 - swish(x)))
+                ops.Add(new Operations.GradSwishOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds[0], forwardOutputId },
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape,
+                    SavedForwardTensorId = forwardInputIds[0]
+                });
+                break;
+
+            case OperationType.Mish:
+                // grad_x = grad_y * mish_derivative(x)
+                ops.Add(new Operations.GradMishOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds[0] },
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape,
+                    SavedForwardTensorId = forwardInputIds[0]
+                });
+                break;
+
+            case OperationType.SoftPlus:
+                // grad_x = grad_y * sigmoid(beta * x)
+                var softplusBeta = GetParam<double>(node, "Beta", 1.0);
+                ops.Add(new Operations.GradSoftPlusOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds[0] },
+                    Beta = softplusBeta,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape,
+                    SavedForwardTensorId = forwardInputIds[0]
+                });
+                break;
+
+            case OperationType.SELU:
+                // grad_x = grad_y * scale * (x > 0 ? 1 : alpha * exp(x))
+                ops.Add(new Operations.GradSELUOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds[0] },
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape,
+                    SavedForwardTensorId = forwardInputIds[0]
+                });
+                break;
+
+            case OperationType.HardSigmoid:
+                // grad_x = grad_y * (0 if x < -3 or x > 3, else 1/6)
+                ops.Add(new Operations.GradHardSigmoidOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds[0] },
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape,
+                    SavedForwardTensorId = forwardInputIds[0]
+                });
+                break;
+
+            case OperationType.HardTanh:
+                // grad_x = grad_y * (0 if x < min or x > max, else 1)
+                var hardTanhMin = GetParam<double>(node, "MinVal", -1.0);
+                var hardTanhMax = GetParam<double>(node, "MaxVal", 1.0);
+                ops.Add(new Operations.GradHardTanhOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds[0] },
+                    MinVal = hardTanhMin,
+                    MaxVal = hardTanhMax,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape,
+                    SavedForwardTensorId = forwardInputIds[0]
+                });
+                break;
+
+            case OperationType.SoftSign:
+                // grad_x = grad_y / (1 + |x|)^2
+                ops.Add(new Operations.GradSoftSignOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds[0] },
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape,
+                    SavedForwardTensorId = forwardInputIds[0]
+                });
+                break;
+
+            case OperationType.CELU:
+                // grad_x = grad_y * (x > 0 ? 1 : exp(x/alpha))
+                var celuAlpha = GetParam<double>(node, "Alpha", 1.0);
+                ops.Add(new Operations.GradCELUOp
+                {
+                    OutputId = _nextTensorId++,
+                    InputIds = new[] { outputGradId, forwardInputIds[0] },
+                    Alpha = celuAlpha,
+                    OutputType = irType,
+                    OutputShape = node.Parents[0].Value.Shape,
+                    SavedForwardTensorId = forwardInputIds[0]
+                });
+                break;
+
             // For unsupported operations, return empty list (gradient won't flow)
             default:
                 // Unsupported operation - gradient flow stops here
