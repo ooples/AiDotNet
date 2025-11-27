@@ -1,10 +1,8 @@
 using System;
-#if NET8_0_OR_GREATER
-using System.Numerics.Tensors;
-#endif
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Operators;
 
 namespace AiDotNet.Tensors.NumericOperations;
 
@@ -716,100 +714,52 @@ public class UIntOperations : INumericOperations<uint>
     #region IVectorizedOperations<uint> Implementation
 
     /// <summary>
-    /// Performs element-wise addition. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
+    /// Performs element-wise addition using SIMD-optimized operations via TensorPrimitivesCore.
     /// </summary>
     public void Add(ReadOnlySpan<uint> x, ReadOnlySpan<uint> y, Span<uint> destination)
-    {
-#if NET8_0_OR_GREATER
-        TensorPrimitives.Add(x, y, destination);
-#else
-        VectorizedOperationsFallback.Add(this, x, y, destination);
-#endif
-    }
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<AddOperatorUInt>(x, y, destination);
 
     /// <summary>
-    /// Performs element-wise subtraction. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
+    /// Performs element-wise subtraction using SIMD-optimized operations via TensorPrimitivesCore.
     /// </summary>
     public void Subtract(ReadOnlySpan<uint> x, ReadOnlySpan<uint> y, Span<uint> destination)
-    {
-#if NET8_0_OR_GREATER
-        TensorPrimitives.Subtract(x, y, destination);
-#else
-        VectorizedOperationsFallback.Subtract(this, x, y, destination);
-#endif
-    }
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<SubtractOperatorUInt>(x, y, destination);
 
     /// <summary>
-    /// Performs element-wise multiplication. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
+    /// Performs element-wise multiplication using SIMD-optimized operations via TensorPrimitivesCore.
     /// </summary>
     public void Multiply(ReadOnlySpan<uint> x, ReadOnlySpan<uint> y, Span<uint> destination)
-    {
-#if NET8_0_OR_GREATER
-        TensorPrimitives.Multiply(x, y, destination);
-#else
-        VectorizedOperationsFallback.Multiply(this, x, y, destination);
-#endif
-    }
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<MultiplyOperatorUInt>(x, y, destination);
 
     /// <summary>
-    /// Performs element-wise division. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
+    /// Performs element-wise division using SIMD-optimized operations via TensorPrimitivesCore.
     /// </summary>
     public void Divide(ReadOnlySpan<uint> x, ReadOnlySpan<uint> y, Span<uint> destination)
-    {
-#if NET8_0_OR_GREATER
-        TensorPrimitives.Divide(x, y, destination);
-#else
-        VectorizedOperationsFallback.Divide(this, x, y, destination);
-#endif
-    }
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<DivideOperatorUInt>(x, y, destination);
 
     /// <summary>
-    /// Computes dot product. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
+    /// Computes dot product using sequential loops.
     /// </summary>
     public uint Dot(ReadOnlySpan<uint> x, ReadOnlySpan<uint> y)
-    {
-#if NET8_0_OR_GREATER
-        return TensorPrimitives.Dot(x, y);
-#else
-        return VectorizedOperationsFallback.Dot(this, x, y);
-#endif
-    }
+        => VectorizedOperationsFallback.Dot(this, x, y);
 
     /// <summary>
-    /// Computes sum. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
+    /// Computes sum using sequential loops.
     /// </summary>
     public uint Sum(ReadOnlySpan<uint> x)
-    {
-#if NET8_0_OR_GREATER
-        return TensorPrimitives.Sum(x);
-#else
-        return VectorizedOperationsFallback.Sum(this, x);
-#endif
-    }
+        => VectorizedOperationsFallback.Sum(this, x);
 
     /// <summary>
-    /// Finds maximum. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
+    /// Finds maximum using sequential loops.
     /// </summary>
     public uint Max(ReadOnlySpan<uint> x)
-    {
-#if NET8_0_OR_GREATER
-        return TensorPrimitives.Max(x);
-#else
-        return VectorizedOperationsFallback.Max(this, x);
-#endif
-    }
+        => VectorizedOperationsFallback.Max(this, x);
 
     /// <summary>
-    /// Finds minimum. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
+    /// Finds minimum using sequential loops.
     /// </summary>
     public uint Min(ReadOnlySpan<uint> x)
-    {
-#if NET8_0_OR_GREATER
-        return TensorPrimitives.Min(x);
-#else
-        return VectorizedOperationsFallback.Min(this, x);
-#endif
-    }
+        => VectorizedOperationsFallback.Min(this, x);
 
     /// <summary>
     /// Computes exponential using sequential loops (fallback, no SIMD).
