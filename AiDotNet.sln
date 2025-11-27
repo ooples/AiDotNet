@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.8.34004.107
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.11222.15 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNet", "src\AiDotNet.csproj", "{588E787B-4FCA-4590-9EE7-16750B9E6D3E}"
 EndProject
@@ -14,6 +14,8 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNet.Serving", "src\AiDotNet.Serving\AiDotNet.Serving.csproj", "{E8B7F9A1-3C4D-4E5F-9A7B-8C1D2E3F4A5B}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNet.Serving.Tests", "tests\AiDotNet.Serving.Tests\AiDotNet.Serving.Tests.csproj", "{F9C8E7D6-4B3A-5E2F-8A9B-1D0C3E2F5A4B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNet.Tensors", "..\..\AiDotNet\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj", "{6CEC59DF-7EE2-1E0E-6592-40A2A318A5BD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -45,6 +47,10 @@ Global
 		{F9C8E7D6-4B3A-5E2F-8A9B-1D0C3E2F5A4B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F9C8E7D6-4B3A-5E2F-8A9B-1D0C3E2F5A4B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F9C8E7D6-4B3A-5E2F-8A9B-1D0C3E2F5A4B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6CEC59DF-7EE2-1E0E-6592-40A2A318A5BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6CEC59DF-7EE2-1E0E-6592-40A2A318A5BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6CEC59DF-7EE2-1E0E-6592-40A2A318A5BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6CEC59DF-7EE2-1E0E-6592-40A2A318A5BD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
