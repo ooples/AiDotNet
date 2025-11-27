@@ -524,4 +524,127 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
         // Create and return a new instance with the same configuration
         return new GradientBoostingRegression<T>(_options, Regularization);
     }
+
+    #region IJitCompilable Implementation Override
+
+    /// <summary>
+    /// Gets whether this Gradient Boosting model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> when soft tree mode is enabled and trees have been trained;
+    /// <c>false</c> otherwise.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Gradient Boosting supports JIT compilation when soft tree mode is enabled. In soft mode,
+    /// each tree in the ensemble uses sigmoid-based soft gating instead of hard if-then splits,
+    /// making the entire sequential ensemble differentiable.
+    /// </para>
+    /// <para>
+    /// The computation graph follows the gradient boosting formula:
+    /// <code>prediction = initial_prediction + learning_rate × Σ tree_i(input)</code>
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT compilation is available when soft tree mode is enabled.
+    ///
+    /// In soft tree mode:
+    /// - Each tree in the boosted ensemble uses smooth transitions
+    /// - The sequential ensemble can be exported as a single computation graph
+    /// - The learning rate and initial prediction are embedded in the graph
+    ///
+    /// This gives you the benefits of gradient boosting with JIT-compiled speed.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation =>
+        UseSoftTree && _trees.Count > 0;
+
+    /// <summary>
+    /// Exports the Gradient Boosting model's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The root node of the exported computation graph.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when soft tree mode is not enabled.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the model has not been trained (no trees).
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// When soft tree mode is enabled, this exports the entire Gradient Boosting ensemble as a
+    /// differentiable computation graph. The graph follows the formula:
+    /// <code>output = initial_prediction + learning_rate × (tree1 + tree2 + ... + treeN)</code>
+    /// where each tree uses soft split operations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This exports the gradient boosted ensemble as a computation graph.
+    ///
+    /// Unlike Random Forest (which averages tree outputs), Gradient Boosting:
+    /// - Starts with an initial prediction (mean of training targets)
+    /// - Adds contributions from each tree scaled by the learning rate
+    /// - Each tree predicts "residuals" (errors from previous trees)
+    ///
+    /// The exported graph combines all these elements into optimized code.
+    /// </para>
+    /// </remarks>
+    public override AiDotNet.Autodiff.ComputationNode<T> ExportComputationGraph(
+        List<AiDotNet.Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (!UseSoftTree)
+        {
+            throw new NotSupportedException(
+                "Gradient Boosting does not support JIT compilation in hard tree mode because " +
+                "decision trees use discrete branching logic.\n\n" +
+                "To enable JIT compilation, set UseSoftTree = true to use soft (differentiable) " +
+                "decision trees with sigmoid-based gating.");
+        }
+
+        if (_trees.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Cannot export computation graph: the Gradient Boosting model has not been trained. " +
+                "Call Train() or TrainAsync() first to build the trees.");
+        }
+
+        // Ensure all trees have soft mode enabled
+        foreach (var tree in _trees)
+        {
+            tree.UseSoftTree = true;
+            tree.SoftTreeTemperature = SoftTreeTemperature;
+        }
+
+        // Create initial prediction constant
+        var initialTensor = new AiDotNet.Autodiff.Tensor<T>(new[] { 1 });
+        initialTensor[0] = _initialPrediction;
+        var initialNode = AiDotNet.Autodiff.TensorOperations<T>.Constant(initialTensor, "initial_prediction");
+
+        // Create learning rate constant
+        var lrTensor = new AiDotNet.Autodiff.Tensor<T>(new[] { 1 });
+        lrTensor[0] = NumOps.FromDouble(_options.LearningRate);
+        var learningRateNode = AiDotNet.Autodiff.TensorOperations<T>.Constant(lrTensor, "learning_rate");
+
+        // Export first tree to get input node
+        var tempInputNodes = new List<AiDotNet.Autodiff.ComputationNode<T>>();
+        var firstTreeGraph = _trees[0].ExportComputationGraph(tempInputNodes);
+
+        if (tempInputNodes.Count > 0)
+        {
+            inputNodes.Add(tempInputNodes[0]);
+        }
+
+        // Sum all tree outputs
+        var treeSumNode = firstTreeGraph;
+        for (int i = 1; i < _trees.Count; i++)
+        {
+            var treeInputNodes = new List<AiDotNet.Autodiff.ComputationNode<T>>();
+            var treeGraph = _trees[i].ExportComputationGraph(treeInputNodes);
+            treeSumNode = AiDotNet.Autodiff.TensorOperations<T>.Add(treeSumNode, treeGraph);
+        }
+
+        // Scale by learning rate: learning_rate * sum_of_trees
+        var scaledTreesNode = AiDotNet.Autodiff.TensorOperations<T>.Multiply(learningRateNode, treeSumNode);
+
+        // Final prediction: initial_prediction + learning_rate * sum_of_trees
+        return AiDotNet.Autodiff.TensorOperations<T>.Add(initialNode, scaledTreesNode);
+    }
+
+    #endregion
 }

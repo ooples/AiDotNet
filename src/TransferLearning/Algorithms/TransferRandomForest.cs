@@ -624,61 +624,65 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// <summary>
     /// Gets whether this mapped Random Forest model supports JIT compilation.
     /// </summary>
-    /// <value>False - Random Forests use tree-based decision logic which is not differentiable and cannot be JIT compiled.</value>
+    /// <value>
+    /// <c>true</c> when the underlying model supports JIT compilation (soft tree mode enabled);
+    /// <c>false</c> otherwise.
+    /// </value>
     /// <remarks>
     /// <para>
-    /// Random Forests are ensemble models composed of decision trees that make predictions
-    /// through discrete branching logic (if-then-else rules). This discrete nature makes them
-    /// incompatible with JIT compilation, which requires differentiable computation graphs.
+    /// JIT compilation is supported when the underlying Random Forest model has soft tree mode enabled.
+    /// In soft tree mode, the discrete branching logic is replaced with smooth sigmoid-based gating,
+    /// making the model differentiable and compatible with JIT compilation.
     /// </para>
-    /// <para><b>For Beginners:</b> JIT compilation works best with mathematical operations
-    /// that can be represented as smooth functions (addition, multiplication, etc.).
+    /// <para><b>For Beginners:</b> JIT compilation is available when soft tree mode is enabled.
     ///
-    /// Random Forests use decision trees, which work like:
-    /// - If feature X is greater than 5, go left, else go right
-    /// - These "if-then" rules are not smooth mathematical operations
-    /// - They cannot be compiled into the type of computation graph JIT needs
+    /// Traditional Random Forests use hard yes/no decisions that can't be JIT compiled.
+    /// With soft tree mode, the trees use smooth transitions instead:
+    /// - This makes the model differentiable
+    /// - Enables JIT compilation for faster inference
+    /// - Gives similar results to traditional Random Forests
     ///
-    /// For Random Forests, use the standard prediction methods which are already optimized
-    /// for tree-based inference.
+    /// To enable JIT compilation:
+    /// <code>
+    /// var rf = (RandomForestRegression&lt;double&gt;)wrappedModel;
+    /// rf.UseSoftTree = true;
+    /// </code>
     /// </para>
     /// </remarks>
-    public bool SupportsJitCompilation => false;
+    public bool SupportsJitCompilation =>
+        _baseModel is IJitCompilable<T> jitModel && jitModel.SupportsJitCompilation;
 
     /// <summary>
     /// Exports the model's computation graph for JIT compilation.
     /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes (parameters).</param>
-    /// <returns>Not supported for Random Forests.</returns>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The root node of the exported computation graph.</returns>
     /// <exception cref="NotSupportedException">
-    /// Always thrown - Random Forests cannot be exported as computation graphs.
+    /// Thrown when the underlying model does not support JIT compilation.
     /// </exception>
     /// <remarks>
     /// <para>
-    /// Random Forest models use tree-based decision logic which cannot be represented
-    /// as a differentiable computation graph required for JIT compilation.
+    /// Delegates to the underlying Random Forest model's ExportComputationGraph method.
+    /// Requires the underlying model to have soft tree mode enabled.
     /// </para>
-    /// <para><b>For Beginners:</b> Unlike neural networks which use mathematical operations
-    /// (multiply, add, etc.), Random Forests use decision trees with discrete branching logic.
+    /// <para><b>For Beginners:</b> This exports the Random Forest as a computation graph.
     ///
-    /// Decision trees work like flowcharts:
-    /// - "Is age greater than 30?" → Yes/No branches
-    /// - "Is income above $50k?" → Yes/No branches
-    ///
-    /// This discrete, rule-based logic cannot be converted into the smooth mathematical
-    /// computation graphs that JIT compilation requires.
-    ///
-    /// For efficient Random Forest inference, use the standard Predict() method which is
-    /// optimized for tree traversal.
+    /// When soft tree mode is enabled, each tree becomes a smooth function that can be
+    /// compiled into an optimized computation graph. The ensemble of soft trees is then
+    /// averaged to produce the final prediction.
     /// </para>
     /// </remarks>
     public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
+        if (_baseModel is IJitCompilable<T> jitModel && jitModel.SupportsJitCompilation)
+        {
+            return jitModel.ExportComputationGraph(inputNodes);
+        }
+
         throw new NotSupportedException(
-            "Random Forest models cannot be exported as computation graphs for JIT compilation. " +
-            "Random Forests use tree-based decision logic with discrete branching (if-then-else rules), " +
-            "which is fundamentally incompatible with the differentiable computation graphs required for JIT compilation. " +
-            "Use the standard Predict() method for inference, which is optimized for tree-based models.");
+            "This mapped Random Forest model does not support JIT compilation. " +
+            "To enable JIT compilation, set UseSoftTree = true on the underlying Random Forest model " +
+            "to use soft (differentiable) decision trees with sigmoid-based gating.");
     }
 
     #endregion

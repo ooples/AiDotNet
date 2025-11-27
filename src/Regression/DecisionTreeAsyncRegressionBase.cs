@@ -1034,83 +1034,195 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         Deserialize(data);
     }
 
+    #region Soft Tree Mode for JIT Compilation
+
+    /// <summary>
+    /// Gets or sets whether to use soft (differentiable) tree mode for JIT compilation support.
+    /// </summary>
+    /// <value><c>true</c> to enable soft tree mode; <c>false</c> (default) for traditional hard decision trees.</value>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the decision tree uses sigmoid-based soft gating instead of hard if-then splits.
+    /// This makes the tree differentiable and enables JIT compilation support.
+    /// </para>
+    /// <para>
+    /// Formula at each split: output = σ((threshold - x[feature]) / temperature) * left + (1 - σ) * right
+    /// where σ is the sigmoid function.
+    /// </para>
+    /// <para><b>For Beginners:</b> Soft tree mode allows the decision tree to be JIT compiled for faster inference.
+    ///
+    /// Traditional decision trees make hard yes/no decisions:
+    /// - "If feature &gt; 5, go LEFT, otherwise go RIGHT"
+    ///
+    /// Soft trees use smooth transitions instead:
+    /// - Near the boundary, the output blends both left and right paths
+    /// - This creates a smooth, differentiable function that can be JIT compiled
+    /// </para>
+    /// </remarks>
+    public bool UseSoftTree
+    {
+        get => Options.UseSoftTree;
+        set => Options.UseSoftTree = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the temperature parameter for soft decision tree mode.
+    /// </summary>
+    /// <value>
+    /// The temperature for sigmoid gating. Lower values produce sharper decisions.
+    /// Default is 1.0.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Only used when <see cref="UseSoftTree"/> is enabled. Controls the smoothness of
+    /// the soft split operations:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Lower temperature (e.g., 0.1) = sharper, more discrete decisions</description></item>
+    /// <item><description>Higher temperature (e.g., 10.0) = softer, more blended decisions</description></item>
+    /// </list>
+    /// </remarks>
+    public T SoftTreeTemperature
+    {
+        get => NumOps.FromDouble(Options.SoftTreeTemperature);
+        set => Options.SoftTreeTemperature = Convert.ToDouble(value);
+    }
+
+    #endregion
+
     #region IJitCompilable Implementation
 
     /// <summary>
     /// Gets whether this model currently supports JIT compilation.
     /// </summary>
-    /// <value>Always returns false for async decision trees, which are not differentiable models.</value>
+    /// <value>
+    /// <c>true</c> when <see cref="UseSoftTree"/> is enabled and the tree has been trained;
+    /// <c>false</c> otherwise.
+    /// </value>
     /// <remarks>
     /// <para>
-    /// Async decision trees, like their synchronous counterparts, are not continuously differentiable models.
-    /// They make discrete decisions based on threshold comparisons. JIT compilation requires a computation graph
-    /// with differentiable operations, which decision trees do not provide.
+    /// When <see cref="UseSoftTree"/> is enabled, the decision tree can be exported as a
+    /// differentiable computation graph using soft (sigmoid-based) gating. This enables
+    /// JIT compilation for optimized inference.
     /// </para>
-    /// <para><b>For Beginners:</b> Async decision trees cannot be JIT compiled for the same reasons as regular decision trees.
+    /// <para>
+    /// When <see cref="UseSoftTree"/> is disabled, JIT compilation is not supported because
+    /// traditional hard decision trees use branching logic that cannot be represented as
+    /// a static computation graph.
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT compilation is available when soft tree mode is enabled.
     ///
-    /// Async decision trees:
-    /// - Make decisions using if-then rules (e.g., "if feature > 5, go left, else go right")
-    /// - These are discrete, non-smooth operations
-    /// - Cannot be represented as a continuous computation graph
-    /// - The "async" part refers to training/prediction execution, not the model structure
-    ///
-    /// JIT compilation needs:
-    /// - Smooth, differentiable operations (like matrix multiplication, addition)
-    /// - A computation graph structure
-    /// - Operations that can be optimized and fused
-    ///
-    /// For async tree-based models, you get fast predictions through:
-    /// - Parallel tree traversal using async operations
-    /// - Efficient node evaluation
-    /// - Ensemble methods that parallelize predictions across trees asynchronously
+    /// In soft tree mode, the discrete if-then decisions are replaced with smooth sigmoid
+    /// functions that can be compiled into an optimized computation graph. This gives you
+    /// the interpretability of decision trees with the speed of JIT-compiled models.
     /// </para>
     /// </remarks>
-    public virtual bool SupportsJitCompilation
-    {
-        get { return false; }
-    }
+    public virtual bool SupportsJitCompilation => UseSoftTree && Root != null;
 
     /// <summary>
     /// Exports the model's computation graph for JIT compilation.
     /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes (not used).</param>
-    /// <returns>Not supported - always throws NotSupportedException.</returns>
-    /// <exception cref="NotSupportedException">Always thrown - async decision trees do not support JIT compilation.</exception>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The root node of the exported computation graph.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when <see cref="UseSoftTree"/> is false.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the tree has not been trained (Root is null).
+    /// </exception>
     /// <remarks>
     /// <para>
-    /// Async decision trees cannot be represented as a computation graph suitable for JIT compilation because
-    /// they use discrete branching logic rather than continuous mathematical operations, regardless of whether
-    /// their execution is asynchronous or synchronous.
+    /// When soft tree mode is enabled, this exports the tree as a differentiable computation
+    /// graph using <see cref="Autodiff.TensorOperations{T}.SoftSplit"/> operations. Each internal
+    /// node becomes a soft split operation that computes sigmoid-weighted combinations of
+    /// left and right subtree outputs.
     /// </para>
-    /// <para><b>For Beginners:</b> This method cannot be used with async decision trees.
+    /// <para><b>For Beginners:</b> This method converts the decision tree into a computation graph.
     ///
-    /// Async decision trees use if-then-else logic:
-    /// - "If age > 30, check income. Else, check credit score."
-    /// - These are discrete decisions, not smooth mathematical functions
-    /// - They cannot be converted to a computation graph
-    /// - The asynchronous execution model doesn't change this fundamental limitation
-    ///
-    /// Models that support JIT compilation use continuous operations:
-    /// - Linear models: y = Wx + b
-    /// - Neural networks: y = activation(W2 * activation(W1 * x + b1) + b2)
-    /// - These can be represented as computation graphs
-    ///
-    /// If you need fast predictions with async tree models, use:
-    /// - Ensemble methods (Random Forests) that parallelize tree evaluations asynchronously
-    /// - Optimized tree traversal algorithms with async/await patterns
-    /// - Hardware-optimized libraries for tree inference with async support
+    /// In soft tree mode, each decision node becomes a smooth blend:
+    /// - Instead of "go left OR right", it computes "X% left + Y% right"
+    /// - The percentages are determined by the sigmoid function
+    /// - This creates a smooth, differentiable function that can be JIT compiled
     /// </para>
     /// </remarks>
     public virtual AiDotNet.Autodiff.ComputationNode<T> ExportComputationGraph(List<AiDotNet.Autodiff.ComputationNode<T>> inputNodes)
     {
-        throw new NotSupportedException(
-            "Async decision trees do not support JIT compilation. " +
-            "Tree-based models use discrete branching logic (if-then-else rules) rather than continuous " +
-            "differentiable operations, which makes them incompatible with computation graph-based JIT compilation. " +
-            "The asynchronous execution model is for training/prediction parallelization and does not change " +
-            "the fundamental tree structure. For fast async tree inference, use ensemble methods like Random Forests " +
-            "which parallelize predictions across multiple trees, or consider hybrid approaches that combine " +
-            "tree-based feature engineering with differentiable models.");
+        if (!UseSoftTree)
+        {
+            throw new NotSupportedException(
+                "Async decision trees do not support JIT compilation in hard tree mode because they use " +
+                "discrete branching logic (if-then-else rules).\n\n" +
+                "To enable JIT compilation, set UseSoftTree = true to use soft (differentiable) decision trees " +
+                "with sigmoid-based gating.");
+        }
+
+        if (Root == null)
+        {
+            throw new InvalidOperationException(
+                "Cannot export computation graph: the decision tree has not been trained. " +
+                "Call Train() or TrainAsync() first to build the tree structure.");
+        }
+
+        // Get the number of features from the tree structure
+        int numFeatures = GetMaxFeatureIndexFromTree(Root) + 1;
+
+        // Create input variable node
+        var inputTensor = new Autodiff.Tensor<T>(new[] { numFeatures });
+        var input = Autodiff.TensorOperations<T>.Variable(inputTensor, "input");
+        inputNodes.Add(input);
+
+        // Recursively export the tree as soft split operations
+        return ExportNodeAsComputationGraph(Root, input);
+    }
+
+    /// <summary>
+    /// Gets the maximum feature index used in the tree.
+    /// </summary>
+    /// <param name="node">The root node of the tree to scan.</param>
+    /// <returns>The maximum feature index found.</returns>
+    private int GetMaxFeatureIndexFromTree(DecisionTreeNode<T>? node)
+    {
+        if (node == null || node.IsLeaf)
+            return -1;
+
+        int maxIndex = node.FeatureIndex;
+        int leftMax = GetMaxFeatureIndexFromTree(node.Left);
+        int rightMax = GetMaxFeatureIndexFromTree(node.Right);
+
+        return Math.Max(maxIndex, Math.Max(leftMax, rightMax));
+    }
+
+    /// <summary>
+    /// Recursively exports a tree node as a computation graph.
+    /// </summary>
+    /// <param name="node">The node to export.</param>
+    /// <param name="input">The input computation node.</param>
+    /// <returns>A computation node representing this subtree.</returns>
+    private Autodiff.ComputationNode<T> ExportNodeAsComputationGraph(
+        DecisionTreeNode<T> node,
+        Autodiff.ComputationNode<T> input)
+    {
+        if (node.IsLeaf)
+        {
+            // Leaf node: return constant prediction value
+            var leafTensor = new Autodiff.Tensor<T>(new[] { 1 });
+            leafTensor[0] = node.Prediction;
+            return Autodiff.TensorOperations<T>.Constant(leafTensor, $"leaf_{node.GetHashCode()}");
+        }
+
+        // Internal node: export as SoftSplit operation
+        // Recursively export left and right subtrees
+        var leftOutput = ExportNodeAsComputationGraph(node.Left!, input);
+        var rightOutput = ExportNodeAsComputationGraph(node.Right!, input);
+
+        // Use SoftSplit operation: output = sigmoid((threshold - x[feature]) / temp) * left + (1 - sigmoid) * right
+        return Autodiff.TensorOperations<T>.SoftSplit(
+            input,
+            leftOutput,
+            rightOutput,
+            node.FeatureIndex,
+            node.SplitValue,
+            SoftTreeTemperature);
     }
 
     #endregion
