@@ -1,3 +1,5 @@
+using AiDotNet.ActivationFunctions;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -504,34 +506,44 @@ public class FeedForwardLayer<T> : LayerBase<T>
         // Check if using scalar activation
         if (!UsingVectorActivation && ScalarActivation != null)
         {
-            // Map scalar activation to autodiff operation
-            var activationName = ScalarActivation.GetType().Name;
-
-            if (activationName.Contains("ReLU"))
-                return Autodiff.TensorOperations<T>.ReLU(input);
-            else if (activationName.Contains("Sigmoid"))
-                return Autodiff.TensorOperations<T>.Sigmoid(input);
-            else if (activationName.Contains("Tanh"))
-                return Autodiff.TensorOperations<T>.Tanh(input);
-            else
-                throw new NotSupportedException($"Scalar activation {activationName} not supported with autodiff. Use manual backward pass or implement autodiff support for this activation.");
+            return ScalarActivation switch
+            {
+                ReLUActivation<T> => Autodiff.TensorOperations<T>.ReLU(input),
+                SigmoidActivation<T> => Autodiff.TensorOperations<T>.Sigmoid(input),
+                TanhActivation<T> => Autodiff.TensorOperations<T>.Tanh(input),
+                ELUActivation<T> elu => Autodiff.TensorOperations<T>.ELU(input, Convert.ToDouble(elu.Alpha)),
+                LeakyReLUActivation<T> leaky => Autodiff.TensorOperations<T>.LeakyReLU(input, Convert.ToDouble(leaky.Alpha)),
+                GELUActivation<T> => Autodiff.TensorOperations<T>.GELU(input),
+                SwishActivation<T> => Autodiff.TensorOperations<T>.Swish(input),
+                SiLUActivation<T> => Autodiff.TensorOperations<T>.Swish(input), // SiLU is same as Swish
+                SELUActivation<T> => Autodiff.TensorOperations<T>.SELU(input),
+                SoftSignActivation<T> => Autodiff.TensorOperations<T>.SoftSign(input),
+                IdentityActivation<T> => input,
+                _ => throw new NotSupportedException($"Scalar activation {ScalarActivation.GetType().Name} not supported with autodiff. " +
+                    "Supported: ReLU, Sigmoid, Tanh, ELU, LeakyReLU, GELU, Swish, SiLU, SELU, SoftSign, Identity")
+            };
         }
 
         // Check if using vector activation
         if (UsingVectorActivation && VectorActivation != null)
         {
-            var activationName = VectorActivation.GetType().Name;
-
-            if (activationName.Contains("Softmax"))
-                return Autodiff.TensorOperations<T>.Softmax(input);
-            else if (activationName.Contains("ReLU"))
-                return Autodiff.TensorOperations<T>.ReLU(input);
-            else if (activationName.Contains("Sigmoid"))
-                return Autodiff.TensorOperations<T>.Sigmoid(input);
-            else if (activationName.Contains("Tanh"))
-                return Autodiff.TensorOperations<T>.Tanh(input);
-            else
-                throw new NotSupportedException($"Vector activation {activationName} not supported with autodiff. Use manual backward pass or implement autodiff support for this activation.");
+            return VectorActivation switch
+            {
+                SoftmaxActivation<T> => Autodiff.TensorOperations<T>.Softmax(input),
+                ReLUActivation<T> => Autodiff.TensorOperations<T>.ReLU(input),
+                SigmoidActivation<T> => Autodiff.TensorOperations<T>.Sigmoid(input),
+                TanhActivation<T> => Autodiff.TensorOperations<T>.Tanh(input),
+                ELUActivation<T> elu => Autodiff.TensorOperations<T>.ELU(input, Convert.ToDouble(elu.Alpha)),
+                LeakyReLUActivation<T> leaky => Autodiff.TensorOperations<T>.LeakyReLU(input, Convert.ToDouble(leaky.Alpha)),
+                GELUActivation<T> => Autodiff.TensorOperations<T>.GELU(input),
+                SwishActivation<T> => Autodiff.TensorOperations<T>.Swish(input),
+                SiLUActivation<T> => Autodiff.TensorOperations<T>.Swish(input),
+                SELUActivation<T> => Autodiff.TensorOperations<T>.SELU(input),
+                SoftSignActivation<T> => Autodiff.TensorOperations<T>.SoftSign(input),
+                IdentityActivation<T> => input,
+                _ => throw new NotSupportedException($"Vector activation {VectorActivation.GetType().Name} not supported with autodiff. " +
+                    "Supported: Softmax, ReLU, Sigmoid, Tanh, ELU, LeakyReLU, GELU, Swish, SiLU, SELU, SoftSign, Identity")
+            };
         }
 
         // No activation function, return input as-is
