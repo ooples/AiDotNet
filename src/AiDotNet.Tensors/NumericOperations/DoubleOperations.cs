@@ -1,3 +1,5 @@
+using System;
+using System.Numerics.Tensors;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -722,4 +724,128 @@ public class DoubleOperations : INumericOperations<double>
 
     /// <inheritdoc/>
     public bool SupportsGpuAcceleration => true;
+
+    #region IVectorizedOperations<double> Implementation - SIMD via TensorPrimitives
+
+    /// <summary>
+    /// Performs element-wise addition using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Add(ReadOnlySpan<double> x, ReadOnlySpan<double> y, Span<double> destination)
+    {
+        TensorPrimitives.Add(x, y, destination);
+    }
+
+    /// <summary>
+    /// Performs element-wise subtraction using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Subtract(ReadOnlySpan<double> x, ReadOnlySpan<double> y, Span<double> destination)
+    {
+        TensorPrimitives.Subtract(x, y, destination);
+    }
+
+    /// <summary>
+    /// Performs element-wise multiplication using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Multiply(ReadOnlySpan<double> x, ReadOnlySpan<double> y, Span<double> destination)
+    {
+        TensorPrimitives.Multiply(x, y, destination);
+    }
+
+    /// <summary>
+    /// Performs element-wise division using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Divide(ReadOnlySpan<double> x, ReadOnlySpan<double> y, Span<double> destination)
+    {
+        TensorPrimitives.Divide(x, y, destination);
+    }
+
+    /// <summary>
+    /// Computes dot product using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public double Dot(ReadOnlySpan<double> x, ReadOnlySpan<double> y)
+    {
+        return TensorPrimitives.Dot(x, y);
+    }
+
+    /// <summary>
+    /// Computes sum using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public double Sum(ReadOnlySpan<double> x)
+    {
+        return TensorPrimitives.Sum(x);
+    }
+
+    /// <summary>
+    /// Finds maximum using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public double Max(ReadOnlySpan<double> x)
+    {
+        return TensorPrimitives.Max(x);
+    }
+
+    /// <summary>
+    /// Finds minimum using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public double Min(ReadOnlySpan<double> x)
+    {
+        return TensorPrimitives.Min(x);
+    }
+
+    /// <summary>
+    /// Computes exponential using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Exp(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitives.Exp(x, destination);
+    }
+
+    /// <summary>
+    /// Computes natural logarithm using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Log(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitives.Log(x, destination);
+    }
+
+    /// <summary>
+    /// Computes hyperbolic tangent using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Tanh(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitives.Tanh(x, destination);
+    }
+
+    /// <summary>
+    /// Computes sigmoid using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Sigmoid(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitives.Sigmoid(x, destination);
+    }
+
+    /// <summary>
+    /// Computes base-2 logarithm using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Log2(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitives.Log2(x, destination);
+    }
+
+    /// <summary>
+    /// Computes softmax using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void SoftMax(ReadOnlySpan<double> x, Span<double> destination)
+    {
+        TensorPrimitives.SoftMax(x, destination);
+    }
+
+    /// <summary>
+    /// Computes cosine similarity using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public double CosineSimilarity(ReadOnlySpan<double> x, ReadOnlySpan<double> y)
+    {
+        return TensorPrimitives.CosineSimilarity(x, y);
+    }
+
+    #endregion
 }

@@ -1,3 +1,6 @@
+using System;
+
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -688,4 +691,98 @@ public class UInt16Operations : INumericOperations<ushort>
 
     /// <inheritdoc/>
     public bool SupportsGpuAcceleration => false;
+
+    #region IVectorizedOperations<ushort> Implementation - Fallback using sequential loops
+
+    /// <summary>
+    /// Performs element-wise addition using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Add(ReadOnlySpan<ushort> x, ReadOnlySpan<ushort> y, Span<ushort> destination)
+        => VectorizedOperationsFallback.Add(this, x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise subtraction using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Subtract(ReadOnlySpan<ushort> x, ReadOnlySpan<ushort> y, Span<ushort> destination)
+        => VectorizedOperationsFallback.Subtract(this, x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise multiplication using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Multiply(ReadOnlySpan<ushort> x, ReadOnlySpan<ushort> y, Span<ushort> destination)
+        => VectorizedOperationsFallback.Multiply(this, x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise division using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Divide(ReadOnlySpan<ushort> x, ReadOnlySpan<ushort> y, Span<ushort> destination)
+        => VectorizedOperationsFallback.Divide(this, x, y, destination);
+
+    /// <summary>
+    /// Computes dot product using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public ushort Dot(ReadOnlySpan<ushort> x, ReadOnlySpan<ushort> y)
+        => VectorizedOperationsFallback.Dot(this, x, y);
+
+    /// <summary>
+    /// Computes sum using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public ushort Sum(ReadOnlySpan<ushort> x)
+        => VectorizedOperationsFallback.Sum(this, x);
+
+    /// <summary>
+    /// Finds maximum using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public ushort Max(ReadOnlySpan<ushort> x)
+        => VectorizedOperationsFallback.Max(this, x);
+
+    /// <summary>
+    /// Finds minimum using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public ushort Min(ReadOnlySpan<ushort> x)
+        => VectorizedOperationsFallback.Min(this, x);
+
+    /// <summary>
+    /// Computes exponential using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Exp(ReadOnlySpan<ushort> x, Span<ushort> destination)
+        => VectorizedOperationsFallback.Exp(this, x, destination);
+
+    /// <summary>
+    /// Computes natural logarithm using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Log(ReadOnlySpan<ushort> x, Span<ushort> destination)
+        => VectorizedOperationsFallback.Log(this, x, destination);
+
+    /// <summary>
+    /// Computes hyperbolic tangent using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Tanh(ReadOnlySpan<ushort> x, Span<ushort> destination)
+        => VectorizedOperationsFallback.Tanh(this, x, destination);
+
+    /// <summary>
+    /// Computes sigmoid using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Sigmoid(ReadOnlySpan<ushort> x, Span<ushort> destination)
+        => VectorizedOperationsFallback.Sigmoid(this, x, destination);
+
+    /// <summary>
+    /// Computes base-2 logarithm using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Log2(ReadOnlySpan<ushort> x, Span<ushort> destination)
+        => VectorizedOperationsFallback.Log2(this, x, destination);
+
+    /// <summary>
+    /// Computes softmax using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void SoftMax(ReadOnlySpan<ushort> x, Span<ushort> destination)
+        => VectorizedOperationsFallback.SoftMax(this, x, destination);
+
+    /// <summary>
+    /// Computes cosine similarity using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public ushort CosineSimilarity(ReadOnlySpan<ushort> x, ReadOnlySpan<ushort> y)
+        => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
+
+    #endregion
 }

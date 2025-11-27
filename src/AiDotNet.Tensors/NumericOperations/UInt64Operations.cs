@@ -1,3 +1,6 @@
+using System;
+
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -746,4 +749,98 @@ public class UInt64Operations : INumericOperations<ulong>
 
     /// <inheritdoc/>
     public bool SupportsGpuAcceleration => false;
+
+    #region IVectorizedOperations<ulong> Implementation - Fallback using sequential loops
+
+    /// <summary>
+    /// Performs element-wise addition using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Add(ReadOnlySpan<ulong> x, ReadOnlySpan<ulong> y, Span<ulong> destination)
+        => VectorizedOperationsFallback.Add(this, x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise subtraction using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Subtract(ReadOnlySpan<ulong> x, ReadOnlySpan<ulong> y, Span<ulong> destination)
+        => VectorizedOperationsFallback.Subtract(this, x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise multiplication using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Multiply(ReadOnlySpan<ulong> x, ReadOnlySpan<ulong> y, Span<ulong> destination)
+        => VectorizedOperationsFallback.Multiply(this, x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise division using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Divide(ReadOnlySpan<ulong> x, ReadOnlySpan<ulong> y, Span<ulong> destination)
+        => VectorizedOperationsFallback.Divide(this, x, y, destination);
+
+    /// <summary>
+    /// Computes dot product using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public ulong Dot(ReadOnlySpan<ulong> x, ReadOnlySpan<ulong> y)
+        => VectorizedOperationsFallback.Dot(this, x, y);
+
+    /// <summary>
+    /// Computes sum using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public ulong Sum(ReadOnlySpan<ulong> x)
+        => VectorizedOperationsFallback.Sum(this, x);
+
+    /// <summary>
+    /// Finds maximum using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public ulong Max(ReadOnlySpan<ulong> x)
+        => VectorizedOperationsFallback.Max(this, x);
+
+    /// <summary>
+    /// Finds minimum using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public ulong Min(ReadOnlySpan<ulong> x)
+        => VectorizedOperationsFallback.Min(this, x);
+
+    /// <summary>
+    /// Computes exponential using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Exp(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => VectorizedOperationsFallback.Exp(this, x, destination);
+
+    /// <summary>
+    /// Computes natural logarithm using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Log(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => VectorizedOperationsFallback.Log(this, x, destination);
+
+    /// <summary>
+    /// Computes hyperbolic tangent using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Tanh(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => VectorizedOperationsFallback.Tanh(this, x, destination);
+
+    /// <summary>
+    /// Computes sigmoid using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Sigmoid(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => VectorizedOperationsFallback.Sigmoid(this, x, destination);
+
+    /// <summary>
+    /// Computes base-2 logarithm using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Log2(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => VectorizedOperationsFallback.Log2(this, x, destination);
+
+    /// <summary>
+    /// Computes softmax using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void SoftMax(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => VectorizedOperationsFallback.SoftMax(this, x, destination);
+
+    /// <summary>
+    /// Computes cosine similarity using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public ulong CosineSimilarity(ReadOnlySpan<ulong> x, ReadOnlySpan<ulong> y)
+        => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
+
+    #endregion
 }

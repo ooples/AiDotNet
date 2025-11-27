@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -724,4 +725,98 @@ public class Int32Operations : INumericOperations<int>
 
     /// <inheritdoc/>
     public bool SupportsGpuAcceleration => true;
+
+    #region IVectorizedOperations<int> Implementation - Fallback using sequential loops
+
+    /// <summary>
+    /// Performs element-wise addition using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Add(ReadOnlySpan<int> x, ReadOnlySpan<int> y, Span<int> destination)
+        => VectorizedOperationsFallback.Add(this, x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise subtraction using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Subtract(ReadOnlySpan<int> x, ReadOnlySpan<int> y, Span<int> destination)
+        => VectorizedOperationsFallback.Subtract(this, x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise multiplication using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Multiply(ReadOnlySpan<int> x, ReadOnlySpan<int> y, Span<int> destination)
+        => VectorizedOperationsFallback.Multiply(this, x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise division using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Divide(ReadOnlySpan<int> x, ReadOnlySpan<int> y, Span<int> destination)
+        => VectorizedOperationsFallback.Divide(this, x, y, destination);
+
+    /// <summary>
+    /// Computes dot product using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public int Dot(ReadOnlySpan<int> x, ReadOnlySpan<int> y)
+        => VectorizedOperationsFallback.Dot(this, x, y);
+
+    /// <summary>
+    /// Computes sum using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public int Sum(ReadOnlySpan<int> x)
+        => VectorizedOperationsFallback.Sum(this, x);
+
+    /// <summary>
+    /// Finds maximum using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public int Max(ReadOnlySpan<int> x)
+        => VectorizedOperationsFallback.Max(this, x);
+
+    /// <summary>
+    /// Finds minimum using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public int Min(ReadOnlySpan<int> x)
+        => VectorizedOperationsFallback.Min(this, x);
+
+    /// <summary>
+    /// Computes exponential using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Exp(ReadOnlySpan<int> x, Span<int> destination)
+        => VectorizedOperationsFallback.Exp(this, x, destination);
+
+    /// <summary>
+    /// Computes natural logarithm using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Log(ReadOnlySpan<int> x, Span<int> destination)
+        => VectorizedOperationsFallback.Log(this, x, destination);
+
+    /// <summary>
+    /// Computes hyperbolic tangent using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Tanh(ReadOnlySpan<int> x, Span<int> destination)
+        => VectorizedOperationsFallback.Tanh(this, x, destination);
+
+    /// <summary>
+    /// Computes sigmoid using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Sigmoid(ReadOnlySpan<int> x, Span<int> destination)
+        => VectorizedOperationsFallback.Sigmoid(this, x, destination);
+
+    /// <summary>
+    /// Computes base-2 logarithm using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Log2(ReadOnlySpan<int> x, Span<int> destination)
+        => VectorizedOperationsFallback.Log2(this, x, destination);
+
+    /// <summary>
+    /// Computes softmax using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void SoftMax(ReadOnlySpan<int> x, Span<int> destination)
+        => VectorizedOperationsFallback.SoftMax(this, x, destination);
+
+    /// <summary>
+    /// Computes cosine similarity using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public int CosineSimilarity(ReadOnlySpan<int> x, ReadOnlySpan<int> y)
+        => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
+
+    #endregion
 }
