@@ -6,34 +6,41 @@ using AiDotNet.Tensors.Interfaces;
 namespace AiDotNet.JitCompiler.Testing;
 
 /// <summary>
-/// Utility for verifying gradient computations using numerical differentiation.
+/// Utility for verifying gradient formulas using numerical differentiation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// Gradient verification compares analytically computed gradients (from autodiff)
-/// with numerically computed gradients (using finite differences). This is essential
-/// for testing the correctness of backward pass implementations.
+/// <b>Important:</b> This class verifies mathematical gradient formulas, NOT the actual
+/// TensorOperations autodiff implementations. For verifying TensorOperations gradients,
+/// use <see cref="AiDotNet.Autodiff.Testing.TensorOperationsVerification{T}"/> instead.
 /// </para>
-/// <para><b>For Beginners:</b> This tests that our gradients are computed correctly.
+/// <para>
+/// This class is useful for:
+/// - Testing that hand-written gradient formulas are mathematically correct
+/// - Verifying gradient formulas before implementing them in TensorOperations
+/// - Educational purposes to understand how numerical gradient checking works
+/// </para>
+/// <para><b>For Beginners:</b> This tests that gradient formulas are mathematically correct.
 ///
 /// The idea:
-/// 1. Compute gradient using autodiff (our implementation)
-/// 2. Compute gradient using finite differences (slow but always correct)
-/// 3. Compare them - they should match!
+/// 1. You provide a forward function (e.g., f(x) = x^2)
+/// 2. You provide a gradient function (e.g., df/dx = 2x)
+/// 3. We compute numerical gradient using finite differences: (f(x+h) - f(x-h)) / (2h)
+/// 4. We compare your gradient formula with the numerical gradient
 ///
-/// Finite difference gradient:
-/// df/dx ≈ (f(x+h) - f(x-h)) / (2h)  where h is a small number
-///
-/// If our autodiff gradient matches the numerical gradient, our implementation is correct!
+/// This is different from <see cref="AiDotNet.Autodiff.Testing.TensorOperationsVerification{T}"/>
+/// which tests the actual autodiff implementation in TensorOperations.
 ///
 /// Example:
 /// - f(x) = x^2
-/// - Autodiff: df/dx = 2x
+/// - Your gradient formula: df/dx = 2x
 /// - Numerical: (f(x+h) - f(x-h)) / (2h) = ((x+h)^2 - (x-h)^2) / (2h) = 2x
-/// - They match! Our gradient for x^2 is correct.
+/// - They match! Your gradient formula is correct.
 /// </para>
 /// </remarks>
+[Obsolete("For testing TensorOperations autodiff gradients, use AiDotNet.Autodiff.Testing.TensorOperationsVerification<T> instead. " +
+          "This class is retained for testing raw gradient formulas and IR operation semantics.")]
 public class GradientVerification<T>
 {
     /// <summary>
@@ -46,19 +53,19 @@ public class GradientVerification<T>
     /// </summary>
     public class VerificationConfig
     {
-        /// <summary>Step size for finite differences.</summary>
+        /// <summary>Step size for finite differences (default: 1e-5).</summary>
         public double Epsilon { get; set; } = 1e-5;
 
-        /// <summary>Relative tolerance for gradient comparison.</summary>
+        /// <summary>Relative tolerance for gradient comparison (default: 1e-4).</summary>
         public double RelativeTolerance { get; set; } = 1e-4;
 
-        /// <summary>Absolute tolerance for gradient comparison.</summary>
+        /// <summary>Absolute tolerance for gradient comparison (default: 1e-6).</summary>
         public double AbsoluteTolerance { get; set; } = 1e-6;
 
-        /// <summary>Maximum number of elements to check (for large tensors).</summary>
+        /// <summary>Maximum number of elements to check for large tensors (default: 1000).</summary>
         public int MaxElementsToCheck { get; set; } = 1000;
 
-        /// <summary>Whether to print detailed results.</summary>
+        /// <summary>Whether to print detailed results (default: false).</summary>
         public bool Verbose { get; set; } = false;
     }
 
@@ -84,11 +91,11 @@ public class GradientVerification<T>
         /// <summary>Total elements checked.</summary>
         public int TotalElementsChecked { get; set; }
 
-        /// <summary>Detailed error messages.</summary>
+        /// <summary>Detailed error messages for failed elements.</summary>
         public List<string> Errors { get; set; } = new();
 
         /// <summary>
-        /// Returns a summary string.
+        /// Returns a summary string of the verification result.
         /// </summary>
         public override string ToString()
         {
@@ -106,19 +113,38 @@ public class GradientVerification<T>
     /// <summary>
     /// Initializes with custom configuration.
     /// </summary>
+    /// <param name="config">The verification configuration.</param>
     public GradientVerification(VerificationConfig config)
     {
         _config = config;
     }
 
     /// <summary>
-    /// Verifies gradients for a single operation.
+    /// Verifies that a gradient formula matches numerical differentiation.
     /// </summary>
-    /// <param name="operation">The operation to verify.</param>
-    /// <param name="inputs">Input tensors.</param>
-    /// <param name="gradientFunc">Function that computes gradients.</param>
-    /// <param name="forwardFunc">Function that computes forward pass.</param>
-    /// <returns>Verification result.</returns>
+    /// <param name="operation">The IR operation being verified (for metadata purposes only).</param>
+    /// <param name="inputs">Input arrays to test.</param>
+    /// <param name="gradientFunc">Your gradient formula implementation.</param>
+    /// <param name="forwardFunc">Your forward pass implementation.</param>
+    /// <returns>Verification result with detailed error information.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method tests whether your provided gradient function produces results
+    /// that match numerical differentiation. It does NOT test the actual autodiff
+    /// system - use <see cref="AiDotNet.Autodiff.Testing.TensorOperationsVerification{T}"/> for that.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tests your hand-written gradient formula.
+    ///
+    /// You provide:
+    /// - forwardFunc: How to compute the output from inputs (forward pass)
+    /// - gradientFunc: Your gradient formula (backward pass)
+    ///
+    /// The method will:
+    /// 1. Compute gradients using your formula
+    /// 2. Compute gradients numerically (the "ground truth")
+    /// 3. Compare them and report any differences
+    /// </para>
+    /// </remarks>
     public VerificationResult VerifyOperation(
         IROp operation,
         T[][] inputs,
@@ -128,7 +154,7 @@ public class GradientVerification<T>
         var result = new VerificationResult();
         var errors = new List<double>();
 
-        // Compute analytical gradients
+        // Compute analytical gradients using provided gradient function
         var outputGrad = CreateOnesLike(forwardFunc(inputs));
         var analyticalGradients = gradientFunc(inputs, outputGrad);
 
@@ -167,6 +193,27 @@ public class GradientVerification<T>
         result.Passed = result.FailedElements == 0;
 
         return result;
+    }
+
+    /// <summary>
+    /// Verifies gradient formulas without requiring an IROp (simplified API).
+    /// </summary>
+    /// <param name="inputs">Input arrays to test.</param>
+    /// <param name="gradientFunc">Your gradient formula implementation.</param>
+    /// <param name="forwardFunc">Your forward pass implementation.</param>
+    /// <returns>Verification result with detailed error information.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is a simplified version that doesn't require an IROp parameter.
+    /// Use this when you just want to verify a gradient formula.
+    /// </para>
+    /// </remarks>
+    public VerificationResult VerifyGradientFormula(
+        T[][] inputs,
+        Func<T[][], T[], T[][]> gradientFunc,
+        Func<T[][], T[]> forwardFunc)
+    {
+        return VerifyOperation(null!, inputs, gradientFunc, forwardFunc);
     }
 
     /// <summary>
@@ -226,7 +273,7 @@ public class GradientVerification<T>
     }
 
     /// <summary>
-    /// Creates an array of ones with the same shape.
+    /// Creates an array of ones with the same length.
     /// </summary>
     private static T[] CreateOnesLike(T[] array)
     {
@@ -238,36 +285,57 @@ public class GradientVerification<T>
         return result;
     }
 
+    #region Built-in Gradient Formula Verifications
+
     /// <summary>
-    /// Verifies gradients for common operations.
+    /// Verifies gradient formulas for common operations.
     /// </summary>
+    /// <returns>Overall verification result.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method verifies that the built-in gradient formulas for common operations
+    /// are mathematically correct. It does NOT test the TensorOperations implementations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This runs tests on gradient formulas for common operations.
+    ///
+    /// It tests formulas like:
+    /// - ReLU: gradient = 1 if x > 0, else 0
+    /// - Sigmoid: gradient = sigmoid(x) * (1 - sigmoid(x))
+    /// - Tanh: gradient = 1 - tanh(x)^2
+    /// - Add: gradient = 1 for both inputs
+    /// - Multiply: gradient = other input
+    ///
+    /// This verifies the math is correct, not the implementation in TensorOperations.
+    /// </para>
+    /// </remarks>
+    [Obsolete("For testing TensorOperations autodiff, use TensorOperationsVerification<T>.VerifyAllOperations() instead.")]
     public static VerificationResult VerifyAllOperations()
     {
         var verifier = new GradientVerification<T>();
         var overallResult = new VerificationResult { Passed = true };
 
-        // Test ReLU
-        var reluResult = VerifyReLU(verifier);
+        // Test ReLU formula
+        var reluResult = VerifyReLUFormula(verifier);
         MergeResults(overallResult, reluResult, "ReLU");
 
-        // Test Sigmoid
-        var sigmoidResult = VerifySigmoid(verifier);
+        // Test Sigmoid formula
+        var sigmoidResult = VerifySigmoidFormula(verifier);
         MergeResults(overallResult, sigmoidResult, "Sigmoid");
 
-        // Test Tanh
-        var tanhResult = VerifyTanh(verifier);
+        // Test Tanh formula
+        var tanhResult = VerifyTanhFormula(verifier);
         MergeResults(overallResult, tanhResult, "Tanh");
 
-        // Test Add
-        var addResult = VerifyAdd(verifier);
+        // Test Add formula
+        var addResult = VerifyAddFormula(verifier);
         MergeResults(overallResult, addResult, "Add");
 
-        // Test Multiply
-        var mulResult = VerifyMultiply(verifier);
+        // Test Multiply formula
+        var mulResult = VerifyMultiplyFormula(verifier);
         MergeResults(overallResult, mulResult, "Multiply");
 
-        // Test MatMul
-        var matmulResult = VerifyMatMul(verifier);
+        // Test MatMul formula
+        var matmulResult = VerifyMatMulFormula(verifier);
         MergeResults(overallResult, matmulResult, "MatMul");
 
         return overallResult;
@@ -291,17 +359,16 @@ public class GradientVerification<T>
         overall.FailedElements += specific.FailedElements;
     }
 
-    private static VerificationResult VerifyReLU(GradientVerification<T> verifier)
+    private static VerificationResult VerifyReLUFormula(GradientVerification<T> verifier)
     {
         var input = new T[] { NumOps.FromDouble(-2), NumOps.FromDouble(-1), NumOps.Zero, NumOps.One, NumOps.FromDouble(2) };
         var inputs = new T[][] { input };
 
-        return verifier.VerifyOperation(
-            new ReLUOp(),
+        return verifier.VerifyGradientFormula(
             inputs,
             (ins, gradOut) =>
             {
-                // ReLU gradient: gradOut * (input > 0 ? 1 : 0)
+                // ReLU gradient formula: gradOut * (input > 0 ? 1 : 0)
                 var grad = new T[ins[0].Length];
                 for (int i = 0; i < grad.Length; i++)
                 {
@@ -323,17 +390,16 @@ public class GradientVerification<T>
             });
     }
 
-    private static VerificationResult VerifySigmoid(GradientVerification<T> verifier)
+    private static VerificationResult VerifySigmoidFormula(GradientVerification<T> verifier)
     {
         var input = new T[] { NumOps.FromDouble(-2), NumOps.FromDouble(-1), NumOps.Zero, NumOps.One, NumOps.FromDouble(2) };
         var inputs = new T[][] { input };
 
-        return verifier.VerifyOperation(
-            new SigmoidOp(),
+        return verifier.VerifyGradientFormula(
             inputs,
             (ins, gradOut) =>
             {
-                // Sigmoid gradient: gradOut * sigmoid(x) * (1 - sigmoid(x))
+                // Sigmoid gradient formula: gradOut * sigmoid(x) * (1 - sigmoid(x))
                 var grad = new T[ins[0].Length];
                 for (int i = 0; i < grad.Length; i++)
                 {
@@ -354,21 +420,19 @@ public class GradientVerification<T>
             });
     }
 
-    private static VerificationResult VerifyTanh(GradientVerification<T> verifier)
+    private static VerificationResult VerifyTanhFormula(GradientVerification<T> verifier)
     {
         var input = new T[] { NumOps.FromDouble(-2), NumOps.FromDouble(-1), NumOps.Zero, NumOps.One, NumOps.FromDouble(2) };
         var inputs = new T[][] { input };
 
-        return verifier.VerifyOperation(
-            new TanhOp(),
+        return verifier.VerifyGradientFormula(
             inputs,
             (ins, gradOut) =>
             {
-                // Tanh gradient: gradOut * (1 - tanh(x)^2)
+                // Tanh gradient formula: gradOut * (1 - tanh(x)^2)
                 var grad = new T[ins[0].Length];
                 for (int i = 0; i < grad.Length; i++)
                 {
-                    // tanh(x) = (exp(x) - exp(-x)) / (exp(x) + exp(-x))
                     var expX = NumOps.Exp(ins[0][i]);
                     var expNegX = NumOps.Exp(NumOps.Negate(ins[0][i]));
                     var t = NumOps.Divide(NumOps.Subtract(expX, expNegX), NumOps.Add(expX, expNegX));
@@ -390,18 +454,17 @@ public class GradientVerification<T>
             });
     }
 
-    private static VerificationResult VerifyAdd(GradientVerification<T> verifier)
+    private static VerificationResult VerifyAddFormula(GradientVerification<T> verifier)
     {
         var input1 = new T[] { NumOps.One, NumOps.FromDouble(2), NumOps.FromDouble(3), NumOps.FromDouble(4), NumOps.FromDouble(5) };
         var input2 = new T[] { NumOps.FromDouble(0.5), NumOps.FromDouble(1.5), NumOps.FromDouble(2.5), NumOps.FromDouble(3.5), NumOps.FromDouble(4.5) };
         var inputs = new T[][] { input1, input2 };
 
-        return verifier.VerifyOperation(
-            new AddOp(),
+        return verifier.VerifyGradientFormula(
             inputs,
             (ins, gradOut) =>
             {
-                // Add gradient: gradOut for both inputs
+                // Add gradient formula: gradOut for both inputs
                 return new T[][] { gradOut.ToArray(), gradOut.ToArray() };
             },
             ins =>
@@ -416,18 +479,17 @@ public class GradientVerification<T>
             });
     }
 
-    private static VerificationResult VerifyMultiply(GradientVerification<T> verifier)
+    private static VerificationResult VerifyMultiplyFormula(GradientVerification<T> verifier)
     {
         var input1 = new T[] { NumOps.One, NumOps.FromDouble(2), NumOps.FromDouble(3), NumOps.FromDouble(4), NumOps.FromDouble(5) };
         var input2 = new T[] { NumOps.FromDouble(0.5), NumOps.FromDouble(1.5), NumOps.FromDouble(2.5), NumOps.FromDouble(3.5), NumOps.FromDouble(4.5) };
         var inputs = new T[][] { input1, input2 };
 
-        return verifier.VerifyOperation(
-            new ElementwiseMultiplyOp(),
+        return verifier.VerifyGradientFormula(
             inputs,
             (ins, gradOut) =>
             {
-                // Multiply gradient: gradOut * other input
+                // Multiply gradient formula: gradOut * other input
                 var grad1 = new T[ins[0].Length];
                 var grad2 = new T[ins[0].Length];
                 for (int i = 0; i < ins[0].Length; i++)
@@ -449,19 +511,18 @@ public class GradientVerification<T>
             });
     }
 
-    private static VerificationResult VerifyMatMul(GradientVerification<T> verifier)
+    private static VerificationResult VerifyMatMulFormula(GradientVerification<T> verifier)
     {
         // 2x3 * 3x2 = 2x2
-        var a = new T[] { NumOps.One, NumOps.FromDouble(2), NumOps.FromDouble(3), NumOps.FromDouble(4), NumOps.FromDouble(5), NumOps.FromDouble(6) };  // 2x3
-        var b = new T[] { NumOps.One, NumOps.FromDouble(2), NumOps.FromDouble(3), NumOps.FromDouble(4), NumOps.FromDouble(5), NumOps.FromDouble(6) };  // 3x2
+        var a = new T[] { NumOps.One, NumOps.FromDouble(2), NumOps.FromDouble(3), NumOps.FromDouble(4), NumOps.FromDouble(5), NumOps.FromDouble(6) };
+        var b = new T[] { NumOps.One, NumOps.FromDouble(2), NumOps.FromDouble(3), NumOps.FromDouble(4), NumOps.FromDouble(5), NumOps.FromDouble(6) };
         var inputs = new T[][] { a, b };
 
-        return verifier.VerifyOperation(
-            new MatMulOp(),
+        return verifier.VerifyGradientFormula(
             inputs,
             (ins, gradOut) =>
             {
-                // MatMul gradients:
+                // MatMul gradient formula:
                 // dA = gradOut @ B^T
                 // dB = A^T @ gradOut
                 int m = 2, k = 3, n = 2;
@@ -521,6 +582,8 @@ public class GradientVerification<T>
                 return output;
             });
     }
+
+    #endregion
 }
 
 /// <summary>
@@ -529,7 +592,7 @@ public class GradientVerification<T>
 public static class GradientVerificationExtensions
 {
     /// <summary>
-    /// Runs gradient verification and prints results.
+    /// Runs gradient verification and prints results to console.
     /// </summary>
     public static void RunAndPrint<T>(this GradientVerification<T>.VerificationResult result)
     {

@@ -1,5 +1,6 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Autodiff;
+using AiDotNet.Autodiff.Testing;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
@@ -10,6 +11,19 @@ namespace AiDotNet.Tests.UnitTests.Autodiff;
 /// <summary>
 /// Tests to verify that autodiff gradients match manual gradient implementations.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This test class verifies gradient correctness at the layer level by comparing:
+/// - Manual gradient implementations (layer.UseAutodiff = false)
+/// - Autodiff gradient implementations (layer.UseAutodiff = true)
+/// - Numerical gradients for complex TensorOperations
+/// </para>
+/// <para>
+/// For testing individual TensorOperations gradients, see also:
+/// - <see cref="TensorOperationsVerification{T}"/> for comprehensive operation verification
+/// - <see cref="NumericalGradient{T}"/> for numerical gradient utilities
+/// </para>
+/// </remarks>
 public class GradientCorrectnessTests
 {
     private const double Tolerance = 1e-4; // Tolerance for gradient comparisons
