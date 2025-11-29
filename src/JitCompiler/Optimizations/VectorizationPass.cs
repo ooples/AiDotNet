@@ -2,7 +2,8 @@ using System.Numerics;
 using AiDotNet.JitCompiler.IR;
 using Operations = AiDotNet.JitCompiler.IR.Operations;
 
-namespace AiDotNet.JitCompiler.Optimizations;
+namespace AiDotNet.JitCompiler.Optimizations
+{
 
 /// <summary>
 /// Optimization pass that vectorizes operations using SIMD instructions.
@@ -406,6 +407,7 @@ public class VectorizationStats
                $"Estimated speedup: {EstimatedSpeedup:F2}x";
     }
 }
+} // namespace AiDotNet.JitCompiler.Optimizations
 
 namespace AiDotNet.JitCompiler.IR.Operations
 {

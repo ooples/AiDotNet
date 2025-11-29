@@ -1,7 +1,8 @@
 using AiDotNet.JitCompiler.IR;
 using Operations = AiDotNet.JitCompiler.IR.Operations;
 
-namespace AiDotNet.JitCompiler.Optimizations;
+namespace AiDotNet.JitCompiler.Optimizations
+{
 
 /// <summary>
 /// Optimization pass that unrolls loops for better performance.
@@ -428,6 +429,7 @@ public class LoopUnrollingPass : IOptimizationPass
         return clone;
     }
 }
+} // namespace AiDotNet.JitCompiler.Optimizations
 
 namespace AiDotNet.JitCompiler.IR.Operations
 {

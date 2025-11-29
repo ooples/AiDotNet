@@ -15,7 +15,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNet.Serving", "src\AiD
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNet.Serving.Tests", "tests\AiDotNet.Serving.Tests\AiDotNet.Serving.Tests.csproj", "{F9C8E7D6-4B3A-5E2F-8A9B-1D0C3E2F5A4B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNet.Tensors", "..\..\AiDotNet\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj", "{6CEC59DF-7EE2-1E0E-6592-40A2A318A5BD}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AiDotNet.Tensors", "src\AiDotNet.Tensors\AiDotNet.Tensors.csproj", "{6CEC59DF-7EE2-1E0E-6592-40A2A318A5BD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
