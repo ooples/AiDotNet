@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using AiDotNet.Inference;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Serving.ContinuousBatching;
 
@@ -355,14 +356,7 @@ public class ContinuousBatcher<T> : IDisposable where T : struct, IComparable<T>
 
     private T ConvertToT(int value)
     {
-        if (typeof(T) == typeof(float))
-            return (T)(object)(float)value;
-        if (typeof(T) == typeof(double))
-            return (T)(object)(double)value;
-        if (typeof(T) == typeof(int))
-            return (T)(object)value;
-
-        throw new NotSupportedException($"Type {typeof(T)} is not supported");
+        return MathHelper.GetNumericOperations<T>().FromDouble((double)value);
     }
 
     private int SampleFromLogits(Tensor<T> logits, GenerationRequest<T> request)
