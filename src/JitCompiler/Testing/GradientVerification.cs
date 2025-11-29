@@ -1,6 +1,7 @@
-using System.Numerics;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
+using AiDotNet.Tensors.Interfaces;
+using AiDotNet.Tensors.NumericOperations;
 
 namespace AiDotNet.JitCompiler.Testing;
 
@@ -112,18 +113,20 @@ public class GradientVerification
     /// <param name="inputs">Input tensors.</param>
     /// <param name="gradientFunc">Function that computes gradients.</param>
     /// <param name="forwardFunc">Function that computes forward pass.</param>
+    /// <param name="ops">Numeric operations for type T.</param>
     /// <returns>Verification result.</returns>
     public VerificationResult VerifyOperation<T>(
         IROp operation,
         T[][] inputs,
         Func<T[][], T[], T[][]> gradientFunc,
-        Func<T[][], T[]> forwardFunc) where T : INumber<T>
+        Func<T[][], T[]> forwardFunc,
+        INumericOperations<T> ops)
     {
         var result = new VerificationResult();
         var errors = new List<double>();
 
         // Compute analytical gradients
-        var outputGrad = CreateOnesLike(forwardFunc(inputs));
+        var outputGrad = CreateOnesLike(forwardFunc(inputs), ops);
         var analyticalGradients = gradientFunc(inputs, outputGrad);
 
         // Compute numerical gradients for each input
@@ -137,8 +140,8 @@ public class GradientVerification
             for (int i = 0; i < elementsToCheck; i++)
             {
                 // Compute numerical gradient using central differences
-                var numericalGrad = ComputeNumericalGradient(inputs, inputIdx, i, forwardFunc);
-                var analyticVal = ToDouble(analyticalGrad[i]);
+                var numericalGrad = ComputeNumericalGradient(inputs, inputIdx, i, forwardFunc, ops);
+                var analyticVal = ops.ToDouble(analyticalGrad[i]);
 
                 // Compute relative error
                 var error = ComputeRelativeError(analyticVal, numericalGrad);
@@ -170,22 +173,23 @@ public class GradientVerification
         T[][] inputs,
         int inputIdx,
         int elementIdx,
-        Func<T[][], T[]> forwardFunc) where T : INumber<T>
+        Func<T[][], T[]> forwardFunc,
+        INumericOperations<T> ops)
     {
-        var h = T.CreateChecked(_config.Epsilon);
+        var h = ops.FromDouble(_config.Epsilon);
 
         // Save original value
         var originalValue = inputs[inputIdx][elementIdx];
 
         // f(x + h)
-        inputs[inputIdx][elementIdx] = originalValue + h;
+        inputs[inputIdx][elementIdx] = ops.Add(originalValue, h);
         var outputPlus = forwardFunc(inputs);
-        var fPlus = SumArray(outputPlus);
+        var fPlus = SumArray(outputPlus, ops);
 
         // f(x - h)
-        inputs[inputIdx][elementIdx] = originalValue - h;
+        inputs[inputIdx][elementIdx] = ops.Subtract(originalValue, h);
         var outputMinus = forwardFunc(inputs);
-        var fMinus = SumArray(outputMinus);
+        var fMinus = SumArray(outputMinus, ops);
 
         // Restore original value
         inputs[inputIdx][elementIdx] = originalValue;
@@ -209,12 +213,12 @@ public class GradientVerification
     /// <summary>
     /// Sums all elements in an array.
     /// </summary>
-    private double SumArray<T>(T[] array) where T : INumber<T>
+    private double SumArray<T>(T[] array, INumericOperations<T> ops)
     {
         double sum = 0;
         foreach (var value in array)
         {
-            sum += ToDouble(value);
+            sum += ops.ToDouble(value);
         }
         return sum;
     }
@@ -222,23 +226,16 @@ public class GradientVerification
     /// <summary>
     /// Creates an array of ones with the same shape.
     /// </summary>
-    private T[] CreateOnesLike<T>(T[] array) where T : INumber<T>
+    private T[] CreateOnesLike<T>(T[] array, INumericOperations<T> ops)
     {
         var result = new T[array.Length];
         for (int i = 0; i < result.Length; i++)
         {
-            result[i] = T.One;
+            result[i] = ops.One;
         }
         return result;
     }
 
-    /// <summary>
-    /// Converts a value to double.
-    /// </summary>
-    private double ToDouble<T>(T value) where T : INumber<T>
-    {
-        return Convert.ToDouble(value);
-    }
 
     /// <summary>
     /// Verifies gradients for common operations.
@@ -320,7 +317,8 @@ public class GradientVerification
                     output[i] = Math.Max(0, ins[0][i]);
                 }
                 return output;
-            });
+            },
+            new FloatOperations());
     }
 
     private static VerificationResult VerifySigmoid(GradientVerification verifier)
@@ -351,7 +349,8 @@ public class GradientVerification
                     output[i] = 1f / (1f + MathF.Exp(-ins[0][i]));
                 }
                 return output;
-            });
+            },
+            new FloatOperations());
     }
 
     private static VerificationResult VerifyTanh(GradientVerification verifier)
@@ -382,7 +381,8 @@ public class GradientVerification
                     output[i] = MathF.Tanh(ins[0][i]);
                 }
                 return output;
-            });
+            },
+            new FloatOperations());
     }
 
     private static VerificationResult VerifyAdd(GradientVerification verifier)
@@ -408,7 +408,8 @@ public class GradientVerification
                     output[i] = ins[0][i] + ins[1][i];
                 }
                 return output;
-            });
+            },
+            new FloatOperations());
     }
 
     private static VerificationResult VerifyMultiply(GradientVerification verifier)
@@ -441,7 +442,8 @@ public class GradientVerification
                     output[i] = ins[0][i] * ins[1][i];
                 }
                 return output;
-            });
+            },
+            new FloatOperations());
     }
 
     private static VerificationResult VerifyMatMul(GradientVerification verifier)
@@ -514,7 +516,8 @@ public class GradientVerification
                 }
 
                 return output;
-            });
+            },
+            new FloatOperations());
     }
 }
 
