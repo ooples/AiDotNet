@@ -1,7 +1,7 @@
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
-using AiDotNet.Tensors.NumericOperations;
 
 namespace AiDotNet.JitCompiler.Testing;
 
@@ -113,20 +113,19 @@ public class GradientVerification
     /// <param name="inputs">Input tensors.</param>
     /// <param name="gradientFunc">Function that computes gradients.</param>
     /// <param name="forwardFunc">Function that computes forward pass.</param>
-    /// <param name="ops">Numeric operations for type T.</param>
     /// <returns>Verification result.</returns>
     public VerificationResult VerifyOperation<T>(
         IROp operation,
         T[][] inputs,
         Func<T[][], T[], T[][]> gradientFunc,
-        Func<T[][], T[]> forwardFunc,
-        INumericOperations<T> ops)
+        Func<T[][], T[]> forwardFunc)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         var result = new VerificationResult();
         var errors = new List<double>();
 
         // Compute analytical gradients
-        var outputGrad = CreateOnesLike(forwardFunc(inputs), ops);
+        var outputGrad = CreateOnesLike(forwardFunc(inputs), numOps);
         var analyticalGradients = gradientFunc(inputs, outputGrad);
 
         // Compute numerical gradients for each input
@@ -140,8 +139,8 @@ public class GradientVerification
             for (int i = 0; i < elementsToCheck; i++)
             {
                 // Compute numerical gradient using central differences
-                var numericalGrad = ComputeNumericalGradient(inputs, inputIdx, i, forwardFunc, ops);
-                var analyticVal = ops.ToDouble(analyticalGrad[i]);
+                var numericalGrad = ComputeNumericalGradient(inputs, inputIdx, i, forwardFunc, numOps);
+                var analyticVal = numOps.ToDouble(analyticalGrad[i]);
 
                 // Compute relative error
                 var error = ComputeRelativeError(analyticVal, numericalGrad);
@@ -317,8 +316,7 @@ public class GradientVerification
                     output[i] = Math.Max(0, ins[0][i]);
                 }
                 return output;
-            },
-            new FloatOperations());
+            });
     }
 
     private static VerificationResult VerifySigmoid(GradientVerification verifier)
@@ -349,8 +347,7 @@ public class GradientVerification
                     output[i] = 1f / (1f + MathF.Exp(-ins[0][i]));
                 }
                 return output;
-            },
-            new FloatOperations());
+            });
     }
 
     private static VerificationResult VerifyTanh(GradientVerification verifier)
@@ -381,8 +378,7 @@ public class GradientVerification
                     output[i] = MathF.Tanh(ins[0][i]);
                 }
                 return output;
-            },
-            new FloatOperations());
+            });
     }
 
     private static VerificationResult VerifyAdd(GradientVerification verifier)
@@ -408,8 +404,7 @@ public class GradientVerification
                     output[i] = ins[0][i] + ins[1][i];
                 }
                 return output;
-            },
-            new FloatOperations());
+            });
     }
 
     private static VerificationResult VerifyMultiply(GradientVerification verifier)
@@ -442,8 +437,7 @@ public class GradientVerification
                     output[i] = ins[0][i] * ins[1][i];
                 }
                 return output;
-            },
-            new FloatOperations());
+            });
     }
 
     private static VerificationResult VerifyMatMul(GradientVerification verifier)
@@ -516,8 +510,7 @@ public class GradientVerification
                 }
 
                 return output;
-            },
-            new FloatOperations());
+            });
     }
 }
 
