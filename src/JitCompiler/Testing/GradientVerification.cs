@@ -8,6 +8,7 @@ namespace AiDotNet.JitCompiler.Testing;
 /// <summary>
 /// Utility for verifying gradient computations using numerical differentiation.
 /// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
 /// Gradient verification compares analytically computed gradients (from autodiff)
@@ -33,8 +34,13 @@ namespace AiDotNet.JitCompiler.Testing;
 /// - They match! Our gradient for x^2 is correct.
 /// </para>
 /// </remarks>
-public class GradientVerification
+public class GradientVerification<T>
 {
+    /// <summary>
+    /// The numeric operations appropriate for the generic type T.
+    /// </summary>
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Configuration for gradient verification.
     /// </summary>
@@ -108,24 +114,22 @@ public class GradientVerification
     /// <summary>
     /// Verifies gradients for a single operation.
     /// </summary>
-    /// <typeparam name="T">Numeric type.</typeparam>
     /// <param name="operation">The operation to verify.</param>
     /// <param name="inputs">Input tensors.</param>
     /// <param name="gradientFunc">Function that computes gradients.</param>
     /// <param name="forwardFunc">Function that computes forward pass.</param>
     /// <returns>Verification result.</returns>
-    public VerificationResult VerifyOperation<T>(
+    public VerificationResult VerifyOperation(
         IROp operation,
         T[][] inputs,
         Func<T[][], T[], T[][]> gradientFunc,
         Func<T[][], T[]> forwardFunc)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
         var result = new VerificationResult();
         var errors = new List<double>();
 
         // Compute analytical gradients
-        var outputGrad = CreateOnesLike(forwardFunc(inputs), numOps);
+        var outputGrad = CreateOnesLike(forwardFunc(inputs));
         var analyticalGradients = gradientFunc(inputs, outputGrad);
 
         // Compute numerical gradients for each input
@@ -139,8 +143,8 @@ public class GradientVerification
             for (int i = 0; i < elementsToCheck; i++)
             {
                 // Compute numerical gradient using central differences
-                var numericalGrad = ComputeNumericalGradient(inputs, inputIdx, i, forwardFunc, numOps);
-                var analyticVal = numOps.ToDouble(analyticalGrad[i]);
+                var numericalGrad = ComputeNumericalGradient(inputs, inputIdx, i, forwardFunc);
+                var analyticVal = NumOps.ToDouble(analyticalGrad[i]);
 
                 // Compute relative error
                 var error = ComputeRelativeError(analyticVal, numericalGrad);
@@ -168,27 +172,26 @@ public class GradientVerification
     /// <summary>
     /// Computes numerical gradient using central differences.
     /// </summary>
-    private double ComputeNumericalGradient<T>(
+    private double ComputeNumericalGradient(
         T[][] inputs,
         int inputIdx,
         int elementIdx,
-        Func<T[][], T[]> forwardFunc,
-        INumericOperations<T> ops)
+        Func<T[][], T[]> forwardFunc)
     {
-        var h = ops.FromDouble(_config.Epsilon);
+        var h = NumOps.FromDouble(_config.Epsilon);
 
         // Save original value
         var originalValue = inputs[inputIdx][elementIdx];
 
         // f(x + h)
-        inputs[inputIdx][elementIdx] = ops.Add(originalValue, h);
+        inputs[inputIdx][elementIdx] = NumOps.Add(originalValue, h);
         var outputPlus = forwardFunc(inputs);
-        var fPlus = SumArray(outputPlus, ops);
+        var fPlus = SumArray(outputPlus);
 
         // f(x - h)
-        inputs[inputIdx][elementIdx] = ops.Subtract(originalValue, h);
+        inputs[inputIdx][elementIdx] = NumOps.Subtract(originalValue, h);
         var outputMinus = forwardFunc(inputs);
-        var fMinus = SumArray(outputMinus, ops);
+        var fMinus = SumArray(outputMinus);
 
         // Restore original value
         inputs[inputIdx][elementIdx] = originalValue;
@@ -200,7 +203,7 @@ public class GradientVerification
     /// <summary>
     /// Computes relative error between two values.
     /// </summary>
-    private double ComputeRelativeError(double analytical, double numerical)
+    private static double ComputeRelativeError(double analytical, double numerical)
     {
         var maxAbs = Math.Max(Math.Abs(analytical), Math.Abs(numerical));
         if (maxAbs < 1e-10)
@@ -212,12 +215,12 @@ public class GradientVerification
     /// <summary>
     /// Sums all elements in an array.
     /// </summary>
-    private double SumArray<T>(T[] array, INumericOperations<T> ops)
+    private static double SumArray(T[] array)
     {
         double sum = 0;
         foreach (var value in array)
         {
-            sum += ops.ToDouble(value);
+            sum += NumOps.ToDouble(value);
         }
         return sum;
     }
@@ -225,23 +228,22 @@ public class GradientVerification
     /// <summary>
     /// Creates an array of ones with the same shape.
     /// </summary>
-    private T[] CreateOnesLike<T>(T[] array, INumericOperations<T> ops)
+    private static T[] CreateOnesLike(T[] array)
     {
         var result = new T[array.Length];
         for (int i = 0; i < result.Length; i++)
         {
-            result[i] = ops.One;
+            result[i] = NumOps.One;
         }
         return result;
     }
-
 
     /// <summary>
     /// Verifies gradients for common operations.
     /// </summary>
     public static VerificationResult VerifyAllOperations()
     {
-        var verifier = new GradientVerification();
+        var verifier = new GradientVerification<T>();
         var overallResult = new VerificationResult { Passed = true };
 
         // Test ReLU
@@ -289,10 +291,10 @@ public class GradientVerification
         overall.FailedElements += specific.FailedElements;
     }
 
-    private static VerificationResult VerifyReLU(GradientVerification verifier)
+    private static VerificationResult VerifyReLU(GradientVerification<T> verifier)
     {
-        var input = new float[] { -2f, -1f, 0f, 1f, 2f };
-        var inputs = new float[][] { input };
+        var input = new T[] { NumOps.FromDouble(-2), NumOps.FromDouble(-1), NumOps.Zero, NumOps.One, NumOps.FromDouble(2) };
+        var inputs = new T[][] { input };
 
         return verifier.VerifyOperation(
             new ReLUOp(),
@@ -300,29 +302,31 @@ public class GradientVerification
             (ins, gradOut) =>
             {
                 // ReLU gradient: gradOut * (input > 0 ? 1 : 0)
-                var grad = new float[ins[0].Length];
+                var grad = new T[ins[0].Length];
                 for (int i = 0; i < grad.Length; i++)
                 {
-                    grad[i] = gradOut[i] * (ins[0][i] > 0 ? 1f : 0f);
+                    grad[i] = NumOps.GreaterThan(ins[0][i], NumOps.Zero)
+                        ? gradOut[i]
+                        : NumOps.Zero;
                 }
-                return new float[][] { grad };
+                return new T[][] { grad };
             },
             ins =>
             {
                 // ReLU forward: max(0, x)
-                var output = new float[ins[0].Length];
+                var output = new T[ins[0].Length];
                 for (int i = 0; i < output.Length; i++)
                 {
-                    output[i] = Math.Max(0, ins[0][i]);
+                    output[i] = NumOps.GreaterThan(ins[0][i], NumOps.Zero) ? ins[0][i] : NumOps.Zero;
                 }
                 return output;
             });
     }
 
-    private static VerificationResult VerifySigmoid(GradientVerification verifier)
+    private static VerificationResult VerifySigmoid(GradientVerification<T> verifier)
     {
-        var input = new float[] { -2f, -1f, 0f, 1f, 2f };
-        var inputs = new float[][] { input };
+        var input = new T[] { NumOps.FromDouble(-2), NumOps.FromDouble(-1), NumOps.Zero, NumOps.One, NumOps.FromDouble(2) };
+        var inputs = new T[][] { input };
 
         return verifier.VerifyOperation(
             new SigmoidOp(),
@@ -330,30 +334,30 @@ public class GradientVerification
             (ins, gradOut) =>
             {
                 // Sigmoid gradient: gradOut * sigmoid(x) * (1 - sigmoid(x))
-                var grad = new float[ins[0].Length];
+                var grad = new T[ins[0].Length];
                 for (int i = 0; i < grad.Length; i++)
                 {
-                    var sig = 1f / (1f + MathF.Exp(-ins[0][i]));
-                    grad[i] = gradOut[i] * sig * (1f - sig);
+                    var sig = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(ins[0][i]))));
+                    grad[i] = NumOps.Multiply(gradOut[i], NumOps.Multiply(sig, NumOps.Subtract(NumOps.One, sig)));
                 }
-                return new float[][] { grad };
+                return new T[][] { grad };
             },
             ins =>
             {
                 // Sigmoid forward: 1 / (1 + exp(-x))
-                var output = new float[ins[0].Length];
+                var output = new T[ins[0].Length];
                 for (int i = 0; i < output.Length; i++)
                 {
-                    output[i] = 1f / (1f + MathF.Exp(-ins[0][i]));
+                    output[i] = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(ins[0][i]))));
                 }
                 return output;
             });
     }
 
-    private static VerificationResult VerifyTanh(GradientVerification verifier)
+    private static VerificationResult VerifyTanh(GradientVerification<T> verifier)
     {
-        var input = new float[] { -2f, -1f, 0f, 1f, 2f };
-        var inputs = new float[][] { input };
+        var input = new T[] { NumOps.FromDouble(-2), NumOps.FromDouble(-1), NumOps.Zero, NumOps.One, NumOps.FromDouble(2) };
+        var inputs = new T[][] { input };
 
         return verifier.VerifyOperation(
             new TanhOp(),
@@ -361,31 +365,36 @@ public class GradientVerification
             (ins, gradOut) =>
             {
                 // Tanh gradient: gradOut * (1 - tanh(x)^2)
-                var grad = new float[ins[0].Length];
+                var grad = new T[ins[0].Length];
                 for (int i = 0; i < grad.Length; i++)
                 {
-                    var t = MathF.Tanh(ins[0][i]);
-                    grad[i] = gradOut[i] * (1f - t * t);
+                    // tanh(x) = (exp(x) - exp(-x)) / (exp(x) + exp(-x))
+                    var expX = NumOps.Exp(ins[0][i]);
+                    var expNegX = NumOps.Exp(NumOps.Negate(ins[0][i]));
+                    var t = NumOps.Divide(NumOps.Subtract(expX, expNegX), NumOps.Add(expX, expNegX));
+                    grad[i] = NumOps.Multiply(gradOut[i], NumOps.Subtract(NumOps.One, NumOps.Multiply(t, t)));
                 }
-                return new float[][] { grad };
+                return new T[][] { grad };
             },
             ins =>
             {
-                // Tanh forward
-                var output = new float[ins[0].Length];
+                // Tanh forward: (exp(x) - exp(-x)) / (exp(x) + exp(-x))
+                var output = new T[ins[0].Length];
                 for (int i = 0; i < output.Length; i++)
                 {
-                    output[i] = MathF.Tanh(ins[0][i]);
+                    var expX = NumOps.Exp(ins[0][i]);
+                    var expNegX = NumOps.Exp(NumOps.Negate(ins[0][i]));
+                    output[i] = NumOps.Divide(NumOps.Subtract(expX, expNegX), NumOps.Add(expX, expNegX));
                 }
                 return output;
             });
     }
 
-    private static VerificationResult VerifyAdd(GradientVerification verifier)
+    private static VerificationResult VerifyAdd(GradientVerification<T> verifier)
     {
-        var input1 = new float[] { 1f, 2f, 3f, 4f, 5f };
-        var input2 = new float[] { 0.5f, 1.5f, 2.5f, 3.5f, 4.5f };
-        var inputs = new float[][] { input1, input2 };
+        var input1 = new T[] { NumOps.One, NumOps.FromDouble(2), NumOps.FromDouble(3), NumOps.FromDouble(4), NumOps.FromDouble(5) };
+        var input2 = new T[] { NumOps.FromDouble(0.5), NumOps.FromDouble(1.5), NumOps.FromDouble(2.5), NumOps.FromDouble(3.5), NumOps.FromDouble(4.5) };
+        var inputs = new T[][] { input1, input2 };
 
         return verifier.VerifyOperation(
             new AddOp(),
@@ -393,25 +402,25 @@ public class GradientVerification
             (ins, gradOut) =>
             {
                 // Add gradient: gradOut for both inputs
-                return new float[][] { gradOut.ToArray(), gradOut.ToArray() };
+                return new T[][] { gradOut.ToArray(), gradOut.ToArray() };
             },
             ins =>
             {
                 // Add forward: a + b
-                var output = new float[ins[0].Length];
+                var output = new T[ins[0].Length];
                 for (int i = 0; i < output.Length; i++)
                 {
-                    output[i] = ins[0][i] + ins[1][i];
+                    output[i] = NumOps.Add(ins[0][i], ins[1][i]);
                 }
                 return output;
             });
     }
 
-    private static VerificationResult VerifyMultiply(GradientVerification verifier)
+    private static VerificationResult VerifyMultiply(GradientVerification<T> verifier)
     {
-        var input1 = new float[] { 1f, 2f, 3f, 4f, 5f };
-        var input2 = new float[] { 0.5f, 1.5f, 2.5f, 3.5f, 4.5f };
-        var inputs = new float[][] { input1, input2 };
+        var input1 = new T[] { NumOps.One, NumOps.FromDouble(2), NumOps.FromDouble(3), NumOps.FromDouble(4), NumOps.FromDouble(5) };
+        var input2 = new T[] { NumOps.FromDouble(0.5), NumOps.FromDouble(1.5), NumOps.FromDouble(2.5), NumOps.FromDouble(3.5), NumOps.FromDouble(4.5) };
+        var inputs = new T[][] { input1, input2 };
 
         return verifier.VerifyOperation(
             new ElementwiseMultiplyOp(),
@@ -419,33 +428,33 @@ public class GradientVerification
             (ins, gradOut) =>
             {
                 // Multiply gradient: gradOut * other input
-                var grad1 = new float[ins[0].Length];
-                var grad2 = new float[ins[0].Length];
+                var grad1 = new T[ins[0].Length];
+                var grad2 = new T[ins[0].Length];
                 for (int i = 0; i < ins[0].Length; i++)
                 {
-                    grad1[i] = gradOut[i] * ins[1][i];
-                    grad2[i] = gradOut[i] * ins[0][i];
+                    grad1[i] = NumOps.Multiply(gradOut[i], ins[1][i]);
+                    grad2[i] = NumOps.Multiply(gradOut[i], ins[0][i]);
                 }
-                return new float[][] { grad1, grad2 };
+                return new T[][] { grad1, grad2 };
             },
             ins =>
             {
                 // Multiply forward: a * b
-                var output = new float[ins[0].Length];
+                var output = new T[ins[0].Length];
                 for (int i = 0; i < output.Length; i++)
                 {
-                    output[i] = ins[0][i] * ins[1][i];
+                    output[i] = NumOps.Multiply(ins[0][i], ins[1][i]);
                 }
                 return output;
             });
     }
 
-    private static VerificationResult VerifyMatMul(GradientVerification verifier)
+    private static VerificationResult VerifyMatMul(GradientVerification<T> verifier)
     {
         // 2x3 * 3x2 = 2x2
-        var a = new float[] { 1f, 2f, 3f, 4f, 5f, 6f };  // 2x3
-        var b = new float[] { 1f, 2f, 3f, 4f, 5f, 6f };  // 3x2
-        var inputs = new float[][] { a, b };
+        var a = new T[] { NumOps.One, NumOps.FromDouble(2), NumOps.FromDouble(3), NumOps.FromDouble(4), NumOps.FromDouble(5), NumOps.FromDouble(6) };  // 2x3
+        var b = new T[] { NumOps.One, NumOps.FromDouble(2), NumOps.FromDouble(3), NumOps.FromDouble(4), NumOps.FromDouble(5), NumOps.FromDouble(6) };  // 3x2
+        var inputs = new T[][] { a, b };
 
         return verifier.VerifyOperation(
             new MatMulOp(),
@@ -457,18 +466,18 @@ public class GradientVerification
                 // dB = A^T @ gradOut
                 int m = 2, k = 3, n = 2;
 
-                var gradA = new float[m * k];
-                var gradB = new float[k * n];
+                var gradA = new T[m * k];
+                var gradB = new T[k * n];
 
                 // dA = gradOut @ B^T
                 for (int i = 0; i < m; i++)
                 {
                     for (int j = 0; j < k; j++)
                     {
-                        float sum = 0;
+                        var sum = NumOps.Zero;
                         for (int l = 0; l < n; l++)
                         {
-                            sum += gradOut[i * n + l] * ins[1][j * n + l];
+                            sum = NumOps.Add(sum, NumOps.Multiply(gradOut[i * n + l], ins[1][j * n + l]));
                         }
                         gradA[i * k + j] = sum;
                     }
@@ -479,31 +488,31 @@ public class GradientVerification
                 {
                     for (int j = 0; j < n; j++)
                     {
-                        float sum = 0;
+                        var sum = NumOps.Zero;
                         for (int l = 0; l < m; l++)
                         {
-                            sum += ins[0][l * k + i] * gradOut[l * n + j];
+                            sum = NumOps.Add(sum, NumOps.Multiply(ins[0][l * k + i], gradOut[l * n + j]));
                         }
                         gradB[i * n + j] = sum;
                     }
                 }
 
-                return new float[][] { gradA, gradB };
+                return new T[][] { gradA, gradB };
             },
             ins =>
             {
                 // MatMul forward: A @ B
                 int m = 2, k = 3, n = 2;
-                var output = new float[m * n];
+                var output = new T[m * n];
 
                 for (int i = 0; i < m; i++)
                 {
                     for (int j = 0; j < n; j++)
                     {
-                        float sum = 0;
+                        var sum = NumOps.Zero;
                         for (int l = 0; l < k; l++)
                         {
-                            sum += ins[0][i * k + l] * ins[1][l * n + j];
+                            sum = NumOps.Add(sum, NumOps.Multiply(ins[0][i * k + l], ins[1][l * n + j]));
                         }
                         output[i * n + j] = sum;
                     }
@@ -522,7 +531,7 @@ public static class GradientVerificationExtensions
     /// <summary>
     /// Runs gradient verification and prints results.
     /// </summary>
-    public static void RunAndPrint(this GradientVerification.VerificationResult result)
+    public static void RunAndPrint<T>(this GradientVerification<T>.VerificationResult result)
     {
         Console.WriteLine(result.ToString());
         Console.WriteLine();
