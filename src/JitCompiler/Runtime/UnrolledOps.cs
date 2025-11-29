@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.JitCompiler.Runtime;
 
@@ -262,27 +263,12 @@ public static class UnrolledOps
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static double ConvertToDouble<T>(T value)
     {
-        return value switch
-        {
-            float f => f,
-            double d => d,
-            int i => i,
-            long l => l,
-            _ => Convert.ToDouble(value)
-        };
+        return MathHelper.GetNumericOperations<T>().ToDouble(value);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static T ConvertFromDouble<T>(double value)
     {
-        if (typeof(T) == typeof(float))
-            return (T)(object)(float)value;
-        if (typeof(T) == typeof(double))
-            return (T)(object)value;
-        if (typeof(T) == typeof(int))
-            return (T)(object)(int)value;
-        if (typeof(T) == typeof(long))
-            return (T)(object)(long)value;
-        return (T)Convert.ChangeType(value, typeof(T));
+        return MathHelper.GetNumericOperations<T>().FromDouble(value);
     }
 }

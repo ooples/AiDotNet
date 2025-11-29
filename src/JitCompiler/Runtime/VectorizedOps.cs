@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.JitCompiler.Runtime;
 
@@ -350,15 +351,16 @@ public static class VectorizedOps
             else
             {
                 result = 0;
+                var numOps = MathHelper.GetNumericOperations<T>();
                 for (int i = 0; i < data.Length; i++)
                 {
-                    result = ApplyReduction(result, Convert.ToDouble(data[i]), reductionType);
+                    result = ApplyReduction(result, numOps.ToDouble(data[i]), reductionType);
                 }
                 if (reductionType == "Mean") result /= data.Length;
             }
 
             var resultArray = new T[1];
-            resultArray[0] = (T)Convert.ChangeType(result, typeof(T));
+            resultArray[0] = MathHelper.GetNumericOperations<T>().FromDouble(result);
             return new Tensor<T>(resultArray, keepDims ? new int[input.Shape.Length] : new[] { 1 });
         }
 
@@ -670,6 +672,7 @@ public static class VectorizedOps
         T[] A, T[] B, T[] C,
         int M, int K, int N)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < M; i++)
         {
             for (int j = 0; j < N; j++)
@@ -677,9 +680,9 @@ public static class VectorizedOps
                 double sum = 0;
                 for (int k = 0; k < K; k++)
                 {
-                    sum += Convert.ToDouble(A[i * K + k]) * Convert.ToDouble(B[k * N + j]);
+                    sum += numOps.ToDouble(A[i * K + k]) * numOps.ToDouble(B[k * N + j]);
                 }
-                C[i * N + j] = (T)Convert.ChangeType(sum, typeof(T));
+                C[i * N + j] = numOps.FromDouble(sum);
             }
         }
     }
@@ -720,13 +723,14 @@ public static class VectorizedOps
         var counts = new int[outputSize];
 
         // Compute reduction
+        var numOps = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < data.Length; i++)
         {
             // Map flat index to multi-dimensional index
             int outputIndex = ComputeOutputIndex(i, shape, axes, outputShape.ToArray());
             resultDouble[outputIndex] = ApplyReduction(
                 resultDouble[outputIndex],
-                Convert.ToDouble(data[i]),
+                numOps.ToDouble(data[i]),
                 reductionType);
             counts[outputIndex]++;
         }
@@ -736,7 +740,7 @@ public static class VectorizedOps
         {
             if (reductionType == "Mean" && counts[i] > 0)
                 resultDouble[i] /= counts[i];
-            result[i] = (T)Convert.ChangeType(resultDouble[i], typeof(T));
+            result[i] = numOps.FromDouble(resultDouble[i]);
         }
 
         return new Tensor<T>(result, outputShape.ToArray());
@@ -806,8 +810,9 @@ public static class VectorizedOps
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static T ApplyBinaryScalar<T>(T left, T right, string operation)
     {
-        double l = Convert.ToDouble(left);
-        double r = Convert.ToDouble(right);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double l = numOps.ToDouble(left);
+        double r = numOps.ToDouble(right);
         double result = operation switch
         {
             "Add" => l + r,
@@ -816,15 +821,16 @@ public static class VectorizedOps
             "Divide" => l / r,
             _ => l + r
         };
-        return (T)Convert.ChangeType(result, typeof(T));
+        return numOps.FromDouble(result);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static T ApplyUnaryScalar<T>(T value, string operation)
     {
-        double v = Convert.ToDouble(value);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double v = numOps.ToDouble(value);
         double result = ApplyUnaryOperation(v, operation);
-        return (T)Convert.ChangeType(result, typeof(T));
+        return numOps.FromDouble(result);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
