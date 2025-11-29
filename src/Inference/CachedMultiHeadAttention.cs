@@ -35,7 +35,6 @@ namespace AiDotNet.Inference;
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
 public class CachedMultiHeadAttention<T> : LayerBase<T>
-    where T : struct, IComparable<T>
 {
     private readonly int _headCount;
     private readonly int _headDimension;

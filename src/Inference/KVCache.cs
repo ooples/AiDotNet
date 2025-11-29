@@ -28,7 +28,7 @@ namespace AiDotNet.Inference;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for cache storage (typically float or double).</typeparam>
-public class KVCache<T> where T : struct, IComparable<T>
+public class KVCache<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

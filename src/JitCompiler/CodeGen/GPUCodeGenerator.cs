@@ -3168,14 +3168,14 @@ public interface IGPURuntime : IDisposable
     /// </summary>
     /// <param name="destination">GPU memory handle.</param>
     /// <param name="source">Source data array.</param>
-    void CopyToDevice<T>(IGPUMemoryHandle destination, T[] source) where T : unmanaged;
+    void CopyToDevice<T>(IGPUMemoryHandle destination, T[] source);
 
     /// <summary>
     /// Copies data from GPU to host memory.
     /// </summary>
     /// <param name="destination">Destination array.</param>
     /// <param name="source">GPU memory handle.</param>
-    void CopyFromDevice<T>(T[] destination, IGPUMemoryHandle source) where T : unmanaged;
+    void CopyFromDevice<T>(T[] destination, IGPUMemoryHandle source);
 
     /// <summary>
     /// Launches a kernel with the specified configuration.
@@ -3271,23 +3271,64 @@ public class MockGPURuntime : IGPURuntime
     }
 
     /// <inheritdoc/>
-    public void CopyToDevice<T>(IGPUMemoryHandle destination, T[] source) where T : unmanaged
+    public void CopyToDevice<T>(IGPUMemoryHandle destination, T[] source)
     {
         if (destination is MockMemoryHandle mock)
         {
-            var bytes = new byte[source.Length * System.Runtime.InteropServices.Marshal.SizeOf<T>()];
-            Buffer.BlockCopy(source, 0, bytes, 0, bytes.Length);
+            // Use INumericOperations for type-safe conversion
+            var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            int elementSize = GetElementSize<T>();
+            var bytes = new byte[source.Length * elementSize];
+
+            // Convert each element to bytes
+            for (int i = 0; i < source.Length; i++)
+            {
+                double value = numOps.ToDouble(source[i]);
+                byte[] elementBytes = typeof(T) == typeof(float)
+                    ? BitConverter.GetBytes((float)value)
+                    : typeof(T) == typeof(double)
+                        ? BitConverter.GetBytes(value)
+                        : typeof(T) == typeof(int)
+                            ? BitConverter.GetBytes((int)value)
+                            : BitConverter.GetBytes(value);
+                Array.Copy(elementBytes, 0, bytes, i * elementSize, Math.Min(elementSize, elementBytes.Length));
+            }
             mock.Data = bytes;
         }
     }
 
     /// <inheritdoc/>
-    public void CopyFromDevice<T>(T[] destination, IGPUMemoryHandle source) where T : unmanaged
+    public void CopyFromDevice<T>(T[] destination, IGPUMemoryHandle source)
     {
         if (source is MockMemoryHandle mock && mock.Data != null)
         {
-            Buffer.BlockCopy(mock.Data, 0, destination, 0, Math.Min(mock.Data.Length, destination.Length * System.Runtime.InteropServices.Marshal.SizeOf<T>()));
+            var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            int elementSize = GetElementSize<T>();
+            int count = Math.Min(destination.Length, mock.Data.Length / elementSize);
+
+            for (int i = 0; i < count; i++)
+            {
+                double value = typeof(T) == typeof(float)
+                    ? BitConverter.ToSingle(mock.Data, i * elementSize)
+                    : typeof(T) == typeof(double)
+                        ? BitConverter.ToDouble(mock.Data, i * elementSize)
+                        : typeof(T) == typeof(int)
+                            ? BitConverter.ToInt32(mock.Data, i * elementSize)
+                            : BitConverter.ToDouble(mock.Data, i * elementSize);
+                destination[i] = numOps.FromDouble(value);
+            }
         }
+    }
+
+    private static int GetElementSize<T>()
+    {
+        if (typeof(T) == typeof(float)) return sizeof(float);
+        if (typeof(T) == typeof(double)) return sizeof(double);
+        if (typeof(T) == typeof(int)) return sizeof(int);
+        if (typeof(T) == typeof(long)) return sizeof(long);
+        if (typeof(T) == typeof(byte)) return sizeof(byte);
+        if (typeof(T) == typeof(short)) return sizeof(short);
+        return sizeof(double); // Default fallback
     }
 
     /// <inheritdoc/>

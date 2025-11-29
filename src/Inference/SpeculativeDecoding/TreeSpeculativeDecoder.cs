@@ -24,7 +24,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class TreeSpeculativeDecoder<T> where T : struct, IComparable<T>
+public class TreeSpeculativeDecoder<T>
 {
     private readonly IDraftModel<T> _draftModel;
     private readonly Func<int[][], float[][][]> _batchTargetForward;

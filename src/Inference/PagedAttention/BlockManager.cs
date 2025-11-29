@@ -24,7 +24,7 @@ namespace AiDotNet.Inference.PagedAttention;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-public class BlockManager<T> where T : struct, IComparable<T>
+public class BlockManager<T>
 {
     private readonly BlockManagerConfig _config;
     private readonly object _lock = new();

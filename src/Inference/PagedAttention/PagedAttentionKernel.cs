@@ -21,7 +21,7 @@ namespace AiDotNet.Inference.PagedAttention;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-public class PagedAttentionKernel<T> where T : struct, IComparable<T>
+public class PagedAttentionKernel<T>
 {
     private readonly PagedKVCache<T> _kvCache;
     private readonly PagedAttentionConfig _config;
@@ -440,7 +440,7 @@ public class PagedAttentionConfig
 /// Integrates PagedAttention with ContinuousBatcher for high-throughput serving.
 /// </summary>
 /// <typeparam name="T">Numeric type.</typeparam>
-public class PagedAttentionServer<T> : IDisposable where T : struct, IComparable<T>
+public class PagedAttentionServer<T> : IDisposable
 {
     private readonly PagedKVCache<T> _kvCache;
     private readonly PagedAttentionKernel<T> _kernel;

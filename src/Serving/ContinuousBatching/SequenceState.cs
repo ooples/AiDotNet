@@ -22,7 +22,7 @@ namespace AiDotNet.Serving.ContinuousBatching;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-public class SequenceState<T> where T : struct, IComparable<T>
+public class SequenceState<T>
 {
     private static long _nextId = 0;
 
@@ -272,7 +272,7 @@ public enum StopReason
 /// Represents a request for text generation.
 /// </summary>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-public class GenerationRequest<T> where T : struct, IComparable<T>
+public class GenerationRequest<T>
 {
     /// <summary>
     /// Token IDs of the prompt.

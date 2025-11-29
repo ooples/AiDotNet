@@ -33,7 +33,7 @@ namespace AiDotNet.Serving.ContinuousBatching;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-public class ContinuousBatcher<T> : IDisposable where T : struct, IComparable<T>
+public class ContinuousBatcher<T> : IDisposable
 {
     private readonly ContinuousBatcherConfig _config;
     private readonly BatchScheduler<T> _scheduler;
@@ -594,7 +594,7 @@ public class ContinuousBatcherConfig
 /// Result of a generation request.
 /// </summary>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-public class GenerationResult<T> where T : struct, IComparable<T>
+public class GenerationResult<T>
 {
     /// <summary>Unique ID of the sequence.</summary>
     public long SequenceId { get; set; }
@@ -660,7 +660,7 @@ public class BatcherStatistics
 /// <summary>
 /// Event args for sequence completion.
 /// </summary>
-public class SequenceCompletedEventArgs<T> : EventArgs where T : struct, IComparable<T>
+public class SequenceCompletedEventArgs<T> : EventArgs
 {
     /// <summary>The completed sequence.</summary>
     public required SequenceState<T> Sequence { get; set; }
@@ -672,7 +672,7 @@ public class SequenceCompletedEventArgs<T> : EventArgs where T : struct, ICompar
 /// <summary>
 /// Event args for token generation.
 /// </summary>
-public class TokenGeneratedEventArgs<T> : EventArgs where T : struct, IComparable<T>
+public class TokenGeneratedEventArgs<T> : EventArgs
 {
     /// <summary>The sequence that generated the token.</summary>
     public required SequenceState<T> Sequence { get; set; }

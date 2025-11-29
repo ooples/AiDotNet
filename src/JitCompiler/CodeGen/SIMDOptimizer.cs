@@ -89,7 +89,7 @@ public class SIMDOptimizer
     /// <summary>
     /// Gets the hardware vector width for a specific type.
     /// </summary>
-    public int GetVectorWidth<T>() where T : struct
+    public int GetVectorWidth<T>()
     {
         if (!_enableSIMD || !Vector.IsHardwareAccelerated)
             return 1;
@@ -172,7 +172,7 @@ public class SIMDOptimizer
         ParameterExpression leftInput,
         ParameterExpression rightInput,
         ParameterExpression output,
-        int totalElements) where T : struct
+        int totalElements)
     {
         var vectorSize = GetVectorWidth<T>();
         var numVectors = totalElements / vectorSize;
@@ -246,7 +246,7 @@ public class SIMDOptimizer
         string operation,
         ParameterExpression input,
         ParameterExpression output,
-        int totalElements) where T : struct
+        int totalElements)
     {
         var vectorSize = GetVectorWidth<T>();
         var numVectors = totalElements / vectorSize;
@@ -295,7 +295,7 @@ public class SIMDOptimizer
     public Expression GenerateSIMDReduction<T>(
         string reductionType,
         ParameterExpression input,
-        int totalElements) where T : struct
+        int totalElements)
     {
         var vectorSize = GetVectorWidth<T>();
         var numVectors = totalElements / vectorSize;
@@ -361,7 +361,7 @@ public class SIMDOptimizer
     /// <summary>
     /// Gets the vector operation method for binary operations.
     /// </summary>
-    private MethodInfo? GetVectorOperationMethod<T>(string operation) where T : struct
+    private MethodInfo? GetVectorOperationMethod<T>(string operation)
     {
         return operation switch
         {
@@ -376,7 +376,7 @@ public class SIMDOptimizer
     /// <summary>
     /// Gets the vector method for unary operations.
     /// </summary>
-    private MethodInfo? GetUnaryVectorMethod<T>(string operation) where T : struct
+    private MethodInfo? GetUnaryVectorMethod<T>(string operation)
     {
         return operation switch
         {
@@ -471,7 +471,7 @@ public static class VectorHelper
     /// <summary>
     /// Loads a vector from an array at the specified offset.
     /// </summary>
-    public static System.Numerics.Vector<T> LoadVector<T>(T[] array, int offset) where T : struct
+    public static System.Numerics.Vector<T> LoadVector<T>(T[] array, int offset)
     {
         return new System.Numerics.Vector<T>(array, offset);
     }
@@ -479,7 +479,7 @@ public static class VectorHelper
     /// <summary>
     /// Stores a vector to an array at the specified offset.
     /// </summary>
-    public static void StoreVector<T>(T[] array, int offset, System.Numerics.Vector<T> vector) where T : struct
+    public static void StoreVector<T>(T[] array, int offset, System.Numerics.Vector<T> vector)
     {
         vector.CopyTo(array, offset);
     }
@@ -487,7 +487,7 @@ public static class VectorHelper
     /// <summary>
     /// Creates a vector with all elements set to the minimum value.
     /// </summary>
-    public static System.Numerics.Vector<T> MinValue<T>() where T : struct
+    public static System.Numerics.Vector<T> MinValue<T>()
     {
         // Use reflection to get MinValue for the type
         var minValue = typeof(T).GetField("MinValue")?.GetValue(null);
@@ -501,7 +501,7 @@ public static class VectorHelper
     /// <summary>
     /// Creates a vector with all elements set to the maximum value.
     /// </summary>
-    public static System.Numerics.Vector<T> MaxValue<T>() where T : struct
+    public static System.Numerics.Vector<T> MaxValue<T>()
     {
         var maxValue = typeof(T).GetField("MaxValue")?.GetValue(null);
         if (maxValue != null)
@@ -514,7 +514,7 @@ public static class VectorHelper
     /// <summary>
     /// Performs horizontal sum reduction on a vector.
     /// </summary>
-    public static T HorizontalReduceSum<T>(System.Numerics.Vector<T> vector) where T : struct
+    public static T HorizontalReduceSum<T>(System.Numerics.Vector<T> vector)
     {
         var array = new T[System.Numerics.Vector<T>.Count];
         vector.CopyTo(array);
@@ -530,7 +530,7 @@ public static class VectorHelper
     /// <summary>
     /// Performs horizontal max reduction on a vector.
     /// </summary>
-    public static T HorizontalReduceMax<T>(System.Numerics.Vector<T> vector) where T : struct
+    public static T HorizontalReduceMax<T>(System.Numerics.Vector<T> vector)
     {
         var array = new T[System.Numerics.Vector<T>.Count];
         vector.CopyTo(array);
@@ -547,7 +547,7 @@ public static class VectorHelper
     /// <summary>
     /// Performs horizontal min reduction on a vector.
     /// </summary>
-    public static T HorizontalReduceMin<T>(System.Numerics.Vector<T> vector) where T : struct
+    public static T HorizontalReduceMin<T>(System.Numerics.Vector<T> vector)
     {
         var array = new T[System.Numerics.Vector<T>.Count];
         vector.CopyTo(array);
@@ -564,7 +564,7 @@ public static class VectorHelper
     /// <summary>
     /// Performs horizontal mean reduction on a vector.
     /// </summary>
-    public static T HorizontalReduceMean<T>(System.Numerics.Vector<T> vector) where T : struct
+    public static T HorizontalReduceMean<T>(System.Numerics.Vector<T> vector)
     {
         var sum = HorizontalReduceSum(vector);
         return (T)(object)((dynamic)sum / System.Numerics.Vector<T>.Count);
@@ -573,7 +573,7 @@ public static class VectorHelper
     /// <summary>
     /// Applies ReLU activation to a vector.
     /// </summary>
-    public static System.Numerics.Vector<T> VectorReLU<T>(System.Numerics.Vector<T> input) where T : struct
+    public static System.Numerics.Vector<T> VectorReLU<T>(System.Numerics.Vector<T> input)
     {
         return Vector.Max(input, System.Numerics.Vector<T>.Zero);
     }
@@ -581,7 +581,7 @@ public static class VectorHelper
     /// <summary>
     /// Applies element-wise comparison for ReLU gradient.
     /// </summary>
-    public static System.Numerics.Vector<T> VectorReLUGrad<T>(System.Numerics.Vector<T> gradOutput, System.Numerics.Vector<T> forwardInput) where T : struct
+    public static System.Numerics.Vector<T> VectorReLUGrad<T>(System.Numerics.Vector<T> gradOutput, System.Numerics.Vector<T> forwardInput)
     {
         var mask = Vector.GreaterThan(forwardInput, System.Numerics.Vector<T>.Zero);
         return Vector.ConditionalSelect(mask, gradOutput, System.Numerics.Vector<T>.Zero);

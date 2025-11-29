@@ -11,7 +11,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
-public interface IDraftModel<T> where T : struct, IComparable<T>
+public interface IDraftModel<T>
 {
     /// <summary>
     /// Gets the maximum number of tokens this draft model can generate in one call.
@@ -45,7 +45,7 @@ public interface IDraftModel<T> where T : struct, IComparable<T>
 /// Result of draft token generation.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class DraftResult<T> where T : struct, IComparable<T>
+public class DraftResult<T>
 {
     /// <summary>
     /// Gets the generated draft tokens.
@@ -83,7 +83,7 @@ public class DraftResult<T> where T : struct, IComparable<T>
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class NGramDraftModel<T> : IDraftModel<T> where T : struct, IComparable<T>
+public class NGramDraftModel<T> : IDraftModel<T>
 {
     private readonly Dictionary<string, Dictionary<int, int>> _ngrams;
     private readonly int _n;
@@ -274,7 +274,7 @@ public class NGramDraftModel<T> : IDraftModel<T> where T : struct, IComparable<T
 /// Wrapper for using a small neural network as a draft model.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class NeuralDraftModel<T> : IDraftModel<T> where T : struct, IComparable<T>
+public class NeuralDraftModel<T> : IDraftModel<T>
 {
     private readonly Func<ReadOnlySpan<int>, float[]> _forwardFunc;
     private readonly int _vocabSize;

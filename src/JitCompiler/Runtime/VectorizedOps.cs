@@ -49,7 +49,7 @@ public static class VectorizedOps
         string operation,
         int vectorWidth,
         int numVectors,
-        int remainder) where T : struct
+        int remainder)
     {
         var leftData = left.Data;
         var rightData = right.Data;
@@ -190,7 +190,7 @@ public static class VectorizedOps
         string operation,
         int vectorWidth,
         int numVectors,
-        int remainder) where T : struct
+        int remainder)
     {
         var data = input.Data;
         var result = new T[data.Length];
@@ -327,7 +327,7 @@ public static class VectorizedOps
         string reductionType,
         int vectorWidth,
         int[]? axes,
-        bool keepDims) where T : struct
+        bool keepDims)
     {
         var data = input.Data;
 
@@ -512,7 +512,7 @@ public static class VectorizedOps
         Tensor<T> left,
         Tensor<T> right,
         int vectorWidth,
-        int tileSize) where T : struct
+        int tileSize)
     {
         // Validate shapes
         if (left.Shape.Length != 2 || right.Shape.Length != 2)
