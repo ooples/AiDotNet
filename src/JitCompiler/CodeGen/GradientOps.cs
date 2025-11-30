@@ -180,11 +180,17 @@ public static class GradientOps
     /// </summary>
     public static Tensor<T> GradSoftmax<T>(Tensor<T> gradOutput, Tensor<T> forwardOutput, int axis)
     {
+        // Normalize axis (support negative indices like -1 = last dimension)
+        int rank = gradOutput.Shape.Length;
+        int normalizedAxis = axis < 0 ? axis + rank : axis;
+        if (normalizedAxis < 0 || normalizedAxis >= rank)
+            throw new ArgumentOutOfRangeException(nameof(axis), $"Axis {axis} is out of range for tensor rank {rank}.");
+
         // grad_x = y * (grad_y - sum(grad_y * y))
         var gradTimesOutput = Tensor<T>.ElementwiseMultiply(gradOutput, forwardOutput);
 
-        // Sum along the axis
-        var summed = SumWithKeepdims(gradTimesOutput, new[] { axis });
+        // Sum along the (normalized) axis, keeping dimensions for broadcasting
+        var summed = SumWithKeepdims(gradTimesOutput, new[] { normalizedAxis });
 
         // grad_y - sum
         var diff = gradOutput.Subtract(summed);
