@@ -118,9 +118,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
             var t when t == typeof(long) => sizeof(long),
             var t when t == typeof(short) => sizeof(short),
             var t when t == typeof(byte) => sizeof(byte),
-#if NET5_0_OR_GREATER
             var t when t == typeof(Half) => 2,
-#endif
             _ => 0
         };
     }
