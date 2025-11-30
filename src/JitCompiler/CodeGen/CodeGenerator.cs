@@ -118,17 +118,18 @@ public class CodeGenerator
         // Create parameter for input array
         var inputsParam = Expression.Parameter(typeof(Tensor<T>[]), "inputs");
 
-        // Create variables for each input tensor
+        // Create variables for each input tensor (as ComputationNode<T> for TensorOperations compatibility)
         foreach (var inputId in graph.InputIds)
         {
-            var inputVar = Expression.Variable(typeof(Tensor<T>), $"t{inputId}");
+            var inputVar = Expression.Variable(typeof(ComputationNode<T>), $"t{inputId}");
             _tensorVariables[inputId] = inputVar;
 
-            // Add assignment: t{inputId} = inputs[index]
-            var assignment = Expression.Assign(
-                inputVar,
-                Expression.ArrayIndex(inputsParam, Expression.Constant(graph.InputIds.IndexOf(inputId)))
-            );
+            // Wrap tensor in ComputationNode: t{inputId} = TensorOperations<T>.Variable(inputs[index])
+            var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string) });
+            var wrapCall = Expression.Call(variableMethod!,
+                Expression.ArrayIndex(inputsParam, Expression.Constant(graph.InputIds.IndexOf(inputId))),
+                Expression.Constant($"input_{inputId}"));
+            var assignment = Expression.Assign(inputVar, wrapCall);
             _expressions.Add(assignment);
         }
 
@@ -142,10 +143,11 @@ public class CodeGenerator
             }
         }
 
-        // Create output array
+        // Create output array - extract Tensor<T> from ComputationNode<T>.Value
+        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value");
         var outputArray = Expression.NewArrayInit(
             typeof(Tensor<T>),
-            graph.OutputIds.Select(id => _tensorVariables[id])
+            graph.OutputIds.Select(id => Expression.Property(_tensorVariables[id], valueProperty!))
         );
 
         _expressions.Add(outputArray);
@@ -197,8 +199,8 @@ public class CodeGenerator
     /// </remarks>
     private Expression? GenerateOperation<T>(IROp op)
     {
-        // Create output variable
-        var outputVar = Expression.Variable(typeof(Tensor<T>), $"t{op.OutputId}");
+        // Create output variable (as ComputationNode<T> to match TensorOperations return types)
+        var outputVar = Expression.Variable(typeof(ComputationNode<T>), $"t{op.OutputId}");
         _tensorVariables[op.OutputId] = outputVar;
 
         // Get input variables
