@@ -2229,7 +2229,7 @@ public static class StatisticsHelper<T>
     public static (T LowerBound, T UpperBound) CalculateWeibullConfidenceIntervals(Vector<T> values, T confidenceLevel)
     {
         const int bootstrapSamples = 1000;
-        var rng = new Random();
+        var rng = RandomHelper.CreateSecureRandom();
         var estimates = new List<(T Shape, T Scale)>();
 
         for (int i = 0; i < bootstrapSamples; i++)
@@ -4800,7 +4800,7 @@ public static class StatisticsHelper<T>
         var sigma2 = _numOps.Divide(rss, _numOps.FromDouble(n - featureCount));
         var standardError = _numOps.Sqrt(sigma2);
 
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         var samples = new List<T>(numSamples);
 
         for (int i = 0; i < numSamples; i++)

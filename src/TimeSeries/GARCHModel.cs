@@ -322,7 +322,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     private T GenerateStandardNormal()
     {
         // Box-Muller transform to generate standard normal random variable
-        Random random = new Random();
+        Random random = RandomHelper.CreateSecureRandom();
         double u1 = random.NextDouble();
         double u2 = random.NextDouble();
         double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);

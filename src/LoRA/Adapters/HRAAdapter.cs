@@ -662,7 +662,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
             else
             {
                 // Initialize new sparse parameter with small random value
-                Random rng = new Random();
+                Random rng = RandomHelper.CreateSecureRandom();
                 double randVal = (rng.NextDouble() - 0.5) * 0.02; // Small initialization
                 newSparseUpdates[key] = NumOps.FromDouble(randVal);
             }

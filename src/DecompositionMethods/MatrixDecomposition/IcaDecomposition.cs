@@ -326,7 +326,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
         Matrix<T> W = new Matrix<T>(numComponents, n);
 
         // Initialize W with random values
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < numComponents; i++)
         {
             for (int j = 0; j < n; j++)

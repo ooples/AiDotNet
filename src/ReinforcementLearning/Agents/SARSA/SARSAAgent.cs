@@ -54,7 +54,7 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
         _options = options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _epsilon = _options.EpsilonStart;
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
         _lastState = null;
         _lastAction = null;
     }

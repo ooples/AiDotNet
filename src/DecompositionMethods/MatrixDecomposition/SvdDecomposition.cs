@@ -607,7 +607,7 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
     /// <returns>A randomly generated matrix</returns>
     private Matrix<T> GenerateRandomMatrix(int rows, int cols)
     {
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         var matrix = new Matrix<T>(rows, cols);
 
         for (int i = 0; i < rows; i++)

@@ -1,6 +1,8 @@
 using System;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Operators;
 
 namespace AiDotNet.Tensors.NumericOperations;
 
@@ -718,4 +720,108 @@ public class Int32Operations : INumericOperations<int>
     /// <param name="value">The int value to convert.</param>
     /// <returns>The value as a double.</returns>
     public double ToDouble(int value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => true;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => true;
+
+    #region IVectorizedOperations<int> Implementation
+
+    /// <summary>
+    /// Performs element-wise addition using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Add(ReadOnlySpan<int> x, ReadOnlySpan<int> y, Span<int> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<AddOperatorInt>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise subtraction using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Subtract(ReadOnlySpan<int> x, ReadOnlySpan<int> y, Span<int> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<SubtractOperatorInt>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise multiplication using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Multiply(ReadOnlySpan<int> x, ReadOnlySpan<int> y, Span<int> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<MultiplyOperatorInt>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise division using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    /// <remarks>
+    /// Integer division doesn't have direct SIMD support, so this uses a scalar fallback
+    /// within the SIMD processing loop for optimal cache utilization.
+    /// </remarks>
+    public void Divide(ReadOnlySpan<int> x, ReadOnlySpan<int> y, Span<int> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<DivideOperatorInt>(x, y, destination);
+
+    /// <summary>
+    /// Computes dot product using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public int Dot(ReadOnlySpan<int> x, ReadOnlySpan<int> y)
+        => TensorPrimitivesCore.Dot(x, y);
+
+    /// <summary>
+    /// Computes sum using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public int Sum(ReadOnlySpan<int> x)
+        => TensorPrimitivesCore.Sum(x);
+
+    /// <summary>
+    /// Finds maximum using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public int Max(ReadOnlySpan<int> x)
+        => TensorPrimitivesCore.Max(x);
+
+    /// <summary>
+    /// Finds minimum using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public int Min(ReadOnlySpan<int> x)
+        => TensorPrimitivesCore.Min(x);
+
+    /// <summary>
+    /// Computes exponential using sequential loops (integers don't support transcendental SIMD).
+    /// </summary>
+    public void Exp(ReadOnlySpan<int> x, Span<int> destination)
+        => VectorizedOperationsFallback.Exp(this, x, destination);
+
+    /// <summary>
+    /// Computes natural logarithm using sequential loops (integers don't support transcendental SIMD).
+    /// </summary>
+    public void Log(ReadOnlySpan<int> x, Span<int> destination)
+        => VectorizedOperationsFallback.Log(this, x, destination);
+
+    /// <summary>
+    /// Computes hyperbolic tangent using sequential loops (integers don't support transcendental SIMD).
+    /// </summary>
+    public void Tanh(ReadOnlySpan<int> x, Span<int> destination)
+        => VectorizedOperationsFallback.Tanh(this, x, destination);
+
+    /// <summary>
+    /// Computes sigmoid using sequential loops (integers don't support transcendental SIMD).
+    /// </summary>
+    public void Sigmoid(ReadOnlySpan<int> x, Span<int> destination)
+        => VectorizedOperationsFallback.Sigmoid(this, x, destination);
+
+    /// <summary>
+    /// Computes base-2 logarithm using sequential loops (integers don't support transcendental SIMD).
+    /// </summary>
+    public void Log2(ReadOnlySpan<int> x, Span<int> destination)
+        => VectorizedOperationsFallback.Log2(this, x, destination);
+
+    /// <summary>
+    /// Computes softmax using sequential loops (integers don't support transcendental SIMD).
+    /// </summary>
+    public void SoftMax(ReadOnlySpan<int> x, Span<int> destination)
+        => VectorizedOperationsFallback.SoftMax(this, x, destination);
+
+    /// <summary>
+    /// Computes cosine similarity using sequential loops (integers don't support this SIMD operation).
+    /// </summary>
+    public int CosineSimilarity(ReadOnlySpan<int> x, ReadOnlySpan<int> y)
+        => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
+
+    #endregion
 }

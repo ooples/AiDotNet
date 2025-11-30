@@ -363,7 +363,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Random number generator for initialization.
     /// </summary>
-    private Random _random = new Random();
+    private Random _random = RandomHelper.CreateSecureRandom();
         
     /// <summary>
     /// Input dimension size.

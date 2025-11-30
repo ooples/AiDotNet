@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
@@ -28,6 +29,10 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// - Actor-Critic methods (SAC, TD3, DDPG)
 /// - Model-based methods (Dreamer, MuZero, World Models)
 /// - Transformer-based methods (Decision Transformer)
+/// </para>
+/// <para><b>JIT Compilation Support:</b> Deep RL agents support JIT compilation for policy inference
+/// when their underlying neural networks support IJitCompilable. The JIT-compiled policy network
+/// provides fast, deterministic action selection (without exploration) suitable for deployment.
 /// </para>
 /// </remarks>
 public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearningAgentBase<T>
@@ -101,5 +106,130 @@ public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearn
             }
         }
         base.Dispose();
+    }
+
+    // ===== JIT Compilation Support =====
+
+    /// <summary>
+    /// Gets the policy network used for action selection.
+    /// </summary>
+    /// <returns>The policy network, or null if no policy network is available.</returns>
+    /// <remarks>
+    /// <para>
+    /// Override this method in derived classes to return the network responsible for action selection.
+    /// This enables JIT compilation support for policy inference.
+    /// </para>
+    /// <para><b>Examples:</b></para>
+    /// <list type="bullet">
+    /// <item><description><b>DQN:</b> Returns the Q-network (actions selected via argmax Q(s,a))</description></item>
+    /// <item><description><b>PPO/A3C:</b> Returns the policy network (actor)</description></item>
+    /// <item><description><b>SAC/TD3:</b> Returns the policy network (actor)</description></item>
+    /// </list>
+    /// </remarks>
+    protected virtual IJitCompilable<T>? GetPolicyNetworkForJit()
+    {
+        // Try to find a network that supports JIT compilation
+        foreach (var network in Networks)
+        {
+            if (network is IJitCompilable<T> jitCompilable && jitCompilable.SupportsJitCompilation)
+            {
+                return jitCompilable;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Gets whether this deep RL agent supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> if the policy network supports JIT compilation; <c>false</c> otherwise.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Deep RL agents support JIT compilation when their policy network (the network used for
+    /// action selection) implements IJitCompilable and reports SupportsJitCompilation = true.
+    /// </para>
+    /// <para><b>JIT Compilation for RL Inference:</b>
+    /// When JIT compilation is supported, you can export the policy network's computation graph
+    /// for optimized inference. This is particularly useful for:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Deployment in production environments where inference speed matters</description></item>
+    /// <item><description>Running agents on embedded devices or edge hardware</description></item>
+    /// <item><description>Reducing latency in real-time control applications</description></item>
+    /// </list>
+    /// <para><b>Important:</b> JIT compilation exports the deterministic policy (without exploration).
+    /// This is appropriate for deployment but not for training where exploration is needed.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            var policyNetwork = GetPolicyNetworkForJit();
+            return policyNetwork?.SupportsJitCompilation ?? false;
+        }
+    }
+
+    /// <summary>
+    /// Exports the policy network's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the policy network's output.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the policy network does not support JIT compilation.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// Exports the policy network (the network used for action selection) as a JIT-compilable
+    /// computation graph. This enables fast, optimized inference for deployment.
+    /// </para>
+    /// <para><b>What Gets Exported:</b></para>
+    /// <list type="bullet">
+    /// <item><description><b>DQN:</b> Q-network outputting Q-values for all actions</description></item>
+    /// <item><description><b>PPO/A3C:</b> Policy network outputting action probabilities</description></item>
+    /// <item><description><b>SAC/TD3:</b> Actor network outputting continuous actions</description></item>
+    /// </list>
+    /// <para><b>What Is NOT Exported:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Exploration strategies (epsilon-greedy, noise injection)</description></item>
+    /// <item><description>Value/critic networks (not needed for inference)</description></item>
+    /// <item><description>Target networks (only used during training)</description></item>
+    /// </list>
+    /// <para><b>Usage Example:</b></para>
+    /// <code>
+    /// // After training the agent
+    /// if (agent.SupportsJitCompilation)
+    /// {
+    ///     var inputNodes = new List&lt;ComputationNode&lt;double&gt;&gt;();
+    ///     var output = agent.ExportComputationGraph(inputNodes);
+    ///
+    ///     var jitCompiler = new JitCompiler();
+    ///     var compiled = jitCompiler.Compile(output, inputNodes);
+    ///
+    ///     // Use for fast inference
+    ///     var actions = compiled.Evaluate(state);
+    /// }
+    /// </code>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        var policyNetwork = GetPolicyNetworkForJit();
+
+        if (policyNetwork == null || !policyNetwork.SupportsJitCompilation)
+        {
+            throw new NotSupportedException(
+                "This deep RL agent does not support JIT compilation. " +
+                "The underlying policy network either does not implement IJitCompilable or " +
+                "does not support JIT compilation. " +
+                "\n\n" +
+                "To enable JIT compilation: " +
+                "\n1. Ensure the policy network implements IJitCompilable<T> " +
+                "\n2. Override GetPolicyNetworkForJit() to return the correct network " +
+                "\n3. Verify the network's SupportsJitCompilation returns true");
+        }
+
+        return policyNetwork.ExportComputationGraph(inputNodes);
     }
 }

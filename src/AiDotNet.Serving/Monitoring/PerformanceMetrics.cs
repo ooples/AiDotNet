@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Serving.Monitoring;
 
@@ -121,7 +122,7 @@ public class PerformanceMetrics
         {
             // Reservoir sampling: randomly select maxSortSize samples
             samples = new double[maxSortSize];
-            var random = new Random();
+            var random = RandomHelper.CreateSecureRandom();
 
             for (int i = 0; i < maxSortSize; i++)
             {

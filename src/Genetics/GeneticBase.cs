@@ -92,7 +92,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
         FitnessCalculator = fitnessCalculator ?? throw new ArgumentNullException(nameof(fitnessCalculator));
         Population = [];
         GeneticParams = new GeneticParameters();
-        Random = new Random();
+        Random = RandomHelper.CreateSecureRandom();
         CrossoverOperators = [];
         MutationOperators = [];
         EvolutionStopwatch = new Stopwatch();

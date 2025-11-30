@@ -269,7 +269,7 @@ public class SparseGaussianProcess<T> : IGaussianProcess<T>
     {
         int m = Math.Min(X.Rows, 100); // Number of inducing points, capped at 100 or the number of data points
         var indices = new List<int>();
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
 
         while (indices.Count < m)
         {

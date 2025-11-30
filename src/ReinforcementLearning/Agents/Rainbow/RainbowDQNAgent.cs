@@ -400,12 +400,71 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override byte[] Serialize()
     {
-        throw new NotImplementedException("RainbowDQN serialization not yet implemented");
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Write metadata
+        writer.Write(_options.StateSize);
+        writer.Write(_options.ActionSize);
+        writer.Write(_options.NumAtoms);
+        writer.Write(_options.VMin);
+        writer.Write(_options.VMax);
+        writer.Write(_options.NStepReturn);
+        writer.Write(_options.UseDistributional);
+        writer.Write(_options.UseNoisyNetworks);
+
+        // Write training state
+        writer.Write(_epsilon);
+        writer.Write(_stepCount);
+        writer.Write(_updateCount);
+        writer.Write(_beta);
+
+        // Write online network
+        var onlineNetworkBytes = _onlineNetwork.Serialize();
+        writer.Write(onlineNetworkBytes.Length);
+        writer.Write(onlineNetworkBytes);
+
+        // Write target network
+        var targetNetworkBytes = _targetNetwork.Serialize();
+        writer.Write(targetNetworkBytes.Length);
+        writer.Write(targetNetworkBytes);
+
+        return ms.ToArray();
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotImplementedException("RainbowDQN deserialization not yet implemented");
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read and validate metadata
+        var stateSize = reader.ReadInt32();
+        var actionSize = reader.ReadInt32();
+        var numAtoms = reader.ReadInt32();
+        var vMin = reader.ReadDouble();
+        var vMax = reader.ReadDouble();
+        var nStepReturn = reader.ReadInt32();
+        var useDistributional = reader.ReadBoolean();
+        var useNoisyNetworks = reader.ReadBoolean();
+
+        if (stateSize != _options.StateSize || actionSize != _options.ActionSize)
+            throw new InvalidOperationException("Serialized network dimensions don't match current options");
+
+        // Read training state
+        _epsilon = reader.ReadDouble();
+        _stepCount = reader.ReadInt32();
+        _updateCount = reader.ReadInt32();
+        _beta = reader.ReadDouble();
+
+        // Read online network
+        var onlineNetworkLength = reader.ReadInt32();
+        var onlineNetworkBytes = reader.ReadBytes(onlineNetworkLength);
+        _onlineNetwork.Deserialize(onlineNetworkBytes);
+
+        // Read target network
+        var targetNetworkLength = reader.ReadInt32();
+        var targetNetworkBytes = reader.ReadBytes(targetNetworkLength);
+        _targetNetwork.Deserialize(targetNetworkBytes);
     }
 
     public override Vector<T> GetParameters()

@@ -6,7 +6,6 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
-using AiDotNet.Helpers;
 using AiDotNet.Enums;
 
 namespace AiDotNet.ReinforcementLearning.Agents.CQL;
@@ -57,7 +56,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         _options = options;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
+        _random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
         _updateCount = 0;
 
         _logAlpha = NumOps.Log(_options.InitialTemperature);

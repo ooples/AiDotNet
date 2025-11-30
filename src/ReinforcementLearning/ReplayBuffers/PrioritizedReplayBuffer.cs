@@ -75,7 +75,7 @@ public class PrioritizedReplayBuffer<T>
         }
 
         // Sample with priorities
-        var random = new Random();
+        var random = RandomHelper.ThreadSafeRandom;
         double minProbability = probabilities.Min();
         double maxWeight = Math.Pow(_buffer.Count * minProbability, -beta);
 

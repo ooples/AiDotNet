@@ -27,7 +27,7 @@ public class DeploymentRuntime<T>
         _telemetry = new TelemetryCollector(config.EnableTelemetry);
         _cache = new ModelCache<T>(config.EnableCaching);
         _sessions = new ConcurrentDictionary<string, InferenceSession>();
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

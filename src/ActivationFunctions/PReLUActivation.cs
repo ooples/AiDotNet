@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -131,5 +133,39 @@ public class PReLUActivation<T> : ActivationFunctionBase<T>
     public void UpdateAlpha(T newAlpha)
     {
         _alpha = newAlpha;
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>True because TensorOperations.PReLU provides full forward and backward pass support.</value>
+    /// <remarks>
+    /// <para>
+    /// PReLU supports JIT compilation with full gradient computation.
+    /// The backward pass correctly computes gradients: 1 for positive inputs, alpha for negative inputs.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with PReLU activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method maps to TensorOperations&lt;T&gt;.PReLU(input) which handles both
+    /// forward and backward passes for JIT compilation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        double alpha = Convert.ToDouble(_alpha);
+        return TensorOperations<T>.PReLU(input, alpha);
     }
 }

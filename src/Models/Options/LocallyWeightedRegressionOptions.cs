@@ -96,4 +96,34 @@ public class LocallyWeightedRegressionOptions : NonLinearRegressionOptions
     /// </para>
     /// </remarks>
     public MatrixDecompositionType DecompositionType { get; set; } = MatrixDecompositionType.Cholesky;
+
+    /// <summary>
+    /// Gets or sets whether to use soft (differentiable) mode for JIT compilation support.
+    /// </summary>
+    /// <value><c>true</c> to enable soft mode; <c>false</c> (default) for traditional LWR behavior.</value>
+    /// <remarks>
+    /// <para>
+    /// When enabled, LocallyWeightedRegression uses a differentiable approximation that embeds
+    /// all training data as constants in the computation graph and computes attention-weighted
+    /// predictions using the softmax of negative squared distances.
+    /// </para>
+    /// <para>
+    /// Formula: weights = softmax(-||input - xTrain[i]||² / bandwidth)
+    ///          output = Σ weights[i] * yTrain[i]
+    /// </para>
+    /// <para><b>For Beginners:</b> Soft mode allows this model to be JIT compiled for faster inference.
+    ///
+    /// Traditional LWR solves a new weighted least squares problem for each prediction, which
+    /// cannot be represented as a static computation graph. Soft mode uses a simplified approach:
+    /// - Compute distances from the query point to all training examples
+    /// - Convert distances to weights using softmax (similar to attention mechanisms)
+    /// - Return the weighted average of training targets
+    ///
+    /// This approximation:
+    /// - Enables JIT compilation for faster predictions
+    /// - Gives similar results for smooth data
+    /// - May be less accurate than traditional LWR for complex local patterns
+    /// </para>
+    /// </remarks>
+    public bool UseSoftMode { get; set; } = false;
 }

@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -23,7 +25,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract class LayerBase<T> : ILayer<T>, IDiagnosticsProvider<T>
+public abstract class LayerBase<T> : ILayer<T>
 {
     /// <summary>
     /// Gets the global execution engine for vector operations.
@@ -49,7 +51,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDiagnosticsProvider<T>
     /// Without activation functions, neural networks couldn't learn complex patterns.
     /// </para>
     /// </remarks>
-    protected IActivationFunction<T>? ScalarActivation { get; private set; }
+    public IActivationFunction<T>? ScalarActivation { get; private set; }
 
     /// <summary>
     /// Gets the vector activation function for this layer, if specified.
@@ -70,7 +72,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDiagnosticsProvider<T>
     /// which is useful for classifying inputs into categories.
     /// </para>
     /// </remarks>
-    protected IVectorActivationFunction<T>? VectorActivation { get; private set; }
+    public IVectorActivationFunction<T>? VectorActivation { get; private set; }
 
     /// <summary>
     /// Gets a value indicating whether this layer uses a vector activation function.
@@ -115,24 +117,24 @@ public abstract class LayerBase<T> : ILayer<T>, IDiagnosticsProvider<T>
     protected INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
 
     /// <summary>
-    /// Gets a random number generator.
+    /// Gets the thread-safe random number generator.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This property provides access to a random number generator, which is used for initializing weights
-    /// and other parameters that require randomization.
+    /// This property provides access to the centralized thread-safe random number generator,
+    /// which is used for initializing weights and other parameters that require randomization.
     /// </para>
     /// <para><b>For Beginners:</b> This provides random numbers for initializing the layer.
-    /// 
+    ///
     /// Random numbers are needed to:
     /// - Set starting values for weights and biases
     /// - Add randomness to avoid symmetry problems
     /// - Help the network learn diverse patterns
-    /// 
+    ///
     /// Good initialization with proper randomness is important for neural networks to learn effectively.
     /// </para>
     /// </remarks>
-    protected Random Random => new();
+    protected static Random Random => RandomHelper.ThreadSafeRandom;
 
     /// <summary>
     /// The trainable parameters of this layer.
@@ -634,6 +636,93 @@ public abstract class LayerBase<T> : ILayer<T>, IDiagnosticsProvider<T>
     /// </remarks>
     public int[] GetOutputShape() => OutputShape;
 
+
+    /// <summary>
+    /// Gets the weight matrix for layers that have trainable weights.
+    /// </summary>
+    /// <returns>The weight matrix, or null if the layer has no weights.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides access to the layer's weight matrix for layers that use weights
+    /// during computation. Layers without weights (like pooling or activation layers) return null.
+    /// </para>
+    /// <para><b>For Beginners:</b> Weights are the learnable parameters that define how a layer transforms data.
+    ///
+    /// For example:
+    /// - Dense layers use a weight matrix to transform inputs
+    /// - Convolutional layers use filters (which are weights) to detect patterns
+    /// - Pooling layers have no weights, so they return null
+    ///
+    /// This method lets you inspect or modify the weights after training.
+    /// </para>
+    /// </remarks>
+    public virtual Matrix<T>? GetWeights() => null;
+
+    /// <summary>
+    /// Gets the bias vector for layers that have trainable biases.
+    /// </summary>
+    /// <returns>The bias vector, or null if the layer has no biases.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides access to the layer's bias vector for layers that use biases
+    /// during computation. Layers without biases return null.
+    /// </para>
+    /// <para><b>For Beginners:</b> Biases are learnable offsets added to the layer's output.
+    ///
+    /// Think of biases as a starting point:
+    /// - Without bias: output = weights × input
+    /// - With bias: output = weights × input + bias
+    ///
+    /// Biases help the network learn more flexible patterns by shifting the activation function.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T>? GetBiases() => null;
+
+    /// <summary>
+    /// Exports the layer's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the layer's operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method constructs a computation graph representation of the layer's forward pass
+    /// that can be JIT compiled for faster inference. All layers MUST implement this method
+    /// to support JIT compilation.
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT (Just-In-Time) compilation converts the layer's operations
+    /// into optimized native code for 5-10x faster inference.
+    ///
+    /// To support JIT compilation, a layer must:
+    /// 1. Implement this method to export its computation graph
+    /// 2. Set SupportsJitCompilation to true
+    /// 3. Use ComputationNode and TensorOperations to build the graph
+    ///
+    /// All layers are required to implement this method, even if they set SupportsJitCompilation = false.
+    /// </para>
+    /// </remarks>
+    public abstract ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes);
+
+    /// <summary>
+    /// Gets whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>True if the layer can be JIT compiled, false otherwise.</value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the layer has implemented ExportComputationGraph()
+    /// and can benefit from JIT compilation. All layers MUST implement this property.
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT compilation can make inference 5-10x faster by converting
+    /// the layer's operations into optimized native code.
+    ///
+    /// Layers should return false if they:
+    /// - Have not yet implemented a working ExportComputationGraph()
+    /// - Use dynamic operations that change based on input data
+    /// - Are too simple to benefit from JIT compilation
+    ///
+    /// When false, the layer will use the standard Forward() method instead.
+    /// </para>
+    /// </remarks>
+    public abstract bool SupportsJitCompilation { get; }
     /// <summary>
     /// Performs the forward pass of the layer.
     /// </summary>
@@ -1575,5 +1664,92 @@ public abstract class LayerBase<T> : ILayer<T>, IDiagnosticsProvider<T>
         }
 
         return diagnostics;
+    }
+
+    /// <summary>
+    /// Applies the layer's configured activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply activation to.</param>
+    /// <returns>The computation node with activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown if activation does not support JIT.</exception>
+    /// <remarks>
+    /// <para>
+    /// This helper method delegates to the activation's ApplyToGraph method,
+    /// following the Open/Closed Principle. Adding new activations does not require
+    /// modifying layer code.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adds the activation function to the computation graph.
+    ///
+    /// Instead of the layer code checking what type of activation is configured (which would
+    /// require changing the layer every time a new activation is added), this method simply
+    /// asks the activation to add itself to the graph. This makes the code more maintainable
+    /// and extensible.
+    /// </para>
+    /// </remarks>
+    protected ComputationNode<T> ApplyActivationToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        // Check scalar activation first
+        if (ScalarActivation is not null)
+        {
+            if (!ScalarActivation.SupportsJitCompilation)
+            {
+                throw new NotSupportedException(
+                    $"Activation {ScalarActivation.GetType().Name} does not support JIT compilation. " +
+                    $"Either the gradient computation is not implemented yet, or the activation " +
+                    $"uses operations not compatible with computation graphs.");
+            }
+
+            return ScalarActivation.ApplyToGraph(input);
+        }
+
+        // Check vector activation
+        if (VectorActivation is not null)
+        {
+            if (!VectorActivation.SupportsJitCompilation)
+            {
+                throw new NotSupportedException(
+                    $"Activation {VectorActivation.GetType().Name} does not support JIT compilation. " +
+                    $"Either the gradient computation is not implemented yet, or the activation " +
+                    $"uses operations not compatible with computation graphs.");
+            }
+
+            return VectorActivation.ApplyToGraph(input);
+        }
+
+        // No activation configured (identity)
+        return input;
+    }
+
+    /// <summary>
+    /// Checks if the layer's current activation function supports JIT compilation.
+    /// </summary>
+    /// <returns>True if the activation can be JIT compiled, false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method checks whether the layer's configured activation function supports
+    /// JIT compilation by querying the activation's SupportsJitCompilation property.
+    /// If no activation is configured, returns true (identity function is always JIT-compatible).
+    /// </para>
+    /// <para><b>For Beginners:</b> This method checks if the activation is ready for JIT compilation.
+    ///
+    /// The layer uses this to determine if it can export a computation graph for faster inference.
+    /// If the activation does not support JIT yet (because gradients are not implemented), the
+    /// layer will fall back to the standard execution path.
+    /// </para>
+    /// </remarks>
+    protected bool CanActivationBeJitted()
+    {
+        if (ScalarActivation is not null)
+            return ScalarActivation.SupportsJitCompilation;
+
+        if (VectorActivation is not null)
+            return VectorActivation.SupportsJitCompilation;
+
+        // No activation (identity) always supports JIT
+        return true;
     }
 }

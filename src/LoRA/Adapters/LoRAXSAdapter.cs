@@ -617,14 +617,95 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
                 "Call InitializeFromSVD first.");
         }
 
-        // For now, return base layer as-is
-        // Full implementation would require extracting base layer weights,
-        // computing delta = U_r * Σ_r * R * V_r^T * scaling,
-        // and creating new layer with merged weights
-        // This is layer-type specific, so derived classes should implement
-        throw new NotImplementedException(
-            "MergeToOriginalLayer must be implemented by layer-specific LoRA-XS adapters. " +
-            "Create a DenseLoRAXSAdapter for dense layers.");
+        if (_frozenU == null || _frozenSigma == null || _frozenVt == null)
+        {
+            throw new InvalidOperationException(
+                "LoRA-XS adapter SVD components are not properly initialized.");
+        }
+
+        // Support both DenseLayer and FullyConnectedLayer
+        DenseLayer<T>? denseBase = _baseLayer as DenseLayer<T>;
+        FullyConnectedLayer<T>? fcBase = _baseLayer as FullyConnectedLayer<T>;
+
+        if (denseBase == null && fcBase == null)
+        {
+            throw new InvalidOperationException(
+                "LoRA-XS adapter merging only supports DenseLayer or FullyConnectedLayer base layers. " +
+                $"Got: {_baseLayer.GetType().Name}");
+        }
+
+        // Compute LoRA-XS weight delta: delta = U_r * Σ_r * R * V_r^T * scaling
+        // Where scaling = alpha / rank
+        int outputSize = _frozenU.Rows;
+        int inputSize = _frozenVt.Columns;
+        int rank = Rank;
+        double scaling = Alpha / rank;
+
+        // Step 1: Compute R * V_r^T (rank × inputSize)
+        var RVt = new Matrix<T>(rank, inputSize);
+        for (int i = 0; i < rank; i++)
+        {
+            for (int j = 0; j < inputSize; j++)
+            {
+                T sum = NumOps.Zero;
+                for (int k = 0; k < rank; k++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_trainableR[i, k], _frozenVt[k, j]));
+                }
+                RVt[i, j] = sum;
+            }
+        }
+
+        // Step 2: Compute Σ_r * (R * V_r^T) - diagonal scaling (rank × inputSize)
+        var SigmaRVt = new Matrix<T>(rank, inputSize);
+        for (int i = 0; i < rank; i++)
+        {
+            T sigma = _frozenSigma[i];
+            for (int j = 0; j < inputSize; j++)
+            {
+                SigmaRVt[i, j] = NumOps.Multiply(sigma, RVt[i, j]);
+            }
+        }
+
+        // Step 3: Compute U_r * (Σ_r * R * V_r^T) (outputSize × inputSize)
+        var loraWeights = new Matrix<T>(outputSize, inputSize);
+        for (int i = 0; i < outputSize; i++)
+        {
+            for (int j = 0; j < inputSize; j++)
+            {
+                T sum = NumOps.Zero;
+                for (int k = 0; k < rank; k++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_frozenU[i, k], SigmaRVt[k, j]));
+                }
+                // Apply scaling factor
+                loraWeights[i, j] = NumOps.Multiply(sum, NumOps.FromDouble(scaling));
+            }
+        }
+
+        // Get base layer parameters
+        Vector<T> baseParams = _baseLayer.GetParameters();
+        int weightCount = inputSize * outputSize;
+
+        // Create new parameters with merged weights
+        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
+
+        // Merge weights: baseWeight + loraWeight
+        for (int i = 0; i < weightCount; i++)
+        {
+            int row = i / inputSize;
+            int col = i % inputSize;
+            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
+        }
+
+        // Copy biases unchanged (LoRA doesn't modify biases)
+        for (int i = weightCount; i < baseParams.Length; i++)
+        {
+            mergedParams[i] = baseParams[i];
+        }
+
+        // Use helper method to clone base layer and preserve activation function
+        return CreateMergedLayerWithClone(mergedParams);
     }
 
     /// <summary>

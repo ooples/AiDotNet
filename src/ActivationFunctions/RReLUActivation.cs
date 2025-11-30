@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -57,7 +59,7 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public RReLUActivation(double lowerBound = 1.0 / 8, double upperBound = 1.0 / 3)
     {
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
         _lowerBound = NumOps.FromDouble(lowerBound);
         _upperBound = NumOps.FromDouble(upperBound);
         _alpha = NumOps.FromDouble((_random.NextDouble() * (upperBound - lowerBound)) + lowerBound);
@@ -149,5 +151,44 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
             // Set alpha to the average of lower and upper bounds for inference
             _alpha = NumOps.Divide(NumOps.Add(_lowerBound, _upperBound), NumOps.FromDouble(2));
         }
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>True because TensorOperations.RReLU provides full forward and backward pass support.</value>
+    /// <remarks>
+    /// <para>
+    /// RReLU supports JIT compilation with the following behavior:
+    /// - In inference mode (default for JIT): uses fixed alpha = (lower + upper) / 2
+    /// - In training mode: samples alpha once per forward pass (not per-element)
+    /// </para>
+    /// <para>
+    /// This is a reasonable compromise that enables JIT while preserving the randomization benefit during training.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with RReLU activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method maps to TensorOperations&lt;T&gt;.RReLU(input) which handles both
+    /// forward and backward passes for JIT compilation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        double lower = Convert.ToDouble(_lowerBound);
+        double upper = Convert.ToDouble(_upperBound);
+        return TensorOperations<T>.RReLU(input, lower, upper, _isTraining);
     }
 }

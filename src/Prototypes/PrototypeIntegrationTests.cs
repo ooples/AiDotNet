@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using AiDotNet.Engines;
-using AiDotNet.Helpers;
 
 namespace AiDotNet.Prototypes;
 
@@ -214,7 +213,7 @@ public static class PrototypeIntegrationTests
         const int numFeatures = 3;
 
         // Generate synthetic data: y = 2*x1 + 3*x2 - 1*x3 + 5
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var X = new float[numSamples * numFeatures];
         var y = new float[numSamples];
 

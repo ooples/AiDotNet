@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -807,7 +806,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
 
         // Sample triplets (all combinations would be O(n³))
         int maxTriplets = Math.Min(n * n, 1000); // Limit for efficiency
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int t = 0; t < maxTriplets; t++)
         {
