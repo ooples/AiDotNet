@@ -1,5 +1,3 @@
-global using AiDotNet.NumericOperations;
-
 namespace AiDotNet.Helpers;
 
 /// <summary>
