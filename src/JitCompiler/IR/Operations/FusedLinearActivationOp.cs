@@ -24,6 +24,11 @@ public class FusedLinearActivationOp : IROp
     public string ActivationName { get; set; } = "ReLU";
 
     /// <summary>
+    /// Gets or sets whether the linear layer has a bias term.
+    /// </summary>
+    public bool HasBias { get; set; } = true;
+
+    /// <summary>
     /// Validates inputs.
     /// </summary>
     public override bool Validate()

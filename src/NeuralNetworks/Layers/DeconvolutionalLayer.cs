@@ -1,5 +1,5 @@
 using System;
-using AiDotNet.Helpers;
+
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -444,7 +444,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     private void InitializeParameters()
     {
         // Xavier/Glorot initialization
-        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputDepth + OutputDepth), NumOps));
+        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputDepth + OutputDepth)));
         for (int i = 0; i < _kernels.Length; i++)
         {
             _kernels[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
@@ -950,9 +950,9 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         inputNodes.Add(inputNode);
 
         var kernelNode = TensorOperations<T>.Constant(_kernels, "kernel");
-        var biasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { OutputDepth }, _biases.ToArray()), "bias");
+        var biasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { OutputDepth }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_biases.ToArray())), "bias");
 
-        var deconvNode = TensorOperations<T>.ConvTranspose2D(inputNode, kernelNode, biasNode, stride: Stride, padding: Padding);
+        var deconvNode = TensorOperations<T>.ConvTranspose2D(inputNode, kernelNode, biasNode, stride: new[] { Stride, Stride }, padding: new[] { Padding, Padding });
 
         if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
         {

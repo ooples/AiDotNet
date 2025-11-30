@@ -26,7 +26,12 @@ public class ELUActivation<T> : ActivationFunctionBase<T>
     /// The alpha parameter that controls the saturation value for negative inputs.
     /// </summary>
     private readonly T _alpha;
-    
+
+    /// <summary>
+    /// Gets the alpha parameter that controls the saturation value for negative inputs.
+    /// </summary>
+    public T Alpha => _alpha;
+
     /// <summary>
     /// Initializes a new instance of the ELUActivation class.
     /// </summary>

@@ -1542,7 +1542,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var bias1Node = Autodiff.TensorOperations<T>.Constant(bias1Tensor, "localization_bias1");
 
         // First layer: MatMul + Add + Activation
-        var localization1 = Autodiff.TensorOperations<T>.MatMul(flattenedInput, weights1Node);
+        var localization1 = Autodiff.TensorOperations<T>.MatrixMultiply(flattenedInput, weights1Node);
         localization1 = Autodiff.TensorOperations<T>.Add(localization1, bias1Node);
 
         // Apply activation function
@@ -1565,7 +1565,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             bias2Tensor[i] = _localizationBias2[i];
         var bias2Node = Autodiff.TensorOperations<T>.Constant(bias2Tensor, "localization_bias2");
 
-        var transformationParams = Autodiff.TensorOperations<T>.MatMul(localization1, weights2Node);
+        var transformationParams = Autodiff.TensorOperations<T>.MatrixMultiply(localization1, weights2Node);
         transformationParams = Autodiff.TensorOperations<T>.Add(transformationParams, bias2Node);
 
         // Reshape transformation parameters to [batch, 2, 3] for affine transformation matrix

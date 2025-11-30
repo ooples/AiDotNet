@@ -462,7 +462,7 @@ public class LambdaLayer<T> : LayerBase<T>
         var output = _traceableExpression(input);
 
         // Apply activation if present
-        output = ApplyActivationToComputationGraph(output);
+        output = ApplyActivationToGraph(output);
 
         return output;
     }

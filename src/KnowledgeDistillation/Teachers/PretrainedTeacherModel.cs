@@ -82,7 +82,7 @@ public class PretrainedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
             inputNodes.Add(inputNode);
 
             var outputNode = _jitCompilableModel.ExportComputationGraph(inputNodes);
-            return new Vector<T>(outputNode.Value.Data);
+            return outputNode.Value.ToVector();
         }
         else
         {

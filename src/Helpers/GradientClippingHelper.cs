@@ -41,9 +41,9 @@ public static class GradientClippingHelper
     /// For example, with maxValue=1.0, a gradient of 5.0 becomes 1.0, and -3.0 becomes -1.0.
     /// </para>
     /// </remarks>
-    public static Vector<T> ClipByValue<T>(Vector<T> gradients, double maxValue = DefaultMaxValue)
+    public static Vector<T>? ClipByValue<T>(Vector<T>? gradients, double maxValue = DefaultMaxValue)
     {
-        if (gradients == null) return gradients;
+        if (gradients == null) return null;
 
         var numOps = MathHelper.GetNumericOperations<T>();
         T maxVal = numOps.FromDouble(maxValue);
@@ -97,9 +97,9 @@ public static class GradientClippingHelper
     /// Formula: if ||g|| > maxNorm, then g = g * (maxNorm / ||g||)
     /// </para>
     /// </remarks>
-    public static Vector<T> ClipByNorm<T>(Vector<T> gradients, double maxNorm = DefaultMaxNorm)
+    public static Vector<T>? ClipByNorm<T>(Vector<T>? gradients, double maxNorm = DefaultMaxNorm)
     {
-        if (gradients == null) return gradients;
+        if (gradients == null) return null;
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
@@ -181,7 +181,7 @@ public static class GradientClippingHelper
     /// behavior across the entire network.
     /// </para>
     /// </remarks>
-    public static List<Vector<T>> ClipByGlobalNorm<T>(List<Vector<T>> gradientsList, double maxNorm = DefaultMaxNorm)
+    public static List<Vector<T>>? ClipByGlobalNorm<T>(List<Vector<T>>? gradientsList, double maxNorm = DefaultMaxNorm)
     {
         if (gradientsList == null || gradientsList.Count == 0)
             return gradientsList;
@@ -205,7 +205,7 @@ public static class GradientClippingHelper
         T maxNormT = numOps.FromDouble(maxNorm);
         if (!numOps.GreaterThan(globalNorm, maxNormT))
         {
-            return gradientsList.Select(g => g?.Clone()).ToList();
+            return gradientsList.Select(g => g?.Clone()).ToList()!;
         }
 
         // Scale all gradients
@@ -215,7 +215,6 @@ public static class GradientClippingHelper
         {
             if (gradients == null)
             {
-                clippedList.Add(null);
                 continue;
             }
 
@@ -237,18 +236,19 @@ public static class GradientClippingHelper
     /// <param name="gradients">The gradient tensor to clip.</param>
     /// <param name="maxNorm">Maximum L2 norm.</param>
     /// <returns>A new tensor with clipped gradients.</returns>
-    public static Tensor<T> ClipByNorm<T>(Tensor<T> gradients, double maxNorm = DefaultMaxNorm)
+    public static Tensor<T>? ClipByNorm<T>(Tensor<T>? gradients, double maxNorm = DefaultMaxNorm)
     {
-        if (gradients == null) return gradients;
+        if (gradients == null) return null;
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        var data = gradients.Data;
+        int length = gradients.Length;
 
         // Compute L2 norm
         T sumSquares = numOps.Zero;
-        for (int i = 0; i < data.Length; i++)
+        for (int i = 0; i < length; i++)
         {
-            sumSquares = numOps.Add(sumSquares, numOps.Multiply(data[i], data[i]));
+            var val = gradients.GetFlatIndexValue(i);
+            sumSquares = numOps.Add(sumSquares, numOps.Multiply(val, val));
         }
         T norm = numOps.Sqrt(sumSquares);
 
@@ -256,16 +256,15 @@ public static class GradientClippingHelper
         T maxNormT = numOps.FromDouble(maxNorm);
         if (!numOps.GreaterThan(norm, maxNormT))
         {
-            return gradients.Clone();
+            return (Tensor<T>)gradients.Clone();
         }
 
         // Scale gradients
         T scale = numOps.Divide(maxNormT, norm);
         var clipped = new Tensor<T>(gradients.Shape);
-        var clippedData = clipped.Data;
-        for (int i = 0; i < data.Length; i++)
+        for (int i = 0; i < length; i++)
         {
-            clippedData[i] = numOps.Multiply(data[i], scale);
+            clipped.SetFlatIndexValue(i, numOps.Multiply(gradients.GetFlatIndexValue(i), scale));
         }
 
         return clipped;
@@ -339,7 +338,7 @@ public static class GradientClippingHelper
     /// without batch normalization.
     /// </para>
     /// </remarks>
-    public static Vector<T> ClipAdaptive<T>(Vector<T> gradients, Vector<T> parameters, double clipRatio = 0.01)
+    public static Vector<T>? ClipAdaptive<T>(Vector<T>? gradients, Vector<T>? parameters, double clipRatio = 0.01)
     {
         if (gradients == null || parameters == null)
             return gradients;

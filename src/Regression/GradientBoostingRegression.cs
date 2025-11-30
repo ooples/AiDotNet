@@ -612,14 +612,14 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         // Create initial prediction constant
-        var initialTensor = new AiDotNet.Autodiff.Tensor<T>(new[] { 1 });
+        var initialTensor = new Tensor<T>(new[] { 1 });
         initialTensor[0] = _initialPrediction;
-        var initialNode = AiDotNet.Autodiff.TensorOperations<T>.Constant(initialTensor, "initial_prediction");
+        var initialNode = TensorOperations<T>.Constant(initialTensor, "initial_prediction");
 
         // Create learning rate constant
-        var lrTensor = new AiDotNet.Autodiff.Tensor<T>(new[] { 1 });
+        var lrTensor = new Tensor<T>(new[] { 1 });
         lrTensor[0] = NumOps.FromDouble(_options.LearningRate);
-        var learningRateNode = AiDotNet.Autodiff.TensorOperations<T>.Constant(lrTensor, "learning_rate");
+        var learningRateNode = TensorOperations<T>.Constant(lrTensor, "learning_rate");
 
         // Export first tree to get input node
         var tempInputNodes = new List<AiDotNet.Autodiff.ComputationNode<T>>();
@@ -636,14 +636,14 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
         {
             var treeInputNodes = new List<AiDotNet.Autodiff.ComputationNode<T>>();
             var treeGraph = _trees[i].ExportComputationGraph(treeInputNodes);
-            treeSumNode = AiDotNet.Autodiff.TensorOperations<T>.Add(treeSumNode, treeGraph);
+            treeSumNode = TensorOperations<T>.Add(treeSumNode, treeGraph);
         }
 
         // Scale by learning rate: learning_rate * sum_of_trees
-        var scaledTreesNode = AiDotNet.Autodiff.TensorOperations<T>.Multiply(learningRateNode, treeSumNode);
+        var scaledTreesNode = TensorOperations<T>.ElementwiseMultiply(learningRateNode, treeSumNode);
 
         // Final prediction: initial_prediction + learning_rate * sum_of_trees
-        return AiDotNet.Autodiff.TensorOperations<T>.Add(initialNode, scaledTreesNode);
+        return TensorOperations<T>.Add(initialNode, scaledTreesNode);
     }
 
     #endregion

@@ -458,7 +458,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         // splitOutputs will contain [meanNode, logvarNode]
         // For deterministic VAE inference (standard practice), return only the mean
         // This avoids randomness and gives the expected value of the latent distribution
-        var meanNode = splitOutputs;  // Split returns the first split
+        var meanNode = splitOutputs[0];  // Get the first split (mean)
 
         return meanNode;
     }

@@ -1,5 +1,5 @@
 using AiDotNet.Autodiff;
-using AiDotNet.Helpers;
+
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -362,7 +362,7 @@ public class GRULayer<T> : LayerBase<T>
         _activation = activation ?? new TanhActivation<T>();
         _recurrentActivation = recurrentActivation ?? new SigmoidActivation<T>();
 
-        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _hiddenSize, NumOps)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _hiddenSize)));
 
         _Wz = InitializeMatrix(_hiddenSize, _inputSize, scale);
         _Wr = InitializeMatrix(_hiddenSize, _inputSize, scale);
@@ -414,7 +414,7 @@ public class GRULayer<T> : LayerBase<T>
         _vectorActivation = vectorActivation ?? new TanhActivation<T>();
         _vectorRecurrentActivation = vectorRecurrentActivation ?? new SigmoidActivation<T>();
 
-        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _hiddenSize, NumOps)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _hiddenSize)));
 
         _Wz = InitializeMatrix(_hiddenSize, _inputSize, scale);
         _Wr = InitializeMatrix(_hiddenSize, _inputSize, scale);

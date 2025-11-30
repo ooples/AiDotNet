@@ -1389,7 +1389,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         var h_t = TensorOperations<T>.ElementwiseMultiply(o_t, c_t_activated);
 
         // Apply layer activation if configured (typically identity for ConvLSTM)
-        var output = ApplyActivationToComputationGraph(h_t);
+        var output = ApplyActivationToGraph(h_t);
 
         return output;
     }

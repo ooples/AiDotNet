@@ -213,7 +213,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
 
         if (_includeTemporalData)
         {
-            sensorHistory.Enqueue(currentReading);
+            sensorHistory!.Enqueue(currentReading);
             if (sensorHistory.Count > _historyWindowSize)
             {
                 sensorHistory.Dequeue();

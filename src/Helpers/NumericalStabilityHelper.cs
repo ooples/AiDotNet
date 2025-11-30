@@ -234,10 +234,9 @@ public static class NumericalStabilityHelper
     {
         if (tensor == null) return false;
 
-        var data = tensor.Data;
-        for (int i = 0; i < data.Length; i++)
+        for (int i = 0; i < tensor.Length; i++)
         {
-            if (IsNaN(data[i])) return true;
+            if (IsNaN(tensor[i])) return true;
         }
         return false;
     }
@@ -252,10 +251,9 @@ public static class NumericalStabilityHelper
     {
         if (tensor == null) return false;
 
-        var data = tensor.Data;
-        for (int i = 0; i < data.Length; i++)
+        for (int i = 0; i < tensor.Length; i++)
         {
-            if (IsInfinity(data[i])) return true;
+            if (IsInfinity(tensor[i])) return true;
         }
         return false;
     }
@@ -278,9 +276,9 @@ public static class NumericalStabilityHelper
     /// <param name="vector">The vector to process.</param>
     /// <param name="replacement">The value to replace NaN with (defaults to zero).</param>
     /// <returns>A new vector with NaN values replaced.</returns>
-    public static Vector<T> ReplaceNaN<T>(Vector<T> vector, T? replacement = default)
+    public static Vector<T>? ReplaceNaN<T>(Vector<T>? vector, T? replacement = default)
     {
-        if (vector == null) return vector;
+        if (vector == null) return null;
 
         var numOps = MathHelper.GetNumericOperations<T>();
         T replaceValue = replacement ?? numOps.Zero;
@@ -300,9 +298,9 @@ public static class NumericalStabilityHelper
     /// <param name="vector">The vector to process.</param>
     /// <param name="replacement">The value to replace infinity with (defaults to zero).</param>
     /// <returns>A new vector with infinite values replaced.</returns>
-    public static Vector<T> ReplaceInfinity<T>(Vector<T> vector, T? replacement = default)
+    public static Vector<T>? ReplaceInfinity<T>(Vector<T>? vector, T? replacement = default)
     {
-        if (vector == null) return vector;
+        if (vector == null) return null;
 
         var numOps = MathHelper.GetNumericOperations<T>();
         T replaceValue = replacement ?? numOps.Zero;
@@ -322,9 +320,9 @@ public static class NumericalStabilityHelper
     /// <param name="vector">The vector to process.</param>
     /// <param name="replacement">The value to replace non-finite values with (defaults to zero).</param>
     /// <returns>A new vector with non-finite values replaced.</returns>
-    public static Vector<T> ReplaceNonFinite<T>(Vector<T> vector, T? replacement = default)
+    public static Vector<T>? ReplaceNonFinite<T>(Vector<T>? vector, T? replacement = default)
     {
-        if (vector == null) return vector;
+        if (vector == null) return null;
 
         var numOps = MathHelper.GetNumericOperations<T>();
         T replaceValue = replacement ?? numOps.Zero;
@@ -349,7 +347,7 @@ public static class NumericalStabilityHelper
     /// This implementation subtracts the maximum value first to prevent overflow.
     /// </para>
     /// </remarks>
-    public static Vector<T> StableSoftmax<T>(Vector<T> logits)
+    public static Vector<T>? StableSoftmax<T>(Vector<T>? logits)
     {
         if (logits == null || logits.Length == 0)
             return logits;
@@ -399,7 +397,7 @@ public static class NumericalStabilityHelper
     /// in cross-entropy loss calculations.
     /// </para>
     /// </remarks>
-    public static Vector<T> StableLogSoftmax<T>(Vector<T> logits)
+    public static Vector<T>? StableLogSoftmax<T>(Vector<T>? logits)
     {
         if (logits == null || logits.Length == 0)
             return logits;

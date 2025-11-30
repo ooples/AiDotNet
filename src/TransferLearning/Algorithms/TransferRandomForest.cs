@@ -5,7 +5,7 @@ using AiDotNet.Regression;
 using AiDotNet.Models.Options;
 using AiDotNet.Regularization;
 using AiDotNet.TransferLearning.FeatureMapping;
-using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Autodiff;
 
 namespace AiDotNet.TransferLearning.Algorithms;
@@ -250,7 +250,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         _baseModel = baseModel;
         _mapper = mapper;
         _targetFeatures = targetFeatures;
-        _numOps = AiDotNet.Helpers.MathHelper.GetNumericOperations<T>();
+        _numOps = MathHelper.GetNumericOperations<T>();
         // Initialize inverse-map reflection method once per process if available
         _inverseMapMethod ??= _mapper.GetType().GetMethod("InverseMapFeatureName", new[] { typeof(string) });
     }

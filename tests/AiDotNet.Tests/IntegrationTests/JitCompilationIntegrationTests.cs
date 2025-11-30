@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using AiDotNet;
 using AiDotNet.Regression;

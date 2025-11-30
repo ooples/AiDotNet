@@ -1068,8 +1068,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
 
         // Create symbolic input node with batch dimension
         // Input shape: [batch, height, width, channels] (NHWC format)
-        var inputShape = InputShape[0];
-        var symbolicInput = new Tensor<T>(new int[] { 1, inputShape[0], inputShape[1], inputShape[2] });
+        var symbolicInput = new Tensor<T>(new int[] { 1, InputShape[0], InputShape[1], InputShape[2] });
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "subpixel_input");
         inputNodes.Add(inputNode);
 
@@ -1080,7 +1079,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         // Step 1: Apply 2D convolution
         // Conv2D expects NCHW format, so we may need to transpose if our layer uses NHWC
         // For simplicity, we assume the input is compatible with Conv2D operation
-        var convOutput = TensorOperations<T>.Conv2D(inputNode, kernelNode, stride: 1, padding: _kernelSize / 2);
+        var convOutput = TensorOperations<T>.Conv2D(inputNode, kernelNode, stride: new[] { 1, 1 }, padding: new[] { _kernelSize / 2, _kernelSize / 2 });
 
         // Step 2: Add bias (broadcast across spatial dimensions)
         var withBias = TensorOperations<T>.Add(convOutput, biasNode);

@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -1167,7 +1169,7 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         int numFeatures = GetMaxFeatureIndexFromTree(Root) + 1;
 
         // Create input variable node
-        var inputTensor = new Autodiff.Tensor<T>(new[] { numFeatures });
+        var inputTensor = new Tensor<T>(new[] { numFeatures });
         var input = Autodiff.TensorOperations<T>.Variable(inputTensor, "input");
         inputNodes.Add(input);
 
@@ -1205,7 +1207,7 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         if (node.IsLeaf)
         {
             // Leaf node: return constant prediction value
-            var leafTensor = new Autodiff.Tensor<T>(new[] { 1 });
+            var leafTensor = new Tensor<T>(new[] { 1 });
             leafTensor[0] = node.Prediction;
             return Autodiff.TensorOperations<T>.Constant(leafTensor, $"leaf_{node.GetHashCode()}");
         }

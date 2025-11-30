@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace AiDotNet.Inference.PagedAttention;
 
 /// <summary>
@@ -75,8 +77,8 @@ public class PagedAttentionKernel<T>
 
         // Allocate working memory
         var scores = new float[seqLen];
-        var keyBuffer = new float[numHeads * headDim];
-        var valueBuffer = new float[numHeads * headDim];
+        var keyBuffer = new T[numHeads * headDim];
+        var valueBuffer = new T[numHeads * headDim];
 
         // Process each head
         for (int head = 0; head < numHeads; head++)
@@ -96,7 +98,7 @@ public class PagedAttentionKernel<T>
                 int keyOffset = head * headDim;
                 for (int d = 0; d < headDim; d++)
                 {
-                    score += ToFloat(query[queryOffset + d]) * keyBuffer[keyOffset + d];
+                    score += query[queryOffset + d] * ToFloat(keyBuffer[keyOffset + d]);
                 }
                 score *= scale;
 
@@ -138,7 +140,7 @@ public class PagedAttentionKernel<T>
                 int valueOffset = head * headDim;
                 for (int d = 0; d < headDim; d++)
                 {
-                    headOutput[d] += scores[pos] * valueBuffer[valueOffset + d];
+                    headOutput[d] += scores[pos] * ToFloat(valueBuffer[valueOffset + d]);
                 }
             }
 
@@ -146,7 +148,7 @@ public class PagedAttentionKernel<T>
             int outputOffset = head * headDim;
             for (int d = 0; d < headDim; d++)
             {
-                output[outputOffset + d] = FromFloat(headOutput[d]);
+                output[outputOffset + d] = headOutput[d];
             }
         }
     }
@@ -211,11 +213,16 @@ public class PagedAttentionKernel<T>
         var sumExps = new float[numHeads];
         var accumulators = new float[numHeads * headDim];
 
+#if NET5_0_OR_GREATER
         Array.Fill(maxScores, float.NegativeInfinity);
         Array.Fill(sumExps, 0f);
+#else
+        ArrayPolyfill.Fill(maxScores, float.NegativeInfinity);
+        ArrayPolyfill.Fill(sumExps, 0f);
+#endif
 
-        var keyBuffer = new float[numHeads * headDim];
-        var valueBuffer = new float[numHeads * headDim];
+        var keyBuffer = new T[numHeads * headDim];
+        var valueBuffer = new T[numHeads * headDim];
 
         // Process block by block (tiled computation)
         for (int blockIdx = 0; blockIdx < numBlocks; blockIdx++)
@@ -242,7 +249,7 @@ public class PagedAttentionKernel<T>
                     float score = 0;
                     for (int d = 0; d < headDim; d++)
                     {
-                        score += ToFloat(query[offset + d]) * keyBuffer[offset + d];
+                        score += query[offset + d] * ToFloat(keyBuffer[offset + d]);
                     }
                     score *= scale;
 
@@ -255,7 +262,7 @@ public class PagedAttentionKernel<T>
                     // Update accumulator
                     for (int d = 0; d < headDim; d++)
                     {
-                        accumulators[offset + d] = accumulators[offset + d] * expOld + expNew * valueBuffer[offset + d];
+                        accumulators[offset + d] = accumulators[offset + d] * expOld + expNew * ToFloat(valueBuffer[offset + d]);
                     }
 
                     // Update sum and max
@@ -273,7 +280,7 @@ public class PagedAttentionKernel<T>
 
             for (int d = 0; d < headDim; d++)
             {
-                output[offset + d] = FromFloat(accumulators[offset + d] * invSum);
+                output[offset + d] = accumulators[offset + d] * invSum;
             }
         }
     }
@@ -377,11 +384,11 @@ public class PagedAttentionKernel<T>
     private static float ToFloat(T value)
     {
         if (typeof(T) == typeof(float))
-            return (float)(object)value;
+            return (float)(object)value!;
         if (typeof(T) == typeof(double))
-            return (float)(double)(object)value;
+            return (float)(double)(object)value!;
         if (typeof(T) == typeof(Half))
-            return (float)(Half)(object)value;
+            return (float)(Half)(object)value!;
 
         return Convert.ToSingle(value);
     }
@@ -395,13 +402,19 @@ public class PagedAttentionKernel<T>
         if (typeof(T) == typeof(Half))
             return (T)(object)(Half)value;
 
-        return (T)Convert.ChangeType(value, typeof(T));
+        return (T)Convert.ChangeType(value, typeof(T))!;
     }
 
     private static ReadOnlySpan<T> ConvertSpan(ReadOnlySpan<float> source)
     {
         if (typeof(T) == typeof(float))
-            return System.Runtime.InteropServices.MemoryMarshal.Cast<float, T>(source);
+        {
+            // Safe: We've verified T == float at runtime
+            // Reinterpret the array using object cast
+            var floatArray = source.ToArray();
+            var tArray = (T[])(object)floatArray;
+            return new ReadOnlySpan<T>(tArray);
+        }
 
         var result = new T[source.Length];
         for (int i = 0; i < source.Length; i++)

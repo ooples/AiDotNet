@@ -1867,7 +1867,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Apply layer activation
-        output = ApplyActivationToComputationGraph(output!);
+        output = ApplyActivationToGraph(output!);
 
         return output;
     }

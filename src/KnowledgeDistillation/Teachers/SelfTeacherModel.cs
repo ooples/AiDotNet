@@ -94,9 +94,16 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     {
         if (_underlyingModel != null)
         {
-            var inputTensor = new Tensor<T>(input.ToArray());
-            var outputTensor = _underlyingModel.Forward(inputTensor);
-            return new Vector<T>(outputTensor.Data);
+            // IJitCompilable doesn't have execution methods - need to cast to a model interface
+            // that has Predict. Typically IJitCompilable models also implement IModel.
+            if (_underlyingModel is IModel<Vector<T>, Vector<T>, ModelMetadata<T>> model)
+            {
+                return model.Predict(input);
+            }
+
+            throw new InvalidOperationException(
+                "Underlying model must implement IModel<Vector<T>, Vector<T>, ModelMetadata<T>> to execute predictions. " +
+                "IJitCompilable only provides computation graph export for JIT compilation.");
         }
 
         throw new InvalidOperationException(

@@ -581,8 +581,8 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        var weightsNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _projectionWeights.Rows, _projectionWeights.Columns }, _projectionWeights.ToArray()), "weights");
-        var biasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _projectionBias.Length }, _projectionBias.ToArray()), "bias");
+        var weightsNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _projectionWeights.Rows, _projectionWeights.Columns }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_projectionWeights.ToArray())), "weights");
+        var biasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _projectionBias.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_projectionBias.ToArray())), "bias");
 
         var output = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
         return TensorOperations<T>.Add(output, biasNode);

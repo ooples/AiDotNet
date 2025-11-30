@@ -1251,7 +1251,7 @@ public class CodeGenerator
             typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>),
             typeof(ComputationNode<T>), typeof(double?), typeof(bool), typeof(double));
 
-        var maskInput = inputs.Length > 3
+        Expression maskInput = inputs.Length > 3
             ? inputs[3]
             : Expression.Constant(null, typeof(Tensor<T>));
 

@@ -92,7 +92,6 @@ public static class MemoryTracker
         }
 
         var process = Process.GetCurrentProcess();
-        var gcInfo = GC.GetGCMemoryInfo();
 
         var snapshot = new MemorySnapshot
         {
@@ -105,11 +104,19 @@ public static class MemoryTracker
             Gen0Collections = GC.CollectionCount(0),
             Gen1Collections = GC.CollectionCount(1),
             Gen2Collections = GC.CollectionCount(2),
-            HeapSizeBytes = gcInfo.HeapSizeBytes,
-            FragmentedBytes = gcInfo.FragmentedBytes,
-            PromotedBytes = gcInfo.PromotedBytes,
-            PinnedObjectsCount = gcInfo.PinnedObjectsCount,
-            FinalizationPendingCount = gcInfo.FinalizationPendingCount
+#if NET5_0_OR_GREATER
+            HeapSizeBytes = GC.GetGCMemoryInfo().HeapSizeBytes,
+            FragmentedBytes = GC.GetGCMemoryInfo().FragmentedBytes,
+            PromotedBytes = GC.GetGCMemoryInfo().PromotedBytes,
+            PinnedObjectsCount = GC.GetGCMemoryInfo().PinnedObjectsCount,
+            FinalizationPendingCount = GC.GetGCMemoryInfo().FinalizationPendingCount
+#else
+            HeapSizeBytes = GC.GetTotalMemory(false),
+            FragmentedBytes = 0,
+            PromotedBytes = 0,
+            PinnedObjectsCount = 0,
+            FinalizationPendingCount = 0
+#endif
         };
 
         if (_enabled)
@@ -147,6 +154,7 @@ public static class MemoryTracker
     /// </summary>
     public static MemoryPressureLevel GetPressureLevel()
     {
+#if NET5_0_OR_GREATER
         var gcInfo = GC.GetGCMemoryInfo();
         double usagePercent = (double)gcInfo.HeapSizeBytes / gcInfo.TotalAvailableMemoryBytes * 100;
 
@@ -157,6 +165,17 @@ public static class MemoryTracker
             < 90 => MemoryPressureLevel.High,
             _ => MemoryPressureLevel.Critical
         };
+#else
+        // In .NET Framework, use a simple heuristic based on available physical memory
+        var totalMemory = GC.GetTotalMemory(false);
+        // Estimate based on typical application memory limits
+        double usagePercent = (double)totalMemory / (2L * 1024 * 1024 * 1024) * 100; // Assume 2GB limit
+
+        if (usagePercent < 50) return MemoryPressureLevel.Low;
+        if (usagePercent < 75) return MemoryPressureLevel.Medium;
+        if (usagePercent < 90) return MemoryPressureLevel.High;
+        return MemoryPressureLevel.Critical;
+#endif
     }
 
     /// <summary>

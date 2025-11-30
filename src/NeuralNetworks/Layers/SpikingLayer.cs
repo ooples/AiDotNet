@@ -1635,7 +1635,7 @@ public class SpikingLayer<T> : LayerBase<T>
         var spikes = TensorOperations<T>.SurrogateSpike(membranePotential, threshold, surrogateBeta);
 
         // Apply activation if present
-        var output = ApplyActivationToComputationGraph(spikes);
+        var output = ApplyActivationToGraph(spikes);
 
         return output;
     }

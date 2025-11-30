@@ -1,5 +1,5 @@
 using AiDotNet.Autodiff;
-using AiDotNet.Helpers;
+
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -387,7 +387,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Initialize weights with random values scaled by Xavier initialization
         // Initialize biases to zero using vectorized operation
 
-        T scaleT = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputShape[0] + OutputShape[0]), NumOps));
+        T scaleT = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputShape[0] + OutputShape[0])));
         var scale = Convert.ToDouble(scaleT);
 
         // Initialize weights (still requires loop for individual random values)

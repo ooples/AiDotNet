@@ -1,4 +1,6 @@
 using Xunit;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.KnowledgeDistillation;
 using AiDotNet.KnowledgeDistillation.Teachers;
 using AiDotNet.Autodiff;
@@ -332,7 +334,9 @@ public class KnowledgeDistillationJitCompilationTests
             _outputDim = outputDim;
         }
 
-        public override Vector<double> Predict(Vector<double> input)
+        public override int OutputDimension => _outputDim;
+
+        public override Vector<double> GetLogits(Vector<double> input)
         {
             return new Vector<double>(new double[_outputDim]);
         }
@@ -363,7 +367,9 @@ public class KnowledgeDistillationJitCompilationTests
             _outputDim = outputDim;
         }
 
-        public Vector<double> Predict(Vector<double> input)
+        public int OutputDimension => _outputDim;
+
+        public Vector<double> GetLogits(Vector<double> input)
         {
             return new Vector<double>(new double[_outputDim]);
         }

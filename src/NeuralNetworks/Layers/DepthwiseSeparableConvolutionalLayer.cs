@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -473,8 +473,8 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        T depthwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_kernelSize * _kernelSize), NumOps));
-        T pointwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_inputDepth), NumOps));
+        T depthwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_kernelSize * _kernelSize)));
+        T pointwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_inputDepth)));
 
         InitializeTensor(_depthwiseKernels, depthwiseScale);
         InitializeTensor(_pointwiseKernels, pointwiseScale);

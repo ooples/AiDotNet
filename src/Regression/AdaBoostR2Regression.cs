@@ -675,10 +675,10 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         // Create weighted first tree contribution
-        var firstWeightTensor = new AiDotNet.Autodiff.Tensor<T>(new[] { 1 });
+        var firstWeightTensor = new Tensor<T>(new[] { 1 });
         firstWeightTensor[0] = firstWeight;
-        var firstWeightNode = AiDotNet.Autodiff.TensorOperations<T>.Constant(firstWeightTensor, "weight_0");
-        var weightedSum = AiDotNet.Autodiff.TensorOperations<T>.Multiply(firstWeightNode, firstTreeGraph);
+        var firstWeightNode = TensorOperations<T>.Constant(firstWeightTensor, "weight_0");
+        var weightedSum = TensorOperations<T>.ElementwiseMultiply(firstWeightNode, firstTreeGraph);
 
         // Add weighted contributions from remaining trees
         for (int i = 1; i < _ensemble.Count; i++)
@@ -688,23 +688,23 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
             var treeGraph = tree.ExportComputationGraph(treeInputNodes);
 
             // Create weight constant
-            var weightTensor = new AiDotNet.Autodiff.Tensor<T>(new[] { 1 });
+            var weightTensor = new Tensor<T>(new[] { 1 });
             weightTensor[0] = weight;
-            var weightNode = AiDotNet.Autodiff.TensorOperations<T>.Constant(weightTensor, $"weight_{i}");
+            var weightNode = TensorOperations<T>.Constant(weightTensor, $"weight_{i}");
 
             // weighted contribution: weight * tree_output
-            var weightedTree = AiDotNet.Autodiff.TensorOperations<T>.Multiply(weightNode, treeGraph);
+            var weightedTree = TensorOperations<T>.ElementwiseMultiply(weightNode, treeGraph);
 
             // Accumulate
-            weightedSum = AiDotNet.Autodiff.TensorOperations<T>.Add(weightedSum, weightedTree);
+            weightedSum = TensorOperations<T>.Add(weightedSum, weightedTree);
         }
 
         // Normalize by total weight: weighted_sum / total_weight
-        var totalWeightTensor = new AiDotNet.Autodiff.Tensor<T>(new[] { 1 });
+        var totalWeightTensor = new Tensor<T>(new[] { 1 });
         totalWeightTensor[0] = totalWeight;
-        var totalWeightNode = AiDotNet.Autodiff.TensorOperations<T>.Constant(totalWeightTensor, "total_weight");
+        var totalWeightNode = TensorOperations<T>.Constant(totalWeightTensor, "total_weight");
 
-        return AiDotNet.Autodiff.TensorOperations<T>.Divide(weightedSum, totalWeightNode);
+        return TensorOperations<T>.Divide(weightedSum, totalWeightNode);
     }
 
     #endregion

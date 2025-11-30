@@ -168,10 +168,15 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 
         if (_jitCompilableModel != null)
         {
-            // Use JIT-compilable model for inference
-            var inputTensor = new Tensor<T>(input.ToArray());
-            var outputTensor = _jitCompilableModel.Forward(inputTensor);
-            return new Vector<T>(outputTensor.Data);
+            // IJitCompilable doesn't have execution methods - need to cast to a model interface
+            if (_jitCompilableModel is IModel<Vector<T>, Vector<T>, ModelMetadata<T>> model)
+            {
+                return model.Predict(input);
+            }
+
+            throw new InvalidOperationException(
+                "Underlying model must implement IModel<Vector<T>, Vector<T>, ModelMetadata<T>> to execute predictions. " +
+                "IJitCompilable only provides computation graph export for JIT compilation.");
         }
 
         if (_teacherForward == null)

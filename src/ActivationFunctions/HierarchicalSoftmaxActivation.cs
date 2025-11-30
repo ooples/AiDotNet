@@ -281,7 +281,7 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
             throw new ArgumentNullException(nameof(input));
 
         // Wrap internal weights in a ComputationNode for JIT compilation
-        var weightsNode = new ComputationNode<T>(NodeWeightsTensor, requiresGrad: true);
+        var weightsNode = new ComputationNode<T>(NodeWeightsTensor, requiresGradient: true);
         return TensorOperations<T>.HierarchicalSoftmax(input, weightsNode, _numClasses);
     }
 

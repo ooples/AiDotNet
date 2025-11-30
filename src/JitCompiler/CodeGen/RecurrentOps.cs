@@ -1,6 +1,4 @@
-using AiDotNet.Helpers;
-using AiDotNet.Mathematics;
-using AiDotNet.Mathematics.LinearAlgebra;
+
 
 namespace AiDotNet.JitCompiler.CodeGen;
 
@@ -228,7 +226,7 @@ public static class RecurrentOps
 
     private static Tensor<T> MatrixMultiply<T>(Tensor<T> a, Tensor<T> b)
     {
-        return Tensor<T>.MatrixMultiply(a, b);
+        return a.MatrixMultiply(b);
     }
 
     private static Tensor<T> Transpose<T>(Tensor<T> a)
@@ -238,6 +236,6 @@ public static class RecurrentOps
 
     private static Tensor<T> Add<T>(Tensor<T> a, Tensor<T> b)
     {
-        return Tensor<T>.Add(a, b);
+        return a.Add(b);
     }
 }

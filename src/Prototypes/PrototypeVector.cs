@@ -1,5 +1,6 @@
 using AiDotNet.Engines;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Prototypes;
 
@@ -187,7 +188,7 @@ public class PrototypeVector<T>
     public static PrototypeVector<T> Ones(int length)
     {
         var vec = new PrototypeVector<T>(length);
-        var numOps = Helpers.MathHelper.GetNumericOperations<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < length; i++)
         {
             vec[i] = numOps.One;

@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using System;
 using System.Collections.Generic;
 using AiDotNet.LinearAlgebra;

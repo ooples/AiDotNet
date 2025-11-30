@@ -32,7 +32,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 public class SpeculativeDecoder<T>
 {
     private readonly IDraftModel<T> _draftModel;
-    private readonly Func<ReadOnlySpan<int>, float[][]> _targetForward;
+    private readonly Func<int[], float[][]> _targetForward;
     private readonly SpeculativeDecodingConfig _config;
     private readonly Random _random;
 
@@ -70,7 +70,7 @@ public class SpeculativeDecoder<T>
     /// <param name="config">Configuration options.</param>
     public SpeculativeDecoder(
         IDraftModel<T> draftModel,
-        Func<ReadOnlySpan<int>, float[][]> targetForward,
+        Func<int[], float[][]> targetForward,
         SpeculativeDecodingConfig? config = null)
     {
         _draftModel = draftModel ?? throw new ArgumentNullException(nameof(draftModel));

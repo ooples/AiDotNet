@@ -77,7 +77,7 @@ public class SIMDStats
     public SIMDStats()
     {
         HardwareAccelerated = Vector.IsHardwareAccelerated;
-        VectorSize = Vector.IsHardwareAccelerated ? Vector<float>.Count : 1;
+        VectorSize = Vector.IsHardwareAccelerated ? System.Numerics.Vector<float>.Count : 1;
     }
 
     /// <summary>

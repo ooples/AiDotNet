@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -675,7 +675,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         }
 
         T batchSizeDivisor = NumOps.FromDouble(batchSize);
-        return mean.Transform(x => NumericalStabilityHelper.SafeDiv(x, batchSizeDivisor, NumOps));
+        return mean.Transform(x => NumericalStabilityHelper.SafeDiv(x, batchSizeDivisor));
     }
 
     /// <summary>
@@ -724,7 +724,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         }
 
         T batchSizeDivisor = NumOps.FromDouble(batchSize);
-        return variance.Transform(x => NumericalStabilityHelper.SafeDiv(x, batchSizeDivisor, NumOps));
+        return variance.Transform(x => NumericalStabilityHelper.SafeDiv(x, batchSizeDivisor));
     }
 
     /// <summary>
@@ -1065,14 +1065,14 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         inputNodes.Add(inputNode);
 
         // Create constant nodes for gamma (scale) and beta (shift) parameters
-        var gammaTensor = new Tensor<T>(new[] { _gamma.Length }, _gamma.ToArray());
-        var betaTensor = new Tensor<T>(new[] { _beta.Length }, _beta.ToArray());
+        var gammaTensor = new Tensor<T>(new[] { _gamma.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_gamma.ToArray()));
+        var betaTensor = new Tensor<T>(new[] { _beta.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_beta.ToArray()));
         var gammaNode = TensorOperations<T>.Constant(gammaTensor, "gamma");
         var betaNode = TensorOperations<T>.Constant(betaTensor, "beta");
 
         // Create tensors for running statistics (used during inference)
-        var runningMeanTensor = new Tensor<T>(new[] { _runningMean.Length }, _runningMean.ToArray());
-        var runningVarTensor = new Tensor<T>(new[] { _runningVariance.Length }, _runningVariance.ToArray());
+        var runningMeanTensor = new Tensor<T>(new[] { _runningMean.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_runningMean.ToArray()));
+        var runningVarTensor = new Tensor<T>(new[] { _runningVariance.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_runningVariance.ToArray()));
 
         // Convert epsilon from T to double for BatchNorm call
         var epsilonDouble = NumOps.ToDouble(_epsilon);

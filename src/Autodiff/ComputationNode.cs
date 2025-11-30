@@ -1,5 +1,5 @@
 using AiDotNet.Enums;
-using AiDotNet.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Autodiff;
 

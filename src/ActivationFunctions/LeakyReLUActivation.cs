@@ -31,6 +31,11 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     private readonly T _alpha;
 
     /// <summary>
+    /// Gets the slope coefficient for negative input values.
+    /// </summary>
+    public T Alpha => _alpha;
+
+    /// <summary>
     /// Initializes a new instance of the Leaky ReLU activation function with the specified alpha parameter.
     /// </summary>
     /// <param name="alpha">
@@ -39,11 +44,11 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The alpha parameter determines how much of the negative inputs "leak through":
-    /// 
+    ///
     /// - With alpha = 0.01 (default), negative inputs are multiplied by 0.01 (reduced to 1% of their value)
     /// - With alpha = 0.1, negative inputs are multiplied by 0.1 (reduced to 10% of their value)
     /// - With alpha = 0.001, negative inputs are multiplied by 0.001 (reduced to 0.1% of their value)
-    /// 
+    ///
     /// A larger alpha means more information flows through for negative inputs, which can help with learning
     /// but might make the network less focused on positive features. The default value of 0.01 works well
     /// for most applications, but you can adjust it based on your specific needs.

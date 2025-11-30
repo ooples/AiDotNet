@@ -183,9 +183,8 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
                 NumOps.Negate(
                     NumericalStabilityHelper.SafeLog(
                         NumOps.Negate(
-                            NumericalStabilityHelper.SafeLog(u, NumOps)
-                        ),
-                        NumOps
+                            NumericalStabilityHelper.SafeLog(u)
+                        )
                     )
                 ),
                 _temperature

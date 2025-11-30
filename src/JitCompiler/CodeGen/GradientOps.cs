@@ -711,7 +711,7 @@ public static class GradientOps
         var result = gradOutputs[0];
         for (int i = 1; i < gradOutputs.Length; i++)
         {
-            result = Tensor<T>.Concat(new[] { result, gradOutputs[i] }, axis);
+            result = Tensor<T>.Concatenate(new[] { result, gradOutputs[i] }, axis);
         }
         return result;
     }
@@ -933,7 +933,7 @@ public static class GradientOps
             var inner = numOps.Multiply(sqrt2OverPi, numOps.Add(x, numOps.Multiply(k, xCubed)));
 
             // tanh(inner)
-            var tanhInner = numOps.Tanh(inner);
+            var tanhInner = numOps.FromDouble(Math.Tanh(numOps.ToDouble(inner)));
 
             // sech^2(inner) = 1 - tanh^2(inner)
             var sech2 = numOps.Subtract(numOps.FromDouble(1.0),
@@ -2023,7 +2023,7 @@ public static class GradientOps
                 T oGate = gatesData[oIdx];
 
                 T cVal = cTData[idx];
-                T tanhC = numOps.Tanh(cVal);
+                T tanhC = numOps.FromDouble(Math.Tanh(numOps.ToDouble(cVal)));
 
                 // grad_o = grad_h * tanh(c_t) * o * (1 - o)
                 T gradOSigmoid = numOps.Multiply(oGate, numOps.Subtract(numOps.FromDouble(1), oGate));
@@ -2289,22 +2289,22 @@ public static class GradientOps
         if (shape.Length == 2)
         {
             // [batch, features] -> [features]
-            int batchSize = shape[0];
+            int batch2D = shape[0];
             int features = shape[1];
-            var result = new T[features];
-            var data = input.ToArray();
+            var result2D = new T[features];
+            var data2D = input.ToArray();
 
             for (int f = 0; f < features; f++)
             {
                 T sum = numOps.Zero;
-                for (int n = 0; n < batchSize; n++)
+                for (int n = 0; n < batch2D; n++)
                 {
-                    sum = numOps.Add(sum, data[n * features + f]);
+                    sum = numOps.Add(sum, data2D[n * features + f]);
                 }
-                result[f] = sum;
+                result2D[f] = sum;
             }
 
-            return new Tensor<T>(new int[] { features }, new Vector<T>(result));
+            return new Tensor<T>(new int[] { features }, new Vector<T>(result2D));
         }
 
         // For N-dimensional tensors (N >= 3), sum over all dimensions except channels (axis 1)

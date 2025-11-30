@@ -1,5 +1,7 @@
+#if NET6_0_OR_GREATER
 using System.Runtime.Intrinsics.X86;
 using System.Runtime.Intrinsics.Arm;
+#endif
 
 namespace AiDotNet.JitCompiler.CodeGen;
 
@@ -64,6 +66,7 @@ public class SIMDCapabilities
     {
         var caps = new SIMDCapabilities();
 
+#if NET6_0_OR_GREATER
         // Detect x86/x64 SIMD capabilities using intrinsics
         caps.HasSSE = Sse.IsSupported;
         caps.HasAVX = Avx.IsSupported;
@@ -83,6 +86,16 @@ public class SIMDCapabilities
             caps.MaxVectorWidth = 16; // 128 bits = 16 bytes
         else
             caps.MaxVectorWidth = 0;
+#else
+        // .NET Framework doesn't have intrinsics - disable SIMD acceleration
+        caps.HasSSE = false;
+        caps.HasAVX = false;
+        caps.HasAVX2 = false;
+        caps.HasAVX512 = false;
+        caps.HasFMA = false;
+        caps.HasNEON = false;
+        caps.MaxVectorWidth = 0;
+#endif
 
         return caps;
     }

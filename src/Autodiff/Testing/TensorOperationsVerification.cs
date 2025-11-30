@@ -403,7 +403,7 @@ public class TensorOperationsVerification<T>
         var input1 = CreateTestTensor(inputShape, -2.0, 2.0);
         // Avoid division by zero with values away from zero
         var input2 = CreateTestTensor(inputShape, 0.5, 2.0, seedOffset: 100);
-        return VerifyBinaryOperation(TensorOperations<T>.ElementwiseDivide, input1, input2, "ElementwiseDivide");
+        return VerifyBinaryOperation(TensorOperations<T>.Divide, input1, input2, "ElementwiseDivide");
     }
 
     #endregion

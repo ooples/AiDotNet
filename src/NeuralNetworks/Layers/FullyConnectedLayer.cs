@@ -913,8 +913,8 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        var weightsNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _weights.Rows, _weights.Columns }, _weights.ToArray()), "weights");
-        var biasesNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _biases.Length }, _biases.ToArray()), "biases");
+        var weightsNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _weights.Rows, _weights.Columns }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_weights.ToArray())), "weights");
+        var biasesNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _biases.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_biases.ToArray())), "biases");
 
         var matmulNode = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
         var addNode = TensorOperations<T>.Add(matmulNode, biasesNode);

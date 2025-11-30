@@ -549,5 +549,30 @@ public enum OperationType
     /// Forward: quantized = round(x / scale) * scale
     /// Backward: gradient passes through unchanged (STE)
     /// </summary>
-    FakeQuantization
+    FakeQuantization,
+
+    /// <summary>
+    /// Custom user-defined operation for extensibility.
+    /// </summary>
+    Custom,
+
+    /// <summary>
+    /// Dropout regularization operation - randomly zeros elements during training.
+    /// </summary>
+    Dropout,
+
+    /// <summary>
+    /// Gather operation - selects elements from a tensor using indices.
+    /// </summary>
+    Gather,
+
+    /// <summary>
+    /// Broadcast operation - expands tensor dimensions to match target shape.
+    /// </summary>
+    Broadcast,
+
+    /// <summary>
+    /// Generic attention mechanism operation.
+    /// </summary>
+    Attention
 }

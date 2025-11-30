@@ -606,15 +606,15 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         {
             var treeInputNodes = new List<AiDotNet.Autodiff.ComputationNode<T>>();
             var treeGraph = _trees[i].ExportComputationGraph(treeInputNodes);
-            sumNode = AiDotNet.Autodiff.TensorOperations<T>.Add(sumNode, treeGraph);
+            sumNode = TensorOperations<T>.Add(sumNode, treeGraph);
         }
 
         // Divide by number of trees to get average
-        var numTreesTensor = new AiDotNet.Autodiff.Tensor<T>(new[] { 1 });
+        var numTreesTensor = new Tensor<T>(new[] { 1 });
         numTreesTensor[0] = NumOps.FromDouble(_trees.Count);
-        var numTreesNode = AiDotNet.Autodiff.TensorOperations<T>.Constant(numTreesTensor, "num_trees");
+        var numTreesNode = TensorOperations<T>.Constant(numTreesTensor, "num_trees");
 
-        return AiDotNet.Autodiff.TensorOperations<T>.Divide(sumNode, numTreesNode);
+        return TensorOperations<T>.Divide(sumNode, numTreesNode);
     }
 
     #endregion

@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -231,7 +231,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // === Vectorized Weight Initialization (Phase B: US-GPU-015) ===
         // Initialize embedding matrix with small random values
-        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(1.0), NumOps.FromDouble(_embeddingMatrix.Columns), NumOps));
+        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(1.0), NumOps.FromDouble(_embeddingMatrix.Columns)));
 
         for (int i = 0; i < _embeddingMatrix.Rows; i++)
         {
@@ -591,7 +591,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Average over all embedding values and scale by 0.5 (standard L2 regularization)
         int totalElements = _embeddingMatrix.Rows * _embeddingMatrix.Columns;
-        T regularizationLoss = NumericalStabilityHelper.SafeDiv(sumSquaredNorms, NumOps.FromDouble(totalElements * 2), NumOps);
+        T regularizationLoss = NumericalStabilityHelper.SafeDiv(sumSquaredNorms, NumOps.FromDouble(totalElements * 2));
 
         // Store unweighted loss for diagnostics
         _lastEmbeddingRegularizationLoss = regularizationLoss;
@@ -650,7 +650,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         if (count > 0)
         {
-            T avgMagnitude = NumericalStabilityHelper.SafeDiv(sumMagnitudes, NumOps.FromDouble(count), NumOps);
+            T avgMagnitude = NumericalStabilityHelper.SafeDiv(sumMagnitudes, NumOps.FromDouble(count));
             diagnostics["AverageEmbeddingMagnitude"] = avgMagnitude?.ToString() ?? "0";
         }
 

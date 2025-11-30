@@ -652,7 +652,7 @@ public class OperationFusionPass : IOptimizationPass
                     InputIds = chain[0].InputIds,
                     OutputType = chain[^1].OutputType,
                     OutputShape = chain[^1].OutputShape,
-                    Operations = chainOps
+                    OperationNames = chainOps
                 };
 
                 operations[i] = fusedOp;

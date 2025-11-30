@@ -1195,10 +1195,10 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         inputNodes.Add(inputNode);
 
         var kernelNode = TensorOperations<T>.Constant(_kernels, "kernel");
-        var biasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _outputDepth }, _biases.ToArray()), "bias");
+        var biasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _outputDepth }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_biases.ToArray())), "bias");
 
         var dilatedConvNode = TensorOperations<T>.DilatedConv2D(inputNode, kernelNode, biasNode,
-            stride: _stride, padding: _padding, dilation: _dilation);
+            stride: new[] { _stride, _stride }, padding: new[] { _padding, _padding }, dilation: new[] { _dilation, _dilation });
 
         if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
         {

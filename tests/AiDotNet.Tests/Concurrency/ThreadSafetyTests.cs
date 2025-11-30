@@ -1,5 +1,6 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Engines;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
 using System;

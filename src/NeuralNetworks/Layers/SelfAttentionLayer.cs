@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -411,7 +411,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var attentionScores = queries.Multiply(keys.Reshape(batchSize, sequenceLength, _headDimension, _headCount));
         T scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_headDimension));
-        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor, NumOps);
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
         attentionScores = attentionScores.Multiply(scaleValue);
 
         var softmaxActivation = new SoftmaxActivation<T>();

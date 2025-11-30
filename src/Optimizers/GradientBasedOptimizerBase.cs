@@ -1,5 +1,5 @@
 using AiDotNet.Engines;
-using AiDotNet.Helpers;
+
 using AiDotNet.MixedPrecision;
 using AiDotNet.Models.Options;
 
@@ -489,8 +489,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         return GradientOptions.GradientClippingMethod switch
         {
-            GradientClippingMethod.ByNorm => GradientClippingHelper.ClipByNorm(gradient, GradientOptions.MaxGradientNorm),
-            GradientClippingMethod.ByValue => GradientClippingHelper.ClipByValue(gradient, GradientOptions.MaxGradientValue),
+            GradientClippingMethod.ByNorm => GradientClippingHelper.ClipByNorm(gradient, GradientOptions.MaxGradientNorm) ?? gradient,
+            GradientClippingMethod.ByValue => GradientClippingHelper.ClipByValue(gradient, GradientOptions.MaxGradientValue) ?? gradient,
             _ => gradient
         };
     }

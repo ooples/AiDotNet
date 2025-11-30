@@ -999,10 +999,10 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        var linearWeightsNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _linearWeights.Rows, _linearWeights.Columns }, _linearWeights.ToArray()), "linear_weights");
-        var gateWeightsNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _gateWeights.Rows, _gateWeights.Columns }, _gateWeights.ToArray()), "gate_weights");
-        var linearBiasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _linearBias.Length }, _linearBias.ToArray()), "linear_bias");
-        var gateBiasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _gateBias.Length }, _gateBias.ToArray()), "gate_bias");
+        var linearWeightsNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _linearWeights.Rows, _linearWeights.Columns }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_linearWeights.ToArray())), "linear_weights");
+        var gateWeightsNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _gateWeights.Rows, _gateWeights.Columns }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_gateWeights.ToArray())), "gate_weights");
+        var linearBiasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _linearBias.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_linearBias.ToArray())), "linear_bias");
+        var gateBiasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _gateBias.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_gateBias.ToArray())), "gate_bias");
 
         var linearOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(inputNode, linearWeightsNode), linearBiasNode);
         var gateOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(inputNode, gateWeightsNode), gateBiasNode);

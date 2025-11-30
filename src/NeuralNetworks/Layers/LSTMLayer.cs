@@ -1,5 +1,5 @@
 using AiDotNet.Autodiff;
-using AiDotNet.Helpers;
+
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -727,7 +727,7 @@ public class LSTMLayer<T> : LayerBase<T>
     private void InitializeWeights()
     {
         // Xavier/Glorot initialization
-        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (_inputSize + _hiddenSize), NumOps)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (_inputSize + _hiddenSize))));
 
         InitializeWeight(_weightsFi, scale);
         InitializeWeight(_weightsIi, scale);
@@ -1746,20 +1746,20 @@ public class LSTMLayer<T> : LayerBase<T>
         var prevCellNode = TensorOperations<T>.Variable(prevCellPlaceholder, "c_prev");
 
         // Create weight and bias nodes
-        var weightsFiNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsFi), "W_fi");
-        var weightsIiNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsIi), "W_ii");
-        var weightsCiNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsCi), "W_ci");
-        var weightsOiNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsOi), "W_oi");
+        var weightsFiNode = TensorOperations<T>.Variable(_weightsFi, "W_fi");
+        var weightsIiNode = TensorOperations<T>.Variable(_weightsIi, "W_ii");
+        var weightsCiNode = TensorOperations<T>.Variable(_weightsCi, "W_ci");
+        var weightsOiNode = TensorOperations<T>.Variable(_weightsOi, "W_oi");
 
-        var weightsFhNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsFh), "W_fh");
-        var weightsIhNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsIh), "W_ih");
-        var weightsChNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsCh), "W_ch");
-        var weightsOhNode = TensorOperations<T>.Variable(Tensor<T>.FromMatrix(_weightsOh), "W_oh");
+        var weightsFhNode = TensorOperations<T>.Variable(_weightsFh, "W_fh");
+        var weightsIhNode = TensorOperations<T>.Variable(_weightsIh, "W_ih");
+        var weightsChNode = TensorOperations<T>.Variable(_weightsCh, "W_ch");
+        var weightsOhNode = TensorOperations<T>.Variable(_weightsOh, "W_oh");
 
-        var biasFNode = TensorOperations<T>.Variable(Tensor<T>.FromVector(_biasF), "b_f");
-        var biasINode = TensorOperations<T>.Variable(Tensor<T>.FromVector(_biasI), "b_i");
-        var biasCNode = TensorOperations<T>.Variable(Tensor<T>.FromVector(_biasC), "b_c");
-        var biasONode = TensorOperations<T>.Variable(Tensor<T>.FromVector(_biasO), "b_o");
+        var biasFNode = TensorOperations<T>.Variable(_biasF, "b_f");
+        var biasINode = TensorOperations<T>.Variable(_biasI, "b_i");
+        var biasCNode = TensorOperations<T>.Variable(_biasC, "b_c");
+        var biasONode = TensorOperations<T>.Variable(_biasO, "b_o");
 
         // Add inputs to the list
         inputNodes.Add(inputNode);

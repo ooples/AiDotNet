@@ -1,5 +1,5 @@
 using AiDotNet.Autodiff;
-using AiDotNet.Helpers;
+
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -1026,8 +1026,8 @@ public class RecurrentLayer<T> : LayerBase<T>
     private void InitializeParameters()
     {
         // Initialize weights and biases (e.g., Xavier/Glorot initialization)
-        T inputScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (_inputWeights.Rows + _inputWeights.Columns), NumOps)));
-        T hiddenScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (_hiddenWeights.Rows + _hiddenWeights.Columns), NumOps)));
+        T inputScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (_inputWeights.Rows + _inputWeights.Columns))));
+        T hiddenScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (_hiddenWeights.Rows + _hiddenWeights.Columns))));
 
         for (int i = 0; i < _inputWeights.Rows; i++)
         {

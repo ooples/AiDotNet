@@ -34,8 +34,8 @@ namespace AiDotNet.Logging;
 public class SummaryWriter : IDisposable
 {
     private readonly TensorBoardWriter _writer;
-    private readonly string _logDir;
-    private readonly string _comment;
+    private readonly string _logDir = string.Empty;
+    private readonly string _comment = string.Empty;
     private long _defaultStep;
     private bool _disposed;
 
@@ -77,10 +77,10 @@ public class SummaryWriter : IDisposable
         }
         else
         {
-            _logDir = logDir;
+            _logDir = logDir!;
         }
 
-        _writer = new TensorBoardWriter(_logDir, filename);
+        _writer = new TensorBoardWriter(_logDir!, filename);
         _defaultStep = 0;
     }
 
@@ -197,7 +197,11 @@ public class SummaryWriter : IDisposable
                         val = imageData[row, col, ch];
 
                     // Clamp and convert to [0, 255]
+#if NET5_0_OR_GREATER
                     pixels[idx++] = (byte)Math.Clamp(val * 255, 0, 255);
+#else
+                    pixels[idx++] = (byte)MathPolyfill.Clamp(val * 255, 0, 255);
+#endif
                 }
             }
         }
@@ -272,7 +276,11 @@ public class SummaryWriter : IDisposable
                         float val = images[i, ch, row, col];
                         if (normalize)
                         {
+#if NET5_0_OR_GREATER
                             val = Math.Clamp(val, 0, 1);
+#else
+                            val = MathPolyfill.Clamp(val, 0, 1);
+#endif
                         }
                         grid[ch, startY + row, startX + col] = val;
                     }

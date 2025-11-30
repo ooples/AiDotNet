@@ -84,7 +84,7 @@ public class VectorizationPass : IOptimizationPass
     public int HardwareVectorWidth =>
         _config.TargetVectorWidth > 0
             ? _config.TargetVectorWidth
-            : (Vector.IsHardwareAccelerated ? Vector<float>.Count : 1);
+            : (Vector.IsHardwareAccelerated ? System.Numerics.Vector<float>.Count : 1);
 
     /// <inheritdoc/>
     public IRGraph Optimize(IRGraph graph)
@@ -248,7 +248,7 @@ public class VectorizationPass : IOptimizationPass
             InputIds = original.InputIds,
             OutputType = original.OutputType,
             OutputShape = original.OutputShape,
-            Operation = operation,
+            Operation = (Operations.VectorizedBinaryOpType)Enum.Parse(typeof(Operations.VectorizedBinaryOpType), operation),
             VectorWidth = vectorWidth,
             NumVectors = numVectors,
             Remainder = remainder
@@ -271,7 +271,7 @@ public class VectorizationPass : IOptimizationPass
             InputIds = original.InputIds,
             OutputType = original.OutputType,
             OutputShape = original.OutputShape,
-            Operation = operation,
+            Operation = (Operations.VectorizedUnaryOpType)Enum.Parse(typeof(Operations.VectorizedUnaryOpType), operation),
             VectorWidth = vectorWidth,
             NumVectors = numVectors,
             Remainder = remainder
@@ -311,7 +311,7 @@ public class VectorizationPass : IOptimizationPass
             InputIds = original.InputIds,
             OutputType = original.OutputType,
             OutputShape = original.OutputShape,
-            ReductionType = reductionType,
+            ReductionType = (Operations.VectorizedReductionType)Enum.Parse(typeof(Operations.VectorizedReductionType), reductionType),
             VectorWidth = vectorWidth,
             Axes = axes,
             KeepDims = keepDims

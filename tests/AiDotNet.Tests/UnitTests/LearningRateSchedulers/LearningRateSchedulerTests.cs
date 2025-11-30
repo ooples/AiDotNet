@@ -256,7 +256,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
         [Fact]
         public void CyclicLR_OscillatesBetweenBounds()
         {
-            var scheduler = new CyclicLRScheduler(baseLr: 0.001, maxLr: 0.01, stepSizeUp: 5);
+            var scheduler = new CyclicLRScheduler(baseLearningRate: 0.001, maxLearningRate: 0.01, stepSizeUp: 5);
 
             double minObserved = double.MaxValue;
             double maxObserved = double.MinValue;

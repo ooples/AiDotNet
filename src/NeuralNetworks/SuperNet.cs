@@ -6,10 +6,7 @@ using AiDotNet.AutoML;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
-using AiDotNet.NumericOperations;
-using AiDotNet.Autodiff;
 
 namespace AiDotNet.NeuralNetworks
 {
@@ -1580,11 +1577,11 @@ namespace AiDotNet.NeuralNetworks
                     var opOutput = ExportOperationGraph(prevOutput, opIdx, weightKey);
 
                     // Scale by softmax weight (create constant for the weight)
-                    var weightTensor = new Tensor<T>(new[] { 1 }, NumOps);
+                    var weightTensor = new Tensor<T>(new[] { 1 });
                     weightTensor[0] = weight;
                     var weightNode = TensorOperations<T>.Constant(weightTensor, $"weight_{nodeIdx}_{prevNodeIdx}_{opIdx}");
 
-                    var scaledOutput = TensorOperations<T>.Multiply(opOutput, weightNode);
+                    var scaledOutput = TensorOperations<T>.ElementwiseMultiply(opOutput, weightNode);
 
                     // Accumulate
                     if (nodeOutput == null)
@@ -1625,43 +1622,43 @@ namespace AiDotNet.NeuralNetworks
             case 1: // 3x3 Conv (simplified as weighted pass)
                 if (weight != null)
                 {
-                    var weightTensor = new Tensor<T>(new[] { weight.Length }, NumOps);
+                    var weightTensor = new Tensor<T>(new[] { weight.Length });
                     for (int i = 0; i < weight.Length; i++)
                     {
                         weightTensor[i] = NumOps.Add(NumOps.One, weight[i]);
                     }
                     var weightNode = TensorOperations<T>.Constant(weightTensor, $"weights_{weightKey}");
-                    return TensorOperations<T>.Multiply(input, weightNode);
+                    return TensorOperations<T>.ElementwiseMultiply(input, weightNode);
                 }
                 return input;
 
             case 2: // 5x5 Conv (simplified)
                 if (weight != null)
                 {
-                    var weightTensor = new Tensor<T>(new[] { weight.Length }, NumOps);
+                    var weightTensor = new Tensor<T>(new[] { weight.Length });
                     for (int i = 0; i < weight.Length; i++)
                     {
                         weightTensor[i] = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(1.5), weight[i]));
                     }
                     var weightNode = TensorOperations<T>.Constant(weightTensor, $"weights_{weightKey}");
-                    return TensorOperations<T>.Multiply(input, weightNode);
+                    return TensorOperations<T>.ElementwiseMultiply(input, weightNode);
                 }
                 return input;
 
             case 3: // MaxPool (simplified as scaling)
                 {
-                    var scaleTensor = new Tensor<T>(new[] { 1 }, NumOps);
+                    var scaleTensor = new Tensor<T>(new[] { 1 });
                     scaleTensor[0] = NumOps.FromDouble(0.9);
                     var scaleNode = TensorOperations<T>.Constant(scaleTensor, $"maxpool_scale_{weightKey}");
-                    return TensorOperations<T>.Multiply(input, scaleNode);
+                    return TensorOperations<T>.ElementwiseMultiply(input, scaleNode);
                 }
 
             case 4: // AvgPool (simplified as scaling)
                 {
-                    var scaleTensor = new Tensor<T>(new[] { 1 }, NumOps);
+                    var scaleTensor = new Tensor<T>(new[] { 1 });
                     scaleTensor[0] = NumOps.FromDouble(0.8);
                     var scaleNode = TensorOperations<T>.Constant(scaleTensor, $"avgpool_scale_{weightKey}");
-                    return TensorOperations<T>.Multiply(input, scaleNode);
+                    return TensorOperations<T>.ElementwiseMultiply(input, scaleNode);
                 }
 
             default:

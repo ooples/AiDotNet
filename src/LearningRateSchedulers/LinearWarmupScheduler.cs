@@ -127,15 +127,15 @@ public class LinearWarmupScheduler : LearningRateSchedulerBase
             return _endLr;
         }
 
-        double progress = (double)decayStep / decaySteps;
+        double decayProgress = (double)decayStep / decaySteps;
 
         if (_decayMode == DecayMode.Linear)
         {
-            return _baseLearningRate - (_baseLearningRate - _endLr) * progress;
+            return _baseLearningRate - (_baseLearningRate - _endLr) * decayProgress;
         }
         else // Cosine
         {
-            double cosineValue = (1 + Math.Cos(Math.PI * progress)) / 2;
+            double cosineValue = (1 + Math.Cos(Math.PI * decayProgress)) / 2;
             return _endLr + (_baseLearningRate - _endLr) * cosineValue;
         }
     }

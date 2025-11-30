@@ -699,7 +699,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
         var output = TensorOperations<T>.Reshape(weighted, outputSize);
 
         // Apply activation
-        output = ApplyActivationToComputationGraph(output);
+        output = ApplyActivationToGraph(output);
 
         return output;
     }

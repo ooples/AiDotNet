@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -381,7 +381,7 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
             // Scalar calculation for dvariance
             T dvariance = NumOps.Zero;
             T std3 = NumOps.Multiply(_lastStd[i], NumOps.Multiply(_lastStd[i], _lastStd[i]));
-            T dvarianceCoeff = NumOps.Multiply(NumOps.FromDouble(-0.5), NumericalStabilityHelper.SafeDiv(NumOps.One, std3, NumOps));
+            T dvarianceCoeff = NumOps.Multiply(NumOps.FromDouble(-0.5), NumericalStabilityHelper.SafeDiv(NumOps.One, std3));
 
             var dxhatScaled = (Vector<T>)Engine.Multiply(dxhat, dvarianceCoeff);
             var dxhatTimesInput = (Vector<T>)Engine.Multiply(dxhatScaled, inputMinusMean);
@@ -389,7 +389,7 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
 
             // Scalar calculation for dmean (first part)
             T dmean = NumOps.Zero;
-            T dmeanCoeff = NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(-1.0), _lastStd[i], NumOps);
+            T dmeanCoeff = NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(-1.0), _lastStd[i]);
 
             T dxhatSum = Engine.Sum(dxhat);
             dmean = NumOps.Multiply(dxhatSum, dmeanCoeff);
@@ -744,8 +744,8 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
         inputNodes.Add(inputNode);
 
         // Create constant nodes for gamma (scale) and beta (shift) parameters
-        var gammaTensor = new Tensor<T>(new[] { _gamma.Length }, _gamma.ToArray());
-        var betaTensor = new Tensor<T>(new[] { _beta.Length }, _beta.ToArray());
+        var gammaTensor = new Tensor<T>(new[] { _gamma.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_gamma.ToArray()));
+        var betaTensor = new Tensor<T>(new[] { _beta.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_beta.ToArray()));
         var gammaNode = TensorOperations<T>.Constant(gammaTensor, "gamma");
         var betaNode = TensorOperations<T>.Constant(betaTensor, "beta");
 

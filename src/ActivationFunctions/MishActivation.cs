@@ -1,5 +1,5 @@
 using AiDotNet.Autodiff;
-using AiDotNet.Helpers;
+
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -53,7 +53,7 @@ public class MishActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Activate(T input)
     {
-        T softplus = NumericalStabilityHelper.SafeLog(NumOps.Add(NumOps.One, NumOps.Exp(input)), NumOps);
+        T softplus = NumericalStabilityHelper.SafeLog(NumOps.Add(NumOps.One, NumOps.Exp(input)));
         T tanh = MathHelper.Tanh(softplus);
 
         return NumOps.Multiply(input, tanh);

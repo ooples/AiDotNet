@@ -6,7 +6,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// <typeparam name="T">The numeric type.</typeparam>
 public class NeuralDraftModel<T> : IDraftModel<T>
 {
-    private readonly Func<ReadOnlySpan<int>, float[]> _forwardFunc;
+    private readonly Func<int[], float[]> _forwardFunc;
     private readonly int _vocabSize;
     private readonly int _maxDraftTokens;
     private readonly Random _random;
@@ -25,7 +25,7 @@ public class NeuralDraftModel<T> : IDraftModel<T>
     /// <param name="maxDraftTokens">Maximum draft tokens to generate.</param>
     /// <param name="seed">Random seed.</param>
     public NeuralDraftModel(
-        Func<ReadOnlySpan<int>, float[]> forwardFunc,
+        Func<int[], float[]> forwardFunc,
         int vocabSize,
         int maxDraftTokens = 5,
         int? seed = null)

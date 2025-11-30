@@ -1,4 +1,4 @@
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Autodiff;
 using AiDotNet.Autodiff.Testing;
 using AiDotNet.NeuralNetworks.Layers;

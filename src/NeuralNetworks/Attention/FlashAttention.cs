@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+
 
 namespace AiDotNet.NeuralNetworks.Attention;
 
@@ -284,7 +284,7 @@ public static class FlashAttention<T>
                     // Update output accumulator: O_new = O_old * (l_old * correction / l_new) + (exp @ V) / l_new
                     // Simplified: O_new = O_old * correction * (l_old / l_new) + (exp @ V) / l_new
                     T outputScale = NumericalStabilityHelper.SafeDiv(
-                        NumOps.Multiply(lOld, correction), lNew, NumOps);
+                        NumOps.Multiply(lOld, correction), lNew);
 
                     // Scale existing output
                     for (int d = 0; d < headDim; d++)
@@ -293,7 +293,7 @@ public static class FlashAttention<T>
                     }
 
                     // Add contribution from current block: (exp @ V) / l_new
-                    T valueScale = NumericalStabilityHelper.SafeDiv(NumOps.One, lNew, NumOps);
+                    T valueScale = NumericalStabilityHelper.SafeDiv(NumOps.One, lNew);
 
                     for (int kj = 0; kj < kvBlockSize; kj++)
                     {
@@ -444,14 +444,14 @@ public static class FlashAttention<T>
                     T lNew = NumOps.Add(NumOps.Multiply(lOld, correction), blockSum);
 
                     T outputScale = NumericalStabilityHelper.SafeDiv(
-                        NumOps.Multiply(lOld, correction), lNew, NumOps);
+                        NumOps.Multiply(lOld, correction), lNew);
 
                     for (int d = 0; d < headDim; d++)
                     {
                         outputAcc[qi, d] = NumOps.Multiply(outputAcc[qi, d], outputScale);
                     }
 
-                    T valueScale = NumericalStabilityHelper.SafeDiv(NumOps.One, lNew, NumOps);
+                    T valueScale = NumericalStabilityHelper.SafeDiv(NumOps.One, lNew);
 
                     for (int kj = 0; kj < kvBlockSize; kj++)
                     {
@@ -633,7 +633,7 @@ public static class FlashAttention<T>
             }
             for (int j = 0; j < seqLenKV; j++)
             {
-                attnWeights[j] = NumericalStabilityHelper.SafeDiv(attnWeights[j], sumExp, NumOps);
+                attnWeights[j] = NumericalStabilityHelper.SafeDiv(attnWeights[j], sumExp);
             }
 
             // Compute gradient of attention weights: dP = dO @ V^T
@@ -804,7 +804,7 @@ public static class FlashAttention<T>
             }
             for (int j = 0; j < seqLenKV; j++)
             {
-                attnWeights[j] = NumericalStabilityHelper.SafeDiv(attnWeights[j], sumExp, NumOps);
+                attnWeights[j] = NumericalStabilityHelper.SafeDiv(attnWeights[j], sumExp);
             }
 
             var gradAttn = new T[seqLenKV];

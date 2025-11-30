@@ -621,7 +621,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         var anomalyScore = TensorOperations<T>.AnomalyScore(input, reconstruction);
 
         // Apply activation
-        var output = ApplyActivationToComputationGraph(anomalyScore);
+        var output = ApplyActivationToGraph(anomalyScore);
 
         return output;
     }

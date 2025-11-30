@@ -54,7 +54,7 @@ public readonly struct ProfilerScope : IDisposable
 
         // Get parent from call stack
         var stack = Profiler.GetCallStack();
-        _parentName = stack.Count > 0 ? stack.Peek()._name : null;
+        _parentName = stack.Count > 0 ? stack.Peek().Name : null;
 
         // Track memory if requested
         if (_trackMemory)

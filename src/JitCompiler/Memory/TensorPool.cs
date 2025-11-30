@@ -164,7 +164,18 @@ public class TensorPool : IDisposable
         // Combine type hash and element count for pool key
         // Round up to nearest power of 2 for better reuse
         int roundedElements = NextPowerOfTwo(elements);
+#if NET5_0_OR_GREATER
         return HashCode.Combine(typeof(T).GetHashCode(), roundedElements);
+#else
+        // Simple hash combination for .NET Framework
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 31 + typeof(T).GetHashCode();
+            hash = hash * 31 + roundedElements;
+            return hash;
+        }
+#endif
     }
 
     private static int NextPowerOfTwo(int n)

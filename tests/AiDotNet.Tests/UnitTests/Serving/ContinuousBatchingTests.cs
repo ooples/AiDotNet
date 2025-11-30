@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Serving.ContinuousBatching;
 using Xunit;
 

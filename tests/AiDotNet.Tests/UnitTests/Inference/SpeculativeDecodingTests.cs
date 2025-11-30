@@ -95,7 +95,7 @@ public class NeuralDraftModelTests
     public void NeuralDraftModel_Creation_Works()
     {
         // Arrange
-        Func<ReadOnlySpan<int>, float[]> forward = tokens =>
+        Func<int[], float[]> forward = tokens =>
         {
             // Simple mock - return uniform distribution
             var logits = new float[100];
@@ -115,7 +115,7 @@ public class NeuralDraftModelTests
     {
         // Arrange
         int callCount = 0;
-        Func<ReadOnlySpan<int>, float[]> forward = tokens =>
+        Func<int[], float[]> forward = tokens =>
         {
             callCount++;
             var logits = new float[50];
@@ -138,7 +138,7 @@ public class NeuralDraftModelTests
     public void NeuralDraftModel_GenerateDraft_RespectsMaxDraftTokens()
     {
         // Arrange
-        Func<ReadOnlySpan<int>, float[]> forward = _ => new float[100];
+        Func<int[], float[]> forward = _ => new float[100];
         var model = new NeuralDraftModel<float>(forward, vocabSize: 100, maxDraftTokens: 3);
 
         // Act
@@ -159,7 +159,7 @@ public class SpeculativeDecoderTests
         return new NGramDraftModel<float>(n: 2, vocabSize: vocabSize, seed: 42);
     }
 
-    private Func<ReadOnlySpan<int>, float[][]> CreateMockTargetForward(int vocabSize = 100)
+    private Func<int[], float[][]> CreateMockTargetForward(int vocabSize = 100)
     {
         return tokens =>
         {
@@ -237,7 +237,7 @@ public class SpeculativeDecoderTests
         const int eosToken = 99;
 
         // Mock target that always returns EOS with high probability
-        Func<ReadOnlySpan<int>, float[][]> targetForward = tokens =>
+        Func<int[], float[][]> targetForward = tokens =>
         {
             var probs = new float[tokens.Length][];
             for (int i = 0; i < tokens.Length; i++)
@@ -508,7 +508,7 @@ public class SpeculativeDecodingIntegrationTests
         draftModel.Train(corpus);
 
         // Target also follows similar pattern
-        Func<ReadOnlySpan<int>, float[][]> targetForward = tokens =>
+        Func<int[], float[][]> targetForward = tokens =>
         {
             var probs = new float[tokens.Length][];
             for (int i = 0; i < tokens.Length; i++)

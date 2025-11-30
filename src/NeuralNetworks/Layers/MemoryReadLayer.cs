@@ -1172,23 +1172,23 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Build attention computation graph
         // Step 1: keys = input @ keyWeights
-        var keys = Autodiff.TensorOperations<T>.MatMul(inputNode, keyWeightsNode);
+        var keys = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, keyWeightsNode);
 
         // Step 2: scores = keys @ memory.T
         var memoryT = Autodiff.TensorOperations<T>.Transpose(memoryNode);
-        var scores = Autodiff.TensorOperations<T>.MatMul(keys, memoryT);
+        var scores = Autodiff.TensorOperations<T>.MatrixMultiply(keys, memoryT);
 
         // Step 3: attention = softmax(scores)
         var attention = Autodiff.TensorOperations<T>.Softmax(scores, axis: -1);
 
         // Step 4: readout = attention @ memory
-        var readout = Autodiff.TensorOperations<T>.MatMul(attention, memoryNode);
+        var readout = Autodiff.TensorOperations<T>.MatrixMultiply(attention, memoryNode);
 
         // Step 5: transformed = readout @ valueWeights
-        var transformed = Autodiff.TensorOperations<T>.MatMul(readout, valueWeightsNode);
+        var transformed = Autodiff.TensorOperations<T>.MatrixMultiply(readout, valueWeightsNode);
 
         // Step 6: projected = transformed @ outputWeights
-        var projected = Autodiff.TensorOperations<T>.MatMul(transformed, outputWeightsNode);
+        var projected = Autodiff.TensorOperations<T>.MatrixMultiply(transformed, outputWeightsNode);
 
         // Step 7: output = projected + bias
         var output = Autodiff.TensorOperations<T>.Add(projected, biasNode);

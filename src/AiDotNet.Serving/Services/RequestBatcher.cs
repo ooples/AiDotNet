@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Serving.Batching;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;

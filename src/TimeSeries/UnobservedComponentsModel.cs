@@ -1891,7 +1891,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
         if (_seasonal != null && _seasonal.Length > 0)
         {
             T avgSeasonal = NumOps.Zero;
-            int period = _ucmOptions.SeasonalPeriod;
+            int period = _ucOptions.SeasonalPeriod;
             for (int i = Math.Max(0, _seasonal.Length - period); i < _seasonal.Length; i++)
             {
                 avgSeasonal = NumOps.Add(avgSeasonal, _seasonal[i]);

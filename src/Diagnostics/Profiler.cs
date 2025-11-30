@@ -342,6 +342,11 @@ public class ProfilerTimer : IDisposable
     private readonly string? _parentName;
     private bool _stopped;
 
+    /// <summary>
+    /// Gets the name of this profiler timer.
+    /// </summary>
+    public string Name => _name;
+
     internal ProfilerTimer(string name)
     {
         _name = name;
@@ -349,7 +354,7 @@ public class ProfilerTimer : IDisposable
         _stopped = false;
 
         var stack = Profiler.GetCallStack();
-        _parentName = stack.Count > 0 ? stack.Peek()._name : null;
+        _parentName = stack.Count > 0 ? stack.Peek().Name : null;
         stack.Push(this);
     }
 

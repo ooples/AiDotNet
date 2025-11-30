@@ -1475,8 +1475,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var squeezed = TensorOperations<T>.ReduceMean(inputNode, axes: new[] { 1, 2 }, keepDims: false);
 
         // Excitation: First fully connected layer
-        var weights1Tensor = new Tensor<T>(new[] { _weights1.Rows, _weights1.Columns }, _weights1.ToArray());
-        var bias1Tensor = new Tensor<T>(new[] { _bias1.Length }, _bias1.ToArray());
+        var weights1Tensor = new Tensor<T>(new[] { _weights1.Rows, _weights1.Columns }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_weights1.ToArray()));
+        var bias1Tensor = new Tensor<T>(new[] { _bias1.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_bias1.ToArray()));
         var weights1Node = TensorOperations<T>.Constant(weights1Tensor, "se_weights1");
         var bias1Node = TensorOperations<T>.Constant(bias1Tensor, "se_bias1");
 
@@ -1494,8 +1494,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Excitation: Second fully connected layer
-        var weights2Tensor = new Tensor<T>(new[] { _weights2.Rows, _weights2.Columns }, _weights2.ToArray());
-        var bias2Tensor = new Tensor<T>(new[] { _bias2.Length }, _bias2.ToArray());
+        var weights2Tensor = new Tensor<T>(new[] { _weights2.Rows, _weights2.Columns }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_weights2.ToArray()));
+        var bias2Tensor = new Tensor<T>(new[] { _bias2.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_bias2.ToArray()));
         var weights2Node = TensorOperations<T>.Constant(weights2Tensor, "se_weights2");
         var bias2Node = TensorOperations<T>.Constant(bias2Tensor, "se_bias2");
 

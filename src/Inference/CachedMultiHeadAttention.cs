@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -126,8 +126,7 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
         int layerIndex = 0)
         : base(
             [sequenceLength, embeddingDimension],
-            [sequenceLength, embeddingDimension],
-            new IdentityActivation<T>())
+            [sequenceLength, embeddingDimension])
     {
         if (embeddingDimension % headCount != 0)
         {
@@ -232,8 +231,8 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
         if (_useFlashAttention)
         {
             var config = new FlashAttentionConfig { UseCausalMask = true };
-            var (output, _) = FlashAttention<T>.Forward(queries, keys, values, config);
-            attentionOutput = output;
+            var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config);
+            attentionOutput = flashOutput;
         }
         else
         {
@@ -273,8 +272,8 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
         if (_useFlashAttention)
         {
             var config = FlashAttentionConfig.Default;
-            var (output, _) = FlashAttention<T>.Forward(queries, keys, values, config);
-            attentionOutput = output;
+            var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config);
+            attentionOutput = flashOutput;
         }
         else
         {
@@ -365,7 +364,7 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
                         T sum = NumOps.Zero;
                         for (int j = 0; j < seqLenKV; j++)
                         {
-                            T weight = NumericalStabilityHelper.SafeDiv(weights[j], sumExp, NumOps);
+                            T weight = NumericalStabilityHelper.SafeDiv(weights[j], sumExp);
                             T vVal = value[new[] { b, h, j, d }];
                             sum = NumOps.Add(sum, NumOps.Multiply(weight, vVal));
                         }
@@ -413,10 +412,10 @@ public class CachedMultiHeadAttention<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         }
 
-        _queryWeights = _queryWeights.Subtract(_queryWeightsGradient.Multiply(learningRate));
-        _keyWeights = _keyWeights.Subtract(_keyWeightsGradient.Multiply(learningRate));
-        _valueWeights = _valueWeights.Subtract(_valueWeightsGradient.Multiply(learningRate));
-        _outputWeights = _outputWeights.Subtract(_outputWeightsGradient.Multiply(learningRate));
+        _queryWeights = _queryWeights.Subtract(_queryWeightsGradient!.Multiply(learningRate));
+        _keyWeights = _keyWeights.Subtract(_keyWeightsGradient!.Multiply(learningRate));
+        _valueWeights = _valueWeights.Subtract(_valueWeightsGradient!.Multiply(learningRate));
+        _outputWeights = _outputWeights.Subtract(_outputWeightsGradient!.Multiply(learningRate));
         _outputBias = _outputBias.Subtract(_outputBiasGradient!.Multiply(learningRate));
     }
 

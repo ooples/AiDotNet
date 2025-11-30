@@ -95,7 +95,7 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
         _symmetric = symmetric;
 
         // Default scale: 1/(2^(bits-1)) for symmetric quantization
-        if (scale == null || NumOps.Equals(scale, default))
+        if (scale == null || NumOps.Equals(scale, default(T)!))
         {
             double defaultScale = 1.0 / (1 << (quantizationBits - 1));
             _scale = NumOps.FromDouble(defaultScale);
@@ -120,11 +120,16 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
     {
         if (_jitCompilableBase != null)
         {
-            // Use JIT-compilable path with fixed-scale quantization
-            var inputTensor = new Tensor<T>(input.ToArray());
-            var outputTensor = _jitCompilableBase.Forward(inputTensor);
-            var logits = new Vector<T>(outputTensor.Data);
-            return QuantizeFixedScale(logits);
+            // IJitCompilable doesn't have execution methods - need to cast to a model interface
+            if (_jitCompilableBase is IModel<Vector<T>, Vector<T>, ModelMetadata<T>> model)
+            {
+                var logits = model.Predict(input);
+                return QuantizeFixedScale(logits);
+            }
+
+            throw new InvalidOperationException(
+                "Underlying model must implement IModel<Vector<T>, Vector<T>, ModelMetadata<T>> to execute predictions. " +
+                "IJitCompilable only provides computation graph export for JIT compilation.");
         }
 
         if (_baseTeacher == null)

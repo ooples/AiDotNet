@@ -1,4 +1,5 @@
 using AiDotNet.NeuralNetworks.Attention;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Attention;

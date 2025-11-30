@@ -738,7 +738,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         var biasNode = Autodiff.TensorOperations<T>.Constant(biasTensor, "conv_bias");
 
         // Apply convolution: [batch, height, width, channels] -> [batch, outH, outW, totalOutputChannels]
-        var convOutput = Autodiff.TensorOperations<T>.Conv2D(inputNode, weightsNode, biasNode, _stride, padding: 0);
+        var convOutput = Autodiff.TensorOperations<T>.Conv2D(inputNode, weightsNode, biasNode, new[] { _stride, _stride }, padding: new[] { 0, 0 });
 
         // Reshape to separate capsules: [batch, outH, outW, totalOutputChannels]
         // -> [batch, outH, outW, capsuleChannels, capsuleDimension]
@@ -755,7 +755,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
 
         // Apply Squash activation to each capsule vector (along the last dimension)
         // The Squash operation scales the length of each capsule vector to [0, 1)
-        var output = Autodiff.TensorOperations<T>.Squash(reshapedOutput, axis: -1);
+        var output = Autodiff.TensorOperations<T>.Squash(reshapedOutput);
 
         return output;
     }

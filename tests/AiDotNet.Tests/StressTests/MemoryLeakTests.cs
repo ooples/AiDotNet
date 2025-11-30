@@ -1,5 +1,6 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Engines;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Optimizers;
 using Xunit;
 using System;

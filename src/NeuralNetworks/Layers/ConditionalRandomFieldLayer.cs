@@ -789,7 +789,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         var logPartition = TensorOperations<T>.CRFForward(input, transitionsNode);
 
         // Apply activation
-        var output = ApplyActivationToComputationGraph(logPartition);
+        var output = ApplyActivationToGraph(logPartition);
 
         return output;
     }

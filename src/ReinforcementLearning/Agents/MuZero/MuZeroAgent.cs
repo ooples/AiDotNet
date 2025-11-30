@@ -5,7 +5,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
-using AiDotNet.Helpers;
+
 using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
 
@@ -534,8 +534,8 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         writer.Write(_options.BatchSize);
         writer.Write(_options.UnrollSteps);
         writer.Write(_options.PUCTConstant);
-        writer.Write(NumOps.ToDouble(_options.LearningRate));
-        writer.Write(NumOps.ToDouble(_options.DiscountFactor));
+        writer.Write(NumOps.ToDouble(_options.LearningRate!));
+        writer.Write(NumOps.ToDouble(_options.DiscountFactor!));
         writer.Write(_options.Seed ?? 0);
         writer.Write(_options.Seed.HasValue);
 

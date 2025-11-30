@@ -3,7 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Helpers;
+
 using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
@@ -409,7 +409,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         writer.Write(_options.NumAtoms);
         writer.Write(_options.VMin);
         writer.Write(_options.VMax);
-        writer.Write(_options.NStepReturn);
+        writer.Write(_options.NSteps);
         writer.Write(_options.UseDistributional);
         writer.Write(_options.UseNoisyNetworks);
 

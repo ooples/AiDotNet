@@ -1,5 +1,5 @@
 using AiDotNet.Autodiff;
-using AiDotNet.Helpers;
+
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -67,7 +67,7 @@ public class SoftPlusActivation<T> : ActivationFunctionBase<T>
         T expInput = NumOps.Exp(input);
         T onePlusExp = NumOps.Add(NumOps.One, expInput);
 
-        return NumericalStabilityHelper.SafeLog(onePlusExp, NumOps);
+        return NumericalStabilityHelper.SafeLog(onePlusExp);
     }
 
     /// <summary>

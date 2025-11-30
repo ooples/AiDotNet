@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.JitCompiler.Runtime;
 
@@ -107,7 +108,7 @@ public static class VectorizedOps
                 break;
         }
 
-        return new Tensor<T>(result, left.Shape);
+        return new Tensor<T>(left.Shape, new Vector<T>(result));
     }
 
     /// <summary>
@@ -178,7 +179,7 @@ public static class VectorizedOps
                 break;
         }
 
-        return new Tensor<T>(result, input.Shape);
+        return new Tensor<T>(input.Shape, new Vector<T>(result));
     }
 
     /// <summary>
@@ -234,7 +235,7 @@ public static class VectorizedOps
             var resultArray = new T[1];
             resultArray[0] = result;
             var resultShape = keepDims ? CreateKeepDimsShape(input.Shape.Length) : new[] { 1 };
-            return new Tensor<T>(resultArray, resultShape);
+            return new Tensor<T>(resultShape, new Vector<T>(resultArray));
         }
 
         // Axis-specific reduction
@@ -326,19 +327,29 @@ public static class VectorizedOps
         // Use type-specific implementations for float/double for better SIMD utilization
         if (typeof(T) == typeof(float))
         {
-            ExecuteVectorizedMatMulFloat(
-                MemoryMarshal.Cast<T, float>(leftSpan),
-                MemoryMarshal.Cast<T, float>(rightSpan),
-                MemoryMarshal.Cast<T, float>(resultSpan),
-                M, K, N, tileSize);
+            // Safe: We've verified T == float at runtime
+            // Reinterpret arrays using object cast
+            var leftData = leftSpan.ToArray();
+            var rightData = rightSpan.ToArray();
+            var leftFloat = (float[])(object)leftData;
+            var rightFloat = (float[])(object)rightData;
+            var resultFloat = new float[M * N];
+            ExecuteVectorizedMatMulFloat(leftFloat, rightFloat, resultFloat, M, K, N, tileSize);
+            // Copy result back using object cast
+            result = (T[])(object)resultFloat;
         }
         else if (typeof(T) == typeof(double))
         {
-            ExecuteVectorizedMatMulDouble(
-                MemoryMarshal.Cast<T, double>(leftSpan),
-                MemoryMarshal.Cast<T, double>(rightSpan),
-                MemoryMarshal.Cast<T, double>(resultSpan),
-                M, K, N, tileSize);
+            // Safe: We've verified T == double at runtime
+            // Reinterpret arrays using object cast
+            var leftData = leftSpan.ToArray();
+            var rightData = rightSpan.ToArray();
+            var leftDouble = (double[])(object)leftData;
+            var rightDouble = (double[])(object)rightData;
+            var resultDouble = new double[M * N];
+            ExecuteVectorizedMatMulDouble(leftDouble, rightDouble, resultDouble, M, K, N, tileSize);
+            // Copy result back using object cast
+            result = (T[])(object)resultDouble;
         }
         else
         {
@@ -346,7 +357,7 @@ public static class VectorizedOps
             ExecuteGenericMatMul(leftSpan, rightSpan, resultSpan, M, K, N);
         }
 
-        return new Tensor<T>(result, new[] { M, N });
+        return new Tensor<T>(new[] { M, N }, new Vector<T>(result));
     }
 
 #if NETCOREAPP3_0_OR_GREATER
@@ -386,6 +397,7 @@ public static class VectorizedOps
                             float aik = A[i * K + k];
                             int bRowOffset = k * N;
 
+#if NET6_0_OR_GREATER
                             // Use SimdVector's optimized inner loop
                             SimdVector.MatMulInnerLoopFloat(
                                 aik,
@@ -393,6 +405,13 @@ public static class VectorizedOps
                                 C.Slice(rowOffset + j0, jEnd - j0),
                                 0,
                                 jEnd - j0);
+#else
+                            // Scalar fallback for .NET Framework
+                            for (int j = j0; j < jEnd; j++)
+                            {
+                                C[rowOffset + j] += aik * B[bRowOffset + j];
+                            }
+#endif
                         }
                     }
                 }
@@ -437,6 +456,7 @@ public static class VectorizedOps
                             double aik = A[i * K + k];
                             int bRowOffset = k * N;
 
+#if NET6_0_OR_GREATER
                             // Use SimdVector's optimized inner loop
                             SimdVector.MatMulInnerLoopDouble(
                                 aik,
@@ -444,6 +464,13 @@ public static class VectorizedOps
                                 C.Slice(rowOffset + j0, jEnd - j0),
                                 0,
                                 jEnd - j0);
+#else
+                            // Scalar fallback for .NET Framework
+                            for (int j = j0; j < jEnd; j++)
+                            {
+                                C[rowOffset + j] += aik * B[bRowOffset + j];
+                            }
+#endif
                         }
                     }
                 }
@@ -547,7 +574,7 @@ public static class VectorizedOps
             }
         }
 
-        return new Tensor<T>(result, outputShape);
+        return new Tensor<T>(outputShape, new Vector<T>(result));
     }
 
     /// <summary>

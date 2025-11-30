@@ -868,7 +868,7 @@ public class RBMLayer<T> : LayerBase<T>
         var hiddenProbs = TensorOperations<T>.Sigmoid(preActivation);
 
         // Apply layer activation if different from sigmoid
-        var output = ApplyActivationToComputationGraph(hiddenProbs);
+        var output = ApplyActivationToGraph(hiddenProbs);
 
         return output;
     }

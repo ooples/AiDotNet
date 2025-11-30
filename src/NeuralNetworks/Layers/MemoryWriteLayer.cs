@@ -1232,17 +1232,17 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Build attention computation graph for memory writing
         // Step 1: queries = input @ queryWeights
-        var queries = Autodiff.TensorOperations<T>.MatMul(inputNode, queryWeightsNode);
+        var queries = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, queryWeightsNode);
 
         // Step 2: keys = input @ keyWeights
-        var keys = Autodiff.TensorOperations<T>.MatMul(inputNode, keyWeightsNode);
+        var keys = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, keyWeightsNode);
 
         // Step 3: values = input @ valueWeights
-        var values = Autodiff.TensorOperations<T>.MatMul(inputNode, valueWeightsNode);
+        var values = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, valueWeightsNode);
 
         // Step 4: scores = queries @ memory.T
         var memoryT = Autodiff.TensorOperations<T>.Transpose(memoryNode);
-        var scores = Autodiff.TensorOperations<T>.MatMul(queries, memoryT);
+        var scores = Autodiff.TensorOperations<T>.MatrixMultiply(queries, memoryT);
 
         // Step 5: Scale scores for stability
         var keyDim = keys.Value.Shape[1];
@@ -1253,16 +1253,16 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             },
             "scale"
         );
-        scores = Autodiff.TensorOperations<T>.Multiply(scores, scale);
+        scores = Autodiff.TensorOperations<T>.ElementwiseMultiply(scores, scale);
 
         // Step 6: attention = softmax(scores)
         var attention = Autodiff.TensorOperations<T>.Softmax(scores, axis: -1);
 
         // Step 7: writeValues = values * attention (element-wise with broadcasting)
-        var writeValues = Autodiff.TensorOperations<T>.Multiply(values, attention);
+        var writeValues = Autodiff.TensorOperations<T>.ElementwiseMultiply(values, attention);
 
         // Step 8: output = writeValues @ outputWeights + bias
-        var projected = Autodiff.TensorOperations<T>.MatMul(writeValues, outputWeightsNode);
+        var projected = Autodiff.TensorOperations<T>.MatrixMultiply(writeValues, outputWeightsNode);
         var output = Autodiff.TensorOperations<T>.Add(projected, biasNode);
 
         // Step 9: Apply activation if needed

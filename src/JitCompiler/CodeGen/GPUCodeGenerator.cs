@@ -33,7 +33,6 @@ public class GPUCodeGenerator
 {
     private readonly GPUBackend _backend;
     private readonly GPUDeviceInfo _deviceInfo;
-    private int _tempVarCounter;
     private readonly Dictionary<int, string> _tensorNames;
     private readonly StringBuilder _kernelCode;
 
@@ -138,7 +137,6 @@ public class GPUCodeGenerator
     {
         _tensorNames.Clear();
         _kernelCode.Clear();
-        _tempVarCounter = 0;
 
         // Determine data type string for the backend
         var dataType = GetDataTypeString<T>();

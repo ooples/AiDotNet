@@ -57,6 +57,7 @@
 	  <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 	  <PackageReference Include="Pinecone.Client" Version="4.0.2" />
 	  <PackageReference Include="StackExchange.Redis" Version="2.10.1" />
+	  <PackageReference Include="System.Net.Http" Version="4.3.4" />
 	  <PackageReference Include="System.Numerics.Tensors" Version="10.0.0" />
 	  <PackageReference Include="System.ValueTuple" Version="4.6.1" />
 	</ItemGroup>
@@ -111,6 +112,16 @@
 	<!-- Global usings for internal AiDotNet namespaces -->
 	<ItemGroup>
 	  <Using Include="AiDotNet.Autodiff" />
+	</ItemGroup>
+
+	<!-- Global usings for common System namespaces -->
+	<ItemGroup>
+	  <Using Include="System.Text" />
+	</ItemGroup>
+
+	<!-- Global usings for internal helpers -->
+	<ItemGroup>
+	  <Using Include="AiDotNet.Helpers" />
 	</ItemGroup>
 
 </Project>

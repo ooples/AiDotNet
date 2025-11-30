@@ -1,6 +1,7 @@
 using AiDotNet.Engines;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Enums;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.ActivationFunctions;

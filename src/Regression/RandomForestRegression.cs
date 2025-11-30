@@ -542,15 +542,15 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
         var sumNode = treeOutputs[0];
         for (int i = 1; i < treeOutputs.Count; i++)
         {
-            sumNode = AiDotNet.Autodiff.TensorOperations<T>.Add(sumNode, treeOutputs[i]);
+            sumNode = TensorOperations<T>.Add(sumNode, treeOutputs[i]);
         }
 
         // Divide by number of trees to get average
-        var numTreesTensor = new AiDotNet.Autodiff.Tensor<T>(new[] { 1 });
+        var numTreesTensor = new Tensor<T>(new[] { 1 });
         numTreesTensor[0] = NumOps.FromDouble(_trees.Count);
-        var numTreesNode = AiDotNet.Autodiff.TensorOperations<T>.Constant(numTreesTensor, "num_trees");
+        var numTreesNode = TensorOperations<T>.Constant(numTreesTensor, "num_trees");
 
-        return AiDotNet.Autodiff.TensorOperations<T>.Divide(sumNode, numTreesNode);
+        return TensorOperations<T>.Divide(sumNode, numTreesNode);
     }
 
     #endregion

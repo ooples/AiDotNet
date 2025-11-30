@@ -607,7 +607,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
         var output = TensorOperations<T>.StraightThroughThreshold(activations, 0.5);
 
         // Apply layer activation
-        output = ApplyActivationToComputationGraph(output);
+        output = ApplyActivationToGraph(output);
 
         return output;
     }

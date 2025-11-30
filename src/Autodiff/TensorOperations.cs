@@ -1,4 +1,5 @@
 using AiDotNet.Engines;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Autodiff;
 /// <summary>
@@ -1541,7 +1542,7 @@ public static class TensorOperations<T>
                     if (numOps.GreaterThan(x, numOps.Zero))
                         return numOps.One;
                     else
-                        return numOps.Add(result.GetValue(idx), alphaT);
+                        return numOps.Add(result[idx], alphaT);
                 });
                 var gradA = engine.TensorMultiply(gradient, derivative);
                 if (a.Gradient == null)
@@ -1758,8 +1759,8 @@ public static class TensorOperations<T>
                 //             = sigmoid(x) * (1 + x - Swish(x))
                 var derivative = a.Value.Transform((x, idx) =>
                 {
-                    var sig = sigmoidValues.GetValue(idx);
-                    var swishVal = result.GetValue(idx);
+                    var sig = sigmoidValues[idx];
+                    var swishVal = result[idx];
                     // sigmoid(x) + x * sigmoid(x) * (1 - sigmoid(x))
                     var oneMinusSig = numOps.Subtract(numOps.One, sig);
                     var xTimesSigTimesOneMinusSig = numOps.Multiply(numOps.Multiply(x, sig), oneMinusSig);
@@ -3038,7 +3039,7 @@ public static class TensorOperations<T>
         strides ??= poolSize;
 
         // Use IEngine for GPU/CPU acceleration
-        var engine = ComputeEngine.GetEngine();
+        var engine = AiDotNetEngine.Current;
         var result = engine.MaxPool2DWithIndices(a.Value, poolSize, strides, out var maxIndices);
 
         void BackwardFunction(Tensor<T> gradient)
@@ -3122,7 +3123,7 @@ public static class TensorOperations<T>
         strides ??= poolSize;
 
         // Use IEngine for GPU/CPU acceleration
-        var engine = ComputeEngine.GetEngine();
+        var engine = AiDotNetEngine.Current;
         var result = engine.AvgPool2D(a.Value, poolSize, strides);
 
         void BackwardFunction(Tensor<T> gradient)
@@ -3418,15 +3419,15 @@ public static class TensorOperations<T>
 
             // Create gamma and beta nodes if not provided
             var gammaNode = gamma ?? new ComputationNode<T>(
-                Tensor<T>.Ones(normalizedShape), requiresGradient: false);
+                Tensor<T>.CreateDefault(normalizedShape, numOps.One), requiresGradient: false);
             var betaNode = beta ?? new ComputationNode<T>(
-                Tensor<T>.Zeros(normalizedShape), requiresGradient: false);
+                Tensor<T>.CreateDefault(normalizedShape, numOps.Zero), requiresGradient: false);
 
             var result = new Tensor<T>(shape);
             var normalized = new Tensor<T>(shape);
             var means = new T[batchElements];
             var variances = new T[batchElements];
-            var eps = numOps.FromDouble(epsilon);
+            var epsInner = numOps.FromDouble(epsilon);
 
             // Compute mean and variance for each batch element
             for (int b = 0; b < batchElements; b++)
@@ -3451,7 +3452,7 @@ public static class TensorOperations<T>
                 variances[b] = numOps.Divide(varSum, numOps.FromDouble(normalizedElements));
 
                 // Normalize and apply gamma/beta
-                var std = numOps.Sqrt(numOps.Add(variances[b], eps));
+                var std = numOps.Sqrt(numOps.Add(variances[b], epsInner));
                 for (int n = 0; n < normalizedElements; n++)
                 {
                     var norm = numOps.Divide(numOps.Subtract(a.Value[batchOffset + n], means[b]), std);
@@ -3512,7 +3513,7 @@ public static class TensorOperations<T>
                     for (int b = 0; b < capturedBatchElements; b++)
                     {
                         int batchOffset = b * capturedNormalizedElements;
-                        var std = numOps.Sqrt(numOps.Add(variances[b], eps));
+                        var std = numOps.Sqrt(numOps.Add(variances[b], epsInner));
                         var invStd = numOps.Divide(numOps.One, std);
 
                         // Compute gradient sums
@@ -3858,15 +3859,15 @@ public static class TensorOperations<T>
 
             // Create gamma and beta nodes if not provided
             var gammaNode = gamma ?? new ComputationNode<T>(
-                Tensor<T>.Ones(new int[] { channels }), requiresGradient: false);
+                Tensor<T>.CreateDefault(new int[] { channels }, numOps.One), requiresGradient: false);
             var betaNode = beta ?? new ComputationNode<T>(
-                Tensor<T>.Zeros(new int[] { channels }), requiresGradient: false);
+                Tensor<T>.CreateDefault(new int[] { channels }, numOps.Zero), requiresGradient: false);
 
             var result = new Tensor<T>(shape);
             var normalized = new Tensor<T>(shape);
             var batchMean = new T[channels];
             var batchVar = new T[channels];
-            var eps = numOps.FromDouble(epsilon);
+            var eps4D = numOps.FromDouble(epsilon);
             var totalElements = batchSize * spatialSize;
             var totalElementsT = numOps.FromDouble(totalElements);
 
@@ -3903,7 +3904,7 @@ public static class TensorOperations<T>
                 batchVar[c] = numOps.Divide(varSum, totalElementsT);
 
                 // Normalize and apply gamma/beta
-                var std = numOps.Sqrt(numOps.Add(batchVar[c], eps));
+                var std = numOps.Sqrt(numOps.Add(batchVar[c], eps4D));
                 for (int b = 0; b < batchSize; b++)
                 {
                     for (int h = 0; h < height; h++)
@@ -3972,7 +3973,7 @@ public static class TensorOperations<T>
                     var gradA = new Tensor<T>(shape);
                     for (int c = 0; c < channels; c++)
                     {
-                        var std = numOps.Sqrt(numOps.Add(batchVar[c], eps));
+                        var std = numOps.Sqrt(numOps.Add(batchVar[c], eps4D));
                         var invStd = numOps.Divide(numOps.One, std);
 
                         var gradSum = numOps.Zero;
@@ -4033,15 +4034,15 @@ public static class TensorOperations<T>
             var totalElementsT = numOps.FromDouble(totalElements);
 
             var gammaNode = gamma ?? new ComputationNode<T>(
-                Tensor<T>.Ones(new int[] { channels }), requiresGradient: false);
+                Tensor<T>.CreateDefault(new int[] { channels }, numOps.One), requiresGradient: false);
             var betaNode = beta ?? new ComputationNode<T>(
-                Tensor<T>.Zeros(new int[] { channels }), requiresGradient: false);
+                Tensor<T>.CreateDefault(new int[] { channels }, numOps.Zero), requiresGradient: false);
 
             var result = new Tensor<T>(shape);
             var normalized = new Tensor<T>(shape);
             var batchMean = new T[channels];
             var batchVar = new T[channels];
-            var eps = numOps.FromDouble(epsilon);
+            var epsND = numOps.FromDouble(epsilon);
 
             // Compute per-channel statistics
             int elementsPerChannel = a.Value.Length / channels;
@@ -4076,7 +4077,7 @@ public static class TensorOperations<T>
                 }
                 batchVar[c] = numOps.Divide(varSum, numOps.FromDouble(count));
 
-                var std = numOps.Sqrt(numOps.Add(batchVar[c], eps));
+                var std = numOps.Sqrt(numOps.Add(batchVar[c], epsND));
                 for (int i = 0; i < a.Value.Length; i++)
                 {
                     int channelIdx = (i / channelStride) % channels;
@@ -4097,7 +4098,7 @@ public static class TensorOperations<T>
                     var gradA = new Tensor<T>(shape);
                     for (int c = 0; c < channels; c++)
                     {
-                        var std = numOps.Sqrt(numOps.Add(batchVar[c], eps));
+                        var std = numOps.Sqrt(numOps.Add(batchVar[c], epsND));
                         var invStd = numOps.Divide(numOps.One, std);
 
                         var gradSum = numOps.Zero;
@@ -4381,7 +4382,7 @@ public static class TensorOperations<T>
             throw new ArgumentException($"Input channels ({inChannels}) must match kernel input channels ({kernelInChannels})");
 
         // Use IEngine for GPU/CPU acceleration
-        var engine = ComputeEngine.GetEngine();
+        var engine = AiDotNetEngine.Current;
         var result = engine.ConvTranspose2D(input.Value, kernel.Value, stride, padding, outputPadding);
 
         // Add bias if provided
@@ -5276,7 +5277,7 @@ public static class TensorOperations<T>
         }
 
         // Use IEngine for GPU/CPU acceleration
-        var engine = ComputeEngine.GetEngine();
+        var engine = AiDotNetEngine.Current;
         var result = engine.DepthwiseConv2D(input.Value, kernel.Value, stride, padding);
 
         // Add bias if provided
@@ -5594,8 +5595,7 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.LocallyConnectedConv2D;
         node.OperationParams = new Dictionary<string, object>
         {
-            { "Stride", stride },
-            { "Padding", padding }
+            { "Stride", stride }
         };
 
         var tape = GradientTape<T>.Current;
@@ -5752,9 +5752,8 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ReduceLogVariance;
         node.OperationParams = new Dictionary<string, object>
         {
-            { "Axes", axes! },
-            { "KeepDims", keepDims },
-            { "Mean", mean }
+            { "Axis", axis },
+            { "Epsilon", epsilon }
         };
 
         var tape = GradientTape<T>.Current;
@@ -6346,11 +6345,7 @@ public static class TensorOperations<T>
 
         // Set JIT compiler metadata
         node.OperationType = OperationType.GridSample;
-        node.OperationParams = new Dictionary<string, object>
-        {
-            { "PaddingMode", paddingMode },
-            { "AlignCorners", alignCorners }
-        };
+        node.OperationParams = new Dictionary<string, object>();
 
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
@@ -8962,11 +8957,11 @@ public static class TensorOperations<T>
             for (int inner = 0; inner < innerSize; inner++)
             {
                 // Find max for numerical stability
-                var maxVal = a.Value.GetValue(outer * axisSize * innerSize + inner);
+                var maxVal = a.Value[outer * axisSize * innerSize + inner];
                 for (int i = 1; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    var val = a.Value.GetValue(flatIdx);
+                    var val = a.Value[flatIdx];
                     if (numOps.GreaterThan(val, maxVal))
                         maxVal = val;
                 }
@@ -8976,7 +8971,7 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    var shifted = numOps.Subtract(a.Value.GetValue(flatIdx), maxVal);
+                    var shifted = numOps.Subtract(a.Value[flatIdx], maxVal);
                     logSumExp = numOps.Add(logSumExp, numOps.Exp(shifted));
                 }
                 logSumExp = numOps.Add(numOps.Log(logSumExp), maxVal);
@@ -8985,9 +8980,9 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    var logSoftmaxVal = numOps.Subtract(a.Value.GetValue(flatIdx), logSumExp);
-                    result.SetValue(flatIdx, logSoftmaxVal);
-                    softmaxOutput.SetValue(flatIdx, numOps.Exp(logSoftmaxVal));
+                    var logSoftmaxVal = numOps.Subtract(a.Value[flatIdx], logSumExp);
+                    result[flatIdx] = logSoftmaxVal;
+                    softmaxOutput[flatIdx] = numOps.Exp(logSoftmaxVal);
                 }
             }
         }
@@ -9012,14 +9007,14 @@ public static class TensorOperations<T>
                         for (int i = 0; i < capturedAxisSize; i++)
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
-                            gradSum = numOps.Add(gradSum, numOps.Multiply(gradient.GetValue(flatIdx), softmaxOutput.GetValue(flatIdx)));
+                            gradSum = numOps.Add(gradSum, numOps.Multiply(gradient[flatIdx], softmaxOutput[flatIdx]));
                         }
                         // Gradient: gradient - softmax * sum(gradient)
                         for (int i = 0; i < capturedAxisSize; i++)
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
-                            gradA.SetValue(flatIdx, numOps.Subtract(gradient.GetValue(flatIdx),
-                                numOps.Multiply(softmaxOutput.GetValue(flatIdx), gradSum)));
+                            gradA[flatIdx] = numOps.Subtract(gradient[flatIdx],
+                                numOps.Multiply(softmaxOutput[flatIdx], gradSum));
                         }
                     }
                 }
@@ -9095,11 +9090,11 @@ public static class TensorOperations<T>
             for (int inner = 0; inner < innerSize; inner++)
             {
                 // Find max of -x for numerical stability (which is -min of x)
-                var maxNegVal = numOps.Negate(a.Value.GetValue(outer * axisSize * innerSize + inner));
+                var maxNegVal = numOps.Negate(a.Value[outer * axisSize * innerSize + inner]);
                 for (int i = 1; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    var negVal = numOps.Negate(a.Value.GetValue(flatIdx));
+                    var negVal = numOps.Negate(a.Value[flatIdx]);
                     if (numOps.GreaterThan(negVal, maxNegVal))
                         maxNegVal = negVal;
                 }
@@ -9110,7 +9105,7 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    var shifted = numOps.Subtract(numOps.Negate(a.Value.GetValue(flatIdx)), maxNegVal);
+                    var shifted = numOps.Subtract(numOps.Negate(a.Value[flatIdx]), maxNegVal);
                     expValues[i] = numOps.Exp(shifted);
                     expSum = numOps.Add(expSum, expValues[i]);
                 }
@@ -9119,7 +9114,7 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    result.SetValue(flatIdx, numOps.Divide(expValues[i], expSum));
+                    result[flatIdx] = numOps.Divide(expValues[i], expSum);
                 }
             }
         }
@@ -9145,14 +9140,14 @@ public static class TensorOperations<T>
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
                             dotProduct = numOps.Add(dotProduct,
-                                numOps.Multiply(gradient.GetValue(flatIdx), result.GetValue(flatIdx)));
+                                numOps.Multiply(gradient[flatIdx], result[flatIdx]));
                         }
                         for (int i = 0; i < capturedAxisSize; i++)
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
-                            var gradMinusDot = numOps.Subtract(gradient.GetValue(flatIdx), dotProduct);
+                            var gradMinusDot = numOps.Subtract(gradient[flatIdx], dotProduct);
                             // Negate because d(softmax(-x))/dx = -softmax(-x) * (gradient - dot)
-                            gradA.SetValue(flatIdx, numOps.Negate(numOps.Multiply(result.GetValue(flatIdx), gradMinusDot)));
+                            gradA[flatIdx] = numOps.Negate(numOps.Multiply(result[flatIdx], gradMinusDot));
                         }
                     }
                 }
@@ -9228,11 +9223,11 @@ public static class TensorOperations<T>
             for (int inner = 0; inner < innerSize; inner++)
             {
                 // Find max of -x for numerical stability
-                var maxNegVal = numOps.Negate(a.Value.GetValue(outer * axisSize * innerSize + inner));
+                var maxNegVal = numOps.Negate(a.Value[outer * axisSize * innerSize + inner]);
                 for (int i = 1; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    var negVal = numOps.Negate(a.Value.GetValue(flatIdx));
+                    var negVal = numOps.Negate(a.Value[flatIdx]);
                     if (numOps.GreaterThan(negVal, maxNegVal))
                         maxNegVal = negVal;
                 }
@@ -9242,7 +9237,7 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    var shifted = numOps.Subtract(numOps.Negate(a.Value.GetValue(flatIdx)), maxNegVal);
+                    var shifted = numOps.Subtract(numOps.Negate(a.Value[flatIdx]), maxNegVal);
                     logSumExp = numOps.Add(logSumExp, numOps.Exp(shifted));
                 }
                 logSumExp = numOps.Add(numOps.Log(logSumExp), maxNegVal);
@@ -9251,9 +9246,9 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    var logSoftminVal = numOps.Subtract(numOps.Negate(a.Value.GetValue(flatIdx)), logSumExp);
-                    result.SetValue(flatIdx, logSoftminVal);
-                    softminOutput.SetValue(flatIdx, numOps.Exp(logSoftminVal));
+                    var logSoftminVal = numOps.Subtract(numOps.Negate(a.Value[flatIdx]), logSumExp);
+                    result[flatIdx] = logSoftminVal;
+                    softminOutput[flatIdx] = numOps.Exp(logSoftminVal);
                 }
             }
         }
@@ -9277,14 +9272,14 @@ public static class TensorOperations<T>
                         for (int i = 0; i < capturedAxisSize; i++)
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
-                            gradSum = numOps.Add(gradSum, numOps.Multiply(gradient.GetValue(flatIdx), softminOutput.GetValue(flatIdx)));
+                            gradSum = numOps.Add(gradSum, numOps.Multiply(gradient[flatIdx], softminOutput[flatIdx]));
                         }
                         for (int i = 0; i < capturedAxisSize; i++)
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
                             // Gradient: -(gradient - softmin * sum(gradient))
-                            gradA.SetValue(flatIdx, numOps.Negate(numOps.Subtract(gradient.GetValue(flatIdx),
-                                numOps.Multiply(softminOutput.GetValue(flatIdx), gradSum))));
+                            gradA[flatIdx] = numOps.Negate(numOps.Subtract(gradient[flatIdx],
+                                numOps.Multiply(softminOutput[flatIdx], gradSum)));
                         }
                     }
                 }
@@ -9634,7 +9629,7 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    var val = a.Value.GetValue(flatIdx);
+                    var val = a.Value[flatIdx];
                     sumSquares = numOps.Add(sumSquares, numOps.Multiply(val, val));
                 }
                 norms[normIdx] = numOps.Sqrt(sumSquares);
@@ -9648,15 +9643,15 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    normalized.SetValue(flatIdx, numOps.Divide(a.Value.GetValue(flatIdx), norm));
+                    normalized[flatIdx] = numOps.Divide(a.Value[flatIdx], norm);
                 }
 
                 // Apply softmax to normalized values
-                var maxVal = normalized.GetValue(outer * axisSize * innerSize + inner);
+                var maxVal = normalized[outer * axisSize * innerSize + inner];
                 for (int i = 1; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    var val = normalized.GetValue(flatIdx);
+                    var val = normalized[flatIdx];
                     if (numOps.GreaterThan(val, maxVal))
                         maxVal = val;
                 }
@@ -9666,7 +9661,7 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    var shifted = numOps.Subtract(normalized.GetValue(flatIdx), maxVal);
+                    var shifted = numOps.Subtract(normalized[flatIdx], maxVal);
                     expValues[i] = numOps.Exp(shifted);
                     expSum = numOps.Add(expSum, expValues[i]);
                 }
@@ -9674,7 +9669,7 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    result.SetValue(flatIdx, numOps.Divide(expValues[i], expSum));
+                    result[flatIdx] = numOps.Divide(expValues[i], expSum);
                 }
             }
         }
@@ -9706,7 +9701,7 @@ public static class TensorOperations<T>
                         for (int i = 0; i < capturedAxisSize; i++)
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
-                            dotProduct = numOps.Add(dotProduct, numOps.Multiply(gradient.GetValue(flatIdx), result.GetValue(flatIdx)));
+                            dotProduct = numOps.Add(dotProduct, numOps.Multiply(gradient[flatIdx], result[flatIdx]));
                         }
 
                         // Gradient through softmax
@@ -9714,8 +9709,8 @@ public static class TensorOperations<T>
                         for (int i = 0; i < capturedAxisSize; i++)
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
-                            softmaxGrad[i] = numOps.Multiply(result.GetValue(flatIdx),
-                                numOps.Subtract(gradient.GetValue(flatIdx), dotProduct));
+                            softmaxGrad[i] = numOps.Multiply(result[flatIdx],
+                                numOps.Subtract(gradient[flatIdx], dotProduct));
                         }
 
                         // Gradient through L2 normalization
@@ -9724,7 +9719,7 @@ public static class TensorOperations<T>
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
                             dotNorm = numOps.Add(dotNorm,
-                                numOps.Multiply(softmaxGrad[i], a.Value.GetValue(flatIdx)));
+                                numOps.Multiply(softmaxGrad[i], a.Value[flatIdx]));
                         }
 
                         for (int i = 0; i < capturedAxisSize; i++)
@@ -9732,9 +9727,9 @@ public static class TensorOperations<T>
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
                             var term1 = numOps.Divide(softmaxGrad[i], norm);
                             var term2 = numOps.Divide(
-                                numOps.Multiply(a.Value.GetValue(flatIdx), dotNorm),
+                                numOps.Multiply(a.Value[flatIdx], dotNorm),
                                 normCubed);
-                            gradA.SetValue(flatIdx, numOps.Subtract(term1, term2));
+                            gradA[flatIdx] = numOps.Subtract(term1, term2);
                         }
                     }
                 }
@@ -9821,7 +9816,7 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    var x = a.Value.GetValue(flatIdx);
+                    var x = a.Value[flatIdx];
                     var taylorExp = numOps.One; // Start with 1
                     var xPower = numOps.One;
 
@@ -9837,7 +9832,7 @@ public static class TensorOperations<T>
                         ? taylorExp
                         : numOps.FromDouble(1e-10);
 
-                    taylorExpValues.SetValue(flatIdx, taylorExp);
+                    taylorExpValues[flatIdx] = taylorExp;
                     expSum = numOps.Add(expSum, taylorExp);
                 }
 
@@ -9845,7 +9840,7 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    result.SetValue(flatIdx, numOps.Divide(taylorExpValues.GetValue(flatIdx), expSum));
+                    result[flatIdx] = numOps.Divide(taylorExpValues[flatIdx], expSum);
                 }
             }
         }
@@ -9872,7 +9867,7 @@ public static class TensorOperations<T>
                         for (int i = 0; i < capturedAxisSize; i++)
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
-                            expSum = numOps.Add(expSum, taylorExpValues.GetValue(flatIdx));
+                            expSum = numOps.Add(expSum, taylorExpValues[flatIdx]);
                         }
 
                         // Softmax-style Jacobian: s_i * (δ_ij - s_j)
@@ -9881,19 +9876,19 @@ public static class TensorOperations<T>
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
                             dotProduct = numOps.Add(dotProduct,
-                                numOps.Multiply(gradient.GetValue(flatIdx), result.GetValue(flatIdx)));
+                                numOps.Multiply(gradient[flatIdx], result[flatIdx]));
                         }
 
                         for (int i = 0; i < capturedAxisSize; i++)
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
                             // Softmax gradient part
-                            var softmaxGrad = numOps.Multiply(result.GetValue(flatIdx),
-                                numOps.Subtract(gradient.GetValue(flatIdx), dotProduct));
+                            var softmaxGrad = numOps.Multiply(result[flatIdx],
+                                numOps.Subtract(gradient[flatIdx], dotProduct));
 
                             // Taylor exp derivative: d/dx[1 + x + x²/2! + ...] = 1 + x + x²/2! + ... (almost)
                             // Actually: d/dx[Taylor_n(x)] = Taylor_{n-1}(x) for exp
-                            var x = a.Value.GetValue(flatIdx);
+                            var x = a.Value[flatIdx];
                             var taylorExpDeriv = numOps.One;
                             var xPower = numOps.One;
                             for (int n = 1; n < capturedOrder; n++)
@@ -9905,7 +9900,7 @@ public static class TensorOperations<T>
 
                             // Chain rule: d(softmax)/d(taylorExp) * d(taylorExp)/dx
                             var normFactor = numOps.Divide(taylorExpDeriv, expSum);
-                            gradA.SetValue(flatIdx, numOps.Multiply(softmaxGrad, normFactor));
+                            gradA[flatIdx] = numOps.Multiply(softmaxGrad, normFactor);
                         }
                     }
                 }
@@ -9984,7 +9979,7 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    indexed.Add((a.Value.GetValue(flatIdx), i));
+                    indexed.Add((a.Value[flatIdx], i));
                 }
 
                 // Sort by value descending
@@ -10030,15 +10025,15 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    var diff = numOps.Subtract(a.Value.GetValue(flatIdx), tau);
+                    var diff = numOps.Subtract(a.Value[flatIdx], tau);
                     if (numOps.GreaterThan(diff, numOps.Zero))
                     {
-                        result.SetValue(flatIdx, diff);
+                        result[flatIdx] = diff;
                         supportMasks[flatIdx] = true;
                     }
                     else
                     {
-                        result.SetValue(flatIdx, numOps.Zero);
+                        result[flatIdx] = numOps.Zero;
                         supportMasks[flatIdx] = false;
                     }
                 }
@@ -10071,7 +10066,7 @@ public static class TensorOperations<T>
                             if (supportMasks[flatIdx])
                             {
                                 supportSize++;
-                                gradSum = numOps.Add(gradSum, gradient.GetValue(flatIdx));
+                                gradSum = numOps.Add(gradSum, gradient[flatIdx]);
                             }
                         }
 
@@ -10085,11 +10080,11 @@ public static class TensorOperations<T>
                                 int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
                                 if (supportMasks[flatIdx])
                                 {
-                                    gradA.SetValue(flatIdx, numOps.Subtract(gradient.GetValue(flatIdx), gradMean));
+                                    gradA[flatIdx] = numOps.Subtract(gradient[flatIdx], gradMean);
                                 }
                                 else
                                 {
-                                    gradA.SetValue(flatIdx, numOps.Zero);
+                                    gradA[flatIdx] = numOps.Zero;
                                 }
                             }
                         }
@@ -10391,7 +10386,7 @@ public static class TensorOperations<T>
 
         // Extract the feature value at featureIndex
         // Compute p_left = σ((threshold - x[featureIndex]) / temperature)
-        var inputData = input.Value.Data;
+        var inputData = input.Value.ToVector();
         var featureValue = featureIndex < inputData.Length ? inputData[featureIndex] : numOps.Zero;
         var diff = numOps.Subtract(threshold, featureValue);
         var scaled = numOps.Divide(diff, temp);
@@ -10448,14 +10443,14 @@ public static class TensorOperations<T>
 
                 // Sum over output dimensions to get scalar gradient for the feature
                 var gradSum = numOps.Zero;
-                for (int i = 0; i < gradient.Data.Length && i < valueDiff.Data.Length; i++)
+                for (int i = 0; i < gradient.Length && i < valueDiff.Length; i++)
                 {
-                    gradSum = numOps.Add(gradSum, numOps.Multiply(gradient.Data[i],
-                        numOps.Multiply(valueDiff.Data[i], gradScale)));
+                    gradSum = numOps.Add(gradSum, numOps.Multiply(gradient.GetFlatIndexValue(i),
+                        numOps.Multiply(valueDiff.GetFlatIndexValue(i), gradScale)));
                 }
 
                 // Create gradient tensor with gradient at featureIndex
-                var inputGrad = new T[input.Value.Data.Length];
+                var inputGrad = new T[input.Value.Length];
                 for (int i = 0; i < inputGrad.Length; i++)
                     inputGrad[i] = numOps.Zero;
                 if (featureIndex < inputGrad.Length)
@@ -10518,9 +10513,9 @@ public static class TensorOperations<T>
         var numOps = MathHelper.GetNumericOperations<T>();
         var temp = temperature ?? numOps.FromDouble(1.0);
 
-        var inputData = input.Value.Data;
-        var svData = supportVectors.Value.Data;
-        var labelData = labels.Value.Data;
+        var inputData = input.Value.ToVector();
+        var svData = supportVectors.Value.ToVector();
+        var labelData = labels.Value.ToVector();
 
         // Determine number of support vectors and features
         var svShape = supportVectors.Value.Shape;
@@ -10593,9 +10588,9 @@ public static class TensorOperations<T>
                     for (int j = 0; j < storedOutputSize; j++)
                     {
                         var idx = i * storedOutputSize + j;
-                        if (idx < gradLabels.Length && j < gradient.Data.Length)
+                        if (idx < gradLabels.Length && j < gradient.Length)
                         {
-                            gradLabels[idx] = numOps.Multiply(storedWeights[i], gradient.Data[j]);
+                            gradLabels[idx] = numOps.Multiply(storedWeights[i], gradient.GetFlatIndexValue(j));
                         }
                     }
                 }
@@ -10615,7 +10610,7 @@ public static class TensorOperations<T>
                     gradInput[i] = numOps.Zero;
 
                 // For each output dimension and each support vector
-                for (int j = 0; j < storedOutputSize && j < gradient.Data.Length; j++)
+                for (int j = 0; j < storedOutputSize && j < gradient.Length; j++)
                 {
                     for (int i = 0; i < storedNSamples; i++)
                     {
@@ -10641,7 +10636,7 @@ public static class TensorOperations<T>
                                 var distGrad = numOps.Multiply(numOps.FromDouble(2.0), numOps.Subtract(inputVal, svVal));
 
                                 var scaleFactor = numOps.Negate(numOps.Divide(numOps.One, temp));
-                                var contrib = numOps.Multiply(gradient.Data[j],
+                                var contrib = numOps.Multiply(gradient.GetFlatIndexValue(j),
                                     numOps.Multiply(labelVal2,
                                         numOps.Multiply(jacobian,
                                             numOps.Multiply(scaleFactor, distGrad))));
@@ -10735,7 +10730,7 @@ public static class TensorOperations<T>
         bool symmetric = true)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputData = input.Value.Data;
+        var inputData = input.Value.ToVector();
 
         // Compute quantization parameters
         var qMin = symmetric ? numOps.FromDouble(-(1 << (numBits - 1))) : numOps.Zero;

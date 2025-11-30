@@ -719,7 +719,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         var output = TensorOperations<T>.StraightThroughThreshold(activationFlat, SparsityThreshold);
 
         // Apply layer activation if present
-        output = ApplyActivationToComputationGraph(output);
+        output = ApplyActivationToGraph(output);
 
         return output;
     }

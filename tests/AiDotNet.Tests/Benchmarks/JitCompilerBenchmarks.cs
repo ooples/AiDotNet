@@ -1,5 +1,6 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.JitCompiler;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;

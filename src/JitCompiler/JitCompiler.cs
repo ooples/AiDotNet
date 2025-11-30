@@ -1158,7 +1158,10 @@ public class JitCompiler : IDisposable
         var nodeExecutionOrder = new List<ComputationNode<T>>();
         var visited = new HashSet<object>();
 
-        // First pass: identify all unsupported nodes
+        // Build a child mapping since ComputationNode only has Parents
+        var childMapping = new Dictionary<object, List<ComputationNode<T>>>();
+
+        // First pass: identify all unsupported nodes and build child mapping
         void MarkUnsupported(ComputationNode<T> node)
         {
             if (visited.Contains(node)) return;
@@ -1166,6 +1169,13 @@ public class JitCompiler : IDisposable
 
             foreach (var parent in node.Parents.Cast<ComputationNode<T>>())
             {
+                // Build child mapping
+                if (!childMapping.ContainsKey(parent))
+                {
+                    childMapping[parent] = new List<ComputationNode<T>>();
+                }
+                childMapping[parent].Add(node);
+
                 MarkUnsupported(parent);
             }
 
@@ -1212,8 +1222,13 @@ public class JitCompiler : IDisposable
                 if (currentPartition.Count > 0)
                 {
                     // Mark the last nodes as partition outputs
+                    // A node is a partition output if it has children that are unsupported or is the output node
                     partitionOutputs.UnionWith(currentPartition.Where(n =>
-                        n.Children.Any(c => unsupportedNodeSet.Contains(c) || c == outputNode)));
+                    {
+                        if (!childMapping.TryGetValue(n, out var children))
+                            return false;
+                        return children.Any(c => unsupportedNodeSet.Contains(c) || c.Equals(outputNode));
+                    }));
 
                     result.JitPartitions.Add(new GraphPartition<T>
                     {
@@ -1257,7 +1272,11 @@ public class JitCompiler : IDisposable
             }
             else
             {
-                partitionOutputs.UnionWith(currentPartition.Where(n => n == outputNode || n.Children.Count == 0));
+                // A node is a partition output if it's the output node or has no children (leaf node)
+                partitionOutputs.UnionWith(currentPartition.Where(n =>
+                    n.Equals(outputNode) ||
+                    !childMapping.ContainsKey(n) ||
+                    childMapping[n].Count == 0));
             }
 
             result.JitPartitions.Add(new GraphPartition<T>
@@ -1316,7 +1335,6 @@ public class JitCompiler : IDisposable
             }
 
             // Execute each partition in order
-            int partitionIdx = 0;
             foreach (var node in partitioning.ExecutionOrder)
             {
                 if (inputs.Contains(node))
@@ -1386,10 +1404,12 @@ public class JitCompiler : IDisposable
             }
         }
 
-        // Compute this node's value
-        node.ComputeValue();
+        // For interpreted execution, the node's value should already be computed
+        // through its forward function or operation. The node.Value contains the result.
+        // If needed, we could execute the forward pass here, but ComputationNode
+        // doesn't have a ComputeValue method - the value is set by tensor operations.
 
-        // Store in cache
+        // Store in cache (the value should already be set)
         tensorCache[node] = node.Value;
     }
 

@@ -519,7 +519,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        return TensorOperations<T>.ReduceLogVariance(inputNode, axes: new[] { Axis }, keepDims: false);
+        return TensorOperations<T>.ReduceLogVariance(inputNode, axis: Axis);
     }
 
     public override bool SupportsJitCompilation => true;

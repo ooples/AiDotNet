@@ -667,7 +667,7 @@ public class ReservoirLayer<T> : LayerBase<T>
         var output = TensorOperations<T>.Reshape(newState, _reservoirSize);
 
         // Apply layer activation if present
-        output = ApplyActivationToComputationGraph(output);
+        output = ApplyActivationToGraph(output);
 
         return output;
     }

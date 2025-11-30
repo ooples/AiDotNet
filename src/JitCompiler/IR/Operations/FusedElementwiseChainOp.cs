@@ -17,14 +17,14 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// </remarks>
 public class FusedElementwiseChainOp : IROp
 {
-    /// <summary>Gets or sets the list of operations in the chain.</summary>
-    public List<string> Operations { get; set; } = [];
+    /// <summary>Gets or sets the list of operation names in the chain.</summary>
+    public List<string> OperationNames { get; set; } = [];
 
     /// <summary>Validates the operation chain.</summary>
     public override bool Validate()
     {
         if (!base.Validate()) return false;
-        if (Operations.Count < 2) return false;
+        if (OperationNames.Count < 2) return false;
         return true;
     }
 }

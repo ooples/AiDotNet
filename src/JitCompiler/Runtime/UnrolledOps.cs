@@ -50,9 +50,9 @@ public static class UnrolledOps
         string[] operations,
         int unrollFactor)
     {
-        var result = new T[input.Data.Length];
-        var data = input.Data;
-        var length = data.Length;
+        var inputVector = input.ToVector();
+        var result = new T[input.Length];
+        var length = input.Length;
 
         // Process in blocks of unrollFactor
         int i = 0;
@@ -63,7 +63,7 @@ public static class UnrolledOps
         {
             for (int u = 0; u < unrollFactor; u++)
             {
-                var value = ConvertToDouble(data[i + u]);
+                var value = ConvertToDouble(inputVector[i + u]);
                 foreach (var op in operations)
                 {
                     value = ApplyOperation(value, op);
@@ -75,7 +75,7 @@ public static class UnrolledOps
         // Handle remainder
         for (; i < length; i++)
         {
-            var value = ConvertToDouble(data[i]);
+            var value = ConvertToDouble(inputVector[i]);
             foreach (var op in operations)
             {
                 value = ApplyOperation(value, op);
@@ -83,7 +83,7 @@ public static class UnrolledOps
             result[i] = ConvertFromDouble<T>(value);
         }
 
-        return new Tensor<T>(result, input.Shape);
+        return new Tensor<T>(input.Shape, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(result));
     }
 
     /// <summary>
@@ -103,7 +103,7 @@ public static class UnrolledOps
         int totalElements)
     {
         var result = new T[totalElements];
-        var data = input.Data;
+        var inputVector = input.ToVector();
 
         int i = 0;
         int unrolledEnd = totalElements - (totalElements % unrollFactor);
@@ -114,35 +114,35 @@ public static class UnrolledOps
             // Manually unroll based on common unroll factors
             if (unrollFactor >= 8)
             {
-                result[i] = ApplyOp<T>(data[i], operation);
-                result[i + 1] = ApplyOp<T>(data[i + 1], operation);
-                result[i + 2] = ApplyOp<T>(data[i + 2], operation);
-                result[i + 3] = ApplyOp<T>(data[i + 3], operation);
-                result[i + 4] = ApplyOp<T>(data[i + 4], operation);
-                result[i + 5] = ApplyOp<T>(data[i + 5], operation);
-                result[i + 6] = ApplyOp<T>(data[i + 6], operation);
-                result[i + 7] = ApplyOp<T>(data[i + 7], operation);
+                result[i] = ApplyOp<T>(inputVector[i], operation);
+                result[i + 1] = ApplyOp<T>(inputVector[i + 1], operation);
+                result[i + 2] = ApplyOp<T>(inputVector[i + 2], operation);
+                result[i + 3] = ApplyOp<T>(inputVector[i + 3], operation);
+                result[i + 4] = ApplyOp<T>(inputVector[i + 4], operation);
+                result[i + 5] = ApplyOp<T>(inputVector[i + 5], operation);
+                result[i + 6] = ApplyOp<T>(inputVector[i + 6], operation);
+                result[i + 7] = ApplyOp<T>(inputVector[i + 7], operation);
                 for (int j = 8; j < unrollFactor; j++)
                 {
-                    result[i + j] = ApplyOp<T>(data[i + j], operation);
+                    result[i + j] = ApplyOp<T>(inputVector[i + j], operation);
                 }
             }
             else if (unrollFactor >= 4)
             {
-                result[i] = ApplyOp<T>(data[i], operation);
-                result[i + 1] = ApplyOp<T>(data[i + 1], operation);
-                result[i + 2] = ApplyOp<T>(data[i + 2], operation);
-                result[i + 3] = ApplyOp<T>(data[i + 3], operation);
+                result[i] = ApplyOp<T>(inputVector[i], operation);
+                result[i + 1] = ApplyOp<T>(inputVector[i + 1], operation);
+                result[i + 2] = ApplyOp<T>(inputVector[i + 2], operation);
+                result[i + 3] = ApplyOp<T>(inputVector[i + 3], operation);
                 for (int j = 4; j < unrollFactor; j++)
                 {
-                    result[i + j] = ApplyOp<T>(data[i + j], operation);
+                    result[i + j] = ApplyOp<T>(inputVector[i + j], operation);
                 }
             }
             else
             {
                 for (int j = 0; j < unrollFactor; j++)
                 {
-                    result[i + j] = ApplyOp<T>(data[i + j], operation);
+                    result[i + j] = ApplyOp<T>(inputVector[i + j], operation);
                 }
             }
         }
@@ -150,10 +150,10 @@ public static class UnrolledOps
         // Handle remainder
         for (; i < totalElements; i++)
         {
-            result[i] = ApplyOp<T>(data[i], operation);
+            result[i] = ApplyOp<T>(inputVector[i], operation);
         }
 
-        return new Tensor<T>(result, input.Shape);
+        return new Tensor<T>(input.Shape, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(result));
     }
 
     /// <summary>
@@ -170,8 +170,8 @@ public static class UnrolledOps
         string reductionType,
         int unrollFactor)
     {
-        var data = input.Data;
-        var length = data.Length;
+        var inputVector = input.ToVector();
+        var length = input.Length;
 
         // Use accumulators for tree reduction
         var accumulators = new double[unrollFactor];
@@ -184,7 +184,7 @@ public static class UnrolledOps
             "Min" => double.MaxValue,
             _ => 0.0
         };
-        Array.Fill(accumulators, initValue);
+        for (int k = 0; k < accumulators.Length; k++) accumulators[k] = initValue;
 
         // Parallel accumulation
         int i = 0;
@@ -194,7 +194,7 @@ public static class UnrolledOps
         {
             for (int j = 0; j < unrollFactor; j++)
             {
-                accumulators[j] = ApplyReduction(accumulators[j], ConvertToDouble(data[i + j]), reductionType);
+                accumulators[j] = ApplyReduction(accumulators[j], ConvertToDouble(inputVector[i + j]), reductionType);
             }
         }
 
@@ -203,7 +203,7 @@ public static class UnrolledOps
         {
             accumulators[i % unrollFactor] = ApplyReduction(
                 accumulators[i % unrollFactor],
-                ConvertToDouble(data[i]),
+                ConvertToDouble(inputVector[i]),
                 reductionType);
         }
 
@@ -220,7 +220,7 @@ public static class UnrolledOps
             result /= length;
         }
 
-        return new Tensor<T>(new[] { ConvertFromDouble<T>(result) }, new[] { 1 });
+        return new Tensor<T>([1], new AiDotNet.Tensors.LinearAlgebra.Vector<T>([ConvertFromDouble<T>(result)]));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

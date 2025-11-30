@@ -574,7 +574,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         var output = _innerLayer.ExportComputationGraph(inputNodes);
 
         // Apply layer activation
-        output = ApplyActivationToComputationGraph(output);
+        output = ApplyActivationToGraph(output);
 
         return output;
     }

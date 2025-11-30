@@ -166,7 +166,7 @@ public class ProfileReport
             WriteIndented = indented
         };
 
-        return JsonSerializer.Serialize(data, options);
+        return System.Text.Json.JsonSerializer.Serialize(data, options);
     }
 
     /// <summary>
@@ -253,7 +253,7 @@ public class ProfileReport
     private static string TruncateName(string name, int maxLength)
     {
         if (name.Length <= maxLength) return name;
-        return string.Concat(name.AsSpan(0, maxLength - 3), "...");
+        return name.Substring(0, maxLength - 3) + "...";
     }
 
     private static string FormatBytes(long bytes)

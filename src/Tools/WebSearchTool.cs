@@ -1,5 +1,6 @@
 using Newtonsoft.Json;
 using AiDotNet.Interfaces;
+using System.Net.Http;
 
 namespace AiDotNet.Tools;
 
