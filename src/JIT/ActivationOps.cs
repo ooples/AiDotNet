@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.Engines;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -141,6 +142,7 @@ public class EluOp<T> : IROp where T : struct
 public class SeluOp<T> : IROp where T : struct
 {
     private readonly IEngine _engine;
+    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private const double Alpha = 1.6732632423543772848170429916717;
     private const double Lambda = 1.0507009873554804934193349852946;
 
@@ -158,7 +160,7 @@ public class SeluOp<T> : IROp where T : struct
 
         // SELU is λ * ELU(x, α)
         var eluResult = _engine.ELU(input, Alpha);
-        return _engine.TensorMultiplyScalar(eluResult, (T)(object)Lambda);
+        return _engine.TensorMultiplyScalar(eluResult, _numOps.FromDouble(Lambda));
     }
 
     public Tensor<T> Backward(Tensor<T> input, Tensor<T> gradOutput)
