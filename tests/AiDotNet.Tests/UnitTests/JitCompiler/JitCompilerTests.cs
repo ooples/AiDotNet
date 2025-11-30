@@ -1,4 +1,3 @@
-using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;

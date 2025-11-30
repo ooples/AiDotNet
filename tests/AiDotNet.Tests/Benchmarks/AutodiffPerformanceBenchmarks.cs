@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;

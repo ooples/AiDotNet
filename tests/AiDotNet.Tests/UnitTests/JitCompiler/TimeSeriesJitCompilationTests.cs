@@ -1,8 +1,11 @@
 using Xunit;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TimeSeries;
 using AiDotNet.Autodiff;
 using AiDotNet.JitCompiler;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Interfaces;
+using JitCompilerClass = AiDotNet.JitCompiler.JitCompiler;
 
 namespace AiDotNet.Tests.UnitTests.JitCompiler;
 
@@ -18,7 +21,7 @@ public class TimeSeriesJitCompilationTests
     public void NBEATSModel_SupportsJitCompilation_WhenTrained()
     {
         // Arrange
-        var options = new NBEATSOptions
+        var options = new NBEATSModelOptions<double>
         {
             LookbackWindow = 10,
             ForecastHorizon = 3,
@@ -29,8 +32,8 @@ public class TimeSeriesJitCompilationTests
         var model = new NBEATSModel<double>(options);
 
         // Train with simple data
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Assert
         Assert.True(model.SupportsJitCompilation, "NBEATSModel should support JIT after training");
@@ -40,7 +43,7 @@ public class TimeSeriesJitCompilationTests
     public void NBEATSModel_ExportComputationGraph_ReturnsValidGraph()
     {
         // Arrange
-        var options = new NBEATSOptions
+        var options = new NBEATSModelOptions<double>
         {
             LookbackWindow = 10,
             ForecastHorizon = 3,
@@ -49,8 +52,8 @@ public class TimeSeriesJitCompilationTests
             ThetaDimension = 4
         };
         var model = new NBEATSModel<double>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Act
         var inputNodes = new List<ComputationNode<double>>();
@@ -66,7 +69,7 @@ public class TimeSeriesJitCompilationTests
     public void NBEATSModel_JitCompilation_ProducesCorrectResults()
     {
         // Arrange
-        var options = new NBEATSOptions
+        var options = new NBEATSModelOptions<double>
         {
             LookbackWindow = 10,
             ForecastHorizon = 3,
@@ -75,14 +78,14 @@ public class TimeSeriesJitCompilationTests
             ThetaDimension = 4
         };
         var model = new NBEATSModel<double>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         var inputNodes = new List<ComputationNode<double>>();
         var outputNode = model.ExportComputationGraph(inputNodes);
 
         // Act
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
         var compatibility = jit.AnalyzeCompatibility(outputNode, inputNodes);
 
         // Assert
@@ -96,7 +99,7 @@ public class TimeSeriesJitCompilationTests
     public void TBATSModel_SupportsJitCompilation_WhenTrained()
     {
         // Arrange
-        var options = new TBATSOptions
+        var options = new TBATSModelOptions<double>
         {
             SeasonalPeriods = new int[] { 7 },
             UseBoxCox = false,
@@ -105,8 +108,8 @@ public class TimeSeriesJitCompilationTests
             FourierOrder = 2
         };
         var model = new TBATSModel<double>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Assert
         Assert.True(model.SupportsJitCompilation, "TBATSModel should support JIT after training");
@@ -116,7 +119,7 @@ public class TimeSeriesJitCompilationTests
     public void TBATSModel_ExportComputationGraph_ReturnsValidGraph()
     {
         // Arrange
-        var options = new TBATSOptions
+        var options = new TBATSModelOptions<double>
         {
             SeasonalPeriods = new int[] { 7 },
             UseBoxCox = false,
@@ -125,8 +128,8 @@ public class TimeSeriesJitCompilationTests
             FourierOrder = 2
         };
         var model = new TBATSModel<double>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Act
         var inputNodes = new List<ComputationNode<double>>();
@@ -145,14 +148,13 @@ public class TimeSeriesJitCompilationTests
         // Arrange
         var options = new ProphetOptions<double, Matrix<double>, Vector<double>>
         {
-            GrowthType = GrowthType.Linear,
             YearlySeasonality = false,
             WeeklySeasonality = false,
             DailySeasonality = false
         };
         var model = new ProphetModel<double, Matrix<double>, Vector<double>>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Assert
         Assert.True(model.SupportsJitCompilation, "ProphetModel should support JIT after training");
@@ -164,14 +166,13 @@ public class TimeSeriesJitCompilationTests
         // Arrange
         var options = new ProphetOptions<double, Matrix<double>, Vector<double>>
         {
-            GrowthType = GrowthType.Linear,
             YearlySeasonality = false,
             WeeklySeasonality = false,
             DailySeasonality = false
         };
         var model = new ProphetModel<double, Matrix<double>, Vector<double>>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Act
         var inputNodes = new List<ComputationNode<double>>();
@@ -188,7 +189,7 @@ public class TimeSeriesJitCompilationTests
     public void BayesianStructuralTimeSeriesModel_SupportsJitCompilation_WhenTrained()
     {
         // Arrange
-        var options = new BSTSOptions
+        var options = new BayesianStructuralTimeSeriesOptions<double>
         {
             NumIterations = 10,
             BurnIn = 5,
@@ -196,8 +197,8 @@ public class TimeSeriesJitCompilationTests
             LocalTrendVariance = 0.01
         };
         var model = new BayesianStructuralTimeSeriesModel<double>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Assert
         Assert.True(model.SupportsJitCompilation, "BayesianStructuralTimeSeriesModel should support JIT after training");
@@ -207,7 +208,7 @@ public class TimeSeriesJitCompilationTests
     public void BayesianStructuralTimeSeriesModel_ExportComputationGraph_ReturnsValidGraph()
     {
         // Arrange
-        var options = new BSTSOptions
+        var options = new BayesianStructuralTimeSeriesOptions<double>
         {
             NumIterations = 10,
             BurnIn = 5,
@@ -215,8 +216,8 @@ public class TimeSeriesJitCompilationTests
             LocalTrendVariance = 0.01
         };
         var model = new BayesianStructuralTimeSeriesModel<double>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Act
         var inputNodes = new List<ComputationNode<double>>();
@@ -233,7 +234,7 @@ public class TimeSeriesJitCompilationTests
     public void STLDecomposition_SupportsJitCompilation_WhenTrained()
     {
         // Arrange
-        var options = new STLOptions
+        var options = new STLDecompositionOptions<double>
         {
             SeasonalPeriod = 7,
             SeasonalSmoothing = 7,
@@ -242,8 +243,8 @@ public class TimeSeriesJitCompilationTests
             OuterLoopIterations = 1
         };
         var model = new STLDecomposition<double>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Assert
         Assert.True(model.SupportsJitCompilation, "STLDecomposition should support JIT after training");
@@ -253,7 +254,7 @@ public class TimeSeriesJitCompilationTests
     public void STLDecomposition_ExportComputationGraph_ReturnsValidGraph()
     {
         // Arrange
-        var options = new STLOptions
+        var options = new STLDecompositionOptions<double>
         {
             SeasonalPeriod = 7,
             SeasonalSmoothing = 7,
@@ -262,8 +263,8 @@ public class TimeSeriesJitCompilationTests
             OuterLoopIterations = 1
         };
         var model = new STLDecomposition<double>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Act
         var inputNodes = new List<ComputationNode<double>>();
@@ -280,14 +281,14 @@ public class TimeSeriesJitCompilationTests
     public void StateSpaceModel_SupportsJitCompilation_WhenTrained()
     {
         // Arrange
-        var options = new StateSpaceOptions
+        var options = new StateSpaceModelOptions<double>
         {
             StateDimension = 2,
             ObservationDimension = 1
         };
         var model = new StateSpaceModel<double>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Assert
         Assert.True(model.SupportsJitCompilation, "StateSpaceModel should support JIT after training");
@@ -297,14 +298,14 @@ public class TimeSeriesJitCompilationTests
     public void StateSpaceModel_ExportComputationGraph_ReturnsValidGraph()
     {
         // Arrange
-        var options = new StateSpaceOptions
+        var options = new StateSpaceModelOptions<double>
         {
             StateDimension = 2,
             ObservationDimension = 1
         };
         var model = new StateSpaceModel<double>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Act
         var inputNodes = new List<ComputationNode<double>>();
@@ -321,14 +322,14 @@ public class TimeSeriesJitCompilationTests
     public void SpectralAnalysisModel_SupportsJitCompilation_WhenTrained()
     {
         // Arrange
-        var options = new SpectralAnalysisOptions
+        var options = new SpectralAnalysisOptions<double>
         {
-            NumFrequencies = 5,
-            WindowType = WindowType.Hann
+            NFFT = 64,
+            UseWindowFunction = true
         };
         var model = new SpectralAnalysisModel<double>(options);
-        var data = GenerateTestData(64); // Power of 2 for FFT
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(64); // Power of 2 for FFT
+        model.Train(X, y);
 
         // Assert
         Assert.True(model.SupportsJitCompilation, "SpectralAnalysisModel should support JIT after training");
@@ -338,14 +339,14 @@ public class TimeSeriesJitCompilationTests
     public void SpectralAnalysisModel_ExportComputationGraph_ReturnsValidGraph()
     {
         // Arrange
-        var options = new SpectralAnalysisOptions
+        var options = new SpectralAnalysisOptions<double>
         {
-            NumFrequencies = 5,
-            WindowType = WindowType.Hann
+            NFFT = 64,
+            UseWindowFunction = true
         };
         var model = new SpectralAnalysisModel<double>(options);
-        var data = GenerateTestData(64);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(64);
+        model.Train(X, y);
 
         // Act
         var inputNodes = new List<ComputationNode<double>>();
@@ -362,16 +363,16 @@ public class TimeSeriesJitCompilationTests
     public void UnobservedComponentsModel_SupportsJitCompilation_WhenTrained()
     {
         // Arrange
-        var options = new UnobservedComponentsOptions
+        var options = new UnobservedComponentsOptions<double, Matrix<double>, Vector<double>>
         {
             Level = true,
             Trend = false,
             SeasonalPeriod = 0,
             Cycle = false
         };
-        var model = new UnobservedComponentsModel<double>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var model = new UnobservedComponentsModel<double, Matrix<double>, Vector<double>>(options);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Assert
         Assert.True(model.SupportsJitCompilation, "UnobservedComponentsModel should support JIT after training");
@@ -381,16 +382,16 @@ public class TimeSeriesJitCompilationTests
     public void UnobservedComponentsModel_ExportComputationGraph_ReturnsValidGraph()
     {
         // Arrange
-        var options = new UnobservedComponentsOptions
+        var options = new UnobservedComponentsOptions<double, Matrix<double>, Vector<double>>
         {
             Level = true,
             Trend = false,
             SeasonalPeriod = 0,
             Cycle = false
         };
-        var model = new UnobservedComponentsModel<double>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var model = new UnobservedComponentsModel<double, Matrix<double>, Vector<double>>(options);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Act
         var inputNodes = new List<ComputationNode<double>>();
@@ -407,7 +408,7 @@ public class TimeSeriesJitCompilationTests
     public void NeuralNetworkARIMAModel_SupportsJitCompilation_WhenTrained()
     {
         // Arrange
-        var options = new NeuralNetworkARIMAOptions
+        var options = new NeuralNetworkARIMAOptions<double>
         {
             AROrder = 2,
             MAOrder = 0,
@@ -416,8 +417,8 @@ public class TimeSeriesJitCompilationTests
             MaxEpochs = 10
         };
         var model = new NeuralNetworkARIMAModel<double>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Assert
         Assert.True(model.SupportsJitCompilation, "NeuralNetworkARIMAModel should support JIT after training");
@@ -427,7 +428,7 @@ public class TimeSeriesJitCompilationTests
     public void NeuralNetworkARIMAModel_ExportComputationGraph_ReturnsValidGraph()
     {
         // Arrange
-        var options = new NeuralNetworkARIMAOptions
+        var options = new NeuralNetworkARIMAOptions<double>
         {
             AROrder = 2,
             MAOrder = 0,
@@ -436,8 +437,8 @@ public class TimeSeriesJitCompilationTests
             MaxEpochs = 10
         };
         var model = new NeuralNetworkARIMAModel<double>(options);
-        var data = GenerateTestData(50);
-        model.Train(data);
+        var (X, y) = GenerateTrainingData(50);
+        model.Train(X, y);
 
         // Act
         var inputNodes = new List<ComputationNode<double>>();
@@ -466,7 +467,7 @@ public class TimeSeriesJitCompilationTests
         var outputNode = model.ExportComputationGraph(inputNodes);
 
         // Analyze compatibility
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
         var compatibility = jit.AnalyzeCompatibility(outputNode, inputNodes);
 
         // Assert
@@ -478,29 +479,28 @@ public class TimeSeriesJitCompilationTests
 
     // ========== Helper Methods ==========
 
-    private static Vector<double> GenerateTestData(int length)
+    private static (Matrix<double> X, Vector<double> y) GenerateTrainingData(int samples)
     {
-        var data = new double[length];
         var random = new Random(42);
-        double value = 100;
+        var x = new Matrix<double>(samples, 1);
+        var y = new Vector<double>(samples);
 
-        for (int i = 0; i < length; i++)
+        for (int i = 0; i < samples; i++)
         {
-            // Simple random walk with trend
-            value += random.NextDouble() * 2 - 1 + 0.1;
-            data[i] = value;
+            x[i, 0] = i;
+            y[i] = Math.Sin(i * 0.1) + random.NextDouble() * 0.1;
         }
 
-        return new Vector<double>(data);
+        return (x, y);
     }
 
     private static ITimeSeriesModel<double>? CreateAndTrainModel(Type modelType)
     {
-        var data = GenerateTestData(50);
+        var (X, y) = GenerateTrainingData(50);
 
         if (modelType == typeof(NBEATSModel<double>))
         {
-            var model = new NBEATSModel<double>(new NBEATSOptions
+            var model = new NBEATSModel<double>(new NBEATSModelOptions<double>
             {
                 LookbackWindow = 10,
                 ForecastHorizon = 3,
@@ -508,12 +508,12 @@ public class TimeSeriesJitCompilationTests
                 HiddenLayerSize = 16,
                 ThetaDimension = 4
             });
-            model.Train(data);
+            model.Train(X, y);
             return model;
         }
         else if (modelType == typeof(TBATSModel<double>))
         {
-            var model = new TBATSModel<double>(new TBATSOptions
+            var model = new TBATSModel<double>(new TBATSModelOptions<double>
             {
                 SeasonalPeriods = new int[] { 7 },
                 UseBoxCox = false,
@@ -521,29 +521,28 @@ public class TimeSeriesJitCompilationTests
                 UseDamping = false,
                 FourierOrder = 2
             });
-            model.Train(data);
+            model.Train(X, y);
             return model;
         }
         else if (modelType == typeof(ProphetModel<double, Matrix<double>, Vector<double>>))
         {
             var model = new ProphetModel<double, Matrix<double>, Vector<double>>(new ProphetOptions<double, Matrix<double>, Vector<double>>
             {
-                GrowthType = GrowthType.Linear,
                 YearlySeasonality = false,
                 WeeklySeasonality = false,
                 DailySeasonality = false
             });
-            model.Train(data);
+            model.Train(X, y);
             return model;
         }
         else if (modelType == typeof(StateSpaceModel<double>))
         {
-            var model = new StateSpaceModel<double>(new StateSpaceOptions
+            var model = new StateSpaceModel<double>(new StateSpaceModelOptions<double>
             {
                 StateDimension = 2,
                 ObservationDimension = 1
             });
-            model.Train(data);
+            model.Train(X, y);
             return model;
         }
 

@@ -1,10 +1,9 @@
 using Xunit;
-using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.KnowledgeDistillation;
 using AiDotNet.KnowledgeDistillation.Teachers;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using JitCompilerClass = AiDotNet.JitCompiler.JitCompiler;
 
 namespace AiDotNet.Tests.UnitTests.JitCompiler;
@@ -61,7 +60,7 @@ public class KnowledgeDistillationJitCompilationTests
         var ensemble = new EnsembleTeacherModel<double>(
             new[] { teacher1, teacher2 },
             new double[] { 0.5, 0.5 },
-            EnsembleAggregationMode.Voting); // Not WeightedAverage
+            EnsembleAggregationMode.GeometricMean); // Not WeightedAverage
 
         // Assert
         Assert.False(ensemble.SupportsJitCompilation,
@@ -165,7 +164,7 @@ public class KnowledgeDistillationJitCompilationTests
     {
         // Arrange
         var baseTeacher = CreateJitCompatibleTeacher();
-        var adaptive = new AdaptiveTeacherModel<double>(baseTeacher, 0.9);
+        var adaptive = new AdaptiveTeacherModel<double>(baseTeacher);
 
         // Assert
         Assert.True(adaptive.SupportsJitCompilation,
@@ -177,7 +176,7 @@ public class KnowledgeDistillationJitCompilationTests
     {
         // Arrange
         var baseTeacher = CreateNonJitTeacher();
-        var adaptive = new AdaptiveTeacherModel<double>(baseTeacher, 0.9);
+        var adaptive = new AdaptiveTeacherModel<double>(baseTeacher);
 
         // Assert
         Assert.False(adaptive.SupportsJitCompilation,
@@ -191,7 +190,7 @@ public class KnowledgeDistillationJitCompilationTests
     {
         // Arrange
         var baseTeacher = CreateJitCompatibleTeacher();
-        var curriculum = new CurriculumTeacherModel<double>(baseTeacher, difficulty => 1.0);
+        var curriculum = new CurriculumTeacherModel<double>(baseTeacher);
 
         // Assert
         Assert.True(curriculum.SupportsJitCompilation,
@@ -203,7 +202,7 @@ public class KnowledgeDistillationJitCompilationTests
     {
         // Arrange
         var baseTeacher = CreateNonJitTeacher();
-        var curriculum = new CurriculumTeacherModel<double>(baseTeacher, difficulty => 1.0);
+        var curriculum = new CurriculumTeacherModel<double>(baseTeacher);
 
         // Assert
         Assert.False(curriculum.SupportsJitCompilation,
@@ -215,9 +214,8 @@ public class KnowledgeDistillationJitCompilationTests
     [Fact]
     public void SelfTeacherModel_DoesNotSupportJit()
     {
-        // Arrange - SelfTeacherModel uses cached predictions
-        var model = CreateBasicNeuralNetwork();
-        var selfTeacher = new SelfTeacherModel<double>(model);
+        // Arrange - SelfTeacherModel uses cached predictions (no underlying model)
+        var selfTeacher = new SelfTeacherModel<double>(10);
 
         // Assert
         Assert.False(selfTeacher.SupportsJitCompilation,
@@ -313,11 +311,6 @@ public class KnowledgeDistillationJitCompilationTests
         return new MockNonJitTeacher(10, 10);
     }
 
-    private static MockNeuralNetwork CreateBasicNeuralNetwork()
-    {
-        return new MockNeuralNetwork(10, 10);
-    }
-
     /// <summary>
     /// Mock teacher that supports JIT compilation.
     /// </summary>
@@ -375,21 +368,4 @@ public class KnowledgeDistillationJitCompilationTests
         }
     }
 
-    /// <summary>
-    /// Mock neural network for SelfTeacherModel testing.
-    /// </summary>
-    private class MockNeuralNetwork
-    {
-        private readonly int _outputDim;
-
-        public MockNeuralNetwork(int inputDim, int outputDim)
-        {
-            _outputDim = outputDim;
-        }
-
-        public Vector<double> Predict(Vector<double> input)
-        {
-            return new Vector<double>(new double[_outputDim]);
-        }
-    }
 }
