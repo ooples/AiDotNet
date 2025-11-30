@@ -762,43 +762,49 @@ public class UIntOperations : INumericOperations<uint>
         => VectorizedOperationsFallback.Min(this, x);
 
     /// <summary>
-    /// Computes exponential using sequential loops (fallback, no SIMD).
+    /// Transcendental operations are not supported for uint type.
     /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Exp produces misleading results for uint.</exception>
     public void Exp(ReadOnlySpan<uint> x, Span<uint> destination)
-        => VectorizedOperationsFallback.Exp(this, x, destination);
+        => throw new NotSupportedException("Transcendental operations (Exp) are not meaningful for uint type. Use float or double instead.");
 
     /// <summary>
-    /// Computes natural logarithm using sequential loops (fallback, no SIMD).
+    /// Transcendental operations are not supported for uint type.
     /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Log produces misleading results for uint.</exception>
     public void Log(ReadOnlySpan<uint> x, Span<uint> destination)
-        => VectorizedOperationsFallback.Log(this, x, destination);
+        => throw new NotSupportedException("Transcendental operations (Log) are not meaningful for uint type. Use float or double instead.");
 
     /// <summary>
-    /// Computes hyperbolic tangent using sequential loops (fallback, no SIMD).
+    /// Transcendental operations are not supported for uint type.
     /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Tanh produces only 0 or 1 for uint.</exception>
     public void Tanh(ReadOnlySpan<uint> x, Span<uint> destination)
-        => VectorizedOperationsFallback.Tanh(this, x, destination);
+        => throw new NotSupportedException("Transcendental operations (Tanh) are not meaningful for uint type. Use float or double instead.");
 
     /// <summary>
-    /// Computes sigmoid using sequential loops (integers don't support transcendental SIMD).
+    /// Transcendental operations are not supported for uint type.
     /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Sigmoid saturates for uint inputs.</exception>
     public void Sigmoid(ReadOnlySpan<uint> x, Span<uint> destination)
-        => VectorizedOperationsFallback.Sigmoid(this, x, destination);
+        => throw new NotSupportedException("Transcendental operations (Sigmoid) are not meaningful for uint type. Use float or double instead.");
 
     /// <summary>
-    /// Computes base-2 logarithm using sequential loops (fallback, no SIMD).
+    /// Transcendental operations are not supported for uint type.
     /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Log2 produces misleading results for uint.</exception>
     public void Log2(ReadOnlySpan<uint> x, Span<uint> destination)
-        => VectorizedOperationsFallback.Log2(this, x, destination);
+        => throw new NotSupportedException("Transcendental operations (Log2) are not meaningful for uint type. Use float or double instead.");
 
     /// <summary>
-    /// Computes softmax using sequential loops (integers don't support transcendental SIMD).
+    /// Transcendental operations are not supported for uint type.
     /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. SoftMax requires floating-point for normalized probabilities.</exception>
     public void SoftMax(ReadOnlySpan<uint> x, Span<uint> destination)
-        => VectorizedOperationsFallback.SoftMax(this, x, destination);
+        => throw new NotSupportedException("Transcendental operations (SoftMax) are not meaningful for uint type. Use float or double instead.");
 
     /// <summary>
-    /// Computes cosine similarity using sequential loops (integers don't support this SIMD operation).
+    /// Computes cosine similarity using sequential loops.
     /// </summary>
     public uint CosineSimilarity(ReadOnlySpan<uint> x, ReadOnlySpan<uint> y)
         => VectorizedOperationsFallback.CosineSimilarity(this, x, y);

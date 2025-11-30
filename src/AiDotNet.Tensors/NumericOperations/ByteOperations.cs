@@ -707,43 +707,49 @@ public class ByteOperations : INumericOperations<byte>
         => VectorizedOperationsFallback.Min(this, x);
 
     /// <summary>
-    /// Computes exponential using sequential loops (integers don't support transcendental SIMD).
+    /// Transcendental operations are not supported for byte type.
     /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Exp produces misleading results for bytes (range 0-255).</exception>
     public void Exp(ReadOnlySpan<byte> x, Span<byte> destination)
-        => VectorizedOperationsFallback.Exp(this, x, destination);
+        => throw new NotSupportedException("Transcendental operations (Exp) are not meaningful for byte type. Use float or double instead.");
 
     /// <summary>
-    /// Computes natural logarithm using sequential loops (integers don't support transcendental SIMD).
+    /// Transcendental operations are not supported for byte type.
     /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Log produces misleading results for bytes (only 0-7 possible).</exception>
     public void Log(ReadOnlySpan<byte> x, Span<byte> destination)
-        => VectorizedOperationsFallback.Log(this, x, destination);
+        => throw new NotSupportedException("Transcendental operations (Log) are not meaningful for byte type. Use float or double instead.");
 
     /// <summary>
-    /// Computes hyperbolic tangent using sequential loops (integers don't support transcendental SIMD).
+    /// Transcendental operations are not supported for byte type.
     /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Tanh produces only 0 or 1 for bytes.</exception>
     public void Tanh(ReadOnlySpan<byte> x, Span<byte> destination)
-        => VectorizedOperationsFallback.Tanh(this, x, destination);
+        => throw new NotSupportedException("Transcendental operations (Tanh) are not meaningful for byte type. Use float or double instead.");
 
     /// <summary>
-    /// Computes sigmoid using sequential loops (integers don't support transcendental SIMD).
+    /// Transcendental operations are not supported for byte type.
     /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Sigmoid saturates for byte inputs.</exception>
     public void Sigmoid(ReadOnlySpan<byte> x, Span<byte> destination)
-        => VectorizedOperationsFallback.Sigmoid(this, x, destination);
+        => throw new NotSupportedException("Transcendental operations (Sigmoid) are not meaningful for byte type. Use float or double instead.");
 
     /// <summary>
-    /// Computes base-2 logarithm using sequential loops (integers don't support transcendental SIMD).
+    /// Transcendental operations are not supported for byte type.
     /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Log2 produces only 0-7 for bytes.</exception>
     public void Log2(ReadOnlySpan<byte> x, Span<byte> destination)
-        => VectorizedOperationsFallback.Log2(this, x, destination);
+        => throw new NotSupportedException("Transcendental operations (Log2) are not meaningful for byte type. Use float or double instead.");
 
     /// <summary>
-    /// Computes softmax using sequential loops (integers don't support transcendental SIMD).
+    /// Transcendental operations are not supported for byte type.
     /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. SoftMax requires floating-point for normalized probabilities.</exception>
     public void SoftMax(ReadOnlySpan<byte> x, Span<byte> destination)
-        => VectorizedOperationsFallback.SoftMax(this, x, destination);
+        => throw new NotSupportedException("Transcendental operations (SoftMax) are not meaningful for byte type. Use float or double instead.");
 
     /// <summary>
-    /// Computes cosine similarity using sequential loops (integers don't support this SIMD operation).
+    /// Computes cosine similarity using sequential loops.
     /// </summary>
     public byte CosineSimilarity(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y)
         => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
