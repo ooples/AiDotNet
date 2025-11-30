@@ -2656,8 +2656,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     private ComputationNode<T> ConvertActivationLayer(Layers.ActivationLayer<T> layer, ComputationNode<T> input)
     {
-        // Get activation function type
-        var activationType = layer.ActivationFunction.GetType().Name;
+        // Get activation function type from either ScalarActivation or VectorActivation
+        var activation = layer.ScalarActivation ?? (object?)layer.VectorActivation;
+        if (activation == null)
+            throw new InvalidOperationException("ActivationLayer has no activation function configured.");
+
+        var activationType = activation.GetType().Name;
 
         return activationType switch
         {
@@ -2950,7 +2954,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var kernelsNode = TensorOperations<T>.Constant(kernels, "conv_kernels");
         var biasesNode = TensorOperations<T>.Constant(biases, "conv_biases");
 
-        return TensorOperations<T>.Conv2D(input, kernelsNode, biasesNode, stride, padding);
+        return TensorOperations<T>.Conv2D(input, kernelsNode, biasesNode, new int[] { stride, stride }, new int[] { padding, padding });
     }
 
     /// <summary>
@@ -2973,7 +2977,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var kernelsNode = TensorOperations<T>.Constant(kernels, "deconv_kernels");
         var biasesNode = TensorOperations<T>.Constant(biases, "deconv_biases");
 
-        return TensorOperations<T>.ConvTranspose2D(input, kernelsNode, biasesNode, stride, padding);
+        return TensorOperations<T>.ConvTranspose2D(input, kernelsNode, biasesNode, new int[] { stride, stride }, new int[] { padding, padding });
     }
 
     /// <summary>
@@ -2998,7 +3002,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var depthwiseKernelsNode = TensorOperations<T>.Constant(depthwiseKernels, "depthwise_kernels");
         var biasesNode = TensorOperations<T>.Constant(biases, "depthwise_sep_biases");
 
-        return TensorOperations<T>.DepthwiseConv2D(input, depthwiseKernelsNode, biasesNode, stride, padding);
+        return TensorOperations<T>.DepthwiseConv2D(input, depthwiseKernelsNode, biasesNode, new int[] { stride, stride }, new int[] { padding, padding });
     }
 
     /// <summary>
@@ -3023,7 +3027,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var kernelsNode = TensorOperations<T>.Constant(kernels, "dilated_conv_kernels");
         var biasesNode = TensorOperations<T>.Constant(biases, "dilated_conv_biases");
 
-        return TensorOperations<T>.DilatedConv2D(input, kernelsNode, biasesNode, stride, padding, dilation);
+        return TensorOperations<T>.DilatedConv2D(input, kernelsNode, biasesNode, new int[] { stride, stride }, new int[] { padding, padding }, new int[] { dilation, dilation });
     }
 
     /// <summary>
@@ -3076,7 +3080,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var poolSize = (int)poolSizeField!.GetValue(layer)!;
         var stride = (int)strideField!.GetValue(layer)!;
 
-        return TensorOperations<T>.MaxPool2D(input, poolSize, stride);
+        return TensorOperations<T>.MaxPool2D(input, new int[] { poolSize, poolSize }, new int[] { stride, stride });
     }
 
     /// <summary>
@@ -3100,11 +3104,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         if (poolingTypeName == "Max")
         {
-            return TensorOperations<T>.MaxPool2D(input, poolSize, stride);
+            return TensorOperations<T>.MaxPool2D(input, new int[] { poolSize, poolSize }, new int[] { stride, stride });
         }
         else // Average
         {
-            return TensorOperations<T>.AvgPool2D(input, poolSize, stride);
+            return TensorOperations<T>.AvgPool2D(input, new int[] { poolSize, poolSize }, new int[] { stride, stride });
         }
     }
 
