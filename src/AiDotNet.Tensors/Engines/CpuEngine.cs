@@ -3074,7 +3074,21 @@ public class CpuEngine : IEngine
     public Tensor<T> ConvTranspose2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> kernel, int[] inputShape, int[] stride, int[] padding)
     {
         // ConvTranspose2D backward w.r.t. input is equivalent to Conv2D forward
-        return Conv2D(gradOutput, kernel, stride, padding, [1, 1]);
+        // Note: This implementation assumes unit dilation. For non-unit dilation, the gradient requires
+        // more complex handling (e.g., dilated convolution with flipped kernel).
+        var result = Conv2D(gradOutput, kernel, stride, padding, [1, 1]);
+
+        // Validate that the result matches expected input shape
+        if (result.Shape[0] != inputShape[0] || result.Shape[1] != inputShape[1] ||
+            result.Shape[2] != inputShape[2] || result.Shape[3] != inputShape[3])
+        {
+            throw new InvalidOperationException(
+                $"ConvTranspose2DBackwardInput result shape [{string.Join(",", result.Shape)}] " +
+                $"does not match expected inputShape [{string.Join(",", inputShape)}]. " +
+                "This may occur with non-standard stride/padding configurations.");
+        }
+
+        return result;
     }
 
     /// <inheritdoc/>
@@ -3350,12 +3364,17 @@ public class CpuEngine : IEngine
         }
 
         // Compute gradInput
+        // Standard batch norm backward formula:
+        // dx = (gamma / sqrt(var + eps) / N) * (N * dy - sum(dy) - (x - mean) / (var + eps) * sum(dy * (x - mean)))
+        // All terms must be scaled by gamma for correctness
         Parallel.For(0, features, f =>
         {
             T invStd = numOps.Divide(numOps.One, numOps.Sqrt(numOps.Add(varData[f], eps)));
+            T gamma = gammaData[f];
             T sumGrad = numOps.Zero;
             T sumGradX = numOps.Zero;
 
+            // Accumulate sums over batch dimension
             for (int b = 0; b < batch; b++)
             {
                 int idx = b * features + f;
@@ -3363,14 +3382,18 @@ public class CpuEngine : IEngine
                 sumGradX = numOps.Add(sumGradX, numOps.Multiply(gradOutputData[idx], numOps.Subtract(inputData[idx], meanData[f])));
             }
 
+            // Apply gamma scaling to accumulated sums
+            T gammaSumGrad = numOps.Multiply(gamma, sumGrad);
+            T gammaSumGradX = numOps.Multiply(gamma, sumGradX);
+
             for (int b = 0; b < batch; b++)
             {
                 int idx = b * features + f;
                 T normalized = numOps.Multiply(numOps.Subtract(inputData[idx], meanData[f]), invStd);
-                T gradNorm = numOps.Multiply(gammaData[f], gradOutputData[idx]);
+                T gradNorm = numOps.Multiply(gamma, gradOutputData[idx]);
                 T term1 = numOps.Multiply(batchT, gradNorm);
-                T term2 = sumGrad;
-                T term3 = numOps.Multiply(normalized, numOps.Multiply(invStd, sumGradX));
+                T term2 = gammaSumGrad;
+                T term3 = numOps.Multiply(normalized, numOps.Multiply(invStd, gammaSumGradX));
                 gradInputData[idx] = numOps.Multiply(numOps.Divide(invStd, batchT), numOps.Subtract(numOps.Subtract(term1, term2), term3));
             }
         });
