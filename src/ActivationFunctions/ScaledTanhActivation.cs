@@ -102,7 +102,7 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// when its input changes slightly. This is used during neural network training to determine
     /// how to adjust weights.
     /// 
-    /// The derivative formula is: f'(x) = ß * (1 - f(x)²)
+    /// The derivative formula is: f'(x) = (ß / 2) * (1 - f(x)²)
     /// 
     /// Key properties of this derivative:
     /// - It's highest at x = 0 (where the function is steepest)
@@ -115,12 +115,15 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Derivative(T input)
     {
-        // f'(x) = ß * (1 - f(x)^2)
+        // f'(x) = (ß / 2) * (1 - f(x)^2)
         T activationValue = Activate(input);
         T squaredActivation = NumOps.Multiply(activationValue, activationValue);
         T oneMinus = NumOps.Subtract(NumOps.One, squaredActivation);
 
-        return NumOps.Multiply(_beta, oneMinus);
+        // (ß / 2) * (1 - f(x)^2)
+        T half = NumOps.FromDouble(0.5);
+        T scaledBeta = NumOps.Multiply(_beta, half);
+        return NumOps.Multiply(scaledBeta, oneMinus);
     }
 
 
@@ -132,7 +135,7 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// <para>
     /// ScaledTanh supports JIT compilation because:
     /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The gradient is β * (1 - f(x)²)
+    /// - The gradient is (β / 2) * (1 - f(x)²)
     /// - The steepness parameter β allows tuning network behavior
     /// - It can be represented as a static computation graph node
     /// </para>
