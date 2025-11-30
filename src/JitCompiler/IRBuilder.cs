@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.JitCompiler.IR;
@@ -87,14 +88,8 @@ public class IRBuilder
         var topoOrder = TopologicalSort(outputNode);
 
         // Convert each node to an IR operation
-        foreach (var node in topoOrder)
+        foreach (var node in topoOrder.Where(n => !inputs.Contains(n)))
         {
-            // Skip input nodes (already processed)
-            if (inputs.Contains(node))
-            {
-                continue;
-            }
-
             // Convert node to IR operation
             var op = ConvertNodeToOp(node);
             if (op != null)
@@ -601,14 +596,8 @@ public class IRBuilder
         // Traverse in reverse topological order for backpropagation
         var reverseOrder = forwardNodes.AsEnumerable().Reverse().ToList();
 
-        foreach (var node in reverseOrder)
+        foreach (var node in reverseOrder.Where(n => !inputs.Contains(n)))
         {
-            // Skip input nodes - their gradients are outputs of backward graph
-            if (inputs.Contains(node))
-            {
-                continue;
-            }
-
             // Get gradient of this node
             if (!gradientMap.TryGetValue(node, out var nodeGradId))
             {

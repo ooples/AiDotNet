@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
 
@@ -152,11 +153,8 @@ public class AdaptiveFusionPass : IOptimizationPass
         var processed = new HashSet<int>();
         var tensorMapping = new Dictionary<int, int>();
 
-        foreach (var op in graph.Operations)
+        foreach (var op in graph.Operations.Where(o => !processed.Contains(o.OutputId)))
         {
-            if (processed.Contains(op.OutputId))
-                continue;
-
             // Only fuse high-value patterns in conservative mode
             var pattern = FindHighValuePattern(graph, op, processed);
 

@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.JitCompiler.IR;
 using Operations = AiDotNet.JitCompiler.IR.Operations;
 

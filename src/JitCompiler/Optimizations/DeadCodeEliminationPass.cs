@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.JitCompiler.IR;
 
 namespace AiDotNet.JitCompiler.Optimizations;
@@ -126,23 +127,17 @@ public class DeadCodeEliminationPass : IOptimizationPass
 
         // Keep only operations whose outputs are live
         int removedCount = 0;
-        foreach (var op in graph.Operations)
+        foreach (var op in graph.Operations.Where(o => liveTensors.Contains(o.OutputId)))
         {
-            if (liveTensors.Contains(op.OutputId))
-            {
-                optimizedGraph.Operations.Add(op);
+            optimizedGraph.Operations.Add(op);
 
-                // Copy shape information for live tensors
-                if (graph.TensorShapes.TryGetValue(op.OutputId, out var shape))
-                {
-                    optimizedGraph.TensorShapes[op.OutputId] = shape;
-                }
-            }
-            else
+            // Copy shape information for live tensors
+            if (graph.TensorShapes.TryGetValue(op.OutputId, out var shape))
             {
-                removedCount++;
+                optimizedGraph.TensorShapes[op.OutputId] = shape;
             }
         }
+        removedCount = graph.Operations.Count - optimizedGraph.Operations.Count;
 
         // Copy shape information for inputs
         foreach (var inputId in graph.InputIds)
@@ -219,12 +214,9 @@ public class DeadCodeEliminationPass : IOptimizationPass
 
         // Find all dead operation outputs
         var deadTensors = new HashSet<int>();
-        foreach (var op in graph.Operations)
+        foreach (var op in graph.Operations.Where(o => !liveTensors.Contains(o.OutputId)))
         {
-            if (!liveTensors.Contains(op.OutputId))
-            {
-                deadTensors.Add(op.OutputId);
-            }
+            deadTensors.Add(op.OutputId);
         }
 
         return deadTensors;

@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace AiDotNet.JitCompiler.IR;
 
 /// <summary>
@@ -137,12 +139,9 @@ public class IRGraph
     public bool Validate()
     {
         // Check that all inputs have shapes defined
-        foreach (var inputId in InputIds)
+        foreach (var inputId in InputIds.Where(id => !TensorShapes.ContainsKey(id)))
         {
-            if (!TensorShapes.ContainsKey(inputId))
-            {
-                return false;
-            }
+            return false;
         }
 
         // Track which tensors have been produced
@@ -158,12 +157,9 @@ public class IRGraph
             }
 
             // Check that all inputs have been produced
-            foreach (var inputId in op.InputIds)
+            foreach (var inputId in op.InputIds.Where(id => !producedTensors.Contains(id)))
             {
-                if (!producedTensors.Contains(inputId))
-                {
-                    return false; // Using a tensor before it's produced
-                }
+                return false; // Using a tensor before it's produced
             }
 
             // Mark output as produced
@@ -177,12 +173,9 @@ public class IRGraph
         }
 
         // Check that all outputs have been produced
-        foreach (var outputId in OutputIds)
+        foreach (var outputId in OutputIds.Where(id => !producedTensors.Contains(id)))
         {
-            if (!producedTensors.Contains(outputId))
-            {
-                return false;
-            }
+            return false;
         }
 
         return true;
