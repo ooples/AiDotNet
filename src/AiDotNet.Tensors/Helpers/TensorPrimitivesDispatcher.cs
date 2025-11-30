@@ -12,6 +12,7 @@ namespace AiDotNet.Tensors.Helpers;
 /// This dispatcher centralizes all the type-specific TensorPrimitives calls in one place.
 /// Callers should check UseGenericTensorPrimitives before calling these methods
 /// and fall back to INumericOperations-based implementations for unsupported types.
+/// Note: double overloads are only available in .NET 8.0+. For .NET Framework, only float is supported.
 /// </remarks>
 internal static class TensorPrimitivesDispatcher
 {
@@ -24,10 +25,12 @@ internal static class TensorPrimitivesDispatcher
         {
             TensorPrimitives.Add((float[])(object)x, (float[])(object)y, (float[])(object)destination);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             TensorPrimitives.Add((double[])(object)x, (double[])(object)y, (double[])(object)destination);
         }
+#endif
         else
         {
             throw new NotSupportedException($"TensorPrimitives.Add is not supported for type {typeof(T)}. Use INumericOperations fallback.");
@@ -43,10 +46,12 @@ internal static class TensorPrimitivesDispatcher
         {
             TensorPrimitives.Subtract((float[])(object)x, (float[])(object)y, (float[])(object)destination);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             TensorPrimitives.Subtract((double[])(object)x, (double[])(object)y, (double[])(object)destination);
         }
+#endif
         else
         {
             throw new NotSupportedException($"TensorPrimitives.Subtract is not supported for type {typeof(T)}. Use INumericOperations fallback.");
@@ -62,10 +67,12 @@ internal static class TensorPrimitivesDispatcher
         {
             TensorPrimitives.Multiply((float[])(object)x, (float[])(object)y, (float[])(object)destination);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             TensorPrimitives.Multiply((double[])(object)x, (double[])(object)y, (double[])(object)destination);
         }
+#endif
         else
         {
             throw new NotSupportedException($"TensorPrimitives.Multiply is not supported for type {typeof(T)}. Use INumericOperations fallback.");
@@ -81,10 +88,12 @@ internal static class TensorPrimitivesDispatcher
         {
             TensorPrimitives.Divide((float[])(object)x, (float[])(object)y, (float[])(object)destination);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             TensorPrimitives.Divide((double[])(object)x, (double[])(object)y, (double[])(object)destination);
         }
+#endif
         else
         {
             throw new NotSupportedException($"TensorPrimitives.Divide is not supported for type {typeof(T)}. Use INumericOperations fallback.");
@@ -100,10 +109,12 @@ internal static class TensorPrimitivesDispatcher
         {
             return (T)(object)TensorPrimitives.Dot((float[])(object)x, (float[])(object)y);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             return (T)(object)TensorPrimitives.Dot((double[])(object)x, (double[])(object)y);
         }
+#endif
         throw new NotSupportedException($"TensorPrimitives.Dot is not supported for type {typeof(T)}. Use INumericOperations fallback.");
     }
 
@@ -116,10 +127,12 @@ internal static class TensorPrimitivesDispatcher
         {
             return (T)(object)TensorPrimitives.Sum((float[])(object)x);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             return (T)(object)TensorPrimitives.Sum((double[])(object)x);
         }
+#endif
         throw new NotSupportedException($"TensorPrimitives.Sum is not supported for type {typeof(T)}. Use INumericOperations fallback.");
     }
 
@@ -132,10 +145,12 @@ internal static class TensorPrimitivesDispatcher
         {
             return (T)(object)TensorPrimitives.Max((float[])(object)x);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             return (T)(object)TensorPrimitives.Max((double[])(object)x);
         }
+#endif
         throw new NotSupportedException($"TensorPrimitives.Max is not supported for type {typeof(T)}. Use INumericOperations fallback.");
     }
 
@@ -148,10 +163,12 @@ internal static class TensorPrimitivesDispatcher
         {
             return (T)(object)TensorPrimitives.Min((float[])(object)x);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             return (T)(object)TensorPrimitives.Min((double[])(object)x);
         }
+#endif
         throw new NotSupportedException($"TensorPrimitives.Min is not supported for type {typeof(T)}. Use INumericOperations fallback.");
     }
 
@@ -164,10 +181,12 @@ internal static class TensorPrimitivesDispatcher
         {
             TensorPrimitives.Exp((float[])(object)x, (float[])(object)destination);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             TensorPrimitives.Exp((double[])(object)x, (double[])(object)destination);
         }
+#endif
         else
         {
             throw new NotSupportedException($"TensorPrimitives.Exp is not supported for type {typeof(T)}. Use INumericOperations fallback.");
@@ -183,10 +202,12 @@ internal static class TensorPrimitivesDispatcher
         {
             TensorPrimitives.Log((float[])(object)x, (float[])(object)destination);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             TensorPrimitives.Log((double[])(object)x, (double[])(object)destination);
         }
+#endif
         else
         {
             throw new NotSupportedException($"TensorPrimitives.Log is not supported for type {typeof(T)}. Use INumericOperations fallback.");
@@ -202,10 +223,12 @@ internal static class TensorPrimitivesDispatcher
         {
             TensorPrimitives.Tanh((float[])(object)x, (float[])(object)destination);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             TensorPrimitives.Tanh((double[])(object)x, (double[])(object)destination);
         }
+#endif
         else
         {
             throw new NotSupportedException($"TensorPrimitives.Tanh is not supported for type {typeof(T)}. Use INumericOperations fallback.");
@@ -221,10 +244,12 @@ internal static class TensorPrimitivesDispatcher
         {
             TensorPrimitives.Sigmoid((float[])(object)x, (float[])(object)destination);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             TensorPrimitives.Sigmoid((double[])(object)x, (double[])(object)destination);
         }
+#endif
         else
         {
             throw new NotSupportedException($"TensorPrimitives.Sigmoid is not supported for type {typeof(T)}. Use INumericOperations fallback.");
@@ -240,10 +265,12 @@ internal static class TensorPrimitivesDispatcher
         {
             TensorPrimitives.Log2((float[])(object)x, (float[])(object)destination);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             TensorPrimitives.Log2((double[])(object)x, (double[])(object)destination);
         }
+#endif
         else
         {
             throw new NotSupportedException($"TensorPrimitives.Log2 is not supported for type {typeof(T)}. Use INumericOperations fallback.");
@@ -259,10 +286,12 @@ internal static class TensorPrimitivesDispatcher
         {
             TensorPrimitives.SoftMax((float[])(object)x, (float[])(object)destination);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             TensorPrimitives.SoftMax((double[])(object)x, (double[])(object)destination);
         }
+#endif
         else
         {
             throw new NotSupportedException($"TensorPrimitives.SoftMax is not supported for type {typeof(T)}. Use INumericOperations fallback.");
@@ -278,10 +307,12 @@ internal static class TensorPrimitivesDispatcher
         {
             return (T)(object)TensorPrimitives.CosineSimilarity((float[])(object)x, (float[])(object)y);
         }
+#if NET8_0_OR_GREATER
         else if (typeof(T) == typeof(double))
         {
             return (T)(object)TensorPrimitives.CosineSimilarity((double[])(object)x, (double[])(object)y);
         }
+#endif
         throw new NotSupportedException($"TensorPrimitives.CosineSimilarity is not supported for type {typeof(T)}. Use INumericOperations fallback.");
     }
 }
