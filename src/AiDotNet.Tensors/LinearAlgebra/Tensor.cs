@@ -1327,21 +1327,35 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
-    /// Performs matrix multiplication between two 2D tensors (matrices).
+    /// Performs matrix multiplication between two tensors with support for N-dimensional batched operations.
     /// </summary>
     /// <param name="other">The second tensor to multiply with.</param>
     /// <returns>A new tensor containing the result of the matrix multiplication.</returns>
     /// <exception cref="ArgumentException">
-    /// Thrown when either tensor is not 2D or when the inner dimensions don't match.
+    /// Thrown when either tensor has fewer than 2 dimensions or when the inner dimensions don't match.
     /// </exception>
     /// <remarks>
+    /// <para>
+    /// This method supports both 2D matrix multiplication and N-dimensional batched matrix multiplication
+    /// following NumPy-style broadcasting semantics. For tensors with shapes [..., M, K] and [..., K, N],
+    /// the result has shape [..., M, N].
+    /// </para>
+    /// <para>
     /// <b>For Beginners:</b> Matrix multiplication is a fundamental operation in linear algebra and machine learning.
-    /// 
+    /// </para>
+    /// <para>
     /// For two matrices A and B to be multiplied:
+    /// </para>
+    /// <para>
     /// - The number of columns in A must equal the number of rows in B
-    /// - The result will have dimensions: (rows of A) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  (columns of B)
-    /// 
+    /// - The result will have dimensions: (rows of A) x (columns of B)
+    /// </para>
+    /// <para>
+    /// For batched operations, shape [2, 3, 4] @ [2, 4, 5] results in [2, 3, 5].
+    /// </para>
+    /// <para>
     /// This is different from element-wise multiplication where corresponding elements are simply multiplied together.
+    /// </para>
     /// </remarks>
     public Tensor<T> MatrixMultiply(Tensor<T> other)
     {

@@ -1316,5 +1316,6 @@ public static class TensorPrimitivesCore
 
         return info.ToString();
     }
+
+    #endregion
 }
-#endregion
