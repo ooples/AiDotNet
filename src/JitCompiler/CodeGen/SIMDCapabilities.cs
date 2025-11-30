@@ -1,4 +1,5 @@
-using System.Numerics;
+using System.Runtime.Intrinsics.X86;
+using System.Runtime.Intrinsics.Arm;
 
 namespace AiDotNet.JitCompiler.CodeGen;
 
@@ -46,37 +47,57 @@ public class SIMDCapabilities
     public int MaxVectorWidth { get; set; }
 
     /// <summary>
+    /// Gets whether any hardware SIMD acceleration is available.
+    /// </summary>
+    public bool IsHardwareAccelerated => HasSSE || HasNEON;
+
+    /// <summary>
     /// Detects SIMD capabilities of the current hardware.
     /// </summary>
     /// <returns>A SIMDCapabilities instance describing the current hardware.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This method checks what SIMD features your CPU supports.
-    /// It uses the .NET runtime's Vector class to determine the maximum vector size,
-    /// then infers which instruction sets are available based on that size.
+    /// <para><b>For Beginners:</b> This method checks what SIMD features your CPU supports
+    /// using the .NET runtime intrinsics API to directly query hardware capabilities.
     /// </para>
     /// </remarks>
     public static SIMDCapabilities Detect()
     {
         var caps = new SIMDCapabilities();
 
-        if (Vector.IsHardwareAccelerated)
-        {
-            var vectorSize = Vector<float>.Count;
+        // Detect x86/x64 SIMD capabilities using intrinsics
+        caps.HasSSE = Sse.IsSupported;
+        caps.HasAVX = Avx.IsSupported;
+        caps.HasAVX2 = Avx2.IsSupported;
+        caps.HasAVX512 = Avx512F.IsSupported;
+        caps.HasFMA = Fma.IsSupported;
 
-            // Infer capabilities from vector size
-            caps.HasSSE = vectorSize >= 4;  // 128-bit = 4 floats
-            caps.HasAVX = vectorSize >= 8;  // 256-bit = 8 floats
-            caps.HasAVX512 = vectorSize >= 16; // 512-bit = 16 floats
-            caps.HasAVX2 = caps.HasAVX;
+        // Detect ARM NEON capabilities
+        caps.HasNEON = AdvSimd.IsSupported;
 
-            // .NET's System.Numerics.Vector doesn't directly expose FMA
-            // but modern CPUs with AVX2 typically have FMA
-            caps.HasFMA = caps.HasAVX2;
-
-            caps.MaxVectorWidth = vectorSize * sizeof(float);
-        }
+        // Determine maximum vector width based on capabilities
+        if (caps.HasAVX512)
+            caps.MaxVectorWidth = 64; // 512 bits = 64 bytes
+        else if (caps.HasAVX)
+            caps.MaxVectorWidth = 32; // 256 bits = 32 bytes
+        else if (caps.HasSSE || caps.HasNEON)
+            caps.MaxVectorWidth = 16; // 128 bits = 16 bytes
+        else
+            caps.MaxVectorWidth = 0;
 
         return caps;
+    }
+
+    /// <summary>
+    /// Gets the number of elements that fit in a SIMD register for the specified type size.
+    /// </summary>
+    /// <param name="typeSizeInBytes">The size of the element type in bytes.</param>
+    /// <returns>The number of elements that fit in a SIMD register.</returns>
+    public int GetVectorCount(int typeSizeInBytes)
+    {
+        if (typeSizeInBytes <= 0 || MaxVectorWidth <= 0)
+            return 1;
+
+        return MaxVectorWidth / typeSizeInBytes;
     }
 
     /// <summary>

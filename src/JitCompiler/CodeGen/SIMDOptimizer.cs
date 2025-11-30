@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-using System.Numerics;
 using System.Reflection;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.Tensors.Helpers;
@@ -57,8 +56,10 @@ public class SIMDOptimizer
         _enableSIMD = enableSIMD;
         _capabilities = SIMDCapabilities.Detect();
 
-        // Vector<T>.Count gives us the number of elements that fit in a SIMD register
-        _vectorSize = Vector.IsHardwareAccelerated ? Vector<float>.Count : 1;
+        // Get the number of float elements that fit in a SIMD register
+        _vectorSize = _capabilities.IsHardwareAccelerated
+            ? _capabilities.GetVectorCount(sizeof(float))
+            : 1;
     }
 
     /// <summary>
@@ -69,7 +70,7 @@ public class SIMDOptimizer
     /// <summary>
     /// Gets whether SIMD optimization is enabled and hardware-accelerated.
     /// </summary>
-    public bool IsEnabled => _enableSIMD && Vector.IsHardwareAccelerated;
+    public bool IsEnabled => _enableSIMD && _capabilities.IsHardwareAccelerated;
 
     /// <summary>
     /// Gets the hardware vector width for a specific type.
@@ -78,12 +79,12 @@ public class SIMDOptimizer
     /// <returns>The number of elements that fit in a SIMD register, or 1 if SIMD is not available.</returns>
     public int GetVectorWidth<T>()
     {
-        if (!_enableSIMD || !Vector.IsHardwareAccelerated)
+        if (!_enableSIMD || !_capabilities.IsHardwareAccelerated)
             return 1;
 
         // Determine vector width based on type size
         var typeSize = GetTypeSize<T>();
-        return typeSize > 0 ? _capabilities.MaxVectorWidth / typeSize : 1;
+        return typeSize > 0 ? _capabilities.GetVectorCount(typeSize) : 1;
     }
 
     /// <summary>
@@ -112,7 +113,7 @@ public class SIMDOptimizer
     public bool ShouldUseSIMD(IROp op)
     {
         if (!_enableSIMD) return false;
-        if (!Vector.IsHardwareAccelerated) return false;
+        if (!_capabilities.IsHardwareAccelerated) return false;
 
         // Check tensor size - must be large enough to benefit
         var totalElements = op.OutputShape.Aggregate(1, (a, b) => a * b);
@@ -275,7 +276,7 @@ public class SIMDOptimizer
             TotalOperations = graph.Operations.Count,
             VectorizableOperations = graph.Operations.Count(ShouldUseSIMD),
             VectorSize = _vectorSize,
-            HardwareAccelerated = Vector.IsHardwareAccelerated
+            HardwareAccelerated = _capabilities.IsHardwareAccelerated
         };
 
         return stats;

@@ -1,6 +1,9 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.X86;
+using System.Runtime.Intrinsics.Arm;
 using AiDotNet.Autodiff;
+using AiDotNet.JitCompiler.CodeGen;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -368,7 +371,8 @@ public static class VectorizedOps
         C.Clear();
 
         // Tiled matrix multiplication with SIMD
-        int vectorCount = Vector<float>.Count;
+        var caps = SIMDCapabilities.Detect();
+        int vectorCount = caps.GetVectorCount(sizeof(float));
 
         for (int i0 = 0; i0 < M; i0 += tileSize)
         {
@@ -430,7 +434,8 @@ public static class VectorizedOps
         int tileSize)
     {
         C.Clear();
-        int vectorCount = Vector<double>.Count;
+        var caps = SIMDCapabilities.Detect();
+        int vectorCount = caps.GetVectorCount(sizeof(double));
 
         for (int i0 = 0; i0 < M; i0 += tileSize)
         {
