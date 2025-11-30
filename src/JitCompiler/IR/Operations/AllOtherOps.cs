@@ -138,7 +138,14 @@ public class ConcatOp : IROp
 /// </summary>
 public class PadOp : IROp
 {
+    /// <summary>Padding width per dimension as 2D array [dim, (before, after)].</summary>
     public int[,]? PadWidth { get; set; }
+
+    /// <summary>Simplified padding as 1D array [pad_before_0, pad_after_0, pad_before_1, pad_after_1, ...].</summary>
+    public int[] Padding { get; set; } = Array.Empty<int>();
+
+    /// <summary>Input shape for kernel generation.</summary>
+    public int[] InputShape { get; set; } = Array.Empty<int>();
 
     public override bool Validate()
     {
@@ -153,7 +160,11 @@ public class PadOp : IROp
 /// </summary>
 public class CropOp : IROp
 {
+    /// <summary>Cropping amounts per dimension.</summary>
     public int[] Cropping { get; set; } = Array.Empty<int>();
+
+    /// <summary>Offset positions for cropping [start indices per dimension].</summary>
+    public int[] Offsets { get; set; } = Array.Empty<int>();
 
     public override bool Validate()
     {
@@ -168,7 +179,14 @@ public class CropOp : IROp
 /// </summary>
 public class UpsampleOp : IROp
 {
-    public int Scale { get; set; }
+    /// <summary>Upsampling scale factor.</summary>
+    public int Scale { get; set; } = 2;
+
+    /// <summary>Upsampling mode: "nearest" or "bilinear".</summary>
+    public string Mode { get; set; } = "nearest";
+
+    /// <summary>Input shape [batch, channels, height, width] for kernel generation.</summary>
+    public int[] InputShape { get; set; } = new int[] { 1, 1, 1, 1 };
 
     public override bool Validate()
     {
@@ -204,9 +222,20 @@ public class PixelShuffleOp : IROp
 /// </summary>
 public class Conv2DOp : IROp
 {
+    /// <summary>Kernel size [height, width].</summary>
+    public int[] KernelSize { get; set; } = new int[] { 3, 3 };
+
+    /// <summary>Stride [height, width].</summary>
     public int[] Stride { get; set; } = new int[] { 1, 1 };
+
+    /// <summary>Padding [height, width].</summary>
     public int[] Padding { get; set; } = new int[] { 0, 0 };
+
+    /// <summary>Whether this convolution has a bias term.</summary>
     public bool HasBias { get; set; }
+
+    /// <summary>Input shape [batch, channels, height, width] for kernel generation.</summary>
+    public int[] InputShape { get; set; } = new int[] { 1, 1, 1, 1 };
 
     public override bool Validate()
     {
@@ -220,7 +249,7 @@ public class Conv2DOp : IROp
     public override string ToString()
     {
         var inputs = HasBias ? $"t{InputIds[0]}, t{InputIds[1]}, t{InputIds[2]}" : $"t{InputIds[0]}, t{InputIds[1]}";
-        return $"t{OutputId} = Conv2D({inputs}, stride=[{string.Join(",", Stride)}], pad=[{string.Join(",", Padding)}]) : {OutputType} {OutputShape.ShapeToString()}";
+        return $"t{OutputId} = Conv2D({inputs}, kernel=[{string.Join(",", KernelSize)}], stride=[{string.Join(",", Stride)}], pad=[{string.Join(",", Padding)}]) : {OutputType} {OutputShape.ShapeToString()}";
     }
 }
 
@@ -229,9 +258,20 @@ public class Conv2DOp : IROp
 /// </summary>
 public class ConvTranspose2DOp : IROp
 {
+    /// <summary>Kernel size [height, width].</summary>
+    public int[] KernelSize { get; set; } = new int[] { 3, 3 };
+
+    /// <summary>Stride [height, width].</summary>
     public int[] Stride { get; set; } = new int[] { 1, 1 };
+
+    /// <summary>Padding [height, width].</summary>
     public int[] Padding { get; set; } = new int[] { 0, 0 };
+
+    /// <summary>Output padding [height, width].</summary>
     public int[] OutputPadding { get; set; } = new int[] { 0, 0 };
+
+    /// <summary>Input shape [batch, channels, height, width] for kernel generation.</summary>
+    public int[] InputShape { get; set; } = new int[] { 1, 1, 1, 1 };
 
     public override bool Validate()
     {
@@ -246,8 +286,17 @@ public class ConvTranspose2DOp : IROp
 /// </summary>
 public class DepthwiseConv2DOp : IROp
 {
+    /// <summary>Kernel size [height, width].</summary>
+    public int[] KernelSize { get; set; } = new int[] { 3, 3 };
+
+    /// <summary>Stride [height, width].</summary>
     public int[] Stride { get; set; } = new int[] { 1, 1 };
+
+    /// <summary>Padding [height, width].</summary>
     public int[] Padding { get; set; } = new int[] { 0, 0 };
+
+    /// <summary>Input shape [batch, channels, height, width] for kernel generation.</summary>
+    public int[] InputShape { get; set; } = new int[] { 1, 1, 1, 1 };
 
     public override bool Validate()
     {
@@ -716,6 +765,58 @@ public class ScaledDotProductAttentionOp : IROp
     {
         var causalStr = IsCausal ? ", causal" : "";
         return $"t{OutputId} = ScaledDotProductAttention(q=t{InputIds[0]}, k=t{InputIds[1]}, v=t{InputIds[2]}{causalStr}) : {OutputType} {OutputShape.ShapeToString()}";
+    }
+}
+
+/// <summary>
+/// Represents a simplified attention operation for GPU code generation.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This is a simplified version of attention used for GPU kernel generation.
+/// Computes Attention(Q, K, V) = softmax(QK^T * scale) * V
+/// </para>
+/// </remarks>
+public class AttentionOp : IROp
+{
+    /// <summary>
+    /// Scaling factor for the attention scores.
+    /// Typically 1/sqrt(head_dim).
+    /// </summary>
+    public double Scale { get; set; } = 1.0;
+
+    /// <summary>
+    /// Number of attention heads.
+    /// </summary>
+    public int NumHeads { get; set; } = 1;
+
+    /// <summary>
+    /// Head dimension (d_k).
+    /// </summary>
+    public int HeadDim { get; set; } = 64;
+
+    /// <summary>
+    /// Sequence length.
+    /// </summary>
+    public int SeqLength { get; set; } = 512;
+
+    /// <summary>
+    /// Whether to apply causal (autoregressive) masking.
+    /// </summary>
+    public bool IsCausal { get; set; }
+
+    public override bool Validate()
+    {
+        if (!base.Validate()) return false;
+        // Inputs: query, key, value (optionally mask)
+        if (InputIds.Length < 3 || InputIds.Length > 4) return false;
+        return true;
+    }
+
+    public override string ToString()
+    {
+        var causalStr = IsCausal ? ", causal" : "";
+        return $"t{OutputId} = Attention(q=t{InputIds[0]}, k=t{InputIds[1]}, v=t{InputIds[2]}, scale={Scale}{causalStr}) : {OutputType} {OutputShape.ShapeToString()}";
     }
 }
 
