@@ -2225,16 +2225,20 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     /// </summary>
     /// <returns>A new tensor that is the transpose of this tensor.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Transposing a tensor means swapping its dimensions. 
-    /// For a 2D tensor (matrix), it means turning rows into columns and vice versa.
-    /// 
-    /// For example, if you have a 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â3 matrix:
+    /// <para><b>For Beginners:</b> Transposing a tensor means swapping its dimensions.
+    ///
+    /// For different tensor ranks:
+    /// - 1D tensors: Returns a copy (transpose has no effect on vectors)
+    /// - 2D tensors: Swaps rows and columns (standard matrix transpose)
+    /// - N-D tensors: Reverses all dimensions (e.g., shape [2,3,4] becomes [4,3,2])
+    ///
+    /// For example, if you have a 2x3 matrix:
     /// ```
     /// A = [[1, 2, 3],
     ///      [4, 5, 6]]
     /// ```
     /// 
-    /// Then A.Transpose() would result in a 3ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â2 matrix:
+    /// Then A.Transpose() would result in a 3x2 matrix:
     /// ```
     /// [[1, 4],
     ///  [2, 5],
