@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.JitCompiler;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
@@ -51,20 +52,20 @@ public class JitCompilerBenchmarks
         // Graph: ReLU(Exp(input))
         _simpleData = CreateRandomTensor(new[] { 64, 64 });
 
-        var input = new ComputationNode<float>(_simpleData) { OperationType = "Input" };
+        var input = new ComputationNode<float>(_simpleData) { OperationType = OperationType.Input };
 
         var exp = new ComputationNode<float>(
             new Tensor<float>(new[] { 64, 64 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "Exp"
+            OperationType = OperationType.Exp
         };
 
         var relu = new ComputationNode<float>(
             new Tensor<float>(new[] { 64, 64 }),
             parents: new List<ComputationNode<float>> { exp })
         {
-            OperationType = "ReLU"
+            OperationType = OperationType.ReLU
         };
 
         _simpleGraph = relu;
@@ -79,29 +80,29 @@ public class JitCompilerBenchmarks
         _linearWeights = CreateRandomTensor(new[] { 128, 256 });
         _linearBias = CreateRandomTensor(new[] { 1, 256 });
 
-        var input = new ComputationNode<float>(_linearInput) { OperationType = "Input" };
-        var weights = new ComputationNode<float>(_linearWeights) { OperationType = "Input" };
-        var bias = new ComputationNode<float>(_linearBias) { OperationType = "Input" };
+        var input = new ComputationNode<float>(_linearInput) { OperationType = OperationType.Input };
+        var weights = new ComputationNode<float>(_linearWeights) { OperationType = OperationType.Input };
+        var bias = new ComputationNode<float>(_linearBias) { OperationType = OperationType.Input };
 
         var matmul = new ComputationNode<float>(
             new Tensor<float>(new[] { 32, 256 }),
             parents: new List<ComputationNode<float>> { input, weights })
         {
-            OperationType = "MatMul"
+            OperationType = OperationType.MatMul
         };
 
         var add = new ComputationNode<float>(
             new Tensor<float>(new[] { 32, 256 }),
             parents: new List<ComputationNode<float>> { matmul, bias })
         {
-            OperationType = "Add"
+            OperationType = OperationType.Add
         };
 
         var relu = new ComputationNode<float>(
             new Tensor<float>(new[] { 32, 256 }),
             parents: new List<ComputationNode<float>> { add })
         {
-            OperationType = "ReLU"
+            OperationType = OperationType.ReLU
         };
 
         _linearGraph = relu;
@@ -127,15 +128,15 @@ public class JitCompilerBenchmarks
         }
 
         // Build graph
-        var input = new ComputationNode<float>(_deepInput) { OperationType = "Input" };
+        var input = new ComputationNode<float>(_deepInput) { OperationType = OperationType.Input };
         _deepInputs = new List<ComputationNode<float>> { input };
 
         var current = input;
 
         for (int i = 0; i < numLayers; i++)
         {
-            var weights = new ComputationNode<float>(_deepWeights[i]) { OperationType = "Input" };
-            var bias = new ComputationNode<float>(_deepBiases[i]) { OperationType = "Input" };
+            var weights = new ComputationNode<float>(_deepWeights[i]) { OperationType = OperationType.Input };
+            var bias = new ComputationNode<float>(_deepBiases[i]) { OperationType = OperationType.Input };
             _deepInputs.Add(weights);
             _deepInputs.Add(bias);
 
@@ -143,21 +144,21 @@ public class JitCompilerBenchmarks
                 new Tensor<float>(new[] { batchSize, layerSize }),
                 parents: new List<ComputationNode<float>> { current, weights })
             {
-                OperationType = "MatMul"
+                OperationType = OperationType.MatMul
             };
 
             var add = new ComputationNode<float>(
                 new Tensor<float>(new[] { batchSize, layerSize }),
                 parents: new List<ComputationNode<float>> { matmul, bias })
             {
-                OperationType = "Add"
+                OperationType = OperationType.Add
             };
 
             var relu = new ComputationNode<float>(
                 new Tensor<float>(new[] { batchSize, layerSize }),
                 parents: new List<ComputationNode<float>> { add })
             {
-                OperationType = "ReLU"
+                OperationType = OperationType.ReLU
             };
 
             current = relu;
@@ -206,12 +207,12 @@ public class JitCompilerBenchmarks
     public Func<Tensor<float>[], Tensor<float>[]> CompilationOverhead()
     {
         // Measure pure compilation time
-        var input = new ComputationNode<float>(new Tensor<float>(new[] { 8, 8 })) { OperationType = "Input" };
+        var input = new ComputationNode<float>(new Tensor<float>(new[] { 8, 8 })) { OperationType = OperationType.Input };
         var relu = new ComputationNode<float>(
             new Tensor<float>(new[] { 8, 8 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "ReLU"
+            OperationType = OperationType.ReLU
         };
 
         // Create new compiler instance to avoid caching

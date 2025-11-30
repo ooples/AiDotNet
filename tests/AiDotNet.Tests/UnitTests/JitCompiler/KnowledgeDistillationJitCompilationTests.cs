@@ -2,7 +2,8 @@ using Xunit;
 using AiDotNet.KnowledgeDistillation;
 using AiDotNet.KnowledgeDistillation.Teachers;
 using AiDotNet.Autodiff;
-using AiDotNet.JitCompiler;
+using AiDotNet.Enums;
+using JitCompilerClass = AiDotNet.JitCompiler.JitCompiler;
 
 namespace AiDotNet.Tests.UnitTests.JitCompiler;
 
@@ -289,7 +290,7 @@ public class KnowledgeDistillationJitCompilationTests
         var inputNodes = new List<ComputationNode<double>>();
         var outputNode = ensemble.ExportComputationGraph(inputNodes);
 
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
         var compatibility = jit.AnalyzeCompatibility(outputNode, inputNodes);
 
         // Assert

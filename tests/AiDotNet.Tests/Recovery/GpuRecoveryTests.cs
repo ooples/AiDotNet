@@ -6,6 +6,8 @@ using System.Threading;
 
 namespace AiDotNet.Tests.Recovery;
 
+#if NET8_0_OR_GREATER
+
 /// <summary>
 /// GPU recovery tests (Phase B: US-GPU-020).
 /// Validates GPU device loss recovery and health monitoring.
@@ -355,3 +357,4 @@ public class GpuRecoveryTests
 
     #endregion
 }
+#endif

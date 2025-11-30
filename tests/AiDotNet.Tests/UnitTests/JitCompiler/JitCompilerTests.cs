@@ -2,6 +2,7 @@ using Xunit;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.JitCompiler;
+using JitCompilerClass = AiDotNet.JitCompiler.JitCompiler;
 
 namespace AiDotNet.Tests.UnitTests.JitCompiler;
 
@@ -16,17 +17,17 @@ public class JitCompilerTests
         // Arrange
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
 
         var result = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "ReLU"
+            OperationType = OperationType.ReLU
         };
 
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
 
         // Act
         var compiled = jit.Compile(result, new List<ComputationNode<float>> { input });
@@ -41,21 +42,21 @@ public class JitCompilerTests
         // Arrange
         var input1 = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
         var input2 = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
 
         var add = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input1, input2 })
         {
-            OperationType = "Add"
+            OperationType = OperationType.Add
         };
 
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
 
         // Act
         var (compiled, stats) = jit.CompileWithStats(add, new List<ComputationNode<float>> { input1, input2 });
@@ -75,17 +76,17 @@ public class JitCompilerTests
         // Arrange
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
 
         var result = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "Exp"
+            OperationType = OperationType.Exp
         };
 
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
 
         // Act - First compilation
         var (compiled1, stats1) = jit.CompileWithStats(result, new List<ComputationNode<float>> { input });
@@ -93,14 +94,14 @@ public class JitCompilerTests
         // Create new nodes with same structure
         var input2 = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
 
         var result2 = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input2 })
         {
-            OperationType = "Exp"
+            OperationType = OperationType.Exp
         };
 
         // Act - Second compilation
@@ -126,18 +127,18 @@ public class JitCompilerTests
             EnableCaching = false
         };
 
-        var jit = new JitCompiler(options);
+        var jit = new JitCompilerClass(options);
 
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
 
         var result = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "Log"
+            OperationType = OperationType.Log
         };
 
         // Act
@@ -154,18 +155,18 @@ public class JitCompilerTests
     public void ClearCache_RemovesAllCachedGraphs()
     {
         // Arrange
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
 
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
 
         var result = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "Sqrt"
+            OperationType = OperationType.Sqrt
         };
 
         // Compile once
@@ -186,11 +187,11 @@ public class JitCompilerTests
     public void GetCacheStats_ReturnsCorrectCounts()
     {
         // Arrange
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
 
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
 
         // Act & Assert - Initially empty
@@ -202,7 +203,7 @@ public class JitCompilerTests
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "ReLU"
+            OperationType = OperationType.ReLU
         };
         jit.Compile(result1, new List<ComputationNode<float>> { input });
 
@@ -214,7 +215,7 @@ public class JitCompilerTests
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "Sigmoid"
+            OperationType = OperationType.Sigmoid
         };
         jit.Compile(result2, new List<ComputationNode<float>> { input });
 
@@ -226,7 +227,7 @@ public class JitCompilerTests
     public void Compile_NullOutputNode_ThrowsException()
     {
         // Arrange
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
@@ -237,7 +238,7 @@ public class JitCompilerTests
     public void Compile_NullInputList_ThrowsException()
     {
         // Arrange
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
         var output = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
 
         // Act & Assert
@@ -310,7 +311,7 @@ public class JitCompilerTests
     public void GetSupportedOperationTypes_ReturnsExpectedOperations()
     {
         // Act
-        var supportedOps = JitCompiler.GetSupportedOperationTypes();
+        var supportedOps = JitCompilerClass.GetSupportedOperationTypes();
 
         // Assert
         Assert.Contains(OperationType.Add, supportedOps);
@@ -330,7 +331,7 @@ public class JitCompilerTests
     public void AnalyzeCompatibility_FullySupportedGraph_ReturnsFullySupported()
     {
         // Arrange
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
             OperationType = OperationType.MatMul  // Just for testing, Input doesn't need OperationType
@@ -358,7 +359,7 @@ public class JitCompilerTests
     public void AnalyzeCompatibility_GraphWithUnsupportedOp_ReturnsPartialSupport()
     {
         // Arrange
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
             Name = "input"
@@ -391,7 +392,7 @@ public class JitCompilerTests
         {
             UnsupportedLayerHandling = UnsupportedLayerHandling.Throw
         };
-        var jit = new JitCompiler(options);
+        var jit = new JitCompilerClass(options);
 
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
         var relu = new ComputationNode<float>(
@@ -419,7 +420,7 @@ public class JitCompilerTests
         {
             UnsupportedLayerHandling = UnsupportedLayerHandling.Throw
         };
-        var jit = new JitCompiler(options);
+        var jit = new JitCompilerClass(options);
 
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
         var unsupportedNode = new ComputationNode<float>(
@@ -443,7 +444,7 @@ public class JitCompilerTests
             UnsupportedLayerHandling = UnsupportedLayerHandling.Fallback,
             LogUnsupportedOperations = true
         };
-        var jit = new JitCompiler(options);
+        var jit = new JitCompilerClass(options);
 
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
         var unsupportedNode = new ComputationNode<float>(
@@ -473,7 +474,7 @@ public class JitCompilerTests
             UnsupportedLayerHandling = UnsupportedLayerHandling.Hybrid,
             LogUnsupportedOperations = true
         };
-        var jit = new JitCompiler(options);
+        var jit = new JitCompilerClass(options);
 
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
         var unsupportedNode = new ComputationNode<float>(
@@ -502,7 +503,7 @@ public class JitCompilerTests
             UnsupportedLayerHandling = UnsupportedLayerHandling.Skip,
             LogUnsupportedOperations = true
         };
-        var jit = new JitCompiler(options);
+        var jit = new JitCompilerClass(options);
 
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
         var unsupportedNode = new ComputationNode<float>(
@@ -653,7 +654,7 @@ public class JitCompilerTests
     public void GetSupportedOperationTypes_IncludesExtendedActivations()
     {
         // Act
-        var supportedOps = JitCompiler.GetSupportedOperationTypes();
+        var supportedOps = JitCompilerClass.GetSupportedOperationTypes();
 
         // Assert - Extended activation functions
         Assert.Contains(OperationType.ELU, supportedOps);
@@ -676,7 +677,7 @@ public class JitCompilerTests
     public void GetSupportedOperationTypes_IncludesExtendedShapeOps()
     {
         // Act
-        var supportedOps = JitCompiler.GetSupportedOperationTypes();
+        var supportedOps = JitCompilerClass.GetSupportedOperationTypes();
 
         // Assert - Shape operations
         Assert.Contains(OperationType.Split, supportedOps);
@@ -689,7 +690,7 @@ public class JitCompilerTests
     public void GetSupportedOperationTypes_IncludesEmbeddingAndAttentionOps()
     {
         // Act
-        var supportedOps = JitCompiler.GetSupportedOperationTypes();
+        var supportedOps = JitCompilerClass.GetSupportedOperationTypes();
 
         // Assert - Embedding and attention operations
         Assert.Contains(OperationType.Embedding, supportedOps);
@@ -701,7 +702,7 @@ public class JitCompilerTests
     public void GetSupportedOperationTypes_IncludesFusedOps()
     {
         // Act
-        var supportedOps = JitCompiler.GetSupportedOperationTypes();
+        var supportedOps = JitCompilerClass.GetSupportedOperationTypes();
 
         // Assert - Fused operations
         Assert.Contains(OperationType.FusedMatMulAdd, supportedOps);
@@ -714,7 +715,7 @@ public class JitCompilerTests
     public void GetSupportedOperationTypes_IncludesComplexNumberOps()
     {
         // Act
-        var supportedOps = JitCompiler.GetSupportedOperationTypes();
+        var supportedOps = JitCompilerClass.GetSupportedOperationTypes();
 
         // Assert - Complex number operations
         Assert.Contains(OperationType.ComplexMatMul, supportedOps);
@@ -725,7 +726,7 @@ public class JitCompilerTests
     public void AnalyzeCompatibility_ExtendedActivation_IsSupported()
     {
         // Arrange
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
 
         var gelu = new ComputationNode<float>(
@@ -747,7 +748,7 @@ public class JitCompilerTests
     public void AnalyzeCompatibility_AttentionOp_IsSupported()
     {
         // Arrange
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
 
         var attention = new ComputationNode<float>(
@@ -769,7 +770,7 @@ public class JitCompilerTests
     public void AnalyzeCompatibility_EmbeddingOp_IsSupported()
     {
         // Arrange
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
 
         var embedding = new ComputationNode<float>(
@@ -791,7 +792,7 @@ public class JitCompilerTests
     public void AnalyzeCompatibility_FusedOp_IsSupported()
     {
         // Arrange
-        var jit = new JitCompiler();
+        var jit = new JitCompilerClass();
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }));
 
         var fusedOp = new ComputationNode<float>(
@@ -813,7 +814,7 @@ public class JitCompilerTests
     public void GetSupportedOperationTypes_CountIsSignificantlyHigher()
     {
         // Act
-        var supportedOps = JitCompiler.GetSupportedOperationTypes();
+        var supportedOps = JitCompilerClass.GetSupportedOperationTypes();
 
         // Assert - We should now support many more operations
         // Originally ~45, now should be ~65+ with the new additions

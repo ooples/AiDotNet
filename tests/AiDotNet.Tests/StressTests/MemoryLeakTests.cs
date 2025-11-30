@@ -9,6 +9,8 @@ using System.Linq;
 
 namespace AiDotNet.Tests.StressTests;
 
+#if NET8_0_OR_GREATER
+
 /// <summary>
 /// Memory leak detection tests for GPU acceleration (Phase B: US-GPU-018).
 /// Validates that GPU memory pools, managed memory, and native resources are properly released.
@@ -494,3 +496,4 @@ public class MemoryLeakTests
 
     #endregion
 }
+#endif

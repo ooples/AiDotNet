@@ -1,5 +1,6 @@
 using Xunit;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.JitCompiler;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
@@ -17,17 +18,17 @@ public class IRBuilderTests
         // Arrange
         var input1 = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
         var input2 = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
         var result = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input1, input2 })
         {
-            OperationType = "Add"
+            OperationType = OperationType.Add
         };
 
         var builder = new IRBuilder();
@@ -50,29 +51,29 @@ public class IRBuilderTests
         // Arrange: result = Add(MatMul(input, weights), bias)
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 1, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
         var weights = new ComputationNode<float>(new Tensor<float>(new[] { 3, 4 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
         var bias = new ComputationNode<float>(new Tensor<float>(new[] { 1, 4 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
 
         var matmul = new ComputationNode<float>(
             new Tensor<float>(new[] { 1, 4 }),
             parents: new List<ComputationNode<float>> { input, weights })
         {
-            OperationType = "MatMul"
+            OperationType = OperationType.MatMul
         };
 
         var result = new ComputationNode<float>(
             new Tensor<float>(new[] { 1, 4 }),
             parents: new List<ComputationNode<float>> { matmul, bias })
         {
-            OperationType = "Add"
+            OperationType = OperationType.Add
         };
 
         var builder = new IRBuilder();
@@ -96,21 +97,21 @@ public class IRBuilderTests
         // Arrange
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
 
         var exp = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "Exp"
+            OperationType = OperationType.Exp
         };
 
         var log = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "Log"
+            OperationType = OperationType.Log
         };
 
         var builder = new IRBuilder();
@@ -135,14 +136,14 @@ public class IRBuilderTests
         // Arrange
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
 
         var power = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "Power",
+            OperationType = OperationType.Power,
             OperationParams = new Dictionary<string, object>
             {
                 ["Exponent"] = 2.0
@@ -167,28 +168,28 @@ public class IRBuilderTests
         // Arrange: Diamond pattern - two paths from input to output
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
 
         var exp = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "Exp"
+            OperationType = OperationType.Exp
         };
 
         var log = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "Log"
+            OperationType = OperationType.Log
         };
 
         var result = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { exp, log })
         {
-            OperationType = "Add"
+            OperationType = OperationType.Add
         };
 
         var builder = new IRBuilder();
@@ -209,7 +210,7 @@ public class IRBuilderTests
         // Arrange
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
 
         var invalidNode = new ComputationNode<float>(
@@ -236,35 +237,35 @@ public class IRBuilderTests
 
         var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 }))
         {
-            OperationType = "Input"
+            OperationType = OperationType.Input
         };
 
         var relu = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "ReLU"
+            OperationType = OperationType.ReLU
         };
 
         var exp = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { relu })
         {
-            OperationType = "Exp"
+            OperationType = OperationType.Exp
         };
 
         var log = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "Log"
+            OperationType = OperationType.Log
         };
 
         var result = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { exp, log })
         {
-            OperationType = "Add"
+            OperationType = OperationType.Add
         };
 
         var builder = new IRBuilder();

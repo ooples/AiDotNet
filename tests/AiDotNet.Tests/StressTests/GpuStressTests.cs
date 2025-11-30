@@ -11,6 +11,8 @@ using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.StressTests;
 
+#if NET8_0_OR_GREATER
+
 /// <summary>
 /// Stress tests for GPU acceleration infrastructure (Phase B: US-GPU-018).
 /// Tests long-running operations, concurrent execution, and stability under load.
@@ -560,3 +562,4 @@ public class GpuStressTests
 
     #endregion
 }
+#endif

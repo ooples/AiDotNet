@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.Optimizers
@@ -13,7 +15,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
         {
             // Arrange & Act
             var optimizer = new AdamWOptimizer<double, Vector<double>, Vector<double>>(null);
-            var options = optimizer.GetOptions() as AdamWOptimizerOptions;
+            var options = optimizer.GetOptions() as AdamWOptimizerOptions<double, Vector<double>, Vector<double>>;
 
             // Assert
             Assert.NotNull(options);
@@ -33,7 +35,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void Constructor_WithCustomOptions_UsesProvidedOptions()
         {
             // Arrange
-            var customOptions = new AdamWOptimizerOptions
+            var customOptions = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.01,
                 Beta1 = 0.85,
@@ -44,7 +46,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
             // Act
             var optimizer = new AdamWOptimizer<double, Vector<double>, Vector<double>>(null, customOptions);
-            var options = optimizer.GetOptions() as AdamWOptimizerOptions;
+            var options = optimizer.GetOptions() as AdamWOptimizerOptions<double, Vector<double>, Vector<double>>;
 
             // Assert
             Assert.NotNull(options);
@@ -59,7 +61,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void UpdateParameters_Vector_WithPositiveGradient_DecreasesParameters()
         {
             // Arrange
-            var options = new AdamWOptimizerOptions
+            var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.1,
                 Beta1 = 0.9,
@@ -83,7 +85,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void UpdateParameters_Vector_WithNegativeGradient_IncreasesParameters()
         {
             // Arrange
-            var options = new AdamWOptimizerOptions
+            var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.1,
                 Beta1 = 0.9,
@@ -107,7 +109,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void UpdateParameters_Vector_WithWeightDecay_AppliesDecoupledDecay()
         {
             // Arrange
-            var options = new AdamWOptimizerOptions
+            var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.1,
                 Beta1 = 0.9,
@@ -133,7 +135,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void UpdateParameters_Matrix_WorksCorrectly()
         {
             // Arrange
-            var options = new AdamWOptimizerOptions
+            var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.1,
                 Beta1 = 0.9,
@@ -167,7 +169,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void UpdateParameters_ConsecutiveCalls_BuildsMomentum()
         {
             // Arrange
-            var options = new AdamWOptimizerOptions
+            var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.01,
                 Beta1 = 0.9,
@@ -200,7 +202,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // AdamW applies weight decay directly to parameters, not to gradients
 
             // Arrange
-            var options = new AdamWOptimizerOptions
+            var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.01,
                 Beta1 = 0.9,
@@ -226,7 +228,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void Reset_ClearsOptimizerState()
         {
             // Arrange
-            var options = new AdamWOptimizerOptions
+            var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.1,
                 Beta1 = 0.9,
@@ -255,7 +257,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void Serialize_Deserialize_PreservesState()
         {
             // Arrange
-            var options = new AdamWOptimizerOptions
+            var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.002,
                 Beta1 = 0.85,
@@ -277,7 +279,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             var optimizer2 = new AdamWOptimizer<double, Vector<double>, Vector<double>>(null);
             optimizer2.Deserialize(serialized);
 
-            var deserializedOptions = optimizer2.GetOptions() as AdamWOptimizerOptions;
+            var deserializedOptions = optimizer2.GetOptions() as AdamWOptimizerOptions<double, Vector<double>, Vector<double>>;
 
             // Assert
             Assert.NotNull(deserializedOptions);
@@ -289,7 +291,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void UpdateParameters_WithAMSGrad_UsesMaxSecondMoment()
         {
             // Arrange
-            var options = new AdamWOptimizerOptions
+            var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.01,
                 Beta1 = 0.9,
@@ -313,7 +315,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void UpdateParameters_WithFloatType_WorksCorrectly()
         {
             // Arrange
-            var options = new AdamWOptimizerOptions
+            var options = new AdamWOptimizerOptions<float, Vector<float>, Vector<float>>
             {
                 LearningRate = 0.1f,
                 Beta1 = 0.9,
@@ -337,7 +339,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void GetOptions_ReturnsCurrentOptions()
         {
             // Arrange
-            var options = new AdamWOptimizerOptions
+            var options = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.005,
                 Beta1 = 0.92,
@@ -347,7 +349,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             var optimizer = new AdamWOptimizer<double, Vector<double>, Vector<double>>(null, options);
 
             // Act
-            var retrievedOptions = optimizer.GetOptions() as AdamWOptimizerOptions;
+            var retrievedOptions = optimizer.GetOptions() as AdamWOptimizerOptions<double, Vector<double>, Vector<double>>;
 
             // Assert
             Assert.NotNull(retrievedOptions);
@@ -361,8 +363,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
         public void UpdateParameters_DifferentBeta1Values_ProducesDifferentResults()
         {
             // Arrange
-            var options1 = new AdamWOptimizerOptions { LearningRate = 0.1, Beta1 = 0.5, Beta2 = 0.999 };
-            var options2 = new AdamWOptimizerOptions { LearningRate = 0.1, Beta1 = 0.99, Beta2 = 0.999 };
+            var options1 = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>> {LearningRate = 0.1, Beta1 = 0.5, Beta2 = 0.999 };
+            var options2 = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>> {LearningRate = 0.1, Beta1 = 0.99, Beta2 = 0.999 };
 
             var optimizer1 = new AdamWOptimizer<double, Vector<double>, Vector<double>>(null, options1);
             var optimizer2 = new AdamWOptimizer<double, Vector<double>, Vector<double>>(null, options2);
