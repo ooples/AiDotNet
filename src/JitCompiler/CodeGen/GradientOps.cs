@@ -207,6 +207,8 @@ public static class GradientOps
         var result = new Tensor<T>(input.Shape);
         var inputData = input.ToArray();
         var resultData = result.ToArray();
+        var zero = (T)Convert.ChangeType(0.0, typeof(T));
+        var one = (T)Convert.ChangeType(1.0, typeof(T));
 
         for (int i = 0; i < inputData.Length; i++)
         {
@@ -214,12 +216,12 @@ public static class GradientOps
             var dataVal = inputData[i];
             if (dataVal is null)
             {
-                resultData[i] = (T)(object)0.0;
+                resultData[i] = zero;
             }
             else
             {
                 dynamic val = dataVal;
-                resultData[i] = val > 0 ? (T)(object)1.0 : (T)(object)0.0;
+                resultData[i] = val > 0 ? one : zero;
             }
         }
 
@@ -233,10 +235,11 @@ public static class GradientOps
     {
         var totalSize = shape.Aggregate(1, (a, b) => a * b);
         var data = new T[totalSize];
+        var one = (T)Convert.ChangeType(1.0, typeof(T));
 
         for (int i = 0; i < totalSize; i++)
         {
-            data[i] = (T)(object)1.0;
+            data[i] = one;
         }
 
         return new Tensor<T>(shape, new Vector<T>(data));
