@@ -34,7 +34,7 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>A vector of probabilities that sum to 1.</returns>
     /// <remarks>
     /// <para>
-    /// The implementation uses TensorPrimitivesHelper for SIMD-optimized Exp and Sum operations (5-10Ã— speedup for float),
+    /// The implementation uses TensorPrimitivesHelper for SIMD-optimized Exp and Sum operations (5-10x speedup for float),
     /// then divides each value by the sum to ensure the output values sum to 1.
     /// </para>
     /// <para>
@@ -50,16 +50,16 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
-        // Use TensorPrimitivesHelper for SIMD-optimized Exp (5-10Ã— speedup for float)
+        // Use TensorPrimitivesHelper for SIMD-optimized Exp (5-10x speedup for float)
         var expVector = TensorPrimitivesHelper<T>.Exp(input);
 
-        // Use TensorPrimitivesHelper for SIMD-optimized Sum (8-12Ã— speedup for float)
+        // Use TensorPrimitivesHelper for SIMD-optimized Sum (8-12x speedup for float)
         T sum = TensorPrimitivesHelper<T>.Sum(expVector);
 
         // Create sum vector for vectorized division
         var sumVector = new Vector<T>(Enumerable.Repeat(sum, expVector.Length).ToArray());
 
-        // Use TensorPrimitivesHelper for SIMD-optimized Divide (5-10Ã— speedup for float)
+        // Use TensorPrimitivesHelper for SIMD-optimized Divide (5-10x speedup for float)
         return TensorPrimitivesHelper<T>.Divide(expVector, sumVector);
     }
 
