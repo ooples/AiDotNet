@@ -7134,22 +7134,51 @@ public static class TensorOperations<T>
         ComputationNode<T> bias)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        // Compute gates
+
+        // Compute gates: input @ W_ih + hidden @ W_hh + bias
         var inputTransform = MatrixMultiply(input, weightIH);
         var hiddenTransform = MatrixMultiply(hiddenState, weightHH);
         var gates = Add(Add(inputTransform, hiddenTransform), bias);
 
-        // Reset gate (simplified)
-        var resetGate = Sigmoid(gates);
+        // Get hidden dimension from hidden state shape
+        var hiddenDim = hiddenState.Value.Shape[hiddenState.Value.Shape.Length - 1];
+        var lastAxis = gates.Value.Shape.Length - 1;
 
-        // Update gate (simplified)
-        var updateGate = Sigmoid(gates);
+        // Validate gates shape: should be [batch, 3*hidden_dim]
+        var gatesLastDim = gates.Value.Shape[lastAxis];
+        if (gatesLastDim != 3 * hiddenDim)
+        {
+            throw new ArgumentException(
+                $"Gates dimension {gatesLastDim} does not match expected 3*hidden_dim ({3 * hiddenDim}). " +
+                $"Ensure weightIH and weightHH have shape [*, 3*hidden_dim].");
+        }
 
-        // Candidate hidden state (simplified)
+        // Split gates into 3 segments along the last axis: [r, z, n]
+        // Each gate has shape [batch, hidden_dim]
+        var resetGateRaw = Slice(gates, 0, hiddenDim, 1, lastAxis);           // r_t
+        var updateGateRaw = Slice(gates, hiddenDim, hiddenDim, 1, lastAxis);  // z_t
+        var newGateRaw = Slice(gates, 2 * hiddenDim, hiddenDim, 1, lastAxis); // n_t (partial)
+
+        // Apply sigmoid to reset and update gates
+        var resetGate = Sigmoid(resetGateRaw);   // r_t = sigmoid(...)
+        var updateGate = Sigmoid(updateGateRaw); // z_t = sigmoid(...)
+
+        // Candidate hidden state: n_t = tanh(W_in * x + b_in + r_t * (W_hn * h + b_hn))
+        // Simplified: we use the newGateRaw and apply reset gate
         var resetHidden = ElementwiseMultiply(resetGate, hiddenState);
-        var candidateHidden = Tanh(Add(MatrixMultiply(input, weightIH), MatrixMultiply(resetHidden, weightHH)));
 
-        // New hidden state: (1 - z) * h + z * h'
+        // For the candidate, we need to recompute with reset applied to hidden part
+        // Split the input-to-hidden weights contribution for the new gate
+        var inputNew = Slice(inputTransform, 2 * hiddenDim, hiddenDim, 1, lastAxis);
+        var hiddenNew = Slice(hiddenTransform, 2 * hiddenDim, hiddenDim, 1, lastAxis);
+        var biasNew = Slice(bias, 2 * hiddenDim, hiddenDim, 1, lastAxis);
+
+        // Apply reset gate to hidden contribution only
+        var resetHiddenNew = ElementwiseMultiply(resetGate, hiddenNew);
+        var candidateInput = Add(Add(inputNew, resetHiddenNew), biasNew);
+        var candidateHidden = Tanh(candidateInput); // n_t = tanh(...)
+
+        // New hidden state: h_t = (1 - z_t) * h_{t-1} + z_t * n_t
         var onesTensor = new Tensor<T>(updateGate.Value.Shape);
         for (int i = 0; i < onesTensor.Length; i++)
             onesTensor[i] = numOps.FromDouble(1.0);
