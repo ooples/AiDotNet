@@ -126,16 +126,15 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
-    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <value>True because gradient computation is implemented.</value>
     /// <remarks>
     /// <para>
-    /// This activation does not yet support JIT compilation because the gradient
-    /// computation (backward pass) has not been implemented in TensorOperations.GELU.
+    /// This activation supports JIT compilation. The gradient computation (backward pass)
+    /// is implemented in TensorOperations.GELU, enabling use in JIT-compiled computation graphs.
     /// </para>
     /// <para>
-    /// To enable JIT support:
-    /// 1. Implement the backward pass in TensorOperations.GELU
-    /// 2. Test the gradient computation
+    /// GELU is widely used in transformers (BERT, GPT) and modern architectures,
+    /// making it an important activation for JIT-compiled models.
     /// </para>
     /// </remarks>
     public override bool SupportsJitCompilation => true;
