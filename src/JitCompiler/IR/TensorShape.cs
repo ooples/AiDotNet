@@ -271,7 +271,8 @@ public static class TensorShapeExtensions
     /// </remarks>
     public static int[] GetShape<T>(this Tensor<T> tensor)
     {
-        return tensor.Shape;
+        // Return a defensive copy to prevent mutation of internal state
+        return tensor.Shape.ToArray();
     }
 
     /// <summary>
