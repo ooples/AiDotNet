@@ -2,6 +2,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.JitCompiler;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace AiDotNet.Examples.JitCompiler;
