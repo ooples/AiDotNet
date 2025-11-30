@@ -85,7 +85,7 @@ public class TreeSpeculativeDecoder<T>
             cancellationToken.ThrowIfCancellationRequested();
 
             // Build speculation tree
-            var tree = BuildSpeculationTree(tokens.ToArray(), temperature);
+            var tree = BuildSpeculationTree([.. tokens], temperature);
             _totalTreeNodes += tree.TotalNodes;
 
             // Get all paths through the tree
@@ -184,8 +184,8 @@ public class TreeSpeculativeDecoder<T>
 
         return new TreeSpeculativeResult
         {
-            Tokens = tokens.ToArray(),
-            NewTokens = tokens.Skip(inputTokens.Length).ToArray(),
+            Tokens = [.. tokens],
+            NewTokens = [.. tokens.Skip(inputTokens.Length)],
             NumGenerated = generated,
             AcceptanceRate = AcceptanceRate,
             StepStatistics = stepStats
@@ -252,7 +252,7 @@ public class TreeSpeculativeDecoder<T>
         return tree;
     }
 
-    private int[] GetNodeContext(int[] baseContext, TreeNode node)
+    private static int[] GetNodeContext(int[] baseContext, TreeNode node)
     {
         var pathTokens = new List<int>();
         var current = node;
@@ -309,7 +309,7 @@ public class TreeSpeculativeDecoder<T>
         return accepted;
     }
 
-    private float[] ApplyTemperature(float[] dist, float temperature)
+    private static float[] ApplyTemperature(float[] dist, float temperature)
     {
         if (Math.Abs(temperature - 1.0f) < 0.001f)
             return dist;
@@ -346,142 +346,4 @@ public class TreeSpeculativeDecoder<T>
 
         return distribution.Length - 1;
     }
-}
-
-/// <summary>
-/// Configuration for tree-based speculative decoding.
-/// </summary>
-public class TreeSpeculativeConfig
-{
-    /// <summary>Number of branches per node.</summary>
-    public int BranchFactor { get; set; } = 2;
-
-    /// <summary>Maximum tree depth.</summary>
-    public int MaxDepth { get; set; } = 4;
-
-    /// <summary>Maximum total nodes in tree.</summary>
-    public int MaxNodes { get; set; } = 16;
-
-    /// <summary>Random seed.</summary>
-    public int? Seed { get; set; }
-}
-
-/// <summary>
-/// Internal tree structure for speculation.
-/// </summary>
-internal class SpeculationTree
-{
-    public TreeNode Root { get; }
-    public int TotalNodes { get; set; }
-    private readonly int _branchFactor;
-    private readonly int _maxDepth;
-
-    public SpeculationTree(int branchFactor, int maxDepth)
-    {
-        _branchFactor = branchFactor;
-        _maxDepth = maxDepth;
-        Root = new TreeNode { Depth = 0 };
-        TotalNodes = 1;
-    }
-
-    public List<int[]> GetAllPaths()
-    {
-        var paths = new List<int[]>();
-        CollectPaths(Root, new List<int>(), paths);
-        return paths;
-    }
-
-    public float[] GetPathProbabilities(int pathIndex)
-    {
-        var allPaths = GetAllPaths();
-        if (pathIndex >= allPaths.Count)
-            return Array.Empty<float>();
-
-        var path = allPaths[pathIndex];
-        var probs = new float[path.Length];
-
-        // Traverse tree to collect probabilities
-        var node = Root;
-        for (int i = 0; i < path.Length; i++)
-        {
-            var child = node.Children.FirstOrDefault(c => c.Token == path[i]);
-            if (child != null)
-            {
-                probs[i] = child.Probability;
-                node = child;
-            }
-            else
-            {
-                probs[i] = 0.01f; // Default
-            }
-        }
-
-        return probs;
-    }
-
-    private void CollectPaths(TreeNode node, List<int> current, List<int[]> paths)
-    {
-        if (node.Children.Count == 0)
-        {
-            if (current.Count > 0)
-                paths.Add(current.ToArray());
-            return;
-        }
-
-        foreach (var child in node.Children)
-        {
-            current.Add(child.Token);
-            CollectPaths(child, current, paths);
-            current.RemoveAt(current.Count - 1);
-        }
-    }
-}
-
-/// <summary>
-/// Node in the speculation tree.
-/// </summary>
-internal class TreeNode
-{
-    public int Token { get; set; }
-    public float Probability { get; set; }
-    public int Depth { get; set; }
-    public TreeNode? Parent { get; set; }
-    public List<TreeNode> Children { get; } = new();
-    public int[]? Context { get; set; }
-}
-
-/// <summary>
-/// Result of tree-based speculative decoding.
-/// </summary>
-public class TreeSpeculativeResult
-{
-    /// <summary>All tokens.</summary>
-    public int[] Tokens { get; set; } = Array.Empty<int>();
-
-    /// <summary>Newly generated tokens.</summary>
-    public int[] NewTokens { get; set; } = Array.Empty<int>();
-
-    /// <summary>Number of new tokens.</summary>
-    public int NumGenerated { get; set; }
-
-    /// <summary>Acceptance rate.</summary>
-    public double AcceptanceRate { get; set; }
-
-    /// <summary>Step statistics.</summary>
-    public List<TreeStepStatistics> StepStatistics { get; set; } = new();
-}
-
-/// <summary>
-/// Statistics for a tree speculation step.
-/// </summary>
-public class TreeStepStatistics
-{
-    /// <summary>Number of nodes in tree.</summary>
-    public int TreeNodes { get; set; }
-
-    /// <summary>Number of paths explored.</summary>
-    public int PathsExplored { get; set; }
-
-    /// <summary>Length of best accepted path.</summary>
-    public int BestPathLength { get; set; }
 }

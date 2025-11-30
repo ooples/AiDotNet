@@ -1,30 +1,49 @@
 namespace AiDotNet.JitCompiler.IR.Operations;
 
 /// <summary>
-/// Represents fused Conv + BatchNorm operation in the IR.
+/// Fused convolution + batch normalization operation.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> Combines convolution with batch normalization.
+///
+/// Batch normalization after convolution is extremely common in CNNs.
+/// By fusing them, we can:
+/// - Fold BN parameters into conv weights (at inference time)
+/// - Skip intermediate tensor storage
+/// - Reduce memory bandwidth significantly
+///
+/// This can be 2-3x faster than separate operations!
+/// </para>
+/// </remarks>
 public class FusedConvBatchNormOp : IROp
 {
     /// <summary>
-    /// Convolution stride.
+    /// Gets or sets the convolution stride.
     /// </summary>
-    public int[] Stride { get; set; } = new int[] { 1, 1 };
+    public int[] Stride { get; set; } = [1, 1];
 
     /// <summary>
-    /// Convolution padding.
+    /// Gets or sets the convolution padding.
     /// </summary>
-    public int[] Padding { get; set; } = new int[] { 0, 0 };
+    public int[] Padding { get; set; } = [0, 0];
 
     /// <summary>
-    /// BatchNorm epsilon.
+    /// Gets or sets the batch norm epsilon value.
     /// </summary>
     public double Epsilon { get; set; } = 1e-5;
 
+    /// <summary>
+    /// Gets or sets the batch norm momentum.
+    /// </summary>
+    public double Momentum { get; set; } = 0.1;
+
+    /// <summary>
+    /// Validates inputs (input, kernel, gamma, beta, running_mean, running_var).
+    /// </summary>
     public override bool Validate()
     {
         if (!base.Validate()) return false;
-        // Inputs: input, conv_weights, bn_gamma, bn_beta, bn_running_mean, bn_running_var
-        if (InputIds.Length != 6) return false;
+        if (InputIds.Length != 6) return false;  // input, kernel, gamma, beta, running_mean, running_var
         return true;
     }
 }
