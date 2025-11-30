@@ -182,17 +182,11 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
-    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <value>True because gradient computation is implemented.</value>
     /// <remarks>
     /// <para>
-    /// This activation does not yet support JIT compilation because the gradient
-    /// computation (backward pass) has not been implemented in TensorOperations.TaylorSoftmax.
-    /// </para>
-    /// <para>
-    /// To enable JIT support:
-    /// 1. Implement the backward pass in TensorOperations.TaylorSoftmax
-    /// 2. Test the gradient computation
-    /// 3. Change SupportsJitCompilation to return true
+    /// JIT compilation is supported with gradient computation implemented
+    /// in TensorOperations.TaylorSoftmax for automatic differentiation.
     /// </para>
     /// </remarks>
     public override bool SupportsJitCompilation => true;

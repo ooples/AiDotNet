@@ -124,17 +124,11 @@ public class SoftminActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
-    /// <value>False because gradient computation is not yet implemented.</value>
+    /// <value>True because gradient computation is implemented.</value>
     /// <remarks>
     /// <para>
-    /// This activation does not yet support JIT compilation because the gradient
-    /// computation (backward pass) has not been implemented in TensorOperations.Softmin.
-    /// </para>
-    /// <para>
-    /// To enable JIT support:
-    /// 1. Implement the backward pass in TensorOperations.Softmin
-    /// 2. Test the gradient computation
-    /// 3. Change SupportsJitCompilation to return true
+    /// This activation supports JIT compilation with gradient computation implemented
+    /// in TensorOperations.Softmin for automatic differentiation.
     /// </para>
     /// </remarks>
     public override bool SupportsJitCompilation => true;
@@ -145,11 +139,10 @@ public class SoftminActivation<T> : ActivationFunctionBase<T>
     /// <param name="input">The computation node to apply the activation to.</param>
     /// <returns>A new computation node with Softmin activation applied.</returns>
     /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <exception cref="NotSupportedException">Thrown because gradient is not implemented.</exception>
     /// <remarks>
     /// <para>
-    /// This method would map the activation to TensorOperations&lt;T&gt;.Softmin(input)
-    /// once the gradient computation is implemented.
+    /// This method maps the activation to TensorOperations&lt;T&gt;.Softmin(input)
+    /// with full gradient support for automatic differentiation.
     /// </para>
     /// </remarks>
     public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)

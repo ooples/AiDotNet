@@ -34,7 +34,7 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <returns>A vector of probabilities that sum to 1.</returns>
     /// <remarks>
     /// <para>
-    /// The implementation uses TensorPrimitivesHelper for SIMD-optimized Exp and Sum operations (5-10Ã— speedup for float),
+    /// The implementation uses TensorPrimitivesHelper for SIMD-optimized Exp and Sum operations (5-10x speedup for float),
     /// then divides each value by the sum to ensure the output values sum to 1.
     /// </para>
     /// <para>
