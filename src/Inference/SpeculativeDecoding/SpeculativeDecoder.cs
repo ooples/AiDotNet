@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.Inference.SpeculativeDecoding;
 
 /// <summary>
@@ -27,7 +29,7 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
-public class SpeculativeDecoder<T> where T : struct, IComparable<T>
+public class SpeculativeDecoder<T>
 {
     private readonly IDraftModel<T> _draftModel;
     private readonly Func<ReadOnlySpan<int>, float[][]> _targetForward;
@@ -361,12 +363,7 @@ public class SpeculativeDecoder<T> where T : struct, IComparable<T>
 
     private static float ToFloat(T value)
     {
-        if (typeof(T) == typeof(float))
-            return (float)(object)value;
-        if (typeof(T) == typeof(double))
-            return (float)(double)(object)value;
-
-        return Convert.ToSingle(value);
+        return MathHelper.GetNumericOperations<T>().ToFloat(value);
     }
 }
 

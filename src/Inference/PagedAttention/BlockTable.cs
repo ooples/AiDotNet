@@ -236,7 +236,7 @@ public class BlockTable
 /// Manages block tables for multiple sequences.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class BlockTableManager<T> where T : struct, IComparable<T>
+public class BlockTableManager<T>
 {
     private readonly BlockManager<T> _blockManager;
     private readonly Dictionary<long, BlockTable> _blockTables;

@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 namespace AiDotNet.Tensors.Helpers;
 
 /// <summary>
-/// Provides thread-safe random number generation utilities for the Tensors library.
+/// Provides thread-safe random number generation utilities for the entire library.
 /// </summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> Random numbers are essential in machine learning for:

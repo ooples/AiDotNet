@@ -3,6 +3,7 @@
     <TargetFrameworks>net8.0;net471;net462</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Version>1.0.0-preview</Version>
     <Title>AiDotNet.Tensors</Title>
@@ -59,6 +60,11 @@
   <!-- ValueTuple support for net462 -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net462'">
     <PackageReference Include="System.ValueTuple" Version="4.6.1" />
+  </ItemGroup>
+
+  <!-- Exclude files that require .NET Core intrinsics from .NET Framework builds -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net462' OR '$(TargetFramework)' == 'net471'">
+    <Compile Remove="Helpers\SimdVector.cs" />
   </ItemGroup>
 
 </Project>

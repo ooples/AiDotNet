@@ -1,6 +1,5 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
-using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 

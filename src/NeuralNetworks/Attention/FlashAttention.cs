@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Attention;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations (typically float or double).</typeparam>
-public static class FlashAttention<T> where T : struct, IComparable<T>
+public static class FlashAttention<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

@@ -22,7 +22,6 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
-    where T : struct, IEquatable<T>, IFormattable
 {
     /// <summary>
     /// The options specific to the Tabu Search algorithm.

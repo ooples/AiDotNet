@@ -1,4 +1,3 @@
-using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;

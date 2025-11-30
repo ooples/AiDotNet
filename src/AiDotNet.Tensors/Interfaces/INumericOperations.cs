@@ -8,28 +8,31 @@ namespace AiDotNet.Tensors.Interfaces;
 /// This interface provides a unified way to perform mathematical operations regardless of the
 /// underlying numeric type (float, double, decimal, etc.), allowing algorithms to work with
 /// different numeric types without changing their implementation.
-/// 
+///
 /// <b>For Beginners:</b> This interface is like a translator that helps AI algorithms work with
 /// different types of numbers.
-/// 
+///
 /// Why is this needed?
 /// - AI algorithms need to do math operations (add, multiply, etc.)
 /// - Different applications might need different number types (float, double, decimal)
 /// - This interface lets the same algorithm work with any number type
-/// 
+///
 /// Real-world analogy:
 /// Think of this interface like a universal calculator. Whether you're working with whole
 /// numbers, decimals, or fractions, the calculator knows how to perform operations like
 /// addition and multiplication for each type. Similarly, this interface knows how to perform
 /// math operations for different numeric types used in AI.
-/// 
+///
 /// When implementing AI algorithms:
 /// - Instead of writing code that only works with one number type (like double)
 /// - You can write code that works with this interface
 /// - Then your algorithm can work with any number type that has an implementation of this interface
+///
+/// This interface extends <see cref="IVectorizedOperations{T}"/> to provide both single-value
+/// operations and SIMD-optimized batch operations on arrays/spans.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface INumericOperations<T>
+public interface INumericOperations<T> : IVectorizedOperations<T>
 {
     /// <summary>
     /// Adds two values together.

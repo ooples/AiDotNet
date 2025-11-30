@@ -89,9 +89,28 @@
 	  <None Remove="AiDotNet.Tensors\**\*" />
 	</ItemGroup>
 
+	<!-- Exclude polyfills that are already provided by AiDotNet.Tensors -->
+	<ItemGroup>
+	  <Compile Remove="Polyfills\LanguageFeaturePolyfills.cs" />
+	</ItemGroup>
+
 	<!-- Add project reference to AiDotNet.Tensors -->
 	<ItemGroup>
 	  <ProjectReference Include="AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
+	</ItemGroup>
+
+	<!-- Global usings for AiDotNet.Tensors namespaces -->
+	<ItemGroup>
+	  <Using Include="AiDotNet.Tensors.LinearAlgebra" />
+	  <Using Include="AiDotNet.Tensors.Engines" />
+	  <Using Include="AiDotNet.Tensors.Interfaces" />
+	  <Using Include="AiDotNet.Tensors.NumericOperations" />
+	  <Using Include="AiDotNet.Tensors.Helpers" />
+	</ItemGroup>
+
+	<!-- Global usings for internal AiDotNet namespaces -->
+	<ItemGroup>
+	  <Using Include="AiDotNet.Autodiff" />
 	</ItemGroup>
 
 </Project>

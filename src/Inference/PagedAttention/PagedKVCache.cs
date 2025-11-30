@@ -23,7 +23,7 @@ namespace AiDotNet.Inference.PagedAttention;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-public class PagedKVCache<T> : IDisposable where T : struct, IComparable<T>
+public class PagedKVCache<T> : IDisposable
 {
     private readonly PagedKVCacheConfig _config;
     private readonly BlockManager<T> _blockManager;

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using AiDotNet.Inference;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Serving.ContinuousBatching;
 
@@ -32,7 +33,7 @@ namespace AiDotNet.Serving.ContinuousBatching;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-public class ContinuousBatcher<T> : IDisposable where T : struct, IComparable<T>
+public class ContinuousBatcher<T> : IDisposable
 {
     private readonly ContinuousBatcherConfig _config;
     private readonly BatchScheduler<T> _scheduler;
@@ -330,7 +331,7 @@ public class ContinuousBatcher<T> : IDisposable where T : struct, IComparable<T>
 
         // Create input tensor from last token only (incremental decoding)
         int lastToken = sequence.TokenIds[^1];
-        var inputTokens = CreateInputTensor(new[] { lastToken });
+        var inputTokens = CreateInputTensor([lastToken]);
 
         // Run model forward pass
         var logits = _model(inputTokens);
@@ -345,24 +346,17 @@ public class ContinuousBatcher<T> : IDisposable where T : struct, IComparable<T>
     private Tensor<T> CreateInputTensor(int[] tokenIds)
     {
         // Create a simple 2D tensor [batch=1, seq_len]
-        var tensor = new Tensor<T>(new[] { 1, tokenIds.Length });
+        var tensor = new Tensor<T>([1, tokenIds.Length]);
         for (int i = 0; i < tokenIds.Length; i++)
         {
-            tensor[new[] { 0, i }] = ConvertToT(tokenIds[i]);
+            tensor[[0, i]] = ConvertToT(tokenIds[i]);
         }
         return tensor;
     }
 
     private T ConvertToT(int value)
     {
-        if (typeof(T) == typeof(float))
-            return (T)(object)(float)value;
-        if (typeof(T) == typeof(double))
-            return (T)(object)(double)value;
-        if (typeof(T) == typeof(int))
-            return (T)(object)value;
-
-        throw new NotSupportedException($"Type {typeof(T)} is not supported");
+        return MathHelper.GetNumericOperations<T>().FromDouble(value);
     }
 
     private int SampleFromLogits(Tensor<T> logits, GenerationRequest<T> request)
@@ -376,8 +370,8 @@ public class ContinuousBatcher<T> : IDisposable where T : struct, IComparable<T>
         for (int i = 0; i < vocabSize; i++)
         {
             int[] indices = logits.Shape.Length > 2
-                ? new[] { 0, lastPos, i }
-                : new[] { 0, i };
+                ? [0, lastPos, i]
+                : [0, i];
             lastLogits[i] = Convert.ToSingle(logits[indices]);
         }
 
@@ -429,7 +423,7 @@ public class ContinuousBatcher<T> : IDisposable where T : struct, IComparable<T>
         return vocabSize - 1; // Fallback to last token
     }
 
-    private void ApplyTopP(float[] probs, float topP)
+    private static void ApplyTopP(float[] probs, float topP)
     {
         // Sort indices by probability descending
         var indices = Enumerable.Range(0, probs.Length)
@@ -465,7 +459,7 @@ public class ContinuousBatcher<T> : IDisposable where T : struct, IComparable<T>
         }
     }
 
-    private void ApplyTopK(float[] probs, int topK)
+    private static void ApplyTopK(float[] probs, int topK)
     {
         // Sort indices by probability descending
         var indices = Enumerable.Range(0, probs.Length)
@@ -540,149 +534,4 @@ public class ContinuousBatcher<T> : IDisposable where T : struct, IComparable<T>
 
         GC.SuppressFinalize(this);
     }
-}
-
-/// <summary>
-/// Configuration for the continuous batcher.
-/// </summary>
-public class ContinuousBatcherConfig
-{
-    /// <summary>
-    /// Scheduler configuration.
-    /// </summary>
-    public BatchSchedulerConfig SchedulerConfig { get; set; } = new();
-
-    /// <summary>
-    /// End-of-sequence token ID.
-    /// </summary>
-    public int EosTokenId { get; set; } = 2;
-
-    /// <summary>
-    /// Milliseconds to sleep when idle.
-    /// </summary>
-    public int IdleSleepMs { get; set; } = 10;
-
-    /// <summary>
-    /// Whether to automatically start the batcher when a request is submitted.
-    /// </summary>
-    public bool AutoStart { get; set; } = true;
-
-    /// <summary>
-    /// Maximum number of tokens in context (prompt + generated).
-    /// </summary>
-    public int MaxContextLength { get; set; } = 4096;
-
-    /// <summary>
-    /// Whether to enable speculative decoding.
-    /// </summary>
-    public bool EnableSpeculativeDecoding { get; set; } = false;
-
-    /// <summary>
-    /// Creates config for a specific model.
-    /// </summary>
-    public static ContinuousBatcherConfig ForModel(string modelName, int maxBatchSize = 8)
-    {
-        return new ContinuousBatcherConfig
-        {
-            SchedulerConfig = BatchSchedulerConfig.ForModel(modelName, maxBatchSize),
-            MaxContextLength = modelName.ToLowerInvariant() switch
-            {
-                "llama-7b" or "llama-13b" => 4096,
-                "llama-70b" => 4096,
-                "gpt2" => 1024,
-                _ => 2048
-            }
-        };
-    }
-}
-
-/// <summary>
-/// Result of a generation request.
-/// </summary>
-/// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-public class GenerationResult<T> where T : struct, IComparable<T>
-{
-    /// <summary>Unique ID of the sequence.</summary>
-    public long SequenceId { get; set; }
-
-    /// <summary>All token IDs including prompt.</summary>
-    public List<int> TokenIds { get; set; } = new();
-
-    /// <summary>Only the generated tokens (excluding prompt).</summary>
-    public List<int> GeneratedTokens { get; set; } = new();
-
-    /// <summary>Reason why generation stopped.</summary>
-    public StopReason FinishReason { get; set; }
-
-    /// <summary>Number of tokens generated.</summary>
-    public int GeneratedLength { get; set; }
-
-    /// <summary>Time spent waiting in queue.</summary>
-    public TimeSpan QueueTime { get; set; }
-
-    /// <summary>Time spent generating.</summary>
-    public TimeSpan? GenerationTime { get; set; }
-
-    /// <summary>Generation speed.</summary>
-    public double? TokensPerSecond { get; set; }
-}
-
-/// <summary>
-/// Statistics about the batcher's operation.
-/// </summary>
-public class BatcherStatistics
-{
-    /// <summary>Total tokens generated since start.</summary>
-    public long TotalTokensGenerated { get; set; }
-
-    /// <summary>Total requests completed since start.</summary>
-    public long TotalRequestsProcessed { get; set; }
-
-    /// <summary>Total batching iterations.</summary>
-    public long TotalIterations { get; set; }
-
-    /// <summary>Tokens generated per second.</summary>
-    public double TokensPerSecond { get; set; }
-
-    /// <summary>Requests completed per second.</summary>
-    public double RequestsPerSecond { get; set; }
-
-    /// <summary>Average batch size per iteration.</summary>
-    public double AverageBatchSize { get; set; }
-
-    /// <summary>Requests currently waiting.</summary>
-    public int WaitingRequests { get; set; }
-
-    /// <summary>Requests currently being processed.</summary>
-    public int RunningRequests { get; set; }
-
-    /// <summary>Memory utilization (0-1).</summary>
-    public double MemoryUtilization { get; set; }
-
-    /// <summary>Total runtime in seconds.</summary>
-    public double RuntimeSeconds { get; set; }
-}
-
-/// <summary>
-/// Event args for sequence completion.
-/// </summary>
-public class SequenceCompletedEventArgs<T> : EventArgs where T : struct, IComparable<T>
-{
-    /// <summary>The completed sequence.</summary>
-    public required SequenceState<T> Sequence { get; set; }
-
-    /// <summary>The generation result.</summary>
-    public required GenerationResult<T> Result { get; set; }
-}
-
-/// <summary>
-/// Event args for token generation.
-/// </summary>
-public class TokenGeneratedEventArgs<T> : EventArgs where T : struct, IComparable<T>
-{
-    /// <summary>The sequence that generated the token.</summary>
-    public required SequenceState<T> Sequence { get; set; }
-
-    /// <summary>The generated token ID.</summary>
-    public required int TokenId { get; set; }
 }

@@ -21,7 +21,7 @@ namespace AiDotNet.Serving.ContinuousBatching;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-public class BatchScheduler<T> where T : struct, IComparable<T>
+public class BatchScheduler<T>
 {
     private readonly BatchSchedulerConfig _config;
     private readonly object _lock = new();

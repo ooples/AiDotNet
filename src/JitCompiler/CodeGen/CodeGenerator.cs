@@ -1032,7 +1032,11 @@ public class CodeGenerator
     /// </remarks>
     private Expression GenerateVectorizedBinaryOp<T>(ParameterExpression[] inputs, Operations.VectorizedBinaryOp op)
     {
-        var method = typeof(VectorizedOps).GetMethod("ExecuteVectorizedBinary")!.MakeGenericMethod(typeof(T));
+        // Find the string-based overload (3rd parameter is string)
+        var method = typeof(VectorizedOps)
+            .GetMethods()
+            .First(m => m.Name == "ExecuteVectorizedBinary" && m.GetParameters()[2].ParameterType == typeof(string))
+            .MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0],
             inputs[1],
@@ -1053,7 +1057,11 @@ public class CodeGenerator
     /// </remarks>
     private Expression GenerateVectorizedUnaryOp<T>(ParameterExpression[] inputs, Operations.VectorizedUnaryOp op)
     {
-        var method = typeof(VectorizedOps).GetMethod("ExecuteVectorizedUnary")!.MakeGenericMethod(typeof(T));
+        // Find the string-based overload (2nd parameter is string)
+        var method = typeof(VectorizedOps)
+            .GetMethods()
+            .First(m => m.Name == "ExecuteVectorizedUnary" && m.GetParameters()[1].ParameterType == typeof(string))
+            .MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0],
             Expression.Constant(op.Operation),
@@ -1073,7 +1081,11 @@ public class CodeGenerator
     /// </remarks>
     private Expression GenerateVectorizedReductionOp<T>(ParameterExpression[] inputs, Operations.VectorizedReductionOp op)
     {
-        var method = typeof(VectorizedOps).GetMethod("ExecuteVectorizedReduction")!.MakeGenericMethod(typeof(T));
+        // Find the string-based overload (2nd parameter is string)
+        var method = typeof(VectorizedOps)
+            .GetMethods()
+            .First(m => m.Name == "ExecuteVectorizedReduction" && m.GetParameters()[1].ParameterType == typeof(string))
+            .MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0],
             Expression.Constant(op.ReductionType),

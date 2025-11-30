@@ -14,7 +14,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
 /// Analyzes retrieved documents and selectively extracts only the sentences most relevant
 /// to the query, reducing context length while preserving important information.
 /// </remarks>
-public class SelectiveContextCompressor<T> : ContextCompressorBase<T> where T : IComparable<T>
+public class SelectiveContextCompressor<T> : ContextCompressorBase<T>
 {
     private readonly int _maxSentences;
     private readonly T _relevanceThreshold;

@@ -2953,29 +2953,48 @@ public class GpuEngine : IEngine, IDisposable
                     Index1D, ArrayView<double>, ArrayView<double>>(
                     (index, input, output) => output[index] = XMath.Atan(input[index]));
 
-                // Asinh: asinh(x) = log(x + sqrt(x*x + 1))
+                // Note: XMath doesn't have Asinh, Acosh, Atanh - using mathematical identities
+                // asinh(x) = ln(x + sqrt(x^2 + 1))
                 _asinhKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
-                    (index, input, output) => output[index] = XMath.Log(input[index] + XMath.Sqrt(input[index] * input[index] + 1.0f)));
+                    (index, input, output) => {
+                        var x = input[index];
+                        output[index] = XMath.Log(x + XMath.Sqrt(x * x + 1.0f));
+                    });
                 _asinhKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
-                    (index, input, output) => output[index] = XMath.Log(input[index] + XMath.Sqrt(input[index] * input[index] + 1.0)));
+                    (index, input, output) => {
+                        var x = input[index];
+                        output[index] = XMath.Log(x + XMath.Sqrt(x * x + 1.0));
+                    });
 
-                // Acosh: acosh(x) = log(x + sqrt(x*x - 1))
+                // acosh(x) = ln(x + sqrt(x^2 - 1))
                 _acoshKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
-                    (index, input, output) => output[index] = XMath.Log(input[index] + XMath.Sqrt(input[index] * input[index] - 1.0f)));
+                    (index, input, output) => {
+                        var x = input[index];
+                        output[index] = XMath.Log(x + XMath.Sqrt(x * x - 1.0f));
+                    });
                 _acoshKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
-                    (index, input, output) => output[index] = XMath.Log(input[index] + XMath.Sqrt(input[index] * input[index] - 1.0)));
+                    (index, input, output) => {
+                        var x = input[index];
+                        output[index] = XMath.Log(x + XMath.Sqrt(x * x - 1.0));
+                    });
 
-                // Atanh: atanh(x) = 0.5 * log((1 + x) / (1 - x))
+                // atanh(x) = 0.5 * ln((1 + x) / (1 - x))
                 _atanhKernelFloat = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<float>, ArrayView<float>>(
-                    (index, input, output) => output[index] = 0.5f * XMath.Log((1.0f + input[index]) / (1.0f - input[index])));
+                    (index, input, output) => {
+                        var x = input[index];
+                        output[index] = 0.5f * XMath.Log((1.0f + x) / (1.0f - x));
+                    });
                 _atanhKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>>(
-                    (index, input, output) => output[index] = 0.5 * XMath.Log((1.0 + input[index]) / (1.0 - input[index])));
+                    (index, input, output) => {
+                        var x = input[index];
+                        output[index] = 0.5 * XMath.Log((1.0 + x) / (1.0 - x));
+                    });
                 Console.WriteLine("[GpuEngine] Trigonometric kernels pre-compiled");
 
                 Console.WriteLine("[GpuEngine] All kernel pre-compilation complete");
@@ -12779,9 +12798,15 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> AvgPool2D<T>(Tensor<T> input, int[] poolSize, int[] stride)
     {
-        // Delegate to CPU fallback for array-based pooling parameters
-        // The GPU implementation uses scalar poolSize/stride/padding
-        return _cpuFallback.AvgPool2D(input, poolSize, stride);
+        // For non-square pooling, fall back to CPU implementation
+        // GPU only supports square pooling via the scalar overload
+        if (poolSize[0] != poolSize[1] || stride[0] != stride[1])
+        {
+            return _cpuFallback.AvgPool2D(input, poolSize, stride);
+        }
+
+        // Use existing GPU AvgPool2D with square parameters
+        return AvgPool2D(input, poolSize[0], stride[0], 0);
     }
 
     /// <inheritdoc/>

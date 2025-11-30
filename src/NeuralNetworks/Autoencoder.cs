@@ -1,5 +1,4 @@
 global using AiDotNet.LossFunctions;
-using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
 
