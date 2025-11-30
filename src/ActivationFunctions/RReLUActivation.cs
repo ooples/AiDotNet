@@ -90,7 +90,9 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
     {
         if (_isTraining)
         {
-            _alpha = NumOps.Multiply(NumOps.FromDouble(_random.NextDouble()), NumOps.Add(NumOps.Subtract(_upperBoundBound, _lowerBoundBound), _lowerBoundBound));
+            var range = NumOps.Subtract(_upperBoundBound, _lowerBoundBound);
+            var randomValue = NumOps.FromDouble(_random.NextDouble());
+            _alpha = NumOps.Add(NumOps.Multiply(randomValue, range), _lowerBoundBound);
         }
 
         if (NumOps.GreaterThanOrEquals(input, NumOps.Zero))
