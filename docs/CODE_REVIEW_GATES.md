@@ -150,33 +150,42 @@ if ($LASTEXITCODE -ne 0) {
 
 # Code quality checks
 Write-Host "[6/9] Checking for null-forgiving operator..." -ForegroundColor Yellow
-$NullForgiv = Select-String -Path src/*.cs -Pattern "[^!]=!" -Exclude "*.xml" | Where-Object { $_.Line -notmatch "!=" -and $_.Line -notmatch "IsNullOrEmpty" }
+$NullForgiv = Get-ChildItem -Path src -Recurse -Filter *.cs |
+    Select-String -Pattern "!" |
+    Where-Object {
+        $_.Line -notmatch "!=" -and
+        $_.Line -notmatch "IsNullOrEmpty" -and
+        $_.Line -notmatch "!string" -and
+        $_.Line -match "\w+!" # Match word followed by ! (null-forgiving)
+    }
 if ($NullForgiv) {
     Write-Host "FAIL: Found null-forgiving operator (!)" -ForegroundColor Red
-    $NullForgiv | ForEach-Object { Write-Host $_.Path:$_.LineNumber - $_.Line }
+    $NullForgiv | ForEach-Object { Write-Host "$($_.Path):$($_.LineNumber) - $($_.Line)" }
     exit 1
 }
 
 Write-Host "[7/9] Checking for System.Text.Json usage..." -ForegroundColor Yellow
-$SystemTextJson = Select-String -Path src/*.cs -Pattern "System.Text.Json"
+$SystemTextJson = Get-ChildItem -Path src -Recurse -Filter *.cs |
+    Select-String -Pattern "System.Text.Json"
 if ($SystemTextJson) {
     Write-Host "FAIL: Found System.Text.Json usage (use Newtonsoft.Json instead)" -ForegroundColor Red
-    $SystemTextJson | ForEach-Object { Write-Host $_.Path:$_.LineNumber - $_.Line }
+    $SystemTextJson | ForEach-Object { Write-Host "$($_.Path):$($_.LineNumber) - $($_.Line)" }
     exit 1
 }
 
 Write-Host "[8/9] Checking for KeyValuePair deconstruction..." -ForegroundColor Yellow
-$KVPDecon = Select-String -Path src/*.cs -Pattern "var \([^,]+,[^)]+\) in"
+$KVPDecon = Get-ChildItem -Path src -Recurse -Filter *.cs |
+    Select-String -Pattern "var \([^,]+,[^)]+\) in"
 if ($KVPDecon) {
     Write-Host "WARNING: Found potential KeyValuePair deconstruction (not supported in net462)" -ForegroundColor Yellow
-    $KVPDecon | ForEach-Object { Write-Host $_.Path:$_.LineNumber - $_.Line }
+    $KVPDecon | ForEach-Object { Write-Host "$($_.Path):$($_.LineNumber) - $($_.Line)" }
 }
 
 Write-Host "[9/9] Checking for investigation files..." -ForegroundColor Yellow
-$InvestFiles = Get-ChildItem -Filter "*REPORT*","*FINDINGS*","*INVESTIGATION*" -ErrorAction SilentlyContinue
+$InvestFiles = Get-ChildItem -Recurse -Filter "*REPORT*","*FINDINGS*","*INVESTIGATION*" -ErrorAction SilentlyContinue
 if ($InvestFiles) {
     Write-Host "FAIL: Found investigation/report files that should not be committed" -ForegroundColor Red
-    $InvestFiles | ForEach-Object { Write-Host $_.Name }
+    $InvestFiles | ForEach-Object { Write-Host $_.FullName }
     exit 1
 }
 
