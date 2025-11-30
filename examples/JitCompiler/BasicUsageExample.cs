@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.JitCompiler;
 using System;
 using System.Diagnostics;
@@ -27,7 +28,7 @@ public class BasicUsageExample
         // Build computation graph
         var input = new ComputationNode<float>(inputData)
         {
-            OperationType = "Input",
+            OperationType = OperationType.Input,
             Name = "input"
         };
 
@@ -36,7 +37,7 @@ public class BasicUsageExample
             new Tensor<float>(new[] { 3, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "ReLU",
+            OperationType = OperationType.ReLU,
             Name = "relu_output"
         };
 
@@ -81,29 +82,29 @@ public class BasicUsageExample
         }
 
         // Build computation graph: output = ReLU(input @ weights + bias)
-        var input = new ComputationNode<float>(inputData) { OperationType = "Input" };
-        var weights = new ComputationNode<float>(weightsData) { OperationType = "Input" };
-        var bias = new ComputationNode<float>(biasData) { OperationType = "Input" };
+        var input = new ComputationNode<float>(inputData) { OperationType = OperationType.Input };
+        var weights = new ComputationNode<float>(weightsData) { OperationType = OperationType.Input };
+        var bias = new ComputationNode<float>(biasData) { OperationType = OperationType.Input };
 
         var matmul = new ComputationNode<float>(
             new Tensor<float>(new[] { 1, 4 }),
             parents: new List<ComputationNode<float>> { input, weights })
         {
-            OperationType = "MatMul"
+            OperationType = OperationType.MatMul
         };
 
         var add = new ComputationNode<float>(
             new Tensor<float>(new[] { 1, 4 }),
             parents: new List<ComputationNode<float>> { matmul, bias })
         {
-            OperationType = "Add"
+            OperationType = OperationType.Add
         };
 
         var relu = new ComputationNode<float>(
             new Tensor<float>(new[] { 1, 4 }),
             parents: new List<ComputationNode<float>> { add })
         {
-            OperationType = "ReLU"
+            OperationType = OperationType.ReLU
         };
 
         // Compile
@@ -140,20 +141,20 @@ public class BasicUsageExample
         }
 
         // Build computation graph: exp(relu(input))
-        var input = new ComputationNode<float>(inputData) { OperationType = "Input" };
+        var input = new ComputationNode<float>(inputData) { OperationType = OperationType.Input };
 
         var relu = new ComputationNode<float>(
             new Tensor<float>(new[] { 100, 100 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "ReLU"
+            OperationType = OperationType.ReLU
         };
 
         var exp = new ComputationNode<float>(
             new Tensor<float>(new[] { 100, 100 }),
             parents: new List<ComputationNode<float>> { relu })
         {
-            OperationType = "Exp"
+            OperationType = OperationType.Exp
         };
 
         // Compile
@@ -195,12 +196,12 @@ public class BasicUsageExample
         var jit = new global::AiDotNet.JitCompiler.JitCompiler();
 
         // First compilation
-        var input1 = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 })) { OperationType = "Input" };
+        var input1 = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 })) { OperationType = OperationType.Input };
         var relu1 = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input1 })
         {
-            OperationType = "ReLU"
+            OperationType = OperationType.ReLU
         };
 
         var (compiled1, stats1) = jit.CompileWithStats(relu1, new List<ComputationNode<float>> { input1 });
@@ -209,12 +210,12 @@ public class BasicUsageExample
         Console.WriteLine($"  Compilation time: {stats1.CompilationTime.TotalMilliseconds:F2}ms\n");
 
         // Second compilation with same structure (should hit cache)
-        var input2 = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 })) { OperationType = "Input" };
+        var input2 = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 })) { OperationType = OperationType.Input };
         var relu2 = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input2 })
         {
-            OperationType = "ReLU"
+            OperationType = OperationType.ReLU
         };
 
         var (compiled2, stats2) = jit.CompileWithStats(relu2, new List<ComputationNode<float>> { input2 });
@@ -227,7 +228,7 @@ public class BasicUsageExample
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input2 })
         {
-            OperationType = "Sigmoid"
+            OperationType = OperationType.Sigmoid
         };
 
         var (compiled3, stats3) = jit.CompileWithStats(sigmoid2, new List<ComputationNode<float>> { input2 });
@@ -263,12 +264,12 @@ public class BasicUsageExample
         var jitCustom = new global::AiDotNet.JitCompiler.JitCompiler(customOptions);
 
         // Build a graph
-        var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 })) { OperationType = "Input" };
+        var input = new ComputationNode<float>(new Tensor<float>(new[] { 2, 3 })) { OperationType = OperationType.Input };
         var exp = new ComputationNode<float>(
             new Tensor<float>(new[] { 2, 3 }),
             parents: new List<ComputationNode<float>> { input })
         {
-            OperationType = "Exp"
+            OperationType = OperationType.Exp
         };
 
         // Compile with default options
