@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
 
@@ -70,7 +71,6 @@ public class OperationFusionPass : IOptimizationPass
 
         while (changed && passCount < maxPasses)
         {
-            changed = false;
             int beforeCount = fusionCount;
 
             // Pattern 1: MatMul + Add + Activation → FusedDenseLayer (3-op fusion first!)
@@ -108,16 +108,13 @@ public class OperationFusionPass : IOptimizationPass
         };
 
         // Add non-fused operations
-        foreach (var op in operations)
+        foreach (var op in operations.Where(o => !fusedOps.Contains(o)))
         {
-            if (!fusedOps.Contains(op))
-            {
-                // Remap input tensor IDs if they were fused
-                var remappedInputs = op.InputIds.Select(id =>
-                    tensorMapping.TryGetValue(id, out var newId) ? newId : id).ToArray();
-                op.InputIds = remappedInputs;
-                optimizedGraph.Operations.Add(op);
-            }
+            // Remap input tensor IDs if they were fused
+            var remappedInputs = op.InputIds.Select(id =>
+                tensorMapping.TryGetValue(id, out var newId) ? newId : id).ToArray();
+            op.InputIds = remappedInputs;
+            optimizedGraph.Operations.Add(op);
         }
 
         // Add metadata
@@ -490,9 +487,8 @@ public class OperationFusionPass : IOptimizationPass
     private int CountUsages(List<IROp> operations, int tensorId, HashSet<IROp> fusedOps)
     {
         int count = 0;
-        foreach (var op in operations)
+        foreach (var op in operations.Where(o => !fusedOps.Contains(o)))
         {
-            if (fusedOps.Contains(op)) continue;
             if (op.InputIds.Contains(tensorId)) count++;
         }
         return count;

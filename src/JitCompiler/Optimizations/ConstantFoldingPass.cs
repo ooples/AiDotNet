@@ -80,17 +80,13 @@ public class ConstantFoldingPass : IOptimizationPass
     {
         // Track which tensors are constants and their values
         var constantTensors = new HashSet<int>();
-        var constantValues = new Dictionary<int, object>();
 
         // Mark input tensors that are constants
         // Note: We'd need metadata on the graph to know which inputs are constants
         // For now, we'll identify constants during the pass
-        foreach (var inputId in graph.InputIds)
-        {
-            // In a full implementation, we'd check graph metadata to see if this input
-            // is marked as a constant. For now, we'll be conservative and assume
-            // inputs are not constant (they could change between executions)
-        }
+        // In a full implementation, we'd check graph metadata to see if inputs
+        // are marked as constant. For now, we'll be conservative and assume
+        // inputs are not constant (they could change between executions)
 
         // Build a new optimized graph
         var optimizedGraph = new IRGraph

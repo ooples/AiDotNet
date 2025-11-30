@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.JitCompiler.IR;
 
 namespace AiDotNet.JitCompiler.Optimizations;
@@ -160,11 +161,8 @@ public class AdaptiveFusionPass : IOptimizationPass
         var fusedOps = new List<IROp>();
         var processed = new HashSet<IROp>();
 
-        foreach (var op in graph.Operations)
+        foreach (var op in graph.Operations.Where(o => !processed.Contains(o)))
         {
-            if (processed.Contains(op))
-                continue;
-
             // Check for high-value fusion patterns
             var pattern = FindHighValuePattern(graph, op);
             if (pattern.Count > 1)

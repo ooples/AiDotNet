@@ -1350,19 +1350,17 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         var filtersNode = new ComputationNode<T>(filters);
         var biasesNode = biases != null ? new ComputationNode<T>(VectorToTensor(biases)) : null;
 
-        // TODO: Get stride and padding from layer properties when available
-        // For now, assume default values
-        var stride = new int[] { 1, 1 };
-        var padding = new int[] { 0, 0 };
+        // Get stride and padding from layer properties
+        var stride = new int[] { layer.Stride, layer.Stride };
+        var padding = new int[] { layer.Padding, layer.Padding };
 
-        // Conv2D operation
-        var convNode = TensorOperations<T>.Conv2D(input, filtersNode, stride, padding);
-
-        // Add bias if present
-        if (biasesNode != null)
-        {
-            convNode = TensorOperations<T>.Add(convNode, biasesNode);
-        }
+        // Conv2D operation (includes optional bias)
+        var convNode = TensorOperations<T>.Conv2D(
+            input,
+            filtersNode,
+            bias: biasesNode,
+            stride: stride,
+            padding: padding);
 
         // Apply activation if present
         if (layer.ScalarActivation != null)
@@ -1399,16 +1397,23 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         var mean = layer.GetRunningMean();
         var variance = layer.GetRunningVariance();
 
-        // Create parameter nodes
+        // Create parameter nodes for scale/shift; running statistics are passed as tensors
         var gammaNode = new ComputationNode<T>(VectorToTensor(gamma));
         var betaNode = new ComputationNode<T>(VectorToTensor(beta));
-        var meanNode = new ComputationNode<T>(VectorToTensor(mean));
-        var varianceNode = new ComputationNode<T>(VectorToTensor(variance));
+        var runningMean = VectorToTensor(mean);
+        var runningVar = VectorToTensor(variance);
 
-        var epsilon = layer.GetEpsilon();
-        var momentum = layer.GetMomentum();
+        var epsilon = Convert.ToDouble(layer.GetEpsilon());
 
-        return TensorOperations<T>.BatchNorm(input, gammaNode, betaNode, meanNode, varianceNode, epsilon, momentum);
+        // Use inference-mode batch norm (training = false)
+        return TensorOperations<T>.BatchNorm(
+            input,
+            gammaNode,
+            betaNode,
+            runningMean,
+            runningVar,
+            training: false,
+            epsilon: epsilon);
     }
 
     private ComputationNode<T> ConvertLayerNormLayer(LayerNormalizationLayer<T> layer, ComputationNode<T> input)
@@ -1417,12 +1422,17 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         var gamma = layer.GetGamma();
         var beta = layer.GetBeta();
         var normalizedShape = layer.GetNormalizedShape();
-        var epsilon = layer.GetEpsilon();
+        var epsilon = Convert.ToDouble(layer.GetEpsilon());
 
         var gammaNode = new ComputationNode<T>(VectorToTensor(gamma));
         var betaNode = new ComputationNode<T>(VectorToTensor(beta));
 
-        return TensorOperations<T>.LayerNorm(input, gammaNode, betaNode, normalizedShape, epsilon);
+        return TensorOperations<T>.LayerNorm(
+            input,
+            normalizedShape,
+            gammaNode,
+            betaNode,
+            epsilon);
     }
 
     private ComputationNode<T> ConvertFlattenLayer(FlattenLayer<T> layer, ComputationNode<T> input)

@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
@@ -86,14 +87,8 @@ public class IRBuilder
         var topoOrder = TopologicalSort(outputNode);
 
         // Convert each node to an IR operation
-        foreach (var node in topoOrder)
+        foreach (var node in topoOrder.Where(n => !inputs.Contains(n)))
         {
-            // Skip input nodes (already processed)
-            if (inputs.Contains(node))
-            {
-                continue;
-            }
-
             // Convert node to IR operation
             var op = ConvertNodeToOp(node);
             if (op != null)

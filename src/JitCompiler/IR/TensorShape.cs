@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.JitCompiler.IR;
@@ -294,11 +295,10 @@ public static class TensorShapeExtensions
     {
         if (shape == null) return false;
 
-        foreach (var dim in shape)
+        foreach (var dim in shape.Where(d => d <= 0 && d != -1))
         {
             // Dimensions must be positive or -1 (dynamic)
-            if (dim <= 0 && dim != -1)
-                return false;
+            return false;
         }
 
         return true;

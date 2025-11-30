@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.JitCompiler.IR;
 using Operations = AiDotNet.JitCompiler.IR.Operations;
 
@@ -103,11 +104,8 @@ public class LoopUnrollingPass : IOptimizationPass
         var unrolledOps = new List<IROp>();
         var processedOps = new HashSet<IROp>();
 
-        foreach (var op in graph.Operations)
+        foreach (var op in graph.Operations.Where(o => !processedOps.Contains(o)))
         {
-            if (processedOps.Contains(op))
-                continue;
-
             // Find repeating patterns starting from this operation
             var pattern = FindRepeatingPattern(graph.Operations, op);
 
