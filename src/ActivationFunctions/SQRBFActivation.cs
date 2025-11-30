@@ -137,7 +137,7 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
     /// <remarks>
     /// <para>
     /// SQRBF supports JIT compilation with full gradient computation.
-    /// The backward pass correctly computes gradients: -2x for |x| ≤ 1, 0 otherwise.
+    /// The backward pass correctly computes gradients using the derivative: -2βx * exp(-β * x²).
     /// </para>
     /// </remarks>
     public override bool SupportsJitCompilation => true;
