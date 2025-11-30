@@ -1,7 +1,9 @@
 using System.Runtime.CompilerServices;
+#if NET6_0_OR_GREATER
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using System.Runtime.Intrinsics.Arm;
+#endif
 
 namespace AiDotNet.Tensors.Helpers;
 
@@ -426,10 +428,12 @@ public static class SimdVector
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector128<double> Add(Vector128<double> left, Vector128<double> right)
     {
+#if NET6_0_OR_GREATER
         if (Sse2.IsSupported)
             return Sse2.Add(left, right);
         if (AdvSimd.Arm64.IsSupported)
-            return AdvSimd.Add(left, right);
+            return AdvSimd.Arm64.Add(left, right);
+#endif
         return Vector128.Add(left, right);
     }
 
@@ -450,10 +454,12 @@ public static class SimdVector
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector128<double> Multiply(Vector128<double> left, Vector128<double> right)
     {
+#if NET6_0_OR_GREATER
         if (Sse2.IsSupported)
             return Sse2.Multiply(left, right);
         if (AdvSimd.Arm64.IsSupported)
-            return AdvSimd.Multiply(left, right);
+            return AdvSimd.Arm64.Multiply(left, right);
+#endif
         return Vector128.Multiply(left, right);
     }
 

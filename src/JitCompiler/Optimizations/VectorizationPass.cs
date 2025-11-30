@@ -363,4 +363,4 @@ public class VectorizationPass : IOptimizationPass
         return stats;
     }
 }
-
+} // namespace AiDotNet.JitCompiler.Optimizations

@@ -1,7 +1,9 @@
 global using System.Collections;
 
+#if NET6_0_OR_GREATER
 using System.Runtime.Intrinsics.X86;
 using System.Runtime.Intrinsics.Arm;
+#endif
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tensors.LinearAlgebra;
@@ -63,8 +65,13 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         if (!MathHelper.SupportsCpuAcceleration<T>())
             return false;
 
+#if NET6_0_OR_GREATER
         // Check for actual hardware SIMD support
         return Sse.IsSupported || AdvSimd.IsSupported;
+#else
+        // .NET Framework doesn't have hardware intrinsics
+        return false;
+#endif
     }
 
     /// <summary>
@@ -79,6 +86,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         if (typeSize == 0)
             return 1;
 
+#if NET6_0_OR_GREATER
         // Determine max vector width in bytes based on hardware
         int maxVectorWidth;
         if (Avx512F.IsSupported)
@@ -91,6 +99,10 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
             return 1;
 
         return maxVectorWidth / typeSize;
+#else
+        // .NET Framework doesn't have hardware intrinsics
+        return 1;
+#endif
     }
 
     /// <summary>

@@ -1,11 +1,5 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Runtime.Intrinsics.X86;
-using System.Runtime.Intrinsics.Arm;
-using AiDotNet.Autodiff;
-using AiDotNet.JitCompiler.CodeGen;
-using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.JitCompiler.Runtime;
 
