@@ -165,14 +165,7 @@ public static class TensorShapeExtensions
             int dim2 = i <= shape2.Length ? shape2[shape2.Length - i] : 1;
 
             // Take maximum (handle dynamic dimensions)
-            if (dim1 == -1 || dim2 == -1)
-            {
-                resultShape[maxRank - i] = -1; // Dynamic
-            }
-            else
-            {
-                resultShape[maxRank - i] = Math.Max(dim1, dim2);
-            }
+            resultShape[maxRank - i] = (dim1 == -1 || dim2 == -1) ? -1 : Math.Max(dim1, dim2);
         }
 
         return resultShape;

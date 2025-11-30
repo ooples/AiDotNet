@@ -49,16 +49,9 @@ public class SIMDOptimizer
         _enableSIMD = enableSIMD;
 
         // Detect vector size based on hardware capabilities
-        if (Vector.IsHardwareAccelerated)
-        {
-            // Vector<T>.Count gives us the number of elements that fit in a SIMD register
-            // This is typically 4 for float (128-bit SSE), 8 for AVX, or 16 for AVX-512
-            _vectorSize = System.Numerics.Vector<float>.Count;
-        }
-        else
-        {
-            _vectorSize = 1; // No SIMD support
-        }
+        // Vector<T>.Count gives us the number of elements that fit in a SIMD register
+        // This is typically 4 for float (128-bit SSE), 8 for AVX, or 16 for AVX-512
+        _vectorSize = Vector.IsHardwareAccelerated ? System.Numerics.Vector<float>.Count : 1;
     }
 
     /// <summary>

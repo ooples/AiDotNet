@@ -249,14 +249,15 @@ public class JitCompiler
 
         // Check cache
         var graphHash = irGraph.ComputeStructureHash();
-        stats.CacheHit = _options.EnableCaching && _compiledGraphCache.ContainsKey(graphHash);
-
-        if (stats.CacheHit)
+        if (_options.EnableCaching && _compiledGraphCache.TryGetValue(graphHash, out var cachedValue))
         {
-            var cached = (Func<Tensor<T>[], Tensor<T>[]>)_compiledGraphCache[graphHash]!;
+            stats.CacheHit = true;
+            var cached = (Func<Tensor<T>[], Tensor<T>[]>)cachedValue;
             stats.CompilationTime = TimeSpan.Zero;
             return (cached, stats);
         }
+
+        stats.CacheHit = false;
 
         // Apply optimizations
         var optimizedGraph = ApplyOptimizations(irGraph);
@@ -394,14 +395,15 @@ public class JitCompiler
 
         // Check cache
         var graphHash = irGraph.ComputeStructureHash() ^ 0xBAC4;
-        stats.CacheHit = _options.EnableCaching && _compiledGraphCache.ContainsKey(graphHash);
-
-        if (stats.CacheHit)
+        if (_options.EnableCaching && _compiledGraphCache.TryGetValue(graphHash, out var cachedValue))
         {
-            var cached = (Func<Tensor<T>[], Tensor<T>[]>)_compiledGraphCache[graphHash]!;
+            stats.CacheHit = true;
+            var cached = (Func<Tensor<T>[], Tensor<T>[]>)cachedValue;
             stats.CompilationTime = TimeSpan.Zero;
             return (cached, stats);
         }
+
+        stats.CacheHit = false;
 
         // Apply optimizations
         var optimizedGraph = ApplyOptimizations(irGraph);

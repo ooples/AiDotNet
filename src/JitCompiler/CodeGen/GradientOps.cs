@@ -63,16 +63,8 @@ public static class GradientOps
     /// </summary>
     public static Tensor<T> GradSubtract<T>(Tensor<T> gradOutput, int inputIndex)
     {
-        if (inputIndex == 0)
-        {
-            // Gradient to left input (minuend)
-            return gradOutput;
-        }
-        else
-        {
-            // Gradient to right input (subtrahend) is negated
-            return NegateHelper(gradOutput);
-        }
+        // Gradient to left input (minuend) is unchanged, gradient to right input (subtrahend) is negated
+        return inputIndex == 0 ? gradOutput : NegateHelper(gradOutput);
     }
 
     /// <summary>

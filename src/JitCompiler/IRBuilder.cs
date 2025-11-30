@@ -332,12 +332,9 @@ public class IRBuilder
         if (paramsProperty != null)
         {
             var paramsDict = paramsProperty.GetValue(node) as Dictionary<string, object>;
-            if (paramsDict != null && paramsDict.TryGetValue(paramName, out var value))
+            if (paramsDict != null && paramsDict.TryGetValue(paramName, out var value) && value is TParam typedValue)
             {
-                if (value is TParam typedValue)
-                {
-                    return typedValue;
-                }
+                return typedValue;
             }
         }
 

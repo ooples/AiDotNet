@@ -638,26 +638,11 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var (normalizedNewData, _) = NormalizationInfo.Normalizer.NormalizeInput(newData);
 
         // Use JIT-compiled function if available for 5-10x faster predictions
-        TOutput normalizedPredictions;
-        if (JitCompiledFunction != null && normalizedNewData is Tensor<T> inputTensor)
-        {
-            // JIT PATH: Use compiled function for accelerated inference
-            var jitResult = JitCompiledFunction(new[] { inputTensor });
-            if (jitResult != null && jitResult.Length > 0 && jitResult[0] is TOutput output)
-            {
-                normalizedPredictions = output;
-            }
-            else
-            {
-                // Fallback to model if JIT result is unexpected
-                normalizedPredictions = Model.Predict(normalizedNewData);
-            }
-        }
-        else
-        {
-            // NORMAL PATH: Use model's standard prediction
-            normalizedPredictions = Model.Predict(normalizedNewData);
-        }
+        TOutput normalizedPredictions = (JitCompiledFunction != null && normalizedNewData is Tensor<T> inputTensor)
+            ? (JitCompiledFunction(new[] { inputTensor }) is var jitResult && jitResult != null && jitResult.Length > 0 && jitResult[0] is TOutput output
+                ? output
+                : Model.Predict(normalizedNewData))
+            : Model.Predict(normalizedNewData);
 
         return NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, NormalizationInfo.YParams);
     }

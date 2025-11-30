@@ -132,14 +132,7 @@ public class CodeGenerator
         }
 
         // Generate code for each operation
-        foreach (var op in graph.Operations)
-        {
-            var opExpression = GenerateOperation<T>(op);
-            if (opExpression != null)
-            {
-                _expressions.Add(opExpression);
-            }
-        }
+        _expressions.AddRange(graph.Operations.Select(GenerateOperation<T>).Where(opExpression => opExpression != null)!);
 
         // Create output array
         var outputArray = Expression.NewArrayInit(
