@@ -70,7 +70,8 @@ public readonly struct MultiplyOperatorLong : IBinaryOperator<long, long>
 {
     public long Invoke(long x, long y) => x * y;
 
-#if NET5_0_OR_GREATER
+#if NET7_0_OR_GREATER
+    // Vector*.Multiply<long> was added in .NET 7
     public Vector128<long> Invoke(Vector128<long> x, Vector128<long> y)
         => Vector128.Multiply(x, y);
 
@@ -79,6 +80,46 @@ public readonly struct MultiplyOperatorLong : IBinaryOperator<long, long>
 
     public Vector512<long> Invoke(Vector512<long> x, Vector512<long> y)
         => Vector512.Multiply(x, y);
+#elif NET5_0_OR_GREATER
+    // Fallback for .NET 5/6: extract, multiply, reconstruct
+    public Vector128<long> Invoke(Vector128<long> x, Vector128<long> y)
+    {
+        Span<long> xValues = stackalloc long[Vector128<long>.Count];
+        Span<long> yValues = stackalloc long[Vector128<long>.Count];
+        x.CopyTo(xValues);
+        y.CopyTo(yValues);
+
+        for (int i = 0; i < xValues.Length; i++)
+            xValues[i] *= yValues[i];
+
+        return Vector128.Create(xValues);
+    }
+
+    public Vector256<long> Invoke(Vector256<long> x, Vector256<long> y)
+    {
+        Span<long> xValues = stackalloc long[Vector256<long>.Count];
+        Span<long> yValues = stackalloc long[Vector256<long>.Count];
+        x.CopyTo(xValues);
+        y.CopyTo(yValues);
+
+        for (int i = 0; i < xValues.Length; i++)
+            xValues[i] *= yValues[i];
+
+        return Vector256.Create(xValues);
+    }
+
+    public Vector512<long> Invoke(Vector512<long> x, Vector512<long> y)
+    {
+        Span<long> xValues = stackalloc long[Vector512<long>.Count];
+        Span<long> yValues = stackalloc long[Vector512<long>.Count];
+        x.CopyTo(xValues);
+        y.CopyTo(yValues);
+
+        for (int i = 0; i < xValues.Length; i++)
+            xValues[i] *= yValues[i];
+
+        return Vector512.Create(xValues);
+    }
 #endif
 }
 
