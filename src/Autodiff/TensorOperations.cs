@@ -7079,30 +7079,38 @@ public static class TensorOperations<T>
         var hiddenTransform = MatrixMultiply(hiddenState, weightHH);
         var gates = Add(Add(inputTransform, hiddenTransform), bias);
 
-        // Split into 4 gates (simplified - assumes concatenated gates)
+        // Get hidden dimension from hidden state shape
         var hiddenDim = hiddenState.Value.Shape[hiddenState.Value.Shape.Length - 1];
+        var lastAxis = gates.Value.Shape.Length - 1;
 
-        // For simplicity, compute all gates together then split conceptually
-        // In practice: i_t, f_t, g_t, o_t = sigmoid(i), sigmoid(f), tanh(g), sigmoid(o)
+        // Validate gates shape: should be [batch, 4*hidden_dim]
+        var gatesLastDim = gates.Value.Shape[lastAxis];
+        if (gatesLastDim != 4 * hiddenDim)
+        {
+            throw new ArgumentException(
+                $"Gates dimension {gatesLastDim} does not match expected 4*hidden_dim ({4 * hiddenDim}). " +
+                $"Ensure weightIH and weightHH have shape [*, 4*hidden_dim].");
+        }
 
-        // Forget gate
-        var forgetGate = Sigmoid(gates); // Simplified
+        // Split gates into 4 segments along the last axis: [i, f, g, o]
+        // Each gate has shape [batch, hidden_dim]
+        var inputGateRaw = Slice(gates, 0, hiddenDim, 1, lastAxis);           // i_t
+        var forgetGateRaw = Slice(gates, hiddenDim, hiddenDim, 1, lastAxis);  // f_t
+        var cellGateRaw = Slice(gates, 2 * hiddenDim, hiddenDim, 1, lastAxis); // g_t
+        var outputGateRaw = Slice(gates, 3 * hiddenDim, hiddenDim, 1, lastAxis); // o_t
 
-        // Input gate
-        var inputGate = Sigmoid(gates); // Simplified
+        // Apply activations: sigmoid for gates, tanh for candidate
+        var inputGate = Sigmoid(inputGateRaw);      // i_t = sigmoid(...)
+        var forgetGate = Sigmoid(forgetGateRaw);    // f_t = sigmoid(...)
+        var candidateCell = Tanh(cellGateRaw);      // g_t = tanh(...)
+        var outputGate = Sigmoid(outputGateRaw);    // o_t = sigmoid(...)
 
-        // Candidate cell state
-        var candidateCell = Tanh(gates); // Simplified
-
-        // Output gate
-        var outputGate = Sigmoid(gates); // Simplified
-
-        // New cell state: f_t * c_{t-1} + i_t * g_t
+        // New cell state: c_t = f_t * c_{t-1} + i_t * g_t
         var forgetPart = ElementwiseMultiply(forgetGate, cellState);
         var inputPart = ElementwiseMultiply(inputGate, candidateCell);
         var newCellState = Add(forgetPart, inputPart);
 
-        // New hidden state: o_t * tanh(c_t)
+        // New hidden state: h_t = o_t * tanh(c_t)
         var newCellTanh = Tanh(newCellState);
         var newHiddenState = ElementwiseMultiply(outputGate, newCellTanh);
 
