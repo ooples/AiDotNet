@@ -82,7 +82,9 @@ public static class SimdVector
                 }
             }
         }
-        // Fallback: create from values
+        // Fallback: create from values, zero-padding if source is shorter than 8 elements.
+        // Zero-padding is intentional for SIMD operations - callers should handle the mask
+        // if they need to ignore padded elements (e.g., for reductions like sum or dot product).
         return Vector256.Create(
             source.Length > 0 ? source[0] : 0f,
             source.Length > 1 ? source[1] : 0f,

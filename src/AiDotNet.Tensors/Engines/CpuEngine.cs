@@ -2391,6 +2391,9 @@ public class CpuEngine : IEngine
         int outputHeight = (height + 2 * padH - effectiveKernelH) / strideH + 1;
         int outputWidth = (width + 2 * padW - effectiveKernelW) / strideW + 1;
 
+        if (outputHeight <= 0 || outputWidth <= 0)
+            throw new ArgumentException($"Invalid output dimensions ({outputHeight}x{outputWidth}). Check kernel size, stride, padding, and dilation parameters.");
+
         var result = new Tensor<T>([batch, outChannels, outputHeight, outputWidth]);
         var inputData = input.ToArray();
         var kernelData = kernel.ToArray();
@@ -2589,8 +2592,14 @@ public class CpuEngine : IEngine
         int poolH = poolSize[0], poolW = poolSize[1];
         int strideH = stride[0], strideW = stride[1];
 
+        if (poolH > height || poolW > width)
+            throw new ArgumentException($"Pool size ({poolH}x{poolW}) cannot exceed input spatial dimensions ({height}x{width})");
+
         int outputHeight = (height - poolH) / strideH + 1;
         int outputWidth = (width - poolW) / strideW + 1;
+
+        if (outputHeight <= 0 || outputWidth <= 0)
+            throw new ArgumentException($"Invalid output dimensions ({outputHeight}x{outputWidth}). Check pool size and stride.");
 
         var result = new Tensor<T>([batch, channels, outputHeight, outputWidth]);
         // Use local variable to avoid capturing out parameter in lambda
@@ -2702,8 +2711,14 @@ public class CpuEngine : IEngine
         int poolH = poolSize[0], poolW = poolSize[1];
         int strideH = stride[0], strideW = stride[1];
 
+        if (poolH > height || poolW > width)
+            throw new ArgumentException($"Pool size ({poolH}x{poolW}) cannot exceed input spatial dimensions ({height}x{width})");
+
         int outputHeight = (height - poolH) / strideH + 1;
         int outputWidth = (width - poolW) / strideW + 1;
+
+        if (outputHeight <= 0 || outputWidth <= 0)
+            throw new ArgumentException($"Invalid output dimensions ({outputHeight}x{outputWidth}). Check pool size and stride.");
 
         var inputData = input.ToArray();
         var outputData = new T[batch * channels * outputHeight * outputWidth];
@@ -3773,7 +3788,9 @@ public class CpuEngine : IEngine
             while (outputMultiIndex.Count > gradOutputShape.Length)
                 outputMultiIndex.RemoveAt(outputMultiIndex.Count - 1);
 
-            int outputIdx = Math.Min(MultiToFlatIndex([.. outputMultiIndex], gradOutputShape, outputStrides), gradOutputData.Length - 1);
+            int outputIdx = MultiToFlatIndex([.. outputMultiIndex], gradOutputShape, outputStrides);
+            if (outputIdx < 0 || outputIdx >= gradOutputData.Length)
+                throw new InvalidOperationException($"Output index {outputIdx} out of range [0, {gradOutputData.Length}). This indicates a shape mismatch between gradOutput and the expected shape.");
             gradInputData[i] = numOps.Multiply(gradOutputData[outputIdx], scale);
         }
 
