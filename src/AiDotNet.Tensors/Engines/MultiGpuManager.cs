@@ -272,6 +272,7 @@ public class MultiGpuManager : IDisposable
         }
 
         var tasks = new List<Task>();
+        var buffers = new List<GpuBuffer<T>>();
 
         foreach (var device in _devices)
         {
@@ -286,11 +287,19 @@ public class MultiGpuManager : IDisposable
             if (device.Id != PrimaryDeviceId && _transfers.ContainsKey(device.Id))
             {
                 var buffer = new GpuBuffer<T>(data.Length, device.Id);
+                buffers.Add(buffer);
                 tasks.Add(_transfers[device.Id].HostToDeviceAsync(data.AsMemory(), buffer));
             }
         }
 
         await Task.WhenAll(tasks);
+
+        // Dispose buffers after transfers complete
+        foreach (var buffer in buffers)
+        {
+            buffer.Dispose();
+        }
+
         return result;
     }
 
