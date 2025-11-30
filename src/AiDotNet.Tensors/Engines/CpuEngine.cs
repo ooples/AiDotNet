@@ -2361,9 +2361,14 @@ public class CpuEngine : IEngine
     {
         if (input == null) throw new ArgumentNullException(nameof(input));
         if (kernel == null) throw new ArgumentNullException(nameof(kernel));
-        if (stride == null || stride.Length != 2) throw new ArgumentException("Stride must be array of 2 elements");
-        if (padding == null || padding.Length != 2) throw new ArgumentException("Padding must be array of 2 elements");
-        if (dilation == null || dilation.Length != 2) throw new ArgumentException("Dilation must be array of 2 elements");
+        if (input.Rank != 4) throw new ArgumentException($"Conv2D requires 4D input tensor. Got rank {input.Rank}.", nameof(input));
+        if (kernel.Rank != 4) throw new ArgumentException($"Conv2D requires 4D kernel tensor. Got rank {kernel.Rank}.", nameof(kernel));
+        if (stride == null || stride.Length != 2) throw new ArgumentException("Stride must be array of 2 elements", nameof(stride));
+        if (stride[0] <= 0 || stride[1] <= 0) throw new ArgumentException("Stride elements must be positive", nameof(stride));
+        if (padding == null || padding.Length != 2) throw new ArgumentException("Padding must be array of 2 elements", nameof(padding));
+        if (dilation == null || dilation.Length != 2) throw new ArgumentException("Dilation must be array of 2 elements", nameof(dilation));
+        if (dilation[0] <= 0 || dilation[1] <= 0) throw new ArgumentException("Dilation elements must be positive", nameof(dilation));
+        if (input.Shape[1] != kernel.Shape[1]) throw new ArgumentException($"Input channels ({input.Shape[1]}) must match kernel in_channels ({kernel.Shape[1]})");
 
         int strideH = stride[0], strideW = stride[1];
         int padH = padding[0], padW = padding[1];
@@ -2486,10 +2491,8 @@ public class CpuEngine : IEngine
                                 {
                                     int gradInputIdx = ((b * inChannels + ic) * height + ih) * width + iw;
                                     int kernelIdx = ((oc * inChannels + ic) * kernelHeight + kh) * kernelWidth + kw;
-                                    lock (gradInput)
-                                    {
-                                        gradInput[gradInputIdx] = numOps.Add(gradInput[gradInputIdx], numOps.Multiply(gradVal, kernelData[kernelIdx]));
-                                    }
+                                    // No lock needed - each (batch, inChannel) partition owns disjoint gradInput slices
+                                    gradInput[gradInputIdx] = numOps.Add(gradInput[gradInputIdx], numOps.Multiply(gradVal, kernelData[kernelIdx]));
                                 }
                             }
                         }
