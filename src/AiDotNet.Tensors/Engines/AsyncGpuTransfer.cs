@@ -450,6 +450,7 @@ public class DoubleBuffer<T> : IDisposable where T : unmanaged
     private readonly GpuBuffer<T>[] _buffers;
     private int _currentIndex;
     private Task? _pendingTransfer;
+    private bool _primed;
 
     public DoubleBuffer(AsyncGpuTransfer transfer, int bufferSize, int deviceId)
     {
@@ -471,6 +472,16 @@ public class DoubleBuffer<T> : IDisposable where T : unmanaged
         if (_pendingTransfer != null)
         {
             await _pendingTransfer;
+        }
+
+        // On first call, load into current buffer and wait so we return initialized data
+        if (!_primed)
+        {
+            _pendingTransfer = _transfer.HostToDeviceAsync(newData, _buffers[_currentIndex]);
+            await _pendingTransfer;
+            _pendingTransfer = null;
+            _primed = true;
+            return _buffers[_currentIndex];
         }
 
         // Get the current buffer (ready for use)
