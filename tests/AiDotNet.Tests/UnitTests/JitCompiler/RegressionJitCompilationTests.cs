@@ -149,7 +149,7 @@ public class RegressionJitCompilationTests
             C = 1.0,
             Epsilon = 0.1,
             Gamma = 0.5,
-            Degree = 2,
+            PolynomialDegree = 2,
             Coef0 = 1.0
         };
         var model = new SupportVectorRegression<double>(options);
@@ -194,7 +194,7 @@ public class RegressionJitCompilationTests
             KernelType = KernelType.Polynomial,
             C = 1.0,
             Epsilon = 0.1,
-            Degree = 2,
+            PolynomialDegree = 2,
             Coef0 = 1.0
         };
         var model = new SupportVectorRegression<double>(options);
@@ -273,9 +273,9 @@ public class RegressionJitCompilationTests
         // Arrange
         var options = new RandomForestRegressionOptions
         {
-            NumTrees = 5,
+            NumberOfTrees = 5,
             MaxDepth = 5,
-            MinSamplesLeaf = 2
+            MinSamplesSplit = 2
         };
         var model = new RandomForestRegression<double>(options);
         var (X, y) = GenerateLinearTestData(100, 5);
@@ -317,8 +317,9 @@ public class RegressionJitCompilationTests
     public void LinearRegressionModels_JitCompatibilityAnalysis_AllSupported(Type modelType)
     {
         // Arrange
-        var model = CreateAndTrainLinearModel(modelType);
-        if (model == null || !model.SupportsJitCompilation) return;
+        var modelObj = CreateAndTrainLinearModel(modelType);
+        if (modelObj is not IRegressionModel<double> model) return;
+        if (!model.SupportsJitCompilation) return;
 
         var inputNodes = new List<ComputationNode<double>>();
         var outputNode = model.ExportComputationGraph(inputNodes);
@@ -392,7 +393,7 @@ public class RegressionJitCompilationTests
         return (X, y);
     }
 
-    private static IRegressionModel<double>? CreateAndTrainLinearModel(Type modelType)
+    private static object? CreateAndTrainLinearModel(Type modelType)
     {
         var (X, y) = GenerateLinearTestData(100, 5);
 

@@ -244,13 +244,12 @@ public class JitCompilerBenchmarks
 }
 
 /// <summary>
-/// Program entry point for running benchmarks.
+/// Benchmark runner helper class.
+/// To run benchmarks, use: dotnet run --project tests/AiDotNet.Tests --configuration Release
+/// Or use BenchmarkSwitcher in a dedicated benchmark host project.
 /// </summary>
 public class JitCompilerBenchmarkRunner
 {
-    public static void Main(string[] args)
-    {
-        var summary = BenchmarkRunner.Run<JitCompilerBenchmarks>();
-        Console.WriteLine(summary);
-    }
+    // Main method removed to avoid entry point conflicts in test projects
+    // Use test runner or dedicated benchmark project to execute benchmarks
 }

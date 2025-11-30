@@ -25,9 +25,8 @@ public class TimeSeriesJitCompilationTests
         {
             LookbackWindow = 10,
             ForecastHorizon = 3,
-            NumBlocks = 2,
-            HiddenLayerSize = 16,
-            ThetaDimension = 4
+            NumBlocksPerStack = 2,
+            HiddenLayerSize = 16
         };
         var model = new NBEATSModel<double>(options);
 
@@ -47,9 +46,8 @@ public class TimeSeriesJitCompilationTests
         {
             LookbackWindow = 10,
             ForecastHorizon = 3,
-            NumBlocks = 2,
-            HiddenLayerSize = 16,
-            ThetaDimension = 4
+            NumBlocksPerStack = 2,
+            HiddenLayerSize = 16
         };
         var model = new NBEATSModel<double>(options);
         var (X, y) = GenerateTrainingData(50);
@@ -73,9 +71,8 @@ public class TimeSeriesJitCompilationTests
         {
             LookbackWindow = 10,
             ForecastHorizon = 3,
-            NumBlocks = 2,
-            HiddenLayerSize = 16,
-            ThetaDimension = 4
+            NumBlocksPerStack = 2,
+            HiddenLayerSize = 16
         };
         var model = new NBEATSModel<double>(options);
         var (X, y) = GenerateTrainingData(50);
@@ -102,10 +99,8 @@ public class TimeSeriesJitCompilationTests
         var options = new TBATSModelOptions<double>
         {
             SeasonalPeriods = new int[] { 7 },
-            UseBoxCox = false,
-            UseTrend = true,
-            UseDamping = false,
-            FourierOrder = 2
+            BoxCoxLambda = 1,
+            TrendDampingFactor = 1
         };
         var model = new TBATSModel<double>(options);
         var (X, y) = GenerateTrainingData(50);
@@ -122,10 +117,8 @@ public class TimeSeriesJitCompilationTests
         var options = new TBATSModelOptions<double>
         {
             SeasonalPeriods = new int[] { 7 },
-            UseBoxCox = false,
-            UseTrend = true,
-            UseDamping = false,
-            FourierOrder = 2
+            BoxCoxLambda = 1,
+            TrendDampingFactor = 1
         };
         var model = new TBATSModel<double>(options);
         var (X, y) = GenerateTrainingData(50);
@@ -191,10 +184,6 @@ public class TimeSeriesJitCompilationTests
         // Arrange
         var options = new BayesianStructuralTimeSeriesOptions<double>
         {
-            NumIterations = 10,
-            BurnIn = 5,
-            LocalLevelVariance = 0.1,
-            LocalTrendVariance = 0.01
         };
         var model = new BayesianStructuralTimeSeriesModel<double>(options);
         var (X, y) = GenerateTrainingData(50);
@@ -210,10 +199,6 @@ public class TimeSeriesJitCompilationTests
         // Arrange
         var options = new BayesianStructuralTimeSeriesOptions<double>
         {
-            NumIterations = 10,
-            BurnIn = 5,
-            LocalLevelVariance = 0.1,
-            LocalTrendVariance = 0.01
         };
         var model = new BayesianStructuralTimeSeriesModel<double>(options);
         var (X, y) = GenerateTrainingData(50);
@@ -236,11 +221,7 @@ public class TimeSeriesJitCompilationTests
         // Arrange
         var options = new STLDecompositionOptions<double>
         {
-            SeasonalPeriod = 7,
-            SeasonalSmoothing = 7,
-            TrendSmoothing = 15,
-            InnerLoopIterations = 2,
-            OuterLoopIterations = 1
+            SeasonalPeriod = 7
         };
         var model = new STLDecomposition<double>(options);
         var (X, y) = GenerateTrainingData(50);
@@ -256,11 +237,7 @@ public class TimeSeriesJitCompilationTests
         // Arrange
         var options = new STLDecompositionOptions<double>
         {
-            SeasonalPeriod = 7,
-            SeasonalSmoothing = 7,
-            TrendSmoothing = 15,
-            InnerLoopIterations = 2,
-            OuterLoopIterations = 1
+            SeasonalPeriod = 7
         };
         var model = new STLDecomposition<double>(options);
         var (X, y) = GenerateTrainingData(50);
@@ -283,8 +260,6 @@ public class TimeSeriesJitCompilationTests
         // Arrange
         var options = new StateSpaceModelOptions<double>
         {
-            StateDimension = 2,
-            ObservationDimension = 1
         };
         var model = new StateSpaceModel<double>(options);
         var (X, y) = GenerateTrainingData(50);
@@ -300,8 +275,6 @@ public class TimeSeriesJitCompilationTests
         // Arrange
         var options = new StateSpaceModelOptions<double>
         {
-            StateDimension = 2,
-            ObservationDimension = 1
         };
         var model = new StateSpaceModel<double>(options);
         var (X, y) = GenerateTrainingData(50);
@@ -365,10 +338,7 @@ public class TimeSeriesJitCompilationTests
         // Arrange
         var options = new UnobservedComponentsOptions<double, Matrix<double>, Vector<double>>
         {
-            Level = true,
-            Trend = false,
-            SeasonalPeriod = 0,
-            Cycle = false
+            SeasonalPeriod = 0
         };
         var model = new UnobservedComponentsModel<double, Matrix<double>, Vector<double>>(options);
         var (X, y) = GenerateTrainingData(50);
@@ -384,10 +354,7 @@ public class TimeSeriesJitCompilationTests
         // Arrange
         var options = new UnobservedComponentsOptions<double, Matrix<double>, Vector<double>>
         {
-            Level = true,
-            Trend = false,
-            SeasonalPeriod = 0,
-            Cycle = false
+            SeasonalPeriod = 0
         };
         var model = new UnobservedComponentsModel<double, Matrix<double>, Vector<double>>(options);
         var (X, y) = GenerateTrainingData(50);
@@ -411,10 +378,7 @@ public class TimeSeriesJitCompilationTests
         var options = new NeuralNetworkARIMAOptions<double>
         {
             AROrder = 2,
-            MAOrder = 0,
-            DifferenceOrder = 1,
-            HiddenLayerSizes = new int[] { 8 },
-            MaxEpochs = 10
+            MAOrder = 0
         };
         var model = new NeuralNetworkARIMAModel<double>(options);
         var (X, y) = GenerateTrainingData(50);
@@ -431,10 +395,7 @@ public class TimeSeriesJitCompilationTests
         var options = new NeuralNetworkARIMAOptions<double>
         {
             AROrder = 2,
-            MAOrder = 0,
-            DifferenceOrder = 1,
-            HiddenLayerSizes = new int[] { 8 },
-            MaxEpochs = 10
+            MAOrder = 0
         };
         var model = new NeuralNetworkARIMAModel<double>(options);
         var (X, y) = GenerateTrainingData(50);
@@ -494,7 +455,7 @@ public class TimeSeriesJitCompilationTests
         return (x, y);
     }
 
-    private static ITimeSeriesModel<double>? CreateAndTrainModel(Type modelType)
+    private static dynamic? CreateAndTrainModel(Type modelType)
     {
         var (X, y) = GenerateTrainingData(50);
 
@@ -504,9 +465,8 @@ public class TimeSeriesJitCompilationTests
             {
                 LookbackWindow = 10,
                 ForecastHorizon = 3,
-                NumBlocks = 2,
-                HiddenLayerSize = 16,
-                ThetaDimension = 4
+                NumBlocksPerStack = 2,
+                HiddenLayerSize = 16
             });
             model.Train(X, y);
             return model;
@@ -516,10 +476,8 @@ public class TimeSeriesJitCompilationTests
             var model = new TBATSModel<double>(new TBATSModelOptions<double>
             {
                 SeasonalPeriods = new int[] { 7 },
-                UseBoxCox = false,
-                UseTrend = true,
-                UseDamping = false,
-                FourierOrder = 2
+                BoxCoxLambda = 1,
+                TrendDampingFactor = 1
             });
             model.Train(X, y);
             return model;
@@ -539,8 +497,6 @@ public class TimeSeriesJitCompilationTests
         {
             var model = new StateSpaceModel<double>(new StateSpaceModelOptions<double>
             {
-                StateDimension = 2,
-                ObservationDimension = 1
             });
             model.Train(X, y);
             return model;

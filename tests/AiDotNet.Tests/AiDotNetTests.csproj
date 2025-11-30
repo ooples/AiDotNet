@@ -30,12 +30,4 @@
     <ProjectReference Include="..\..\src\AiDotNet.csproj" />
   </ItemGroup>
 
-  <!-- Temporarily exclude JIT test files that need API updates -->
-  <ItemGroup>
-    <Compile Remove="UnitTests\JitCompiler\TimeSeriesJitCompilationTests.cs" />
-    <Compile Remove="UnitTests\JitCompiler\RegressionJitCompilationTests.cs" />
-    <Compile Remove="UnitTests\ReinforcementLearning\CartPoleEnvironmentTests.cs" />
-    <Compile Remove="Benchmarks\JitCompilerBenchmarks.cs" />
-  </ItemGroup>
-
 </Project>
