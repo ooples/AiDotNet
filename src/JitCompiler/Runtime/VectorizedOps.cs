@@ -370,10 +370,7 @@ public static class VectorizedOps
         // Initialize result to zero
         C.Clear();
 
-        // Tiled matrix multiplication with SIMD
-        var caps = SIMDCapabilities.Detect();
-        int vectorCount = caps.GetVectorCount(sizeof(float));
-
+        // Tiled matrix multiplication with SIMD using our SimdVector helper
         for (int i0 = 0; i0 < M; i0 += tileSize)
         {
             int iEnd = Math.Min(i0 + tileSize, M);
@@ -386,34 +383,22 @@ public static class VectorizedOps
                 {
                     int jEnd = Math.Min(j0 + tileSize, N);
 
-                    // Inner loop - vectorized
+                    // Inner loop - vectorized using SimdVector
                     for (int i = i0; i < iEnd; i++)
                     {
+                        int rowOffset = i * N;
                         for (int k = k0; k < kEnd; k++)
                         {
                             float aik = A[i * K + k];
-                            var aVec = new Vector<float>(aik);
+                            int bRowOffset = k * N;
 
-                            int j = j0;
-                            int jVecEnd = j0 + ((jEnd - j0) / vectorCount) * vectorCount;
-
-                            // Vectorized inner loop
-                            for (; j < jVecEnd; j += vectorCount)
-                            {
-                                int cIdx = i * N + j;
-                                int bIdx = k * N + j;
-
-                                var bVec = new Vector<float>(B.Slice(bIdx, vectorCount));
-                                var cVec = new Vector<float>(C.Slice(cIdx, vectorCount));
-
-                                (cVec + aVec * bVec).CopyTo(C.Slice(cIdx, vectorCount));
-                            }
-
-                            // Scalar remainder
-                            for (; j < jEnd; j++)
-                            {
-                                C[i * N + j] += aik * B[k * N + j];
-                            }
+                            // Use SimdVector's optimized inner loop
+                            SimdVector.MatMulInnerLoopFloat(
+                                aik,
+                                B.Slice(bRowOffset + j0, jEnd - j0),
+                                C.Slice(rowOffset + j0, jEnd - j0),
+                                0,
+                                jEnd - j0);
                         }
                     }
                 }
@@ -433,10 +418,10 @@ public static class VectorizedOps
         int M, int K, int N,
         int tileSize)
     {
+        // Initialize result to zero
         C.Clear();
-        var caps = SIMDCapabilities.Detect();
-        int vectorCount = caps.GetVectorCount(sizeof(double));
 
+        // Tiled matrix multiplication with SIMD using our SimdVector helper
         for (int i0 = 0; i0 < M; i0 += tileSize)
         {
             int iEnd = Math.Min(i0 + tileSize, M);
@@ -449,31 +434,22 @@ public static class VectorizedOps
                 {
                     int jEnd = Math.Min(j0 + tileSize, N);
 
+                    // Inner loop - vectorized using SimdVector
                     for (int i = i0; i < iEnd; i++)
                     {
+                        int rowOffset = i * N;
                         for (int k = k0; k < kEnd; k++)
                         {
                             double aik = A[i * K + k];
-                            var aVec = new Vector<double>(aik);
+                            int bRowOffset = k * N;
 
-                            int j = j0;
-                            int jVecEnd = j0 + ((jEnd - j0) / vectorCount) * vectorCount;
-
-                            for (; j < jVecEnd; j += vectorCount)
-                            {
-                                int cIdx = i * N + j;
-                                int bIdx = k * N + j;
-
-                                var bVec = new Vector<double>(B.Slice(bIdx, vectorCount));
-                                var cVec = new Vector<double>(C.Slice(cIdx, vectorCount));
-
-                                (cVec + aVec * bVec).CopyTo(C.Slice(cIdx, vectorCount));
-                            }
-
-                            for (; j < jEnd; j++)
-                            {
-                                C[i * N + j] += aik * B[k * N + j];
-                            }
+                            // Use SimdVector's optimized inner loop
+                            SimdVector.MatMulInnerLoopDouble(
+                                aik,
+                                B.Slice(bRowOffset + j0, jEnd - j0),
+                                C.Slice(rowOffset + j0, jEnd - j0),
+                                0,
+                                jEnd - j0);
                         }
                     }
                 }
