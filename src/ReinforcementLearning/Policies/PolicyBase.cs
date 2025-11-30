@@ -1,7 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Helpers;
 using System;
 using System.Collections.Generic;
 

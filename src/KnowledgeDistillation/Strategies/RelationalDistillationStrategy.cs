@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 

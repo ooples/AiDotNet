@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace AiDotNet.Helpers;
+namespace AiDotNet.Tensors.Helpers;
 
 /// <summary>
 /// Provides thread-safe random number generation utilities for the entire library.

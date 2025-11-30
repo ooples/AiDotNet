@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Serving.Monitoring;
 

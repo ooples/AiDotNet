@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.AutoML;
 using AiDotNet.Enums;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.LinearAlgebra;

@@ -1,7 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
-using AiDotNet.Helpers;
 using System.Linq;
 using System.Text;
 
