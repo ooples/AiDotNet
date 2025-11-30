@@ -1,5 +1,8 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.JitCompiler.Runtime;
 
@@ -29,16 +32,94 @@ namespace AiDotNet.JitCompiler.Runtime;
 public static class VectorizedOps
 {
     /// <summary>
+    /// Binary operation types supported by vectorized operations.
+    /// </summary>
+    public enum BinaryOperation
+    {
+        Add,
+        Subtract,
+        Multiply,
+        Divide
+    }
+
+    /// <summary>
+    /// Unary operation types supported by vectorized operations.
+    /// </summary>
+    public enum UnaryOperation
+    {
+        Negate,
+        Exp,
+        Log,
+        Sqrt,
+        ReLU,
+        Sigmoid,
+        Tanh
+    }
+
+    /// <summary>
+    /// Reduction operation types supported by vectorized operations.
+    /// </summary>
+    public enum ReductionOperation
+    {
+        Sum,
+        Mean,
+        Max,
+        Min
+    }
+
+    /// <summary>
     /// Executes a vectorized binary operation (Add, Subtract, Multiply, Divide).
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
     /// <param name="left">Left operand tensor.</param>
     /// <param name="right">Right operand tensor.</param>
     /// <param name="operation">The operation to perform.</param>
-    /// <param name="vectorWidth">The SIMD vector width.</param>
-    /// <param name="numVectors">Number of full vectors to process.</param>
-    /// <param name="remainder">Number of remaining scalar elements.</param>
+    /// <param name="vectorWidth">The SIMD vector width (unused, kept for API compatibility).</param>
+    /// <param name="numVectors">Number of full vectors to process (unused, kept for API compatibility).</param>
+    /// <param name="remainder">Number of remaining scalar elements (unused, kept for API compatibility).</param>
     /// <returns>Result tensor.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Tensor<T> ExecuteVectorizedBinary<T>(
+        Tensor<T> left,
+        Tensor<T> right,
+        BinaryOperation operation,
+        int vectorWidth,
+        int numVectors,
+        int remainder)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var leftSpan = left.AsSpan();
+        var rightSpan = right.AsSpan();
+        var result = new T[leftSpan.Length];
+        var resultSpan = result.AsSpan();
+
+        // Use INumericOperations<T> vectorized operations (follows OCP)
+        switch (operation)
+        {
+            case BinaryOperation.Add:
+                numOps.Add(leftSpan, rightSpan, resultSpan);
+                break;
+            case BinaryOperation.Subtract:
+                numOps.Subtract(leftSpan, rightSpan, resultSpan);
+                break;
+            case BinaryOperation.Multiply:
+                numOps.Multiply(leftSpan, rightSpan, resultSpan);
+                break;
+            case BinaryOperation.Divide:
+                numOps.Divide(leftSpan, rightSpan, resultSpan);
+                break;
+        }
+
+        return new Tensor<T>(result, left.Shape);
+    }
+
+    /// <summary>
+    /// Executes a vectorized binary operation using string-based dispatch.
+    /// </summary>
+    /// <remarks>
+    /// This overload is provided for backward compatibility. Prefer using the enum-based overload
+    /// for better type safety and performance.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Tensor<T> ExecuteVectorizedBinary<T>(
         Tensor<T> left,
@@ -48,134 +129,8 @@ public static class VectorizedOps
         int numVectors,
         int remainder)
     {
-        var leftData = left.Data;
-        var rightData = right.Data;
-        var result = new T[leftData.Length];
-
-        if (typeof(T) == typeof(float))
-        {
-            ExecuteVectorizedBinaryFloat(
-                MemoryMarshal.Cast<T, float>(leftData),
-                MemoryMarshal.Cast<T, float>(rightData),
-                MemoryMarshal.Cast<T, float>(result),
-                operation, vectorWidth, numVectors, remainder);
-        }
-        else if (typeof(T) == typeof(double))
-        {
-            ExecuteVectorizedBinaryDouble(
-                MemoryMarshal.Cast<T, double>(leftData),
-                MemoryMarshal.Cast<T, double>(rightData),
-                MemoryMarshal.Cast<T, double>(result),
-                operation, vectorWidth, numVectors, remainder);
-        }
-        else
-        {
-            // Fallback for non-supported types
-            for (int i = 0; i < leftData.Length; i++)
-            {
-                result[i] = ApplyBinaryScalar(leftData[i], rightData[i], operation);
-            }
-        }
-
-        return new Tensor<T>(result, left.Shape);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void ExecuteVectorizedBinaryFloat(
-        ReadOnlySpan<float> left,
-        ReadOnlySpan<float> right,
-        Span<float> result,
-        string operation,
-        int vectorWidth,
-        int numVectors,
-        int remainder)
-    {
-        int i = 0;
-
-        if (Vector.IsHardwareAccelerated && left.Length >= Vector<float>.Count)
-        {
-            var count = Vector<float>.Count;
-            int vectorizedEnd = (left.Length / count) * count;
-
-            for (; i < vectorizedEnd; i += count)
-            {
-                var vLeft = new Vector<float>(left.Slice(i, count));
-                var vRight = new Vector<float>(right.Slice(i, count));
-
-                Vector<float> vResult = operation switch
-                {
-                    "Add" => vLeft + vRight,
-                    "Subtract" => vLeft - vRight,
-                    "Multiply" => vLeft * vRight,
-                    "Divide" => vLeft / vRight,
-                    _ => vLeft + vRight
-                };
-
-                vResult.CopyTo(result.Slice(i, count));
-            }
-        }
-
-        // Handle remainder with scalar operations
-        for (; i < left.Length; i++)
-        {
-            result[i] = operation switch
-            {
-                "Add" => left[i] + right[i],
-                "Subtract" => left[i] - right[i],
-                "Multiply" => left[i] * right[i],
-                "Divide" => left[i] / right[i],
-                _ => left[i] + right[i]
-            };
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void ExecuteVectorizedBinaryDouble(
-        ReadOnlySpan<double> left,
-        ReadOnlySpan<double> right,
-        Span<double> result,
-        string operation,
-        int vectorWidth,
-        int numVectors,
-        int remainder)
-    {
-        int i = 0;
-
-        if (Vector.IsHardwareAccelerated && left.Length >= Vector<double>.Count)
-        {
-            var count = Vector<double>.Count;
-            int vectorizedEnd = (left.Length / count) * count;
-
-            for (; i < vectorizedEnd; i += count)
-            {
-                var vLeft = new Vector<double>(left.Slice(i, count));
-                var vRight = new Vector<double>(right.Slice(i, count));
-
-                Vector<double> vResult = operation switch
-                {
-                    "Add" => vLeft + vRight,
-                    "Subtract" => vLeft - vRight,
-                    "Multiply" => vLeft * vRight,
-                    "Divide" => vLeft / vRight,
-                    _ => vLeft + vRight
-                };
-
-                vResult.CopyTo(result.Slice(i, count));
-            }
-        }
-
-        // Handle remainder
-        for (; i < left.Length; i++)
-        {
-            result[i] = operation switch
-            {
-                "Add" => left[i] + right[i],
-                "Subtract" => left[i] - right[i],
-                "Multiply" => left[i] * right[i],
-                "Divide" => left[i] / right[i],
-                _ => left[i] + right[i]
-            };
-        }
+        var op = ParseBinaryOperation(operation);
+        return ExecuteVectorizedBinary(left, right, op, vectorWidth, numVectors, remainder);
     }
 
     /// <summary>
@@ -184,140 +139,118 @@ public static class VectorizedOps
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Tensor<T> ExecuteVectorizedUnary<T>(
         Tensor<T> input,
-        string operation,
+        UnaryOperation operation,
         int vectorWidth,
         int numVectors,
         int remainder)
     {
-        var data = input.Data;
-        var result = new T[data.Length];
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputSpan = input.AsSpan();
+        var result = new T[inputSpan.Length];
+        var resultSpan = result.AsSpan();
 
-        if (typeof(T) == typeof(float))
+        // Use INumericOperations<T> vectorized operations (follows OCP)
+        switch (operation)
         {
-            ExecuteVectorizedUnaryFloat(
-                MemoryMarshal.Cast<T, float>(data),
-                MemoryMarshal.Cast<T, float>(result),
-                operation, vectorWidth);
-        }
-        else if (typeof(T) == typeof(double))
-        {
-            ExecuteVectorizedUnaryDouble(
-                MemoryMarshal.Cast<T, double>(data),
-                MemoryMarshal.Cast<T, double>(result),
-                operation, vectorWidth);
-        }
-        else
-        {
-            // Fallback
-            for (int i = 0; i < data.Length; i++)
-            {
-                result[i] = ApplyUnaryScalar(data[i], operation);
-            }
+            case UnaryOperation.Negate:
+                for (int i = 0; i < inputSpan.Length; i++)
+                {
+                    result[i] = numOps.Negate(inputSpan[i]);
+                }
+                break;
+            case UnaryOperation.Exp:
+                numOps.Exp(inputSpan, resultSpan);
+                break;
+            case UnaryOperation.Log:
+                numOps.Log(inputSpan, resultSpan);
+                break;
+            case UnaryOperation.Sqrt:
+                for (int i = 0; i < inputSpan.Length; i++)
+                {
+                    result[i] = numOps.Sqrt(inputSpan[i]);
+                }
+                break;
+            case UnaryOperation.ReLU:
+                ExecuteReLU(inputSpan, resultSpan, numOps);
+                break;
+            case UnaryOperation.Sigmoid:
+                numOps.Sigmoid(inputSpan, resultSpan);
+                break;
+            case UnaryOperation.Tanh:
+                numOps.Tanh(inputSpan, resultSpan);
+                break;
         }
 
         return new Tensor<T>(result, input.Shape);
     }
 
+    /// <summary>
+    /// Executes a vectorized unary operation using string-based dispatch.
+    /// </summary>
+    /// <remarks>
+    /// This overload is provided for backward compatibility. Prefer using the enum-based overload
+    /// for better type safety and performance.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void ExecuteVectorizedUnaryFloat(
-        ReadOnlySpan<float> input,
-        Span<float> result,
+    public static Tensor<T> ExecuteVectorizedUnary<T>(
+        Tensor<T> input,
         string operation,
-        int vectorWidth)
+        int vectorWidth,
+        int numVectors,
+        int remainder)
     {
-        int i = 0;
-
-        if (Vector.IsHardwareAccelerated && input.Length >= Vector<float>.Count)
-        {
-            var count = Vector<float>.Count;
-            var zero = Vector<float>.Zero;
-            int vectorizedEnd = (input.Length / count) * count;
-
-            for (; i < vectorizedEnd; i += count)
-            {
-                var v = new Vector<float>(input.Slice(i, count));
-
-                Vector<float> vResult = operation switch
-                {
-                    "Negate" => -v,
-                    "ReLU" => Vector.Max(zero, v),
-                    // For Exp, Log, Sqrt, Sigmoid, Tanh - fall through to scalar
-                    // because Vector<T> doesn't have these directly
-                    _ => v
-                };
-
-                if (operation is "Exp" or "Log" or "Sqrt" or "Sigmoid" or "Tanh")
-                {
-                    // Use scalar fallback for complex operations
-                    for (int j = 0; j < count; j++)
-                    {
-                        result[i + j] = ApplyUnaryOperation(input[i + j], operation);
-                    }
-                }
-                else
-                {
-                    vResult.CopyTo(result.Slice(i, count));
-                }
-            }
-        }
-
-        // Handle remainder
-        for (; i < input.Length; i++)
-        {
-            result[i] = ApplyUnaryOperation(input[i], operation);
-        }
+        var op = ParseUnaryOperation(operation);
+        return ExecuteVectorizedUnary(input, op, vectorWidth, numVectors, remainder);
     }
 
+    /// <summary>
+    /// Executes ReLU (Rectified Linear Unit) activation function.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void ExecuteVectorizedUnaryDouble(
-        ReadOnlySpan<double> input,
-        Span<double> result,
-        string operation,
-        int vectorWidth)
+    private static void ExecuteReLU<T>(ReadOnlySpan<T> input, Span<T> result, INumericOperations<T> numOps)
     {
-        int i = 0;
-
-        if (Vector.IsHardwareAccelerated && input.Length >= Vector<double>.Count)
+        var zero = numOps.Zero;
+        for (int i = 0; i < input.Length; i++)
         {
-            var count = Vector<double>.Count;
-            var zero = Vector<double>.Zero;
-            int vectorizedEnd = (input.Length / count) * count;
-
-            for (; i < vectorizedEnd; i += count)
-            {
-                var v = new Vector<double>(input.Slice(i, count));
-
-                Vector<double> vResult = operation switch
-                {
-                    "Negate" => -v,
-                    "ReLU" => Vector.Max(zero, v),
-                    _ => v
-                };
-
-                if (operation is "Exp" or "Log" or "Sqrt" or "Sigmoid" or "Tanh")
-                {
-                    for (int j = 0; j < count; j++)
-                    {
-                        result[i + j] = ApplyUnaryOperation(input[i + j], operation);
-                    }
-                }
-                else
-                {
-                    vResult.CopyTo(result.Slice(i, count));
-                }
-            }
-        }
-
-        // Handle remainder
-        for (; i < input.Length; i++)
-        {
-            result[i] = ApplyUnaryOperation(input[i], operation);
+            result[i] = numOps.GreaterThan(input[i], zero) ? input[i] : zero;
         }
     }
 
     /// <summary>
-    /// Executes a vectorized reduction operation (Sum, Mean, Max).
+    /// Executes a vectorized reduction operation (Sum, Mean, Max, Min).
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Tensor<T> ExecuteVectorizedReduction<T>(
+        Tensor<T> input,
+        ReductionOperation reductionType,
+        int vectorWidth,
+        int[]? axes,
+        bool keepDims)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputSpan = input.AsSpan();
+
+        // Simple case: reduce all elements
+        if (axes == null || axes.Length == 0 || axes.Length == input.Shape.Length)
+        {
+            T result = ComputeFullReduction(inputSpan, reductionType, numOps);
+            var resultArray = new T[1];
+            resultArray[0] = result;
+            var resultShape = keepDims ? CreateKeepDimsShape(input.Shape.Length) : new[] { 1 };
+            return new Tensor<T>(resultArray, resultShape);
+        }
+
+        // Axis-specific reduction
+        return ReduceAlongAxes(input, axes, reductionType, keepDims, numOps);
+    }
+
+    /// <summary>
+    /// Executes a vectorized reduction operation using string-based dispatch.
+    /// </summary>
+    /// <remarks>
+    /// This overload is provided for backward compatibility. Prefer using the enum-based overload
+    /// for better type safety and performance.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Tensor<T> ExecuteVectorizedReduction<T>(
         Tensor<T> input,
@@ -326,185 +259,51 @@ public static class VectorizedOps
         int[]? axes,
         bool keepDims)
     {
-        var data = input.Data;
-
-        // Simple case: reduce all elements
-        if (axes == null || axes.Length == 0 || (axes.Length == input.Shape.Length))
-        {
-            double result;
-
-            if (typeof(T) == typeof(float))
-            {
-                result = ExecuteVectorizedReductionFloat(
-                    MemoryMarshal.Cast<T, float>(data),
-                    reductionType);
-            }
-            else if (typeof(T) == typeof(double))
-            {
-                result = ExecuteVectorizedReductionDouble(
-                    MemoryMarshal.Cast<T, double>(data),
-                    reductionType);
-            }
-            else
-            {
-                result = 0;
-                var numOps = MathHelper.GetNumericOperations<T>();
-                for (int i = 0; i < data.Length; i++)
-                {
-                    result = ApplyReduction(result, numOps.ToDouble(data[i]), reductionType);
-                }
-                if (reductionType == "Mean") result /= data.Length;
-            }
-
-            var resultArray = new T[1];
-            resultArray[0] = MathHelper.GetNumericOperations<T>().FromDouble(result);
-            return new Tensor<T>(resultArray, keepDims ? new int[input.Shape.Length] : new[] { 1 });
-        }
-
-        // For axis-specific reduction, fall back to non-vectorized implementation
-        return ReduceAlongAxes(input, axes, reductionType, keepDims);
+        var op = ParseReductionOperation(reductionType);
+        return ExecuteVectorizedReduction(input, op, vectorWidth, axes, keepDims);
     }
 
+    /// <summary>
+    /// Computes a full reduction over all elements.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static double ExecuteVectorizedReductionFloat(ReadOnlySpan<float> input, string reductionType)
+    private static T ComputeFullReduction<T>(ReadOnlySpan<T> data, ReductionOperation operation, INumericOperations<T> numOps)
     {
-        double result = reductionType switch
+        switch (operation)
         {
-            "Sum" or "Mean" => 0.0,
-            "Max" => double.MinValue,
-            "Min" => double.MaxValue,
-            _ => 0.0
-        };
-
-        int i = 0;
-
-        if (Vector.IsHardwareAccelerated && input.Length >= Vector<float>.Count)
-        {
-            var count = Vector<float>.Count;
-            int vectorizedEnd = (input.Length / count) * count;
-
-            if (reductionType is "Sum" or "Mean")
-            {
-                var vSum = Vector<float>.Zero;
-                for (; i < vectorizedEnd; i += count)
-                {
-                    vSum += new Vector<float>(input.Slice(i, count));
-                }
-                // Horizontal sum
-                for (int j = 0; j < count; j++)
-                {
-                    result += vSum[j];
-                }
-            }
-            else if (reductionType == "Max")
-            {
-                var vMax = new Vector<float>(float.MinValue);
-                for (; i < vectorizedEnd; i += count)
-                {
-                    vMax = Vector.Max(vMax, new Vector<float>(input.Slice(i, count)));
-                }
-                // Horizontal max
-                for (int j = 0; j < count; j++)
-                {
-                    result = Math.Max(result, vMax[j]);
-                }
-            }
-            else if (reductionType == "Min")
-            {
-                var vMin = new Vector<float>(float.MaxValue);
-                for (; i < vectorizedEnd; i += count)
-                {
-                    vMin = Vector.Min(vMin, new Vector<float>(input.Slice(i, count)));
-                }
-                // Horizontal min
-                for (int j = 0; j < count; j++)
-                {
-                    result = Math.Min(result, vMin[j]);
-                }
-            }
+            case ReductionOperation.Sum:
+                return numOps.Sum(data);
+            case ReductionOperation.Mean:
+                var sum = numOps.Sum(data);
+                return numOps.Divide(sum, numOps.FromDouble(data.Length));
+            case ReductionOperation.Max:
+                return numOps.Max(data);
+            case ReductionOperation.Min:
+                return numOps.Min(data);
+            default:
+                return numOps.Sum(data);
         }
-
-        // Handle remainder
-        for (; i < input.Length; i++)
-        {
-            result = ApplyReduction(result, input[i], reductionType);
-        }
-
-        if (reductionType == "Mean") result /= input.Length;
-
-        return result;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static double ExecuteVectorizedReductionDouble(ReadOnlySpan<double> input, string reductionType)
+    /// <summary>
+    /// Creates a shape array with all ones for keepDims.
+    /// </summary>
+    private static int[] CreateKeepDimsShape(int rank)
     {
-        double result = reductionType switch
-        {
-            "Sum" or "Mean" => 0.0,
-            "Max" => double.MinValue,
-            "Min" => double.MaxValue,
-            _ => 0.0
-        };
-
-        int i = 0;
-
-        if (Vector.IsHardwareAccelerated && input.Length >= Vector<double>.Count)
-        {
-            var count = Vector<double>.Count;
-            int vectorizedEnd = (input.Length / count) * count;
-
-            if (reductionType is "Sum" or "Mean")
-            {
-                var vSum = Vector<double>.Zero;
-                for (; i < vectorizedEnd; i += count)
-                {
-                    vSum += new Vector<double>(input.Slice(i, count));
-                }
-                for (int j = 0; j < count; j++)
-                {
-                    result += vSum[j];
-                }
-            }
-            else if (reductionType == "Max")
-            {
-                var vMax = new Vector<double>(double.MinValue);
-                for (; i < vectorizedEnd; i += count)
-                {
-                    vMax = Vector.Max(vMax, new Vector<double>(input.Slice(i, count)));
-                }
-                for (int j = 0; j < count; j++)
-                {
-                    result = Math.Max(result, vMax[j]);
-                }
-            }
-            else if (reductionType == "Min")
-            {
-                var vMin = new Vector<double>(double.MaxValue);
-                for (; i < vectorizedEnd; i += count)
-                {
-                    vMin = Vector.Min(vMin, new Vector<double>(input.Slice(i, count)));
-                }
-                for (int j = 0; j < count; j++)
-                {
-                    result = Math.Min(result, vMin[j]);
-                }
-            }
-        }
-
-        for (; i < input.Length; i++)
-        {
-            result = ApplyReduction(result, input[i], reductionType);
-        }
-
-        if (reductionType == "Mean") result /= input.Length;
-
-        return result;
+        var shape = new int[rank];
+        for (int i = 0; i < rank; i++)
+            shape[i] = 1;
+        return shape;
     }
 
     /// <summary>
     /// Executes a vectorized matrix multiplication with tiling.
     /// </summary>
+#if NETCOREAPP3_0_OR_GREATER
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+#else
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#endif
     public static Tensor<T> ExecuteVectorizedMatMul<T>(
         Tensor<T> left,
         Tensor<T> right,
@@ -523,33 +322,41 @@ public static class VectorizedOps
             throw new ArgumentException("Inner dimensions must match for matrix multiplication");
 
         var result = new T[M * N];
+        var leftSpan = left.AsSpan();
+        var rightSpan = right.AsSpan();
+        var resultSpan = result.AsSpan();
 
+        // Use type-specific implementations for float/double for better SIMD utilization
         if (typeof(T) == typeof(float))
         {
             ExecuteVectorizedMatMulFloat(
-                MemoryMarshal.Cast<T, float>(left.Data),
-                MemoryMarshal.Cast<T, float>(right.Data),
-                MemoryMarshal.Cast<T, float>(result),
+                MemoryMarshal.Cast<T, float>(leftSpan),
+                MemoryMarshal.Cast<T, float>(rightSpan),
+                MemoryMarshal.Cast<T, float>(resultSpan),
                 M, K, N, tileSize);
         }
         else if (typeof(T) == typeof(double))
         {
             ExecuteVectorizedMatMulDouble(
-                MemoryMarshal.Cast<T, double>(left.Data),
-                MemoryMarshal.Cast<T, double>(right.Data),
-                MemoryMarshal.Cast<T, double>(result),
+                MemoryMarshal.Cast<T, double>(leftSpan),
+                MemoryMarshal.Cast<T, double>(rightSpan),
+                MemoryMarshal.Cast<T, double>(resultSpan),
                 M, K, N, tileSize);
         }
         else
         {
-            // Fallback: naive matmul
-            ExecuteNaiveMatMul(left.Data, right.Data, result, M, K, N);
+            // Generic fallback using INumericOperations<T>
+            ExecuteGenericMatMul(leftSpan, rightSpan, resultSpan, M, K, N);
         }
 
         return new Tensor<T>(result, new[] { M, N });
     }
 
+#if NETCOREAPP3_0_OR_GREATER
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+#else
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#endif
     private static void ExecuteVectorizedMatMulFloat(
         ReadOnlySpan<float> A,
         ReadOnlySpan<float> B,
@@ -610,7 +417,11 @@ public static class VectorizedOps
         }
     }
 
+#if NETCOREAPP3_0_OR_GREATER
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+#else
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#endif
     private static void ExecuteVectorizedMatMulDouble(
         ReadOnlySpan<double> A,
         ReadOnlySpan<double> B,
@@ -665,180 +476,264 @@ public static class VectorizedOps
         }
     }
 
-    private static void ExecuteNaiveMatMul<T>(
-        T[] A, T[] B, T[] C,
+    /// <summary>
+    /// Generic matrix multiplication using INumericOperations for any numeric type.
+    /// </summary>
+    private static void ExecuteGenericMatMul<T>(
+        ReadOnlySpan<T> A,
+        ReadOnlySpan<T> B,
+        Span<T> C,
         int M, int K, int N)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
+
         for (int i = 0; i < M; i++)
         {
             for (int j = 0; j < N; j++)
             {
-                double sum = 0;
+                T sum = numOps.Zero;
                 for (int k = 0; k < K; k++)
                 {
-                    sum += numOps.ToDouble(A[i * K + k]) * numOps.ToDouble(B[k * N + j]);
+                    sum = numOps.Add(sum, numOps.Multiply(A[i * K + k], B[k * N + j]));
                 }
-                C[i * N + j] = numOps.FromDouble(sum);
+                C[i * N + j] = sum;
             }
         }
     }
 
+    /// <summary>
+    /// Reduces a tensor along specific axes.
+    /// </summary>
     private static Tensor<T> ReduceAlongAxes<T>(
-        Tensor<T> input, int[] axes, string reductionType, bool keepDims)
+        Tensor<T> input,
+        int[] axes,
+        ReductionOperation reductionType,
+        bool keepDims,
+        INumericOperations<T> numOps)
     {
-        // Simplified implementation - reduce along specific axes
-        // Full implementation would handle arbitrary axes combinations
-        var data = input.Data;
-        var shape = input.Shape;
+        var inputShape = input.Shape;
+        var inputSpan = input.AsSpan();
+
+        // Normalize negative axes
+        var normalizedAxes = NormalizeAxes(axes, inputShape.Length);
 
         // Calculate output shape
-        var outputShape = new List<int>();
-        for (int i = 0; i < shape.Length; i++)
-        {
-            if (!axes.Contains(i))
-                outputShape.Add(shape[i]);
-            else if (keepDims)
-                outputShape.Add(1);
-        }
-        if (outputShape.Count == 0) outputShape.Add(1);
-
+        var outputShape = CalculateOutputShape(inputShape, normalizedAxes, keepDims);
         var outputSize = outputShape.Aggregate(1, (a, b) => a * b);
+
+        // Initialize result array and accumulator counts
         var result = new T[outputSize];
-
-        // Initialize based on reduction type
-        double initVal = reductionType switch
-        {
-            "Sum" or "Mean" => 0.0,
-            "Max" => double.MinValue,
-            "Min" => double.MaxValue,
-            _ => 0.0
-        };
-
-        var resultDouble = new double[outputSize];
-        Array.Fill(resultDouble, initVal);
         var counts = new int[outputSize];
 
-        // Compute reduction
-        var numOps = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < data.Length; i++)
+        // Initialize based on reduction type
+        T initValue = reductionType switch
         {
-            // Map flat index to multi-dimensional index
-            int outputIndex = ComputeOutputIndex(i, shape, axes, outputShape.ToArray());
-            resultDouble[outputIndex] = ApplyReduction(
-                resultDouble[outputIndex],
-                numOps.ToDouble(data[i]),
-                reductionType);
-            counts[outputIndex]++;
-        }
+            ReductionOperation.Sum or ReductionOperation.Mean => numOps.Zero,
+            ReductionOperation.Max => numOps.MinValue,
+            ReductionOperation.Min => numOps.MaxValue,
+            _ => numOps.Zero
+        };
 
-        // Finalize (for mean)
         for (int i = 0; i < outputSize; i++)
         {
-            if (reductionType == "Mean" && counts[i] > 0)
-                resultDouble[i] /= counts[i];
-            result[i] = numOps.FromDouble(resultDouble[i]);
+            result[i] = initValue;
         }
 
-        return new Tensor<T>(result, outputShape.ToArray());
-    }
+        // Calculate strides for input tensor
+        var inputStrides = CalculateStrides(inputShape);
+        var outputStrides = CalculateStrides(outputShape);
+        var outputShapeWithKeptDims = CalculateOutputShape(inputShape, normalizedAxes, true);
 
-    private static int ComputeOutputIndex(int flatIndex, int[] inputShape, int[] axes, int[] outputShape)
-    {
-        // Convert flat index to coordinates
-        var coords = new int[inputShape.Length];
-        int remaining = flatIndex;
-        for (int i = inputShape.Length - 1; i >= 0; i--)
+        // Iterate through all input elements
+        var inputCoords = new int[inputShape.Length];
+        for (int flatIdx = 0; flatIdx < inputSpan.Length; flatIdx++)
         {
-            coords[i] = remaining % inputShape[i];
-            remaining /= inputShape[i];
+            // Convert flat index to coordinates
+            FlatIndexToCoords(flatIdx, inputShape, inputStrides, inputCoords);
+
+            // Calculate output index by projecting out the reduced axes
+            int outputIdx = CoordsToOutputIndex(inputCoords, normalizedAxes, outputShapeWithKeptDims, outputStrides, keepDims);
+
+            // Apply reduction
+            T inputValue = inputSpan[flatIdx];
+            result[outputIdx] = ApplyReduction(result[outputIdx], inputValue, reductionType, numOps);
+            counts[outputIdx]++;
         }
 
-        // Compute output index (skipping reduced axes)
-        int outputIndex = 0;
-        int outputStride = 1;
-        int outputDim = outputShape.Length - 1;
-
-        for (int i = inputShape.Length - 1; i >= 0; i--)
+        // Finalize for mean reduction
+        if (reductionType == ReductionOperation.Mean)
         {
-            if (!axes.Contains(i))
+            for (int i = 0; i < outputSize; i++)
             {
-                outputIndex += coords[i] * outputStride;
-                outputStride *= outputShape[outputDim];
-                outputDim--;
+                if (counts[i] > 0)
+                {
+                    result[i] = numOps.Divide(result[i], numOps.FromDouble(counts[i]));
+                }
             }
         }
 
-        return outputIndex;
+        return new Tensor<T>(result, outputShape);
     }
 
+    /// <summary>
+    /// Normalizes axes, converting negative indices to positive.
+    /// </summary>
+    private static int[] NormalizeAxes(int[] axes, int rank)
+    {
+        var normalized = new int[axes.Length];
+        for (int i = 0; i < axes.Length; i++)
+        {
+            normalized[i] = axes[i] < 0 ? rank + axes[i] : axes[i];
+            if (normalized[i] < 0 || normalized[i] >= rank)
+            {
+                throw new ArgumentOutOfRangeException(nameof(axes), $"Axis {axes[i]} is out of bounds for tensor with rank {rank}");
+            }
+        }
+        return normalized;
+    }
+
+    /// <summary>
+    /// Calculates the output shape after reduction.
+    /// </summary>
+    private static int[] CalculateOutputShape(int[] inputShape, int[] axes, bool keepDims)
+    {
+        var axesSet = new HashSet<int>(axes);
+        var outputShape = new List<int>();
+
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (!axesSet.Contains(i))
+            {
+                outputShape.Add(inputShape[i]);
+            }
+            else if (keepDims)
+            {
+                outputShape.Add(1);
+            }
+        }
+
+        if (outputShape.Count == 0)
+        {
+            outputShape.Add(1);
+        }
+
+        return outputShape.ToArray();
+    }
+
+    /// <summary>
+    /// Calculates strides for a given shape.
+    /// </summary>
+    private static int[] CalculateStrides(int[] shape)
+    {
+        var strides = new int[shape.Length];
+        int stride = 1;
+        for (int i = shape.Length - 1; i >= 0; i--)
+        {
+            strides[i] = stride;
+            stride *= shape[i];
+        }
+        return strides;
+    }
+
+    /// <summary>
+    /// Converts a flat index to multi-dimensional coordinates.
+    /// </summary>
+    private static void FlatIndexToCoords(int flatIndex, int[] shape, int[] strides, int[] coords)
+    {
+        int remaining = flatIndex;
+        for (int i = 0; i < shape.Length; i++)
+        {
+            coords[i] = remaining / strides[i];
+            remaining %= strides[i];
+        }
+    }
+
+    /// <summary>
+    /// Converts input coordinates to output flat index, projecting out reduced axes.
+    /// </summary>
+    private static int CoordsToOutputIndex(int[] inputCoords, int[] reducedAxes, int[] outputShape, int[] outputStrides, bool keepDims)
+    {
+        var axesSet = new HashSet<int>(reducedAxes);
+        int outputIdx = 0;
+        int outputDim = 0;
+
+        for (int i = 0; i < inputCoords.Length; i++)
+        {
+            if (!axesSet.Contains(i))
+            {
+                outputIdx += inputCoords[i] * outputStrides[outputDim];
+                outputDim++;
+            }
+            else if (keepDims)
+            {
+                // For keepDims, the reduced dimension contributes 0 (since shape[dim] = 1)
+                outputDim++;
+            }
+        }
+
+        return outputIdx;
+    }
+
+    /// <summary>
+    /// Applies a reduction operation between accumulator and value.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static float ApplyUnaryOperation(float value, string operation)
+    private static T ApplyReduction<T>(T accumulator, T value, ReductionOperation operation, INumericOperations<T> numOps)
     {
         return operation switch
         {
-            "Negate" => -value,
-            "ReLU" => MathF.Max(0, value),
-            "Sigmoid" => 1f / (1f + MathF.Exp(-value)),
-            "Tanh" => MathF.Tanh(value),
-            "Exp" => MathF.Exp(value),
-            "Log" => MathF.Log(value),
-            "Sqrt" => MathF.Sqrt(value),
-            _ => value
+            ReductionOperation.Sum or ReductionOperation.Mean => numOps.Add(accumulator, value),
+            ReductionOperation.Max => numOps.GreaterThan(value, accumulator) ? value : accumulator,
+            ReductionOperation.Min => numOps.LessThan(value, accumulator) ? value : accumulator,
+            _ => numOps.Add(accumulator, value)
         };
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static double ApplyUnaryOperation(double value, string operation)
+    /// <summary>
+    /// Parses a string operation name to BinaryOperation enum.
+    /// </summary>
+    private static BinaryOperation ParseBinaryOperation(string operation)
     {
         return operation switch
         {
-            "Negate" => -value,
-            "ReLU" => Math.Max(0, value),
-            "Sigmoid" => 1.0 / (1.0 + Math.Exp(-value)),
-            "Tanh" => Math.Tanh(value),
-            "Exp" => Math.Exp(value),
-            "Log" => Math.Log(value),
-            "Sqrt" => Math.Sqrt(value),
-            _ => value
+            "Add" => BinaryOperation.Add,
+            "Subtract" => BinaryOperation.Subtract,
+            "Multiply" => BinaryOperation.Multiply,
+            "Divide" => BinaryOperation.Divide,
+            _ => throw new ArgumentException($"Unknown binary operation: {operation}", nameof(operation))
         };
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static T ApplyBinaryScalar<T>(T left, T right, string operation)
+    /// <summary>
+    /// Parses a string operation name to UnaryOperation enum.
+    /// </summary>
+    private static UnaryOperation ParseUnaryOperation(string operation)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        double l = numOps.ToDouble(left);
-        double r = numOps.ToDouble(right);
-        double result = operation switch
+        return operation switch
         {
-            "Add" => l + r,
-            "Subtract" => l - r,
-            "Multiply" => l * r,
-            "Divide" => l / r,
-            _ => l + r
+            "Negate" => UnaryOperation.Negate,
+            "Exp" => UnaryOperation.Exp,
+            "Log" => UnaryOperation.Log,
+            "Sqrt" => UnaryOperation.Sqrt,
+            "ReLU" => UnaryOperation.ReLU,
+            "Sigmoid" => UnaryOperation.Sigmoid,
+            "Tanh" => UnaryOperation.Tanh,
+            _ => throw new ArgumentException($"Unknown unary operation: {operation}", nameof(operation))
         };
-        return numOps.FromDouble(result);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static T ApplyUnaryScalar<T>(T value, string operation)
+    /// <summary>
+    /// Parses a string operation name to ReductionOperation enum.
+    /// </summary>
+    private static ReductionOperation ParseReductionOperation(string operation)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        double v = numOps.ToDouble(value);
-        double result = ApplyUnaryOperation(v, operation);
-        return numOps.FromDouble(result);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static double ApplyReduction(double accumulator, double value, string reductionType)
-    {
-        return reductionType switch
+        return operation switch
         {
-            "Sum" or "Mean" => accumulator + value,
-            "Max" => Math.Max(accumulator, value),
-            "Min" => Math.Min(accumulator, value),
-            _ => accumulator + value
+            "Sum" => ReductionOperation.Sum,
+            "Mean" => ReductionOperation.Mean,
+            "Max" => ReductionOperation.Max,
+            "Min" => ReductionOperation.Min,
+            _ => throw new ArgumentException($"Unknown reduction operation: {operation}", nameof(operation))
         };
     }
 }

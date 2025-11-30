@@ -9,6 +9,22 @@
 namespace System.Runtime.CompilerServices
 {
     /// <summary>
+    /// Polyfill for MethodImplOptions.AggressiveOptimization which was introduced in .NET Core 3.0.
+    /// This provides the constant value (512) that can be used with [MethodImpl] attribute.
+    /// </summary>
+    /// <remarks>
+    /// In .NET Framework, this flag has no effect at runtime, but it allows code to compile.
+    /// The JIT compiler in .NET Framework will simply ignore this flag.
+    /// </remarks>
+    public static class MethodImplOptionsEx
+    {
+        /// <summary>
+        /// Specifies that the method should be optimized aggressively by the JIT compiler.
+        /// Value: 512 (0x200). Only effective in .NET Core 3.0+; ignored in .NET Framework.
+        /// </summary>
+        public const MethodImplOptions AggressiveOptimization = (MethodImplOptions)512;
+    }
+    /// <summary>
     /// Reserved for use by a compiler for tracking metadata.
     /// This class should not be used by developers in source code.
     /// Used to mark init-only setters.
