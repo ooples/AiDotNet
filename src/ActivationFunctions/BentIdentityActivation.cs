@@ -13,7 +13,7 @@ namespace AiDotNet.ActivationFunctions;
 /// This helps prevent the "dying neuron" problem that can occur with ReLU, where neurons can get stuck
 /// outputting zero.
 /// 
-/// The mathematical formula is: f(x) = ((v(x² + 1) - 1) / 2) + x
+/// The mathematical formula is: f(x) = ((sqrt(x² + 1) - 1) / 2) + x
 /// 
 /// Key properties:
 /// - Always produces a non-zero gradient, helping with training
@@ -38,7 +38,7 @@ public class BentIdentityActivation<T> : ActivationFunctionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method transforms an input value using the formula:
-    /// f(x) = ((v(x² + 1) - 1) / 2) + x
+    /// f(x) = ((sqrt(x² + 1) - 1) / 2) + x
     /// 
     /// The function adds a non-linear component to the identity function (x),
     /// making it bend slightly while maintaining good gradient properties.
@@ -65,7 +65,7 @@ public class BentIdentityActivation<T> : ActivationFunctionBase<T>
     /// when its input changes slightly. This is used during neural network training to determine
     /// how to adjust weights.
     /// 
-    /// The derivative formula is: f'(x) = x / (2 * v(x² + 1)) + 1
+    /// The derivative formula is: f'(x) = x / (2 * sqrt(x² + 1)) + 1
     /// 
     /// An important property is that this derivative is always greater than 1, which helps prevent
     /// the vanishing gradient problem during training.
