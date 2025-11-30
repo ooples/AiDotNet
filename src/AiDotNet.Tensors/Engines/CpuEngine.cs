@@ -3030,42 +3030,57 @@ public class CpuEngine : IEngine
         for (int i = 0; i < outputData.Length; i++)
             outputData[i] = numOps.Zero;
 
-        Parallel.For(0, batch * inChannels, idx =>
-        {
-            int b = idx / inChannels;
-            int ic = idx % inChannels;
-
-            for (int ih = 0; ih < height; ih++)
+        // Use thread-local accumulation to avoid lock contention
+        var lockObj = new object();
+        Parallel.For(0, batch * inChannels,
+            // Initialize thread-local storage
+            () => new T[batch * outChannels * outputHeight * outputWidth],
+            // Body
+            (idx, state, localOutput) =>
             {
-                for (int iw = 0; iw < width; iw++)
+                int b = idx / inChannels;
+                int ic = idx % inChannels;
+
+                for (int ih = 0; ih < height; ih++)
                 {
-                    int inputIdx = ((b * inChannels + ic) * height + ih) * width + iw;
-                    T inputVal = inputData[inputIdx];
-
-                    for (int oc = 0; oc < outChannels; oc++)
+                    for (int iw = 0; iw < width; iw++)
                     {
-                        for (int kh = 0; kh < kernelHeight; kh++)
-                        {
-                            for (int kw = 0; kw < kernelWidth; kw++)
-                            {
-                                int oh = ih * strideH - padH + kh;
-                                int ow = iw * strideW - padW + kw;
+                        int inputIdx = ((b * inChannels + ic) * height + ih) * width + iw;
+                        T inputVal = inputData[inputIdx];
 
-                                if (oh >= 0 && oh < outputHeight && ow >= 0 && ow < outputWidth)
+                        for (int oc = 0; oc < outChannels; oc++)
+                        {
+                            for (int kh = 0; kh < kernelHeight; kh++)
+                            {
+                                for (int kw = 0; kw < kernelWidth; kw++)
                                 {
-                                    int outputIdx = ((b * outChannels + oc) * outputHeight + oh) * outputWidth + ow;
-                                    int kernelIdx = ((ic * outChannels + oc) * kernelHeight + kh) * kernelWidth + kw;
-                                    lock (outputData)
+                                    int oh = ih * strideH - padH + kh;
+                                    int ow = iw * strideW - padW + kw;
+
+                                    if (oh >= 0 && oh < outputHeight && ow >= 0 && ow < outputWidth)
                                     {
-                                        outputData[outputIdx] = numOps.Add(outputData[outputIdx], numOps.Multiply(inputVal, kernelData[kernelIdx]));
+                                        int outputIdx = ((b * outChannels + oc) * outputHeight + oh) * outputWidth + ow;
+                                        int kernelIdx = ((ic * outChannels + oc) * kernelHeight + kh) * kernelWidth + kw;
+                                        localOutput[outputIdx] = numOps.Add(localOutput[outputIdx], numOps.Multiply(inputVal, kernelData[kernelIdx]));
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
-        });
+                return localOutput;
+            },
+            // Merge thread-local results
+            (localOutput) =>
+            {
+                lock (lockObj)
+                {
+                    for (int i = 0; i < outputData.Length; i++)
+                    {
+                        outputData[i] = numOps.Add(outputData[i], localOutput[i]);
+                    }
+                }
+            });
 
         return new Tensor<T>([batch, outChannels, outputHeight, outputWidth], new Vector<T>(outputData));
     }
@@ -3874,11 +3889,8 @@ public class CpuEngine : IEngine
                     int iw = ow / scaleW;
                     int gradOutputIdx = ((b * channels + c) * newHeight + oh) * newWidth + ow;
                     int gradInputIdx = ((b * channels + c) * height + ih) * width + iw;
-
-                    lock (gradInputData)
-                    {
-                        gradInputData[gradInputIdx] = numOps.Add(gradInputData[gradInputIdx], gradOutputData[gradOutputIdx]);
-                    }
+                    // No lock needed - each (batch, channel) partition owns disjoint gradInput slices
+                    gradInputData[gradInputIdx] = numOps.Add(gradInputData[gradInputIdx], gradOutputData[gradOutputIdx]);
                 }
             }
         });
