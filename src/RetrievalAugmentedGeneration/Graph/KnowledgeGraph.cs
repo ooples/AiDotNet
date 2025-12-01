@@ -136,7 +136,9 @@ public class KnowledgeGraph<T>
     public IEnumerable<GraphNode<T>> GetNeighbors(string nodeId)
     {
         var edges = GetOutgoingEdges(nodeId);
-        return edges.Select(e => _store.GetNode(e.TargetId)!);
+        return edges
+            .Select(e => _store.GetNode(e.TargetId))
+            .OfType<GraphNode<T>>();
     }
     
     /// <summary>
