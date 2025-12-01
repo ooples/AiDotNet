@@ -192,20 +192,13 @@ public class GraphQueryMatcher<T>
                     edges = edges.Where(e => e.RelationType == relationshipType);
                 }
 
-                foreach (var edge in edges)
-                {
-                    var targetNode = _graph.GetNode(edge.TargetId);
-                    if (targetNode == null)
-                        continue;
-
-                    // Avoid cycles (don't revisit nodes in current path)
-                    if (path.Any(n => n.Id == targetNode.Id))
-                        continue;
-
-                    // Create new path
-                    var newPath = new List<GraphNode<T>>(path) { targetNode };
-                    nextPaths.Add(newPath);
-                }
+                // Map edges to target nodes, filter nulls and cycles, then create new paths
+                var newPaths = edges
+                    .Select(edge => _graph.GetNode(edge.TargetId))
+                    .OfType<GraphNode<T>>()
+                    .Where(targetNode => !path.Any(n => n.Id == targetNode.Id))
+                    .Select(targetNode => new List<GraphNode<T>>(path) { targetNode });
+                nextPaths.AddRange(newPaths);
             }
 
             currentPaths = nextPaths;
@@ -262,15 +255,13 @@ public class GraphQueryMatcher<T>
             if (path.Count > shortestLength)
                 break;
 
-            // Get neighbors
-            var edges = _graph.GetOutgoingEdges(currentNode.Id);
+            // Get neighbors - map edges to target nodes and filter nulls
+            var neighbors = _graph.GetOutgoingEdges(currentNode.Id)
+                .Select(edge => _graph.GetNode(edge.TargetId))
+                .OfType<GraphNode<T>>();
 
-            foreach (var edge in edges)
+            foreach (var neighbor in neighbors)
             {
-                var neighbor = _graph.GetNode(edge.TargetId);
-                if (neighbor == null)
-                    continue;
-
                 // Check if we found target
                 if (neighbor.Id == targetId)
                 {
@@ -339,26 +330,23 @@ public class GraphQueryMatcher<T>
         if (string.IsNullOrWhiteSpace(propsString))
             return null;
 
-        var props = new Dictionary<string, object>();
-        var pairs = propsString.Split(',');
-
-        foreach (var pair in pairs)
-        {
-            var parts = pair.Split(':');
-            if (parts.Length != 2)
-                continue;
-
-            var key = parts[0].Trim();
-            var value = parts[1].Trim().Trim('"', '\'');
-
-            // Try to parse as number
-            if (int.TryParse(value, out var intValue))
-                props[key] = intValue;
-            else if (double.TryParse(value, out var doubleValue))
-                props[key] = doubleValue;
-            else
-                props[key] = value;
-        }
+        var props = propsString.Split(',')
+            .Select(pair => pair.Split(':'))
+            .Where(parts => parts.Length == 2)
+            .Select(parts =>
+            {
+                var key = parts[0].Trim();
+                var valueStr = parts[1].Trim().Trim('"', '\'');
+                object value;
+                if (int.TryParse(valueStr, out var intValue))
+                    value = intValue;
+                else if (double.TryParse(valueStr, out var doubleValue))
+                    value = doubleValue;
+                else
+                    value = valueStr;
+                return new KeyValuePair<string, object>(key, value);
+            })
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
 
         return props.Count > 0 ? props : null;
     }
