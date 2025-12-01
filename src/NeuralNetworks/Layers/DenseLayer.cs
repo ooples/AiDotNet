@@ -1187,11 +1187,10 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Input shape: [batchSize, inputSize]
         int inputSize = InputShape[0];
-        int outputSize = OutputShape[0];
 
-        // Create placeholder for input data with symbolic batch dimension
-        var inputShape = new int[] { -1, inputSize }; // -1 means variable batch size
-        var inputPlaceholder = new Tensor<T>(new int[] { 1, inputSize }); // Actual placeholder is batch size 1
+        // Create placeholder for input data
+        // Note: Using batch size 1 for placeholder; actual batch size is determined at runtime
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, inputSize });
         var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
 
         // Create constant nodes for weights and biases

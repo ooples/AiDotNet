@@ -2352,7 +2352,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// property indicates whether this specific network configuration can be JIT compiled.
     /// </para>
     /// </remarks>
-    public virtual bool SupportsJitCompilation => true;
+    public virtual bool SupportsJitCompilation => Layers.Count == 0 || Layers.All(layer => layer.SupportsJitCompilation);
 
     /// <inheritdoc/>
     /// <remarks>

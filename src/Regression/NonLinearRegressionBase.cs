@@ -1293,10 +1293,8 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         // Element-wise multiply
         var product = TensorOperations<T>.ElementwiseMultiply(x1, x2);
 
-        // Sum all elements (reduction)
-        // Note: For now, we'll use a simple approach
-        // In a full implementation, we'd have a proper Sum/Reduce operation
-        return product; // Simplified - assumes proper reduction in code generation
+        // Sum all elements to get the dot product (scalar)
+        return TensorOperations<T>.Sum(product);
     }
 
     /// <summary>
@@ -1310,9 +1308,8 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         // Square: (x1 - x2)^2
         var squared = TensorOperations<T>.ElementwiseMultiply(diff, diff);
 
-        // Sum squared differences (||x1 - x2||^2)
-        // Simplified - assumes proper reduction
-        var sumSquared = squared;
+        // Sum squared differences to get ||x1 - x2||^2 (scalar)
+        var sumSquared = TensorOperations<T>.Sum(squared);
 
         // Multiply by -gamma
         var gammaShape = new int[] { 1, 1 };
@@ -1331,9 +1328,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// </summary>
     private ComputationNode<T> ComputeSigmoidKernel(ComputationNode<T> x1, ComputationNode<T> x2)
     {
-        // Dot product: x1 · x2
-        var dotProduct = TensorOperations<T>.ElementwiseMultiply(x1, x2);
-        // Simplified - assumes proper reduction
+        // Dot product: x1 · x2 = sum(x1 * x2)
+        var product = TensorOperations<T>.ElementwiseMultiply(x1, x2);
+        var dotProduct = TensorOperations<T>.Sum(product);
 
         // Multiply by gamma
         var gammaShape = new int[] { 1, 1 };
@@ -1358,9 +1355,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// </summary>
     private ComputationNode<T> ComputePolynomialKernel(ComputationNode<T> x1, ComputationNode<T> x2)
     {
-        // Dot product: x1 · x2
-        var dotProduct = TensorOperations<T>.ElementwiseMultiply(x1, x2);
-        // Simplified - assumes proper reduction
+        // Dot product: x1 · x2 = sum(x1 * x2)
+        var product = TensorOperations<T>.ElementwiseMultiply(x1, x2);
+        var dotProduct = TensorOperations<T>.Sum(product);
 
         // Multiply by gamma
         var gammaShape = new int[] { 1, 1 };
@@ -1393,9 +1390,8 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         var squared = TensorOperations<T>.ElementwiseMultiply(diff, diff);
         var absDiff = TensorOperations<T>.Sqrt(squared);
 
-        // Sum absolute differences (|x1 - x2|_1 = L1 norm)
-        // Simplified - assumes proper reduction
-        var l1Norm = absDiff;
+        // Sum absolute differences to get L1 norm (|x1 - x2|_1)
+        var l1Norm = TensorOperations<T>.Sum(absDiff);
 
         // Multiply by -gamma
         var gammaShape = new int[] { 1, 1 };

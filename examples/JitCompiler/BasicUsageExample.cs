@@ -128,11 +128,11 @@ public class BasicUsageExample
     }
 
     /// <summary>
-    /// Example 3: Performance comparison (JIT vs interpreted)
+    /// Example 3: JIT compilation performance benchmark
     /// </summary>
     public static void PerformanceComparisonExample()
     {
-        Console.WriteLine("=== Example 3: Performance Comparison ===\n");
+        Console.WriteLine("=== Example 3: JIT Performance Benchmark ===\n");
 
         // Create larger tensors for meaningful benchmark
         var inputData = new Tensor<float>(new[] { 100, 100 });

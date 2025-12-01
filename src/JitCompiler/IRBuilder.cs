@@ -624,6 +624,12 @@ public class IRBuilder
 
             // Distribute gradients to parent nodes with inline accumulation
             // This ensures gradientMap is updated during traversal so deeper nodes get gradients
+            //
+            // INVARIANT: backwardOps[i] corresponds to the gradient for node.Parents[i].
+            // CreateBackwardOps() must generate exactly one backward op per parent, in the same order.
+            // The defensive `&& i < backwardOps.Count` guard handles cases where CreateBackwardOps
+            // returns fewer ops than expected (e.g., unimplemented backward for some input types),
+            // silently skipping gradient propagation for those inputs rather than crashing.
             for (int i = 0; i < node.Parents.Count && i < backwardOps.Count; i++)
             {
                 var parent = node.Parents[i];

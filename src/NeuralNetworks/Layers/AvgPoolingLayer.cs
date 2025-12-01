@@ -284,16 +284,21 @@ public class AvgPoolingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // The layer uses 3D tensors (channels, height, width), but TensorOperations.AvgPool2D
+        // expects 4D tensors (batch, channels, height, width). We add a batch dimension of 1.
+        var input4D = _lastInput.Reshape(new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] });
+        var gradient4D = outputGradient.Reshape(new int[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2] });
+
         // Convert input to computation node
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var inputNode = Autodiff.TensorOperations<T>.Variable(input4D, "input", requiresGradient: true);
 
         // Forward pass using autodiff AvgPool2D operation
         var poolSize = new int[] { PoolSize, PoolSize };
         var strides = new int[] { Strides, Strides };
         var outputNode = Autodiff.TensorOperations<T>.AvgPool2D(inputNode, poolSize, strides);
 
-        // Perform backward pass
-        outputNode.Gradient = outputGradient;
+        // Perform backward pass with 4D gradient
+        outputNode.Gradient = gradient4D;
         var topoOrder = GetTopologicalOrder(outputNode);
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
@@ -304,8 +309,9 @@ public class AvgPoolingLayer<T> : LayerBase<T>
             }
         }
 
-        // Extract input gradient
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        // Extract input gradient and reshape back to 3D
+        var inputGrad4D = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        return inputGrad4D.Reshape(_lastInput.Shape);
     }
 
     /// <summary>
