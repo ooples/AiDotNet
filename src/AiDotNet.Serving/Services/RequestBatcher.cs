@@ -97,6 +97,11 @@ public class RequestBatcher : IRequestBatcher, IDisposable
             "timeout" => new TimeoutBatchingStrategy(_options.BatchingWindowMs, _options.MaxBatchSize),
             "size" => new SizeBatchingStrategy(_options.MaxBatchSize, _options.BatchingWindowMs),
             "bucket" => new BucketBatchingStrategy(_options.BucketSizes, _options.MaxBatchSize, _options.BatchingWindowMs),
+            "continuous" => new ContinuousBatchingStrategy(
+                _options.MaxBatchSize,
+                Math.Max(1, _options.BatchingWindowMs / 10),
+                _options.TargetLatencyMs,
+                _options.AdaptiveBatchSize),
             "adaptive" => new AdaptiveBatchingStrategy(
                 _options.MinBatchSize,
                 _options.MaxBatchSize,
