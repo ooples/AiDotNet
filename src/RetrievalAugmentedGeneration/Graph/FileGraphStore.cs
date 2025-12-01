@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -59,10 +60,11 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
     private readonly BTreeIndex _edgeIndex;
     private readonly WriteAheadLog? _wal;
 
-    // In-memory caches for indices and metadata
-    private readonly Dictionary<string, HashSet<string>> _outgoingEdges; // nodeId -> edge IDs
-    private readonly Dictionary<string, HashSet<string>> _incomingEdges; // nodeId -> edge IDs
-    private readonly Dictionary<string, HashSet<string>> _nodesByLabel; // label -> node IDs
+    // In-memory caches for indices and metadata (thread-safe for concurrent async access)
+    private readonly ConcurrentDictionary<string, HashSet<string>> _outgoingEdges; // nodeId -> edge IDs
+    private readonly ConcurrentDictionary<string, HashSet<string>> _incomingEdges; // nodeId -> edge IDs
+    private readonly ConcurrentDictionary<string, HashSet<string>> _nodesByLabel; // label -> node IDs
+    private readonly object _cacheLock = new object(); // Lock for modifying HashSet contents
 
     private readonly JsonSerializerSettings _jsonSettings;
     private bool _disposed;
@@ -96,10 +98,10 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
         _nodeIndex = new BTreeIndex(Path.Combine(storageDirectory, "node_index.db"));
         _edgeIndex = new BTreeIndex(Path.Combine(storageDirectory, "edge_index.db"));
 
-        // Initialize in-memory structures
-        _outgoingEdges = new Dictionary<string, HashSet<string>>();
-        _incomingEdges = new Dictionary<string, HashSet<string>>();
-        _nodesByLabel = new Dictionary<string, HashSet<string>>();
+        // Initialize in-memory structures (thread-safe)
+        _outgoingEdges = new ConcurrentDictionary<string, HashSet<string>>();
+        _incomingEdges = new ConcurrentDictionary<string, HashSet<string>>();
+        _nodesByLabel = new ConcurrentDictionary<string, HashSet<string>>();
 
         _jsonSettings = new JsonSerializerSettings
         {
@@ -145,15 +147,15 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             // Update index
             _nodeIndex.Add(node.Id, offset);
 
-            // Update in-memory indices
-            if (!_nodesByLabel.ContainsKey(node.Label))
-                _nodesByLabel[node.Label] = new HashSet<string>();
-            _nodesByLabel[node.Label].Add(node.Id);
+            // Update in-memory indices (thread-safe)
+            lock (_cacheLock)
+            {
+                var labelSet = _nodesByLabel.GetOrAdd(node.Label, _ => new HashSet<string>());
+                labelSet.Add(node.Id);
 
-            if (!_outgoingEdges.ContainsKey(node.Id))
-                _outgoingEdges[node.Id] = new HashSet<string>();
-            if (!_incomingEdges.ContainsKey(node.Id))
-                _incomingEdges[node.Id] = new HashSet<string>();
+                _outgoingEdges.GetOrAdd(node.Id, _ => new HashSet<string>());
+                _incomingEdges.GetOrAdd(node.Id, _ => new HashSet<string>());
+            }
 
             // Flush indices periodically (every 100 operations for performance)
             if (_nodeIndex.Count % 100 == 0)
@@ -209,9 +211,14 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             // Update index
             _edgeIndex.Add(edge.Id, offset);
 
-            // Update in-memory edge indices
-            _outgoingEdges[edge.SourceId].Add(edge.Id);
-            _incomingEdges[edge.TargetId].Add(edge.Id);
+            // Update in-memory edge indices (thread-safe)
+            lock (_cacheLock)
+            {
+                if (_outgoingEdges.TryGetValue(edge.SourceId, out var outgoingSet))
+                    outgoingSet.Add(edge.Id);
+                if (_incomingEdges.TryGetValue(edge.TargetId, out var incomingSet))
+                    incomingSet.Add(edge.Id);
+            }
 
             // Flush indices periodically
             if (_edgeIndex.Count % 100 == 0)
@@ -338,32 +345,45 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             // Log to WAL first (durability)
             _wal?.LogRemoveNode(nodeId);
 
-            // Remove all outgoing edges
+            // Remove all outgoing edges (thread-safe)
             if (_outgoingEdges.TryGetValue(nodeId, out var outgoing))
             {
-                foreach (var edgeId in outgoing.ToList())
+                List<string> edgesToRemove;
+                lock (_cacheLock)
+                {
+                    edgesToRemove = outgoing.ToList();
+                }
+                foreach (var edgeId in edgesToRemove)
                 {
                     RemoveEdge(edgeId);
                 }
-                _outgoingEdges.Remove(nodeId);
+                _outgoingEdges.TryRemove(nodeId, out _);
             }
 
-            // Remove all incoming edges
+            // Remove all incoming edges (thread-safe)
             if (_incomingEdges.TryGetValue(nodeId, out var incoming))
             {
-                foreach (var edgeId in incoming.ToList())
+                List<string> edgesToRemove;
+                lock (_cacheLock)
+                {
+                    edgesToRemove = incoming.ToList();
+                }
+                foreach (var edgeId in edgesToRemove)
                 {
                     RemoveEdge(edgeId);
                 }
-                _incomingEdges.Remove(nodeId);
+                _incomingEdges.TryRemove(nodeId, out _);
             }
 
-            // Remove from label index
-            if (_nodesByLabel.TryGetValue(node.Label, out var nodeIds))
+            // Remove from label index (thread-safe)
+            lock (_cacheLock)
             {
-                nodeIds.Remove(nodeId);
-                if (nodeIds.Count == 0)
-                    _nodesByLabel.Remove(node.Label);
+                if (_nodesByLabel.TryGetValue(node.Label, out var nodeIds))
+                {
+                    nodeIds.Remove(nodeId);
+                    if (nodeIds.Count == 0)
+                        _nodesByLabel.TryRemove(node.Label, out _);
+                }
             }
 
             // Remove from node index (marks as deleted, actual data remains)
@@ -397,11 +417,14 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             // Log to WAL first (durability)
             _wal?.LogRemoveEdge(edgeId);
 
-            // Remove from in-memory indices
-            if (_outgoingEdges.TryGetValue(edge.SourceId, out var outgoing))
-                outgoing.Remove(edgeId);
-            if (_incomingEdges.TryGetValue(edge.TargetId, out var incoming))
-                incoming.Remove(edgeId);
+            // Remove from in-memory indices (thread-safe)
+            lock (_cacheLock)
+            {
+                if (_outgoingEdges.TryGetValue(edge.SourceId, out var outgoing))
+                    outgoing.Remove(edgeId);
+                if (_incomingEdges.TryGetValue(edge.TargetId, out var incoming))
+                    incoming.Remove(edgeId);
+            }
 
             // Remove from edge index
             _edgeIndex.Remove(edgeId);
@@ -425,7 +448,13 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
         if (!_outgoingEdges.TryGetValue(nodeId, out var edgeIds))
             return Enumerable.Empty<GraphEdge<T>>();
 
-        return edgeIds.Select(id => GetEdge(id)).Where(e => e != null).Cast<GraphEdge<T>>();
+        // Take snapshot of edge IDs under lock to avoid concurrent modification
+        List<string> snapshot;
+        lock (_cacheLock)
+        {
+            snapshot = edgeIds.ToList();
+        }
+        return snapshot.Select(id => GetEdge(id)).Where(e => e != null).Cast<GraphEdge<T>>();
     }
 
     /// <inheritdoc/>
@@ -434,7 +463,13 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
         if (!_incomingEdges.TryGetValue(nodeId, out var edgeIds))
             return Enumerable.Empty<GraphEdge<T>>();
 
-        return edgeIds.Select(id => GetEdge(id)).Where(e => e != null).Cast<GraphEdge<T>>();
+        // Take snapshot of edge IDs under lock to avoid concurrent modification
+        List<string> snapshot;
+        lock (_cacheLock)
+        {
+            snapshot = edgeIds.ToList();
+        }
+        return snapshot.Select(id => GetEdge(id)).Where(e => e != null).Cast<GraphEdge<T>>();
     }
 
     /// <inheritdoc/>
@@ -443,7 +478,13 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
         if (!_nodesByLabel.TryGetValue(label, out var nodeIds))
             return Enumerable.Empty<GraphNode<T>>();
 
-        return nodeIds.Select(id => GetNode(id)).Where(n => n != null).Cast<GraphNode<T>>();
+        // Take snapshot of node IDs under lock to avoid concurrent modification
+        List<string> snapshot;
+        lock (_cacheLock)
+        {
+            snapshot = nodeIds.ToList();
+        }
+        return snapshot.Select(id => GetNode(id)).Where(n => n != null).Cast<GraphNode<T>>();
     }
 
     /// <inheritdoc/>
@@ -502,28 +543,31 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
     {
         try
         {
-            // Rebuild node-related indices
+            // Rebuild node-related indices (thread-safe using GetOrAdd)
             foreach (var node in _nodeIndex.GetAllKeys().Select(GetNode).OfType<GraphNode<T>>())
             {
                 // Rebuild label index
-                if (!_nodesByLabel.ContainsKey(node.Label))
-                    _nodesByLabel[node.Label] = new HashSet<string>();
-                _nodesByLabel[node.Label].Add(node.Id);
+                var labelSet = _nodesByLabel.GetOrAdd(node.Label, _ => new HashSet<string>());
+                lock (_cacheLock)
+                {
+                    labelSet.Add(node.Id);
+                }
 
                 // Initialize edge indices
-                if (!_outgoingEdges.ContainsKey(node.Id))
-                    _outgoingEdges[node.Id] = new HashSet<string>();
-                if (!_incomingEdges.ContainsKey(node.Id))
-                    _incomingEdges[node.Id] = new HashSet<string>();
+                _outgoingEdges.GetOrAdd(node.Id, _ => new HashSet<string>());
+                _incomingEdges.GetOrAdd(node.Id, _ => new HashSet<string>());
             }
 
-            // Rebuild edge indices
+            // Rebuild edge indices (thread-safe)
             foreach (var edge in _edgeIndex.GetAllKeys().Select(GetEdge).OfType<GraphEdge<T>>())
             {
-                if (_outgoingEdges.TryGetValue(edge.SourceId, out var outgoingSet))
-                    outgoingSet.Add(edge.Id);
-                if (_incomingEdges.TryGetValue(edge.TargetId, out var incomingSet))
-                    incomingSet.Add(edge.Id);
+                lock (_cacheLock)
+                {
+                    if (_outgoingEdges.TryGetValue(edge.SourceId, out var outgoingSet))
+                        outgoingSet.Add(edge.Id);
+                    if (_incomingEdges.TryGetValue(edge.TargetId, out var incomingSet))
+                        incomingSet.Add(edge.Id);
+                }
             }
         }
         catch (IOException ex)
@@ -570,15 +614,15 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             // Update index
             _nodeIndex.Add(node.Id, offset);
 
-            // Update in-memory indices
-            if (!_nodesByLabel.ContainsKey(node.Label))
-                _nodesByLabel[node.Label] = new HashSet<string>();
-            _nodesByLabel[node.Label].Add(node.Id);
+            // Update in-memory indices (thread-safe)
+            lock (_cacheLock)
+            {
+                var labelSet = _nodesByLabel.GetOrAdd(node.Label, _ => new HashSet<string>());
+                labelSet.Add(node.Id);
 
-            if (!_outgoingEdges.ContainsKey(node.Id))
-                _outgoingEdges[node.Id] = new HashSet<string>();
-            if (!_incomingEdges.ContainsKey(node.Id))
-                _incomingEdges[node.Id] = new HashSet<string>();
+                _outgoingEdges.GetOrAdd(node.Id, _ => new HashSet<string>());
+                _incomingEdges.GetOrAdd(node.Id, _ => new HashSet<string>());
+            }
 
             // Flush indices periodically
             if (_nodeIndex.Count % 100 == 0)
@@ -634,9 +678,14 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             // Update index
             _edgeIndex.Add(edge.Id, offset);
 
-            // Update in-memory edge indices
-            _outgoingEdges[edge.SourceId].Add(edge.Id);
-            _incomingEdges[edge.TargetId].Add(edge.Id);
+            // Update in-memory edge indices (thread-safe)
+            lock (_cacheLock)
+            {
+                if (_outgoingEdges.TryGetValue(edge.SourceId, out var outgoingSet))
+                    outgoingSet.Add(edge.Id);
+                if (_incomingEdges.TryGetValue(edge.TargetId, out var incomingSet))
+                    incomingSet.Add(edge.Id);
+            }
 
             // Flush indices periodically
             if (_edgeIndex.Count % 100 == 0)
@@ -759,32 +808,45 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             // Log to WAL first (durability)
             _wal?.LogRemoveNode(nodeId);
 
-            // Remove all outgoing edges
+            // Remove all outgoing edges (thread-safe)
             if (_outgoingEdges.TryGetValue(nodeId, out var outgoing))
             {
-                foreach (var edgeId in outgoing.ToList())
+                List<string> edgesToRemove;
+                lock (_cacheLock)
+                {
+                    edgesToRemove = outgoing.ToList();
+                }
+                foreach (var edgeId in edgesToRemove)
                 {
                     await RemoveEdgeAsync(edgeId);
                 }
-                _outgoingEdges.Remove(nodeId);
+                _outgoingEdges.TryRemove(nodeId, out _);
             }
 
-            // Remove all incoming edges
+            // Remove all incoming edges (thread-safe)
             if (_incomingEdges.TryGetValue(nodeId, out var incoming))
             {
-                foreach (var edgeId in incoming.ToList())
+                List<string> edgesToRemove;
+                lock (_cacheLock)
+                {
+                    edgesToRemove = incoming.ToList();
+                }
+                foreach (var edgeId in edgesToRemove)
                 {
                     await RemoveEdgeAsync(edgeId);
                 }
-                _incomingEdges.Remove(nodeId);
+                _incomingEdges.TryRemove(nodeId, out _);
             }
 
-            // Remove from label index
-            if (_nodesByLabel.TryGetValue(node.Label, out var nodeIds))
+            // Remove from label index (thread-safe)
+            lock (_cacheLock)
             {
-                nodeIds.Remove(nodeId);
-                if (nodeIds.Count == 0)
-                    _nodesByLabel.Remove(node.Label);
+                if (_nodesByLabel.TryGetValue(node.Label, out var nodeIds))
+                {
+                    nodeIds.Remove(nodeId);
+                    if (nodeIds.Count == 0)
+                        _nodesByLabel.TryRemove(node.Label, out _);
+                }
             }
 
             // Remove from node index
