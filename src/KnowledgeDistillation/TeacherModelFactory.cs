@@ -95,7 +95,10 @@ public static class TeacherModelFactory<T>
         if (!outputDimension.HasValue)
             throw new ArgumentException("Output dimension is required for Pretrained teacher type");
 
-        return new PretrainedTeacherModel<T>(model.Predict, outputDimension.Value);
+        // Determine input dimension from model metadata if available, otherwise use output dimension as fallback
+        var metadata = model.GetModelMetadata();
+        int inputDim = metadata?.FeatureCount ?? outputDimension.Value;
+        return new PretrainedTeacherModel<T>(model.Predict, inputDim, outputDimension.Value);
     }
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreateTransformerTeacher(
@@ -107,7 +110,10 @@ public static class TeacherModelFactory<T>
         if (!outputDimension.HasValue)
             throw new ArgumentException("Output dimension is required for Transformer teacher type");
 
-        return new TransformerTeacherModel<T>(model.Predict, outputDimension.Value);
+        // Determine input dimension from model metadata if available, otherwise use output dimension as fallback
+        var metadata = model.GetModelMetadata();
+        int inputDim = metadata?.FeatureCount ?? outputDimension.Value;
+        return new TransformerTeacherModel<T>(model.Predict, inputDim, outputDimension.Value);
     }
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreateMultiModalTeacher(
@@ -160,11 +166,16 @@ public static class TeacherModelFactory<T>
             throw new ArgumentException("Output dimension is required for Online teacher type");
 
         // Online teacher needs forward and update functions
+        // Determine input dimension from model metadata if available
+        var metadata = model.GetModelMetadata();
+        int inputDim = metadata?.FeatureCount ?? outputDimension.Value;
+
         return new OnlineTeacherModel<T>(
             model.Predict,
-            (pred, target) => { }, // No-op update for now
+            inputDim,
             outputDimension.Value,
-            updateMode,
+            teacherUpdate: (pred, target) => { }, // No-op update for now
+            updateMode: updateMode,
             updateRate: updateRate);
     }
 

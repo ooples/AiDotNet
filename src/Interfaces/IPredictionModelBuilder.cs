@@ -563,6 +563,62 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator);
 
     /// <summary>
+    /// Configures an AutoML model for automatic machine learning optimization.
+    /// </summary>
+    /// <param name="autoMLModel">The AutoML model instance to use for hyperparameter search and model selection.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AutoML (Automated Machine Learning) automatically searches for the best
+    /// model and hyperparameters for your problem. Instead of manually trying different models and settings,
+    /// AutoML does this for you.
+    /// </para>
+    /// <para>
+    /// When you configure an AutoML model:
+    /// - The Build() method will run the AutoML search process
+    /// - AutoML will try different models and hyperparameters
+    /// - The best model found will be returned as your trained model
+    /// - You can configure search time limits, candidate models, and optimization metrics
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var autoML = new BayesianOptimizationAutoML&lt;double, double[][], double[]&gt;();
+    /// autoML.SetTimeLimit(TimeSpan.FromMinutes(30));
+    /// autoML.SetCandidateModels(new[] { ModelType.RandomForest, ModelType.GradientBoosting });
+    ///
+    /// var builder = new PredictionModelBuilder&lt;double, double[][], double[]&gt;()
+    ///     .ConfigureAutoML(autoML)
+    ///     .Build(trainingData, trainingLabels);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
+
+    /// <summary>
+    /// Configures the environment for reinforcement learning.
+    /// </summary>
+    /// <param name="environment">The RL environment to use for training.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> When training reinforcement learning agents, you need an environment
+    /// for the agent to interact with. This is like setting up a simulation or game for the agent
+    /// to learn from. Common environments include CartPole (balancing a pole), Atari games,
+    /// robotic simulations, etc.
+    ///
+    /// After configuring an environment, use BuildAsync(episodes) to train an RL agent.
+    ///
+    /// Example:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureEnvironment(new CartPoleEnvironment&lt;double&gt;())
+    ///     .ConfigureModel(new DQNAgent&lt;double&gt;())
+    ///     .BuildAsync(episodes: 1000);
+    /// </code>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureEnvironment(ReinforcementLearning.Interfaces.IEnvironment<T> environment);
+
+    /// <summary>
     /// Configures knowledge distillation for training a smaller student model from a larger teacher model.
     /// </summary>
     /// <remarks>
@@ -780,6 +836,162 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="config">The export configuration (optional, uses CPU/ONNX if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null);
+
+    /// <summary>
+    /// Enables GPU acceleration for training and inference with optional configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> GPU acceleration makes your model train 10-100x faster on large datasets
+    /// by using your graphics card (GPU) for parallel computation. It automatically uses GPU for large
+    /// operations and CPU for small ones, with zero code changes required.
+    /// </para>
+    /// <para>
+    /// Benefits:
+    /// - 10-100x faster training for large neural networks
+    /// - Automatic size-based routing (GPU for large ops, CPU for small)
+    /// - Supports NVIDIA (CUDA) and AMD/Intel (OpenCL) GPUs
+    /// - Automatic CPU fallback if GPU unavailable
+    /// - Works transparently with existing models
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Enable with defaults (recommended)
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureGpuAcceleration()
+    ///     .BuildAsync(data, labels);
+    ///
+    /// // Or with aggressive settings for high-end GPUs
+    /// builder.ConfigureGpuAcceleration(GpuAccelerationConfig.Aggressive());
+    ///
+    /// // Or CPU-only for debugging
+    /// builder.ConfigureGpuAcceleration(GpuAccelerationConfig.CpuOnly());
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="config">GPU acceleration configuration (optional, uses defaults if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureGpuAcceleration(GpuAccelerationConfig? config = null);
+
+    /// <summary>
+    /// Configures Just-In-Time (JIT) compilation for neural network forward and backward passes.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> JIT compilation is an optimization technique that converts your neural network's
+    /// operations into highly optimized native code at runtime, similar to how modern browsers optimize JavaScript.
+    /// </para>
+    /// <para>
+    /// Benefits:
+    /// - 2-10x faster inference through operation fusion and vectorization
+    /// - Reduced memory allocations during forward/backward passes
+    /// - Automatic optimization of computation graphs
+    /// - Zero code changes required - just enable the config
+    /// </para>
+    /// <para>
+    /// JIT compilation works by:
+    /// 1. Analyzing your neural network's computation graph
+    /// 2. Fusing compatible operations together (e.g., MatMul + Bias + ReLU)
+    /// 3. Generating optimized native code using System.Reflection.Emit
+    /// 4. Caching compiled code for subsequent runs
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Enable JIT with defaults (recommended)
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureJitCompilation()
+    ///     .BuildAsync(data, labels);
+    ///
+    /// // Or with custom settings
+    /// builder.ConfigureJitCompilation(new JitCompilationConfig
+    /// {
+    ///     Enabled = true,
+    ///     CompilerOptions = new JitCompilerOptions
+    ///     {
+    ///         EnableOperationFusion = true,
+    ///         EnableVectorization = true
+    ///     }
+    /// });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="config">JIT compilation configuration (optional, enables with defaults if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(AiDotNet.Configuration.JitCompilationConfig? config = null);
+
+    /// <summary>
+    /// Configures inference-time optimizations for faster predictions.
+    /// </summary>
+    /// <param name="config">Inference optimization configuration (optional, uses defaults if null).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Inference optimization makes your model's predictions faster and more efficient.
+    ///
+    /// Key features enabled:
+    /// - <b>KV Cache:</b> Speeds up transformer/attention models by 2-10x
+    /// - <b>Batching:</b> Groups predictions for higher throughput
+    /// - <b>Speculative Decoding:</b> Speeds up text generation by 1.5-3x
+    ///
+    /// Example:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, ...&gt;()
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
+    ///     .BuildAsync(x, y);
+    ///
+    /// // Or with custom settings:
+    /// var config = new InferenceOptimizationConfig
+    /// {
+    ///     EnableKVCache = true,
+    ///     MaxBatchSize = 64,
+    ///     EnableSpeculativeDecoding = true
+    /// };
+    ///
+    /// var result = await builder
+    ///     .ConfigureInferenceOptimizations(config)
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null);
+
+    /// <summary>
+    /// Configures mixed-precision training for faster neural network training with reduced memory usage.
+    /// </summary>
+    /// <param name="config">Mixed precision configuration (optional, uses defaults if null).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixed-precision training is a powerful optimization technique that uses
+    /// both 16-bit (half precision) and 32-bit (full precision) floating-point numbers during training.
+    /// This provides:
+    /// - **Up to 50% memory savings** allowing larger batch sizes or bigger models
+    /// - **2-3x faster training** on modern GPUs with Tensor Cores (NVIDIA Volta+)
+    /// - **Maintained accuracy** through careful precision management and loss scaling
+    ///
+    /// <b>Requirements:</b>
+    /// - Type parameter T must be float (FP32)
+    /// - Requires gradient-based optimizers (SGD, Adam, etc.)
+    /// - Best suited for neural networks with large parameter counts
+    ///
+    /// Example:
+    /// <code>
+    /// // Enable with default settings (recommended)
+    /// var result = await new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    ///     .ConfigureModel(network)
+    ///     .ConfigureOptimizer(optimizer)
+    ///     .ConfigureMixedPrecision()  // Enable mixed-precision
+    ///     .BuildAsync(trainingData, labels);
+    ///
+    /// // Or with custom configuration
+    /// builder.ConfigureMixedPrecision(MixedPrecisionConfig.Conservative());
+    /// </code>
+    /// </para>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null);
 
     /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.

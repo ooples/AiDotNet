@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -95,7 +97,7 @@ public class AddLayer<T> : LayerBase<T>
     /// // Create an AddLayer for combining two 28�28 feature maps with ReLU activation
     /// var addLayer = new AddLayer<float>(
     ///     new[] { new[] { 32, 28, 28, 64 }, new[] { 32, 28, 28, 64 } },
-    ///     new ReLU<float>()
+    ///     new ReLUActivation<float>()
     /// );
     /// ```
     /// 
@@ -307,11 +309,14 @@ public class AddLayer<T> : LayerBase<T>
         Tensor<T> gradientWithActivation;
         if (UsingVectorActivation && VectorActivation != null)
         {
-            gradientWithActivation = VectorActivation.Derivative(_lastOutput).Multiply(outputGradient);
+            // Use element-wise multiplication for gradient computation
+            gradientWithActivation = Tensor<T>.ElementwiseMultiply(VectorActivation.Derivative(_lastOutput), outputGradient);
         }
         else if (ScalarActivation != null)
         {
-            gradientWithActivation = _lastOutput.Transform((x, i) => NumOps.Multiply(ScalarActivation.Derivative(x), outputGradient[i]));
+            // Vectorized: compute activation derivatives and multiply element-wise
+            var derivatives = _lastOutput.Transform((x, i) => ScalarActivation.Derivative(x));
+            gradientWithActivation = Tensor<T>.ElementwiseMultiply(derivatives, outputGradient);
         }
         else
         {
@@ -509,6 +514,80 @@ public class AddLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to which input variable nodes should be added.</param>
+    /// <returns>The output computation node representing this layer's operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the activation function is not supported for JIT compilation.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representation of the addition operation that can be compiled
+    /// and optimized for efficient execution. The graph represents element-wise addition of multiple inputs
+    /// followed by optional activation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a reusable, optimized version of the layer for faster inference.
+    ///
+    /// For addition layers:
+    /// - Creates placeholder nodes for each input
+    /// - Chains addition operations together
+    /// - Applies the activation function to the result
+    /// - Returns a computation graph that can be executed efficiently
+    ///
+    /// This is used during inference to make predictions faster by pre-compiling the operations.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (!CanActivationBeJitted())
+        {
+            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax");
+        }
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create placeholder nodes for each input tensor
+        // AddLayer expects multiple inputs of the same shape
+        var input1Placeholder = new Tensor<T>(InputShape);
+        var input1Node = TensorOperations<T>.Variable(input1Placeholder, "input1");
+        inputNodes.Add(input1Node);
+
+        var input2Placeholder = new Tensor<T>(InputShape);
+        var input2Node = TensorOperations<T>.Variable(input2Placeholder, "input2");
+        inputNodes.Add(input2Node);
+
+        // Build computation graph: output = input1 + input2 + ... + inputN
+        var resultNode = TensorOperations<T>.Add(input1Node, input2Node);
+
+        // For simplicity, we support 2 inputs in JIT mode
+        // If more inputs are needed at runtime, they would be added iteratively
+
+        // Apply activation function using LayerBase helper
+        var activatedOutput = ApplyActivationToGraph(resultNode);
+
+        return activatedOutput;
+    }
+
+    /// <summary>
+    /// Gets whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>True if the activation function supports JIT compilation, false otherwise.</value>
+    /// <remarks>
+    /// <para>
+    /// Addition layers support JIT compilation as long as their activation function does.
+    /// The element-wise addition operation is straightforward to compile and optimize.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => CanActivationBeJitted();
+
+    /// <summary>
     /// Clears the layer's memory of previous inputs and outputs.
     /// </summary>
     /// <remarks>
@@ -519,18 +598,18 @@ public class AddLayer<T> : LayerBase<T>
     /// want to ensure the layer behaves deterministically.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory of previous calculations.
-    /// 
+    ///
     /// During training, the layer remembers the inputs and output from the last forward pass
     /// to help with backpropagation calculations. This method makes the layer "forget" those values.
-    /// 
+    ///
     /// You might need to reset state:
     /// - When starting a new batch of training data
     /// - Between training epochs
     /// - When switching from training to testing
     /// - When you want to ensure consistent behavior
-    /// 
+    ///
     /// For addition layers, this simply clears the saved input and output tensors.
-    /// 
+    ///
     /// This helps ensure that processing one batch doesn't accidentally affect
     /// the processing of the next batch.
     /// </para>

@@ -1,3 +1,5 @@
+
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -225,6 +227,10 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private LayerNormalizationLayer<T> _norm2;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -280,13 +286,13 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int sequenceLength = 1; // Default to 1
         _selfAttention = new MultiHeadAttentionLayer<T>(
-            sequenceLength, 
-            _embeddingSize, 
-            _numHeads, 
+            sequenceLength,
+            _embeddingSize,
+            _numHeads,
             new GELUActivation<T>() as IActivationFunction<T>);
-            
+
         _norm1 = new LayerNormalizationLayer<T>(_embeddingSize);
-        
+
         _feedForward = new FeedForwardLayer<T>(
             _embeddingSize,
             _feedForwardDim,
@@ -533,41 +539,19 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Collect parameters from all sublayers
+        // === Vectorized Parameter Concatenation (Phase B: US-GPU-015) ===
+        // Collect parameters from all sublayers and concatenate them
         var selfAttentionParams = _selfAttention.GetParameters();
         var norm1Params = _norm1.GetParameters();
         var feedForwardParams = _feedForward.GetParameters();
         var norm2Params = _norm2.GetParameters();
-    
-        // Calculate total parameter count
-        int totalParamCount = selfAttentionParams.Length + 
-                              norm1Params.Length + 
-                              feedForwardParams.Length + 
-                              norm2Params.Length;
-    
-        // Create a vector to hold all parameters
-        var parameters = new Vector<T>(totalParamCount);
-    
-        // Copy all parameters into the combined vector
-        int currentIndex = 0;
-    
-        // Copy self-attention parameters
-        for (int i = 0; i < selfAttentionParams.Length; i++)
-            parameters[currentIndex++] = selfAttentionParams[i];
-    
-        // Copy norm1 parameters
-        for (int i = 0; i < norm1Params.Length; i++)
-            parameters[currentIndex++] = norm1Params[i];
-    
-        // Copy feed-forward parameters
-        for (int i = 0; i < feedForwardParams.Length; i++)
-            parameters[currentIndex++] = feedForwardParams[i];
-    
-        // Copy norm2 parameters
-        for (int i = 0; i < norm2Params.Length; i++)
-            parameters[currentIndex++] = norm2Params[i];
-    
-        return parameters;
+
+        // Concatenate all parameter vectors at once
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(
+                Vector<T>.Concatenate(selfAttentionParams, norm1Params),
+                feedForwardParams),
+            norm2Params);
     }
 
     /// <summary>
@@ -655,7 +639,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Average the auxiliary losses if any were computed
         if (auxLayerCount > 0)
         {
-            totalAuxLoss = NumOps.Divide(totalAuxLoss, NumOps.FromDouble(auxLayerCount));
+            totalAuxLoss = NumericalStabilityHelper.SafeDiv(totalAuxLoss, NumOps.FromDouble(auxLayerCount));
         }
 
         _lastAuxiliaryLoss = totalAuxLoss;
@@ -731,5 +715,210 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return diagnostics;
+    }
+
+    /// <summary>
+    /// Exports the transformer encoder layer as a computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to which the input node will be added.</param>
+    /// <returns>The output computation node representing the transformer encoder operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates a symbolic computation graph for JIT compilation:
+    /// 1. Creates a symbolic input node
+    /// 2. Applies multi-head self-attention with residual connection and norm
+    /// 3. Applies feed-forward network with residual connection and norm
+    /// 4. Returns the final output
+    /// </para>
+    /// <para><b>For Beginners:</b> This method builds a symbolic representation of a transformer encoder layer for JIT.
+    ///
+    /// The transformer encoder layer is a composite layer combining:
+    /// - Multi-head self-attention (captures relationships between positions)
+    /// - Layer normalization (stabilizes training)
+    /// - Feed-forward network (processes each position independently)
+    /// - Residual connections (helps gradient flow in deep networks)
+    ///
+    /// The forward pass:
+    /// 1. x' = LayerNorm(x + MultiHeadAttention(x))
+    /// 2. output = LayerNorm(x' + FeedForward(x'))
+    ///
+    /// JIT optimization for composite layers:
+    /// - For now, composite layers note their structure but may delegate to sublayers
+    /// - Future optimization could fuse operations across sublayers
+    /// - Each sublayer (attention, feed-forward, norm) can be independently JIT compiled
+    ///
+    /// This is the core building block of BERT (12-24 encoder layers), GPT uses decoder layers.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when sublayers are not initialized.</exception>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured. Initialize the layer first.");
+
+        if (_selfAttention == null || _norm1 == null || _feedForward == null || _norm2 == null)
+            throw new InvalidOperationException("Sublayers not initialized. Initialize the layer first.");
+
+        // Create symbolic input node with batch dimension
+        // InputShape is [sequenceLength, embeddingDimension]
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "encoder_input");
+        inputNodes.Add(inputNode);
+
+        // Step 1: Self-attention sublayer using MultiHeadAttention operation
+        var attentionOut = ApplyMultiHeadAttentionGraph(_selfAttention, inputNode);
+
+        // Step 2: First residual connection: residual1 = input + attention_out
+        var residual1 = TensorOperations<T>.Add(inputNode, attentionOut);
+
+        // Step 3: First layer normalization
+        var normalized1 = ApplyLayerNormGraph(_norm1, residual1);
+
+        // Step 4: Feed-forward sublayer
+        var ffApplied = ApplyFeedForwardGraph(_feedForward, normalized1);
+
+        // Step 5: Second residual connection: residual2 = normalized1 + ff_out
+        var residual2 = TensorOperations<T>.Add(normalized1, ffApplied);
+
+        // Step 6: Second layer normalization
+        var output = ApplyLayerNormGraph(_norm2, residual2);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Applies multi-head attention graph to an input node.
+    /// </summary>
+    private ComputationNode<T> ApplyMultiHeadAttentionGraph(MultiHeadAttentionLayer<T> attentionLayer, ComputationNode<T> input)
+    {
+        // Get attention projection weights
+        var queryWeights = attentionLayer.GetQueryWeights();
+        var keyWeights = attentionLayer.GetKeyWeights();
+        var valueWeights = attentionLayer.GetValueWeights();
+        var outputWeights = attentionLayer.GetOutputWeights();
+
+        if (queryWeights == null || keyWeights == null || valueWeights == null || outputWeights == null)
+            throw new InvalidOperationException("Attention weights not initialized.");
+
+        // Create constant nodes for projection weights using Tensor.FromMatrix
+        var wqNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(queryWeights), "Wq");
+        var wkNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(keyWeights), "Wk");
+        var wvNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(valueWeights), "Wv");
+        var woNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(outputWeights), "Wo");
+
+        // Apply multi-head attention (self-attention: query, key, value all from same input)
+        return TensorOperations<T>.MultiHeadAttention(
+            query: input,
+            key: input,
+            value: input,
+            numHeads: attentionLayer.HeadCount,
+            wQ: wqNode,
+            wK: wkNode,
+            wV: wvNode,
+            wO: woNode);
+    }
+
+    /// <summary>
+    /// Applies layer normalization graph to an input node.
+    /// </summary>
+    private ComputationNode<T> ApplyLayerNormGraph(LayerNormalizationLayer<T> normLayer, ComputationNode<T> input)
+    {
+        // Get normalization parameters
+        var gamma = normLayer.GetGamma();
+        var beta = normLayer.GetBeta();
+        var normalizedShape = normLayer.GetNormalizedShape();
+        var epsilon = Convert.ToDouble(normLayer.GetEpsilon());
+
+        // Create constant nodes for gamma and beta
+        var gammaTensor = new Tensor<T>(new int[] { gamma.Length });
+        var betaTensor = new Tensor<T>(new int[] { beta.Length });
+        for (int i = 0; i < gamma.Length; i++)
+        {
+            gammaTensor[i] = gamma[i];
+            betaTensor[i] = beta[i];
+        }
+        var gammaNode = TensorOperations<T>.Constant(gammaTensor, "gamma");
+        var betaNode = TensorOperations<T>.Constant(betaTensor, "beta");
+
+        return TensorOperations<T>.LayerNorm(input, normalizedShape, gammaNode, betaNode, epsilon);
+    }
+
+    /// <summary>
+    /// Applies feed-forward graph to an input node.
+    /// </summary>
+    private ComputationNode<T> ApplyFeedForwardGraph(FeedForwardLayer<T> ffLayer, ComputationNode<T> input)
+    {
+        // Get feed-forward weights and biases directly as tensors
+        var weightsTensor = ffLayer.GetWeightsTensor();
+        var biasTensor = ffLayer.GetBiasesTensor();
+
+        if (weightsTensor == null || biasTensor == null)
+            throw new InvalidOperationException("Feed-forward layer weights not initialized.");
+
+        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "ff_weights");
+        var biasNode = TensorOperations<T>.Constant(biasTensor, "ff_bias");
+
+        // Linear transformation: output = input @ weights + bias
+        var weightsT = TensorOperations<T>.Transpose(weightsNode);
+        var linear = TensorOperations<T>.MatrixMultiply(input, weightsT);
+        var withBias = TensorOperations<T>.Add(linear, biasNode);
+
+        // Apply activation if present using the activation's own ApplyToGraph method
+        // This follows OCP - each activation knows how to export itself to a graph
+        var activation = ffLayer.ScalarActivation;
+        if (activation != null)
+        {
+            return activation.ApplyToGraph(withBias);
+        }
+
+        return withBias;
+    }
+
+    /// <summary>
+    /// Gets whether this transformer encoder layer supports JIT compilation.
+    /// </summary>
+    /// <value>True if all sublayers support JIT compilation.</value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the layer can be JIT compiled. As a composite layer,
+    /// it supports JIT if all its sublayers support JIT:
+    /// - Multi-head self-attention layer
+    /// - Layer normalization layers
+    /// - Feed-forward layer
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you if this composite layer can use JIT compilation.
+    ///
+    /// The transformer encoder layer can be JIT compiled if:
+    /// - All sublayers are properly initialized
+    /// - Each sublayer supports JIT compilation
+    ///
+    /// Composite layer JIT optimization:
+    /// - Each sublayer can be independently JIT compiled
+    /// - Future optimization: fuse operations across sublayers
+    /// - Residual connections and layer norms are fast operations
+    ///
+    /// The bottleneck in transformers is typically the attention mechanism (O(n²)),
+    /// which benefits most from JIT compilation. The feed-forward networks are also
+    /// computationally expensive (matrix multiplications).
+    ///
+    /// BERT and other transformers stack 12-24 of these encoder layers, so optimizing
+    /// each layer compounds to significant speedup for the full model.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            // TransformerEncoderLayer is a composite layer
+            // It supports JIT if all sublayers support JIT
+            return _selfAttention != null && _selfAttention.SupportsJitCompilation &&
+                   _norm1 != null && _norm1.SupportsJitCompilation &&
+                   _feedForward != null && _feedForward.SupportsJitCompilation &&
+                   _norm2 != null && _norm2.SupportsJitCompilation;
+        }
     }
 }

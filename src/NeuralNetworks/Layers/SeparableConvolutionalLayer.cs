@@ -1231,4 +1231,96 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         _pointwiseKernelsVelocity = null;
         _biasesVelocity = null;
     }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> when kernels are initialized and activation function supports JIT.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Separable convolutional layers support JIT compilation using DepthwiseConv2D and Conv2D
+    /// operations from TensorOperations. The layer performs depthwise convolution followed by
+    /// pointwise (1x1) convolution.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation =>
+        _depthwiseKernels != null && _pointwiseKernels != null && _biases != null &&
+        CanActivationBeJitted();
+
+    /// <summary>
+    /// Exports the separable convolutional layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the separable convolution output.</returns>
+    /// <remarks>
+    /// <para>
+    /// The separable convolution computation graph implements:
+    /// 1. Depthwise convolution: Applies separate filters to each input channel
+    /// 2. Pointwise convolution: 1x1 convolution to combine channels
+    /// 3. Activation function
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates an optimized version of the separable convolution.
+    /// It's more efficient than standard convolution by splitting the operation into two steps.
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_depthwiseKernels == null || _pointwiseKernels == null || _biases == null)
+            throw new InvalidOperationException("Kernels and biases not initialized.");
+
+        if (InputShape == null || InputShape.Length < 4)
+            throw new InvalidOperationException("Layer input shape not configured. Expected [batch, height, width, channels].");
+
+        // Validate activation can be JIT compiled
+        if (!CanActivationBeJitted())
+        {
+            var activationType = (ScalarActivation?.GetType() ?? VectorActivation?.GetType())?.Name ?? "Unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax, Identity");
+        }
+
+        // Create symbolic input node in NHWC format [batch, height, width, channels]
+        var symbolicInput = new Tensor<T>(new int[] { 1, InputShape[1], InputShape[2], InputShape[3] });
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "separable_input");
+        inputNodes.Add(inputNode);
+
+        // Convert depthwise kernels from [inputDepth, kernelSize, kernelSize, 1] to [inputDepth, 1, kernelSize, kernelSize]
+        var depthwiseKernelNCHW = ConvertDepthwiseKernelToNCHW(_depthwiseKernels);
+        var depthwiseKernelNode = Autodiff.TensorOperations<T>.Constant(depthwiseKernelNCHW, "depthwise_kernel");
+
+        // Convert pointwise kernels from [inputDepth, 1, 1, outputDepth] to [outputDepth, inputDepth, 1, 1]
+        var pointwiseKernelNCHW = ConvertPointwiseKernelToNCHW(_pointwiseKernels);
+        var pointwiseKernelNode = Autodiff.TensorOperations<T>.Constant(pointwiseKernelNCHW, "pointwise_kernel");
+
+        // Convert bias to tensor
+        var biasTensor = ConvertVectorToTensor(_biases);
+        var biasNode = Autodiff.TensorOperations<T>.Constant(biasTensor, "bias");
+
+        // Step 1: Depthwise convolution (no bias)
+        var depthwiseOutput = Autodiff.TensorOperations<T>.DepthwiseConv2D(
+            inputNode,
+            depthwiseKernelNode,
+            bias: null,
+            stride: new int[] { _stride, _stride },
+            padding: new int[] { _padding, _padding });
+
+        // Step 2: Pointwise convolution (1x1 conv with bias)
+        var pointwiseOutput = Autodiff.TensorOperations<T>.Conv2D(
+            depthwiseOutput,
+            pointwiseKernelNode,
+            biasNode,
+            stride: new int[] { 1, 1 },
+            padding: new int[] { 0, 0 });
+
+        // Step 3: Apply activation function using base class helper
+        var output = ApplyActivationToGraph(pointwiseOutput);
+
+        return output;
+    }
 }

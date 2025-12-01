@@ -1,4 +1,5 @@
 ﻿using AiDotNet.Examples;
+using AiDotNet.Prototypes;
 using AiDotNetTestConsole.Examples;
 
 namespace AiDotNetTestConsole;
@@ -15,9 +16,10 @@ class Program
         Console.WriteLine("4. Enhanced Regression Example (Real Estate Analysis)");
         Console.WriteLine("5. Enhanced Neural Network Example (Customer Churn Prediction)");
         Console.WriteLine("6. Enhanced Time Series Example (Energy Demand Forecasting)");
+        Console.WriteLine("7. Phase A GPU Acceleration Integration Tests");
         Console.WriteLine("0. Exit");
         Console.WriteLine();
-        Console.Write("Select an example to run (0-6): ");
+        Console.Write("Select an example to run (0-7): ");
 
         if (int.TryParse(Console.ReadLine(), out int choice))
         {
@@ -52,8 +54,13 @@ class Program
                     var enhancedTSExample = new EnhancedTimeSeriesExample();
                     await enhancedTSExample.RunExample();
                     break;
+                case 7:
+                    Console.WriteLine("Running Phase A GPU Acceleration Integration Tests...");
+                    Console.WriteLine();
+                    PrototypeIntegrationTests.RunAll();
+                    break;
                 default:
-                    Console.WriteLine("Invalid choice. Please select a number between 0 and 6.");
+                    Console.WriteLine("Invalid choice. Please select a number between 0 and 7.");
                     break;
             }
         }

@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Optimizers;
@@ -39,14 +39,17 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     /// <param name="numLevels">Number of frequency levels (k in the paper)</param>
     /// <param name="updateFrequencies">Update frequencies for each level (f1, f2, ..., fk)</param>
     /// <param name="learningRates">Learning rates per level</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     public ContinuumMemorySystemLayer(
         int[] inputShape,
         int hiddenDim,
         int numFrequencyLevels = 3,
         int[]? updateFrequencies = null,
-        T[]? learningRates = null)
+        T[]? learningRates = null,
+        IEngine? engine = null)
         : base(inputShape, new[] { hiddenDim })
     {
+
         // Validate inputs
         if (inputShape == null || inputShape.Length == 0)
             throw new ArgumentException("Input shape cannot be null or empty", nameof(inputShape));
@@ -206,7 +209,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 
             gradient = _mlpBlocks[level].Backward(gradient);
 
-            // Accumulate gradients for this level
+            // === Vectorized Gradient Accumulation using IEngine (Phase B: US-GPU-015) ===
             // Equation 31: θ^(fℓ)_{i+1} = θ^(fℓ)_i - Σ η^(ℓ)_t f(θ^(fℓ)_t; xt) if i ≡ 0 (mod C(ℓ))
             var mlpGradient = _mlpBlocks[level].GetParameterGradients();
             if (mlpGradient != null && mlpGradient.Length > 0)
@@ -217,12 +220,8 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
                         $"Gradient length mismatch at level {level}: expected {_accumulatedGradients[level].Length}, got {mlpGradient.Length}");
                 }
 
-                for (int i = 0; i < mlpGradient.Length; i++)
-                {
-                    _accumulatedGradients[level][i] = _numOps.Add(
-                        _accumulatedGradients[level][i],
-                        mlpGradient[i]);
-                }
+                // Vectorized: accumulatedGrad = accumulatedGrad + gradient
+                _accumulatedGradients[level] = (Vector<T>)Engine.Add(_accumulatedGradients[level], mlpGradient);
             }
 
             _stepCounters[level]++;
@@ -280,7 +279,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
                 // Let the DenseLayer use its own autodiff implementation
                 gradient = _mlpBlocks[level].Backward(gradient);
 
-                // Accumulate gradients for this level
+                // === Vectorized Gradient Accumulation using IEngine (Phase B: US-GPU-015) ===
                 var mlpGradient = _mlpBlocks[level].GetParameterGradients();
                 if (mlpGradient != null && mlpGradient.Length > 0)
                 {
@@ -290,12 +289,8 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
                             $"Gradient length mismatch at level {level}: expected {_accumulatedGradients[level].Length}, got {mlpGradient.Length}");
                     }
 
-                    for (int i = 0; i < mlpGradient.Length; i++)
-                    {
-                        _accumulatedGradients[level][i] = _numOps.Add(
-                            _accumulatedGradients[level][i],
-                            mlpGradient[i]);
-                    }
+                    // Vectorized: accumulatedGrad = accumulatedGrad + gradient
+                    _accumulatedGradients[level] = (Vector<T>)Engine.Add(_accumulatedGradients[level], mlpGradient);
                 }
 
                 _stepCounters[level]++;
@@ -356,15 +351,10 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         }
         else
         {
-            // Fallback to standard gradient descent
-            var updated = new Vector<T>(currentParams.Length);
-
-            for (int i = 0; i < currentParams.Length; i++)
-            {
-                // θ^(fℓ)_{i+1} = θ^(fℓ)_i - η^(ℓ) * Σ gradients
-                T update = _numOps.Multiply(_accumulatedGradients[level][i], learningRate);
-                updated[i] = _numOps.Subtract(currentParams[i], update);
-            }
+            // === Vectorized Standard Gradient Descent using IEngine (Phase B: US-GPU-015) ===
+            // θ^(fℓ)_{i+1} = θ^(fℓ)_i - η^(ℓ) * Σ gradients
+            var scaledGrad = (Vector<T>)Engine.Multiply(_accumulatedGradients[level], learningRate);
+            var updated = (Vector<T>)Engine.Subtract(currentParams, scaledGrad);
 
             _mlpBlocks[level].SetParameters(updated);
         }
@@ -397,23 +387,40 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             if (slowParams == null || slowParams.Length == 0)
                 throw new InvalidOperationException($"Slow MLP at level {i + 1} has no parameters");
 
+            // === Vectorized Memory Consolidation using IEngine (Phase B: US-GPU-015) ===
             int minLen = Math.Min(fastParams.Length, slowParams.Length);
             T transferRate = _numOps.FromDouble(0.01);
             T oneMinusTransfer = _numOps.Subtract(_numOps.One, transferRate);
 
             var consolidated = new Vector<T>(slowParams.Length);
-            for (int j = 0; j < slowParams.Length; j++)
+
+            if (minLen > 0)
             {
-                if (j < minLen)
+                // Extract overlapping portions
+                var slowOverlap = new Vector<T>(minLen);
+                var fastOverlap = new Vector<T>(minLen);
+                for (int j = 0; j < minLen; j++)
                 {
-                    T slow = _numOps.Multiply(slowParams[j], oneMinusTransfer);
-                    T fast = _numOps.Multiply(fastParams[j], transferRate);
-                    consolidated[j] = _numOps.Add(slow, fast);
+                    slowOverlap[j] = slowParams[j];
+                    fastOverlap[j] = fastParams[j];
                 }
-                else
+
+                // Vectorized: consolidated = slow * (1 - rate) + fast * rate
+                var slowScaled = (Vector<T>)Engine.Multiply(slowOverlap, oneMinusTransfer);
+                var fastScaled = (Vector<T>)Engine.Multiply(fastOverlap, transferRate);
+                var consolidatedOverlap = (Vector<T>)Engine.Add(slowScaled, fastScaled);
+
+                // Copy back
+                for (int j = 0; j < minLen; j++)
                 {
-                    consolidated[j] = slowParams[j];
+                    consolidated[j] = consolidatedOverlap[j];
                 }
+            }
+
+            // Copy remaining slow parameters
+            for (int j = minLen; j < slowParams.Length; j++)
+            {
+                consolidated[j] = slowParams[j];
             }
 
             _mlpBlocks[i + 1].SetParameters(consolidated);
@@ -629,4 +636,47 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             _accumulatedGradients[i] = new Vector<T>(_accumulatedGradients[i].Length);
         }
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
+            throw new InvalidOperationException("MLP blocks are not initialized.");
+
+        // ContinuumMemorySystemLayer is a chain of DenseLayer (MLP) blocks
+        // Since DenseLayer supports JIT compilation, we can chain them together
+        // The update frequencies are only relevant during training, not inference
+
+        var current = inputNodes[0];
+
+        // Chain through all MLP blocks: yt = MLP^(fk)(MLP^(fk-1)(...MLP^(f1)(xt)))
+        for (int level = 0; level < _mlpBlocks.Length; level++)
+        {
+            if (_mlpBlocks[level] == null)
+                throw new InvalidOperationException($"MLP block at level {level} is null.");
+
+            current = _mlpBlocks[level].ExportComputationGraph([current]);
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> because ContinuumMemorySystemLayer is a chain of DenseLayer blocks,
+    /// each of which supports JIT compilation. The update frequency logic is only used
+    /// during training and does not affect inference.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
+
 }

@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -125,13 +127,7 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     private Vector<T> ApplyWindowFunction(Vector<T> signal)
     {
         var window = _spectralOptions.WindowFunction.Create(signal.Length);
-        Vector<T> windowedSignal = new Vector<T>(signal.Length);
-        for (int i = 0; i < signal.Length; i++)
-        {
-            windowedSignal[i] = NumOps.Multiply(signal[i], window[i]);
-        }
-
-        return windowedSignal;
+        return (Vector<T>)Engine.Multiply(signal, window);
     }
 
     /// <summary>
@@ -498,14 +494,14 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         T sinValue;
         if (NumOps.LessThan(angle, NumOps.FromDouble(Math.PI)))
         {
-            // Use sin(x) ˜ x - x³/6 for small x
+            // Use sin(x) ï¿½ x - xï¿½/6 for small x
             if (NumOps.LessThan(angle, NumOps.FromDouble(Math.PI / 2)))
             {
                 T xSquared = NumOps.Multiply(angle, angle);
                 T xCubed = NumOps.Multiply(xSquared, angle);
                 sinValue = NumOps.Subtract(angle, NumOps.Divide(xCubed, NumOps.FromDouble(6)));
             }
-            // For x near p/2, use sin(x) ˜ 1 - (x - p/2)²/2
+            // For x near p/2, use sin(x) ï¿½ 1 - (x - p/2)ï¿½/2
             else
             {
                 T diff = NumOps.Subtract(angle, NumOps.FromDouble(Math.PI / 2));
@@ -663,5 +659,61 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     
         // Create a new instance with the copied options
         return new SpectralAnalysisModel<T>(newOptions);
+    }
+
+    /// <summary>
+    /// Gets whether this model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Returns <c>true</c> when the model has computed a periodogram.
+    /// Spectral analysis prediction simply returns the precomputed periodogram,
+    /// which can be efficiently exported as a constant tensor.
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> JIT compilation for spectral analysis is straightforward
+    /// because the "prediction" is just the precomputed periodogram. The FFT analysis
+    /// is done during training, and prediction just returns the result.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => _periodogram != null && _periodogram.Length > 1;
+
+    /// <summary>
+    /// Exports the Spectral Analysis Model as a computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">A list to which input nodes will be added (not used for spectral analysis).</param>
+    /// <returns>The output computation node containing the periodogram.</returns>
+    /// <remarks>
+    /// <para>
+    /// Since spectral analysis doesn't make traditional predictions but returns the computed
+    /// periodogram, the computation graph simply returns the precomputed periodogram as a constant.
+    /// </para>
+    /// <para><b>For Beginners:</b> Unlike other models that compute predictions from input,
+    /// spectral analysis just returns the frequency content it found in your data during training.
+    /// The JIT-compiled version returns this precomputed result efficiently.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+        {
+            throw new ArgumentNullException(nameof(inputNodes), "Input nodes list cannot be null.");
+        }
+
+        if (_periodogram == null || _periodogram.Length <= 1)
+        {
+            throw new InvalidOperationException("Cannot export computation graph: Periodogram has not been computed.");
+        }
+
+        // For spectral analysis, prediction just returns the periodogram
+        // No input is needed - we just return the precomputed result
+        var periodogramData = new T[_periodogram.Length];
+        for (int i = 0; i < _periodogram.Length; i++)
+        {
+            periodogramData[i] = _periodogram[i];
+        }
+        var periodogramTensor = new Tensor<T>(new[] { _periodogram.Length }, new Vector<T>(periodogramData));
+        var outputNode = TensorOperations<T>.Constant(periodogramTensor, "periodogram");
+
+        return outputNode;
     }
 }

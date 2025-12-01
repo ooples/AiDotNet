@@ -437,10 +437,8 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         InitializeMatrix(_localizationWeights1, scale);
         InitializeMatrix(_localizationWeights2, scale);
 
-        for (int i = 0; i < _localizationBias1.Length; i++)
-        {
-            _localizationBias1[i] = NumOps.Zero;
-        }
+        // VECTORIZED: Initialize bias vector to zero using Engine.FillZero
+        _localizationBias1 = Engine.FillZero<T>(_localizationBias1.Length);
 
         // Initialize the localization bias2 to represent identity transformation
         _localizationBias2[0] = NumOps.One;
@@ -469,11 +467,26 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeMatrix(Matrix<T> matrix, T scale)
     {
+        // VECTORIZED: Generate all random values at once, then scale via vector operation
+        int totalElements = matrix.Rows * matrix.Columns;
+        var randomVec = new Vector<T>(totalElements);
+
+        // Fill with random values in range [-0.5, 0.5]
+        for (int idx = 0; idx < totalElements; idx++)
+        {
+            randomVec[idx] = NumOps.FromDouble(Random.NextDouble() - 0.5);
+        }
+
+        // Vectorized multiply by scale
+        var scaledVec = Engine.Multiply(randomVec, scale);
+
+        // Copy back to matrix
+        int index = 0;
         for (int i = 0; i < matrix.Rows; i++)
         {
             for (int j = 0; j < matrix.Columns; j++)
             {
-                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+                matrix[i, j] = scaledVec[index++];
             }
         }
     }
@@ -626,14 +639,45 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T> GenerateOutputGrid()
     {
-        // Generate a grid of (x, y) coordinates for the output
+        // VECTORIZED: Generate a grid of (x, y) coordinates for the output
         var grid = new Tensor<T>([_outputHeight, _outputWidth, 2]);
+
+        // Pre-compute normalized coordinates for x and y dimensions
+        var xCoords = new T[_outputWidth];
+        var yCoords = new T[_outputHeight];
+
+        // Guard against division by zero when dimension is 1
+        for (int j = 0; j < _outputWidth; j++)
+        {
+            if (_outputWidth == 1)
+            {
+                xCoords[j] = NumOps.Zero; // Single pixel at center
+            }
+            else
+            {
+                xCoords[j] = NumOps.FromDouble((double)j / (_outputWidth - 1) * 2 - 1);
+            }
+        }
+
+        for (int i = 0; i < _outputHeight; i++)
+        {
+            if (_outputHeight == 1)
+            {
+                yCoords[i] = NumOps.Zero; // Single pixel at center
+            }
+            else
+            {
+                yCoords[i] = NumOps.FromDouble((double)i / (_outputHeight - 1) * 2 - 1);
+            }
+        }
+
+        // VECTORIZED: Set grid values using pre-computed coordinates
         for (int i = 0; i < _outputHeight; i++)
         {
             for (int j = 0; j < _outputWidth; j++)
             {
-                grid[i, j, 0] = NumOps.FromDouble((double)j / (_outputWidth - 1) * 2 - 1);
-                grid[i, j, 1] = NumOps.FromDouble((double)i / (_outputHeight - 1) * 2 - 1);
+                grid[i, j, 0] = xCoords[j];
+                grid[i, j, 1] = yCoords[i];
             }
         }
 
@@ -1461,4 +1505,83 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         return diagnostics;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_localizationWeights1 == null || _localizationBias1 == null ||
+            _localizationWeights2 == null || _localizationBias2 == null)
+            throw new InvalidOperationException("Layer not initialized. Call Initialize() first.");
+
+        // Create input node
+        var symbolicInput = new Tensor<T>(InputShape);
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Localization network: 2-layer fully connected network
+        // Layer 1: Flatten input and apply first fully connected layer
+        int batchSize = InputShape[0];
+        var flattenedShape = new int[] { batchSize, _inputHeight * _inputWidth };
+        var flattenedInput = Autodiff.TensorOperations<T>.Reshape(inputNode, flattenedShape);
+
+        // Convert weights and biases to tensors
+        var weights1Tensor = new Tensor<T>(new int[] { _localizationWeights1.Rows, _localizationWeights1.Columns });
+        for (int i = 0; i < _localizationWeights1.Rows; i++)
+            for (int j = 0; j < _localizationWeights1.Columns; j++)
+                weights1Tensor[i, j] = _localizationWeights1[i, j];
+        var weights1Node = Autodiff.TensorOperations<T>.Constant(weights1Tensor, "localization_weights1");
+
+        var bias1Tensor = new Tensor<T>(new int[] { _localizationBias1.Length });
+        for (int i = 0; i < _localizationBias1.Length; i++)
+            bias1Tensor[i] = _localizationBias1[i];
+        var bias1Node = Autodiff.TensorOperations<T>.Constant(bias1Tensor, "localization_bias1");
+
+        // First layer: MatMul + Add + Activation
+        var localization1 = Autodiff.TensorOperations<T>.MatrixMultiply(flattenedInput, weights1Node);
+        localization1 = Autodiff.TensorOperations<T>.Add(localization1, bias1Node);
+
+        // Apply activation function
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+            localization1 = ScalarActivation.ApplyToGraph(localization1);
+        else if (VectorActivation != null && VectorActivation.SupportsJitCompilation)
+            localization1 = VectorActivation.ApplyToGraph(localization1);
+        else
+            localization1 = Autodiff.TensorOperations<T>.Tanh(localization1);
+
+        // Layer 2: Second fully connected layer to get transformation parameters
+        var weights2Tensor = new Tensor<T>(new int[] { _localizationWeights2.Rows, _localizationWeights2.Columns });
+        for (int i = 0; i < _localizationWeights2.Rows; i++)
+            for (int j = 0; j < _localizationWeights2.Columns; j++)
+                weights2Tensor[i, j] = _localizationWeights2[i, j];
+        var weights2Node = Autodiff.TensorOperations<T>.Constant(weights2Tensor, "localization_weights2");
+
+        var bias2Tensor = new Tensor<T>(new int[] { _localizationBias2.Length });
+        for (int i = 0; i < _localizationBias2.Length; i++)
+            bias2Tensor[i] = _localizationBias2[i];
+        var bias2Node = Autodiff.TensorOperations<T>.Constant(bias2Tensor, "localization_bias2");
+
+        var transformationParams = Autodiff.TensorOperations<T>.MatrixMultiply(localization1, weights2Node);
+        transformationParams = Autodiff.TensorOperations<T>.Add(transformationParams, bias2Node);
+
+        // Reshape transformation parameters to [batch, 2, 3] for affine transformation matrix
+        var thetaShape = new int[] { batchSize, 2, 3 };
+        var thetaNode = Autodiff.TensorOperations<T>.Reshape(transformationParams, thetaShape);
+
+        // Generate sampling grid using AffineGrid
+        var gridNode = Autodiff.TensorOperations<T>.AffineGrid(thetaNode, _outputHeight, _outputWidth);
+
+        // Sample from input using GridSample
+        var outputNode = Autodiff.TensorOperations<T>.GridSample(inputNode, gridNode);
+
+        return outputNode;
+    }
+
+    public override bool SupportsJitCompilation => _localizationWeights1 != null && _localizationBias1 != null &&
+                                                     _localizationWeights2 != null && _localizationBias2 != null;
+
 }

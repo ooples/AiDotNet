@@ -586,7 +586,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     private Tensor<T> SampleBinaryStates(Tensor<T> activations)
     {
         var result = new Tensor<T>(activations.Shape);
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         
         for (int i = 0; i < activations.Length; i++)
         {
@@ -845,7 +845,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     public Tensor<T> GenerateSamples(int numSamples, int numSteps = 1000)
     {
         var samples = new Tensor<T>(new[] { numSamples, VisibleSize });
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         
         for (int s = 0; s < numSamples; s++)
         {

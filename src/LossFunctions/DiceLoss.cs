@@ -1,3 +1,5 @@
+
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -29,16 +31,10 @@ namespace AiDotNet.LossFunctions;
 public class DiceLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
-    /// Small value to prevent division by zero.
-    /// </summary>
-    private readonly T _epsilon;
-    
-    /// <summary>
     /// Initializes a new instance of the DiceLoss class.
     /// </summary>
     public DiceLoss()
     {
-        _epsilon = NumOps.FromDouble(1e-15);
     }
     
     /// <summary>
@@ -62,11 +58,12 @@ public class DiceLoss<T> : LossFunctionBase<T>
             sumActual = NumOps.Add(sumActual, actual[i]);
         }
         
-        // Add epsilon to prevent division by zero
-        T denominator = NumOps.Add(NumOps.Add(sumPredicted, sumActual), _epsilon);
-        T diceCoefficient = NumOps.Divide(
+        // Use NumericalStabilityHelper.SafeDiv to prevent division by zero
+        T denominator = NumOps.Add(sumPredicted, sumActual);
+        T diceCoefficient = NumericalStabilityHelper.SafeDiv(
             NumOps.Multiply(NumOps.FromDouble(2), intersection),
-            denominator
+            denominator,
+            NumericalStabilityHelper.SmallEpsilon
         );
         
         return NumOps.Subtract(NumOps.One, diceCoefficient);
@@ -94,17 +91,17 @@ public class DiceLoss<T> : LossFunctionBase<T>
             sumActual = NumOps.Add(sumActual, actual[i]);
         }
         
-        // Add epsilon to prevent division by zero
-        T denominator = NumOps.Add(NumOps.Power(NumOps.Add(sumPredicted, sumActual), NumOps.FromDouble(2)), _epsilon);
-        
+        // Use NumericalStabilityHelper.SafeDiv to prevent division by zero
+        T denominator = NumOps.Power(NumOps.Add(sumPredicted, sumActual), NumOps.FromDouble(2));
+
         for (int i = 0; i < predicted.Length; i++)
         {
             T numerator = NumOps.Subtract(
                 NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(actual[i], NumOps.Add(sumPredicted, sumActual))),
                 NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(intersection, NumOps.FromDouble(2)))
             );
-            
-            derivative[i] = NumOps.Divide(numerator, denominator);
+
+            derivative[i] = NumericalStabilityHelper.SafeDiv(numerator, denominator, NumericalStabilityHelper.SmallEpsilon);
         }
         
         return derivative;

@@ -505,17 +505,17 @@ public class FlattenLayer<T> : LayerBase<T>
     /// data or when switching between training and inference modes.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - The saved input is cleared
     /// - The layer forgets the previous data it processed
     /// - This frees up memory and prepares for new data
-    /// 
+    ///
     /// This is typically called:
     /// - Between training batches
     /// - When switching from training to evaluation mode
     /// - When starting to process completely new data
-    /// 
+    ///
     /// It's like wiping a whiteboard clean before starting a new calculation.
     /// </para>
     /// </remarks>
@@ -523,5 +523,45 @@ public class FlattenLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward pass
         _lastInput = null;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because flatten is a simple reshape operation that can be JIT compiled.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Exports the flatten layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the flattened result.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph for the flatten operation using a reshape node.
+    /// The flatten operation is equivalent to reshaping the input to [batchSize, product of dimensions].
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create placeholder for input data with symbolic batch dimension
+        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(_inputShape).ToArray());
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input");
+
+        inputNodes.Add(inputNode);
+
+        // Flatten is just a reshape operation: reshape to [batchSize, outputSize]
+        var flattenedShape = new int[] { -1, _outputSize }; // -1 means variable batch size
+        var outputNode = Autodiff.TensorOperations<T>.Reshape(inputNode, flattenedShape);
+
+        return outputNode;
     }
 }

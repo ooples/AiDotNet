@@ -1178,4 +1178,47 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         _kernelGradients = null;
         _biasGradients = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_kernels == null || _biases == null)
+            throw new InvalidOperationException("Layer weights not initialized.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        var kernelNode = TensorOperations<T>.Constant(_kernels, "kernel");
+        var biasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _outputDepth }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_biases.ToArray())), "bias");
+
+        var dilatedConvNode = TensorOperations<T>.DilatedConv2D(inputNode, kernelNode, biasNode,
+            stride: new[] { _stride, _stride }, padding: new[] { _padding, _padding }, dilation: new[] { _dilation, _dilation });
+
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+        {
+            return ScalarActivation.ApplyToGraph(dilatedConvNode);
+        }
+
+        return dilatedConvNode;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            if (_kernels == null || _biases == null)
+                return false;
+
+            if (ScalarActivation != null)
+                return ScalarActivation.SupportsJitCompilation;
+
+            return true;
+        }
+    }
 }

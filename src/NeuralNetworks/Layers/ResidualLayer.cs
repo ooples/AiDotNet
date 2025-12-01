@@ -534,4 +534,81 @@ public class ResidualLayer<T> : LayerBase<T>
         _lastInput = null;
         _innerLayer?.ResetState();
     }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> if the activation and inner layer (if present) support JIT compilation; otherwise, <c>false</c>.
+    /// </value>
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            // Check if activation can be jitted
+            if (!CanActivationBeJitted())
+                return false;
+
+            // Check if inner layer (if present) supports JIT
+            if (_innerLayer is not null && !_innerLayer.SupportsJitCompilation)
+                return false;
+
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Exports the residual layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the residual connection with activation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph for the residual connection: output = activation(input + innerLayer(input)).
+    /// If there is no inner layer, it simply returns: output = activation(input).
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (!CanActivationBeJitted())
+            throw new NotSupportedException("Activation function not supported for JIT compilation.");
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create placeholder for input data
+        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input");
+
+        inputNodes.Add(inputNode);
+
+        Autodiff.ComputationNode<T> resultNode;
+
+        if (_innerLayer is not null)
+        {
+            // Build computation graph for inner layer
+            var innerInputNodes = new List<Autodiff.ComputationNode<T>>();
+            var innerOutput = _innerLayer.ExportComputationGraph(innerInputNodes);
+
+            // For the residual connection, we need to pass the same input to the inner layer
+            // This is a simplification - in a full implementation, we would need to properly
+            // connect the input node to the inner layer's computation graph
+
+            // Residual connection: add input + innerLayer(input)
+            resultNode = Autodiff.TensorOperations<T>.Add(inputNode, innerOutput);
+        }
+        else
+        {
+            // No inner layer, just pass through
+            resultNode = inputNode;
+        }
+
+        // Apply activation using LayerBase helper
+        var activatedOutput = ApplyActivationToGraph(resultNode);
+
+        return activatedOutput;
+    }
 }

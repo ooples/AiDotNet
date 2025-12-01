@@ -662,4 +662,54 @@ public class ReadoutLayer<T> : LayerBase<T>
             _bias[i] = NumOps.Zero;
         }
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_weights == null || _bias == null)
+            throw new InvalidOperationException("Layer weights not initialized. Initialize the layer before compiling.");
+
+        // Create symbolic input
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Convert weights and bias to tensors
+        var weightsTensor = new Tensor<T>(new[] { _weights.Rows, _weights.Columns });
+        for (int i = 0; i < _weights.Rows; i++)
+            for (int j = 0; j < _weights.Columns; j++)
+                weightsTensor[i, j] = _weights[i, j];
+
+        var biasTensor = new Tensor<T>(new[] { _bias.Length });
+        for (int i = 0; i < _bias.Length; i++)
+            biasTensor[i] = _bias[i];
+
+        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "readout_weights");
+        var biasNode = TensorOperations<T>.Constant(biasTensor, "readout_bias");
+
+        // Compute output = weights * input + bias
+        var matmulNode = TensorOperations<T>.MatrixMultiply(weightsNode, inputNode);
+        var outputNode = TensorOperations<T>.Add(matmulNode, biasNode);
+
+        // Apply activation if specified
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+        {
+            outputNode = ScalarActivation.ApplyToGraph(outputNode);
+        }
+        else if (VectorActivation != null && VectorActivation.SupportsJitCompilation)
+        {
+            outputNode = VectorActivation.ApplyToGraph(outputNode);
+        }
+
+        return outputNode;
+    }
+
+    public override bool SupportsJitCompilation =>
+        _weights != null && _bias != null;
+
 }

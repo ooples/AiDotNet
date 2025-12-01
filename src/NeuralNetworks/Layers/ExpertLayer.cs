@@ -389,18 +389,13 @@ public class ExpertLayer<T> : LayerBase<T>
                 nameof(parameters));
         }
 
+        // === Vectorized Parameter Distribution (Phase B: US-GPU-015) ===
         int offset = 0;
         foreach (var layer in _layers.Where(l => l.ParameterCount > 0))
         {
             var layerParamCount = layer.ParameterCount;
-            var layerParams = new List<T>();
-
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                layerParams.Add(parameters[offset + i]);
-            }
-
-            layer.SetParameters(new Vector<T>(layerParams.ToArray()));
+            var layerParamsVec = parameters.Slice(offset, layerParamCount);
+            layer.SetParameters(layerParamsVec);
             offset += layerParamCount;
         }
     }
@@ -483,4 +478,47 @@ public class ExpertLayer<T> : LayerBase<T>
 
         return new ExpertLayer<T>(clonedLayers, InputShape, OutputShape, ScalarActivation);
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Check if all inner layers support JIT
+        foreach (var layer in _layers)
+        {
+            if (layer is LayerBase<T> layerBase && !layerBase.SupportsJitCompilation)
+                throw new InvalidOperationException($"Inner layer does not support JIT compilation.");
+        }
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Chain layers sequentially
+        var currentNode = inputNode;
+        foreach (var layer in _layers)
+        {
+            if (layer is LayerBase<T> layerBase)
+            {
+                var layerInputNodes = new List<ComputationNode<T>>();
+                currentNode = layerBase.ExportComputationGraph(layerInputNodes);
+            }
+        }
+
+        // Apply expert's activation function if specified
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+        {
+            currentNode = ScalarActivation.ApplyToGraph(currentNode);
+        }
+
+        return currentNode;
+    }
+
+    public override bool SupportsJitCompilation =>
+        _layers.All(l => l is LayerBase<T> layerBase && layerBase.SupportsJitCompilation);
+
 }

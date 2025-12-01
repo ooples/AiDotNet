@@ -565,4 +565,28 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         _projectionWeightsGradient = null;
         _projectionBiasGradient = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_projectionWeights == null || _projectionBias == null)
+            throw new InvalidOperationException("Layer weights not initialized.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        var weightsNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _projectionWeights.Rows, _projectionWeights.Columns }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_projectionWeights.ToArray())), "weights");
+        var biasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _projectionBias.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_projectionBias.ToArray())), "bias");
+
+        var output = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
+        return TensorOperations<T>.Add(output, biasNode);
+    }
+
+    public override bool SupportsJitCompilation => _projectionWeights != null && _projectionBias != null;
 }
