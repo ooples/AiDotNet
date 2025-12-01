@@ -30,23 +30,20 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         private GraphNode<double> CreateTestNode(string id, string label, Dictionary<string, object>? properties = null)
         {
-            return new GraphNode<double>
+            var node = new GraphNode<double>(id, label);
+            if (properties != null)
             {
-                Id = id,
-                Label = label,
-                Properties = properties ?? new Dictionary<string, object>()
-            };
+                foreach (var kvp in properties)
+                {
+                    node.SetProperty(kvp.Key, kvp.Value);
+                }
+            }
+            return node;
         }
 
         private GraphEdge<double> CreateTestEdge(string sourceId, string relationType, string targetId, double weight = 1.0)
         {
-            return new GraphEdge<double>
-            {
-                SourceId = sourceId,
-                RelationType = relationType,
-                TargetId = targetId,
-                Weight = weight
-            };
+            return new GraphEdge<double>(sourceId, targetId, relationType, weight);
         }
 
         #region Constructor Tests
@@ -584,8 +581,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Create graph with file storage
             using (var fileStore = new FileGraphStore<double>(storagePath))
-            using (var graph = new KnowledgeGraph<double>(fileStore))
             {
+                var graph = new KnowledgeGraph<double>(fileStore);
                 var alice = CreateTestNode("alice", "PERSON", new Dictionary<string, object> { { "name", "Alice" } });
                 var bob = CreateTestNode("bob", "PERSON", new Dictionary<string, object> { { "name", "Bob" } });
 
@@ -599,8 +596,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Reload with new KnowledgeGraph instance
             using (var fileStore = new FileGraphStore<double>(storagePath))
-            using (var graph = new KnowledgeGraph<double>(fileStore))
             {
+                var graph = new KnowledgeGraph<double>(fileStore);
                 // Assert - Data persisted
                 Assert.Equal(2, graph.NodeCount);
                 Assert.Equal(1, graph.EdgeCount);

@@ -12,23 +12,20 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
     {
         private GraphNode<double> CreateTestNode(string id, string label, Dictionary<string, object>? properties = null)
         {
-            return new GraphNode<double>
+            var node = new GraphNode<double>(id, label);
+            if (properties != null)
             {
-                Id = id,
-                Label = label,
-                Properties = properties ?? new Dictionary<string, object>()
-            };
+                foreach (var kvp in properties)
+                {
+                    node.SetProperty(kvp.Key, kvp.Value);
+                }
+            }
+            return node;
         }
 
         private GraphEdge<double> CreateTestEdge(string sourceId, string relationType, string targetId, double weight = 1.0)
         {
-            return new GraphEdge<double>
-            {
-                SourceId = sourceId,
-                RelationType = relationType,
-                TargetId = targetId,
-                Weight = weight
-            };
+            return new GraphEdge<double>(sourceId, targetId, relationType, weight);
         }
 
         #region Constructor Tests

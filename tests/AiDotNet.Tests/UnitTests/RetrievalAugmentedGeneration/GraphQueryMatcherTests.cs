@@ -19,105 +19,64 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             SetupTestData();
         }
 
+        private GraphNode<double> CreateNode(string id, string label, Dictionary<string, object>? properties = null)
+        {
+            var node = new GraphNode<double>(id, label);
+            if (properties != null)
+            {
+                foreach (var kvp in properties)
+                {
+                    node.SetProperty(kvp.Key, kvp.Value);
+                }
+            }
+            return node;
+        }
+
+        private GraphEdge<double> CreateEdge(string sourceId, string relationType, string targetId, double weight = 1.0)
+        {
+            return new GraphEdge<double>(sourceId, targetId, relationType, weight);
+        }
+
         private void SetupTestData()
         {
             // Create people
-            _graph.AddNode(new GraphNode<double>
+            _graph.AddNode(CreateNode("alice", "Person", new Dictionary<string, object>
             {
-                Id = "alice",
-                Label = "Person",
-                Properties = new Dictionary<string, object>
-                {
-                    { "name", "Alice" },
-                    { "age", 30 }
-                }
-            });
+                { "name", "Alice" },
+                { "age", 30 }
+            }));
 
-            _graph.AddNode(new GraphNode<double>
+            _graph.AddNode(CreateNode("bob", "Person", new Dictionary<string, object>
             {
-                Id = "bob",
-                Label = "Person",
-                Properties = new Dictionary<string, object>
-                {
-                    { "name", "Bob" },
-                    { "age", 35 }
-                }
-            });
+                { "name", "Bob" },
+                { "age", 35 }
+            }));
 
-            _graph.AddNode(new GraphNode<double>
+            _graph.AddNode(CreateNode("charlie", "Person", new Dictionary<string, object>
             {
-                Id = "charlie",
-                Label = "Person",
-                Properties = new Dictionary<string, object>
-                {
-                    { "name", "Charlie" },
-                    { "age", 28 }
-                }
-            });
+                { "name", "Charlie" },
+                { "age", 28 }
+            }));
 
             // Create companies
-            _graph.AddNode(new GraphNode<double>
+            _graph.AddNode(CreateNode("google", "Company", new Dictionary<string, object>
             {
-                Id = "google",
-                Label = "Company",
-                Properties = new Dictionary<string, object>
-                {
-                    { "name", "Google" },
-                    { "industry", "Tech" }
-                }
-            });
+                { "name", "Google" },
+                { "industry", "Tech" }
+            }));
 
-            _graph.AddNode(new GraphNode<double>
+            _graph.AddNode(CreateNode("microsoft", "Company", new Dictionary<string, object>
             {
-                Id = "microsoft",
-                Label = "Company",
-                Properties = new Dictionary<string, object>
-                {
-                    { "name", "Microsoft" },
-                    { "industry", "Tech" }
-                }
-            });
+                { "name", "Microsoft" },
+                { "industry", "Tech" }
+            }));
 
             // Create relationships
-            _graph.AddEdge(new GraphEdge<double>
-            {
-                SourceId = "alice",
-                RelationType = "KNOWS",
-                TargetId = "bob",
-                Weight = 1.0
-            });
-
-            _graph.AddEdge(new GraphEdge<double>
-            {
-                SourceId = "bob",
-                RelationType = "KNOWS",
-                TargetId = "charlie",
-                Weight = 1.0
-            });
-
-            _graph.AddEdge(new GraphEdge<double>
-            {
-                SourceId = "alice",
-                RelationType = "WORKS_AT",
-                TargetId = "google",
-                Weight = 1.0
-            });
-
-            _graph.AddEdge(new GraphEdge<double>
-            {
-                SourceId = "bob",
-                RelationType = "WORKS_AT",
-                TargetId = "microsoft",
-                Weight = 1.0
-            });
-
-            _graph.AddEdge(new GraphEdge<double>
-            {
-                SourceId = "charlie",
-                RelationType = "WORKS_AT",
-                TargetId = "google",
-                Weight = 1.0
-            });
+            _graph.AddEdge(CreateEdge("alice", "KNOWS", "bob"));
+            _graph.AddEdge(CreateEdge("bob", "KNOWS", "charlie"));
+            _graph.AddEdge(CreateEdge("alice", "WORKS_AT", "google"));
+            _graph.AddEdge(CreateEdge("bob", "WORKS_AT", "microsoft"));
+            _graph.AddEdge(CreateEdge("charlie", "WORKS_AT", "google"));
         }
 
         #region FindNodes Tests
@@ -398,12 +357,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         public void FindShortestPaths_NoConnection_ReturnsEmpty()
         {
             // Arrange - Add isolated node
-            _graph.AddNode(new GraphNode<double>
-            {
-                Id = "isolated",
-                Label = "Person",
-                Properties = new Dictionary<string, object> { { "name", "Isolated" } }
-            });
+            _graph.AddNode(CreateNode("isolated", "Person", new Dictionary<string, object> { { "name", "Isolated" } }));
 
             // Act
             var paths = _matcher.FindShortestPaths("alice", "isolated");
@@ -536,13 +490,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         public void FindPathsOfLength_ComplexGraph_FindsAllPaths()
         {
             // Arrange - Add more connections to create multiple paths
-            _graph.AddEdge(new GraphEdge<double>
-            {
-                SourceId = "alice",
-                RelationType = "KNOWS",
-                TargetId = "charlie",
-                Weight = 1.0
-            });
+            _graph.AddEdge(CreateEdge("alice", "KNOWS", "charlie"));
 
             // Act - Find 1-hop paths from Alice
             var paths = _matcher.FindPathsOfLength("alice", 1);

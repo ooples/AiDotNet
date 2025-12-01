@@ -24,23 +24,14 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
         private GraphNode<double> CreateTestNode(string id, string label)
         {
-            return new GraphNode<double>
-            {
-                Id = id,
-                Label = label,
-                Properties = new Dictionary<string, object> { { "name", $"Node {id}" } }
-            };
+            var node = new GraphNode<double>(id, label);
+            node.SetProperty("name", $"Node {id}");
+            return node;
         }
 
         private GraphEdge<double> CreateTestEdge(string sourceId, string relationType, string targetId)
         {
-            return new GraphEdge<double>
-            {
-                SourceId = sourceId,
-                RelationType = relationType,
-                TargetId = targetId,
-                Weight = 1.0
-            };
+            return new GraphEdge<double>(sourceId, targetId, relationType, 1.0);
         }
 
         #region Basic Transaction Tests
