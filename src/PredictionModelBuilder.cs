@@ -65,6 +65,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private KnowledgeDistillationOptions<T, TInput, TOutput>? _knowledgeDistillationOptions;
     private MixedPrecisionConfig? _mixedPrecisionConfig;
     private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig;
+    private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
     private ReinforcementLearning.Interfaces.IEnvironment<T>? _environment;
     private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
 
@@ -337,6 +338,47 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(AiDotNet.Configuration.JitCompilationConfig? config = null)
     {
         _jitCompilationConfig = config ?? new AiDotNet.Configuration.JitCompilationConfig { Enabled = true };
+        return this;
+    }
+
+    /// <summary>
+    /// Configures inference-time optimizations for faster predictions.
+    /// </summary>
+    /// <param name="config">Inference optimization configuration (optional, uses defaults if null).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Inference optimization makes your model's predictions faster and more efficient.
+    ///
+    /// Key features enabled:
+    /// - <b>KV Cache:</b> Speeds up transformer/attention models by 2-10x
+    /// - <b>Batching:</b> Groups predictions for higher throughput
+    /// - <b>Speculative Decoding:</b> Speeds up text generation by 1.5-3x
+    ///
+    /// Example:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, ...&gt;()
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
+    ///     .BuildAsync(x, y);
+    ///
+    /// // Or with custom settings:
+    /// var config = new InferenceOptimizationConfig
+    /// {
+    ///     EnableKVCache = true,
+    ///     MaxBatchSize = 64,
+    ///     EnableSpeculativeDecoding = true
+    /// };
+    /// 
+    /// var result = await builder
+    ///     .ConfigureInferenceOptimizations(config)
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null)
+    {
+        _inferenceOptimizationConfig = config ?? AiDotNet.Configuration.InferenceOptimizationConfig.Default;
         return this;
     }
 
@@ -874,7 +916,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _agentConfig,
             agentRecommendation,
             deploymentConfig,
-            jitCompiledFunction);
+            jitCompiledFunction,
+            _inferenceOptimizationConfig);
 
         return finalResult;
     }

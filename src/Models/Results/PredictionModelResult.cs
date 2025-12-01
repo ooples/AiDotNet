@@ -369,6 +369,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     [JsonIgnore]  // Don't serialize - will need to be recompiled after deserialization
     private Func<Tensor<T>[], Tensor<T>[]>? JitCompiledFunction { get; set; }
+    private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
@@ -439,7 +440,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         AgentConfiguration<T>? agentConfig = null,
         AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null,
         DeploymentConfiguration? deploymentConfiguration = null,
-        Func<Tensor<T>[], Tensor<T>[]>? jitCompiledFunction = null)
+        Func<Tensor<T>[], Tensor<T>[]>? jitCompiledFunction = null,
+        AiDotNet.Configuration.InferenceOptimizationConfig? inferenceOptimizationConfig = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
@@ -457,6 +459,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         AgentRecommendation = agentRecommendation;
         DeploymentConfiguration = deploymentConfiguration;
         JitCompiledFunction = jitCompiledFunction;
+        InferenceOptimizationConfig = inferenceOptimizationConfig;
     }
 
     /// <summary>
