@@ -260,6 +260,40 @@ public abstract class TensorBase<T>
     }
 
     /// <summary>
+    /// Gets the value at a flat (linear) index in the underlying data.
+    /// </summary>
+    /// <param name="flatIndex">The flat index (0 to Length-1).</param>
+    /// <returns>The value at the specified flat index.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This allows accessing tensor elements using a single
+    /// index that treats the tensor as a 1D array. The flat index corresponds to
+    /// row-major ordering where the last dimension varies fastest.</para>
+    /// </remarks>
+    public T GetFlat(int flatIndex)
+    {
+        if (flatIndex < 0 || flatIndex >= Length)
+            throw new ArgumentOutOfRangeException(nameof(flatIndex), "Flat index is out of range.");
+        return _data[flatIndex];
+    }
+
+    /// <summary>
+    /// Sets the value at a flat (linear) index in the underlying data.
+    /// </summary>
+    /// <param name="flatIndex">The flat index (0 to Length-1).</param>
+    /// <param name="value">The value to set.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This allows setting tensor elements using a single
+    /// index that treats the tensor as a 1D array. The flat index corresponds to
+    /// row-major ordering where the last dimension varies fastest.</para>
+    /// </remarks>
+    public void SetFlat(int flatIndex, T value)
+    {
+        if (flatIndex < 0 || flatIndex >= Length)
+            throw new ArgumentOutOfRangeException(nameof(flatIndex), "Flat index is out of range.");
+        _data[flatIndex] = value;
+    }
+
+    /// <summary>
     /// Returns a string representation of the tensor.
     /// </summary>
     /// <returns>A string representation of the tensor.</returns>

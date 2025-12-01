@@ -691,4 +691,75 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         _convWeightsGradient = null;
         _convBiasGradient = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_convWeights == null || _convBias == null)
+            throw new InvalidOperationException("Layer not initialized. Call Initialize() first.");
+
+        // Create input node - expecting [batch, height, width, channels]
+        var symbolicInput = new Tensor<T>(InputShape);
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Reshape convolution weights from Matrix to Conv2D format
+        // Current: Matrix [capsuleChannels * capsuleDimension, inputChannels * kernelSize * kernelSize]
+        // Need: Tensor [kernelSize, kernelSize, inputChannels, capsuleChannels * capsuleDimension]
+        int totalOutputChannels = _capsuleChannels * _capsuleDimension;
+        var convWeightsTensor = new Tensor<T>(new int[] { _kernelSize, _kernelSize, _inputChannels, totalOutputChannels });
+
+        // Reshape the matrix weights to Conv2D format
+        for (int outCh = 0; outCh < totalOutputChannels; outCh++)
+        {
+            for (int inCh = 0; inCh < _inputChannels; inCh++)
+            {
+                for (int kh = 0; kh < _kernelSize; kh++)
+                {
+                    for (int kw = 0; kw < _kernelSize; kw++)
+                    {
+                        int matrixCol = inCh * _kernelSize * _kernelSize + kh * _kernelSize + kw;
+                        convWeightsTensor[kh, kw, inCh, outCh] = _convWeights[outCh, matrixCol];
+                    }
+                }
+            }
+        }
+        var weightsNode = Autodiff.TensorOperations<T>.Constant(convWeightsTensor, "conv_weights");
+
+        // Convert bias vector to tensor
+        var biasTensor = new Tensor<T>(new int[] { totalOutputChannels });
+        for (int i = 0; i < _convBias.Length; i++)
+            biasTensor[i] = _convBias[i];
+        var biasNode = Autodiff.TensorOperations<T>.Constant(biasTensor, "conv_bias");
+
+        // Apply convolution: [batch, height, width, channels] -> [batch, outH, outW, totalOutputChannels]
+        var convOutput = Autodiff.TensorOperations<T>.Conv2D(inputNode, weightsNode, biasNode, new[] { _stride, _stride }, padding: new[] { 0, 0 });
+
+        // Reshape to separate capsules: [batch, outH, outW, totalOutputChannels]
+        // -> [batch, outH, outW, capsuleChannels, capsuleDimension]
+        int batchSize = InputShape[0];
+        int inputHeight = InputShape[1];
+        int inputWidth = InputShape[2];
+        int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
+        int outputWidth = (inputWidth - _kernelSize) / _stride + 1;
+
+        var reshapedOutput = Autodiff.TensorOperations<T>.Reshape(
+            convOutput,
+            new int[] { batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension }
+        );
+
+        // Apply Squash activation to each capsule vector (along the last dimension)
+        // The Squash operation scales the length of each capsule vector to [0, 1)
+        var output = Autodiff.TensorOperations<T>.Squash(reshapedOutput);
+
+        return output;
+    }
+
+    public override bool SupportsJitCompilation => _convWeights != null && _convBias != null;
+
 }

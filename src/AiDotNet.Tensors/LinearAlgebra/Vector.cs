@@ -1,5 +1,9 @@
 global using System.Collections;
 
+#if NET6_0_OR_GREATER
+using System.Runtime.Intrinsics.X86;
+using System.Runtime.Intrinsics.Arm;
+#endif
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tensors.LinearAlgebra;
@@ -15,6 +19,110 @@ namespace AiDotNet.Tensors.LinearAlgebra;
 /// </remarks>
 public class Vector<T> : VectorBase<T>, IEnumerable<T>
 {
+    /// <summary>
+    /// Gets whether CPU SIMD acceleration is available for vector operations.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> SIMD (Single Instruction Multiple Data) allows the CPU
+    /// to perform the same operation on multiple values simultaneously.
+    ///
+    /// When IsCpuAccelerated is true, operations like Add, Multiply, etc. can be
+    /// hardware-accelerated using instructions like SSE, AVX, or NEON, making them
+    /// significantly faster.
+    /// </para>
+    /// </remarks>
+    public static bool IsCpuAccelerated => DetectCpuAcceleration();
+
+    /// <summary>
+    /// Gets whether GPU acceleration is available for vector operations.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> GPU acceleration uses the graphics card to perform
+    /// many calculations in parallel, which can be much faster than CPU for large datasets.
+    ///
+    /// When IsGpuAccelerated is true, large vector operations may be offloaded to the GPU.
+    /// </para>
+    /// </remarks>
+    public static bool IsGpuAccelerated => MathHelper.SupportsGpuAcceleration<T>();
+
+    /// <summary>
+    /// Gets the number of elements that fit in a SIMD register for the current type.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This tells you how many numbers can be processed
+    /// at once using SIMD instructions. For example, with AVX and float, this is typically 8
+    /// (256 bits / 32 bits per float = 8 floats).
+    /// </para>
+    /// </remarks>
+    public static int SimdVectorCount => GetSimdVectorCount();
+
+    /// <summary>
+    /// Detects whether CPU SIMD acceleration is available.
+    /// </summary>
+    private static bool DetectCpuAcceleration()
+    {
+        // Check for type-specific CPU acceleration support
+        if (!MathHelper.SupportsCpuAcceleration<T>())
+            return false;
+
+#if NET6_0_OR_GREATER
+        // Check for actual hardware SIMD support
+        return Sse.IsSupported || AdvSimd.IsSupported;
+#else
+        // .NET Framework doesn't have hardware intrinsics
+        return false;
+#endif
+    }
+
+    /// <summary>
+    /// Gets the SIMD vector count based on hardware capabilities and type size.
+    /// </summary>
+    private static int GetSimdVectorCount()
+    {
+        if (!IsCpuAccelerated)
+            return 1;
+
+        var typeSize = GetTypeSizeInBytes();
+        if (typeSize == 0)
+            return 1;
+
+#if NET6_0_OR_GREATER
+        // Determine max vector width in bytes based on hardware
+        int maxVectorWidth;
+        if (Avx512F.IsSupported)
+            maxVectorWidth = 64; // 512 bits
+        else if (Avx.IsSupported)
+            maxVectorWidth = 32; // 256 bits
+        else if (Sse.IsSupported || AdvSimd.IsSupported)
+            maxVectorWidth = 16; // 128 bits
+        else
+            return 1;
+
+        return maxVectorWidth / typeSize;
+#else
+        // .NET Framework doesn't have hardware intrinsics
+        return 1;
+#endif
+    }
+
+    /// <summary>
+    /// Gets the size in bytes of the element type T.
+    /// </summary>
+    private static int GetTypeSizeInBytes()
+    {
+        return typeof(T) switch
+        {
+            var t when t == typeof(float) => sizeof(float),
+            var t when t == typeof(double) => sizeof(double),
+            var t when t == typeof(int) => sizeof(int),
+            var t when t == typeof(long) => sizeof(long),
+            var t when t == typeof(short) => sizeof(short),
+            var t when t == typeof(byte) => sizeof(byte),
+            var t when t == typeof(Half) => 2,
+            _ => 0
+        };
+    }
+
     /// <summary>
     /// Initializes a new instance of the Vector class with the specified length.
     /// </summary>
@@ -660,7 +768,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
         if (min >= max)
             throw new ArgumentException("Minimum value must be less than maximum value");
         
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         var vector = new Vector<T>(size);
     
         for (int i = 0; i < size; i++)

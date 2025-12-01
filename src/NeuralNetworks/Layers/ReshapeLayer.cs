@@ -127,6 +127,15 @@ public class ReshapeLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Gets the target shape for the reshape operation.
+    /// </summary>
+    /// <returns>The target shape array (excluding batch dimension).</returns>
+    public int[] GetTargetShape()
+    {
+        return _outputShape;
+    }
+
+    /// <summary>
     /// Performs the forward pass of the reshape layer.
     /// </summary>
     /// <param name="input">The input tensor to reshape.</param>
@@ -485,5 +494,47 @@ public class ReshapeLayer<T> : LayerBase<T>
 
             indices[i] = 0;
         }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because reshape is a simple reshape operation that can be JIT compiled.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Exports the reshape layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the reshaped result.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph for the reshape operation using a reshape node.
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (OutputShape == null || OutputShape.Length == 0)
+            throw new InvalidOperationException("Layer output shape not configured.");
+
+        // Create placeholder for input data with symbolic batch dimension
+        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(_inputShape).ToArray());
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input");
+
+        inputNodes.Add(inputNode);
+
+        // Reshape operation: reshape to target shape
+        var targetShape = new int[] { -1 }.Concat(_outputShape).ToArray(); // -1 means variable batch size
+        var outputNode = Autodiff.TensorOperations<T>.Reshape(inputNode, targetShape);
+
+        return outputNode;
     }
 }

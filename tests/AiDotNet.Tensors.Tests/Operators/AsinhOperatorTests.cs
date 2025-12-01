@@ -95,8 +95,8 @@ namespace AiDotNet.Tensors.Tests.Operators
             double result = Math.Log(input + Math.Sqrt(input * input + 1.0));
 #endif
 
-            // Assert - asinh(100) should be approximately ln(200)
-            double expected = Math.Log(200.0);
+            // Assert - asinh(100) = ln(100 + sqrt(100^2 + 1)) ≈ ln(200.005)
+            double expected = Math.Log(100.0 + Math.Sqrt(100.0 * 100.0 + 1.0));
             Assert.Equal(expected, result, DoubleTolerance);
         }
 

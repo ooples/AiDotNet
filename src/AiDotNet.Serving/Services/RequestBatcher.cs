@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Serving.Batching;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
@@ -92,12 +92,17 @@ public class RequestBatcher : IRequestBatcher, IDisposable
     /// </summary>
     private IBatchingStrategy CreateBatchingStrategy()
     {
-        return _options.BatchingStrategy?.ToLower() switch
+        return _options.BatchingStrategy switch
         {
-            "timeout" => new TimeoutBatchingStrategy(_options.BatchingWindowMs, _options.MaxBatchSize),
-            "size" => new SizeBatchingStrategy(_options.MaxBatchSize, _options.BatchingWindowMs),
-            "bucket" => new BucketBatchingStrategy(_options.BucketSizes, _options.MaxBatchSize, _options.BatchingWindowMs),
-            "adaptive" => new AdaptiveBatchingStrategy(
+            BatchingStrategyType.Timeout => new TimeoutBatchingStrategy(_options.BatchingWindowMs, _options.MaxBatchSize),
+            BatchingStrategyType.Size => new SizeBatchingStrategy(_options.MaxBatchSize, _options.BatchingWindowMs),
+            BatchingStrategyType.Bucket => new BucketBatchingStrategy(_options.BucketSizes, _options.MaxBatchSize, _options.BatchingWindowMs),
+            BatchingStrategyType.Continuous => new ContinuousBatchingStrategy(
+                _options.MaxBatchSize,
+                Math.Max(1, _options.BatchingWindowMs / 10),
+                _options.TargetLatencyMs,
+                _options.AdaptiveBatchSize),
+            BatchingStrategyType.Adaptive => new AdaptiveBatchingStrategy(
                 _options.MinBatchSize,
                 _options.MaxBatchSize,
                 _options.BatchingWindowMs,
@@ -117,11 +122,11 @@ public class RequestBatcher : IRequestBatcher, IDisposable
     /// </summary>
     private IPaddingStrategy CreatePaddingStrategy()
     {
-        return _options.PaddingStrategy?.ToLower() switch
+        return _options.PaddingStrategy switch
         {
-            "bucket" => new BucketPaddingStrategy(_options.BucketSizes),
-            "fixed" => new FixedSizePaddingStrategy(_options.FixedPaddingSize),
-            "minimal" => new MinimalPaddingStrategy(),
+            PaddingStrategyType.Bucket => new BucketPaddingStrategy(_options.BucketSizes),
+            PaddingStrategyType.Fixed => new FixedSizePaddingStrategy(_options.FixedPaddingSize),
+            PaddingStrategyType.Minimal => new MinimalPaddingStrategy(),
             _ => new MinimalPaddingStrategy()
         };
     }
@@ -261,14 +266,20 @@ public class RequestBatcher : IRequestBatcher, IDisposable
         {
             while (requests.Count < optimalBatchSize && _priorityQueue.TryDequeue(out var request))
             {
-                requests.Add(request);
+                if (request != null)
+                {
+                    requests.Add(request);
+                }
             }
         }
         else
         {
             while (requests.Count < optimalBatchSize && _requestQueue.TryDequeue(out var request))
             {
-                requests.Add(request);
+                if (request != null)
+                {
+                    requests.Add(request);
+                }
             }
         }
 

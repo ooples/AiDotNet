@@ -5,7 +5,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
-using AiDotNet.Helpers;
+
 using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
 
@@ -522,12 +522,134 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override byte[] Serialize()
     {
-        throw new NotSupportedException("MuZero serialization is not supported. Use SaveModel/LoadModel to persist the model.");
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Write options
+        writer.Write(_options.ObservationSize);
+        writer.Write(_options.ActionSize);
+        writer.Write(_options.LatentStateSize);
+        writer.Write(_options.NumSimulations);
+        writer.Write(_options.ReplayBufferSize);
+        writer.Write(_options.BatchSize);
+        writer.Write(_options.UnrollSteps);
+        writer.Write(_options.PUCTConstant);
+        writer.Write(NumOps.ToDouble(_options.LearningRate!));
+        writer.Write(NumOps.ToDouble(_options.DiscountFactor!));
+        writer.Write(_options.Seed ?? 0);
+        writer.Write(_options.Seed.HasValue);
+
+        // Write hidden layer configurations
+        writer.Write(_options.RepresentationLayers.Count);
+        foreach (var size in _options.RepresentationLayers)
+            writer.Write(size);
+
+        writer.Write(_options.DynamicsLayers.Count);
+        foreach (var size in _options.DynamicsLayers)
+            writer.Write(size);
+
+        writer.Write(_options.PredictionLayers.Count);
+        foreach (var size in _options.PredictionLayers)
+            writer.Write(size);
+
+        // Write update count
+        writer.Write(_updateCount);
+
+        // Serialize each network
+        var repData = _representationNetwork.Serialize();
+        writer.Write(repData.Length);
+        writer.Write(repData);
+
+        var dynData = _dynamicsNetwork.Serialize();
+        writer.Write(dynData.Length);
+        writer.Write(dynData);
+
+        var predData = _predictionNetwork.Serialize();
+        writer.Write(predData.Length);
+        writer.Write(predData);
+
+        return ms.ToArray();
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotSupportedException("MuZero deserialization is not supported. Use SaveModel/LoadModel to persist the model.");
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read options
+        int observationSize = reader.ReadInt32();
+        int actionSize = reader.ReadInt32();
+        int latentStateSize = reader.ReadInt32();
+        int numSimulations = reader.ReadInt32();
+        int replayBufferSize = reader.ReadInt32();
+        int batchSize = reader.ReadInt32();
+        int unrollSteps = reader.ReadInt32();
+        double puctConstant = reader.ReadDouble();
+        T learningRate = NumOps.FromDouble(reader.ReadDouble());
+        T discountFactor = NumOps.FromDouble(reader.ReadDouble());
+        int seed = reader.ReadInt32();
+        bool hasSeed = reader.ReadBoolean();
+
+        // Read hidden layer configurations
+        int repLayerCount = reader.ReadInt32();
+        var repLayers = new List<int>();
+        for (int i = 0; i < repLayerCount; i++)
+            repLayers.Add(reader.ReadInt32());
+
+        int dynLayerCount = reader.ReadInt32();
+        var dynLayers = new List<int>();
+        for (int i = 0; i < dynLayerCount; i++)
+            dynLayers.Add(reader.ReadInt32());
+
+        int predLayerCount = reader.ReadInt32();
+        var predLayers = new List<int>();
+        for (int i = 0; i < predLayerCount; i++)
+            predLayers.Add(reader.ReadInt32());
+
+        _options = new MuZeroOptions<T>
+        {
+            ObservationSize = observationSize,
+            ActionSize = actionSize,
+            LatentStateSize = latentStateSize,
+            NumSimulations = numSimulations,
+            ReplayBufferSize = replayBufferSize,
+            BatchSize = batchSize,
+            UnrollSteps = unrollSteps,
+            PUCTConstant = puctConstant,
+            LearningRate = learningRate,
+            DiscountFactor = discountFactor,
+            Seed = hasSeed ? seed : null,
+            RepresentationLayers = repLayers,
+            DynamicsLayers = dynLayers,
+            PredictionLayers = predLayers
+        };
+
+        // Read update count
+        _updateCount = reader.ReadInt32();
+
+        // Deserialize each network
+        int repLen = reader.ReadInt32();
+        byte[] repData = reader.ReadBytes(repLen);
+        _representationNetwork.Deserialize(repData);
+
+        int dynLen = reader.ReadInt32();
+        byte[] dynData = reader.ReadBytes(dynLen);
+        _dynamicsNetwork.Deserialize(dynData);
+
+        int predLen = reader.ReadInt32();
+        byte[] predData = reader.ReadBytes(predLen);
+        _predictionNetwork.Deserialize(predData);
+
+        // Reinitialize replay buffer (training state not persisted)
+        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize, _options.Seed);
+
+        // Update Networks list
+        Networks = new List<INeuralNetwork<T>>
+        {
+            _representationNetwork,
+            _dynamicsNetwork,
+            _predictionNetwork
+        };
     }
 
     public override Vector<T> GetParameters()

@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -674,4 +676,68 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         LastInput = null;
         LastOutput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        // SpatialPoolerLayer JIT uses straight-through estimator for thresholding:
+        // 1. Compute overlap: activation = Connections^T @ input
+        // 2. Apply threshold: output = StraightThroughThreshold(activation, sparsityThreshold)
+        //
+        // The straight-through estimator allows gradients to flow through the discrete threshold
+        // operation during backpropagation.
+
+        var input = inputNodes[0];
+
+        // Convert connections to tensor [InputSize, ColumnCount]
+        var connectionsTensor = new Tensor<T>([InputSize, ColumnCount]);
+        for (int i = 0; i < InputSize; i++)
+            for (int j = 0; j < ColumnCount; j++)
+                connectionsTensor[i, j] = Connections[i, j];
+
+        var connectionsNode = TensorOperations<T>.Constant(connectionsTensor, "sp_connections");
+
+        // Transpose connections for multiplication: [ColumnCount, InputSize]
+        var connectionsTransposed = TensorOperations<T>.Transpose(connectionsNode);
+
+        // Reshape input for matrix multiplication
+        var inputReshaped = TensorOperations<T>.Reshape(input, InputSize, 1);
+
+        // activation = Connections^T @ input
+        var activation = TensorOperations<T>.MatrixMultiply(connectionsTransposed, inputReshaped);
+        var activationFlat = TensorOperations<T>.Reshape(activation, ColumnCount);
+
+        // Apply straight-through threshold for sparse binary output
+        var output = TensorOperations<T>.StraightThroughThreshold(activationFlat, SparsityThreshold);
+
+        // Apply layer activation if present
+        output = ApplyActivationToGraph(output);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c>. SpatialPoolerLayer uses straight-through estimator for JIT compilation.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for SpatialPooler uses a straight-through estimator for the threshold
+    /// operation. The forward pass produces sparse binary activations (0 or 1), but gradients
+    /// pass through unchanged during backpropagation. This enables differentiable training
+    /// while maintaining the sparse output characteristics.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
 }

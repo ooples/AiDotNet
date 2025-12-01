@@ -1,5 +1,5 @@
 using AiDotNet.Data.Loaders;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Data;

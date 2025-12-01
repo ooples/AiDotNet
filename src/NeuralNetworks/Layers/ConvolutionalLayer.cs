@@ -1,5 +1,5 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
-using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -157,6 +157,24 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// - It will improve its pattern recognition as it processes more data
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Gets the filter kernels of the convolutional layer.
+    /// </summary>
+    /// <returns>The filter tensor used for convolution operations.</returns>
+    public Tensor<T> GetFilters()
+    {
+        return _kernels;
+    }
+
+    /// <summary>
+    /// Gets the biases vector of the convolutional layer.
+    /// </summary>
+    /// <returns>The bias values added to each output channel.</returns>
+    public override Vector<T> GetBiases()
+    {
+        return _biases;
+    }
+
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -335,7 +353,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         _biases = new Vector<T>(OutputDepth);
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
 
         InitializeWeights();
     }
@@ -386,7 +404,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         _biases = new Vector<T>(OutputDepth);
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
 
         InitializeWeights();
     }
@@ -679,7 +697,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeWeights()
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (InputDepth * KernelSize * KernelSize + OutputDepth)));
+        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputDepth * KernelSize * KernelSize + OutputDepth)));
     
         for (int i = 0; i < OutputDepth; i++)
         {
@@ -942,14 +960,22 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </summary>
     private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
     {
-        if (ScalarActivation is ReLUActivation<T>)
-            return Autodiff.TensorOperations<T>.ReLU(input);
-        else if (ScalarActivation is SigmoidActivation<T>)
-            return Autodiff.TensorOperations<T>.Sigmoid(input);
-        else if (ScalarActivation is TanhActivation<T>)
-            return Autodiff.TensorOperations<T>.Tanh(input);
-        else
-            throw new NotSupportedException($"Activation {ScalarActivation?.GetType().Name} not supported in autodiff mode");
+        return ScalarActivation switch
+        {
+            ReLUActivation<T> => Autodiff.TensorOperations<T>.ReLU(input),
+            SigmoidActivation<T> => Autodiff.TensorOperations<T>.Sigmoid(input),
+            TanhActivation<T> => Autodiff.TensorOperations<T>.Tanh(input),
+            ELUActivation<T> elu => Autodiff.TensorOperations<T>.ELU(input, Convert.ToDouble(elu.Alpha)),
+            LeakyReLUActivation<T> leaky => Autodiff.TensorOperations<T>.LeakyReLU(input, Convert.ToDouble(leaky.Alpha)),
+            GELUActivation<T> => Autodiff.TensorOperations<T>.GELU(input),
+            SwishActivation<T> => Autodiff.TensorOperations<T>.Swish(input),
+            SiLUActivation<T> => Autodiff.TensorOperations<T>.Swish(input), // SiLU is same as Swish
+            SELUActivation<T> => Autodiff.TensorOperations<T>.SELU(input),
+            SoftSignActivation<T> => Autodiff.TensorOperations<T>.SoftSign(input),
+            IdentityActivation<T> => input, // Identity just returns input as-is
+            _ => throw new NotSupportedException($"Activation {ScalarActivation?.GetType().Name} not supported in autodiff mode. " +
+                "Supported: ReLU, Sigmoid, Tanh, ELU, LeakyReLU, GELU, Swish, SiLU, SELU, SoftSign, Identity")
+        };
     }
 
     /// <summary>
@@ -1183,5 +1209,102 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+    }
+
+    /// <summary>
+    /// Exports the convolutional layer's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the convolution operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method constructs a computation graph representation of the convolutional layer by:
+    /// 1. Validating input parameters and layer configuration
+    /// 2. Creating a symbolic input node with proper batch dimension
+    /// 3. Creating constant nodes for kernels and biases
+    /// 4. Applying Conv2D operation
+    /// 5. Applying activation function if configured
+    /// </para>
+    /// <para><b>For Beginners:</b> This method converts the convolutional layer into a computation graph for JIT compilation.
+    ///
+    /// The computation graph describes:
+    /// - Input: A symbolic tensor with shape [1, InputDepth, Height, Width]
+    /// - Kernels: The learned filters [OutputDepth, InputDepth, KernelSize, KernelSize]
+    /// - Operation: 2D convolution with specified stride and padding
+    /// - Activation: Applied to the convolution output
+    /// - Output: Feature maps with shape [1, OutputDepth, OutputHeight, OutputWidth]
+    ///
+    /// JIT compilation can make inference 5-10x faster by optimizing this graph into native code.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_kernels == null)
+            throw new InvalidOperationException("Layer weights not initialized.");
+
+        // Create symbolic input node (shape definition only, batch size adapts at runtime)
+        // ConvolutionalLayer expects input shape: [depth, height, width]
+        // Conv2D expects: [batch, channels, height, width]
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Create constant nodes for kernels and biases
+        var kernelNode = TensorOperations<T>.Constant(_kernels, "kernel");
+        var biasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { OutputDepth }, _biases), "bias");
+
+        // Apply Conv2D operation
+        var conv2dNode = TensorOperations<T>.Conv2D(
+            inputNode,
+            kernelNode,
+            biasNode,
+            stride: new int[] { Stride, Stride },
+            padding: new int[] { Padding, Padding });
+
+        // Apply activation function if configured
+        var activatedOutput = ApplyActivationToGraph(conv2dNode);
+        return activatedOutput;
+    }
+
+    /// <summary>
+    /// Gets whether this convolutional layer supports JIT compilation.
+    /// </summary>
+    /// <value>True if the layer and its activation function support JIT compilation.</value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the layer can be JIT compiled. The layer supports JIT if:
+    /// - The layer is properly initialized with weights
+    /// - The activation function (if any) supports JIT compilation
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you if this layer can use JIT compilation for faster inference.
+    ///
+    /// The layer can be JIT compiled if:
+    /// - The layer has been trained or initialized with weights
+    /// - The activation function (ReLU, etc.) supports JIT
+    ///
+    /// Conv2D operations are fully supported for JIT compilation.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            // Check if weights are initialized
+            if (_kernels == null || _biases == null)
+                return false;
+
+            // Check if activation supports JIT
+            IActivationFunction<T>? activation = ScalarActivation;
+            if (activation == null && VectorActivation != null)
+                activation = (IActivationFunction<T>)VectorActivation;
+
+            return activation?.SupportsJitCompilation ?? true;
+        }
     }
 }

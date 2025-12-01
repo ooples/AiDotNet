@@ -1297,7 +1297,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     public Tensor<T> GenerateRandomNoiseTensor(int batchSize, int noiseSize)
     {
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         var shape = new int[] { batchSize, noiseSize };
         var noise = new Tensor<T>(shape);
     

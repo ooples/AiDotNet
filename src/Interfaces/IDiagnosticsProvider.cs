@@ -3,7 +3,6 @@ namespace AiDotNet.Interfaces;
 /// <summary>
 /// Interface for components that provide diagnostic information for monitoring and debugging.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
 /// This interface enables neural network components (layers, networks, loss functions, etc.)
@@ -88,7 +87,7 @@ namespace AiDotNet.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
-public interface IDiagnosticsProvider<T>
+public interface IDiagnosticsProvider
 {
     /// <summary>
     /// Gets diagnostic information about this component's state and behavior.

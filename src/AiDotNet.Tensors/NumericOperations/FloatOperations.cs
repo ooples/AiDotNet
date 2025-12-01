@@ -1,4 +1,8 @@
 using System;
+#if NET8_0_OR_GREATER
+using System.Numerics.Tensors;
+#endif
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -797,4 +801,200 @@ public class FloatOperations : INumericOperations<float>
     /// </para>
     /// </remarks>
     public double ToDouble(float value) => (double)value;
+
+    /// <summary>
+    /// Indicates that float supports SIMD/CPU-accelerated operations.
+    /// </summary>
+    public bool SupportsCpuAcceleration => true;
+
+    /// <summary>
+    /// Indicates that float supports GPU-accelerated operations.
+    /// </summary>
+    public bool SupportsGpuAcceleration => true;
+
+    #region IVectorizedOperations<float> Implementation - SIMD via TensorPrimitives
+
+    private static readonly FloatOperations _instance = new();
+
+    /// <summary>
+    /// Performs element-wise addition using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Add(ReadOnlySpan<float> x, ReadOnlySpan<float> y, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Add(x, y, destination);
+#else
+        VectorizedOperationsFallback.Add(_instance, x, y, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Performs element-wise subtraction using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Subtract(ReadOnlySpan<float> x, ReadOnlySpan<float> y, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Subtract(x, y, destination);
+#else
+        VectorizedOperationsFallback.Subtract(_instance, x, y, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Performs element-wise multiplication using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Multiply(ReadOnlySpan<float> x, ReadOnlySpan<float> y, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Multiply(x, y, destination);
+#else
+        VectorizedOperationsFallback.Multiply(_instance, x, y, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Performs element-wise division using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Divide(ReadOnlySpan<float> x, ReadOnlySpan<float> y, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Divide(x, y, destination);
+#else
+        VectorizedOperationsFallback.Divide(_instance, x, y, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Computes dot product using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public float Dot(ReadOnlySpan<float> x, ReadOnlySpan<float> y)
+    {
+#if NET8_0_OR_GREATER
+        return TensorPrimitives.Dot(x, y);
+#else
+        return VectorizedOperationsFallback.Dot(_instance, x, y);
+#endif
+    }
+
+    /// <summary>
+    /// Computes sum using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public float Sum(ReadOnlySpan<float> x)
+    {
+#if NET8_0_OR_GREATER
+        return TensorPrimitives.Sum(x);
+#else
+        return VectorizedOperationsFallback.Sum(_instance, x);
+#endif
+    }
+
+    /// <summary>
+    /// Finds maximum using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public float Max(ReadOnlySpan<float> x)
+    {
+#if NET8_0_OR_GREATER
+        return TensorPrimitives.Max(x);
+#else
+        return VectorizedOperationsFallback.Max(_instance, x);
+#endif
+    }
+
+    /// <summary>
+    /// Finds minimum using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public float Min(ReadOnlySpan<float> x)
+    {
+#if NET8_0_OR_GREATER
+        return TensorPrimitives.Min(x);
+#else
+        return VectorizedOperationsFallback.Min(_instance, x);
+#endif
+    }
+
+    /// <summary>
+    /// Computes exponential using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Exp(ReadOnlySpan<float> x, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Exp(x, destination);
+#else
+        VectorizedOperationsFallback.Exp(_instance, x, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Computes natural logarithm using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Log(ReadOnlySpan<float> x, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Log(x, destination);
+#else
+        VectorizedOperationsFallback.Log(_instance, x, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Computes hyperbolic tangent using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Tanh(ReadOnlySpan<float> x, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Tanh(x, destination);
+#else
+        VectorizedOperationsFallback.Tanh(_instance, x, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Computes sigmoid using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Sigmoid(ReadOnlySpan<float> x, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Sigmoid(x, destination);
+#else
+        VectorizedOperationsFallback.Sigmoid(_instance, x, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Computes base-2 logarithm using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Log2(ReadOnlySpan<float> x, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Log2(x, destination);
+#else
+        VectorizedOperationsFallback.Log2(_instance, x, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Computes softmax using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void SoftMax(ReadOnlySpan<float> x, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.SoftMax(x, destination);
+#else
+        VectorizedOperationsFallback.SoftMax(_instance, x, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Computes cosine similarity using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public float CosineSimilarity(ReadOnlySpan<float> x, ReadOnlySpan<float> y)
+    {
+#if NET8_0_OR_GREATER
+        return TensorPrimitives.CosineSimilarity(x, y);
+#else
+        return VectorizedOperationsFallback.CosineSimilarity(_instance, x, y);
+#endif
+    }
+
+    #endregion
 }

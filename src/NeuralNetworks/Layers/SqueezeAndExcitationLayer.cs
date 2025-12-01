@@ -1453,4 +1453,73 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         return diagnostics;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_weights1 == null || _weights2 == null || _bias1 == null || _bias2 == null)
+            throw new InvalidOperationException("Layer weights not initialized. Initialize the layer before compiling.");
+
+        // Create symbolic input tensor with batch dimension
+        // SE blocks operate on [batch, height, width, channels] tensors
+        var symbolicInput = new Tensor<T>(new int[] { 1, 1, 1, _channels });
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Squeeze: Global Average Pooling across spatial dimensions
+        var squeezed = TensorOperations<T>.ReduceMean(inputNode, axes: new[] { 1, 2 }, keepDims: false);
+
+        // Excitation: First fully connected layer
+        var weights1Tensor = new Tensor<T>(new[] { _weights1.Rows, _weights1.Columns }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_weights1.ToArray()));
+        var bias1Tensor = new Tensor<T>(new[] { _bias1.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_bias1.ToArray()));
+        var weights1Node = TensorOperations<T>.Constant(weights1Tensor, "se_weights1");
+        var bias1Node = TensorOperations<T>.Constant(bias1Tensor, "se_bias1");
+
+        var fc1Output = TensorOperations<T>.MatrixMultiply(squeezed, weights1Node);
+        fc1Output = TensorOperations<T>.Add(fc1Output, bias1Node);
+
+        // Apply first activation (default: ReLU)
+        if (_firstActivation != null && _firstActivation.SupportsJitCompilation)
+        {
+            fc1Output = _firstActivation.ApplyToGraph(fc1Output);
+        }
+        else if (_firstVectorActivation == null)
+        {
+            fc1Output = TensorOperations<T>.ReLU(fc1Output);
+        }
+
+        // Excitation: Second fully connected layer
+        var weights2Tensor = new Tensor<T>(new[] { _weights2.Rows, _weights2.Columns }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_weights2.ToArray()));
+        var bias2Tensor = new Tensor<T>(new[] { _bias2.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_bias2.ToArray()));
+        var weights2Node = TensorOperations<T>.Constant(weights2Tensor, "se_weights2");
+        var bias2Node = TensorOperations<T>.Constant(bias2Tensor, "se_bias2");
+
+        var fc2Output = TensorOperations<T>.MatrixMultiply(fc1Output, weights2Node);
+        fc2Output = TensorOperations<T>.Add(fc2Output, bias2Node);
+
+        // Apply second activation (default: Sigmoid)
+        if (_secondActivation != null && _secondActivation.SupportsJitCompilation)
+        {
+            fc2Output = _secondActivation.ApplyToGraph(fc2Output);
+        }
+        else if (_secondVectorActivation == null)
+        {
+            fc2Output = TensorOperations<T>.Sigmoid(fc2Output);
+        }
+
+        // Scale: Multiply input by excitation weights (with broadcasting)
+        // fc2Output has shape [batch, channels], inputNode has shape [batch, height, width, channels]
+        // ElementwiseMultiply should handle broadcasting automatically
+        var scaledOutput = TensorOperations<T>.ElementwiseMultiply(inputNode, fc2Output);
+
+        return scaledOutput;
+    }
+
+    public override bool SupportsJitCompilation =>
+        _weights1 != null && _weights2 != null && _bias1 != null && _bias2 != null;
 }

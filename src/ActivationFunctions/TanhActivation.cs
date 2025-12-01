@@ -1,4 +1,6 @@
-using AiDotNet.Helpers;
+
+
+using AiDotNet.Autodiff;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -110,5 +112,39 @@ public class TanhActivation<T> : ActivationFunctionBase<T>
     {
         T tanh = MathHelper.Tanh(input);
         return NumOps.Subtract(NumOps.One, NumOps.Multiply(tanh, tanh));
+    }
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>True because Tanh gradient computation is fully implemented and tested.</value>
+    /// <remarks>
+    /// <para>
+    /// Tanh supports JIT compilation because:
+    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
+    /// - The operation is well-defined and differentiable
+    /// - It can be represented as a static computation graph node
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with Tanh activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method maps the Tanh activation to TensorOperations&lt;T&gt;.Tanh(input),
+    /// which handles both forward and backward passes for JIT compilation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        return TensorOperations<T>.Tanh(input);
     }
 }

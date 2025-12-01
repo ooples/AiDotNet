@@ -1,7 +1,8 @@
 using System;
-
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Operators;
 
 namespace AiDotNet.Tensors.NumericOperations;
 
@@ -648,4 +649,110 @@ public class ByteOperations : INumericOperations<byte>
     /// <param name="value">The byte value to convert.</param>
     /// <returns>The value as a double.</returns>
     public double ToDouble(byte value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => false;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => false;
+
+    #region IVectorizedOperations<byte> Implementation
+
+    /// <summary>
+    /// Performs element-wise addition using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Add(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y, Span<byte> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<AddOperatorByte>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise subtraction using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Subtract(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y, Span<byte> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<SubtractOperatorByte>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise multiplication using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Multiply(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y, Span<byte> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<MultiplyOperatorByte>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise division using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Divide(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y, Span<byte> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<DivideOperatorByte>(x, y, destination);
+
+    /// <summary>
+    /// Computes dot product using sequential loops.
+    /// </summary>
+    public byte Dot(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y)
+        => VectorizedOperationsFallback.Dot(this, x, y);
+
+    /// <summary>
+    /// Computes sum using sequential loops.
+    /// </summary>
+    public byte Sum(ReadOnlySpan<byte> x)
+        => VectorizedOperationsFallback.Sum(this, x);
+
+    /// <summary>
+    /// Finds maximum using sequential loops.
+    /// </summary>
+    public byte Max(ReadOnlySpan<byte> x)
+        => VectorizedOperationsFallback.Max(this, x);
+
+    /// <summary>
+    /// Finds minimum using sequential loops.
+    /// </summary>
+    public byte Min(ReadOnlySpan<byte> x)
+        => VectorizedOperationsFallback.Min(this, x);
+
+    /// <summary>
+    /// Transcendental operations are not supported for byte type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Exp produces misleading results for bytes (range 0-255).</exception>
+    public void Exp(ReadOnlySpan<byte> x, Span<byte> destination)
+        => throw new NotSupportedException("Transcendental operations (Exp) are not meaningful for byte type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for byte type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Log produces misleading results for bytes (only 0-7 possible).</exception>
+    public void Log(ReadOnlySpan<byte> x, Span<byte> destination)
+        => throw new NotSupportedException("Transcendental operations (Log) are not meaningful for byte type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for byte type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Tanh produces only 0 or 1 for bytes.</exception>
+    public void Tanh(ReadOnlySpan<byte> x, Span<byte> destination)
+        => throw new NotSupportedException("Transcendental operations (Tanh) are not meaningful for byte type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for byte type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Sigmoid saturates for byte inputs.</exception>
+    public void Sigmoid(ReadOnlySpan<byte> x, Span<byte> destination)
+        => throw new NotSupportedException("Transcendental operations (Sigmoid) are not meaningful for byte type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for byte type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Log2 produces only 0-7 for bytes.</exception>
+    public void Log2(ReadOnlySpan<byte> x, Span<byte> destination)
+        => throw new NotSupportedException("Transcendental operations (Log2) are not meaningful for byte type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for byte type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. SoftMax requires floating-point for normalized probabilities.</exception>
+    public void SoftMax(ReadOnlySpan<byte> x, Span<byte> destination)
+        => throw new NotSupportedException("Transcendental operations (SoftMax) are not meaningful for byte type. Use float or double instead.");
+
+    /// <summary>
+    /// Computes cosine similarity using sequential loops.
+    /// </summary>
+    public byte CosineSimilarity(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y)
+        => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
+
+    #endregion
 }

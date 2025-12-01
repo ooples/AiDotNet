@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -401,6 +403,61 @@ public class UpsamplingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to which input variable nodes should be added.</param>
+    /// <returns>The output computation node representing this layer's operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representation of the upsampling operation using nearest-neighbor
+    /// interpolation. The operation repeats each value in the input based on the scale factor.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an optimized version of the upsampling operation.
+    ///
+    /// For upsampling layers:
+    /// - Creates a placeholder for the input tensor
+    /// - Applies the upsampling operation (repeat values)
+    /// - Returns a computation graph for efficient execution
+    ///
+    /// This allows for faster inference by pre-compiling the upsampling operation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create placeholder for input tensor
+        // Input shape: [channels, height, width]
+        var inputPlaceholder = new Tensor<T>(InputShape);
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+        inputNodes.Add(inputNode);
+
+        // Apply upsampling operation
+        var outputNode = TensorOperations<T>.Upsample(inputNode, _scaleFactor);
+
+        // Upsampling layers typically don't use activation, but we return the result
+        // No activation to apply for upsampling layers (they use identity by default)
+        return outputNode;
+    }
+
+    /// <summary>
+    /// Gets whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>Always returns true as upsampling operations can be efficiently compiled.</value>
+    /// <remarks>
+    /// <para>
+    /// Upsampling layers support JIT compilation since the nearest-neighbor interpolation
+    /// is a straightforward operation that can be optimized at compile time.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -409,12 +466,12 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// This is useful when starting to process a new, unrelated input.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory of what it last processed.
-    /// 
+    ///
     /// When resetting the state:
     /// - The layer forgets what input it recently processed
     /// - This helps prepare it for processing new, unrelated inputs
     /// - It's like clearing a workspace before starting a new project
-    /// 
+    ///
     /// This is mostly important during training, where the layer needs to
     /// maintain consistency between forward and backward passes.
     /// </para>

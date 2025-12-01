@@ -4,7 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.FeatureSelectors;
 using AiDotNet.FitnessCalculators;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Normalizers;

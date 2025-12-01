@@ -1,3 +1,6 @@
+using AiDotNet.Autodiff;
+
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -50,7 +53,7 @@ public class MishActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Activate(T input)
     {
-        T softplus = NumOps.Log(NumOps.Add(NumOps.One, NumOps.Exp(input)));
+        T softplus = NumericalStabilityHelper.SafeLog(NumOps.Add(NumOps.One, NumOps.Exp(input)));
         T tanh = MathHelper.Tanh(softplus);
 
         return NumOps.Multiply(input, tanh);
@@ -100,5 +103,41 @@ public class MishActivation<T> : ActivationFunctionBase<T>
         );
         
         return NumOps.Divide(NumOps.Multiply(exp_x, omega), NumOps.Square(delta));
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>True because gradient computation is fully implemented in TensorOperations.Mish.</value>
+    /// <remarks>
+    /// <para>
+    /// Mish supports JIT compilation because:
+    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
+    /// - The operation uses IEngine for GPU acceleration
+    /// - It can be represented as a static computation graph node
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with Mish activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method maps the Mish activation to TensorOperations&lt;T&gt;.Mish(input),
+    /// which handles both forward and backward passes for JIT compilation.
+    /// Mish is a smooth, self-regularizing activation function.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        return TensorOperations<T>.Mish(input);
     }
 }

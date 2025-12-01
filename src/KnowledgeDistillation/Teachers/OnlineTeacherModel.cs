@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -56,12 +57,14 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 /// </remarks>
 public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 {
-    private readonly Func<Vector<T>, Vector<T>> _teacherForward;
-    private readonly Action<Vector<T>, Vector<T>> _teacherUpdate;
+    private readonly Func<Vector<T>, Vector<T>>? _teacherForward;
+    private readonly IJitCompilable<T>? _jitCompilableModel;
+    private readonly Action<Vector<T>, Vector<T>>? _teacherUpdate;
     private readonly OnlineUpdateMode _updateMode;
     private readonly double _updateRate;
     private readonly int _updateFrequency;
     private int _updateCounter;
+    private readonly int _inputDim;
 
     /// <summary>
     /// Gets the output dimension of the teacher model.
@@ -74,57 +77,77 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     public bool IsUpdating { get; set; } = true;
 
     /// <summary>
-    /// Initializes a new instance of the OnlineTeacherModel class.
+    /// Initializes a new instance of the OnlineTeacherModel class using function delegates.
     /// </summary>
     /// <param name="teacherForward">Function to perform forward pass through teacher.</param>
-    /// <param name="teacherUpdate">Function to update teacher parameters (input, gradient).</param>
+    /// <param name="inputDimension">Input dimension of the teacher.</param>
     /// <param name="outputDimension">Output dimension of the teacher.</param>
+    /// <param name="teacherUpdate">Optional function to update teacher parameters (input, gradient).</param>
     /// <param name="updateMode">How to update the teacher (default: EMA).</param>
     /// <param name="updateRate">Update rate for EMA or learning rate (default: 0.999 for EMA).</param>
     /// <param name="updateFrequency">How often to update (default: every step).</param>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Create an online teacher by providing:
-    /// - Forward function: Gets teacher predictions
-    /// - Update function: Updates teacher parameters
-    /// - Update mode: How to update (EMA recommended for stability)</para>
-    ///
-    /// <para>Example:
-    /// <code>
-    /// // Teacher model with forward and backward functions
-    /// Func&lt;Vector&lt;double&gt;, Vector&lt;double&gt;&gt; teacherForward = input => teacherModel.Forward(input);
-    /// Action&lt;Vector&lt;double&gt;, Vector&lt;double&gt;&gt; teacherUpdate = (input, grad) => teacherModel.Backward(grad);
-    ///
-    /// var onlineTeacher = new OnlineTeacherModel&lt;double&gt;(
-    ///     teacherForward: teacherForward,
-    ///     teacherUpdate: teacherUpdate,
-    ///     outputDimension: 10,
-    ///     updateMode: OnlineUpdateMode.EMA,
-    ///     updateRate: 0.999  // Slow, stable updates
-    /// );
-    /// </code>
-    /// </para>
-    ///
-    /// <para><b>Choosing Update Parameters:</b>
-    /// - **EMA rate 0.99-0.999**: Slow, stable teacher evolution
-    /// - **EMA rate 0.9-0.99**: Faster adaptation to new data
-    /// - **Gradient-based**: Use small learning rate (0.0001-0.001)
-    /// - **Update frequency**: Every step (1) for continuous, or every N steps for stability</para>
+    /// <para><b>Note:</b> This constructor creates a non-JIT-compilable teacher.
+    /// For JIT support, use the constructor that accepts an IJitCompilable model.</para>
     /// </remarks>
     public OnlineTeacherModel(
         Func<Vector<T>, Vector<T>> teacherForward,
-        Action<Vector<T>, Vector<T>> teacherUpdate,
+        int inputDimension,
         int outputDimension,
+        Action<Vector<T>, Vector<T>>? teacherUpdate = null,
         OnlineUpdateMode updateMode = OnlineUpdateMode.EMA,
         double updateRate = 0.999,
         int updateFrequency = 1)
     {
         _teacherForward = teacherForward ?? throw new ArgumentNullException(nameof(teacherForward));
-        _teacherUpdate = teacherUpdate ?? throw new ArgumentNullException(nameof(teacherUpdate));
+        _teacherUpdate = teacherUpdate;
+        _inputDim = inputDimension;
         OutputDimension = outputDimension;
         _updateMode = updateMode;
         _updateRate = updateRate;
         _updateFrequency = updateFrequency;
         _updateCounter = 0;
+        _jitCompilableModel = null;
+
+        if (updateFrequency < 1)
+            throw new ArgumentException("Update frequency must be at least 1", nameof(updateFrequency));
+        if (updateRate <= 0 || updateRate > 1)
+            throw new ArgumentException("Update rate must be in (0, 1]", nameof(updateRate));
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the OnlineTeacherModel class using a JIT-compilable model.
+    /// </summary>
+    /// <param name="jitCompilableModel">A JIT-compilable model for forward pass.</param>
+    /// <param name="inputDimension">Input dimension of the teacher.</param>
+    /// <param name="outputDimension">Output dimension of the teacher.</param>
+    /// <param name="teacherUpdate">Optional function to update teacher parameters.</param>
+    /// <param name="updateMode">How to update the teacher (default: EMA).</param>
+    /// <param name="updateRate">Update rate for EMA or learning rate (default: 0.999 for EMA).</param>
+    /// <param name="updateFrequency">How often to update (default: every step).</param>
+    /// <remarks>
+    /// <para><b>JIT Support:</b> This constructor enables JIT compilation for inference
+    /// when the underlying model supports it. Note that updates still use the teacherUpdate
+    /// function if provided.</para>
+    /// </remarks>
+    public OnlineTeacherModel(
+        IJitCompilable<T> jitCompilableModel,
+        int inputDimension,
+        int outputDimension,
+        Action<Vector<T>, Vector<T>>? teacherUpdate = null,
+        OnlineUpdateMode updateMode = OnlineUpdateMode.EMA,
+        double updateRate = 0.999,
+        int updateFrequency = 1)
+    {
+        _jitCompilableModel = jitCompilableModel ?? throw new ArgumentNullException(nameof(jitCompilableModel));
+        _teacherUpdate = teacherUpdate;
+        _inputDim = inputDimension;
+        OutputDimension = outputDimension;
+        _updateMode = updateMode;
+        _updateRate = updateRate;
+        _updateFrequency = updateFrequency;
+        _updateCounter = 0;
+        _teacherForward = null;
 
         if (updateFrequency < 1)
             throw new ArgumentException("Update frequency must be at least 1", nameof(updateFrequency));
@@ -142,6 +165,23 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     public override Vector<T> GetLogits(Vector<T> input)
     {
         if (input == null) throw new ArgumentNullException(nameof(input));
+
+        if (_jitCompilableModel != null)
+        {
+            // IJitCompilable doesn't have execution methods - need to cast to a model interface
+            if (_jitCompilableModel is IModel<Vector<T>, Vector<T>, ModelMetadata<T>> model)
+            {
+                return model.Predict(input);
+            }
+
+            throw new InvalidOperationException(
+                "Underlying model must implement IModel<Vector<T>, Vector<T>, ModelMetadata<T>> to execute predictions. " +
+                "IJitCompilable only provides computation graph export for JIT compilation.");
+        }
+
+        if (_teacherForward == null)
+            throw new InvalidOperationException("No forward function or JIT-compilable model configured");
+
         return _teacherForward(input);
     }
 
@@ -197,7 +237,7 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     private void UpdateEMA(Vector<T> input, Vector<T> targetOutput)
     {
         // Get current teacher prediction
-        var currentOutput = _teacherForward(input);
+        var currentOutput = GetLogits(input);
 
         // Compute EMA update: new = alpha * current + (1-alpha) * target
         var gradient = new Vector<T>(currentOutput.Length);
@@ -209,7 +249,7 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
             gradient[i] = scaled;
         }
 
-        _teacherUpdate(input, gradient);
+        _teacherUpdate?.Invoke(input, gradient);
     }
 
     /// <summary>
@@ -218,7 +258,7 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     private void UpdateGradient(Vector<T> input, Vector<T> targetOutput)
     {
         // Get current prediction
-        var currentOutput = _teacherForward(input);
+        var currentOutput = GetLogits(input);
 
         // Compute MSE gradient: 2 * (current - target)
         var gradient = new Vector<T>(currentOutput.Length);
@@ -229,7 +269,7 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
             gradient[i] = scaled;
         }
 
-        _teacherUpdate(input, gradient);
+        _teacherUpdate?.Invoke(input, gradient);
     }
 
     /// <summary>
@@ -238,7 +278,7 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     private void UpdateMomentum(Vector<T> input, Vector<T> targetOutput)
     {
         // Similar to EMA but with momentum factor
-        var currentOutput = _teacherForward(input);
+        var currentOutput = GetLogits(input);
 
         var gradient = new Vector<T>(currentOutput.Length);
         for (int i = 0; i < currentOutput.Length; i++)
@@ -248,7 +288,7 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
             gradient[i] = scaled;
         }
 
-        _teacherUpdate(input, gradient);
+        _teacherUpdate?.Invoke(input, gradient);
     }
 
     /// <summary>
@@ -265,6 +305,44 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// Resets the update counter.
     /// </summary>
     public void ResetCounter() => _updateCounter = 0;
+
+    /// <summary>
+    /// Gets whether this teacher supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> if constructed with an IJitCompilable model that supports JIT compilation;
+    /// <c>false</c> if constructed with function delegates which cannot be exported as a computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => _jitCompilableModel?.SupportsJitCompilation ?? false;
+
+    /// <summary>
+    /// Exports the computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input nodes.</param>
+    /// <returns>The output computation node.</returns>
+    /// <exception cref="NotSupportedException">Thrown when using function delegates instead of an IJitCompilable model.</exception>
+    /// <remarks>
+    /// <para>
+    /// When constructed with an IJitCompilable model, this method delegates to the underlying model's
+    /// computation graph export. When constructed with function delegates, JIT compilation is not supported
+    /// because function delegates can contain arbitrary code that cannot be represented as tensor operations.
+    /// </para>
+    /// <para>
+    /// To enable JIT compilation, use the constructor that accepts an IJitCompilable model
+    /// instead of using function delegates.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (_jitCompilableModel != null && _jitCompilableModel.SupportsJitCompilation)
+        {
+            return _jitCompilableModel.ExportComputationGraph(inputNodes);
+        }
+
+        return ThrowJitNotSupported(
+            nameof(OnlineTeacherModel<T>),
+            "it uses function delegates which cannot be exported as a computation graph. Use the constructor that accepts an IJitCompilable model instead");
+    }
 }
 
 /// <summary>

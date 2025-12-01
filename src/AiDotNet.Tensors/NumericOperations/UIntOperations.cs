@@ -1,11 +1,12 @@
 using System;
-
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Operators;
 
 namespace AiDotNet.Tensors.NumericOperations;
 
-/// <summary>
+    /// <summary>
 /// Provides mathematical operations for the <see cref="uint"/> (UInt32) data type.
 /// </summary>
 /// <remarks>
@@ -703,4 +704,110 @@ public class UIntOperations : INumericOperations<uint>
     /// Converts a uint value to double (FP64) precision.
     /// </summary>
     public double ToDouble(uint value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => false;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => false;
+
+    #region IVectorizedOperations<uint> Implementation
+
+    /// <summary>
+    /// Performs element-wise addition using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Add(ReadOnlySpan<uint> x, ReadOnlySpan<uint> y, Span<uint> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<AddOperatorUInt>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise subtraction using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Subtract(ReadOnlySpan<uint> x, ReadOnlySpan<uint> y, Span<uint> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<SubtractOperatorUInt>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise multiplication using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Multiply(ReadOnlySpan<uint> x, ReadOnlySpan<uint> y, Span<uint> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<MultiplyOperatorUInt>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise division using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Divide(ReadOnlySpan<uint> x, ReadOnlySpan<uint> y, Span<uint> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<DivideOperatorUInt>(x, y, destination);
+
+    /// <summary>
+    /// Computes dot product using sequential loops.
+    /// </summary>
+    public uint Dot(ReadOnlySpan<uint> x, ReadOnlySpan<uint> y)
+        => VectorizedOperationsFallback.Dot(this, x, y);
+
+    /// <summary>
+    /// Computes sum using sequential loops.
+    /// </summary>
+    public uint Sum(ReadOnlySpan<uint> x)
+        => VectorizedOperationsFallback.Sum(this, x);
+
+    /// <summary>
+    /// Finds maximum using sequential loops.
+    /// </summary>
+    public uint Max(ReadOnlySpan<uint> x)
+        => VectorizedOperationsFallback.Max(this, x);
+
+    /// <summary>
+    /// Finds minimum using sequential loops.
+    /// </summary>
+    public uint Min(ReadOnlySpan<uint> x)
+        => VectorizedOperationsFallback.Min(this, x);
+
+    /// <summary>
+    /// Transcendental operations are not supported for uint type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Exp produces misleading results for uint.</exception>
+    public void Exp(ReadOnlySpan<uint> x, Span<uint> destination)
+        => throw new NotSupportedException("Transcendental operations (Exp) are not meaningful for uint type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for uint type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Log produces misleading results for uint.</exception>
+    public void Log(ReadOnlySpan<uint> x, Span<uint> destination)
+        => throw new NotSupportedException("Transcendental operations (Log) are not meaningful for uint type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for uint type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Tanh produces only 0 or 1 for uint.</exception>
+    public void Tanh(ReadOnlySpan<uint> x, Span<uint> destination)
+        => throw new NotSupportedException("Transcendental operations (Tanh) are not meaningful for uint type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for uint type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Sigmoid saturates for uint inputs.</exception>
+    public void Sigmoid(ReadOnlySpan<uint> x, Span<uint> destination)
+        => throw new NotSupportedException("Transcendental operations (Sigmoid) are not meaningful for uint type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for uint type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Log2 produces misleading results for uint.</exception>
+    public void Log2(ReadOnlySpan<uint> x, Span<uint> destination)
+        => throw new NotSupportedException("Transcendental operations (Log2) are not meaningful for uint type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for uint type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. SoftMax requires floating-point for normalized probabilities.</exception>
+    public void SoftMax(ReadOnlySpan<uint> x, Span<uint> destination)
+        => throw new NotSupportedException("Transcendental operations (SoftMax) are not meaningful for uint type. Use float or double instead.");
+
+    /// <summary>
+    /// Computes cosine similarity using sequential loops.
+    /// </summary>
+    public uint CosineSimilarity(ReadOnlySpan<uint> x, ReadOnlySpan<uint> y)
+        => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
+
+    #endregion
 }

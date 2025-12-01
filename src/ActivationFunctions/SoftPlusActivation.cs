@@ -1,3 +1,6 @@
+using AiDotNet.Autodiff;
+
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -64,7 +67,7 @@ public class SoftPlusActivation<T> : ActivationFunctionBase<T>
         T expInput = NumOps.Exp(input);
         T onePlusExp = NumOps.Add(NumOps.One, expInput);
 
-        return NumOps.Log(onePlusExp);
+        return NumericalStabilityHelper.SafeLog(onePlusExp);
     }
 
     /// <summary>
@@ -99,5 +102,40 @@ public class SoftPlusActivation<T> : ActivationFunctionBase<T>
         T denominator = NumOps.Add(NumOps.One, expNegInput);
 
         return NumOps.Divide(NumOps.One, denominator);
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>True because gradient computation is fully implemented in TensorOperations.SoftPlus.</value>
+    /// <remarks>
+    /// <para>
+    /// SoftPlus supports JIT compilation because:
+    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
+    /// - The gradient is sigmoid(x) = 1 / (1 + e^(-x)), which is numerically stable
+    /// - It can be represented as a static computation graph node
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with SoftPlus activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method maps the SoftPlus activation to TensorOperations&lt;T&gt;.SoftPlus(input),
+    /// which handles both forward and backward passes for JIT compilation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        return TensorOperations<T>.SoftPlus(input);
     }
 }
