@@ -159,9 +159,17 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             if (_nodeIndex.Count % 100 == 0)
                 _nodeIndex.Flush();
         }
-        catch (Exception ex)
+        catch (IOException ex)
         {
             throw new IOException($"Failed to add node '{node.Id}' to file store", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new IOException($"Failed to add node '{node.Id}' to file store due to unauthorized access", ex);
+        }
+        catch (JsonSerializationException ex)
+        {
+            throw new IOException($"Failed to serialize node '{node.Id}' to JSON", ex);
         }
     }
 
@@ -209,9 +217,17 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             if (_edgeIndex.Count % 100 == 0)
                 _edgeIndex.Flush();
         }
-        catch (Exception ex)
+        catch (IOException ex)
         {
             throw new IOException($"Failed to add edge '{edge.Id}' to file store", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new IOException($"Failed to add edge '{edge.Id}' to file store due to access permissions", ex);
+        }
+        catch (JsonSerializationException ex)
+        {
+            throw new IOException($"Failed to serialize edge '{edge.Id}' to JSON", ex);
         }
     }
 
@@ -243,9 +259,17 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             // Deserialize
             return JsonConvert.DeserializeObject<GraphNode<T>>(json, _jsonSettings);
         }
-        catch (Exception ex)
+        catch (IOException ex)
         {
             throw new IOException($"Failed to read node '{nodeId}' from file store", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new IOException($"Failed to read node '{nodeId}' from file store", ex);
+        }
+        catch (JsonSerializationException ex)
+        {
+            throw new IOException($"Failed to deserialize node '{nodeId}' from JSON", ex);
         }
     }
 
@@ -277,9 +301,17 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             // Deserialize
             return JsonConvert.DeserializeObject<GraphEdge<T>>(json, _jsonSettings);
         }
-        catch (Exception ex)
+        catch (IOException ex)
         {
             throw new IOException($"Failed to read edge '{edgeId}' from file store", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new IOException($"Failed to read edge '{edgeId}' from file store", ex);
+        }
+        catch (JsonSerializationException ex)
+        {
+            throw new IOException($"Failed to deserialize edge '{edgeId}' from JSON", ex);
         }
     }
 
@@ -332,7 +364,11 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
 
             return true;
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to remove node '{nodeId}' from file store", ex);
+        }
+        catch (UnauthorizedAccessException ex)
         {
             throw new IOException($"Failed to remove node '{nodeId}' from file store", ex);
         }
@@ -365,7 +401,11 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
 
             return true;
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to remove edge '{edgeId}' from file store", ex);
+        }
+        catch (UnauthorizedAccessException ex)
         {
             throw new IOException($"Failed to remove edge '{edgeId}' from file store", ex);
         }
@@ -432,7 +472,11 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             if (File.Exists(_edgesFilePath))
                 File.Delete(_edgesFilePath);
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            throw new IOException("Failed to clear file store", ex);
+        }
+        catch (UnauthorizedAccessException ex)
         {
             throw new IOException("Failed to clear file store", ex);
         }
@@ -539,9 +583,17 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             if (_nodeIndex.Count % 100 == 0)
                 _nodeIndex.Flush();
         }
-        catch (Exception ex)
+        catch (IOException ex)
         {
             throw new IOException($"Failed to add node '{node.Id}' to file store", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new IOException($"Failed to add node '{node.Id}' to file store due to access permissions", ex);
+        }
+        catch (JsonSerializationException ex)
+        {
+            throw new IOException($"Failed to serialize node '{node.Id}' to JSON", ex);
         }
     }
 
@@ -589,9 +641,13 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             if (_edgeIndex.Count % 100 == 0)
                 _edgeIndex.Flush();
         }
-        catch (Exception ex)
+        catch (IOException ex)
         {
             throw new IOException($"Failed to add edge '{edge.Id}' to file store", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new IOException($"Failed to add edge '{edge.Id}' to file store due to access permissions", ex);
         }
     }
 
@@ -623,9 +679,17 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             // Deserialize
             return JsonConvert.DeserializeObject<GraphNode<T>>(json, _jsonSettings);
         }
-        catch (Exception ex)
+        catch (IOException ex)
         {
             throw new IOException($"Failed to read node '{nodeId}' from file store", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new IOException($"Failed to read node '{nodeId}' from file store", ex);
+        }
+        catch (JsonSerializationException ex)
+        {
+            throw new IOException($"Failed to deserialize node '{nodeId}' from JSON", ex);
         }
     }
 
@@ -657,9 +721,17 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             // Deserialize
             return JsonConvert.DeserializeObject<GraphEdge<T>>(json, _jsonSettings);
         }
-        catch (Exception ex)
+        catch (IOException ex)
         {
             throw new IOException($"Failed to read edge '{edgeId}' from file store", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new IOException($"Failed to read edge '{edgeId}' from file store", ex);
+        }
+        catch (JsonSerializationException ex)
+        {
+            throw new IOException($"Failed to deserialize edge '{edgeId}' from JSON", ex);
         }
     }
 
@@ -712,7 +784,11 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
 
             return true;
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to remove node '{nodeId}' from file store", ex);
+        }
+        catch (UnauthorizedAccessException ex)
         {
             throw new IOException($"Failed to remove node '{nodeId}' from file store", ex);
         }
