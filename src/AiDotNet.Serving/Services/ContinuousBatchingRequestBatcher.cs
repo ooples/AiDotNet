@@ -314,8 +314,11 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
         var model = ModelRepository.GetModel<T>(request.ModelName);
         if (model == null)
         {
-            SetRequestException(request, new InvalidOperationException(
-                $"Model '{request.ModelName}' not found or wrong numeric type"));
+            if (request.CompletionSource is TaskCompletionSource<Vector<T>> errorTcs)
+            {
+                errorTcs.TrySetException(new InvalidOperationException(
+                    $"Model '{request.ModelName}' not found or wrong numeric type"));
+            }
             return Task.CompletedTask;
         }
 
@@ -331,20 +334,44 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
         }
         catch (Exception ex)
         {
-            SetRequestException(request, ex);
+            if (request.CompletionSource is TaskCompletionSource<Vector<T>> exTcs)
+            {
+                exTcs.TrySetException(ex);
+            }
         }
 
         return Task.CompletedTask;
     }
 
     /// <summary>
-    /// Sets an exception on a request.
+    /// Sets an exception on a request using type-safe pattern matching.
+    /// Avoids reflection by checking the NumericType and casting appropriately.
     /// </summary>
     private static void SetRequestException(ContinuousRequest request, Exception exception)
     {
-        var tcsType = request.CompletionSource.GetType();
-        var setExceptionMethod = tcsType.GetMethod("TrySetException", new[] { typeof(Exception) });
-        setExceptionMethod?.Invoke(request.CompletionSource, new object[] { exception });
+        // Use type-safe pattern matching based on the stored NumericType
+        // This avoids reflection overhead and provides compile-time safety
+        switch (request.NumericType)
+        {
+            case "Double":
+                if (request.CompletionSource is TaskCompletionSource<Vector<double>> doubleTcs)
+                {
+                    doubleTcs.TrySetException(exception);
+                }
+                break;
+            case "Single":
+                if (request.CompletionSource is TaskCompletionSource<Vector<float>> floatTcs)
+                {
+                    floatTcs.TrySetException(exception);
+                }
+                break;
+            case "Decimal":
+                if (request.CompletionSource is TaskCompletionSource<Vector<decimal>> decimalTcs)
+                {
+                    decimalTcs.TrySetException(exception);
+                }
+                break;
+        }
     }
 
     /// <summary>
