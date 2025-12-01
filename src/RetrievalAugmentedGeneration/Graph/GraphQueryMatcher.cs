@@ -129,17 +129,11 @@ public class GraphQueryMatcher<T>
             foreach (var edge in edges)
             {
                 var targetNode = _graph.GetNode(edge.TargetId);
-                if (targetNode == null)
-                    continue;
-
-                // Check if target matches label and properties
-                if (targetNode.Label != targetLabel)
-                    continue;
-
-                if (targetProperties != null && targetProperties.Count > 0)
+                if (targetNode == null
+                    || targetNode.Label != targetLabel
+                    || (targetProperties != null && targetProperties.Count > 0 && !MatchesProperties(targetNode, targetProperties)))
                 {
-                    if (!MatchesProperties(targetNode, targetProperties))
-                        continue;
+                    continue;
                 }
 
                 // Found a match!
@@ -374,12 +368,12 @@ public class GraphQueryMatcher<T>
     /// </summary>
     private bool MatchesProperties(GraphNode<T> node, Dictionary<string, object> properties)
     {
-        foreach (var (key, value) in properties)
+        foreach (var kvp in properties)
         {
-            if (!node.Properties.TryGetValue(key, out var nodeValue))
+            if (!node.Properties.TryGetValue(kvp.Key, out var nodeValue))
                 return false;
 
-            if (!AreEqual(nodeValue, value))
+            if (!AreEqual(nodeValue, kvp.Value))
                 return false;
         }
         return true;
@@ -395,10 +389,13 @@ public class GraphQueryMatcher<T>
         if (obj1 == null || obj2 == null)
             return false;
 
-        // Handle numeric comparisons
+        // Handle numeric comparisons with tolerance for floating-point values
         if (IsNumeric(obj1) && IsNumeric(obj2))
         {
-            return Convert.ToDouble(obj1) == Convert.ToDouble(obj2);
+            var d1 = Convert.ToDouble(obj1);
+            var d2 = Convert.ToDouble(obj2);
+            const double tolerance = 1e-10;
+            return Math.Abs(d1 - d2) < tolerance;
         }
 
         return obj1.Equals(obj2);
