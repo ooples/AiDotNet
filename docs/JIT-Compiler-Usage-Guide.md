@@ -206,7 +206,6 @@ if (!stats.CacheHit)
 - Production deployments
 
 **Less beneficial for:**
-- Training (backward pass not yet supported)
 - Graphs that change structure frequently
 - Very small operations (compilation overhead)
 
@@ -291,7 +290,7 @@ if (stats.EstimatedMemoryBytes > threshold)
 ## Future Enhancements
 
 Planned improvements:
-- [ ] Support for backward pass (gradient) compilation
+- [x] Support for backward pass (gradient) compilation
 - [ ] GPU code generation
 - [ ] More fusion patterns
 - [ ] Advanced optimizations (loop unrolling, vectorization hints)
@@ -312,6 +311,12 @@ See the `examples/JitCompilerExample.cs` file for complete working examples.
 
 - `(Func<Tensor<T>[], Tensor<T>[]>, CompilationStats) CompileWithStats<T>(...)`
   - Compiles and returns statistics
+
+- `Func<Tensor<T>[], Tensor<T>[]> CompileBackward<T>(ComputationNode<T> outputNode, List<ComputationNode<T>> inputs)`
+  - Compiles a backward pass (gradient computation) graph to executable code
+
+- `(Func<Tensor<T>[], Tensor<T>[]>, CompilationStats) CompileBackwardWithStats<T>(...)`
+  - Compiles backward pass and returns statistics
 
 - `void ClearCache()`
   - Clears the compiled graph cache

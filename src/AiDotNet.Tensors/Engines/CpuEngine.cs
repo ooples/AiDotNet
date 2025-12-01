@@ -2443,6 +2443,17 @@ public class CpuEngine : IEngine
     {
         if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
         if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (inputShape == null || inputShape.Length != 4) throw new ArgumentException("inputShape must be array of 4 elements [batch, inChannels, height, width]", nameof(inputShape));
+        if (gradOutput.Rank != 4) throw new ArgumentException($"Conv2DBackwardInput requires 4D gradOutput tensor. Got rank {gradOutput.Rank}.", nameof(gradOutput));
+        if (kernel.Rank != 4) throw new ArgumentException($"Conv2DBackwardInput requires 4D kernel tensor. Got rank {kernel.Rank}.", nameof(kernel));
+        if (stride == null || stride.Length != 2) throw new ArgumentException("Stride must be array of 2 elements", nameof(stride));
+        if (stride[0] <= 0 || stride[1] <= 0) throw new ArgumentException("Stride elements must be positive", nameof(stride));
+        if (padding == null || padding.Length != 2) throw new ArgumentException("Padding must be array of 2 elements", nameof(padding));
+        if (dilation == null || dilation.Length != 2) throw new ArgumentException("Dilation must be array of 2 elements", nameof(dilation));
+        if (dilation[0] <= 0 || dilation[1] <= 0) throw new ArgumentException("Dilation elements must be positive", nameof(dilation));
+        if (gradOutput.Shape[0] != inputShape[0]) throw new ArgumentException($"gradOutput batch size ({gradOutput.Shape[0]}) must match inputShape batch size ({inputShape[0]})");
+        if (gradOutput.Shape[1] != kernel.Shape[0]) throw new ArgumentException($"gradOutput outChannels ({gradOutput.Shape[1]}) must match kernel outChannels ({kernel.Shape[0]})");
+        if (inputShape[1] != kernel.Shape[1]) throw new ArgumentException($"inputShape inChannels ({inputShape[1]}) must match kernel inChannels ({kernel.Shape[1]})");
 
         var numOps = MathHelper.GetNumericOperations<T>();
         int batch = inputShape[0];
@@ -2512,6 +2523,17 @@ public class CpuEngine : IEngine
     {
         if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
         if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernelShape == null || kernelShape.Length != 4) throw new ArgumentException("kernelShape must be array of 4 elements [outChannels, inChannels, kernelHeight, kernelWidth]", nameof(kernelShape));
+        if (gradOutput.Rank != 4) throw new ArgumentException($"Conv2DBackwardKernel requires 4D gradOutput tensor. Got rank {gradOutput.Rank}.", nameof(gradOutput));
+        if (input.Rank != 4) throw new ArgumentException($"Conv2DBackwardKernel requires 4D input tensor. Got rank {input.Rank}.", nameof(input));
+        if (stride == null || stride.Length != 2) throw new ArgumentException("Stride must be array of 2 elements", nameof(stride));
+        if (stride[0] <= 0 || stride[1] <= 0) throw new ArgumentException("Stride elements must be positive", nameof(stride));
+        if (padding == null || padding.Length != 2) throw new ArgumentException("Padding must be array of 2 elements", nameof(padding));
+        if (dilation == null || dilation.Length != 2) throw new ArgumentException("Dilation must be array of 2 elements", nameof(dilation));
+        if (dilation[0] <= 0 || dilation[1] <= 0) throw new ArgumentException("Dilation elements must be positive", nameof(dilation));
+        if (gradOutput.Shape[0] != input.Shape[0]) throw new ArgumentException($"gradOutput batch size ({gradOutput.Shape[0]}) must match input batch size ({input.Shape[0]})");
+        if (gradOutput.Shape[1] != kernelShape[0]) throw new ArgumentException($"gradOutput outChannels ({gradOutput.Shape[1]}) must match kernelShape outChannels ({kernelShape[0]})");
+        if (input.Shape[1] != kernelShape[1]) throw new ArgumentException($"input inChannels ({input.Shape[1]}) must match kernelShape inChannels ({kernelShape[1]})");
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
@@ -3019,6 +3041,15 @@ public class CpuEngine : IEngine
     {
         if (input == null) throw new ArgumentNullException(nameof(input));
         if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (input.Rank != 4) throw new ArgumentException($"ConvTranspose2D requires 4D input tensor. Got rank {input.Rank}.", nameof(input));
+        if (kernel.Rank != 4) throw new ArgumentException($"ConvTranspose2D requires 4D kernel tensor. Got rank {kernel.Rank}.", nameof(kernel));
+        if (stride == null || stride.Length != 2) throw new ArgumentException("Stride must be array of 2 elements", nameof(stride));
+        if (stride[0] <= 0 || stride[1] <= 0) throw new ArgumentException("Stride elements must be positive", nameof(stride));
+        if (padding == null || padding.Length != 2) throw new ArgumentException("Padding must be array of 2 elements", nameof(padding));
+        if (padding[0] < 0 || padding[1] < 0) throw new ArgumentException("Padding elements must be non-negative", nameof(padding));
+        if (outputPadding == null || outputPadding.Length != 2) throw new ArgumentException("OutputPadding must be array of 2 elements", nameof(outputPadding));
+        if (outputPadding[0] < 0 || outputPadding[1] < 0) throw new ArgumentException("OutputPadding elements must be non-negative", nameof(outputPadding));
+        if (input.Shape[1] != kernel.Shape[0]) throw new ArgumentException($"Input inChannels ({input.Shape[1]}) must match kernel inChannels ({kernel.Shape[0]})");
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
@@ -4092,6 +4123,41 @@ public class CpuEngine : IEngine
 
     #region Tensor Reduction Operations
 
+    /// <summary>
+    /// Validates and normalizes reduction axes.
+    /// </summary>
+    /// <param name="axes">The axes to validate</param>
+    /// <param name="rank">The tensor rank</param>
+    /// <returns>Normalized, validated, and sorted unique axes</returns>
+    private static int[] ValidateAndNormalizeAxes(int[] axes, int rank)
+    {
+        if (axes == null)
+            throw new ArgumentNullException(nameof(axes), "Axes cannot be null");
+
+        if (axes.Length == 0)
+            throw new ArgumentException("Axes array cannot be empty", nameof(axes));
+
+        var normalizedAxes = new int[axes.Length];
+        for (int i = 0; i < axes.Length; i++)
+        {
+            int axis = axes[i];
+            // Normalize negative indices
+            int normalized = axis < 0 ? rank + axis : axis;
+
+            if (normalized < 0 || normalized >= rank)
+                throw new ArgumentOutOfRangeException(nameof(axes), $"Axis {axis} is out of range for tensor with rank {rank}. Valid range is [{-rank}, {rank - 1}].");
+
+            normalizedAxes[i] = normalized;
+        }
+
+        // Check for duplicates
+        var uniqueAxes = normalizedAxes.Distinct().ToArray();
+        if (uniqueAxes.Length != axes.Length)
+            throw new ArgumentException("Duplicate axes are not allowed", nameof(axes));
+
+        return uniqueAxes.OrderBy(a => a).ToArray();
+    }
+
     /// <inheritdoc/>
     public Tensor<T> ReduceMax<T>(Tensor<T> input, int[] axes, bool keepDims, out int[] maxIndices)
     {
@@ -4099,8 +4165,8 @@ public class CpuEngine : IEngine
         var inputShape = input.Shape;
         var inputData = input.ToArray();
 
-        // Normalize axes
-        var normalizedAxes = axes.Select(a => a < 0 ? inputShape.Length + a : a).OrderBy(a => a).ToArray();
+        // Validate and normalize axes
+        var normalizedAxes = ValidateAndNormalizeAxes(axes, inputShape.Length);
 
         // Compute output shape
         var outputShapeList = new List<int>();
@@ -4192,7 +4258,8 @@ public class CpuEngine : IEngine
         var inputShape = input.Shape;
         var inputData = input.ToArray();
 
-        var normalizedAxes = axes.Select(a => a < 0 ? inputShape.Length + a : a).OrderBy(a => a).ToArray();
+        // Validate and normalize axes
+        var normalizedAxes = ValidateAndNormalizeAxes(axes, inputShape.Length);
 
         var outputShapeList = new List<int>();
         for (int i = 0; i < inputShape.Length; i++)
@@ -4258,11 +4325,15 @@ public class CpuEngine : IEngine
     /// <inheritdoc/>
     public Tensor<T> ReduceMeanBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] axes)
     {
+        if (inputShape == null || inputShape.Length == 0)
+            throw new ArgumentNullException(nameof(inputShape), "inputShape cannot be null or empty");
+
         var numOps = MathHelper.GetNumericOperations<T>();
         int inputSize = inputShape.Aggregate(1, (a, b) => a * b);
         var gradInputData = new T[inputSize];
 
-        var normalizedAxes = axes.Select(a => a < 0 ? inputShape.Length + a : a).ToArray();
+        // Validate and normalize axes
+        var normalizedAxes = ValidateAndNormalizeAxes(axes, inputShape.Length);
 
         int reduceCount = 1;
         foreach (var ax in normalizedAxes)
