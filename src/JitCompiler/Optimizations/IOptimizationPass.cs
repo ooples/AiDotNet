@@ -51,10 +51,15 @@ public interface IOptimizationPass
     /// <returns>An optimized IR graph.</returns>
     /// <remarks>
     /// <para>
-    /// This method should return a new optimized graph. It should not modify
-    /// the input graph (functional programming style). The returned graph
-    /// must be semantically equivalent to the input (same computation),
-    /// but can have different structure for better performance.
+    /// This method returns an optimized graph that is semantically equivalent
+    /// to the input (same computation), but may have different structure for
+    /// better performance.
+    /// </para>
+    /// <para>
+    /// <b>Important:</b> Implementations may modify operations from the input graph
+    /// for efficiency (e.g., remapping InputIds). Callers should not assume the input
+    /// graph remains unchanged after this method returns. If you need to preserve the
+    /// original graph, make a deep copy before calling this method.
     /// </para>
     /// <para><b>For Beginners:</b> This is where the magic happens!
     ///
@@ -66,8 +71,8 @@ public interface IOptimizationPass
     ///
     /// Important rules:
     /// - Don't change what the graph computes (correctness!)
-    /// - Don't modify the input graph (return a new one)
     /// - The optimized graph should produce identical results
+    /// - The input graph may be modified as a side effect
     ///
     /// Example:
     /// Input:  t1 = Add(Const(2), Const(3)); t2 = Mul(t1, x)

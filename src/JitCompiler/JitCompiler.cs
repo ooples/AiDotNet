@@ -247,9 +247,17 @@ public class JitCompiler : IDisposable
     /// - How much speedup to expect
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if outputNode or inputs is null.
+    /// </exception>
     public (Func<Tensor<T>[], Tensor<T>[]> CompiledFunc, CompilationStats Stats) CompileWithStats<T>(
         ComputationNode<T> outputNode, List<ComputationNode<T>> inputs)
     {
+        if (outputNode == null)
+            throw new ArgumentNullException(nameof(outputNode));
+        if (inputs == null)
+            throw new ArgumentNullException(nameof(inputs));
+
         var stats = new CompilationStats();
         var startTime = DateTime.UtcNow;
 
@@ -392,9 +400,17 @@ public class JitCompiler : IDisposable
     /// - Cache hit information
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if outputNode or inputs is null.
+    /// </exception>
     public (Func<Tensor<T>[], Tensor<T>[]> CompiledBackward, CompilationStats Stats) CompileBackwardWithStats<T>(
         ComputationNode<T> outputNode, List<ComputationNode<T>> inputs)
     {
+        if (outputNode == null)
+            throw new ArgumentNullException(nameof(outputNode));
+        if (inputs == null)
+            throw new ArgumentNullException(nameof(inputs));
+
         var stats = new CompilationStats();
         var startTime = DateTime.UtcNow;
 

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
 
@@ -34,8 +35,8 @@ public class AutoTuningPass : IOptimizationPass
     /// <inheritdoc/>
     public string Name => "Auto-Tuning";
 
-    private static readonly Dictionary<int, TuningConfig> _tuningCache = new();
-    private static readonly Dictionary<int, TuningMetrics> _metricsHistory = new();
+    private static readonly ConcurrentDictionary<int, TuningConfig> _tuningCache = new();
+    private static readonly ConcurrentDictionary<int, TuningMetrics> _metricsHistory = new();
 
     /// <summary>
     /// Configuration for tuning behavior.
@@ -86,10 +87,10 @@ public class AutoTuningPass : IOptimizationPass
         // 3. Analyze graph and select optimal configuration
         var config = SelectOptimalConfig(graph);
 
-        // 4. Cache the configuration if graph is complex enough
+        // 4. Cache the configuration if graph is complex enough (thread-safe)
         if (graph.Operations.Count >= _config.MinGraphSizeForCaching)
         {
-            _tuningCache[fingerprint] = config;
+            _tuningCache.TryAdd(fingerprint, config);
         }
 
         graph.Metadata["AutoTuning_CacheHit"] = false;

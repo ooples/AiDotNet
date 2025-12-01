@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace AiDotNet.JitCompiler.IR;
 
 /// <summary>
@@ -43,6 +45,8 @@ public static class IRTypeExtensions
             Type t when t == typeof(uint) => IRType.UInt32,
             Type t when t == typeof(ulong) => IRType.UInt64,
             Type t when t == typeof(decimal) => IRType.Decimal,
+            Type t when t == typeof(Half) => IRType.Half,
+            Type t when t == typeof(Complex) => IRType.Complex,
             _ => throw new NotSupportedException($"Type {type} not supported in IR")
         };
     }
@@ -65,6 +69,8 @@ public static class IRTypeExtensions
             IRType.UInt32 => typeof(uint),
             IRType.UInt64 => typeof(ulong),
             IRType.Decimal => typeof(decimal),
+            IRType.Half => typeof(Half),
+            IRType.Complex => typeof(Complex),
             _ => throw new NotSupportedException($"IRType {irType} conversion not supported")
         };
     }

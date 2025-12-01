@@ -39,6 +39,7 @@ public static class TensorShapeExtensions
     /// <para><b>For Beginners:</b> This calculates how many total values a tensor holds.
     ///
     /// For example:
+    /// - [] has 1 element (scalar - a single number)
     /// - [5] has 5 elements
     /// - [3, 4] has 3 × 4 = 12 elements
     /// - [2, 3, 4] has 2 × 3 × 4 = 24 elements
@@ -48,7 +49,8 @@ public static class TensorShapeExtensions
     /// </remarks>
     public static int GetElementCount(this int[] shape)
     {
-        if (shape.Length == 0) return 0;
+        // Scalar (empty shape) has 1 element
+        if (shape.Length == 0) return 1;
 
         int count = 1;
         foreach (var dim in shape)

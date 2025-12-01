@@ -229,7 +229,7 @@ public class JitCompiledModel
         // Compile on first call
         if (_compiledForward == null)
         {
-            _compiledForward = _jit.Compile(output, new[] { inputNode });
+            _compiledForward = _jit.Compile(output, new List<ComputationNode<float>> { inputNode });
         }
 
         // Execute compiled version

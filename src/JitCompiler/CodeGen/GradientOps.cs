@@ -1,5 +1,6 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.JitCompiler.CodeGen;
 
@@ -204,25 +205,15 @@ public static class GradientOps
     /// </summary>
     private static Tensor<T> CreateMask<T>(Tensor<T> input)
     {
-        var result = new Tensor<T>(input.Shape);
+        var numOps = MathHelper.GetNumericOperations<T>();
         var inputData = input.ToArray();
-        var resultData = result.ToArray();
-        var zero = (T)Convert.ChangeType(0.0, typeof(T));
-        var one = (T)Convert.ChangeType(1.0, typeof(T));
+        var resultData = new T[inputData.Length];
 
         for (int i = 0; i < inputData.Length; i++)
         {
-            // Use dynamic to handle generic comparison
-            var dataVal = inputData[i];
-            if (dataVal is null)
-            {
-                resultData[i] = zero;
-            }
-            else
-            {
-                dynamic val = dataVal;
-                resultData[i] = val > 0 ? one : zero;
-            }
+            resultData[i] = numOps.GreaterThan(inputData[i], numOps.Zero)
+                ? numOps.One
+                : numOps.Zero;
         }
 
         return new Tensor<T>(input.Shape, new Vector<T>(resultData));
@@ -233,13 +224,13 @@ public static class GradientOps
     /// </summary>
     private static Tensor<T> CreateOnes<T>(int[] shape)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         var totalSize = shape.Aggregate(1, (a, b) => a * b);
         var data = new T[totalSize];
-        var one = (T)Convert.ChangeType(1.0, typeof(T));
 
         for (int i = 0; i < totalSize; i++)
         {
-            data[i] = one;
+            data[i] = numOps.One;
         }
 
         return new Tensor<T>(shape, new Vector<T>(data));

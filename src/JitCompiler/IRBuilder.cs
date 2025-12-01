@@ -418,18 +418,9 @@ public class IRBuilder
     /// </remarks>
     private IRType InferIRType(Type type)
     {
-        if (type == typeof(float)) return IRType.Float32;
-        if (type == typeof(double)) return IRType.Float64;
-        if (type == typeof(int)) return IRType.Int32;
-        if (type == typeof(long)) return IRType.Int64;
-        if (type == typeof(byte)) return IRType.Byte;
-        if (type == typeof(sbyte)) return IRType.SByte;
-        if (type == typeof(short)) return IRType.Int16;
-        if (type == typeof(ushort)) return IRType.UInt16;
-        if (type == typeof(uint)) return IRType.UInt32;
-        if (type == typeof(ulong)) return IRType.UInt64;
-        if (type == typeof(decimal)) return IRType.Decimal;
-        return IRType.Float32; // Default
+        // Delegate to the centralized type mapping to avoid duplication
+        // and ensure consistent behavior (throws on unsupported types)
+        return IRTypeExtensions.FromSystemType(type);
     }
 
     /// <summary>
@@ -570,10 +561,8 @@ public class IRBuilder
         _nodeToTensorId.Clear();
 
         // Dictionary to track forward node -> backward gradient tensor ID
+        // Updated inline during traversal so gradients propagate to all ancestors
         var gradientMap = new Dictionary<object, int>();
-
-        // Dictionary to accumulate gradients for nodes with multiple consumers
-        var gradientAccumulators = new Dictionary<object, List<int>>();
 
         // First, build the forward graph to get tensor IDs
         var forwardNodes = TopologicalSort(outputNode);
@@ -596,7 +585,7 @@ public class IRBuilder
         // Traverse in reverse topological order for backpropagation
         var reverseOrder = forwardNodes.AsEnumerable().Reverse().ToList();
 
-        foreach (var node in reverseOrder.Where(n => !inputs.Contains(n)))
+        foreach (var node in reverseOrder)
         {
             // Get gradient of this node
             if (!gradientMap.TryGetValue(node, out var nodeGradId))
@@ -605,57 +594,60 @@ public class IRBuilder
                 continue;
             }
 
+            // Treat input nodes as gradient sinks: don't propagate further,
+            // their gradients will be exposed as graph outputs at the end
+            if (inputs.Contains(node))
+            {
+                continue;
+            }
+
             // Generate backward operations based on node type
             var backwardOps = CreateBackwardOps(node, nodeGradId);
 
-            if (backwardOps != null && backwardOps.Count > 0)
+            if (backwardOps == null || backwardOps.Count == 0)
             {
-                foreach (var op in backwardOps)
+                // Warn about missing backward implementation for non-leaf nodes
+                if (node.Parents.Count > 0 && node.OperationType.HasValue)
                 {
-                    graph.Operations.Add(op);
-                    graph.TensorShapes[op.OutputId] = op.OutputShape;
+                    System.Diagnostics.Debug.WriteLine(
+                        $"Warning: No backward ops generated for {node.OperationType.Value}. " +
+                        "Gradients will not propagate through this operation.");
                 }
+                continue;
+            }
 
-                // Distribute gradients to parent nodes
-                for (int i = 0; i < node.Parents.Count; i++)
+            foreach (var op in backwardOps)
+            {
+                graph.Operations.Add(op);
+                graph.TensorShapes[op.OutputId] = op.OutputShape;
+            }
+
+            // Distribute gradients to parent nodes with inline accumulation
+            // This ensures gradientMap is updated during traversal so deeper nodes get gradients
+            for (int i = 0; i < node.Parents.Count && i < backwardOps.Count; i++)
+            {
+                var parent = node.Parents[i];
+                var parentGradId = backwardOps[i].OutputId;
+
+                if (gradientMap.TryGetValue(parent, out var existingGradId))
                 {
-                    var parent = node.Parents[i];
-                    var parentGradId = backwardOps[i].OutputId;
-
-                    // If parent already has gradient(s), accumulate
-                    if (!gradientAccumulators.ContainsKey(parent))
+                    // Need to accumulate multiple gradient contributions
+                    var accumOp = new Operations.GradAccumulateOp
                     {
-                        gradientAccumulators[parent] = new List<int>();
-                    }
-                    gradientAccumulators[parent].Add(parentGradId);
+                        OutputId = _nextTensorId++,
+                        InputIds = new[] { existingGradId, parentGradId },
+                        OutputType = InferIRType(typeof(T)),
+                        OutputShape = parent.Value.Shape
+                    };
+                    graph.Operations.Add(accumOp);
+                    graph.TensorShapes[accumOp.OutputId] = accumOp.OutputShape;
+                    gradientMap[parent] = accumOp.OutputId;
                 }
-            }
-        }
-
-        // Create gradient accumulation operations for nodes with multiple gradients
-        foreach (var kvp in gradientAccumulators)
-        {
-            var node = kvp.Key;
-            var gradIds = kvp.Value;
-
-            if (gradIds.Count == 1)
-            {
-                // Single gradient - no accumulation needed
-                gradientMap[node] = gradIds[0];
-            }
-            else
-            {
-                // Multiple gradients - need to accumulate
-                var accumOp = new Operations.GradAccumulateOp
+                else
                 {
-                    OutputId = _nextTensorId++,
-                    InputIds = gradIds.ToArray(),
-                    OutputType = InferIRType(typeof(T)),
-                    OutputShape = ((ComputationNode<T>)node).Value.Shape
-                };
-                graph.Operations.Add(accumOp);
-                graph.TensorShapes[accumOp.OutputId] = accumOp.OutputShape;
-                gradientMap[node] = accumOp.OutputId;
+                    // First gradient for this parent
+                    gradientMap[parent] = parentGradId;
+                }
             }
         }
 

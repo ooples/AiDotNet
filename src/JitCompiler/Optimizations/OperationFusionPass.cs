@@ -58,6 +58,9 @@ public class OperationFusionPass : IOptimizationPass
     /// </summary>
     public IRGraph Optimize(IRGraph graph)
     {
+        // Track output IDs so CountUsages can prevent fusing externally visible tensors
+        _currentOutputIds = graph.OutputIds;
+
         // Copy operations to working list
         var operations = new List<IROp>(graph.Operations);
         var fusedOps = new HashSet<IROp>();
@@ -505,6 +508,7 @@ public class OperationFusionPass : IOptimizationPass
 
     /// <summary>
     /// Counts how many operations use a given tensor as input.
+    /// Also counts graph outputs as usages to prevent fusing tensors that are externally visible.
     /// </summary>
     private int CountUsages(List<IROp> operations, int tensorId, HashSet<IROp> fusedOps)
     {
@@ -513,8 +517,18 @@ public class OperationFusionPass : IOptimizationPass
         {
             if (op.InputIds.Contains(tensorId)) count++;
         }
+
+        // Also treat graph outputs as usages - we track this via instance field
+        if (_currentOutputIds != null && _currentOutputIds.Contains(tensorId))
+        {
+            count++;
+        }
+
         return count;
     }
+
+    // Track current graph's output IDs during optimization
+    private IList<int>? _currentOutputIds;
 
     private int FuseBatchNormActivation(List<IROp> operations, HashSet<IROp> fusedOps, Dictionary<int, int> tensorMapping)
     {

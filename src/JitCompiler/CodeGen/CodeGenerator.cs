@@ -51,8 +51,6 @@ namespace AiDotNet.JitCompiler.CodeGen;
 /// </remarks>
 public class CodeGenerator
 {
-    private readonly Dictionary<int, ParameterExpression> _tensorVariables = new();
-    private readonly List<Expression> _expressions = new();
     private readonly MethodInfo[] _tensorOperationsMethods;
 
     /// <summary>
@@ -112,8 +110,9 @@ public class CodeGenerator
     /// </remarks>
     public Func<Tensor<T>[], Tensor<T>[]> Generate<T>(IRGraph graph)
     {
-        _tensorVariables.Clear();
-        _expressions.Clear();
+        // Use local variables instead of instance fields to ensure thread safety
+        var tensorVariables = new Dictionary<int, ParameterExpression>();
+        var expressions = new List<Expression>();
 
         // Create parameter for input array
         var inputsParam = Expression.Parameter(typeof(Tensor<T>[]), "inputs");
@@ -122,7 +121,7 @@ public class CodeGenerator
         foreach (var inputId in graph.InputIds)
         {
             var inputVar = Expression.Variable(typeof(ComputationNode<T>), $"t{inputId}");
-            _tensorVariables[inputId] = inputVar;
+            tensorVariables[inputId] = inputVar;
 
             // Wrap tensor in ComputationNode: t{inputId} = TensorOperations<T>.Variable(inputs[index])
             var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string) });
@@ -130,16 +129,16 @@ public class CodeGenerator
                 Expression.ArrayIndex(inputsParam, Expression.Constant(graph.InputIds.IndexOf(inputId))),
                 Expression.Constant($"input_{inputId}"));
             var assignment = Expression.Assign(inputVar, wrapCall);
-            _expressions.Add(assignment);
+            expressions.Add(assignment);
         }
 
         // Generate code for each operation
         foreach (var op in graph.Operations)
         {
-            var opExpression = GenerateOperation<T>(op);
+            var opExpression = GenerateOperation<T>(op, tensorVariables, expressions);
             if (opExpression != null)
             {
-                _expressions.Add(opExpression);
+                expressions.Add(opExpression);
             }
         }
 
@@ -147,15 +146,15 @@ public class CodeGenerator
         var valueProperty = typeof(ComputationNode<T>).GetProperty("Value");
         var outputArray = Expression.NewArrayInit(
             typeof(Tensor<T>),
-            graph.OutputIds.Select(id => Expression.Property(_tensorVariables[id], valueProperty!))
+            graph.OutputIds.Select(id => Expression.Property(tensorVariables[id], valueProperty!))
         );
 
-        _expressions.Add(outputArray);
+        expressions.Add(outputArray);
 
         // Build lambda expression
         var block = Expression.Block(
-            _tensorVariables.Values,
-            _expressions
+            tensorVariables.Values,
+            expressions
         );
 
         var lambda = Expression.Lambda<Func<Tensor<T>[], Tensor<T>[]>>(
@@ -197,14 +196,14 @@ public class CodeGenerator
     /// This expression becomes part of the final compiled function.
     /// </para>
     /// </remarks>
-    private Expression? GenerateOperation<T>(IROp op)
+    private Expression? GenerateOperation<T>(IROp op, Dictionary<int, ParameterExpression> tensorVariables, List<Expression> expressions)
     {
         // Create output variable (as ComputationNode<T> to match TensorOperations return types)
         var outputVar = Expression.Variable(typeof(ComputationNode<T>), $"t{op.OutputId}");
-        _tensorVariables[op.OutputId] = outputVar;
+        tensorVariables[op.OutputId] = outputVar;
 
         // Get input variables
-        var inputVars = op.InputIds.Select(id => _tensorVariables[id]).ToArray();
+        var inputVars = op.InputIds.Select(id => tensorVariables[id]).ToArray();
 
         // Generate operation-specific code
         Expression? operationCall = op switch
@@ -386,7 +385,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateBinaryOp<T>(string methodName, ParameterExpression[] inputs)
     {
-        var method = FindMethod(methodName, typeof(ComputationNode<T>), typeof(ComputationNode<T>));
+        var method = FindMethod<T>(methodName, typeof(ComputationNode<T>), typeof(ComputationNode<T>));
         return Expression.Call(method, inputs[0], inputs[1]);
     }
 
@@ -395,7 +394,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateUnaryOp<T>(string methodName, ParameterExpression[] inputs)
     {
-        var method = FindMethod(methodName, typeof(ComputationNode<T>));
+        var method = FindMethod<T>(methodName, typeof(ComputationNode<T>));
         return Expression.Call(method, inputs[0]);
     }
 
@@ -404,7 +403,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GeneratePowerOp<T>(ParameterExpression input, double exponent)
     {
-        var method = FindMethod("Power", typeof(ComputationNode<T>), typeof(double));
+        var method = FindMethod<T>("Power", typeof(ComputationNode<T>), typeof(double));
         return Expression.Call(method, input, Expression.Constant(exponent));
     }
 
@@ -413,7 +412,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateSoftmaxOp<T>(ParameterExpression input, int axis)
     {
-        var method = FindMethod("Softmax", typeof(ComputationNode<T>), typeof(int));
+        var method = FindMethod<T>("Softmax", typeof(ComputationNode<T>), typeof(int));
         return Expression.Call(method, input, Expression.Constant(axis));
     }
 
@@ -422,7 +421,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateSumOp<T>(ParameterExpression input, int[]? axes, bool keepDims)
     {
-        var method = FindMethod("Sum", typeof(ComputationNode<T>), typeof(int[]), typeof(bool));
+        var method = FindMethod<T>("Sum", typeof(ComputationNode<T>), typeof(int[]), typeof(bool));
         return Expression.Call(method, input, Expression.Constant(axes), Expression.Constant(keepDims));
     }
 
@@ -431,7 +430,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateReduceOp<T>(string methodName, ParameterExpression input, int[]? axes, bool keepDims)
     {
-        var method = FindMethod(methodName, typeof(ComputationNode<T>), typeof(int[]), typeof(bool));
+        var method = FindMethod<T>(methodName, typeof(ComputationNode<T>), typeof(int[]), typeof(bool));
         return Expression.Call(method, input, Expression.Constant(axes), Expression.Constant(keepDims));
     }
 
@@ -440,7 +439,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateReshapeOp<T>(ParameterExpression input, int[] newShape)
     {
-        var method = FindMethod("Reshape", typeof(ComputationNode<T>), typeof(int[]));
+        var method = FindMethod<T>("Reshape", typeof(ComputationNode<T>), typeof(int[]));
         return Expression.Call(method, input, Expression.Constant(newShape));
     }
 
@@ -449,7 +448,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateConcatOp<T>(ParameterExpression[] inputs, int axis)
     {
-        var method = FindMethod("Concat", typeof(ComputationNode<T>[]), typeof(int));
+        var method = FindMethod<T>("Concat", typeof(ComputationNode<T>[]), typeof(int));
         var inputArray = Expression.NewArrayInit(typeof(ComputationNode<T>), inputs);
         return Expression.Call(method, inputArray, Expression.Constant(axis));
     }
@@ -460,7 +459,7 @@ public class CodeGenerator
     private Expression GenerateConv2DOp<T>(ParameterExpression[] inputs, Conv2DOp op)
     {
         // This is a simplified placeholder - full implementation would handle all Conv2D parameters
-        var method = FindMethod("Conv2D", typeof(ComputationNode<T>), typeof(ComputationNode<T>),
+        var method = FindMethod<T>("Conv2D", typeof(ComputationNode<T>), typeof(ComputationNode<T>),
             typeof(int[]), typeof(int[]));
         return Expression.Call(method, inputs[0], inputs[1],
             Expression.Constant(op.Stride), Expression.Constant(op.Padding));
@@ -471,7 +470,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateMaxPool2DOp<T>(ParameterExpression input, MaxPool2DOp op)
     {
-        var method = FindMethod("MaxPool2D", typeof(ComputationNode<T>),
+        var method = FindMethod<T>("MaxPool2D", typeof(ComputationNode<T>),
             typeof(int[]), typeof(int[]), typeof(int[]));
         return Expression.Call(method, input,
             Expression.Constant(op.PoolSize),
@@ -484,7 +483,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateAvgPool2DOp<T>(ParameterExpression input, AvgPool2DOp op)
     {
-        var method = FindMethod("AvgPool2D", typeof(ComputationNode<T>),
+        var method = FindMethod<T>("AvgPool2D", typeof(ComputationNode<T>),
             typeof(int[]), typeof(int[]), typeof(int[]));
         return Expression.Call(method, input,
             Expression.Constant(op.PoolSize),
@@ -497,7 +496,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateLayerNormOp<T>(ParameterExpression[] inputs, LayerNormOp op)
     {
-        var method = FindMethod("LayerNorm", typeof(ComputationNode<T>),
+        var method = FindMethod<T>("LayerNorm", typeof(ComputationNode<T>),
             typeof(ComputationNode<T>), typeof(ComputationNode<T>),
             typeof(int[]), typeof(double));
         return Expression.Call(method, inputs[0], inputs[1], inputs[2],
@@ -510,7 +509,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateBatchNormOp<T>(ParameterExpression[] inputs, BatchNormOp op)
     {
-        var method = FindMethod("BatchNorm", typeof(ComputationNode<T>),
+        var method = FindMethod<T>("BatchNorm", typeof(ComputationNode<T>),
             typeof(ComputationNode<T>), typeof(ComputationNode<T>),
             typeof(ComputationNode<T>), typeof(ComputationNode<T>),
             typeof(double), typeof(double));
@@ -536,7 +535,7 @@ public class CodeGenerator
     /// Uses reflection to find methods at runtime.
     /// </para>
     /// </remarks>
-    private MethodInfo FindMethod(string methodName, params Type[] parameterTypes)
+    private MethodInfo FindMethod<T>(string methodName, params Type[] parameterTypes)
     {
         var method = _tensorOperationsMethods.FirstOrDefault(m =>
             m.Name == methodName &&
@@ -548,11 +547,10 @@ public class CodeGenerator
                 $"Could not find TensorOperations method '{methodName}' with {parameterTypes.Length} parameters");
         }
 
-        // If method is generic, make it concrete with T
+        // If method is generic, specialize it with the element type T
         if (method.IsGenericMethodDefinition)
         {
-            var genericArg = parameterTypes[0].GetGenericArguments()[0];
-            method = method.MakeGenericMethod(genericArg);
+            method = method.MakeGenericMethod(typeof(T));
         }
 
         return method;
@@ -1122,7 +1120,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateELUOp<T>(ParameterExpression input, double alpha)
     {
-        var method = FindMethod("ELU", typeof(ComputationNode<T>), typeof(double));
+        var method = FindMethod<T>("ELU", typeof(ComputationNode<T>), typeof(double));
         return Expression.Call(method, input, Expression.Constant(alpha));
     }
 
@@ -1131,7 +1129,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateLeakyReLUOp<T>(ParameterExpression input, double alpha)
     {
-        var method = FindMethod("LeakyReLU", typeof(ComputationNode<T>), typeof(double));
+        var method = FindMethod<T>("LeakyReLU", typeof(ComputationNode<T>), typeof(double));
         return Expression.Call(method, input, Expression.Constant(alpha));
     }
 
@@ -1140,7 +1138,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGELUOp<T>(ParameterExpression input, bool approximate)
     {
-        var method = FindMethod("GELU", typeof(ComputationNode<T>), typeof(bool));
+        var method = FindMethod<T>("GELU", typeof(ComputationNode<T>), typeof(bool));
         return Expression.Call(method, input, Expression.Constant(approximate));
     }
 
@@ -1149,7 +1147,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateSoftPlusOp<T>(ParameterExpression input, double beta, double threshold)
     {
-        var method = FindMethod("SoftPlus", typeof(ComputationNode<T>), typeof(double), typeof(double));
+        var method = FindMethod<T>("SoftPlus", typeof(ComputationNode<T>), typeof(double), typeof(double));
         return Expression.Call(method, input, Expression.Constant(beta), Expression.Constant(threshold));
     }
 
@@ -1158,7 +1156,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateHardTanhOp<T>(ParameterExpression input, double minVal, double maxVal)
     {
-        var method = FindMethod("HardTanh", typeof(ComputationNode<T>), typeof(double), typeof(double));
+        var method = FindMethod<T>("HardTanh", typeof(ComputationNode<T>), typeof(double), typeof(double));
         return Expression.Call(method, input, Expression.Constant(minVal), Expression.Constant(maxVal));
     }
 
@@ -1167,7 +1165,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateCELUOp<T>(ParameterExpression input, double alpha)
     {
-        var method = FindMethod("CELU", typeof(ComputationNode<T>), typeof(double));
+        var method = FindMethod<T>("CELU", typeof(ComputationNode<T>), typeof(double));
         return Expression.Call(method, input, Expression.Constant(alpha));
     }
 
@@ -1176,7 +1174,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateLogSoftmaxOp<T>(ParameterExpression input, int axis)
     {
-        var method = FindMethod("LogSoftmax", typeof(ComputationNode<T>), typeof(int));
+        var method = FindMethod<T>("LogSoftmax", typeof(ComputationNode<T>), typeof(int));
         return Expression.Call(method, input, Expression.Constant(axis));
     }
 
@@ -1185,7 +1183,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateThresholdedReLUOp<T>(ParameterExpression input, double threshold)
     {
-        var method = FindMethod("ThresholdedReLU", typeof(ComputationNode<T>), typeof(double));
+        var method = FindMethod<T>("ThresholdedReLU", typeof(ComputationNode<T>), typeof(double));
         return Expression.Call(method, input, Expression.Constant(threshold));
     }
 
@@ -1198,12 +1196,12 @@ public class CodeGenerator
     {
         if (op.SplitSizes.Length > 0)
         {
-            var method = FindMethod("Split", typeof(ComputationNode<T>), typeof(int[]), typeof(int));
+            var method = FindMethod<T>("Split", typeof(ComputationNode<T>), typeof(int[]), typeof(int));
             return Expression.Call(method, input, Expression.Constant(op.SplitSizes), Expression.Constant(op.Axis));
         }
         else
         {
-            var method = FindMethod("Split", typeof(ComputationNode<T>), typeof(int), typeof(int));
+            var method = FindMethod<T>("Split", typeof(ComputationNode<T>), typeof(int), typeof(int));
             return Expression.Call(method, input, Expression.Constant(op.NumSplits), Expression.Constant(op.Axis));
         }
     }
@@ -1213,7 +1211,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateSliceOp<T>(ParameterExpression input, SliceOp op)
     {
-        var method = FindMethod("Slice", typeof(ComputationNode<T>), typeof(int[]), typeof(int[]), typeof(int[]), typeof(int[]));
+        var method = FindMethod<T>("Slice", typeof(ComputationNode<T>), typeof(int[]), typeof(int[]), typeof(int[]), typeof(int[]));
         return Expression.Call(method, input,
             Expression.Constant(op.Starts),
             Expression.Constant(op.Ends),
@@ -1226,7 +1224,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateNormOp<T>(ParameterExpression input, int axis, bool keepDims)
     {
-        var method = FindMethod("Norm", typeof(ComputationNode<T>), typeof(int), typeof(bool));
+        var method = FindMethod<T>("Norm", typeof(ComputationNode<T>), typeof(int), typeof(bool));
         return Expression.Call(method, input, Expression.Constant(axis), Expression.Constant(keepDims));
     }
 
@@ -1237,7 +1235,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateEmbeddingOp<T>(ParameterExpression[] inputs, EmbeddingOp op)
     {
-        var method = FindMethod("Embedding", typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(int?));
+        var method = FindMethod<T>("Embedding", typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(int?));
         return Expression.Call(method, inputs[0], inputs[1],
             op.PaddingIdx.HasValue
                 ? Expression.Constant(op.PaddingIdx, typeof(int?))
@@ -1249,7 +1247,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateScaledDotProductAttentionOp<T>(ParameterExpression[] inputs, ScaledDotProductAttentionOp op)
     {
-        var method = FindMethod("ScaledDotProductAttention",
+        var method = FindMethod<T>("ScaledDotProductAttention",
             typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>),
             typeof(ComputationNode<T>), typeof(double?), typeof(bool), typeof(double));
 
@@ -1274,7 +1272,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateMultiHeadAttentionOp<T>(ParameterExpression[] inputs, MultiHeadAttentionOp op)
     {
-        var method = FindMethod("MultiHeadAttention",
+        var method = FindMethod<T>("MultiHeadAttention",
             typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>),
             typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>),
             typeof(int), typeof(double));
@@ -1298,7 +1296,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateFusedMatMulAddOp<T>(ParameterExpression[] inputs)
     {
-        var method = FindMethod("FusedMatMulAdd",
+        var method = FindMethod<T>("FusedMatMulAdd",
             typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>));
         return Expression.Call(method, inputs[0], inputs[1], inputs[2]);
     }
@@ -1308,7 +1306,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateFusedLinearReLUOp<T>(ParameterExpression[] inputs)
     {
-        var method = FindMethod("FusedLinearReLU",
+        var method = FindMethod<T>("FusedLinearReLU",
             typeof(ComputationNode<T>), typeof(ComputationNode<T>), typeof(ComputationNode<T>));
         return Expression.Call(method, inputs[0], inputs[1], inputs[2]);
     }
@@ -1318,7 +1316,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateFusedConvBatchNormOp<T>(ParameterExpression[] inputs, FusedConvBatchNormOp op)
     {
-        var method = FindMethod("FusedConvBatchNorm",
+        var method = FindMethod<T>("FusedConvBatchNorm",
             typeof(ComputationNode<T>), typeof(ComputationNode<T>),
             typeof(ComputationNode<T>), typeof(ComputationNode<T>),
             typeof(ComputationNode<T>), typeof(ComputationNode<T>),
@@ -1335,7 +1333,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateFusedAddReLUOp<T>(ParameterExpression[] inputs)
     {
-        var method = FindMethod("FusedAddReLU", typeof(ComputationNode<T>), typeof(ComputationNode<T>));
+        var method = FindMethod<T>("FusedAddReLU", typeof(ComputationNode<T>), typeof(ComputationNode<T>));
         return Expression.Call(method, inputs[0], inputs[1]);
     }
 
@@ -1346,7 +1344,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateComplexMatMulOp<T>(ParameterExpression[] inputs)
     {
-        var method = FindMethod("ComplexMatMul",
+        var method = FindMethod<T>("ComplexMatMul",
             typeof(ComputationNode<T>), typeof(ComputationNode<T>),
             typeof(ComputationNode<T>), typeof(ComputationNode<T>));
         return Expression.Call(method, inputs[0], inputs[1], inputs[2], inputs[3]);
@@ -1357,7 +1355,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateComplexMultiplyOp<T>(ParameterExpression[] inputs)
     {
-        var method = FindMethod("ComplexMultiply",
+        var method = FindMethod<T>("ComplexMultiply",
             typeof(ComputationNode<T>), typeof(ComputationNode<T>),
             typeof(ComputationNode<T>), typeof(ComputationNode<T>));
         return Expression.Call(method, inputs[0], inputs[1], inputs[2], inputs[3]);
@@ -1370,7 +1368,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateDropoutOp<T>(ParameterExpression input, DropoutOp op)
     {
-        var method = FindMethod("Dropout", typeof(ComputationNode<T>), typeof(double), typeof(bool));
+        var method = FindMethod<T>("Dropout", typeof(ComputationNode<T>), typeof(double), typeof(bool));
         return Expression.Call(method, input,
             Expression.Constant(op.Probability),
             Expression.Constant(op.Training));
@@ -1383,7 +1381,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateScaledTanhOp<T>(ParameterExpression input, double beta)
     {
-        var method = FindMethod("ScaledTanh", typeof(ComputationNode<T>), typeof(double));
+        var method = FindMethod<T>("ScaledTanh", typeof(ComputationNode<T>), typeof(double));
         return Expression.Call(method, input, Expression.Constant(beta));
     }
 
@@ -1392,7 +1390,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateISRUOp<T>(ParameterExpression input, double alpha)
     {
-        var method = FindMethod("ISRU", typeof(ComputationNode<T>), typeof(double));
+        var method = FindMethod<T>("ISRU", typeof(ComputationNode<T>), typeof(double));
         return Expression.Call(method, input, Expression.Constant(alpha));
     }
 
@@ -1401,7 +1399,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateSoftminOp<T>(ParameterExpression input, int axis)
     {
-        var method = FindMethod("Softmin", typeof(ComputationNode<T>), typeof(int));
+        var method = FindMethod<T>("Softmin", typeof(ComputationNode<T>), typeof(int));
         return Expression.Call(method, input, Expression.Constant(axis));
     }
 
@@ -1410,7 +1408,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateLogSoftminOp<T>(ParameterExpression input, int axis)
     {
-        var method = FindMethod("LogSoftmin", typeof(ComputationNode<T>), typeof(int));
+        var method = FindMethod<T>("LogSoftmin", typeof(ComputationNode<T>), typeof(int));
         return Expression.Call(method, input, Expression.Constant(axis));
     }
 
@@ -1419,7 +1417,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateMaxoutOp<T>(ParameterExpression input, int numPieces)
     {
-        var method = FindMethod("Maxout", typeof(ComputationNode<T>), typeof(int));
+        var method = FindMethod<T>("Maxout", typeof(ComputationNode<T>), typeof(int));
         return Expression.Call(method, input, Expression.Constant(numPieces));
     }
 
@@ -1428,7 +1426,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateRReLUOp<T>(ParameterExpression input, double lower, double upper)
     {
-        var method = FindMethod("RReLU", typeof(ComputationNode<T>), typeof(double), typeof(double));
+        var method = FindMethod<T>("RReLU", typeof(ComputationNode<T>), typeof(double), typeof(double));
         return Expression.Call(method, input, Expression.Constant(lower), Expression.Constant(upper));
     }
 
@@ -1437,7 +1435,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateSphericalSoftmaxOp<T>(ParameterExpression input, int axis)
     {
-        var method = FindMethod("SphericalSoftmax", typeof(ComputationNode<T>), typeof(int));
+        var method = FindMethod<T>("SphericalSoftmax", typeof(ComputationNode<T>), typeof(int));
         return Expression.Call(method, input, Expression.Constant(axis));
     }
 
@@ -1446,7 +1444,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateTaylorSoftmaxOp<T>(ParameterExpression input, int axis, int order)
     {
-        var method = FindMethod("TaylorSoftmax", typeof(ComputationNode<T>), typeof(int), typeof(int));
+        var method = FindMethod<T>("TaylorSoftmax", typeof(ComputationNode<T>), typeof(int), typeof(int));
         return Expression.Call(method, input, Expression.Constant(axis), Expression.Constant(order));
     }
 
@@ -1455,7 +1453,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateSparsemaxOp<T>(ParameterExpression input, int axis)
     {
-        var method = FindMethod("Sparsemax", typeof(ComputationNode<T>), typeof(int));
+        var method = FindMethod<T>("Sparsemax", typeof(ComputationNode<T>), typeof(int));
         return Expression.Call(method, input, Expression.Constant(axis));
     }
 
@@ -1464,7 +1462,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateHierarchicalSoftmaxOp<T>(ParameterExpression input, int[] treeStructure)
     {
-        var method = FindMethod("HierarchicalSoftmax", typeof(ComputationNode<T>), typeof(int[]));
+        var method = FindMethod<T>("HierarchicalSoftmax", typeof(ComputationNode<T>), typeof(int[]));
         return Expression.Call(method, input, Expression.Constant(treeStructure));
     }
 

@@ -314,6 +314,10 @@ public class BasicUsageExample
         }
         catch (Exception ex)
         {
+            // Rethrow critical exceptions that should not be caught
+            if (ex is OutOfMemoryException || ex is StackOverflowException || ex is System.Threading.ThreadAbortException)
+                throw;
+
             Console.WriteLine($"Error running examples: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
         }

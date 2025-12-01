@@ -267,7 +267,7 @@ public class JitCompilerTests
         Assert.Contains("6", str);
         Assert.Contains("Constant Folding", str);
         Assert.Contains("15.5", str);
-        Assert.Contains("false", str);
+        Assert.Contains("False", str);
     }
 
     [Fact]
