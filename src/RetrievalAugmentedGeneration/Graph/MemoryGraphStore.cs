@@ -15,15 +15,22 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// This implementation provides high-performance graph storage entirely in RAM.
 /// All operations are O(1) or O(degree) complexity. Data is lost when the application stops.
 /// </para>
+/// <para>
+/// <b>Thread Safety:</b> This class is NOT thread-safe. Callers must ensure proper
+/// synchronization when accessing from multiple threads. For thread-safe operations,
+/// use external locking or consider using <see cref="FileGraphStore{T}"/> which provides
+/// thread-safe access via ConcurrentDictionary.
+/// </para>
 /// <para><b>For Beginners:</b> This stores your graph in the computer's memory (RAM).
 ///
 /// Pros:
-/// - ⚡ Very fast (everything in RAM)
+/// - Very fast (everything in RAM)
 /// - Simple to use (no setup required)
 ///
 /// Cons:
-/// - 🔄 Data lost when app closes
-/// - 💾 Limited by available RAM
+/// - Data lost when app closes
+/// - Limited by available RAM
+/// - Not thread-safe (single-threaded use only)
 ///
 /// Good for:
 /// - Development and testing
@@ -33,7 +40,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// Not good for:
 /// - Production systems requiring persistence
 /// - Very large graphs (&gt;1M nodes)
-/// - Multi-process access to the same graph
+/// - Multi-process or multi-threaded access to the same graph
 ///
 /// For persistent storage, use FileGraphStore or Neo4jGraphStore instead.
 /// </para>
