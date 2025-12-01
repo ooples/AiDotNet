@@ -1,4 +1,5 @@
 using AiDotNet.Inference.SpeculativeDecoding;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
@@ -12,7 +13,7 @@ public class NGramDraftModelTests
     public void NGramDraftModel_Creation_InitializesCorrectly()
     {
         // Act
-        var model = new NGramDraftModel<float>(n: 3, vocabSize: 100);
+        var model = new NGramDraftModel<float>(ngramSize: 3, vocabSize: 100);
 
         // Assert
         Assert.Equal(100, model.VocabSize);
@@ -23,18 +24,18 @@ public class NGramDraftModelTests
     public void NGramDraftModel_Train_LearnsPatternsFromCorpus()
     {
         // Arrange
-        var model = new NGramDraftModel<float>(n: 2, vocabSize: 10, seed: 42);
+        var model = new NGramDraftModel<float>(ngramSize: 2, vocabSize: 10, seed: 42);
 
         // Simple pattern: 1 -> 2, 2 -> 3, 3 -> 1
-        var corpus = new int[][]
+        var corpus = new List<Vector<int>>
         {
-            new[] { 1, 2, 3, 1, 2, 3, 1, 2, 3 },
-            new[] { 1, 2, 3, 1, 2, 3, 1, 2, 3 }
+            new Vector<int>(new[] { 1, 2, 3, 1, 2, 3, 1, 2, 3 }),
+            new Vector<int>(new[] { 1, 2, 3, 1, 2, 3, 1, 2, 3 })
         };
 
         // Act
         model.Train(corpus);
-        var draft = model.GenerateDraft(new int[] { 1 }, 3, temperature: 0.1f);
+        var draft = model.GenerateDraft(new Vector<int>(new[] { 1 }), 3, temperature: 0.1f);
 
         // Assert - with low temperature, should follow learned pattern
         Assert.Equal(3, draft.NumTokens);
@@ -45,31 +46,32 @@ public class NGramDraftModelTests
     public void NGramDraftModel_GenerateDraft_ProducesValidOutput()
     {
         // Arrange
-        var model = new NGramDraftModel<float>(n: 3, vocabSize: 100, seed: 42);
+        var model = new NGramDraftModel<float>(ngramSize: 3, vocabSize: 100, seed: 42);
 
         // Act
-        var draft = model.GenerateDraft(new int[] { 1, 2, 3 }, 5, temperature: 1.0f);
+        var draft = model.GenerateDraft(new Vector<int>(new[] { 1, 2, 3 }), 5, temperature: 1.0f);
 
         // Assert
         Assert.Equal(5, draft.NumTokens);
         Assert.Equal(5, draft.Tokens.Length);
         Assert.Equal(5, draft.TokenProbabilities.Length);
-        Assert.Equal(5, draft.Probabilities.GetLength(0));
-        Assert.Equal(100, draft.Probabilities.GetLength(1));
+        Assert.Equal(5, draft.Probabilities.Rows);
+        Assert.Equal(100, draft.Probabilities.Columns);
     }
 
     [Fact]
     public void NGramDraftModel_GenerateDraft_TokenProbabilitiesAreValid()
     {
         // Arrange
-        var model = new NGramDraftModel<float>(n: 2, vocabSize: 50, seed: 42);
+        var model = new NGramDraftModel<float>(ngramSize: 2, vocabSize: 50, seed: 42);
 
         // Act
-        var draft = model.GenerateDraft(new int[] { 5 }, 3, temperature: 1.0f);
+        var draft = model.GenerateDraft(new Vector<int>(new[] { 5 }), 3, temperature: 1.0f);
 
         // Assert - probabilities should be in valid range
-        foreach (var prob in draft.TokenProbabilities)
+        for (int i = 0; i < draft.TokenProbabilities.Length; i++)
         {
+            float prob = draft.TokenProbabilities[i];
             Assert.True(prob >= 0 && prob <= 1, $"Token probability {prob} out of range");
         }
     }
@@ -95,10 +97,10 @@ public class NeuralDraftModelTests
     public void NeuralDraftModel_Creation_Works()
     {
         // Arrange
-        Func<int[], float[]> forward = tokens =>
+        Func<Vector<int>, Vector<float>> forward = tokens =>
         {
             // Simple mock - return uniform distribution
-            var logits = new float[100];
+            var logits = new Vector<float>(100);
             return logits;
         };
 
@@ -115,10 +117,10 @@ public class NeuralDraftModelTests
     {
         // Arrange
         int callCount = 0;
-        Func<int[], float[]> forward = tokens =>
+        Func<Vector<int>, Vector<float>> forward = tokens =>
         {
             callCount++;
-            var logits = new float[50];
+            var logits = new Vector<float>(50);
             // Bias towards token 10
             logits[10] = 5.0f;
             return logits;
@@ -127,7 +129,7 @@ public class NeuralDraftModelTests
         var model = new NeuralDraftModel<float>(forward, vocabSize: 50, maxDraftTokens: 4, seed: 42);
 
         // Act
-        var draft = model.GenerateDraft(new int[] { 1, 2 }, 3, temperature: 0.5f);
+        var draft = model.GenerateDraft(new Vector<int>(new[] { 1, 2 }), 3, temperature: 0.5f);
 
         // Assert
         Assert.Equal(3, draft.NumTokens);
@@ -138,11 +140,11 @@ public class NeuralDraftModelTests
     public void NeuralDraftModel_GenerateDraft_RespectsMaxDraftTokens()
     {
         // Arrange
-        Func<int[], float[]> forward = _ => new float[100];
+        Func<Vector<int>, Vector<float>> forward = _ => new Vector<float>(100);
         var model = new NeuralDraftModel<float>(forward, vocabSize: 100, maxDraftTokens: 3);
 
         // Act
-        var draft = model.GenerateDraft(new int[] { 1 }, numDraftTokens: 10, temperature: 1.0f);
+        var draft = model.GenerateDraft(new Vector<int>(new[] { 1 }), numDraftTokens: 10, temperature: 1.0f);
 
         // Assert - should be capped at maxDraftTokens
         Assert.Equal(3, draft.NumTokens);
@@ -156,24 +158,23 @@ public class SpeculativeDecoderTests
 {
     private IDraftModel<float> CreateMockDraftModel(int vocabSize = 100)
     {
-        return new NGramDraftModel<float>(n: 2, vocabSize: vocabSize, seed: 42);
+        return new NGramDraftModel<float>(ngramSize: 2, vocabSize: vocabSize, seed: 42);
     }
 
-    private Func<int[], float[][]> CreateMockTargetForward(int vocabSize = 100)
+    private Func<Vector<int>, Matrix<float>> CreateMockTargetForward(int vocabSize = 100)
     {
         return tokens =>
         {
             // Return probability distributions for each position
-            var probs = new float[tokens.Length][];
+            var probs = new Matrix<float>(tokens.Length, vocabSize);
             for (int i = 0; i < tokens.Length; i++)
             {
-                probs[i] = new float[vocabSize];
                 // Simple distribution - bias towards token 1
-                probs[i][1] = 0.5f;
+                probs[i, 1] = 0.5f;
                 float remaining = 0.5f / (vocabSize - 1);
                 for (int v = 0; v < vocabSize; v++)
                 {
-                    if (v != 1) probs[i][v] = remaining;
+                    if (v != 1) probs[i, v] = remaining;
                 }
             }
             return probs;
@@ -199,12 +200,13 @@ public class SpeculativeDecoderTests
         var decoder = new SpeculativeDecoder<float>(
             CreateMockDraftModel(),
             CreateMockTargetForward(),
-            new SpeculativeDecodingConfig { NumDraftTokens = 3 });
+            new SpeculativeDecodingConfig<float> { NumDraftTokens = 3 });
 
         // Act
         var result = await decoder.GenerateAsync(
-            inputTokens: new int[] { 1, 2, 3 },
-            maxNewTokens: 10);
+            inputTokens: new Vector<int>(new[] { 1, 2, 3 }),
+            maxNewTokens: 10,
+            temperature: 1.0f);
 
         // Assert
         Assert.True(result.NumGenerated > 0);
@@ -219,12 +221,13 @@ public class SpeculativeDecoderTests
         var decoder = new SpeculativeDecoder<float>(
             CreateMockDraftModel(),
             CreateMockTargetForward(),
-            new SpeculativeDecodingConfig { NumDraftTokens = 2 });
+            new SpeculativeDecodingConfig<float> { NumDraftTokens = 2 });
 
         // Act
         var result = decoder.Generate(
-            inputTokens: new int[] { 1 },
-            maxNewTokens: 5);
+            inputTokens: new Vector<int>(new[] { 1 }),
+            maxNewTokens: 5,
+            temperature: 1.0f);
 
         // Assert
         Assert.True(result.NumGenerated > 0);
@@ -237,17 +240,16 @@ public class SpeculativeDecoderTests
         const int eosToken = 99;
 
         // Mock target that always returns EOS with high probability
-        Func<int[], float[][]> targetForward = tokens =>
+        Func<Vector<int>, Matrix<float>> targetForward = tokens =>
         {
-            var probs = new float[tokens.Length][];
+            var probs = new Matrix<float>(tokens.Length, 100);
             for (int i = 0; i < tokens.Length; i++)
             {
-                probs[i] = new float[100];
-                probs[i][eosToken] = 0.9f;
+                probs[i, eosToken] = 0.9f;
                 float remaining = 0.1f / 99;
                 for (int v = 0; v < 100; v++)
                 {
-                    if (v != eosToken) probs[i][v] = remaining;
+                    if (v != eosToken) probs[i, v] = remaining;
                 }
             }
             return probs;
@@ -256,17 +258,18 @@ public class SpeculativeDecoderTests
         var decoder = new SpeculativeDecoder<float>(
             CreateMockDraftModel(),
             targetForward,
-            new SpeculativeDecodingConfig { NumDraftTokens = 3 });
+            new SpeculativeDecodingConfig<float> { NumDraftTokens = 3 });
 
         // Act
         var result = await decoder.GenerateAsync(
-            inputTokens: new int[] { 1 },
+            inputTokens: new Vector<int>(new[] { 1 }),
             maxNewTokens: 100,
+            temperature: 1.0f,
             eosToken: eosToken);
 
         // Assert - should stop early
         Assert.True(result.NumGenerated < 100);
-        Assert.Contains(eosToken, result.NewTokens);
+        Assert.True(ContainsToken(result.NewTokens, eosToken));
     }
 
     [Fact]
@@ -276,10 +279,10 @@ public class SpeculativeDecoderTests
         var decoder = new SpeculativeDecoder<float>(
             CreateMockDraftModel(),
             CreateMockTargetForward(),
-            new SpeculativeDecodingConfig { NumDraftTokens = 3 });
+            new SpeculativeDecodingConfig<float> { NumDraftTokens = 3 });
 
         // Act
-        await decoder.GenerateAsync(new int[] { 1, 2 }, maxNewTokens: 10);
+        await decoder.GenerateAsync(new Vector<int>(new[] { 1, 2 }), maxNewTokens: 10, temperature: 1.0f);
 
         // Assert
         var stats = decoder.GetStatistics();
@@ -296,7 +299,7 @@ public class SpeculativeDecoderTests
             CreateMockDraftModel(),
             CreateMockTargetForward());
 
-        decoder.Generate(new int[] { 1 }, maxNewTokens: 5);
+        decoder.Generate(new Vector<int>(new[] { 1 }), maxNewTokens: 5, temperature: 1.0f);
 
         // Act
         decoder.ResetStatistics();
@@ -320,7 +323,7 @@ public class SpeculativeDecoderTests
 
         // Act & Assert
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            decoder.GenerateAsync(new int[] { 1 }, maxNewTokens: 100, cancellationToken: cts.Token));
+            decoder.GenerateAsync(new Vector<int>(new[] { 1 }), maxNewTokens: 100, temperature: 1.0f, cancellationToken: cts.Token));
     }
 
     [Fact]
@@ -330,10 +333,10 @@ public class SpeculativeDecoderTests
         var decoder = new SpeculativeDecoder<float>(
             CreateMockDraftModel(),
             CreateMockTargetForward(),
-            new SpeculativeDecodingConfig { NumDraftTokens = 2 });
+            new SpeculativeDecodingConfig<float> { NumDraftTokens = 2 });
 
         // Act
-        var result = await decoder.GenerateAsync(new int[] { 1 }, maxNewTokens: 10);
+        var result = await decoder.GenerateAsync(new Vector<int>(new[] { 1 }), maxNewTokens: 10, temperature: 1.0f);
 
         // Assert
         Assert.NotEmpty(result.StepStatistics);
@@ -351,14 +354,24 @@ public class SpeculativeDecoderTests
         var decoder = new SpeculativeDecoder<float>(
             CreateMockDraftModel(),
             CreateMockTargetForward(),
-            new SpeculativeDecodingConfig { NumDraftTokens = 4 });
+            new SpeculativeDecodingConfig<float> { NumDraftTokens = 4 });
 
         // Act
-        await decoder.GenerateAsync(new int[] { 1, 2, 3 }, maxNewTokens: 20);
+        await decoder.GenerateAsync(new Vector<int>(new[] { 1, 2, 3 }), maxNewTokens: 20, temperature: 1.0f);
 
         // Assert
         var rate = decoder.AcceptanceRate;
         Assert.True(rate >= 0 && rate <= 1, $"Acceptance rate {rate} should be between 0 and 1");
+    }
+
+    private static bool ContainsToken(Vector<int> tokens, int token)
+    {
+        for (int i = 0; i < tokens.Length; i++)
+        {
+            if (tokens[i] == token)
+                return true;
+        }
+        return false;
     }
 }
 
@@ -369,26 +382,26 @@ public class TreeSpeculativeDecoderTests
 {
     private IDraftModel<float> CreateMockDraftModel()
     {
-        return new NGramDraftModel<float>(n: 2, vocabSize: 50, seed: 42);
+        return new NGramDraftModel<float>(ngramSize: 2, vocabSize: 50, seed: 42);
     }
 
-    private Func<int[][], float[][][]> CreateMockBatchTargetForward()
+    private Func<List<Vector<int>>, List<Matrix<float>>> CreateMockBatchTargetForward()
     {
         return sequences =>
         {
-            var results = new float[sequences.Length][][];
-            for (int s = 0; s < sequences.Length; s++)
+            var results = new List<Matrix<float>>();
+            foreach (var sequence in sequences)
             {
-                results[s] = new float[sequences[s].Length][];
-                for (int p = 0; p < sequences[s].Length; p++)
+                var probs = new Matrix<float>(sequence.Length, 50);
+                for (int p = 0; p < sequence.Length; p++)
                 {
-                    results[s][p] = new float[50];
                     // Uniform distribution
                     for (int v = 0; v < 50; v++)
                     {
-                        results[s][p][v] = 0.02f;
+                        probs[p, v] = 0.02f;
                     }
                 }
+                results.Add(probs);
             }
             return results;
         };
@@ -424,12 +437,13 @@ public class TreeSpeculativeDecoderTests
 
         // Act
         var result = await decoder.GenerateAsync(
-            inputTokens: new int[] { 1, 2 },
-            maxNewTokens: 5);
+            inputTokens: new Vector<int>(new[] { 1, 2 }),
+            maxNewTokens: 5,
+            temperature: 1.0f);
 
         // Assert
         Assert.True(result.NumGenerated > 0);
-        Assert.NotEmpty(result.NewTokens);
+        Assert.True(result.NewTokens.Length > 0);
     }
 
     [Fact]
@@ -441,7 +455,7 @@ public class TreeSpeculativeDecoderTests
             CreateMockBatchTargetForward());
 
         // Act
-        var result = decoder.Generate(new int[] { 1 }, maxNewTokens: 3);
+        var result = decoder.Generate(new Vector<int>(new[] { 1 }), maxNewTokens: 3, temperature: 1.0f);
 
         // Assert
         Assert.True(result.NumGenerated > 0);
@@ -462,7 +476,7 @@ public class TreeSpeculativeDecoderTests
             });
 
         // Act
-        var result = await decoder.GenerateAsync(new int[] { 1 }, maxNewTokens: 5);
+        var result = await decoder.GenerateAsync(new Vector<int>(new[] { 1 }), maxNewTokens: 5, temperature: 1.0f);
 
         // Assert
         Assert.NotEmpty(result.StepStatistics);
@@ -482,7 +496,7 @@ public class TreeSpeculativeDecoderTests
             CreateMockBatchTargetForward());
 
         // Act
-        await decoder.GenerateAsync(new int[] { 1, 2, 3 }, maxNewTokens: 10);
+        await decoder.GenerateAsync(new Vector<int>(new[] { 1, 2, 3 }), maxNewTokens: 10, temperature: 1.0f);
 
         // Assert
         var rate = decoder.AcceptanceRate;
@@ -499,29 +513,28 @@ public class SpeculativeDecodingIntegrationTests
     public async Task SpeculativeDecoding_WithTrainedDraft_AchievesSpeedup()
     {
         // Arrange
-        var draftModel = new NGramDraftModel<float>(n: 2, vocabSize: 20, seed: 42);
+        var draftModel = new NGramDraftModel<float>(ngramSize: 2, vocabSize: 20, seed: 42);
 
         // Train on repetitive pattern
         var corpus = Enumerable.Range(0, 100).Select(_ =>
-            new int[] { 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5 }
+            new Vector<int>(new[] { 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5 })
         ).ToList();
         draftModel.Train(corpus);
 
         // Target also follows similar pattern
-        Func<int[], float[][]> targetForward = tokens =>
+        Func<Vector<int>, Matrix<float>> targetForward = tokens =>
         {
-            var probs = new float[tokens.Length][];
+            var probs = new Matrix<float>(tokens.Length, 20);
             for (int i = 0; i < tokens.Length; i++)
             {
-                probs[i] = new float[20];
                 // Follow pattern: predict next in 1,2,3,4,5 cycle
                 int lastToken = i > 0 ? tokens[i - 1] : 0;
                 int nextToken = (lastToken % 5) + 1;
-                probs[i][nextToken] = 0.8f;
+                probs[i, nextToken] = 0.8f;
                 float remaining = 0.2f / 19;
                 for (int v = 0; v < 20; v++)
                 {
-                    if (v != nextToken) probs[i][v] = remaining;
+                    if (v != nextToken) probs[i, v] = remaining;
                 }
             }
             return probs;
@@ -530,10 +543,10 @@ public class SpeculativeDecodingIntegrationTests
         var decoder = new SpeculativeDecoder<float>(
             draftModel,
             targetForward,
-            new SpeculativeDecodingConfig { NumDraftTokens = 4 });
+            new SpeculativeDecodingConfig<float> { NumDraftTokens = 4 });
 
         // Act
-        var result = await decoder.GenerateAsync(new int[] { 5 }, maxNewTokens: 20, temperature: 0.5f);
+        var result = await decoder.GenerateAsync(new Vector<int>(new[] { 5 }), maxNewTokens: 20, temperature: 0.5f);
 
         // Assert
         var stats = decoder.GetStatistics();
@@ -548,14 +561,13 @@ public class SpeculativeDecodingIntegrationTests
     {
         // Arrange
         var decoder = new SpeculativeDecoder<float>(
-            new NGramDraftModel<float>(n: 2, vocabSize: 50, seed: 42),
+            new NGramDraftModel<float>(ngramSize: 2, vocabSize: 50, seed: 42),
             tokens =>
             {
-                var probs = new float[tokens.Length][];
+                var probs = new Matrix<float>(tokens.Length, 50);
                 for (int i = 0; i < tokens.Length; i++)
                 {
-                    probs[i] = new float[50];
-                    for (int v = 0; v < 50; v++) probs[i][v] = 0.02f;
+                    for (int v = 0; v < 50; v++) probs[i, v] = 0.02f;
                 }
                 return probs;
             });
@@ -563,7 +575,7 @@ public class SpeculativeDecodingIntegrationTests
         // Act - multiple generations
         for (int i = 0; i < 5; i++)
         {
-            await decoder.GenerateAsync(new int[] { 1 }, maxNewTokens: 5);
+            await decoder.GenerateAsync(new Vector<int>(new[] { 1 }), maxNewTokens: 5, temperature: 1.0f);
         }
 
         // Assert
@@ -576,7 +588,7 @@ public class SpeculativeDecodingIntegrationTests
     public void SpeculativeDecodingConfig_DefaultValues_AreReasonable()
     {
         // Act
-        var config = new SpeculativeDecodingConfig();
+        var config = new SpeculativeDecodingConfig<float>();
 
         // Assert
         Assert.Equal(5, config.NumDraftTokens);
