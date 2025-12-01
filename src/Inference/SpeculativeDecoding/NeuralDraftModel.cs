@@ -1,12 +1,23 @@
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Inference.SpeculativeDecoding;
 
 /// <summary>
 /// Wrapper for using a small neural network as a draft model.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This class wraps a neural network (like a small transformer)
+/// to use as the "fast guesser" in speculative decoding. The neural network should
+/// be much smaller and faster than the main model you're trying to accelerate.
+/// </para>
+/// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
 public class NeuralDraftModel<T> : IDraftModel<T>
 {
-    private readonly Func<int[], float[]> _forwardFunc;
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    private readonly Func<Vector<int>, Vector<T>> _forwardFunc;
     private readonly int _vocabSize;
     private readonly int _maxDraftTokens;
     private readonly Random _random;
@@ -25,7 +36,7 @@ public class NeuralDraftModel<T> : IDraftModel<T>
     /// <param name="maxDraftTokens">Maximum draft tokens to generate.</param>
     /// <param name="seed">Random seed.</param>
     public NeuralDraftModel(
-        Func<int[], float[]> forwardFunc,
+        Func<Vector<int>, Vector<T>> forwardFunc,
         int vocabSize,
         int maxDraftTokens = 5,
         int? seed = null)
@@ -38,22 +49,27 @@ public class NeuralDraftModel<T> : IDraftModel<T>
 
     /// <inheritdoc/>
     public DraftResult<T> GenerateDraft(
-        ReadOnlySpan<int> inputTokens,
+        Vector<int> inputTokens,
         int numDraftTokens,
-        float temperature = 1.0f)
+        T temperature)
     {
         numDraftTokens = Math.Min(numDraftTokens, _maxDraftTokens);
 
         var tokens = new List<int>();
-        var probs = new List<float[]>();
-        var tokenProbs = new List<float>();
+        var probs = new List<Vector<T>>();
+        var tokenProbs = new List<T>();
 
-        var currentTokens = new List<int>(inputTokens.ToArray());
+        var currentTokens = new List<int>();
+        for (int i = 0; i < inputTokens.Length; i++)
+        {
+            currentTokens.Add(inputTokens[i]);
+        }
 
         for (int i = 0; i < numDraftTokens; i++)
         {
             // Forward pass
-            var logits = _forwardFunc(currentTokens.ToArray());
+            var currentVector = new Vector<int>(currentTokens.ToArray());
+            var logits = _forwardFunc(currentVector);
 
             // Convert to probabilities with temperature
             var distribution = Softmax(logits, temperature);
@@ -68,22 +84,25 @@ public class NeuralDraftModel<T> : IDraftModel<T>
             currentTokens.Add(token);
         }
 
-        var result = new DraftResult<T>
-        {
-            Tokens = tokens.ToArray(),
-            TokenProbabilities = tokenProbs.ToArray(),
-            Probabilities = new T[numDraftTokens, _vocabSize]
-        };
+        // Build result
+        var resultTokens = new Vector<int>(tokens.ToArray());
+        var resultTokenProbs = new Vector<T>(tokenProbs.ToArray());
+        var resultProbs = new Matrix<T>(numDraftTokens, _vocabSize);
 
         for (int i = 0; i < probs.Count; i++)
         {
-            for (int v = 0; v < _vocabSize; v++)
+            for (int v = 0; v < _vocabSize && v < probs[i].Length; v++)
             {
-                result.Probabilities[i, v] = FromFloat(probs[i][v]);
+                resultProbs[i, v] = probs[i][v];
             }
         }
 
-        return result;
+        return new DraftResult<T>
+        {
+            Tokens = resultTokens,
+            TokenProbabilities = resultTokenProbs,
+            Probabilities = resultProbs
+        };
     }
 
     /// <inheritdoc/>
@@ -92,50 +111,62 @@ public class NeuralDraftModel<T> : IDraftModel<T>
         // Neural models may need KV cache reset - handled externally
     }
 
-    private float[] Softmax(float[] logits, float temperature)
+    /// <summary>
+    /// Applies softmax with temperature to logits.
+    /// </summary>
+    private Vector<T> Softmax(Vector<T> logits, T temperature)
     {
-        var result = new float[logits.Length];
+        var result = new Vector<T>(logits.Length);
 
-        // Apply temperature
-        float maxLogit = logits.Max();
-        float sum = 0;
+        // Find max logit for numerical stability
+        T maxLogit = logits[0];
+        for (int i = 1; i < logits.Length; i++)
+        {
+            if (NumOps.GreaterThan(logits[i], maxLogit))
+            {
+                maxLogit = logits[i];
+            }
+        }
+
+        // Apply temperature and compute exp
+        T sum = NumOps.Zero;
+        T one = NumOps.One;
 
         for (int i = 0; i < logits.Length; i++)
         {
-            result[i] = MathF.Exp((logits[i] - maxLogit) / temperature);
-            sum += result[i];
+            T scaled = NumOps.Divide(NumOps.Subtract(logits[i], maxLogit), temperature);
+            result[i] = NumOps.Exp(scaled);
+            // Note: No Pow/Power needed here - we use exp((logit - max) / temp) for softmax
+            sum = NumOps.Add(sum, result[i]);
         }
 
-        for (int i = 0; i < result.Length; i++)
+        // Normalize
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
-            result[i] /= sum;
+            for (int i = 0; i < result.Length; i++)
+            {
+                result[i] = NumOps.Divide(result[i], sum);
+            }
         }
 
         return result;
     }
 
-    private int SampleFromDistribution(float[] distribution)
+    /// <summary>
+    /// Samples a token index from a probability distribution.
+    /// </summary>
+    private int SampleFromDistribution(Vector<T> distribution)
     {
-        float r = (float)_random.NextDouble();
-        float cumulative = 0;
+        T r = NumOps.FromDouble(_random.NextDouble());
+        T cumulative = NumOps.Zero;
 
         for (int i = 0; i < distribution.Length; i++)
         {
-            cumulative += distribution[i];
-            if (r <= cumulative)
+            cumulative = NumOps.Add(cumulative, distribution[i]);
+            if (NumOps.LessThanOrEquals(r, cumulative))
                 return i;
         }
 
         return distribution.Length - 1;
-    }
-
-    private static T FromFloat(float value)
-    {
-        if (typeof(T) == typeof(float))
-            return (T)(object)value;
-        if (typeof(T) == typeof(double))
-            return (T)(object)(double)value;
-
-        return (T)Convert.ChangeType(value, typeof(T));
     }
 }

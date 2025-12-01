@@ -172,23 +172,41 @@ public class ModelStartupService : IHostedService
     /// <summary>
     /// Loads a typed model and registers it with the repository.
     /// </summary>
+    /// <remarks>
+    /// This method loads a serialized PredictionModelResult from disk and wraps it
+    /// in a ServableModelWrapper for serving. The facade pattern is maintained -
+    /// all configuration (LoRA, inference opts, etc.) is preserved.
+    /// </remarks>
     private void LoadTypedModel<T>(string name, string path)
     {
-        // Load the serialized PredictionModelResult
-        // This maintains the facade pattern - all configuration (LoRA, inference opts, etc.) is included
-        var modelResult = PredictionModelResult<T, Matrix<T>, Vector<T>>.Load(path);
+        // Load the serialized PredictionModelResult using internal constructor
+        // This is accessible via InternalsVisibleTo
+        var modelResult = new PredictionModelResult<T, Matrix<T>, Vector<T>>();
+        modelResult.LoadFromFile(path);
 
-        // Get dimensions from the model
-        var inputDim = modelResult.OptimizationResult?.BestSolution?.InputShape?.Length > 0
-            ? modelResult.OptimizationResult.BestSolution.InputShape[0]
-            : 1;
-        var outputDim = modelResult.OptimizationResult?.BestSolution?.OutputShape?.Length > 0
-            ? modelResult.OptimizationResult.BestSolution.OutputShape[0]
+        // Get dimensions from the model metadata
+        var metadata = modelResult.GetModelMetadata();
+        var inputDim = metadata.FeatureCount > 0 ? metadata.FeatureCount : 1;
+        // Output dimension defaults to 1 for most regression/classification models
+        // For multi-output models, this could be extended via metadata properties
+        var outputDim = metadata.Properties.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue is int dim
+            ? dim
             : 1;
 
         // Create predict functions that delegate to PredictionModelResult
         // This preserves all facade functionality (LoRA, inference opts, etc.)
-        Func<Vector<T>, Vector<T>> predictFunc = input => modelResult.Predict(input);
+        // Note: PredictionModelResult<T, Matrix<T>, Vector<T>> has Predict(Matrix<T>) -> Vector<T>
+        // We wrap single vectors in a matrix for prediction
+        Func<Vector<T>, Vector<T>> predictFunc = input =>
+        {
+            // Wrap single vector as single-row matrix
+            var inputMatrix = new Matrix<T>(1, input.Length);
+            for (int i = 0; i < input.Length; i++)
+            {
+                inputMatrix[0, i] = input[i];
+            }
+            return modelResult.Predict(inputMatrix);
+        };
 
         Func<Matrix<T>, Matrix<T>> predictBatchFunc = inputs =>
         {
@@ -197,7 +215,13 @@ public class ModelStartupService : IHostedService
             for (int i = 0; i < inputs.Rows; i++)
             {
                 var inputRow = inputs.GetRow(i);
-                var output = modelResult.Predict(inputRow);
+                // Wrap row as single-row matrix
+                var inputMatrix = new Matrix<T>(1, inputRow.Length);
+                for (int j = 0; j < inputRow.Length; j++)
+                {
+                    inputMatrix[0, j] = inputRow[j];
+                }
+                var output = modelResult.Predict(inputMatrix);
                 for (int j = 0; j < output.Length && j < outputDim; j++)
                 {
                     results[i, j] = output[j];
@@ -221,5 +245,8 @@ public class ModelStartupService : IHostedService
         {
             throw new InvalidOperationException($"A model with name '{name}' already exists");
         }
+
+        _logger.LogDebug("Model '{Name}' registered with {InputDim} input dimensions and {OutputDim} output dimensions",
+            name, inputDim, outputDim);
     }
 }

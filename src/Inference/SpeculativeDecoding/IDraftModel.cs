@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Inference.SpeculativeDecoding;
 
 /// <summary>
@@ -26,9 +28,9 @@ public interface IDraftModel<T>
     /// <param name="temperature">Sampling temperature.</param>
     /// <returns>Draft generation result with tokens and probabilities.</returns>
     DraftResult<T> GenerateDraft(
-        ReadOnlySpan<int> inputTokens,
+        Vector<int> inputTokens,
         int numDraftTokens,
-        float temperature = 1.0f);
+        T temperature);
 
     /// <summary>
     /// Gets the vocabulary size of this model.

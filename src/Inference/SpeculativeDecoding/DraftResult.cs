@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Inference.SpeculativeDecoding;
 
 /// <summary>
@@ -9,18 +11,18 @@ public class DraftResult<T>
     /// <summary>
     /// Gets the generated draft tokens.
     /// </summary>
-    public int[] Tokens { get; set; } = [];
+    public Vector<int> Tokens { get; set; } = new Vector<int>(0);
 
     /// <summary>
     /// Gets the probability distributions for each draft position.
     /// Shape: [num_draft_tokens, vocab_size]
     /// </summary>
-    public T[,] Probabilities { get; set; } = new T[0, 0];
+    public Matrix<T> Probabilities { get; set; } = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Gets the sampled token probabilities (p(token) for each drafted token).
     /// </summary>
-    public float[] TokenProbabilities { get; set; } = [];
+    public Vector<T> TokenProbabilities { get; set; } = new Vector<T>(0);
 
     /// <summary>
     /// Gets the number of draft tokens generated.

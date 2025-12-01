@@ -1,3 +1,6 @@
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Inference.SpeculativeDecoding;
 
 /// <summary>
@@ -16,8 +19,10 @@ namespace AiDotNet.Inference.SpeculativeDecoding;
 /// <typeparam name="T">The numeric type.</typeparam>
 public class NGramDraftModel<T> : IDraftModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly Dictionary<string, Dictionary<int, int>> _ngrams;
-    private readonly int _n;
+    private readonly int _ngramSize;
     private readonly int _vocabSize;
     private readonly Random _random;
 
@@ -30,12 +35,12 @@ public class NGramDraftModel<T> : IDraftModel<T>
     /// <summary>
     /// Creates an n-gram draft model.
     /// </summary>
-    /// <param name="n">The n-gram order (e.g., 3 for trigrams).</param>
+    /// <param name="ngramSize">The n-gram order (e.g., 3 for trigrams).</param>
     /// <param name="vocabSize">Vocabulary size.</param>
     /// <param name="seed">Random seed for reproducibility.</param>
-    public NGramDraftModel(int n = 3, int vocabSize = 50000, int? seed = null)
+    public NGramDraftModel(int ngramSize = 3, int vocabSize = 50000, int? seed = null)
     {
-        _n = n;
+        _ngramSize = ngramSize;
         _vocabSize = vocabSize;
         _ngrams = new Dictionary<string, Dictionary<int, int>>();
         _random = seed.HasValue ? new Random(seed.Value) : new Random();
@@ -45,11 +50,11 @@ public class NGramDraftModel<T> : IDraftModel<T>
     /// Trains the n-gram model on a corpus.
     /// </summary>
     /// <param name="corpus">Token sequences to train on.</param>
-    public void Train(IEnumerable<int[]> corpus)
+    public void Train(IEnumerable<Vector<int>> corpus)
     {
         foreach (var sequence in corpus)
         {
-            for (int i = _n - 1; i < sequence.Length; i++)
+            for (int i = _ngramSize - 1; i < sequence.Length; i++)
             {
                 var context = GetContext(sequence, i);
                 int nextToken = sequence[i];
@@ -67,15 +72,19 @@ public class NGramDraftModel<T> : IDraftModel<T>
 
     /// <inheritdoc/>
     public DraftResult<T> GenerateDraft(
-        ReadOnlySpan<int> inputTokens,
+        Vector<int> inputTokens,
         int numDraftTokens,
-        float temperature = 1.0f)
+        T temperature)
     {
         var tokens = new List<int>();
-        var probs = new List<float[]>();
-        var tokenProbs = new List<float>();
+        var probs = new List<Vector<T>>();
+        var tokenProbs = new List<T>();
 
-        var context = new List<int>(inputTokens.ToArray());
+        var context = new List<int>();
+        for (int i = 0; i < inputTokens.Length; i++)
+        {
+            context.Add(inputTokens[i]);
+        }
 
         for (int i = 0; i < numDraftTokens; i++)
         {
@@ -87,29 +96,31 @@ public class NGramDraftModel<T> : IDraftModel<T>
             tokenProbs.Add(distribution[token]);
 
             context.Add(token);
-            if (context.Count > _n - 1)
+            if (context.Count > _ngramSize - 1)
             {
                 context.RemoveAt(0);
             }
         }
 
         // Convert to result
-        var result = new DraftResult<T>
-        {
-            Tokens = tokens.ToArray(),
-            TokenProbabilities = tokenProbs.ToArray(),
-            Probabilities = new T[numDraftTokens, _vocabSize]
-        };
+        var resultTokens = new Vector<int>(tokens.ToArray());
+        var resultTokenProbs = new Vector<T>(tokenProbs.ToArray());
+        var resultProbs = new Matrix<T>(numDraftTokens, _vocabSize);
 
         for (int i = 0; i < probs.Count; i++)
         {
-            for (int v = 0; v < _vocabSize; v++)
+            for (int v = 0; v < _vocabSize && v < probs[i].Length; v++)
             {
-                result.Probabilities[i, v] = FromFloat(probs[i][v]);
+                resultProbs[i, v] = probs[i][v];
             }
         }
 
-        return result;
+        return new DraftResult<T>
+        {
+            Tokens = resultTokens,
+            TokenProbabilities = resultTokenProbs,
+            Probabilities = resultProbs
+        };
     }
 
     /// <inheritdoc/>
@@ -118,39 +129,44 @@ public class NGramDraftModel<T> : IDraftModel<T>
         // No state to reset for n-gram model
     }
 
-    private string GetContext(int[] sequence, int position)
+    private string GetContext(Vector<int> sequence, int position)
     {
-        var contextTokens = new int[_n - 1];
-        int start = Math.Max(0, position - _n + 1);
+        var contextTokens = new int[_ngramSize - 1];
+        int start = Math.Max(0, position - _ngramSize + 1);
         int len = position - start;
 
-        Array.Copy(sequence, start, contextTokens, _n - 1 - len, len);
+        for (int i = 0; i < len; i++)
+        {
+            contextTokens[_ngramSize - 1 - len + i] = sequence[start + i];
+        }
         return string.Join(",", contextTokens);
     }
 
     private string GetContext(List<int> tokens)
     {
-        var contextTokens = tokens.Skip(Math.Max(0, tokens.Count - _n + 1)).Take(_n - 1);
+        var contextTokens = tokens.Skip(Math.Max(0, tokens.Count - _ngramSize + 1)).Take(_ngramSize - 1);
         return string.Join(",", contextTokens);
     }
 
-    private float[] GetDistribution(List<int> context, float temperature)
+    private Vector<T> GetDistribution(List<int> context, T temperature)
     {
-        var distribution = new float[_vocabSize];
+        var distribution = new Vector<T>(_vocabSize);
         var contextKey = GetContext(context);
 
         if (_ngrams.TryGetValue(contextKey, out var counts))
         {
             int total = counts.Values.Sum();
-            foreach (var (token, count) in counts)
+            foreach (var kvp in counts)
             {
-                distribution[token] = (float)count / total;
+                int token = kvp.Key;
+                int count = kvp.Value;
+                distribution[token] = NumOps.FromDouble((double)count / total);
             }
         }
         else
         {
             // Uniform distribution if unseen context
-            float uniform = 1.0f / _vocabSize;
+            T uniform = NumOps.FromDouble(1.0 / _vocabSize);
             for (int i = 0; i < _vocabSize; i++)
             {
                 distribution[i] = uniform;
@@ -158,45 +174,40 @@ public class NGramDraftModel<T> : IDraftModel<T>
         }
 
         // Apply temperature
-        if (Math.Abs(temperature - 1.0f) > 0.001f)
+        T one = NumOps.One;
+        if (!NumOps.Equals(temperature, one))
         {
-            float sum = 0;
+            T sum = NumOps.Zero;
+            T invTemp = NumOps.Divide(one, temperature);
             for (int i = 0; i < distribution.Length; i++)
             {
-                distribution[i] = MathF.Pow(distribution[i], 1.0f / temperature);
-                sum += distribution[i];
+                distribution[i] = NumOps.Power(distribution[i], invTemp);
+                sum = NumOps.Add(sum, distribution[i]);
             }
-            for (int i = 0; i < distribution.Length; i++)
+            if (NumOps.GreaterThan(sum, NumOps.Zero))
             {
-                distribution[i] /= sum;
+                for (int i = 0; i < distribution.Length; i++)
+                {
+                    distribution[i] = NumOps.Divide(distribution[i], sum);
+                }
             }
         }
 
         return distribution;
     }
 
-    private int SampleFromDistribution(float[] distribution)
+    private int SampleFromDistribution(Vector<T> distribution)
     {
-        float r = (float)_random.NextDouble();
-        float cumulative = 0;
+        T r = NumOps.FromDouble(_random.NextDouble());
+        T cumulative = NumOps.Zero;
 
         for (int i = 0; i < distribution.Length; i++)
         {
-            cumulative += distribution[i];
-            if (r <= cumulative)
+            cumulative = NumOps.Add(cumulative, distribution[i]);
+            if (NumOps.LessThanOrEquals(r, cumulative))
                 return i;
         }
 
         return distribution.Length - 1;
-    }
-
-    private static T FromFloat(float value)
-    {
-        if (typeof(T) == typeof(float))
-            return (T)(object)value;
-        if (typeof(T) == typeof(double))
-            return (T)(object)(double)value;
-
-        return (T)Convert.ChangeType(value, typeof(T));
     }
 }
