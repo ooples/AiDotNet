@@ -407,8 +407,9 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardScalarActivation(Tensor<T> outputGradient)
     {
-        return _lastInput!.Transform((x, indices) => 
-            NumOps.Multiply(ScalarActivation!.Derivative(x), outputGradient[indices]));
+        // Use flat indexing since Transform provides a flat index, not an array of indices
+        return _lastInput!.Transform((x, flatIndex) =>
+            NumOps.Multiply(ScalarActivation!.Derivative(x), outputGradient.GetFlat(flatIndex)));
     }
 
 

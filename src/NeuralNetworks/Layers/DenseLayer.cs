@@ -623,7 +623,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int batchSize = input.Shape[0];
 
         var flattenedInput = input.Reshape(batchSize, input.Shape[1]);
-        var output = flattenedInput.Multiply(_weights.Transpose()).Add(_biases);
+        // Convert transposed weights matrix to tensor for 2D tensor multiplication
+        var weightsTransposed = Tensor<T>.FromMatrix(_weights.Transpose());
+        var output = flattenedInput.Multiply(weightsTransposed).Add(_biases);
 
         // Cache pre-activation output for proper gradient computation in backward pass
         _lastOutput = output;

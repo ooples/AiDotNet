@@ -342,15 +342,16 @@ namespace AiDotNet.Tensors.Tests.Operators
         [Fact]
         public void TanhOperatorFloat_ScalarOperation_IsBounded()
         {
-            // Arrange & Act - tanh is bounded: -1 < tanh(x) < 1
+            // Arrange & Act - tanh is bounded: -1 <= tanh(x) <= 1
+            // Note: Due to float precision limits, tanh(10.0f) saturates exactly to 1.0f
             float result1 = MathF.Tanh(-10.0f);
             float result2 = MathF.Tanh(0.0f);
             float result3 = MathF.Tanh(10.0f);
 
-            // Assert
-            Assert.True(result1 > -1.0f && result1 < 1.0f);
-            Assert.True(result2 > -1.0f && result2 < 1.0f);
-            Assert.True(result3 > -1.0f && result3 < 1.0f);
+            // Assert - use >= and <= since float precision saturates to boundary values
+            Assert.True(result1 >= -1.0f && result1 <= 1.0f);
+            Assert.True(result2 >= -1.0f && result2 <= 1.0f);
+            Assert.True(result3 >= -1.0f && result3 <= 1.0f);
         }
 
 #if NET5_0_OR_GREATER

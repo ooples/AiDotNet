@@ -123,11 +123,12 @@ public class CodeGenerator
             var inputVar = Expression.Variable(typeof(ComputationNode<T>), $"t{inputId}");
             tensorVariables[inputId] = inputVar;
 
-            // Wrap tensor in ComputationNode: t{inputId} = TensorOperations<T>.Variable(inputs[index])
-            var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string) });
+            // Wrap tensor in ComputationNode: t{inputId} = TensorOperations<T>.Variable(inputs[index], name, requiresGradient)
+            var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) });
             var wrapCall = Expression.Call(variableMethod!,
                 Expression.ArrayIndex(inputsParam, Expression.Constant(graph.InputIds.IndexOf(inputId))),
-                Expression.Constant($"input_{inputId}"));
+                Expression.Constant($"input_{inputId}"),
+                Expression.Constant(true)); // requiresGradient = true
             var assignment = Expression.Assign(inputVar, wrapCall);
             expressions.Add(assignment);
         }
@@ -976,10 +977,16 @@ public class CodeGenerator
     {
         var method = typeof(UnrolledOps).GetMethod("ExecuteUnrolledSequence")!.MakeGenericMethod(typeof(T));
         var operationsArray = Expression.Constant(op.Operations.ToArray());
-        return Expression.Call(method,
-            inputs[0],
+        // Extract Tensor<T> from ComputationNode<T>.Value for runtime operations
+        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value")!;
+        var inputValue = Expression.Property(inputs[0], valueProperty);
+        var tensorResult = Expression.Call(method,
+            inputValue,
             operationsArray,
             Expression.Constant(op.UnrollFactor));
+        // Wrap the Tensor<T> result back into ComputationNode<T>
+        var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })!;
+        return Expression.Call(variableMethod, tensorResult, Expression.Constant("unrolled_seq"), Expression.Constant(false));
     }
 
     /// <summary>
@@ -994,11 +1001,17 @@ public class CodeGenerator
     private Expression GenerateUnrolledElementwiseOp<T>(ParameterExpression[] inputs, Operations.UnrolledElementwiseOp op)
     {
         var method = typeof(UnrolledOps).GetMethod("ExecuteUnrolledElementwise")!.MakeGenericMethod(typeof(T));
-        return Expression.Call(method,
-            inputs[0],
+        // Extract Tensor<T> from ComputationNode<T>.Value for runtime operations
+        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value")!;
+        var inputValue = Expression.Property(inputs[0], valueProperty);
+        var tensorResult = Expression.Call(method,
+            inputValue,
             Expression.Constant(op.BaseOperation),
             Expression.Constant(op.UnrollFactor),
             Expression.Constant(op.TotalElements));
+        // Wrap the Tensor<T> result back into ComputationNode<T>
+        var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })!;
+        return Expression.Call(variableMethod, tensorResult, Expression.Constant("unrolled_elem"), Expression.Constant(false));
     }
 
     /// <summary>
@@ -1013,10 +1026,16 @@ public class CodeGenerator
     private Expression GenerateUnrolledReductionOp<T>(ParameterExpression[] inputs, Operations.UnrolledReductionOp op)
     {
         var method = typeof(UnrolledOps).GetMethod("ExecuteUnrolledReduction")!.MakeGenericMethod(typeof(T));
-        return Expression.Call(method,
-            inputs[0],
+        // Extract Tensor<T> from ComputationNode<T>.Value for runtime operations
+        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value")!;
+        var inputValue = Expression.Property(inputs[0], valueProperty);
+        var tensorResult = Expression.Call(method,
+            inputValue,
             Expression.Constant(op.ReductionType),
             Expression.Constant(op.UnrollFactor));
+        // Wrap the Tensor<T> result back into ComputationNode<T>
+        var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })!;
+        return Expression.Call(variableMethod, tensorResult, Expression.Constant("unrolled_red"), Expression.Constant(false));
     }
 
     // ========== Vectorized Operation Code Generators ==========
@@ -1037,13 +1056,20 @@ public class CodeGenerator
             .GetMethods()
             .First(m => m.Name == "ExecuteVectorizedBinary" && m.GetParameters()[2].ParameterType == typeof(string))
             .MakeGenericMethod(typeof(T));
-        return Expression.Call(method,
-            inputs[0],
-            inputs[1],
+        // Extract Tensor<T> from ComputationNode<T>.Value for runtime operations
+        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value")!;
+        var leftValue = Expression.Property(inputs[0], valueProperty);
+        var rightValue = Expression.Property(inputs[1], valueProperty);
+        var tensorResult = Expression.Call(method,
+            leftValue,
+            rightValue,
             Expression.Constant(op.Operation),
             Expression.Constant(op.VectorWidth),
             Expression.Constant(op.NumVectors),
             Expression.Constant(op.Remainder));
+        // Wrap the Tensor<T> result back into ComputationNode<T>
+        var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })!;
+        return Expression.Call(variableMethod, tensorResult, Expression.Constant("vec_binary"), Expression.Constant(false));
     }
 
     /// <summary>
@@ -1062,12 +1088,18 @@ public class CodeGenerator
             .GetMethods()
             .First(m => m.Name == "ExecuteVectorizedUnary" && m.GetParameters()[1].ParameterType == typeof(string))
             .MakeGenericMethod(typeof(T));
-        return Expression.Call(method,
-            inputs[0],
+        // Extract Tensor<T> from ComputationNode<T>.Value for runtime operations
+        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value")!;
+        var inputValue = Expression.Property(inputs[0], valueProperty);
+        var tensorResult = Expression.Call(method,
+            inputValue,
             Expression.Constant(op.Operation),
             Expression.Constant(op.VectorWidth),
             Expression.Constant(op.NumVectors),
             Expression.Constant(op.Remainder));
+        // Wrap the Tensor<T> result back into ComputationNode<T>
+        var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })!;
+        return Expression.Call(variableMethod, tensorResult, Expression.Constant("vec_unary"), Expression.Constant(false));
     }
 
     /// <summary>
@@ -1086,12 +1118,18 @@ public class CodeGenerator
             .GetMethods()
             .First(m => m.Name == "ExecuteVectorizedReduction" && m.GetParameters()[1].ParameterType == typeof(string))
             .MakeGenericMethod(typeof(T));
-        return Expression.Call(method,
-            inputs[0],
+        // Extract Tensor<T> from ComputationNode<T>.Value for runtime operations
+        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value")!;
+        var inputValue = Expression.Property(inputs[0], valueProperty);
+        var tensorResult = Expression.Call(method,
+            inputValue,
             Expression.Constant(op.ReductionType),
             Expression.Constant(op.VectorWidth),
             Expression.Constant(op.Axes, typeof(int[])),
             Expression.Constant(op.KeepDims));
+        // Wrap the Tensor<T> result back into ComputationNode<T>
+        var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })!;
+        return Expression.Call(variableMethod, tensorResult, Expression.Constant("vec_reduce"), Expression.Constant(false));
     }
 
     /// <summary>
@@ -1106,11 +1144,18 @@ public class CodeGenerator
     private Expression GenerateVectorizedMatMulOp<T>(ParameterExpression[] inputs, Operations.VectorizedMatMulOp op)
     {
         var method = typeof(VectorizedOps).GetMethod("ExecuteVectorizedMatMul")!.MakeGenericMethod(typeof(T));
-        return Expression.Call(method,
-            inputs[0],
-            inputs[1],
+        // Extract Tensor<T> from ComputationNode<T>.Value for runtime operations
+        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value")!;
+        var leftValue = Expression.Property(inputs[0], valueProperty);
+        var rightValue = Expression.Property(inputs[1], valueProperty);
+        var tensorResult = Expression.Call(method,
+            leftValue,
+            rightValue,
             Expression.Constant(op.VectorWidth),
             Expression.Constant(op.TileSize));
+        // Wrap the Tensor<T> result back into ComputationNode<T>
+        var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })!;
+        return Expression.Call(variableMethod, tensorResult, Expression.Constant("vec_matmul"), Expression.Constant(false));
     }
 
     // ========== Extended Activation Operation Code Generators ==========

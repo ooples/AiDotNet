@@ -309,13 +309,14 @@ public class AddLayer<T> : LayerBase<T>
         Tensor<T> gradientWithActivation;
         if (UsingVectorActivation && VectorActivation != null)
         {
-            gradientWithActivation = VectorActivation.Derivative(_lastOutput).Multiply(outputGradient);
+            // Use element-wise multiplication for gradient computation
+            gradientWithActivation = Tensor<T>.ElementwiseMultiply(VectorActivation.Derivative(_lastOutput), outputGradient);
         }
         else if (ScalarActivation != null)
         {
-            // Vectorized: compute activation derivatives and multiply
+            // Vectorized: compute activation derivatives and multiply element-wise
             var derivatives = _lastOutput.Transform((x, i) => ScalarActivation.Derivative(x));
-            gradientWithActivation = derivatives.Multiply(outputGradient);
+            gradientWithActivation = Tensor<T>.ElementwiseMultiply(derivatives, outputGradient);
         }
         else
         {

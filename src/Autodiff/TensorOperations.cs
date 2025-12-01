@@ -6217,8 +6217,8 @@ public static class TensorOperations<T>
                 var numOps = MathHelper.GetNumericOperations<T>();
                 for (int i = 0; i < gradient.Length; i++)
                 {
-                    var derivative = activation.Derivative(input.Value[i]);
-                    gradA[i] = numOps.Multiply(gradient[i], derivative);
+                    var derivative = activation.Derivative(input.Value.GetFlat(i));
+                    gradA.SetFlat(i, numOps.Multiply(gradient.GetFlat(i), derivative));
                 }
 
                 var existingGrad = input.Gradient;

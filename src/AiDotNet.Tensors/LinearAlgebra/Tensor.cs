@@ -466,22 +466,46 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     /// </remarks>
     public Tensor<T> Add(Vector<T> vector)
     {
-        if (this.Rank != 3 || this.Shape[2] != vector.Length)
-            throw new ArgumentException("Vector length must match the last dimension of the tensor.");
-
-        var result = new Tensor<T>(this.Shape);
-        for (int i = 0; i < this.Shape[0]; i++)
+        // Support both 2D and 3D tensors
+        // For 2D: [batch, features] + [features] -> broadcasts vector across batch
+        // For 3D: [batch, seq, features] + [features] -> broadcasts vector across batch and seq
+        if (this.Rank == 2)
         {
-            for (int j = 0; j < this.Shape[1]; j++)
+            if (this.Shape[1] != vector.Length)
+                throw new ArgumentException($"Vector length ({vector.Length}) must match the last dimension of the tensor ({this.Shape[1]}).");
+
+            var result = new Tensor<T>(this.Shape);
+            for (int i = 0; i < this.Shape[0]; i++)
             {
-                for (int k = 0; k < this.Shape[2]; k++)
+                for (int j = 0; j < this.Shape[1]; j++)
                 {
-                    result[i, j, k] = _numOps.Add(this[i, j, k], vector[k]);
+                    result[i, j] = _numOps.Add(this[i, j], vector[j]);
                 }
             }
+            return result;
         }
+        else if (this.Rank == 3)
+        {
+            if (this.Shape[2] != vector.Length)
+                throw new ArgumentException($"Vector length ({vector.Length}) must match the last dimension of the tensor ({this.Shape[2]}).");
 
-        return result;
+            var result = new Tensor<T>(this.Shape);
+            for (int i = 0; i < this.Shape[0]; i++)
+            {
+                for (int j = 0; j < this.Shape[1]; j++)
+                {
+                    for (int k = 0; k < this.Shape[2]; k++)
+                    {
+                        result[i, j, k] = _numOps.Add(this[i, j, k], vector[k]);
+                    }
+                }
+            }
+            return result;
+        }
+        else
+        {
+            throw new ArgumentException($"Add(Vector) is only supported for 2D and 3D tensors. Got rank {this.Rank}.");
+        }
     }
 
     /// <summary>

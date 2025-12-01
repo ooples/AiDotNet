@@ -1781,7 +1781,7 @@ public class CpuEngine : IEngine
 
         for (int i = 0; i < a.Length; i++)
         {
-            result[i] = numOps.Add(a[i], b[i]);
+            result.SetFlat(i, numOps.Add(a.GetFlat(i), b.GetFlat(i)));
         }
 
         return result;
@@ -1803,7 +1803,7 @@ public class CpuEngine : IEngine
 
         for (int i = 0; i < a.Length; i++)
         {
-            result[i] = numOps.Subtract(a[i], b[i]);
+            result.SetFlat(i, numOps.Subtract(a.GetFlat(i), b.GetFlat(i)));
         }
 
         return result;
@@ -1825,7 +1825,7 @@ public class CpuEngine : IEngine
 
         for (int i = 0; i < a.Length; i++)
         {
-            result[i] = numOps.Multiply(a[i], b[i]);
+            result.SetFlat(i, numOps.Multiply(a.GetFlat(i), b.GetFlat(i)));
         }
 
         return result;
@@ -1841,7 +1841,7 @@ public class CpuEngine : IEngine
 
         for (int i = 0; i < tensor.Length; i++)
         {
-            result[i] = numOps.Multiply(tensor[i], scalar);
+            result.SetFlat(i, numOps.Multiply(tensor.GetFlat(i), scalar));
         }
 
         return result;
@@ -1864,12 +1864,12 @@ public class CpuEngine : IEngine
         for (int i = 0; i < a.Length; i++)
         {
             // Check for division by zero
-            if (numOps.Equals(b[i], numOps.Zero))
+            if (numOps.Equals(b.GetFlat(i), numOps.Zero))
             {
                 throw new DivideByZeroException($"Division by zero at index {i}");
             }
 
-            result[i] = numOps.Divide(a[i], b[i]);
+            result.SetFlat(i, numOps.Divide(a.GetFlat(i), b.GetFlat(i)));
         }
 
         return result;
