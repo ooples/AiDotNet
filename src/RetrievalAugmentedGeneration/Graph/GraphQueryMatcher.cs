@@ -235,25 +235,26 @@ public class GraphQueryMatcher<T>
 
         // BFS to find shortest paths
         var queue = new Queue<List<GraphNode<T>>>();
-        var visited = new HashSet<string>();
+        var visitedAtDepth = new Dictionary<string, int>();
         var results = new List<List<GraphNode<T>>>();
         var shortestLength = int.MaxValue;
 
         queue.Enqueue(new List<GraphNode<T>> { sourceNode });
-        visited.Add(sourceId);
+        visitedAtDepth[sourceId] = 0;
 
         while (queue.Count > 0)
         {
             var path = queue.Dequeue();
             var currentNode = path[^1];
+            var currentDepth = path.Count - 1;
 
             // Check if we've exceeded max depth
             if (path.Count > maxDepth)
-                break;
+                continue;
 
-            // If we found longer paths than shortest, stop
+            // If we found longer paths than shortest, stop processing this path
             if (path.Count > shortestLength)
-                break;
+                continue;
 
             // Get neighbors - map edges to target nodes and filter nulls
             var neighbors = _graph.GetOutgoingEdges(currentNode.Id)
@@ -275,9 +276,11 @@ public class GraphQueryMatcher<T>
                 if (path.Any(n => n.Id == neighbor.Id))
                     continue;
 
-                // Continue exploring
-                if (!visited.Contains(neighbor.Id) || path.Count < shortestLength)
+                // Continue exploring - allow visiting at same or earlier depth for shortest paths
+                var newDepth = currentDepth + 1;
+                if (!visitedAtDepth.TryGetValue(neighbor.Id, out var prevDepth) || newDepth <= prevDepth)
                 {
+                    visitedAtDepth[neighbor.Id] = newDepth;
                     var newPath = new List<GraphNode<T>>(path) { neighbor };
                     queue.Enqueue(newPath);
                 }
