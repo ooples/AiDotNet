@@ -66,6 +66,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private MixedPrecisionConfig? _mixedPrecisionConfig;
     private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig;
     private ReinforcementLearning.Interfaces.IEnvironment<T>? _environment;
+    private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
 
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
@@ -1215,6 +1216,43 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator)
     {
         _crossValidator = crossValidator;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures an AutoML model for automatic machine learning optimization.
+    /// </summary>
+    /// <param name="autoMLModel">The AutoML model instance to use for hyperparameter search and model selection.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AutoML (Automated Machine Learning) automatically searches for the best
+    /// model and hyperparameters for your problem. Instead of manually trying different models and settings,
+    /// AutoML does this for you.
+    /// </para>
+    /// <para>
+    /// When you configure an AutoML model:
+    /// - The Build() method will run the AutoML search process
+    /// - AutoML will try different models and hyperparameters
+    /// - The best model found will be returned as your trained model
+    /// - You can configure search time limits, candidate models, and optimization metrics
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var autoML = new BayesianOptimizationAutoML&lt;double, double[][], double[]&gt;();
+    /// autoML.SetTimeLimit(TimeSpan.FromMinutes(30));
+    /// autoML.SetCandidateModels(new[] { ModelType.RandomForest, ModelType.GradientBoosting });
+    ///
+    /// var builder = new PredictionModelBuilder&lt;double, double[][], double[]&gt;()
+    ///     .ConfigureAutoML(autoML)
+    ///     .Build(trainingData, trainingLabels);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel)
+    {
+        _autoMLModel = autoMLModel;
         return this;
     }
 
