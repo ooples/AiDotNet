@@ -12776,7 +12776,8 @@ public class GpuEngine : IEngine, IDisposable
             throw new ArgumentException($"TensorTranspose requires a 2D tensor. Got rank {tensor.Rank}.");
 
         // GPU transpose for supported types and large enough tensors
-        if (tensor.Length >= _thresholds.MatrixMultiply && SupportsGpu && _gpuHealthy)
+        // Use lower threshold than MatMul since transpose is simpler but benefits from GPU parallelism
+        if (tensor.Length >= _thresholds.MatrixMultiply / 2 && SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
                 return (Tensor<T>)(object)TensorTransposeGpuFloat((Tensor<float>)(object)tensor);

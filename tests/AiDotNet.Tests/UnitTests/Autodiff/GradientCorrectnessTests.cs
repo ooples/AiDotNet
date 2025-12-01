@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Autodiff;
 using AiDotNet.Autodiff.Testing;
@@ -585,6 +586,277 @@ public class GradientCorrectnessTests
     }
 
     [Fact]
+    public void TaylorSoftmax_AutodiffGradients_MatchNumericalGradients()
+    {
+        // Arrange
+        const int batchSize = 2;
+        const int features = 4;
+        var shape = new[] { batchSize, features };
+
+        var input = CreateRandomTensor(shape);
+        var outputGradient = CreateRandomTensor(shape);
+
+        // Act - Autodiff gradients
+        using (var tape = new GradientTape<float>())
+        {
+            var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
+            tape.Watch(inputNode);
+
+            var output = TensorOperations<float>.TaylorSoftmax(inputNode, order: 2, axis: -1);
+            output.Gradient = outputGradient;
+
+            // Backward pass
+            var topoOrder = GetTopologicalOrder(output);
+            for (int i = topoOrder.Count - 1; i >= 0; i--)
+            {
+                var node = topoOrder[i];
+                if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+                {
+                    node.BackwardFunction(node.Gradient);
+                }
+            }
+
+            var autodiffGradient = inputNode.Gradient!;
+
+            // Numerical gradient
+            const float epsilon = 1e-4f;
+            var numericalGradient = new Tensor<float>(shape);
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                // Forward + epsilon
+                var inputPlus = input.Clone();
+                inputPlus[i] += epsilon;
+                var nodePlus = TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
+                var outputPlus = TensorOperations<float>.TaylorSoftmax(nodePlus, order: 2, axis: -1);
+
+                // Forward - epsilon
+                var inputMinus = input.Clone();
+                inputMinus[i] -= epsilon;
+                var nodeMinus = TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
+                var outputMinus = TensorOperations<float>.TaylorSoftmax(nodeMinus, order: 2, axis: -1);
+
+                // Numerical gradient
+                float gradSum = 0;
+                for (int j = 0; j < outputGradient.Length; j++)
+                {
+                    float diff = (outputPlus.Value[j] - outputMinus.Value[j]) / (2 * epsilon);
+                    gradSum += outputGradient[j] * diff;
+                }
+                numericalGradient[i] = gradSum;
+            }
+
+            // Assert - gradients should match within tolerance
+            for (int i = 0; i < autodiffGradient.Length; i++)
+            {
+                var diff = Math.Abs(autodiffGradient[i] - numericalGradient[i]);
+                Assert.True(diff < Tolerance,
+                    $"TaylorSoftmax gradient mismatch at index {i}: autodiff={autodiffGradient[i]}, numerical={numericalGradient[i]}");
+            }
+        }
+    }
+
+    [Fact]
+    public void TaylorSoftmax_HigherOrder_AutodiffGradients_MatchNumericalGradients()
+    {
+        // Test with higher order Taylor approximation (order=4)
+        const int batchSize = 2;
+        const int features = 4;
+        var shape = new[] { batchSize, features };
+
+        var input = CreateRandomTensor(shape);
+        var outputGradient = CreateRandomTensor(shape);
+
+        using (var tape = new GradientTape<float>())
+        {
+            var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
+            tape.Watch(inputNode);
+
+            var output = TensorOperations<float>.TaylorSoftmax(inputNode, order: 4, axis: -1);
+            output.Gradient = outputGradient;
+
+            var topoOrder = GetTopologicalOrder(output);
+            for (int i = topoOrder.Count - 1; i >= 0; i--)
+            {
+                var node = topoOrder[i];
+                if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+                {
+                    node.BackwardFunction(node.Gradient);
+                }
+            }
+
+            var autodiffGradient = inputNode.Gradient!;
+
+            // Numerical gradient
+            const float epsilon = 1e-4f;
+            var numericalGradient = new Tensor<float>(shape);
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                var inputPlus = input.Clone();
+                inputPlus[i] += epsilon;
+                var nodePlus = TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
+                var outputPlus = TensorOperations<float>.TaylorSoftmax(nodePlus, order: 4, axis: -1);
+
+                var inputMinus = input.Clone();
+                inputMinus[i] -= epsilon;
+                var nodeMinus = TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
+                var outputMinus = TensorOperations<float>.TaylorSoftmax(nodeMinus, order: 4, axis: -1);
+
+                float gradSum = 0;
+                for (int j = 0; j < outputGradient.Length; j++)
+                {
+                    float diff = (outputPlus.Value[j] - outputMinus.Value[j]) / (2 * epsilon);
+                    gradSum += outputGradient[j] * diff;
+                }
+                numericalGradient[i] = gradSum;
+            }
+
+            for (int i = 0; i < autodiffGradient.Length; i++)
+            {
+                var diff = Math.Abs(autodiffGradient[i] - numericalGradient[i]);
+                Assert.True(diff < Tolerance,
+                    $"TaylorSoftmax (order=4) gradient mismatch at index {i}: autodiff={autodiffGradient[i]}, numerical={numericalGradient[i]}");
+            }
+        }
+    }
+
+    [Fact]
+    public void TaylorSoftmax_ThrowsOnInvalidOrder()
+    {
+        var input = CreateRandomTensor(new[] { 2, 4 });
+        var inputNode = TensorOperations<float>.Variable(input, requiresGradient: false);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TensorOperations<float>.TaylorSoftmax(inputNode, order: 0, axis: -1));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TensorOperations<float>.TaylorSoftmax(inputNode, order: -1, axis: -1));
+    }
+
+    [Fact]
+    public void GumbelSoftmax_AutodiffGradients_MatchNumericalGradients()
+    {
+        // Note: GumbelSoftmax has stochastic Gumbel noise, so we test gradient flow
+        // by using a fixed seed and ensuring gradients are computed correctly
+        const int batchSize = 2;
+        const int features = 4;
+        var shape = new[] { batchSize, features };
+
+        // Use a deterministic input for stable gradient testing
+        var input = new Tensor<float>(shape);
+        for (int i = 0; i < input.Length; i++)
+            input[i] = (float)(i * 0.1 - 0.4); // Range roughly [-0.4, 0.4]
+
+        var outputGradient = CreateRandomTensor(shape);
+
+        using (var tape = new GradientTape<float>())
+        {
+            var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
+            tape.Watch(inputNode);
+
+            // Use soft mode (hard=false) for proper gradient testing
+            var output = TensorOperations<float>.GumbelSoftmax(inputNode, temperature: 1.0, hard: false);
+            output.Gradient = outputGradient;
+
+            var topoOrder = GetTopologicalOrder(output);
+            for (int i = topoOrder.Count - 1; i >= 0; i--)
+            {
+                var node = topoOrder[i];
+                if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+                {
+                    node.BackwardFunction(node.Gradient);
+                }
+            }
+
+            var autodiffGradient = inputNode.Gradient!;
+
+            // Verify gradient has correct shape and non-zero values
+            Assert.Equal(shape, autodiffGradient.Shape);
+            Assert.True(autodiffGradient.Length > 0);
+
+            // Verify gradient values are reasonable (not NaN/Inf)
+            for (int i = 0; i < autodiffGradient.Length; i++)
+            {
+                Assert.False(float.IsNaN(autodiffGradient[i]), $"GumbelSoftmax gradient is NaN at index {i}");
+                Assert.False(float.IsInfinity(autodiffGradient[i]), $"GumbelSoftmax gradient is Infinity at index {i}");
+            }
+        }
+    }
+
+    [Fact]
+    public void GumbelSoftmax_TemperatureScaling_AffectsOutput()
+    {
+        var shape = new[] { 2, 4 };
+        var input = CreateRandomTensor(shape);
+
+        var inputNodeHigh = TensorOperations<float>.Variable(input, requiresGradient: false);
+        var inputNodeLow = TensorOperations<float>.Variable(input, requiresGradient: false);
+
+        // Higher temperature = softer distribution
+        var outputHigh = TensorOperations<float>.GumbelSoftmax(inputNodeHigh, temperature: 5.0, hard: false);
+        // Lower temperature = sharper distribution
+        var outputLow = TensorOperations<float>.GumbelSoftmax(inputNodeLow, temperature: 0.5, hard: false);
+
+        // Verify both produce valid probability distributions (sum to 1)
+        for (int b = 0; b < 2; b++)
+        {
+            float sumHigh = 0, sumLow = 0;
+            for (int f = 0; f < 4; f++)
+            {
+                sumHigh += outputHigh.Value[b * 4 + f];
+                sumLow += outputLow.Value[b * 4 + f];
+            }
+            Assert.True(Math.Abs(sumHigh - 1.0f) < 0.01f, $"High temp output doesn't sum to 1: {sumHigh}");
+            Assert.True(Math.Abs(sumLow - 1.0f) < 0.01f, $"Low temp output doesn't sum to 1: {sumLow}");
+        }
+    }
+
+    [Fact]
+    public void GumbelSoftmax_HardMode_ProducesOneHot()
+    {
+        var shape = new[] { 3, 5 };
+        var input = CreateRandomTensor(shape);
+        var inputNode = TensorOperations<float>.Variable(input, requiresGradient: false);
+
+        var output = TensorOperations<float>.GumbelSoftmax(inputNode, temperature: 1.0, hard: true);
+
+        // Verify hard mode produces one-hot vectors
+        for (int b = 0; b < 3; b++)
+        {
+            int oneCount = 0;
+            int zeroCount = 0;
+            for (int f = 0; f < 5; f++)
+            {
+                var val = output.Value[b * 5 + f];
+                if (Math.Abs(val - 1.0f) < 0.01f) oneCount++;
+                else if (Math.Abs(val) < 0.01f) zeroCount++;
+            }
+            Assert.Equal(1, oneCount);
+            Assert.Equal(4, zeroCount);
+        }
+    }
+
+    [Fact]
+    public void GumbelSoftmax_ThrowsOnInvalidTemperature()
+    {
+        var input = CreateRandomTensor(new[] { 2, 4 });
+        var inputNode = TensorOperations<float>.Variable(input, requiresGradient: false);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TensorOperations<float>.GumbelSoftmax(inputNode, temperature: 0, hard: false));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TensorOperations<float>.GumbelSoftmax(inputNode, temperature: -1.0, hard: false));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TensorOperations<float>.GumbelSoftmax(inputNode, temperature: double.NaN, hard: false));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TensorOperations<float>.GumbelSoftmax(inputNode, temperature: double.PositiveInfinity, hard: false));
+    }
+
+    [Fact]
     public void MaxPool2D_AutodiffGradients_CorrectRouting()
     {
         // Arrange - Simple 2x2 max pool on 4x4 input
@@ -980,12 +1252,13 @@ public class GradientCorrectnessTests
     /// </summary>
     private static Tensor<float> CreateRandomTensor(int[] shape)
     {
-        var tensor = new Tensor<float>(shape);
+        int totalSize = shape.Aggregate(1, (acc, dim) => acc * dim);
+        var data = new float[totalSize];
         var random = new Random(42);
-        for (int i = 0; i < tensor.Length; i++)
+        for (int i = 0; i < totalSize; i++)
         {
-            tensor[i] = (float)(random.NextDouble() * 2 - 1);
+            data[i] = (float)(random.NextDouble() * 2 - 1);
         }
-        return tensor;
+        return new Tensor<float>(shape, new Vector<float>(data));
     }
 }

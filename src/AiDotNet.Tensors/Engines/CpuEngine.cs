@@ -3695,14 +3695,9 @@ public class CpuEngine : IEngine
             for (int i = 0; i < axisSize; i++)
             {
                 int flatIdx = (outer * axisSize + i) * innerSize + inner;
-                if (numOps.GreaterThan(outputData[flatIdx], numOps.Zero))
-                {
-                    gradInputData[flatIdx] = numOps.Subtract(gradOutputData[flatIdx], meanGradSupport);
-                }
-                else
-                {
-                    gradInputData[flatIdx] = numOps.Zero;
-                }
+                gradInputData[flatIdx] = numOps.GreaterThan(outputData[flatIdx], numOps.Zero)
+                    ? numOps.Subtract(gradOutputData[flatIdx], meanGradSupport)
+                    : numOps.Zero;
             }
         });
 
