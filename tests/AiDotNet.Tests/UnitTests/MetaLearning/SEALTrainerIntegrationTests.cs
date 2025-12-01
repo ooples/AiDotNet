@@ -1,6 +1,7 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Config;
 using AiDotNet.MetaLearning.Trainers;
@@ -329,5 +330,26 @@ internal class LearningMockModel : AiDotNet.Interfaces.IFullModel<double, Matrix
         {
             _parameters[i] -= learningRate * gradients[i];
         }
+    }
+
+    // IJitCompilable implementation
+    public bool SupportsJitCompilation => true;
+
+    public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
+    {
+        // Create a computation graph for the learning mock model
+        var inputShape = new int[] { 1, _inputSize };
+        var inputTensor = new Tensor<double>(inputShape);
+        var inputNode = TensorOperations<double>.Variable(inputTensor, "input");
+        inputNodes.Add(inputNode);
+
+        // Create parameter node
+        var paramTensor = new Tensor<double>(new int[] { _parameters.Length }, _parameters);
+        var paramNode = TensorOperations<double>.Variable(paramTensor, "parameters");
+        inputNodes.Add(paramNode);
+
+        // Simple computation: mean of input
+        var meanNode = TensorOperations<double>.Mean(inputNode);
+        return meanNode;
     }
 }

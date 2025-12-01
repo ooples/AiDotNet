@@ -1,4 +1,5 @@
 using AiDotNet.ReinforcementLearning.Environments;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.ReinforcementLearning;
@@ -44,7 +45,7 @@ public class CartPoleEnvironmentTests
         env.Reset();
 
         // Act
-        var action = new AiDotNet.LinearAlgebra.Vector<double>(new double[] { 0 }); // Push left
+        var action = new Vector<double>(new double[] { 0 }); // Push left
         var (nextState, reward, done, info) = env.Step(action);
 
         // Assert
@@ -63,8 +64,8 @@ public class CartPoleEnvironmentTests
         env.Reset();
 
         // Act & Assert
-        var invalidAction1 = new AiDotNet.LinearAlgebra.Vector<double>(new double[] { -1 });
-        var invalidAction2 = new AiDotNet.LinearAlgebra.Vector<double>(new double[] { 2 });
+        var invalidAction1 = new Vector<double>(new double[] { -1 });
+        var invalidAction2 = new Vector<double>(new double[] { 2 });
         Assert.Throws<ArgumentException>(() => env.Step(invalidAction1));
         Assert.Throws<ArgumentException>(() => env.Step(invalidAction2));
     }
@@ -85,7 +86,7 @@ public class CartPoleEnvironmentTests
         while (!done && steps < maxSteps)
         {
             int actionIndex = random.Next(2);
-            var action = new AiDotNet.LinearAlgebra.Vector<double>(new double[] { actionIndex });
+            var action = new Vector<double>(new double[] { actionIndex });
             (_, _, done, _) = env.Step(action);
             steps++;
         }
@@ -116,7 +117,7 @@ public class CartPoleEnvironmentTests
         }
 
         // Take same actions
-        var action = new AiDotNet.LinearAlgebra.Vector<double>(new double[] { 0 });
+        var action = new Vector<double>(new double[] { 0 });
         var (nextState1, _, _, _) = env1.Step(action);
         var (nextState2, _, _, _) = env2.Step(action);
 

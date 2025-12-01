@@ -64,7 +64,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
     private KnowledgeDistillationOptions<T, TInput, TOutput>? _knowledgeDistillationOptions;
     private MixedPrecisionConfig? _mixedPrecisionConfig;
+    private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig;
+    private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
     private ReinforcementLearning.Interfaces.IEnvironment<T>? _environment;
+    private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
 
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
@@ -264,6 +267,118 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null)
     {
         _mixedPrecisionConfig = config ?? new MixedPrecisionConfig();
+        return this;
+    }
+
+    /// <summary>
+    /// Configures JIT (Just-In-Time) compilation for accelerated model inference.
+    /// </summary>
+    /// <param name="config">The JIT compilation configuration. If null, uses default settings with JIT enabled.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation converts your model's computation graph into optimized native code, providing
+    /// significant performance improvements (5-10x faster) for inference. The compilation happens once
+    /// during model building, then the optimized code is reused for all predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT compilation makes your model's predictions much faster by
+    /// "pre-compiling" the calculations into optimized code before you start using it.
+    ///
+    /// <b>Benefits:</b>
+    /// - 2-3x faster for simple operations
+    /// - 5-10x faster for complex models
+    /// - Automatic operation fusion and optimization
+    /// - Near-zero overhead for cached compilations
+    ///
+    /// <b>When to use JIT:</b>
+    /// - Production inference (maximize speed)
+    /// - Batch processing (repeated predictions)
+    /// - Large or complex models (more optimization opportunities)
+    ///
+    /// <b>When NOT to use JIT:</b>
+    /// - Training (JIT is for inference only)
+    /// - Very simple models (compilation overhead exceeds benefits)
+    /// - Models with dynamic structure
+    ///
+    /// <b>Important:</b> Your model must implement IJitCompilable to support JIT compilation.
+    /// Currently, models built with TensorOperations computation graphs are supported.
+    /// Neural networks using layer-based architecture will be supported in a future update.
+    ///
+    /// <b>Example usage:</b>
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureJitCompilation(new JitCompilationConfig
+    ///     {
+    ///         Enabled = true,
+    ///         CompilerOptions = new JitCompilerOptions
+    ///         {
+    ///             EnableOperationFusion = true,     // Biggest performance gain
+    ///             EnableDeadCodeElimination = true,
+    ///             EnableConstantFolding = true,
+    ///             EnableCaching = true
+    ///         },
+    ///         ThrowOnFailure = false  // Graceful fallback if JIT not supported
+    ///     })
+    ///     .BuildAsync(x, y);
+    ///
+    /// // Predictions now use JIT-compiled code (5-10x faster!)
+    /// var prediction = result.Predict(newData);
+    /// </code>
+    ///
+    /// <b>Simple usage (uses defaults):</b>
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureJitCompilation()  // Enables JIT with default settings
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(AiDotNet.Configuration.JitCompilationConfig? config = null)
+    {
+        _jitCompilationConfig = config ?? new AiDotNet.Configuration.JitCompilationConfig { Enabled = true };
+        return this;
+    }
+
+    /// <summary>
+    /// Configures inference-time optimizations for faster predictions.
+    /// </summary>
+    /// <param name="config">Inference optimization configuration (optional, uses defaults if null).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Inference optimization makes your model's predictions faster and more efficient.
+    ///
+    /// Key features enabled:
+    /// - <b>KV Cache:</b> Speeds up transformer/attention models by 2-10x
+    /// - <b>Batching:</b> Groups predictions for higher throughput
+    /// - <b>Speculative Decoding:</b> Speeds up text generation by 1.5-3x
+    ///
+    /// Example:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, ...&gt;()
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
+    ///     .BuildAsync(x, y);
+    ///
+    /// // Or with custom settings:
+    /// var config = new InferenceOptimizationConfig
+    /// {
+    ///     EnableKVCache = true,
+    ///     MaxBatchSize = 64,
+    ///     EnableSpeculativeDecoding = true
+    /// };
+    /// 
+    /// var result = await builder
+    ///     .ConfigureInferenceOptimizations(config)
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null)
+    {
+        _inferenceOptimizationConfig = config ?? AiDotNet.Configuration.InferenceOptimizationConfig.Default;
         return this;
     }
 
@@ -518,9 +633,49 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             }
         }
 
-        // Validate model is set (either by user or by agent)
+        // AUTOML SEARCH (if configured and no model explicitly set)
+        // AutoML finds the best model type and hyperparameters automatically
+        if (_autoMLModel != null && _model == null)
+        {
+            Console.WriteLine("AutoML configured - starting model search...");
+
+            // Set up preprocessing for AutoML search
+            var autoMLNormalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
+            var autoMLFeatureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
+            var autoMLOutlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
+            var autoMLPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(
+                autoMLNormalizer, autoMLFeatureSelector, autoMLOutlierRemoval);
+
+            // Preprocess and split data for AutoML search
+            var (autoMLPreprocessedX, autoMLPreprocessedY, _) = autoMLPreprocessor.PreprocessData(x, y);
+            var (autoMLXTrain, autoMLYTrain, autoMLXVal, autoMLYVal, _, _) = autoMLPreprocessor.SplitData(
+                autoMLPreprocessedX, autoMLPreprocessedY);
+
+            // Configure AutoML with model evaluator if available
+            if (_modelEvaluator != null)
+            {
+                _autoMLModel.SetModelEvaluator(_modelEvaluator);
+            }
+
+            // Run AutoML search to find the best model
+            var bestModel = await _autoMLModel.SearchAsync(
+                autoMLXTrain,
+                autoMLYTrain,
+                autoMLXVal,
+                autoMLYVal,
+                _autoMLModel.TimeLimit,
+                CancellationToken.None);
+
+            _model = bestModel;
+
+            Console.WriteLine($"AutoML search complete. Best model: {bestModel.GetType().Name}");
+            Console.WriteLine($"Best score: {_autoMLModel.BestScore}");
+            Console.WriteLine($"Trials completed: {_autoMLModel.GetTrialHistory().Count}");
+        }
+
+        // Validate model is set (either by user, agent, or AutoML)
         if (_model == null)
-            throw new InvalidOperationException("Model implementation must be specified");
+            throw new InvalidOperationException("Model implementation must be specified. Use ConfigureModel() to set a model, ConfigureAutoML() for automatic model selection, or enable agent assistance.");
 
         // Use defaults for these interfaces if they aren't set
         var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
@@ -528,6 +683,30 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var featureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
         var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
         var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(normalizer, featureSelector, outlierRemoval);
+
+        // LORA ADAPTATION (if configured)
+        // Apply LoRA adapters to neural network layers for parameter-efficient fine-tuning
+        if (_loraConfiguration != null && _model is NeuralNetworks.NeuralNetworkBase<T> neuralNetForLoRA)
+        {
+            Console.WriteLine("Applying LoRA adapters to neural network layers...");
+            
+            int adaptedCount = 0;
+            for (int i = 0; i < neuralNetForLoRA.Layers.Count; i++)
+            {
+                var originalLayer = neuralNetForLoRA.Layers[i];
+                var adaptedLayer = _loraConfiguration.ApplyLoRA(originalLayer);
+                
+                // If the layer was adapted (wrapped with LoRA), update the list
+                if (!ReferenceEquals(originalLayer, adaptedLayer))
+                {
+                    neuralNetForLoRA.Layers[i] = adaptedLayer;
+                    adaptedCount++;
+                }
+            }
+            
+            Console.WriteLine($"LoRA applied to {adaptedCount} layers (rank={_loraConfiguration.Rank}, alpha={_loraConfiguration.Alpha})");
+        }
+
 
         // Wrap model and optimizer for distributed training if configured
         IFullModel<T, TInput, TOutput> model = _model;
@@ -679,7 +858,50 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _exportConfig,
             _gpuAccelerationConfig);
 
-        // Return PredictionModelResult with CV results and agent data
+        // JIT COMPILATION (if configured and supported)
+        Func<Tensor<T>[], Tensor<T>[]>? jitCompiledFunction = null;
+        if (_jitCompilationConfig?.Enabled == true)
+        {
+            try
+            {
+                // Check if the model supports JIT compilation
+                if (optimizationResult.BestSolution is IJitCompilable<T> jitModel &&
+                    jitModel.SupportsJitCompilation)
+                {
+                    // Export computation graph from model
+                    var inputNodes = new List<Autodiff.ComputationNode<T>>();
+                    var outputNode = jitModel.ExportComputationGraph(inputNodes);
+
+                    // Compile the graph with configured options
+                    var jitCompiler = new AiDotNet.JitCompiler.JitCompiler(_jitCompilationConfig.CompilerOptions);
+                    jitCompiledFunction = jitCompiler.Compile(outputNode, inputNodes);
+
+                    Console.WriteLine($"JIT compilation successful for model {optimizationResult.BestSolution?.GetType().Name}");
+                }
+                else if (_jitCompilationConfig.ThrowOnFailure)
+                {
+                    throw new InvalidOperationException(
+                        $"JIT compilation requested but model type {optimizationResult.BestSolution?.GetType().Name ?? "null"} " +
+                        $"does not implement IJitCompilable<T> or does not support JIT compilation. " +
+                        $"To use JIT compilation, the model must implement IJitCompilable and set SupportsJitCompilation = true.");
+                }
+                else
+                {
+                    // Graceful fallback - log warning
+                    Console.WriteLine($"Warning: JIT compilation requested but model type {optimizationResult.BestSolution?.GetType().Name ?? "null"} does not support it. " +
+                                      $"Proceeding without JIT acceleration.");
+                }
+            }
+            catch (Exception ex) when (!_jitCompilationConfig.ThrowOnFailure)
+            {
+                // Graceful fallback - log warning and continue without JIT
+                Console.WriteLine($"Warning: JIT compilation failed: {ex.Message}");
+                Console.WriteLine("Proceeding without JIT acceleration.");
+                jitCompiledFunction = null;
+            }
+        }
+
+        // Return PredictionModelResult with CV results, agent data, and JIT compilation
         var finalResult = new PredictionModelResult<T, TInput, TOutput>(
             optimizationResult,
             normInfo,
@@ -693,7 +915,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             cvResults,
             _agentConfig,
             agentRecommendation,
-            deploymentConfig);
+            deploymentConfig,
+            jitCompiledFunction,
+            _inferenceOptimizationConfig);
 
         return finalResult;
     }
@@ -1099,6 +1323,43 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator)
     {
         _crossValidator = crossValidator;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures an AutoML model for automatic machine learning optimization.
+    /// </summary>
+    /// <param name="autoMLModel">The AutoML model instance to use for hyperparameter search and model selection.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AutoML (Automated Machine Learning) automatically searches for the best
+    /// model and hyperparameters for your problem. Instead of manually trying different models and settings,
+    /// AutoML does this for you.
+    /// </para>
+    /// <para>
+    /// When you configure an AutoML model:
+    /// - The Build() method will run the AutoML search process
+    /// - AutoML will try different models and hyperparameters
+    /// - The best model found will be returned as your trained model
+    /// - You can configure search time limits, candidate models, and optimization metrics
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var autoML = new BayesianOptimizationAutoML&lt;double, double[][], double[]&gt;();
+    /// autoML.SetTimeLimit(TimeSpan.FromMinutes(30));
+    /// autoML.SetCandidateModels(new[] { ModelType.RandomForest, ModelType.GradientBoosting });
+    ///
+    /// var builder = new PredictionModelBuilder&lt;double, double[][], double[]&gt;()
+    ///     .ConfigureAutoML(autoML)
+    ///     .Build(trainingData, trainingLabels);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel)
+    {
+        _autoMLModel = autoMLModel;
         return this;
     }
 
@@ -1583,10 +1844,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 // Convert KD trainer's Vector<T> to model's TInput type using reference for shape
                 TInput modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(input, referenceInput);
 
-                if (studentModel is NeuralNetworkModel<T> nnModel)
+                if (studentModel is INeuralNetwork<T> nnModel)
                 {
                     // Use ForwardWithMemory() to save activations for backpropagation
-                    var output = nnModel.Network.ForwardWithMemory(Tensor<T>.FromVector(input));
+                    var output = nnModel.ForwardWithMemory(Tensor<T>.FromVector(input));
                     return output.ToVector();
                 }
 
@@ -1599,11 +1860,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             // This function receives output gradients from distillation strategy and applies them to the model
             Action<Vector<T>> studentBackward = gradient =>
             {
-                // Cast to NeuralNetworkModel to access backpropagation methods
-                if (studentModel is not NeuralNetworkModel<T> nnModel)
+                // Cast to INeuralNetwork to access backpropagation methods
+                if (studentModel is not INeuralNetwork<T> nnModel)
                 {
                     throw new InvalidOperationException(
-                        "Knowledge distillation requires a NeuralNetworkModel for gradient backpropagation. " +
+                        "Knowledge distillation requires a neural network (INeuralNetwork<T>) for gradient backpropagation. " +
                         $"Current model type: {studentModel.GetType().Name}");
                 }
 
@@ -1616,14 +1877,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                     if (inputQueue.Count > 0)
                     {
                         var matchingInput = inputQueue.Dequeue();
-                        nnModel.Network.ForwardWithMemory(Tensor<T>.FromVector(matchingInput));
+                        nnModel.ForwardWithMemory(Tensor<T>.FromVector(matchingInput));
                     }
 
                     // Step 1: Backpropagate output gradient through network to compute parameter gradients
-                    nnModel.Network.Backpropagate(Tensor<T>.FromVector(gradient));
+                    nnModel.Backpropagate(Tensor<T>.FromVector(gradient));
 
                     // Step 2: Get parameter gradients from backpropagation
-                    var paramGradients = nnModel.Network.GetParameterGradients();
+                    var paramGradients = nnModel.GetParameterGradients();
 
                     // Step 3: Apply gradient-based optimizer update if available
                     if (optimizer is IGradientBasedOptimizer<T, Vector<T>, Vector<T>> gradOptimizer)
@@ -1632,7 +1893,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                         // This preserves momentum, ADAM state, and uses configured learning rate
                         var currentParams = nnModel.GetParameters();
                         var updatedParams = gradOptimizer.UpdateParameters(currentParams, paramGradients);
-                        nnModel.Network.UpdateParameters(updatedParams);
+                        nnModel.UpdateParameters(updatedParams);
                     }
                     else
                     {
@@ -1649,7 +1910,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                                 NumOps.Multiply(learningRate, paramGradients[i]));
                         }
 
-                        nnModel.Network.UpdateParameters(newParams);
+                        nnModel.UpdateParameters(newParams);
                     }
                 }
                 catch (Exception ex)

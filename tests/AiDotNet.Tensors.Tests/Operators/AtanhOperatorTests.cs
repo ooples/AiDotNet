@@ -69,7 +69,8 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             // Arrange
             double input = 0.1;
-            double expected = 0.10033467208545055; // atanh(0.1)
+            // atanh(x) = 0.5 * ln((1+x)/(1-x))
+            double expected = 0.5 * Math.Log((1.0 + input) / (1.0 - input));
 
             // Act
 #if NET5_0_OR_GREATER
@@ -95,8 +96,8 @@ namespace AiDotNet.Tensors.Tests.Operators
             double result = 0.5 * Math.Log((1.0 + input) / (1.0 - input));
 #endif
 
-            // Assert - atanh(0.99) should be large
-            Assert.True(result > 3.0, "atanh(0.99) should be greater than 3");
+            // Assert - atanh(0.99) ≈ 2.647 (grows as x approaches 1)
+            Assert.True(result > 2.0, "atanh(0.99) should be greater than 2");
         }
 
         #endregion

@@ -885,4 +885,94 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _transformationMatrixGradient = null;
         _biasGradient = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var input = inputNodes[0];
+        int inputCapsules = InputShape[0];
+        int inputDimension = InputShape[1];
+
+        // Create weight tensor as constant node
+        var transformTensor = new Tensor<T>(
+            new[] { _transformationMatrix.Shape[0], _transformationMatrix.Shape[1], _transformationMatrix.Shape[2] },
+            _transformationMatrix.ToVector());
+        var transformationMatrixNode = TensorOperations<T>.Constant(transformTensor, "CapsuleTransformMatrix");
+
+        // Bias vector as constant
+        var biasTensor = new Tensor<T>(new[] { _bias.Length }, _bias);
+        var biasNode = TensorOperations<T>.Constant(biasTensor, "CapsuleBias");
+
+        // Reshape input for matrix multiplication: [batchSize * inputCapsules, inputDimension]
+        var reshapedInput = TensorOperations<T>.Reshape(input, [inputCapsules, inputDimension]);
+
+        // Transform input capsules: predictions = input @ transformationMatrix
+        // This gives us [inputCapsules, numCapsules, capsuleDimension]
+        var predictions = TensorOperations<T>.MatrixMultiply(reshapedInput, transformationMatrixNode);
+
+        // Initialize coupling coefficients as uniform: 1/numCapsules
+        var uniformCoeff = NumOps.FromDouble(1.0 / _numCapsules);
+        var couplingsData = new T[inputCapsules * _numCapsules];
+        for (int i = 0; i < couplingsData.Length; i++)
+            couplingsData[i] = uniformCoeff;
+        var couplingsTensor = new Tensor<T>(new[] { inputCapsules, _numCapsules }, new Vector<T>(couplingsData));
+        var couplings = TensorOperations<T>.Constant(couplingsTensor, "InitialCouplings");
+
+        ComputationNode<T> output = predictions;
+
+        // Unroll routing iterations
+        for (int iter = 0; iter < _numRoutingIterations; iter++)
+        {
+            // Apply softmax to couplings along numCapsules dimension
+            var routingWeights = TensorOperations<T>.Softmax(couplings, axis: 1);
+
+            // Weighted sum: weightedSum[j] = sum_i(couplings[i,j] * predictions[i,j])
+            // This is element-wise multiply then sum over input capsules
+            var weighted = TensorOperations<T>.ElementwiseMultiply(predictions, routingWeights);
+            var weightedSum = TensorOperations<T>.Sum(weighted, [0]); // Sum over inputCapsules
+
+            // Add bias
+            var withBias = TensorOperations<T>.Add(weightedSum, biasNode);
+
+            // Apply squash activation: v = ||s||^2 / (1 + ||s||^2) * s / ||s||
+            // This normalizes vectors to have length <= 1
+            var squaredNorm = TensorOperations<T>.Sum(TensorOperations<T>.Square(withBias), [1]);
+            var oneTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.One }));
+            var oneNode = TensorOperations<T>.Constant(oneTensor, "One");
+            var normPlusOne = TensorOperations<T>.Add(squaredNorm, oneNode);
+            var scaleFactor = TensorOperations<T>.Divide(squaredNorm, normPlusOne);
+            var norm = TensorOperations<T>.Sqrt(squaredNorm);
+            var normalizedVec = TensorOperations<T>.Divide(withBias, norm);
+            output = TensorOperations<T>.ElementwiseMultiply(normalizedVec, scaleFactor);
+
+            // Update couplings if not last iteration
+            if (iter < _numRoutingIterations - 1)
+            {
+                // Agreement: predictions dot output for each input capsule
+                var agreement = TensorOperations<T>.Sum(
+                    TensorOperations<T>.ElementwiseMultiply(predictions, output), [2]);
+                couplings = TensorOperations<T>.Add(couplings, agreement);
+            }
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> because CapsuleLayer uses dynamic routing with a fixed number of iterations
+    /// that can be unrolled into a static computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
+
 }

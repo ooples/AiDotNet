@@ -1,6 +1,7 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Engines;
 using AiDotNet.Enums;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using Xunit;
@@ -10,6 +11,8 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.StressTests;
+
+#if NET8_0_OR_GREATER
 
 /// <summary>
 /// Stress tests for GPU acceleration infrastructure (Phase B: US-GPU-018).
@@ -560,3 +563,4 @@ public class GpuStressTests
 
     #endregion
 }
+#endif

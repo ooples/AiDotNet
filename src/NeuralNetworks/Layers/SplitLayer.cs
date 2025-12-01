@@ -436,4 +436,39 @@ public class SplitLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInput = null;
     }
+
+    /// <summary>
+    /// Exports the split layer as a computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to which the input node will be added.</param>
+    /// <returns>The output computation node representing the split operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// The split layer is implemented as a reshape operation that adds a new dimension.
+    /// Input shape [batch, inputSize] is reshaped to [batch, numSplits, splitSize].
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Input shape: [batch, inputSize]
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "split_input");
+        inputNodes.Add(inputNode);
+
+        // Split is implemented as a reshape: [batch, inputSize] → [batch, numSplits, splitSize]
+        // This matches the Forward() implementation which creates a tensor with shape [batchSize, _numSplits, splitSize]
+        int inputSize = InputShape[0];
+        int splitSize = inputSize / _numSplits;
+        var outputShape = new int[] { 1, _numSplits, splitSize };
+
+        return TensorOperations<T>.Reshape(inputNode, outputShape);
+    }
+
+    public override bool SupportsJitCompilation => true;
 }

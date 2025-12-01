@@ -253,7 +253,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // Autodiff supports all scalar activations via generic TensorOperations.ApplyActivation
+        // Autodiff supports all scalar activations via generic TensorOperations<T>.ApplyActivation
         // Only vector activations need manual path
         if (UseAutodiff && !_useVectorActivation)
             return BackwardViaAutodiff(outputGradient);
@@ -313,7 +313,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// Applies activation function using autodiff operations.
     /// </summary>
     /// <remarks>
-    /// This method uses the generic TensorOperations.ApplyActivation which supports ALL 39 built-in
+    /// This method uses the generic TensorOperations<T>.ApplyActivation which supports ALL 39 built-in
     /// activation functions automatically. Only truly custom user-defined activations would fail.
     /// </remarks>
     private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
@@ -407,8 +407,9 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardScalarActivation(Tensor<T> outputGradient)
     {
-        return _lastInput!.Transform((x, indices) => 
-            NumOps.Multiply(ScalarActivation!.Derivative(x), outputGradient[indices]));
+        // Use flat indexing since Transform provides a flat index, not an array of indices
+        return _lastInput!.Transform((x, flatIndex) =>
+            NumOps.Multiply(ScalarActivation!.Derivative(x), outputGradient.GetFlat(flatIndex)));
     }
 
 
@@ -569,5 +570,87 @@ public class ActivationLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
+    }
+
+    /// <summary>
+    /// Exports the activation layer's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the activation function applied to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method constructs a computation graph representation of the activation layer by:
+    /// 1. Validating input parameters and layer configuration
+    /// 2. Creating a symbolic input node with proper batch dimension
+    /// 3. Applying the activation function to the symbolic input
+    /// </para>
+    /// <para><b>For Beginners:</b> This method converts the activation layer into a computation graph for JIT compilation.
+    ///
+    /// The computation graph describes:
+    /// - Input: A symbolic tensor with batch size = 1 plus the layer's input shape
+    /// - Operation: Apply the activation function (ReLU, Sigmoid, etc.)
+    /// - Output: The activated tensor
+    ///
+    /// JIT compilation can make inference 5-10x faster by optimizing this graph into native code.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        IActivationFunction<T>? activation = ScalarActivation;
+        if (activation == null && VectorActivation != null)
+            activation = (IActivationFunction<T>)VectorActivation;
+
+        if (activation == null)
+            throw new InvalidOperationException("No activation function configured.");
+
+        if (!activation.SupportsJitCompilation)
+        {
+            throw new NotSupportedException(
+                $"Activation function '{activation.GetType().Name}' does not support JIT compilation yet.");
+        }
+
+        // Create symbolic input node (shape definition only, batch size adapts at runtime)
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Build symbolic computation graph by applying activation function
+        return activation.ApplyToGraph(inputNode);
+    }
+
+    /// <summary>
+    /// Gets whether this activation layer supports JIT compilation.
+    /// </summary>
+    /// <value>True if the activation function supports JIT compilation, false otherwise.</value>
+    /// <remarks>
+    /// <para>
+    /// This property checks whether the configured activation function supports JIT compilation.
+    /// Returns false if no activation is configured or if the activation doesn't support JIT.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you if this layer can use JIT compilation for faster inference.
+    ///
+    /// The layer can be JIT compiled if:
+    /// - The activation function (ReLU, Sigmoid, etc.) has JIT support implemented
+    /// - The activation's gradient computation is available
+    ///
+    /// Common activations like ReLU, Sigmoid, and Tanh typically support JIT.
+    /// Custom or exotic activations may not support it yet.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            IActivationFunction<T>? activation = ScalarActivation;
+            if (activation == null && VectorActivation != null)
+                activation = (IActivationFunction<T>)VectorActivation;
+            return activation?.SupportsJitCompilation ?? false;
+        }
     }
 }

@@ -434,4 +434,21 @@ public class PaddingLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        return TensorOperations<T>.Pad(inputNode, _padding);
+    }
+
+    public override bool SupportsJitCompilation => true;
 }

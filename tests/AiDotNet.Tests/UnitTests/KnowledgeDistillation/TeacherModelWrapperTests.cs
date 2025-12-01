@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.KnowledgeDistillation;
 using AiDotNet.LinearAlgebra;
 using Xunit;

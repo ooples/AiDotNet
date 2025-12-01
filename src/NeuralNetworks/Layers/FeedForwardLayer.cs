@@ -1,3 +1,5 @@
+using AiDotNet.ActivationFunctions;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -208,6 +210,16 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets the weight tensor for JIT compilation and graph composition.
+    /// </summary>
+    public Tensor<T> GetWeightsTensor() => Weights;
+
+    /// <summary>
+    /// Gets the bias tensor for JIT compilation and graph composition.
+    /// </summary>
+    public Tensor<T> GetBiasesTensor() => Biases;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FeedForwardLayer{T}"/> class with a scalar activation function.
@@ -494,34 +506,44 @@ public class FeedForwardLayer<T> : LayerBase<T>
         // Check if using scalar activation
         if (!UsingVectorActivation && ScalarActivation != null)
         {
-            // Map scalar activation to autodiff operation
-            var activationName = ScalarActivation.GetType().Name;
-
-            if (activationName.Contains("ReLU"))
-                return Autodiff.TensorOperations<T>.ReLU(input);
-            else if (activationName.Contains("Sigmoid"))
-                return Autodiff.TensorOperations<T>.Sigmoid(input);
-            else if (activationName.Contains("Tanh"))
-                return Autodiff.TensorOperations<T>.Tanh(input);
-            else
-                throw new NotSupportedException($"Scalar activation {activationName} not supported with autodiff. Use manual backward pass or implement autodiff support for this activation.");
+            return ScalarActivation switch
+            {
+                ReLUActivation<T> => Autodiff.TensorOperations<T>.ReLU(input),
+                SigmoidActivation<T> => Autodiff.TensorOperations<T>.Sigmoid(input),
+                TanhActivation<T> => Autodiff.TensorOperations<T>.Tanh(input),
+                ELUActivation<T> elu => Autodiff.TensorOperations<T>.ELU(input, Convert.ToDouble(elu.Alpha)),
+                LeakyReLUActivation<T> leaky => Autodiff.TensorOperations<T>.LeakyReLU(input, Convert.ToDouble(leaky.Alpha)),
+                GELUActivation<T> => Autodiff.TensorOperations<T>.GELU(input),
+                SwishActivation<T> => Autodiff.TensorOperations<T>.Swish(input),
+                SiLUActivation<T> => Autodiff.TensorOperations<T>.Swish(input), // SiLU is same as Swish
+                SELUActivation<T> => Autodiff.TensorOperations<T>.SELU(input),
+                SoftSignActivation<T> => Autodiff.TensorOperations<T>.SoftSign(input),
+                IdentityActivation<T> => input,
+                _ => throw new NotSupportedException($"Scalar activation {ScalarActivation.GetType().Name} not supported with autodiff. " +
+                    "Supported: ReLU, Sigmoid, Tanh, ELU, LeakyReLU, GELU, Swish, SiLU, SELU, SoftSign, Identity")
+            };
         }
 
         // Check if using vector activation
         if (UsingVectorActivation && VectorActivation != null)
         {
-            var activationName = VectorActivation.GetType().Name;
-
-            if (activationName.Contains("Softmax"))
-                return Autodiff.TensorOperations<T>.Softmax(input);
-            else if (activationName.Contains("ReLU"))
-                return Autodiff.TensorOperations<T>.ReLU(input);
-            else if (activationName.Contains("Sigmoid"))
-                return Autodiff.TensorOperations<T>.Sigmoid(input);
-            else if (activationName.Contains("Tanh"))
-                return Autodiff.TensorOperations<T>.Tanh(input);
-            else
-                throw new NotSupportedException($"Vector activation {activationName} not supported with autodiff. Use manual backward pass or implement autodiff support for this activation.");
+            return VectorActivation switch
+            {
+                SoftmaxActivation<T> => Autodiff.TensorOperations<T>.Softmax(input),
+                ReLUActivation<T> => Autodiff.TensorOperations<T>.ReLU(input),
+                SigmoidActivation<T> => Autodiff.TensorOperations<T>.Sigmoid(input),
+                TanhActivation<T> => Autodiff.TensorOperations<T>.Tanh(input),
+                ELUActivation<T> elu => Autodiff.TensorOperations<T>.ELU(input, Convert.ToDouble(elu.Alpha)),
+                LeakyReLUActivation<T> leaky => Autodiff.TensorOperations<T>.LeakyReLU(input, Convert.ToDouble(leaky.Alpha)),
+                GELUActivation<T> => Autodiff.TensorOperations<T>.GELU(input),
+                SwishActivation<T> => Autodiff.TensorOperations<T>.Swish(input),
+                SiLUActivation<T> => Autodiff.TensorOperations<T>.Swish(input),
+                SELUActivation<T> => Autodiff.TensorOperations<T>.SELU(input),
+                SoftSignActivation<T> => Autodiff.TensorOperations<T>.SoftSign(input),
+                IdentityActivation<T> => input,
+                _ => throw new NotSupportedException($"Vector activation {VectorActivation.GetType().Name} not supported with autodiff. " +
+                    "Supported: Softmax, ReLU, Sigmoid, Tanh, ELU, LeakyReLU, GELU, Swish, SiLU, SELU, SoftSign, Identity")
+            };
         }
 
         // No activation function, return input as-is
@@ -698,5 +720,62 @@ public class FeedForwardLayer<T> : LayerBase<T>
         Output = Tensor<T>.Empty();
         WeightsGradient = Tensor<T>.Empty();
         BiasesGradient = Tensor<T>.Empty();
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (Weights == null || Biases == null)
+            throw new InvalidOperationException("Layer weights and biases not initialized.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        var weightsNode = TensorOperations<T>.Constant(Weights, "weights");
+        var biasesNode = TensorOperations<T>.Constant(Biases, "biases");
+
+        var matmulNode = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
+        var addNode = TensorOperations<T>.Add(matmulNode, biasesNode);
+
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+        {
+            return ScalarActivation.ApplyToGraph(addNode);
+        }
+        else if (VectorActivation != null)
+        {
+            var activation = (IActivationFunction<T>)VectorActivation;
+            if (activation.SupportsJitCompilation)
+            {
+                return activation.ApplyToGraph(addNode);
+            }
+        }
+
+        return addNode;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            if (Weights == null || Biases == null)
+                return false;
+
+            if (ScalarActivation != null)
+                return ScalarActivation.SupportsJitCompilation;
+
+            if (VectorActivation != null)
+            {
+                var activation = (IActivationFunction<T>)VectorActivation;
+                return activation.SupportsJitCompilation;
+            }
+
+            return true;
+        }
     }
 }

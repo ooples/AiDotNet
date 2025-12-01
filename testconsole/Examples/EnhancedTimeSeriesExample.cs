@@ -1,5 +1,5 @@
 ﻿using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Optimizers;

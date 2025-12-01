@@ -1,7 +1,8 @@
 using System;
-
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Operators;
 
 namespace AiDotNet.Tensors.NumericOperations;
 
@@ -719,4 +720,110 @@ public class SByteOperations : INumericOperations<sbyte>
     /// Converts an sbyte value to double (FP64) precision.
     /// </summary>
     public double ToDouble(sbyte value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => false;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => false;
+
+    #region IVectorizedOperations<sbyte> Implementation
+
+    /// <summary>
+    /// Performs element-wise addition using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Add(ReadOnlySpan<sbyte> x, ReadOnlySpan<sbyte> y, Span<sbyte> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<AddOperatorSByte>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise subtraction using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Subtract(ReadOnlySpan<sbyte> x, ReadOnlySpan<sbyte> y, Span<sbyte> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<SubtractOperatorSByte>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise multiplication using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Multiply(ReadOnlySpan<sbyte> x, ReadOnlySpan<sbyte> y, Span<sbyte> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<MultiplyOperatorSByte>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise division using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Divide(ReadOnlySpan<sbyte> x, ReadOnlySpan<sbyte> y, Span<sbyte> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<DivideOperatorSByte>(x, y, destination);
+
+    /// <summary>
+    /// Computes dot product using sequential loops.
+    /// </summary>
+    public sbyte Dot(ReadOnlySpan<sbyte> x, ReadOnlySpan<sbyte> y)
+        => VectorizedOperationsFallback.Dot(this, x, y);
+
+    /// <summary>
+    /// Computes sum using sequential loops.
+    /// </summary>
+    public sbyte Sum(ReadOnlySpan<sbyte> x)
+        => VectorizedOperationsFallback.Sum(this, x);
+
+    /// <summary>
+    /// Finds maximum using sequential loops.
+    /// </summary>
+    public sbyte Max(ReadOnlySpan<sbyte> x)
+        => VectorizedOperationsFallback.Max(this, x);
+
+    /// <summary>
+    /// Finds minimum using sequential loops.
+    /// </summary>
+    public sbyte Min(ReadOnlySpan<sbyte> x)
+        => VectorizedOperationsFallback.Min(this, x);
+
+    /// <summary>
+    /// Transcendental operations are not supported for sbyte type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Exp produces misleading results for sbyte (range -128 to 127).</exception>
+    public void Exp(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+        => throw new NotSupportedException("Transcendental operations (Exp) are not meaningful for sbyte type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for sbyte type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Log produces misleading results for sbyte.</exception>
+    public void Log(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+        => throw new NotSupportedException("Transcendental operations (Log) are not meaningful for sbyte type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for sbyte type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Tanh produces only -1, 0, or 1 for sbyte.</exception>
+    public void Tanh(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+        => throw new NotSupportedException("Transcendental operations (Tanh) are not meaningful for sbyte type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for sbyte type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Sigmoid saturates for sbyte inputs.</exception>
+    public void Sigmoid(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+        => throw new NotSupportedException("Transcendental operations (Sigmoid) are not meaningful for sbyte type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for sbyte type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Log2 produces misleading results for sbyte.</exception>
+    public void Log2(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+        => throw new NotSupportedException("Transcendental operations (Log2) are not meaningful for sbyte type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for sbyte type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. SoftMax requires floating-point for normalized probabilities.</exception>
+    public void SoftMax(ReadOnlySpan<sbyte> x, Span<sbyte> destination)
+        => throw new NotSupportedException("Transcendental operations (SoftMax) are not meaningful for sbyte type. Use float or double instead.");
+
+    /// <summary>
+    /// Computes cosine similarity using sequential loops.
+    /// </summary>
+    public sbyte CosineSimilarity(ReadOnlySpan<sbyte> x, ReadOnlySpan<sbyte> y)
+        => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
+
+    #endregion
 }

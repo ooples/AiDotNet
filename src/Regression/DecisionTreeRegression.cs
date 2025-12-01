@@ -13,7 +13,7 @@ namespace AiDotNet.Regression;
 /// <para><b>For Beginners:</b> A decision tree regression is like a flowchart that helps predict numerical values.
 /// 
 /// Think of it like answering a series of yes/no questions to reach a prediction:
-/// - "Is the temperature above 75°F?"
+/// - "Is the temperature above 75ï¿½F?"
 /// - "Is the humidity below 50%?"
 /// - "Is it a weekend?"
 /// 
@@ -106,7 +106,7 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         _options = options ?? new DecisionTreeOptions();
         _regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
         _featureImportances = Vector<T>.Empty();
-        _random = new Random(_options.Seed ?? Environment.TickCount);
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

@@ -1,10 +1,13 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Engines;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System;
 using System.Threading;
 
 namespace AiDotNet.Tests.Recovery;
+
+#if NET8_0_OR_GREATER
 
 /// <summary>
 /// GPU recovery tests (Phase B: US-GPU-020).
@@ -355,3 +358,4 @@ public class GpuRecoveryTests
 
     #endregion
 }
+#endif

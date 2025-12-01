@@ -1,7 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Helpers;
 using System;
 using System.Collections.Generic;
 
@@ -35,7 +34,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// <param name="random">Optional random number generator. If null, a new instance will be created.</param>
         protected PolicyBase(Random? random = null)
         {
-            _random = random ?? new Random();
+            _random = random ?? RandomHelper.CreateSecureRandom();
             _disposed = false;
         }
 

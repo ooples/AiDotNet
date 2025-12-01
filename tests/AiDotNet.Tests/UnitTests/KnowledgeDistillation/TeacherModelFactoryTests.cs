@@ -1,8 +1,9 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation;
 using AiDotNet.KnowledgeDistillation.Teachers;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using Xunit;
@@ -358,6 +359,22 @@ public class TeacherModelFactoryTests
             var copy = new MockFullModel(_inputDim, _outputDim);
             copy.SetParameters(parameters);
             return copy;
+        }
+
+        // IJitCompilable implementation
+        public bool SupportsJitCompilation => true;
+
+        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
+        {
+            // Create a computation graph for the mock model
+            var inputShape = new int[] { 1, _inputDim };
+            var inputTensor = new Tensor<double>(inputShape);
+            var inputNode = TensorOperations<double>.Variable(inputTensor, "input");
+            inputNodes.Add(inputNode);
+
+            // Simple computation: sum of input elements normalized
+            var sumNode = TensorOperations<double>.Sum(inputNode);
+            return sumNode;
         }
     }
 }

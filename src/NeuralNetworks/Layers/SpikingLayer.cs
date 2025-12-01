@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Autodiff;
+
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Represents a layer of spiking neurons that model the biological dynamics of neural activity.
@@ -1580,4 +1582,78 @@ public class SpikingLayer<T> : LayerBase<T>
             _biasGradients[i] = NumOps.Zero;
         }
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        // SpikingLayer JIT uses surrogate gradient for single-timestep computation:
+        // 1. Linear transformation: pre_activation = W @ input + bias
+        // 2. Surrogate spike: spikes = SurrogateSpike(pre_activation, threshold)
+        //
+        // This is a simplified model suitable for inference. Training uses full temporal simulation.
+
+        var input = inputNodes[0];
+
+        // Convert weights to tensor
+        int inputSize = Weights.Columns;
+        int outputSize = Weights.Rows;
+        var weightsTensor = new Tensor<T>([outputSize, inputSize]);
+        for (int i = 0; i < outputSize; i++)
+            for (int j = 0; j < inputSize; j++)
+                weightsTensor[i, j] = Weights[i, j];
+
+        // Convert biases to tensor
+        var biasTensor = new Tensor<T>([outputSize]);
+        for (int i = 0; i < outputSize; i++)
+            biasTensor[i] = Bias[i];
+
+        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "spiking_weights");
+        var biasNode = TensorOperations<T>.Constant(biasTensor, "spiking_bias");
+
+        // Reshape input for matrix multiplication
+        var inputReshaped = TensorOperations<T>.Reshape(input, inputSize, 1);
+
+        // W @ input
+        var weighted = TensorOperations<T>.MatrixMultiply(weightsNode, inputReshaped);
+        var weightedFlat = TensorOperations<T>.Reshape(weighted, outputSize);
+
+        // W @ input + bias (this represents the membrane potential after one timestep)
+        var membranePotential = TensorOperations<T>.Add(weightedFlat, biasNode);
+
+        // Apply surrogate spike function with threshold
+        // Default threshold is typically 1.0 for normalized inputs
+        double threshold = 1.0;
+        double surrogateBeta = 1.0 / _tau; // Use tau to scale surrogate sharpness
+        var spikes = TensorOperations<T>.SurrogateSpike(membranePotential, threshold, surrogateBeta);
+
+        // Apply activation if present
+        var output = ApplyActivationToGraph(spikes);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c>. SpikingLayer uses surrogate gradients for JIT compilation.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for spiking neurons uses a surrogate gradient approach where the
+    /// non-differentiable spike threshold is approximated with a smooth function during
+    /// backpropagation. The forward pass produces discrete spikes (0 or 1), but gradients
+    /// are computed using a sigmoid-based surrogate.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
 }

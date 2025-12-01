@@ -32,7 +32,7 @@ public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
         _options = options;
         _valueTable = new Dictionary<string, T>();
         _model = new Dictionary<string, Dictionary<int, List<(string, T, T)>>>();
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

@@ -1,5 +1,7 @@
 using AiDotNet.Engines;
+
 using AiDotNet.MixedPrecision;
+using AiDotNet.Models.Options;
 
 namespace AiDotNet.Optimizers;
 
@@ -455,6 +457,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         int batchSize = InputHelper<T, TInput>.GetBatchSize(X);
         gradient = gradient.Divide(NumOps.FromDouble(batchSize));
 
+        // Apply gradient clipping if enabled
+        gradient = ApplyGradientClipping(gradient);
+
         var gradientModel = new GradientModel<T>(gradient);
         GradientCache.CacheGradient(cacheKey, gradientModel);
 
@@ -462,6 +467,94 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _lastComputedGradients = gradient;
 
         return gradient;
+    }
+
+    /// <summary>
+    /// Applies gradient clipping based on the configured options.
+    /// </summary>
+    /// <param name="gradient">The gradient to clip.</param>
+    /// <returns>The clipped gradient.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Gradient clipping prevents training instability by limiting
+    /// how large gradients can become. This is especially important for deep networks and RNNs
+    /// where gradients can "explode" (become extremely large) during backpropagation.
+    /// </para>
+    /// </remarks>
+    protected virtual Vector<T> ApplyGradientClipping(Vector<T> gradient)
+    {
+        if (!GradientOptions.EnableGradientClipping)
+        {
+            return gradient;
+        }
+
+        return GradientOptions.GradientClippingMethod switch
+        {
+            GradientClippingMethod.ByNorm => GradientClippingHelper.ClipByNorm(gradient, GradientOptions.MaxGradientNorm) ?? gradient,
+            GradientClippingMethod.ByValue => GradientClippingHelper.ClipByValue(gradient, GradientOptions.MaxGradientValue) ?? gradient,
+            _ => gradient
+        };
+    }
+
+    /// <summary>
+    /// Checks if the current gradients are exhibiting exploding gradient behavior.
+    /// </summary>
+    /// <param name="threshold">The threshold above which gradients are considered exploding. Default is 1000.</param>
+    /// <returns>True if gradients are exploding, false otherwise.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method helps detect when training is becoming unstable.
+    /// If gradients become too large, it usually indicates a problem with the learning rate
+    /// or model architecture that needs to be addressed.
+    /// </para>
+    /// </remarks>
+    public bool AreGradientsExploding(double threshold = 1000.0)
+    {
+        if (_lastComputedGradients == null || _lastComputedGradients.Length == 0)
+        {
+            return false;
+        }
+
+        return GradientClippingHelper.AreGradientsExploding(_lastComputedGradients, threshold);
+    }
+
+    /// <summary>
+    /// Checks if the current gradients are exhibiting vanishing gradient behavior.
+    /// </summary>
+    /// <param name="threshold">The threshold below which gradients are considered vanishing. Default is 1e-7.</param>
+    /// <returns>True if gradients are vanishing, false otherwise.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Vanishing gradients occur when gradients become so small that
+    /// learning effectively stops. This is common in deep networks and can indicate the need
+    /// for techniques like residual connections, batch normalization, or different activation functions.
+    /// </para>
+    /// </remarks>
+    public bool AreGradientsVanishing(double threshold = 1e-7)
+    {
+        if (_lastComputedGradients == null || _lastComputedGradients.Length == 0)
+        {
+            return false;
+        }
+
+        return GradientClippingHelper.AreGradientsVanishing(_lastComputedGradients, threshold);
+    }
+
+    /// <summary>
+    /// Gets the L2 norm of the last computed gradients.
+    /// </summary>
+    /// <returns>The gradient norm, or 0 if no gradients have been computed.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The gradient norm is a measure of how "strong" the overall
+    /// gradient is. Monitoring this value during training can help diagnose issues with
+    /// exploding or vanishing gradients.
+    /// </para>
+    /// </remarks>
+    public T GetGradientNorm()
+    {
+        if (_lastComputedGradients == null || _lastComputedGradients.Length == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        return GradientClippingHelper.ComputeNorm(_lastComputedGradients);
     }
 
     /// <summary>

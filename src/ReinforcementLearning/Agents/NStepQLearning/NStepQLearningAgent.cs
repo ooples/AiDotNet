@@ -29,7 +29,7 @@ public class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _nStepBuffer = new List<(string, int, T)>();
         _epsilon = _options.EpsilonStart;
-        _random = new Random();
+        _random = RandomHelper.CreateSecureRandom();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

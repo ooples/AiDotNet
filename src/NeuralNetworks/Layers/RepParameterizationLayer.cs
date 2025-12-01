@@ -437,4 +437,32 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         _lastLogVar = null;
         _lastEpsilon = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Input contains [batch, latentSize * 2] where first half is mean, second half is logvar
+        int latentSize = InputShape[0] / 2;
+        var symbolicInput = new Tensor<T>(new int[] { 1, InputShape[0] });
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Split input into mean and logvar along axis 1
+        var splitOutputs = TensorOperations<T>.Split(inputNode, numSplits: 2, axis: 1);
+
+        // splitOutputs will contain [meanNode, logvarNode]
+        // For deterministic VAE inference (standard practice), return only the mean
+        // This avoids randomness and gives the expected value of the latent distribution
+        var meanNode = splitOutputs[0];  // Get the first split (mean)
+
+        return meanNode;
+    }
+
+    public override bool SupportsJitCompilation => true;
+
 }

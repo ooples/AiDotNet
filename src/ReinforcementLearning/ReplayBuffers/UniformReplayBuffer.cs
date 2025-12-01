@@ -39,7 +39,7 @@ public class UniformReplayBuffer<T> : IReplayBuffer<T>
 
         Capacity = capacity;
         _buffer = new List<Experience<T>>(capacity);
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         _position = 0;
     }
 

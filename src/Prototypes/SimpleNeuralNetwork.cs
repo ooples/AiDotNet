@@ -1,5 +1,3 @@
-using AiDotNet.Helpers;
-
 namespace AiDotNet.Prototypes;
 
 /// <summary>
@@ -55,7 +53,7 @@ public class SimpleNeuralNetwork<T>
         _hiddenSize = hiddenSize;
         _outputSize = outputSize;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
         InitializeWeights();
     }

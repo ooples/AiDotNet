@@ -1,8 +1,9 @@
 using AiDotNet;
+using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -366,6 +367,22 @@ public static class KnowledgeDistillationExample
 
         public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(0);
         public void ApplyGradients(Vector<double> gradients, double learningRate) { }
+
+        // IJitCompilable implementation
+        public bool SupportsJitCompilation => true;
+
+        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
+        {
+            // Create a simple computation graph for the mock model
+            var inputShape = new int[] { 1, _inputDim };
+            var inputTensor = new Tensor<double>(inputShape);
+            var inputNode = TensorOperations<double>.Variable(inputTensor, "input");
+            inputNodes.Add(inputNode);
+
+            // Simple transformation: mean of inputs
+            var outputNode = TensorOperations<double>.Mean(inputNode);
+            return outputNode;
+        }
     }
 }
 

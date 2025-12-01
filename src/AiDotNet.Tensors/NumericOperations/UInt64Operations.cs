@@ -1,9 +1,12 @@
+using System;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Operators;
 
 namespace AiDotNet.Tensors.NumericOperations;
 
-/// <summary>
+    /// <summary>
 /// Provides mathematical operations for the <see cref="ulong"/> (UInt64) data type.
 /// </summary>
 /// <remarks>
@@ -740,4 +743,110 @@ public class UInt64Operations : INumericOperations<ulong>
     /// Converts a ulong value to double (FP64) precision.
     /// </summary>
     public double ToDouble(ulong value) => (double)value;
+
+    /// <inheritdoc/>
+    public bool SupportsCpuAcceleration => false;
+
+    /// <inheritdoc/>
+    public bool SupportsGpuAcceleration => false;
+
+    #region IVectorizedOperations<ulong> Implementation
+
+    /// <summary>
+    /// Performs element-wise addition using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Add(ReadOnlySpan<ulong> x, ReadOnlySpan<ulong> y, Span<ulong> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<AddOperatorULong>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise subtraction using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Subtract(ReadOnlySpan<ulong> x, ReadOnlySpan<ulong> y, Span<ulong> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<SubtractOperatorULong>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise multiplication using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Multiply(ReadOnlySpan<ulong> x, ReadOnlySpan<ulong> y, Span<ulong> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<MultiplyOperatorULong>(x, y, destination);
+
+    /// <summary>
+    /// Performs element-wise division using SIMD-optimized operations via TensorPrimitivesCore.
+    /// </summary>
+    public void Divide(ReadOnlySpan<ulong> x, ReadOnlySpan<ulong> y, Span<ulong> destination)
+        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<DivideOperatorULong>(x, y, destination);
+
+    /// <summary>
+    /// Computes dot product using sequential loops.
+    /// </summary>
+    public ulong Dot(ReadOnlySpan<ulong> x, ReadOnlySpan<ulong> y)
+        => VectorizedOperationsFallback.Dot(this, x, y);
+
+    /// <summary>
+    /// Computes sum using sequential loops.
+    /// </summary>
+    public ulong Sum(ReadOnlySpan<ulong> x)
+        => VectorizedOperationsFallback.Sum(this, x);
+
+    /// <summary>
+    /// Finds maximum using sequential loops.
+    /// </summary>
+    public ulong Max(ReadOnlySpan<ulong> x)
+        => VectorizedOperationsFallback.Max(this, x);
+
+    /// <summary>
+    /// Finds minimum using sequential loops.
+    /// </summary>
+    public ulong Min(ReadOnlySpan<ulong> x)
+        => VectorizedOperationsFallback.Min(this, x);
+
+    /// <summary>
+    /// Transcendental operations are not supported for ulong type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Exp produces misleading results for ulong.</exception>
+    public void Exp(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => throw new NotSupportedException("Transcendental operations (Exp) are not meaningful for ulong type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for ulong type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Log produces misleading results for ulong.</exception>
+    public void Log(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => throw new NotSupportedException("Transcendental operations (Log) are not meaningful for ulong type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for ulong type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Tanh produces only 0 or 1 for ulong.</exception>
+    public void Tanh(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => throw new NotSupportedException("Transcendental operations (Tanh) are not meaningful for ulong type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for ulong type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Sigmoid saturates for ulong inputs.</exception>
+    public void Sigmoid(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => throw new NotSupportedException("Transcendental operations (Sigmoid) are not meaningful for ulong type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for ulong type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. Log2 produces misleading results for ulong.</exception>
+    public void Log2(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => throw new NotSupportedException("Transcendental operations (Log2) are not meaningful for ulong type. Use float or double instead.");
+
+    /// <summary>
+    /// Transcendental operations are not supported for ulong type.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always thrown. SoftMax requires floating-point for normalized probabilities.</exception>
+    public void SoftMax(ReadOnlySpan<ulong> x, Span<ulong> destination)
+        => throw new NotSupportedException("Transcendental operations (SoftMax) are not meaningful for ulong type. Use float or double instead.");
+
+    /// <summary>
+    /// Computes cosine similarity using sequential loops.
+    /// </summary>
+    public ulong CosineSimilarity(ReadOnlySpan<ulong> x, ReadOnlySpan<ulong> y)
+        => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
+
+    #endregion
 }

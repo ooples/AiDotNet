@@ -1,6 +1,7 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Config;
 using AiDotNet.MetaLearning.Trainers;
@@ -392,5 +393,27 @@ internal class SEALMockModel : IFullModel<double, Matrix<double>, Vector<double>
         {
             _parameters[i] -= learningRate * gradients[i];
         }
+    }
+
+    // IJitCompilable implementation
+    public bool SupportsJitCompilation => true;
+
+    public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
+    {
+        // Create a computation graph for the mock model
+        // Input: flattened image [1, 784]
+        var inputShape = new int[] { 1, InputFeatureCount };
+        var inputTensor = new Tensor<double>(inputShape);
+        var inputNode = TensorOperations<double>.Variable(inputTensor, "input");
+        inputNodes.Add(inputNode);
+
+        // Create parameter node
+        var paramTensor = new Tensor<double>(new int[] { _parameters.Length }, _parameters);
+        var paramNode = TensorOperations<double>.Variable(paramTensor, "parameters");
+        inputNodes.Add(paramNode);
+
+        // Simple computation: mean of input weighted by first few parameters
+        var meanNode = TensorOperations<double>.Mean(inputNode);
+        return meanNode;
     }
 }

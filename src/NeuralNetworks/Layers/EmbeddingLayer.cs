@@ -1,3 +1,5 @@
+
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -229,7 +231,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // === Vectorized Weight Initialization (Phase B: US-GPU-015) ===
         // Initialize embedding matrix with small random values
-        T scale = NumOps.Sqrt(NumOps.FromDouble(1.0 / _embeddingMatrix.Columns));
+        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(1.0), NumOps.FromDouble(_embeddingMatrix.Columns)));
 
         for (int i = 0; i < _embeddingMatrix.Rows; i++)
         {
@@ -589,7 +591,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Average over all embedding values and scale by 0.5 (standard L2 regularization)
         int totalElements = _embeddingMatrix.Rows * _embeddingMatrix.Columns;
-        T regularizationLoss = NumOps.Divide(sumSquaredNorms, NumOps.FromDouble(totalElements * 2));
+        T regularizationLoss = NumericalStabilityHelper.SafeDiv(sumSquaredNorms, NumOps.FromDouble(totalElements * 2));
 
         // Store unweighted loss for diagnostics
         _lastEmbeddingRegularizationLoss = regularizationLoss;
@@ -648,7 +650,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         if (count > 0)
         {
-            T avgMagnitude = NumOps.Divide(sumMagnitudes, NumOps.FromDouble(count));
+            T avgMagnitude = NumericalStabilityHelper.SafeDiv(sumMagnitudes, NumOps.FromDouble(count));
             diagnostics["AverageEmbeddingMagnitude"] = avgMagnitude?.ToString() ?? "0";
         }
 
@@ -707,5 +709,56 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _embeddingGradient = null;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because embedding lookup can be JIT compiled.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Exports the embedding layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the embedded vectors.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph for the embedding lookup operation.
+    /// The graph uses the embedding matrix as a constant and performs an EmbeddingLookup operation
+    /// based on the input indices.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates an optimized version of the embedding lookup.
+    ///
+    /// The computation graph:
+    /// - Takes input indices (token IDs)
+    /// - Looks up corresponding rows in the embedding matrix
+    /// - Returns the embedding vectors for each token
+    ///
+    /// This is JIT compiled for faster inference.
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_embeddingMatrix == null)
+            throw new InvalidOperationException("Embedding matrix not initialized.");
+
+        // Create placeholder for input indices
+        // Input shape for embeddings: [batchSize, sequenceLength] or [batchSize, 1]
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, 1 });
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input_indices");
+        inputNodes.Add(inputNode);
+
+        // Create constant node for embedding matrix [vocab_size, embedding_dim]
+        var embeddingTensor = Tensor<T>.FromMatrix(_embeddingMatrix);
+        var embeddingNode = Autodiff.TensorOperations<T>.Constant(embeddingTensor, "embeddings");
+
+        // Use EmbeddingLookup operation which supports gradients
+        return Autodiff.TensorOperations<T>.EmbeddingLookup(embeddingNode, inputNode);
     }
 }

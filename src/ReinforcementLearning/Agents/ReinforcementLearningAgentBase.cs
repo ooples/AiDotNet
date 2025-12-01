@@ -91,7 +91,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     {
         Options = options ?? throw new ArgumentNullException(nameof(options));
         NumOps = MathHelper.GetNumericOperations<T>();
-        Random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
+        Random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
         
         // Ensure required properties are provided
         if (options.LossFunction is null)
@@ -412,7 +412,113 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
                 $"Failed to deserialize agent state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
         }
     }
+
+    // ===== IJitCompilable<T, Vector<T>, Vector<T>> Implementation =====
+
+    /// <summary>
+    /// Gets whether this RL agent supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// False for the base class. Derived classes may override to return true if they support JIT compilation.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Most RL agents do not directly support JIT compilation because:
+    /// - They use layer-based neural networks without direct computation graph export
+    /// - Tabular methods use lookup tables rather than mathematical operations
+    /// - Policy selection often involves dynamic branching based on exploration strategies
+    /// </para>
+    /// <para>
+    /// Deep RL agents that use neural networks (DQN, PPO, SAC, etc.) may override this
+    /// to delegate JIT compilation to their underlying policy or value networks if those
+    /// networks support computation graph export.
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT compilation speeds up models by converting them to optimized code.
+    ///
+    /// RL agents typically don't support JIT compilation directly because:
+    /// - They combine multiple networks (policy, value, target networks)
+    /// - They use exploration strategies with random decisions
+    /// - The action selection process is complex and dynamic
+    ///
+    /// However, the underlying neural networks used by deep RL agents (like the Q-network in DQN)
+    /// can potentially be JIT compiled separately for faster inference.
+    /// </para>
+    /// </remarks>
+    public virtual bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Exports the agent's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the agent's prediction.</returns>
+    /// <exception cref="NotSupportedException">
+    /// RL agents do not support direct JIT compilation. Use the underlying neural network for JIT compilation if needed.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// The base RL agent class does not support JIT compilation because RL agents are complex
+    /// systems that combine multiple components:
+    /// - Policy networks (select actions)
+    /// - Value networks (estimate state/action values)
+    /// - Target networks (provide stable training targets)
+    /// - Exploration strategies (epsilon-greedy, noise injection, etc.)
+    /// - Experience replay buffers
+    /// </para>
+    /// <para>
+    /// The action selection process in RL involves:
+    /// 1. Forward pass through policy/value network
+    /// 2. Exploration decision (random vs greedy)
+    /// 3. Action sampling or selection
+    /// 4. Potential action noise injection
+    ///
+    /// This complex pipeline with dynamic branching is not suitable for JIT compilation.
+    /// </para>
+    /// <para><b>Workaround for Deep RL Agents:</b>
+    /// If you need to accelerate inference for deep RL agents (DQN, PPO, SAC, etc.),
+    /// consider JIT compiling the underlying neural networks separately:
+    ///
+    /// <code>
+    /// // For DQN agent with Q-network
+    /// var dqnAgent = new DQNAgent&lt;double&gt;(options);
+    ///
+    /// // Access the Q-network directly if exposed
+    /// // (This requires the agent to expose its networks publicly or via a property)
+    /// var qNetwork = dqnAgent.QNetwork; // hypothetical property
+    ///
+    /// // JIT compile the Q-network for faster inference
+    /// if (qNetwork.SupportsJitCompilation)
+    /// {
+    ///     var inputNodes = new List&lt;ComputationNode&lt;double&gt;&gt;();
+    ///     var graphOutput = qNetwork.ExportComputationGraph(inputNodes);
+    ///     var jitCompiler = new JitCompiler&lt;double&gt;(graphOutput, inputNodes);
+    ///     // Use jitCompiler.Evaluate() for fast Q-value computation
+    /// }
+    /// </code>
+    /// </para>
+    /// <para><b>For Tabular RL Agents:</b>
+    /// Tabular methods (Q-Learning, SARSA, etc.) use lookup tables rather than neural networks.
+    /// They perform dictionary lookups which cannot be JIT compiled. These agents are already
+    /// very fast for small state spaces and do not benefit from JIT compilation.
+    /// </para>
+    /// </remarks>
+    public virtual Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "RL agents do not support direct JIT compilation. " +
+            "The agent's action selection involves complex processes including exploration strategies, " +
+            "multiple neural networks (policy, value, target), and dynamic branching that cannot be " +
+            "represented as a static computation graph. " +
+            "\n\n" +
+            "For deep RL agents (DQN, PPO, SAC, etc.), if you need faster inference, consider: " +
+            "\n1. Disabling exploration during inference (set training=false in SelectAction) " +
+            "\n2. Using the agent's Predict() method which uses the greedy policy " +
+            "\n3. JIT compiling the underlying neural networks separately if they are exposed " +
+            "\n\n" +
+            "For tabular RL agents (Q-Learning, SARSA, etc.), JIT compilation is not applicable " +
+            "as they use lookup tables which are already very fast for small state spaces.");
+    }
 }
+
 
 /// <summary>
 /// Configuration options for reinforcement learning agents.
