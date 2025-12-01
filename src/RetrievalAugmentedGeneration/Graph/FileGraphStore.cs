@@ -246,18 +246,22 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             using var stream = new FileStream(_nodesFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             stream.Seek(offset, SeekOrigin.Begin);
 
-            // Read length prefix
+            // Read length prefix - ensure all 4 bytes are read
             var lengthBytes = new byte[4];
-            stream.Read(lengthBytes, 0, 4);
+            ReadExactly(stream, lengthBytes, 0, 4);
             var length = BitConverter.ToInt32(lengthBytes, 0);
 
-            // Read JSON data
+            // Read JSON data - ensure all bytes are read
             var jsonBytes = new byte[length];
-            stream.Read(jsonBytes, 0, length);
+            ReadExactly(stream, jsonBytes, 0, length);
             var json = Encoding.UTF8.GetString(jsonBytes);
 
             // Deserialize
             return JsonConvert.DeserializeObject<GraphNode<T>>(json, _jsonSettings);
+        }
+        catch (EndOfStreamException ex)
+        {
+            throw new IOException($"Failed to read node '{nodeId}' from file store - data may be corrupted", ex);
         }
         catch (IOException ex)
         {
@@ -288,18 +292,22 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             using var stream = new FileStream(_edgesFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             stream.Seek(offset, SeekOrigin.Begin);
 
-            // Read length prefix
+            // Read length prefix - ensure all 4 bytes are read
             var lengthBytes = new byte[4];
-            stream.Read(lengthBytes, 0, 4);
+            ReadExactly(stream, lengthBytes, 0, 4);
             var length = BitConverter.ToInt32(lengthBytes, 0);
 
-            // Read JSON data
+            // Read JSON data - ensure all bytes are read
             var jsonBytes = new byte[length];
-            stream.Read(jsonBytes, 0, length);
+            ReadExactly(stream, jsonBytes, 0, length);
             var json = Encoding.UTF8.GetString(jsonBytes);
 
             // Deserialize
             return JsonConvert.DeserializeObject<GraphEdge<T>>(json, _jsonSettings);
+        }
+        catch (EndOfStreamException ex)
+        {
+            throw new IOException($"Failed to read edge '{edgeId}' from file store - data may be corrupted", ex);
         }
         catch (IOException ex)
         {
@@ -659,18 +667,22 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             using var stream = new FileStream(_nodesFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
             stream.Seek(offset, SeekOrigin.Begin);
 
-            // Read length prefix
+            // Read length prefix - ensure all 4 bytes are read
             var lengthBytes = new byte[4];
-            await stream.ReadAsync(lengthBytes, 0, 4);
+            await ReadExactlyAsync(stream, lengthBytes, 0, 4);
             var length = BitConverter.ToInt32(lengthBytes, 0);
 
-            // Read JSON data
+            // Read JSON data - ensure all bytes are read
             var jsonBytes = new byte[length];
-            await stream.ReadAsync(jsonBytes, 0, length);
+            await ReadExactlyAsync(stream, jsonBytes, 0, length);
             var json = Encoding.UTF8.GetString(jsonBytes);
 
             // Deserialize
             return JsonConvert.DeserializeObject<GraphNode<T>>(json, _jsonSettings);
+        }
+        catch (EndOfStreamException ex)
+        {
+            throw new IOException($"Failed to read node '{nodeId}' from file store - data may be corrupted", ex);
         }
         catch (IOException ex)
         {
@@ -701,18 +713,22 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             using var stream = new FileStream(_edgesFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
             stream.Seek(offset, SeekOrigin.Begin);
 
-            // Read length prefix
+            // Read length prefix - ensure all 4 bytes are read
             var lengthBytes = new byte[4];
-            await stream.ReadAsync(lengthBytes, 0, 4);
+            await ReadExactlyAsync(stream, lengthBytes, 0, 4);
             var length = BitConverter.ToInt32(lengthBytes, 0);
 
-            // Read JSON data
+            // Read JSON data - ensure all bytes are read
             var jsonBytes = new byte[length];
-            await stream.ReadAsync(jsonBytes, 0, length);
+            await ReadExactlyAsync(stream, jsonBytes, 0, length);
             var json = Encoding.UTF8.GetString(jsonBytes);
 
             // Deserialize
             return JsonConvert.DeserializeObject<GraphEdge<T>>(json, _jsonSettings);
+        }
+        catch (EndOfStreamException ex)
+        {
+            throw new IOException($"Failed to read edge '{edgeId}' from file store - data may be corrupted", ex);
         }
         catch (IOException ex)
         {
@@ -867,6 +883,46 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
         finally
         {
             _disposed = true;
+        }
+    }
+
+    /// <summary>
+    /// Reads exactly the specified number of bytes from the stream.
+    /// </summary>
+    /// <param name="stream">The stream to read from.</param>
+    /// <param name="buffer">The buffer to read into.</param>
+    /// <param name="offset">The offset in the buffer to start writing at.</param>
+    /// <param name="count">The number of bytes to read.</param>
+    /// <exception cref="EndOfStreamException">Thrown if the stream ends before all bytes are read.</exception>
+    private static void ReadExactly(Stream stream, byte[] buffer, int offset, int count)
+    {
+        int totalRead = 0;
+        while (totalRead < count)
+        {
+            int bytesRead = stream.Read(buffer, offset + totalRead, count - totalRead);
+            if (bytesRead == 0)
+                throw new EndOfStreamException($"Unexpected end of stream. Expected {count} bytes, got {totalRead}.");
+            totalRead += bytesRead;
+        }
+    }
+
+    /// <summary>
+    /// Asynchronously reads exactly the specified number of bytes from the stream.
+    /// </summary>
+    /// <param name="stream">The stream to read from.</param>
+    /// <param name="buffer">The buffer to read into.</param>
+    /// <param name="offset">The offset in the buffer to start writing at.</param>
+    /// <param name="count">The number of bytes to read.</param>
+    /// <exception cref="EndOfStreamException">Thrown if the stream ends before all bytes are read.</exception>
+    private static async Task ReadExactlyAsync(Stream stream, byte[] buffer, int offset, int count)
+    {
+        int totalRead = 0;
+        while (totalRead < count)
+        {
+            int bytesRead = await stream.ReadAsync(buffer, offset + totalRead, count - totalRead);
+            if (bytesRead == 0)
+                throw new EndOfStreamException($"Unexpected end of stream. Expected {count} bytes, got {totalRead}.");
+            totalRead += bytesRead;
         }
     }
 }
