@@ -220,10 +220,20 @@ public class BTreeIndex : IDisposable
                 }
             }
 
-            // Replace old index file with new one
+            // Replace old index file with new one atomically
             if (File.Exists(_indexFilePath))
-                File.Delete(_indexFilePath);
-            File.Move(tempPath, _indexFilePath);
+            {
+                // Use File.Replace for atomic replacement on Windows
+                var backupPath = _indexFilePath + ".bak";
+                File.Replace(tempPath, _indexFilePath, backupPath);
+                // Clean up backup file
+                if (File.Exists(backupPath))
+                    File.Delete(backupPath);
+            }
+            else
+            {
+                File.Move(tempPath, _indexFilePath);
+            }
 
             _isDirty = false;
         }
@@ -279,10 +289,25 @@ public class BTreeIndex : IDisposable
     /// </summary>
     public void Dispose()
     {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases resources used by the index.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose(), false if called from finalizer.</param>
+    protected virtual void Dispose(bool disposing)
+    {
         if (_disposed)
             return;
 
-        Flush();
+        if (disposing)
+        {
+            // Flush managed resources
+            Flush();
+        }
+
         _disposed = true;
     }
 }
