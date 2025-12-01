@@ -1018,6 +1018,11 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// </remarks>
     public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
+        if (inputNodes == null)
+        {
+            throw new ArgumentNullException(nameof(inputNodes));
+        }
+
         // Validation: Ensure model is trained
         if (Coefficients == null || Coefficients.Length == 0)
         {

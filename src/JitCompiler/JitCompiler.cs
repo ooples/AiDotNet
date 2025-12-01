@@ -51,8 +51,8 @@ namespace AiDotNet.JitCompiler;
 public class JitCompiler : IDisposable
 {
     private readonly ConcurrentDictionary<int, object> _compiledGraphCache = new();
-    private readonly IRBuilder _irBuilder = new();
-    private readonly CodeGenerator _codeGenerator = new();
+    // Note: IRBuilder and CodeGenerator are created per compilation for thread safety
+    // since they maintain internal state during graph building/code generation
     private readonly List<IOptimizationPass> _optimizationPasses = new();
     private readonly JitCompilerOptions _options;
     private readonly TensorPool? _tensorPool;
@@ -200,8 +200,12 @@ public class JitCompiler : IDisposable
         if (inputs == null)
             throw new ArgumentNullException(nameof(inputs));
 
+        // Create new IRBuilder and CodeGenerator per compilation for thread safety
+        var irBuilder = new IRBuilder();
+        var codeGenerator = new CodeGenerator();
+
         // Build IR graph from computation graph
-        var irGraph = _irBuilder.Build(outputNode, inputs);
+        var irGraph = irBuilder.Build(outputNode, inputs);
 
         // Check cache
         var graphHash = irGraph.ComputeStructureHash();
@@ -214,7 +218,7 @@ public class JitCompiler : IDisposable
         var optimizedGraph = ApplyOptimizations(irGraph);
 
         // Generate code
-        var compiledFunc = _codeGenerator.Generate<T>(optimizedGraph);
+        var compiledFunc = codeGenerator.Generate<T>(optimizedGraph);
 
         // Cache result
         if (_options.EnableCaching)
@@ -258,11 +262,15 @@ public class JitCompiler : IDisposable
         if (inputs == null)
             throw new ArgumentNullException(nameof(inputs));
 
+        // Create new IRBuilder and CodeGenerator per compilation for thread safety
+        var irBuilder = new IRBuilder();
+        var codeGenerator = new CodeGenerator();
+
         var stats = new CompilationStats();
         var startTime = DateTime.UtcNow;
 
         // Build IR graph
-        var irGraph = _irBuilder.Build(outputNode, inputs);
+        var irGraph = irBuilder.Build(outputNode, inputs);
         stats.OriginalOperationCount = irGraph.Operations.Count;
 
         // Check cache
@@ -282,7 +290,7 @@ public class JitCompiler : IDisposable
         stats.OptimizationsApplied = _optimizationPasses.Select(p => p.Name).ToList();
 
         // Generate code
-        var compiledFunc = _codeGenerator.Generate<T>(optimizedGraph);
+        var compiledFunc = codeGenerator.Generate<T>(optimizedGraph);
 
         stats.CompilationTime = DateTime.UtcNow - startTime;
 
@@ -352,8 +360,12 @@ public class JitCompiler : IDisposable
         if (inputs == null)
             throw new ArgumentNullException(nameof(inputs));
 
+        // Create new IRBuilder and CodeGenerator per compilation for thread safety
+        var irBuilder = new IRBuilder();
+        var codeGenerator = new CodeGenerator();
+
         // Build backward IR graph from computation graph
-        var irGraph = _irBuilder.BuildBackward(outputNode, inputs);
+        var irGraph = irBuilder.BuildBackward(outputNode, inputs);
 
         // Check cache
         var graphHash = irGraph.ComputeStructureHash() ^ 0xBAC4;  // Differentiate backward from forward
@@ -366,7 +378,7 @@ public class JitCompiler : IDisposable
         var optimizedGraph = ApplyOptimizations(irGraph);
 
         // Generate code
-        var compiledFunc = _codeGenerator.Generate<T>(optimizedGraph);
+        var compiledFunc = codeGenerator.Generate<T>(optimizedGraph);
 
         // Cache result
         if (_options.EnableCaching)
@@ -411,11 +423,15 @@ public class JitCompiler : IDisposable
         if (inputs == null)
             throw new ArgumentNullException(nameof(inputs));
 
+        // Create new IRBuilder and CodeGenerator per compilation for thread safety
+        var irBuilder = new IRBuilder();
+        var codeGenerator = new CodeGenerator();
+
         var stats = new CompilationStats();
         var startTime = DateTime.UtcNow;
 
         // Build backward IR graph
-        var irGraph = _irBuilder.BuildBackward(outputNode, inputs);
+        var irGraph = irBuilder.BuildBackward(outputNode, inputs);
         stats.OriginalOperationCount = irGraph.Operations.Count;
 
         // Check cache
@@ -435,7 +451,7 @@ public class JitCompiler : IDisposable
         stats.OptimizationsApplied = _optimizationPasses.Select(p => p.Name).ToList();
 
         // Generate code
-        var compiledBackward = _codeGenerator.Generate<T>(optimizedGraph);
+        var compiledBackward = codeGenerator.Generate<T>(optimizedGraph);
 
         stats.CompilationTime = DateTime.UtcNow - startTime;
 
@@ -574,8 +590,12 @@ public class JitCompiler : IDisposable
 
         try
         {
+            // Create new IRBuilder and CodeGenerator per compilation for thread safety
+            var irBuilder = new IRBuilder();
+            var codeGenerator = new CodeGenerator();
+
             // Build IR graph from computation graph
-            var irGraph = _irBuilder.Build(outputNode, inputs);
+            var irGraph = irBuilder.Build(outputNode, inputs);
 
             // Check cache
             var graphHash = irGraph.ComputeStructureHash();
@@ -589,7 +609,7 @@ public class JitCompiler : IDisposable
             var optimizedGraph = ApplyOptimizationsWithRecovery(irGraph);
 
             // Generate code
-            compiledFunc = _codeGenerator.Generate<T>(optimizedGraph);
+            compiledFunc = codeGenerator.Generate<T>(optimizedGraph);
 
             // Cache result
             if (_options.EnableCaching)
