@@ -138,6 +138,22 @@ public class ModelStartupService : IHostedService
             modelPath = Path.Combine(_options.ModelDirectory, modelPath);
         }
 
+        // Validate path is within model directory to prevent traversal attacks
+        var modelsRoot = Path.GetFullPath(_options.ModelDirectory);
+        if (!modelsRoot.EndsWith(Path.DirectorySeparatorChar.ToString()) &&
+            !modelsRoot.EndsWith(Path.AltDirectorySeparatorChar.ToString()))
+        {
+            modelsRoot += Path.DirectorySeparatorChar;
+        }
+
+        var canonicalPath = Path.GetFullPath(modelPath);
+        if (!canonicalPath.StartsWith(modelsRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UnauthorizedAccessException(
+                $"Model path '{modelConfig.Path}' resolves outside the allowed model directory");
+        }
+        modelPath = canonicalPath;
+
         // Validate model file exists
         if (!File.Exists(modelPath))
         {

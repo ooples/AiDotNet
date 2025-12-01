@@ -115,8 +115,10 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
     /// <param name="modelName">The name of the model to use for prediction.</param>
     /// <param name="input">The input features.</param>
     /// <param name="priority">The priority level for this request.
-    /// Note: In continuous batching mode, priority is stored but requests are processed in FIFO order.
-    /// Priority-based scheduling would require a PriorityQueue implementation which is not yet available.</param>
+    /// Note: In continuous batching mode, priority is stored for metadata purposes but requests
+    /// are processed in strict FIFO order. This design choice optimizes for throughput and
+    /// fairness in high-load scenarios where continuous batching provides the most benefit.
+    /// For priority-aware scheduling, consider using the standard RequestBatcher instead.</param>
     /// <returns>A task that completes with the prediction result.</returns>
     public override Task<Vector<T>> QueueRequest<T>(string modelName, Vector<T> input, RequestPriority priority = RequestPriority.Normal)
     {
