@@ -591,9 +591,49 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             }
         }
 
-        // Validate model is set (either by user or by agent)
+        // AUTOML SEARCH (if configured and no model explicitly set)
+        // AutoML finds the best model type and hyperparameters automatically
+        if (_autoMLModel != null && _model == null)
+        {
+            Console.WriteLine("AutoML configured - starting model search...");
+
+            // Set up preprocessing for AutoML search
+            var autoMLNormalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
+            var autoMLFeatureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
+            var autoMLOutlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
+            var autoMLPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(
+                autoMLNormalizer, autoMLFeatureSelector, autoMLOutlierRemoval);
+
+            // Preprocess and split data for AutoML search
+            var (autoMLPreprocessedX, autoMLPreprocessedY, _) = autoMLPreprocessor.PreprocessData(x, y);
+            var (autoMLXTrain, autoMLYTrain, autoMLXVal, autoMLYVal, _, _) = autoMLPreprocessor.SplitData(
+                autoMLPreprocessedX, autoMLPreprocessedY);
+
+            // Configure AutoML with model evaluator if available
+            if (_modelEvaluator != null)
+            {
+                _autoMLModel.SetModelEvaluator(_modelEvaluator);
+            }
+
+            // Run AutoML search to find the best model
+            var bestModel = await _autoMLModel.SearchAsync(
+                autoMLXTrain,
+                autoMLYTrain,
+                autoMLXVal,
+                autoMLYVal,
+                _autoMLModel.TimeLimit,
+                CancellationToken.None);
+
+            _model = bestModel;
+
+            Console.WriteLine($"AutoML search complete. Best model: {bestModel.GetType().Name}");
+            Console.WriteLine($"Best score: {_autoMLModel.BestScore}");
+            Console.WriteLine($"Trials completed: {_autoMLModel.GetTrialHistory().Count}");
+        }
+
+        // Validate model is set (either by user, agent, or AutoML)
         if (_model == null)
-            throw new InvalidOperationException("Model implementation must be specified");
+            throw new InvalidOperationException("Model implementation must be specified. Use ConfigureModel() to set a model, ConfigureAutoML() for automatic model selection, or enable agent assistance.");
 
         // Use defaults for these interfaces if they aren't set
         var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
@@ -601,6 +641,30 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var featureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
         var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
         var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(normalizer, featureSelector, outlierRemoval);
+
+        // LORA ADAPTATION (if configured)
+        // Apply LoRA adapters to neural network layers for parameter-efficient fine-tuning
+        if (_loraConfiguration != null && _model is NeuralNetworks.NeuralNetworkBase<T> neuralNetForLoRA)
+        {
+            Console.WriteLine("Applying LoRA adapters to neural network layers...");
+            
+            int adaptedCount = 0;
+            for (int i = 0; i < neuralNetForLoRA.Layers.Count; i++)
+            {
+                var originalLayer = neuralNetForLoRA.Layers[i];
+                var adaptedLayer = _loraConfiguration.ApplyLoRA(originalLayer);
+                
+                // If the layer was adapted (wrapped with LoRA), update the list
+                if (!ReferenceEquals(originalLayer, adaptedLayer))
+                {
+                    neuralNetForLoRA.Layers[i] = adaptedLayer;
+                    adaptedCount++;
+                }
+            }
+            
+            Console.WriteLine($"LoRA applied to {adaptedCount} layers (rank={_loraConfiguration.Rank}, alpha={_loraConfiguration.Alpha})");
+        }
+
 
         // Wrap model and optimizer for distributed training if configured
         IFullModel<T, TInput, TOutput> model = _model;
