@@ -175,16 +175,11 @@ public static class GraphAnalytics
             var inDegree = graph.GetIncomingEdges(node.Id).Count();
             var totalDegree = outDegree + inDegree;
 
-            if (normalized && nodes.Count > 1)
-            {
-                // Normalize by the maximum possible degree (n-1) for undirected,
-                // or 2(n-1) for directed graphs
-                centrality[node.Id] = totalDegree / (2.0 * (nodes.Count - 1));
-            }
-            else
-            {
-                centrality[node.Id] = totalDegree;
-            }
+            // Normalize by the maximum possible degree (n-1) for undirected,
+            // or 2(n-1) for directed graphs
+            centrality[node.Id] = (normalized && nodes.Count > 1)
+                ? totalDegree / (2.0 * (nodes.Count - 1))
+                : totalDegree;
         }
 
         return centrality;
@@ -399,13 +394,10 @@ public static class GraphAnalytics
             var current = queue.Dequeue();
             var currentDistance = distances[current];
 
-            foreach (var edge in graph.GetOutgoingEdges(current))
+            foreach (var edge in graph.GetOutgoingEdges(current).Where(e => distances[e.TargetId] == int.MaxValue))
             {
-                if (distances[edge.TargetId] == int.MaxValue)
-                {
-                    distances[edge.TargetId] = currentDistance + 1;
-                    queue.Enqueue(edge.TargetId);
-                }
+                distances[edge.TargetId] = currentDistance + 1;
+                queue.Enqueue(edge.TargetId);
             }
         }
 
@@ -490,43 +482,34 @@ public static class GraphAnalytics
         var visited = new HashSet<string>();
         var components = new List<HashSet<string>>();
 
-        foreach (var node in nodes)
+        foreach (var node in nodes.Where(n => !visited.Contains(n.Id)))
         {
-            if (!visited.Contains(node.Id))
+            var component = new HashSet<string>();
+            var queue = new Queue<string>();
+            queue.Enqueue(node.Id);
+            visited.Add(node.Id);
+
+            while (queue.Count > 0)
             {
-                var component = new HashSet<string>();
-                var queue = new Queue<string>();
-                queue.Enqueue(node.Id);
-                visited.Add(node.Id);
+                var current = queue.Dequeue();
+                component.Add(current);
 
-                while (queue.Count > 0)
+                // Check outgoing edges
+                foreach (var edge in graph.GetOutgoingEdges(current).Where(e => !visited.Contains(e.TargetId)))
                 {
-                    var current = queue.Dequeue();
-                    component.Add(current);
-
-                    // Check outgoing edges
-                    foreach (var edge in graph.GetOutgoingEdges(current))
-                    {
-                        if (!visited.Contains(edge.TargetId))
-                        {
-                            visited.Add(edge.TargetId);
-                            queue.Enqueue(edge.TargetId);
-                        }
-                    }
-
-                    // Check incoming edges (for undirected behavior)
-                    foreach (var edge in graph.GetIncomingEdges(current))
-                    {
-                        if (!visited.Contains(edge.SourceId))
-                        {
-                            visited.Add(edge.SourceId);
-                            queue.Enqueue(edge.SourceId);
-                        }
-                    }
+                    visited.Add(edge.TargetId);
+                    queue.Enqueue(edge.TargetId);
                 }
 
-                components.Add(component);
+                // Check incoming edges (for undirected behavior)
+                foreach (var edge in graph.GetIncomingEdges(current).Where(e => !visited.Contains(e.SourceId)))
+                {
+                    visited.Add(edge.SourceId);
+                    queue.Enqueue(edge.SourceId);
+                }
             }
+
+            components.Add(component);
         }
 
         return components;
@@ -602,14 +585,14 @@ public static class GraphAnalytics
 
                 foreach (var edge in graph.GetOutgoingEdges(node.Id))
                 {
-                    if (labels.ContainsKey(edge.TargetId))
-                        neighborLabels.Add(labels[edge.TargetId]);
+                    if (labels.TryGetValue(edge.TargetId, out var targetLabel))
+                        neighborLabels.Add(targetLabel);
                 }
 
                 foreach (var edge in graph.GetIncomingEdges(node.Id))
                 {
-                    if (labels.ContainsKey(edge.SourceId))
-                        neighborLabels.Add(labels[edge.SourceId]);
+                    if (labels.TryGetValue(edge.SourceId, out var sourceLabel))
+                        neighborLabels.Add(sourceLabel);
                 }
 
                 if (neighborLabels.Count == 0)
