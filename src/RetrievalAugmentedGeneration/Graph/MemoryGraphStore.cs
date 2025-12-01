@@ -77,6 +77,17 @@ public class MemoryGraphStore<T> : IGraphStore<T>
         if (node == null)
             throw new ArgumentNullException(nameof(node));
 
+        // Remove old label index if node exists with different label
+        if (_nodes.TryGetValue(node.Id, out var existingNode) && existingNode.Label != node.Label)
+        {
+            if (_nodesByLabel.TryGetValue(existingNode.Label, out var oldLabelNodeIds))
+            {
+                oldLabelNodeIds.Remove(node.Id);
+                if (oldLabelNodeIds.Count == 0)
+                    _nodesByLabel.Remove(existingNode.Label);
+            }
+        }
+
         _nodes[node.Id] = node;
 
         if (!_nodesByLabel.ContainsKey(node.Label))
