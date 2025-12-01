@@ -3,6 +3,8 @@ using Microsoft.Extensions.Options;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
+using AiDotNet.Models.Results;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Serving.Controllers;
 
@@ -128,34 +130,37 @@ public class ModelsController : ControllerBase
                 });
             }
 
-            // LoadModel from file requires a model metadata and type registry system.
-            // This is deferred to a future feature that will include:
-            // - Model serialization with type metadata headers
-            // - Model type registry and factory pattern
-            // - License verification for premium models
-            // - Integration with AiDotNet Platform (web-based model creation)
-
-            _logger.LogWarning("LoadModel endpoint requires model metadata system. " +
-                "This feature is deferred to support the broader AiDotNet Platform integration.");
-
-            return StatusCode(501, new LoadModelResponse
+            // Load model based on numeric type
+            ModelInfo? loadedModelInfo;
+            try
             {
-                Success = false,
-                Error = "LoadModel from file is not yet implemented. " +
-                        "This endpoint requires a model metadata and type registry system.\n\n" +
-                        "Current options:\n" +
-                        "1. Use IModelRepository.LoadModel<T>(name, model) programmatically\n" +
-                        "2. Configure StartupModels in appsettings.json\n" +
-                        "3. Track GitHub issues for REST API support roadmap\n\n" +
-                        "For production deployments, see documentation at: " +
-                        "https://github.com/ooples/AiDotNet/wiki"
-            });
+                var numericType = ParseNumericType(request.NumericType);
+                loadedModelInfo = numericType switch
+                {
+                    NumericType.Float => LoadTypedModel<float>(request.Name, candidatePath),
+                    NumericType.Decimal => LoadTypedModel<decimal>(request.Name, candidatePath),
+                    _ => LoadTypedModel<double>(request.Name, candidatePath)
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to load model '{ModelName}' from '{Path}'",
+                    request.Name, candidatePath);
+                return BadRequest(new LoadModelResponse
+                {
+                    Success = false,
+                    Error = $"Failed to load model: {ex.Message}"
+                });
+            }
 
-            // TODO: Implement actual model loading logic
-            // Example pseudocode:
-            // var model = ModelSerializer.Load<T>(request.Path);
-            // var success = _modelRepository.LoadModel(request.Name, model, request.Path);
-            // return Ok(new LoadModelResponse { Success = true, ModelInfo = ... });
+            _logger.LogInformation("Successfully loaded model '{ModelName}' from '{Path}'",
+                request.Name, candidatePath);
+
+            return Ok(new LoadModelResponse
+            {
+                Success = true,
+                ModelInfo = loadedModelInfo
+            });
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -266,5 +271,114 @@ public class ModelsController : ControllerBase
 
         _logger.LogInformation("Model '{ModelName}' unloaded successfully", modelName);
         return Ok(new { message = $"Model '{modelName}' unloaded successfully" });
+    }
+
+    /// <summary>
+    /// Parses a numeric type string to the NumericType enum.
+    /// </summary>
+    private static NumericType ParseNumericType(string numericType)
+    {
+        if (string.IsNullOrWhiteSpace(numericType))
+        {
+            return NumericType.Double;
+        }
+
+        return numericType.ToLowerInvariant() switch
+        {
+            "float" or "single" => NumericType.Float,
+            "decimal" => NumericType.Decimal,
+            _ => NumericType.Double
+        };
+    }
+
+    /// <summary>
+    /// Loads a typed model and registers it with the repository.
+    /// </summary>
+    /// <remarks>
+    /// This method loads a serialized PredictionModelResult from disk and wraps it
+    /// in a ServableModelWrapper for serving. The facade pattern is maintained -
+    /// all configuration (LoRA, inference opts, etc.) is preserved.
+    /// </remarks>
+    private ModelInfo LoadTypedModel<T>(string name, string path)
+    {
+        // Load the serialized PredictionModelResult using internal constructor
+        // This is accessible via InternalsVisibleTo
+        var modelResult = new PredictionModelResult<T, Matrix<T>, Vector<T>>();
+        modelResult.LoadFromFile(path);
+
+        // Get dimensions from the model metadata
+        var metadata = modelResult.GetModelMetadata();
+        var inputDim = metadata.FeatureCount > 0 ? metadata.FeatureCount : 1;
+        // Output dimension defaults to 1 for most regression/classification models
+        // For multi-output models, this could be extended via metadata properties
+        var outputDim = metadata.Properties.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue is int dim
+            ? dim
+            : 1;
+
+        // Create predict functions that delegate to PredictionModelResult
+        // This preserves all facade functionality (LoRA, inference opts, etc.)
+        // Note: PredictionModelResult<T, Matrix<T>, Vector<T>> has Predict(Matrix<T>) -> Vector<T>
+        // We wrap single vectors in a matrix for prediction
+        Func<Vector<T>, Vector<T>> predictFunc = input =>
+        {
+            // Wrap single vector as single-row matrix
+            var inputMatrix = new Matrix<T>(1, input.Length);
+            for (int i = 0; i < input.Length; i++)
+            {
+                inputMatrix[0, i] = input[i];
+            }
+            return modelResult.Predict(inputMatrix);
+        };
+
+        Func<Matrix<T>, Matrix<T>> predictBatchFunc = inputs =>
+        {
+            // Predict each row and combine results
+            var results = new Matrix<T>(inputs.Rows, outputDim);
+            for (int i = 0; i < inputs.Rows; i++)
+            {
+                var inputRow = inputs.GetRow(i);
+                // Wrap row as single-row matrix
+                var inputMatrix = new Matrix<T>(1, inputRow.Length);
+                for (int j = 0; j < inputRow.Length; j++)
+                {
+                    inputMatrix[0, j] = inputRow[j];
+                }
+                var output = modelResult.Predict(inputMatrix);
+                for (int j = 0; j < output.Length && j < outputDim; j++)
+                {
+                    results[i, j] = output[j];
+                }
+            }
+            return results;
+        };
+
+        // Create a servable wrapper that implements IServableModel
+        var servableModel = new ServableModelWrapper<T>(
+            name,
+            inputDim,
+            outputDim,
+            predictFunc,
+            predictBatchFunc);
+
+        // Register with the repository
+        var success = _modelRepository.LoadModel(name, servableModel, path);
+
+        if (!success)
+        {
+            throw new InvalidOperationException($"A model with name '{name}' already exists");
+        }
+
+        _logger.LogDebug("Model '{Name}' registered with {InputDim} input dimensions and {OutputDim} output dimensions",
+            name, inputDim, outputDim);
+
+        return new ModelInfo
+        {
+            Name = name,
+            SourcePath = path,
+            NumericType = typeof(T).Name,
+            InputDimension = inputDim,
+            OutputDimension = outputDim,
+            LoadedAt = DateTime.UtcNow
+        };
     }
 }
