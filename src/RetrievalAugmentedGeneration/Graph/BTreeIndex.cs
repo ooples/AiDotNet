@@ -227,7 +227,11 @@ public class BTreeIndex : IDisposable
 
             _isDirty = false;
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to flush index to disk: {_indexFilePath}", ex);
+        }
+        catch (UnauthorizedAccessException ex)
         {
             throw new IOException($"Failed to flush index to disk: {_indexFilePath}", ex);
         }
@@ -260,7 +264,11 @@ public class BTreeIndex : IDisposable
 
             _isDirty = false;
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to load index from disk: {_indexFilePath}", ex);
+        }
+        catch (UnauthorizedAccessException ex)
         {
             throw new IOException($"Failed to load index from disk: {_indexFilePath}", ex);
         }

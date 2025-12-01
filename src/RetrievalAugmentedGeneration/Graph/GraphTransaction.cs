@@ -278,9 +278,13 @@ public class GraphTransaction<T> : IDisposable
             {
                 Rollback();
             }
-            catch
+            catch (InvalidOperationException)
             {
-                // Ignore rollback errors during dispose
+                // Ignore rollback errors during dispose - transaction may already be in invalid state
+            }
+            catch (IOException)
+            {
+                // Ignore I/O errors during dispose - underlying store may be unavailable
             }
         }
 

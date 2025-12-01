@@ -409,9 +409,9 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 txn.AddNode(CreateTestNode("alice", "PERSON"));
                 throw new Exception("Simulated error");
             }
-            catch
+            catch (Exception)
             {
-                // Swallow exception
+                // Swallow exception - expected in this test
             }
 
             // Transaction should have been rolled back

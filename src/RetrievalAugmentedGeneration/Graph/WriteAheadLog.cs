@@ -211,7 +211,7 @@ public class WriteAheadLog : IDisposable
                     if (entry != null)
                         entries.Add(entry);
                 }
-                catch
+                catch (JsonSerializationException)
                 {
                     // Skip corrupted entries
                 }
