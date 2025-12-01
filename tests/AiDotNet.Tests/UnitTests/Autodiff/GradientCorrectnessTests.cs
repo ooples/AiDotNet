@@ -44,14 +44,14 @@ public class GradientCorrectnessTests
         var random = new Random(42);
         for (int i = 0; i < input.Length; i++)
         {
-            input[i] = (float)(random.NextDouble() * 2 - 1); // Range: [-1, 1]
+            SetTensorValue(input, i, (float)(random.NextDouble() * 2 - 1)); // Range: [-1, 1]
         }
 
         // Create test output gradient
         var outputGradient = new Tensor<float>(new[] { batchSize, outputSize });
         for (int i = 0; i < outputGradient.Length; i++)
         {
-            outputGradient[i] = (float)(random.NextDouble() * 2 - 1);
+            SetTensorValue(outputGradient, i, (float)(random.NextDouble() * 2 - 1));
         }
 
         // Act - Manual gradients
@@ -75,9 +75,9 @@ public class GradientCorrectnessTests
         // Compare input gradients element-wise
         for (int i = 0; i < manualInputGradient.Length; i++)
         {
-            var diff = Math.Abs(manualInputGradient[i] - autodiffInputGradient[i]);
+            var diff = Math.Abs(GetTensorValue(manualInputGradient, i) - GetTensorValue(autodiffInputGradient, i));
             Assert.True(diff < Tolerance,
-                $"Input gradient mismatch at index {i}: manual={manualInputGradient[i]}, autodiff={autodiffInputGradient[i]}, diff={diff}");
+                $"Input gradient mismatch at index {i}: manual={GetTensorValue(manualInputGradient, i)}, autodiff={GetTensorValue(autodiffInputGradient, i)}, diff={diff}");
         }
     }
 
@@ -93,14 +93,14 @@ public class GradientCorrectnessTests
         var random = new Random(42);
         for (int i = 0; i < input.Length; i++)
         {
-            input[i] = (float)(random.NextDouble() * 4 - 2); // Range: [-2, 2]
+            SetTensorValue(input, i, (float)(random.NextDouble() * 4 - 2)); // Range: [-2, 2]
         }
 
         // Create test output gradient
         var outputGradient = new Tensor<float>(shape);
         for (int i = 0; i < outputGradient.Length; i++)
         {
-            outputGradient[i] = (float)(random.NextDouble());
+            SetTensorValue(outputGradient, i, (float)(random.NextDouble()));
         }
 
         // Act - Manual gradients
@@ -121,9 +121,9 @@ public class GradientCorrectnessTests
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
-            var diff = Math.Abs(manualGradient[i] - autodiffGradient[i]);
+            var diff = Math.Abs(GetTensorValue(manualGradient, i) - GetTensorValue(autodiffGradient, i));
             Assert.True(diff < Tolerance,
-                $"Gradient mismatch at index {i}: manual={manualGradient[i]}, autodiff={autodiffGradient[i]}, diff={diff}");
+                $"Gradient mismatch at index {i}: manual={GetTensorValue(manualGradient, i)}, autodiff={GetTensorValue(autodiffGradient, i)}, diff={diff}");
         }
     }
 
@@ -138,13 +138,13 @@ public class GradientCorrectnessTests
         var random = new Random(42);
         for (int i = 0; i < input.Length; i++)
         {
-            input[i] = (float)(random.NextDouble() * 2 - 1);
+            SetTensorValue(input, i, (float)(random.NextDouble() * 2 - 1));
         }
 
         var outputGradient = new Tensor<float>(shape);
         for (int i = 0; i < outputGradient.Length; i++)
         {
-            outputGradient[i] = (float)(random.NextDouble());
+            SetTensorValue(outputGradient, i, (float)(random.NextDouble()));
         }
 
         // Act - Manual gradients
@@ -164,9 +164,9 @@ public class GradientCorrectnessTests
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
-            var diff = Math.Abs(manualGradient[i] - autodiffGradient[i]);
+            var diff = Math.Abs(GetTensorValue(manualGradient, i) - GetTensorValue(autodiffGradient, i));
             Assert.True(diff < Tolerance,
-                $"Sigmoid gradient mismatch at index {i}: manual={manualGradient[i]}, autodiff={autodiffGradient[i]}, diff={diff}");
+                $"Sigmoid gradient mismatch at index {i}: manual={GetTensorValue(manualGradient, i)}, autodiff={GetTensorValue(autodiffGradient, i)}, diff={diff}");
         }
     }
 
@@ -181,13 +181,13 @@ public class GradientCorrectnessTests
         var random = new Random(42);
         for (int i = 0; i < input.Length; i++)
         {
-            input[i] = (float)(random.NextDouble() * 2 - 1);
+            SetTensorValue(input, i, (float)(random.NextDouble() * 2 - 1));
         }
 
         var outputGradient = new Tensor<float>(shape);
         for (int i = 0; i < outputGradient.Length; i++)
         {
-            outputGradient[i] = (float)(random.NextDouble());
+            SetTensorValue(outputGradient, i, (float)(random.NextDouble()));
         }
 
         // Act - Manual gradients
@@ -207,9 +207,9 @@ public class GradientCorrectnessTests
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
-            var diff = Math.Abs(manualGradient[i] - autodiffGradient[i]);
+            var diff = Math.Abs(GetTensorValue(manualGradient, i) - GetTensorValue(autodiffGradient, i));
             Assert.True(diff < Tolerance,
-                $"Tanh gradient mismatch at index {i}: manual={manualGradient[i]}, autodiff={autodiffGradient[i]}, diff={diff}");
+                $"Tanh gradient mismatch at index {i}: manual={GetTensorValue(manualGradient, i)}, autodiff={GetTensorValue(autodiffGradient, i)}, diff={diff}");
         }
     }
 
@@ -227,13 +227,13 @@ public class GradientCorrectnessTests
         var random = new Random(42);
         for (int i = 0; i < input.Length; i++)
         {
-            input[i] = (float)(random.NextDouble() * 2);
+            SetTensorValue(input, i, (float)(random.NextDouble() * 2));
         }
 
         var outputGradient = new Tensor<float>(shape);
         for (int i = 0; i < outputGradient.Length; i++)
         {
-            outputGradient[i] = (float)(random.NextDouble());
+            SetTensorValue(outputGradient, i, (float)(random.NextDouble()));
         }
 
         // Act - Manual gradients
@@ -253,9 +253,9 @@ public class GradientCorrectnessTests
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
-            var diff = Math.Abs(manualGradient[i] - autodiffGradient[i]);
+            var diff = Math.Abs(GetTensorValue(manualGradient, i) - GetTensorValue(autodiffGradient, i));
             Assert.True(diff < Tolerance,
-                $"BatchNorm gradient mismatch at index {i}: manual={manualGradient[i]}, autodiff={autodiffGradient[i]}, diff={diff}");
+                $"BatchNorm gradient mismatch at index {i}: manual={GetTensorValue(manualGradient, i)}, autodiff={GetTensorValue(autodiffGradient, i)}, diff={diff}");
         }
     }
 
@@ -273,13 +273,13 @@ public class GradientCorrectnessTests
         var random = new Random(42);
         for (int i = 0; i < input.Length; i++)
         {
-            input[i] = (float)(random.NextDouble());
+            SetTensorValue(input, i, (float)(random.NextDouble()));
         }
 
         var outputGradient = new Tensor<float>(shape);
         for (int i = 0; i < outputGradient.Length; i++)
         {
-            outputGradient[i] = (float)(random.NextDouble());
+            SetTensorValue(outputGradient, i, (float)(random.NextDouble()));
         }
 
         // Act - Manual gradients
@@ -302,17 +302,17 @@ public class GradientCorrectnessTests
         for (int i = 0; i < manualGradient.Length; i++)
         {
             // Both should be zero or both should be non-zero (same dropout mask)
-            bool manualIsZero = Math.Abs(manualGradient[i]) < 1e-8;
-            bool autodiffIsZero = Math.Abs(autodiffGradient[i]) < 1e-8;
+            bool manualIsZero = Math.Abs(GetTensorValue(manualGradient, i)) < 1e-8;
+            bool autodiffIsZero = Math.Abs(GetTensorValue(autodiffGradient, i)) < 1e-8;
 
             Assert.Equal(manualIsZero, autodiffIsZero);
 
             // If both are non-zero, they should match
             if (!manualIsZero && !autodiffIsZero)
             {
-                var diff = Math.Abs(manualGradient[i] - autodiffGradient[i]);
+                var diff = Math.Abs(GetTensorValue(manualGradient, i) - GetTensorValue(autodiffGradient, i));
                 Assert.True(diff < Tolerance,
-                    $"Dropout gradient mismatch at index {i}: manual={manualGradient[i]}, autodiff={autodiffGradient[i]}");
+                    $"Dropout gradient mismatch at index {i}: manual={GetTensorValue(manualGradient, i)}, autodiff={GetTensorValue(autodiffGradient, i)}");
             }
         }
     }
@@ -350,9 +350,9 @@ public class GradientCorrectnessTests
 
         for (int i = 0; i < manual.Length; i++)
         {
-            var diff = Math.Abs(manual[i] - autodiff[i]);
+            var diff = Math.Abs(GetTensorValue(manual, i) - GetTensorValue(autodiff, i));
             Assert.True(diff < Tolerance,
-                $"AddLayer gradient mismatch at index {i}: manual={manual[i]}, autodiff={autodiff[i]}");
+                $"AddLayer gradient mismatch at index {i}: manual={GetTensorValue(manual, i)}, autodiff={GetTensorValue(autodiff, i)}");
         }
     }
 
@@ -388,9 +388,9 @@ public class GradientCorrectnessTests
 
         for (int i = 0; i < manual.Length; i++)
         {
-            var diff = Math.Abs(manual[i] - autodiff[i]);
+            var diff = Math.Abs(GetTensorValue(manual, i) - GetTensorValue(autodiff, i));
             Assert.True(diff < Tolerance,
-                $"MultiplyLayer gradient mismatch at index {i}: manual={manual[i]}, autodiff={autodiff[i]}");
+                $"MultiplyLayer gradient mismatch at index {i}: manual={GetTensorValue(manual, i)}, autodiff={GetTensorValue(autodiff, i)}");
         }
     }
 
@@ -425,9 +425,9 @@ public class GradientCorrectnessTests
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
-            var diff = Math.Abs(manualGradient[i] - autodiffGradient[i]);
+            var diff = Math.Abs(GetTensorValue(manualGradient, i) - GetTensorValue(autodiffGradient, i));
             Assert.True(diff < Tolerance,
-                $"ResidualLayer gradient mismatch at index {i}: manual={manualGradient[i]}, autodiff={autodiffGradient[i]}");
+                $"ResidualLayer gradient mismatch at index {i}: manual={GetTensorValue(manualGradient, i)}, autodiff={GetTensorValue(autodiffGradient, i)}");
         }
     }
 
@@ -461,9 +461,9 @@ public class GradientCorrectnessTests
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
-            var diff = Math.Abs(manualGradient[i] - autodiffGradient[i]);
+            var diff = Math.Abs(GetTensorValue(manualGradient, i) - GetTensorValue(autodiffGradient, i));
             Assert.True(diff < Tolerance,
-                $"LayerNorm gradient mismatch at index {i}: manual={manualGradient[i]}, autodiff={autodiffGradient[i]}");
+                $"LayerNorm gradient mismatch at index {i}: manual={GetTensorValue(manualGradient, i)}, autodiff={GetTensorValue(autodiffGradient, i)}");
         }
     }
 
@@ -508,9 +508,9 @@ public class GradientCorrectnessTests
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
-            var diff = Math.Abs(manualGradient[i] - autodiffGradient[i]);
+            var diff = Math.Abs(GetTensorValue(manualGradient, i) - GetTensorValue(autodiffGradient, i));
             Assert.True(diff < Tolerance,
-                $"Multi-layer gradient mismatch at index {i}: manual={manualGradient[i]}, autodiff={autodiffGradient[i]}");
+                $"Multi-layer gradient mismatch at index {i}: manual={GetTensorValue(manualGradient, i)}, autodiff={GetTensorValue(autodiffGradient, i)}");
         }
     }
 
@@ -555,13 +555,13 @@ public class GradientCorrectnessTests
             {
                 // Forward + epsilon
                 var inputPlus = input.Clone();
-                inputPlus[i] += epsilon;
+                SetTensorValue(inputPlus, i, GetTensorValue(inputPlus, i) + epsilon);
                 var nodePlus = TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
                 var outputPlus = TensorOperations<float>.Softmax(nodePlus, axis: -1);
 
                 // Forward - epsilon
                 var inputMinus = input.Clone();
-                inputMinus[i] -= epsilon;
+                SetTensorValue(inputMinus, i, GetTensorValue(inputMinus, i) - epsilon);
                 var nodeMinus = TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
                 var outputMinus = TensorOperations<float>.Softmax(nodeMinus, axis: -1);
 
@@ -569,18 +569,18 @@ public class GradientCorrectnessTests
                 float gradSum = 0;
                 for (int j = 0; j < outputGradient.Length; j++)
                 {
-                    float diff = (outputPlus.Value[j] - outputMinus.Value[j]) / (2 * epsilon);
-                    gradSum += outputGradient[j] * diff;
+                    float diff = (GetTensorValue(outputPlus.Value, j) - GetTensorValue(outputMinus.Value, j)) / (2 * epsilon);
+                    gradSum += GetTensorValue(outputGradient, j) * diff;
                 }
-                numericalGradient[i] = gradSum;
+                SetTensorValue(numericalGradient, i, gradSum);
             }
 
             // Assert - gradients should match within tolerance
             for (int i = 0; i < autodiffGradient.Length; i++)
             {
-                var diff = Math.Abs(autodiffGradient[i] - numericalGradient[i]);
+                var diff = Math.Abs(GetTensorValue(autodiffGradient, i) - GetTensorValue(numericalGradient, i));
                 Assert.True(diff < Tolerance,
-                    $"Softmax gradient mismatch at index {i}: autodiff={autodiffGradient[i]}, numerical={numericalGradient[i]}");
+                    $"Softmax gradient mismatch at index {i}: autodiff={GetTensorValue(autodiffGradient, i)}, numerical={GetTensorValue(numericalGradient, i)}");
             }
         }
     }
@@ -626,13 +626,13 @@ public class GradientCorrectnessTests
             {
                 // Forward + epsilon
                 var inputPlus = input.Clone();
-                inputPlus[i] += epsilon;
+                SetTensorValue(inputPlus, i, GetTensorValue(inputPlus, i) + epsilon);
                 var nodePlus = TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
                 var outputPlus = TensorOperations<float>.TaylorSoftmax(nodePlus, order: 2, axis: -1);
 
                 // Forward - epsilon
                 var inputMinus = input.Clone();
-                inputMinus[i] -= epsilon;
+                SetTensorValue(inputMinus, i, GetTensorValue(inputMinus, i) - epsilon);
                 var nodeMinus = TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
                 var outputMinus = TensorOperations<float>.TaylorSoftmax(nodeMinus, order: 2, axis: -1);
 
@@ -640,18 +640,18 @@ public class GradientCorrectnessTests
                 float gradSum = 0;
                 for (int j = 0; j < outputGradient.Length; j++)
                 {
-                    float diff = (outputPlus.Value[j] - outputMinus.Value[j]) / (2 * epsilon);
-                    gradSum += outputGradient[j] * diff;
+                    float diff = (GetTensorValue(outputPlus.Value, j) - GetTensorValue(outputMinus.Value, j)) / (2 * epsilon);
+                    gradSum += GetTensorValue(outputGradient, j) * diff;
                 }
-                numericalGradient[i] = gradSum;
+                SetTensorValue(numericalGradient, i, gradSum);
             }
 
             // Assert - gradients should match within tolerance
             for (int i = 0; i < autodiffGradient.Length; i++)
             {
-                var diff = Math.Abs(autodiffGradient[i] - numericalGradient[i]);
+                var diff = Math.Abs(GetTensorValue(autodiffGradient, i) - GetTensorValue(numericalGradient, i));
                 Assert.True(diff < Tolerance,
-                    $"TaylorSoftmax gradient mismatch at index {i}: autodiff={autodiffGradient[i]}, numerical={numericalGradient[i]}");
+                    $"TaylorSoftmax gradient mismatch at index {i}: autodiff={GetTensorValue(autodiffGradient, i)}, numerical={GetTensorValue(numericalGradient, i)}");
             }
         }
     }
@@ -694,29 +694,29 @@ public class GradientCorrectnessTests
             for (int i = 0; i < input.Length; i++)
             {
                 var inputPlus = input.Clone();
-                inputPlus[i] += epsilon;
+                SetTensorValue(inputPlus, i, GetTensorValue(inputPlus, i) + epsilon);
                 var nodePlus = TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
                 var outputPlus = TensorOperations<float>.TaylorSoftmax(nodePlus, order: 4, axis: -1);
 
                 var inputMinus = input.Clone();
-                inputMinus[i] -= epsilon;
+                SetTensorValue(inputMinus, i, GetTensorValue(inputMinus, i) - epsilon);
                 var nodeMinus = TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
                 var outputMinus = TensorOperations<float>.TaylorSoftmax(nodeMinus, order: 4, axis: -1);
 
                 float gradSum = 0;
                 for (int j = 0; j < outputGradient.Length; j++)
                 {
-                    float diff = (outputPlus.Value[j] - outputMinus.Value[j]) / (2 * epsilon);
-                    gradSum += outputGradient[j] * diff;
+                    float diff = (GetTensorValue(outputPlus.Value, j) - GetTensorValue(outputMinus.Value, j)) / (2 * epsilon);
+                    gradSum += GetTensorValue(outputGradient, j) * diff;
                 }
-                numericalGradient[i] = gradSum;
+                SetTensorValue(numericalGradient, i, gradSum);
             }
 
             for (int i = 0; i < autodiffGradient.Length; i++)
             {
-                var diff = Math.Abs(autodiffGradient[i] - numericalGradient[i]);
+                var diff = Math.Abs(GetTensorValue(autodiffGradient, i) - GetTensorValue(numericalGradient, i));
                 Assert.True(diff < Tolerance,
-                    $"TaylorSoftmax (order=4) gradient mismatch at index {i}: autodiff={autodiffGradient[i]}, numerical={numericalGradient[i]}");
+                    $"TaylorSoftmax (order=4) gradient mismatch at index {i}: autodiff={GetTensorValue(autodiffGradient, i)}, numerical={GetTensorValue(numericalGradient, i)}");
             }
         }
     }
@@ -746,7 +746,7 @@ public class GradientCorrectnessTests
         // Use a deterministic input for stable gradient testing
         var input = new Tensor<float>(shape);
         for (int i = 0; i < input.Length; i++)
-            input[i] = (float)(i * 0.1 - 0.4); // Range roughly [-0.4, 0.4]
+            SetTensorValue(input, i, (float)(i * 0.1 - 0.4)); // Range roughly [-0.4, 0.4]
 
         var outputGradient = CreateRandomTensor(shape);
 
@@ -778,8 +778,8 @@ public class GradientCorrectnessTests
             // Verify gradient values are reasonable (not NaN/Inf)
             for (int i = 0; i < autodiffGradient.Length; i++)
             {
-                Assert.False(float.IsNaN(autodiffGradient[i]), $"GumbelSoftmax gradient is NaN at index {i}");
-                Assert.False(float.IsInfinity(autodiffGradient[i]), $"GumbelSoftmax gradient is Infinity at index {i}");
+                Assert.False(float.IsNaN(GetTensorValue(autodiffGradient, i)), $"GumbelSoftmax gradient is NaN at index {i}");
+                Assert.False(float.IsInfinity(GetTensorValue(autodiffGradient, i)), $"GumbelSoftmax gradient is Infinity at index {i}");
             }
         }
     }
@@ -804,8 +804,8 @@ public class GradientCorrectnessTests
             float sumHigh = 0, sumLow = 0;
             for (int f = 0; f < 4; f++)
             {
-                sumHigh += outputHigh.Value[b * 4 + f];
-                sumLow += outputLow.Value[b * 4 + f];
+                sumHigh += GetTensorValue(outputHigh.Value, b * 4 + f);
+                sumLow += GetTensorValue(outputLow.Value, b * 4 + f);
             }
             Assert.True(Math.Abs(sumHigh - 1.0f) < 0.01f, $"High temp output doesn't sum to 1: {sumHigh}");
             Assert.True(Math.Abs(sumLow - 1.0f) < 0.01f, $"Low temp output doesn't sum to 1: {sumLow}");
@@ -828,7 +828,7 @@ public class GradientCorrectnessTests
             int zeroCount = 0;
             for (int f = 0; f < 5; f++)
             {
-                var val = output.Value[b * 5 + f];
+                var val = GetTensorValue(output.Value, b * 5 + f);
                 if (Math.Abs(val - 1.0f) < 0.01f) oneCount++;
                 else if (Math.Abs(val) < 0.01f) zeroCount++;
             }
@@ -863,7 +863,7 @@ public class GradientCorrectnessTests
         var input = new Tensor<float>(new int[] { 1, 1, 4, 4 });
         // Create pattern where max positions are known
         for (int i = 0; i < 16; i++)
-            input[i] = i;
+            SetTensorValue(input, i, i);
 
         var outputGradient = new Tensor<float>(new int[] { 1, 1, 2, 2 });
         outputGradient[0, 0, 0, 0] = 1.0f;
@@ -1129,7 +1129,7 @@ public class GradientCorrectnessTests
             {
                 // Forward + epsilon
                 var inputPlus = input.Clone();
-                inputPlus[i] += epsilon;
+                SetTensorValue(inputPlus, i, GetTensorValue(inputPlus, i) + epsilon);
                 var nodePlus = TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
                 var gammaNodePlus = TensorOperations<float>.Variable(gamma, requiresGradient: false);
                 var betaNodePlus = TensorOperations<float>.Variable(beta, requiresGradient: false);
@@ -1137,7 +1137,7 @@ public class GradientCorrectnessTests
 
                 // Forward - epsilon
                 var inputMinus = input.Clone();
-                inputMinus[i] -= epsilon;
+                SetTensorValue(inputMinus, i, GetTensorValue(inputMinus, i) - epsilon);
                 var nodeMinus = TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
                 var gammaNodeMinus = TensorOperations<float>.Variable(gamma, requiresGradient: false);
                 var betaNodeMinus = TensorOperations<float>.Variable(beta, requiresGradient: false);
@@ -1147,18 +1147,18 @@ public class GradientCorrectnessTests
                 float gradSum = 0;
                 for (int j = 0; j < outputGradient.Length; j++)
                 {
-                    float diff = (outputPlus.Value[j] - outputMinus.Value[j]) / (2 * epsilon);
-                    gradSum += outputGradient[j] * diff;
+                    float diff = (GetTensorValue(outputPlus.Value, j) - GetTensorValue(outputMinus.Value, j)) / (2 * epsilon);
+                    gradSum += GetTensorValue(outputGradient, j) * diff;
                 }
-                numericalGradient[i] = gradSum;
+                SetTensorValue(numericalGradient, i, gradSum);
             }
 
             // Assert - gradients should match within tolerance
             for (int i = 0; i < autodiffGradient.Length; i++)
             {
-                var diff = Math.Abs(autodiffGradient[i] - numericalGradient[i]);
+                var diff = Math.Abs(GetTensorValue(autodiffGradient, i) - GetTensorValue(numericalGradient, i));
                 Assert.True(diff < Tolerance,
-                    $"LayerNorm gradient mismatch at index {i}: autodiff={autodiffGradient[i]}, numerical={numericalGradient[i]}");
+                    $"LayerNorm gradient mismatch at index {i}: autodiff={GetTensorValue(autodiffGradient, i)}, numerical={GetTensorValue(numericalGradient, i)}");
             }
         }
     }
@@ -1211,7 +1211,7 @@ public class GradientCorrectnessTests
             {
                 // Forward + epsilon
                 var inputPlus = input.Clone();
-                inputPlus[i] += epsilon;
+                SetTensorValue(inputPlus, i, GetTensorValue(inputPlus, i) + epsilon);
                 var nodePlus = TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
                 var gammaNodePlus = TensorOperations<float>.Variable(gamma, requiresGradient: false);
                 var betaNodePlus = TensorOperations<float>.Variable(beta, requiresGradient: false);
@@ -1220,7 +1220,7 @@ public class GradientCorrectnessTests
 
                 // Forward - epsilon
                 var inputMinus = input.Clone();
-                inputMinus[i] -= epsilon;
+                SetTensorValue(inputMinus, i, GetTensorValue(inputMinus, i) - epsilon);
                 var nodeMinus = TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
                 var gammaNodeMinus = TensorOperations<float>.Variable(gamma, requiresGradient: false);
                 var betaNodeMinus = TensorOperations<float>.Variable(beta, requiresGradient: false);
@@ -1231,18 +1231,18 @@ public class GradientCorrectnessTests
                 float gradSum = 0;
                 for (int j = 0; j < outputGradient.Length; j++)
                 {
-                    float diff = (outputPlus.Value[j] - outputMinus.Value[j]) / (2 * epsilon);
-                    gradSum += outputGradient[j] * diff;
+                    float diff = (GetTensorValue(outputPlus.Value, j) - GetTensorValue(outputMinus.Value, j)) / (2 * epsilon);
+                    gradSum += GetTensorValue(outputGradient, j) * diff;
                 }
-                numericalGradient[i] = gradSum;
+                SetTensorValue(numericalGradient, i, gradSum);
             }
 
             // Assert - gradients should match within tolerance
             for (int i = 0; i < autodiffGradient.Length; i++)
             {
-                var diff = Math.Abs(autodiffGradient[i] - numericalGradient[i]);
+                var diff = Math.Abs(GetTensorValue(autodiffGradient, i) - GetTensorValue(numericalGradient, i));
                 Assert.True(diff < Tolerance,
-                    $"BatchNorm gradient mismatch at index {i}: autodiff={autodiffGradient[i]}, numerical={numericalGradient[i]}");
+                    $"BatchNorm gradient mismatch at index {i}: autodiff={GetTensorValue(autodiffGradient, i)}, numerical={GetTensorValue(numericalGradient, i)}");
             }
         }
     }
@@ -1260,5 +1260,35 @@ public class GradientCorrectnessTests
             data[i] = (float)(random.NextDouble() * 2 - 1);
         }
         return new Tensor<float>(shape, new Vector<float>(data));
+    }
+
+    /// <summary>
+    /// Convert flat index to multi-dimensional indices for tensor access.
+    /// </summary>
+    private static int[] FlatToIndices(int flatIndex, int[] shape)
+    {
+        var indices = new int[shape.Length];
+        for (int i = shape.Length - 1; i >= 0; i--)
+        {
+            indices[i] = flatIndex % shape[i];
+            flatIndex /= shape[i];
+        }
+        return indices;
+    }
+
+    /// <summary>
+    /// Get value at flat index from tensor.
+    /// </summary>
+    private static float GetTensorValue(Tensor<float> tensor, int flatIndex)
+    {
+        return tensor.GetFlat(flatIndex);
+    }
+
+    /// <summary>
+    /// Set value at flat index in tensor.
+    /// </summary>
+    private static void SetTensorValue(Tensor<float> tensor, int flatIndex, float value)
+    {
+        tensor.SetFlat(flatIndex, value);
     }
 }

@@ -2491,7 +2491,7 @@ public static class TensorOperations<T>
             // Initialize with pad value
             for (int i = 0; i < result.Length; i++)
             {
-                result[i] = padValue;
+                result.SetFlat(i, padValue);
             }
             // Copy input data to center
             for (int r = 0; r < inputRows; r++)
@@ -2546,7 +2546,7 @@ public static class TensorOperations<T>
             // Initialize with pad value
             for (int i = 0; i < result.Length; i++)
             {
-                result[i] = padValue;
+                result.SetFlat(i, padValue);
             }
 
             // Copy input data to appropriate location
@@ -7515,15 +7515,15 @@ public static class TensorOperations<T>
             var u = random.NextDouble();
             u = Math.Max(u, eps);
             u = Math.Min(u, 1 - eps);
-            gumbel[i] = numOps.FromDouble(-Math.Log(-Math.Log(u)));
+            gumbel.SetFlat(i, numOps.FromDouble(-Math.Log(-Math.Log(u))));
         }
 
         // Compute soft samples: softmax((logits + gumbel) / temperature)
         var tempTensor = new Tensor<T>(shape);
         for (int i = 0; i < tempTensor.Length; i++)
         {
-            var val = numOps.Add(logits.Value[i], gumbel[i]);
-            tempTensor[i] = numOps.Divide(val, numOps.FromDouble(temperature));
+            var val = numOps.Add(logits.Value.GetFlat(i), gumbel.GetFlat(i));
+            tempTensor.SetFlat(i, numOps.Divide(val, numOps.FromDouble(temperature)));
         }
 
         // Apply softmax along last axis
@@ -7541,18 +7541,18 @@ public static class TensorOperations<T>
             for (int b = 0; b < batchSize; b++)
             {
                 int maxIdx = 0;
-                T maxVal = softResult[b * lastDim];
+                T maxVal = softResult.GetFlat(b * lastDim);
                 for (int i = 1; i < lastDim; i++)
                 {
-                    if (numOps.GreaterThan(softResult[b * lastDim + i], maxVal))
+                    if (numOps.GreaterThan(softResult.GetFlat(b * lastDim + i), maxVal))
                     {
-                        maxVal = softResult[b * lastDim + i];
+                        maxVal = softResult.GetFlat(b * lastDim + i);
                         maxIdx = i;
                     }
                 }
                 for (int i = 0; i < lastDim; i++)
                 {
-                    hardResult[b * lastDim + i] = i == maxIdx ? numOps.One : numOps.Zero;
+                    hardResult.SetFlat(b * lastDim + i, i == maxIdx ? numOps.One : numOps.Zero);
                 }
             }
 
@@ -9112,7 +9112,7 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    var x = a.Value[flatIdx];
+                    var x = a.Value.GetFlat(flatIdx);
                     var taylorExp = numOps.One; // Start with 1
                     var xPower = numOps.One;
 
@@ -9128,7 +9128,7 @@ public static class TensorOperations<T>
                         ? taylorExp
                         : numOps.FromDouble(1e-10);
 
-                    taylorExpValues[flatIdx] = taylorExp;
+                    taylorExpValues.SetFlat(flatIdx, taylorExp);
                     expSum = numOps.Add(expSum, taylorExp);
                 }
 
@@ -9136,7 +9136,7 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     int flatIdx = outer * axisSize * innerSize + i * innerSize + inner;
-                    result[flatIdx] = numOps.Divide(taylorExpValues[flatIdx], expSum);
+                    result.SetFlat(flatIdx, numOps.Divide(taylorExpValues.GetFlat(flatIdx), expSum));
                 }
             }
         }
@@ -9163,7 +9163,7 @@ public static class TensorOperations<T>
                         for (int i = 0; i < capturedAxisSize; i++)
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
-                            expSum = numOps.Add(expSum, taylorExpValues[flatIdx]);
+                            expSum = numOps.Add(expSum, taylorExpValues.GetFlat(flatIdx));
                         }
 
                         // Softmax-style Jacobian: s_i * (δ_ij - s_j)
@@ -9172,19 +9172,19 @@ public static class TensorOperations<T>
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
                             dotProduct = numOps.Add(dotProduct,
-                                numOps.Multiply(gradient[flatIdx], result[flatIdx]));
+                                numOps.Multiply(gradient.GetFlat(flatIdx), result.GetFlat(flatIdx)));
                         }
 
                         for (int i = 0; i < capturedAxisSize; i++)
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
                             // Softmax gradient part: s_i * (grad_i - dot(grad, s))
-                            var softmaxGrad = numOps.Multiply(result[flatIdx],
-                                numOps.Subtract(gradient[flatIdx], dotProduct));
+                            var softmaxGrad = numOps.Multiply(result.GetFlat(flatIdx),
+                                numOps.Subtract(gradient.GetFlat(flatIdx), dotProduct));
 
                             // Taylor exp derivative: d/dx[1 + x + x²/2! + ... + x^n/n!] = 1 + x + ... + x^(n-1)/(n-1)!
                             // This is Taylor_{n-1}(x) for exp
-                            var x = a.Value[flatIdx];
+                            var x = a.Value.GetFlat(flatIdx);
                             var taylorExpDeriv = numOps.One;
                             var xPower = numOps.One;
                             for (int n = 1; n < capturedOrder; n++)
@@ -9197,9 +9197,9 @@ public static class TensorOperations<T>
                             // For y_i = g(x_i) / sum_j(g(x_j)), the chain rule requires:
                             // grad_x_i = softmaxGrad * g'(x_i) / g(x_i)
                             // where g is the Taylor approximation of exp
-                            var gVal = taylorExpValues[flatIdx];
+                            var gVal = taylorExpValues.GetFlat(flatIdx);
                             var gPrimeOverG = numOps.Divide(taylorExpDeriv, gVal);
-                            gradA[flatIdx] = numOps.Multiply(softmaxGrad, gPrimeOverG);
+                            gradA.SetFlat(flatIdx, numOps.Multiply(softmaxGrad, gPrimeOverG));
                         }
                     }
                 }
