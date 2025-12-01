@@ -127,16 +127,9 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
 
             // Get current file position (or reuse existing offset if updating)
             long offset;
-            if (_nodeIndex.Contains(node.Id))
-            {
-                // For updates, we append to the end (old data becomes garbage)
-                // In production, you'd implement compaction to reclaim space
-                offset = new FileInfo(_nodesFilePath).Exists ? new FileInfo(_nodesFilePath).Length : 0;
-            }
-            else
-            {
-                offset = new FileInfo(_nodesFilePath).Exists ? new FileInfo(_nodesFilePath).Length : 0;
-            }
+            // For updates, we append to the end (old data becomes garbage)
+            // In production, you'd implement compaction to reclaim space
+            offset = new FileInfo(_nodesFilePath).Exists ? new FileInfo(_nodesFilePath).Length : 0;
 
             // Write node data to file
             using (var stream = new FileStream(_nodesFilePath, FileMode.Append, FileAccess.Write, FileShare.Read))
@@ -480,16 +473,19 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             foreach (var edgeId in _edgeIndex.GetAllKeys())
             {
                 var edge = GetEdge(edgeId);
-                if (edge != null)
-                {
-                    if (_outgoingEdges.ContainsKey(edge.SourceId))
-                        _outgoingEdges[edge.SourceId].Add(edge.Id);
-                    if (_incomingEdges.ContainsKey(edge.TargetId))
-                        _incomingEdges[edge.TargetId].Add(edge.Id);
-                }
+                if (edge == null) continue;
+
+                if (_outgoingEdges.TryGetValue(edge.SourceId, out var outgoingSet))
+                    outgoingSet.Add(edge.Id);
+                if (_incomingEdges.TryGetValue(edge.TargetId, out var incomingSet))
+                    incomingSet.Add(edge.Id);
             }
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            throw new IOException("Failed to rebuild in-memory indices", ex);
+        }
+        catch (InvalidDataException ex)
         {
             throw new IOException("Failed to rebuild in-memory indices", ex);
         }
@@ -513,15 +509,7 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             var bytes = Encoding.UTF8.GetBytes(json);
 
             // Get current file position
-            long offset;
-            if (_nodeIndex.Contains(node.Id))
-            {
-                offset = new FileInfo(_nodesFilePath).Exists ? new FileInfo(_nodesFilePath).Length : 0;
-            }
-            else
-            {
-                offset = new FileInfo(_nodesFilePath).Exists ? new FileInfo(_nodesFilePath).Length : 0;
-            }
+            long offset = new FileInfo(_nodesFilePath).Exists ? new FileInfo(_nodesFilePath).Length : 0;
 
             // Write node data to file asynchronously
             using (var stream = new FileStream(_nodesFilePath, FileMode.Append, FileAccess.Write, FileShare.Read, 4096, useAsync: true))
