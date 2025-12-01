@@ -151,15 +151,15 @@ public class ModelStartupService : IHostedService
         // Using Task.Run to avoid blocking the startup thread for file I/O
         await Task.Run(() =>
         {
-            switch (modelConfig.NumericType?.ToLower())
+            switch (modelConfig.NumericType)
             {
-                case "float":
+                case NumericType.Float:
                     LoadTypedModel<float>(modelConfig.Name, modelPath);
                     break;
-                case "decimal":
+                case NumericType.Decimal:
                     LoadTypedModel<decimal>(modelConfig.Name, modelPath);
                     break;
-                case "double":
+                case NumericType.Double:
                 default:
                     LoadTypedModel<double>(modelConfig.Name, modelPath);
                     break;
