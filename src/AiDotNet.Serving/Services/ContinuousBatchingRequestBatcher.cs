@@ -47,7 +47,6 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
 {
     private readonly ConcurrentQueue<ContinuousRequest> _requestQueue = new();
     private readonly ConcurrentDictionary<long, ContinuousRequest> _runningRequests = new();
-    private readonly SemaphoreSlim _processingSemaphore = new(1, 1);
     private readonly Task _processingLoop;
     private readonly CancellationTokenSource _cts = new();
     private readonly PerformanceMetrics _performanceMetrics;
@@ -115,7 +114,9 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
     /// <typeparam name="T">The numeric type used by the model.</typeparam>
     /// <param name="modelName">The name of the model to use for prediction.</param>
     /// <param name="input">The input features.</param>
-    /// <param name="priority">The priority level for this request.</param>
+    /// <param name="priority">The priority level for this request.
+    /// Note: In continuous batching mode, priority is stored but requests are processed in FIFO order.
+    /// Priority-based scheduling would require a PriorityQueue implementation which is not yet available.</param>
     /// <returns>A task that completes with the prediction result.</returns>
     public override Task<Vector<T>> QueueRequest<T>(string modelName, Vector<T> input, RequestPriority priority = RequestPriority.Normal)
     {
@@ -197,10 +198,10 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
             try
             {
                 // Try to fill available slots with new requests
-                await ScheduleNewRequests(cancellationToken);
+                await ScheduleNewRequests(cancellationToken).ConfigureAwait(false);
 
                 // Small delay to prevent tight loop
-                await Task.Delay(_iterationIntervalMs, cancellationToken);
+                await Task.Delay(_iterationIntervalMs, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -209,7 +210,7 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Error in continuous batching processing loop");
-                await Task.Delay(100, cancellationToken); // Back off on errors
+                await Task.Delay(100, cancellationToken).ConfigureAwait(false); // Back off on errors
             }
         }
     }
@@ -381,17 +382,28 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
     {
         _cts.Cancel();
 
+        // Use Task.WhenAny with a timeout task to avoid synchronous blocking
+        // which could deadlock if called from a synchronization context
         try
         {
-            _processingLoop.Wait(TimeSpan.FromSeconds(5));
+            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(5));
+            var completedTask = Task.WhenAny(_processingLoop, timeoutTask).GetAwaiter().GetResult();
+
+            if (completedTask == timeoutTask)
+            {
+                Logger.LogWarning("Processing loop did not complete within timeout during disposal");
+            }
         }
         catch (AggregateException)
         {
             // Expected on cancellation
         }
+        catch (OperationCanceledException)
+        {
+            // Expected on cancellation
+        }
 
         _cts.Dispose();
-        _processingSemaphore.Dispose();
 
         // Fail any remaining requests
         while (_requestQueue.TryDequeue(out var request))

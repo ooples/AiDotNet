@@ -332,22 +332,15 @@ public class ModelsController : ControllerBase
 
         Func<Matrix<T>, Matrix<T>> predictBatchFunc = inputs =>
         {
-            // Predict each row and combine results
+            // Pass entire batch for efficient batch inference
+            // PredictionModelResult.Predict(Matrix<T>) returns Vector<T> with one value per sample
+            var predictions = modelResult.Predict(inputs);
+
+            // Convert Vector<T> result to Matrix<T> format
             var results = new Matrix<T>(inputs.Rows, outputDim);
-            for (int i = 0; i < inputs.Rows; i++)
+            for (int i = 0; i < predictions.Length && i < inputs.Rows; i++)
             {
-                var inputRow = inputs.GetRow(i);
-                // Wrap row as single-row matrix
-                var inputMatrix = new Matrix<T>(1, inputRow.Length);
-                for (int j = 0; j < inputRow.Length; j++)
-                {
-                    inputMatrix[0, j] = inputRow[j];
-                }
-                var output = modelResult.Predict(inputMatrix);
-                for (int j = 0; j < output.Length && j < outputDim; j++)
-                {
-                    results[i, j] = output[j];
-                }
+                results[i, 0] = predictions[i];
             }
             return results;
         };

@@ -197,6 +197,64 @@ public class InferenceOptimizationConfig
 
     #endregion
 
+    #region Validation
+
+    /// <summary>
+    /// Validates the configuration and throws if any values are invalid.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when configuration values are invalid.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Call this method to ensure your configuration is valid before use.
+    ///
+    /// Validation rules:
+    /// - KVCacheMaxSizeMB must be positive
+    /// - MaxBatchSize must be positive
+    /// - MinBatchSize must be positive and not exceed MaxBatchSize
+    /// - BatchTimeoutMs must be non-negative
+    /// - SpeculationDepth must be non-negative
+    /// </para>
+    /// </remarks>
+    public void Validate()
+    {
+        if (KVCacheMaxSizeMB <= 0)
+        {
+            throw new InvalidOperationException(
+                $"KVCacheMaxSizeMB must be positive. Got: {KVCacheMaxSizeMB}");
+        }
+
+        if (MaxBatchSize <= 0)
+        {
+            throw new InvalidOperationException(
+                $"MaxBatchSize must be positive. Got: {MaxBatchSize}");
+        }
+
+        if (MinBatchSize <= 0)
+        {
+            throw new InvalidOperationException(
+                $"MinBatchSize must be positive. Got: {MinBatchSize}");
+        }
+
+        if (MinBatchSize > MaxBatchSize)
+        {
+            throw new InvalidOperationException(
+                $"MinBatchSize ({MinBatchSize}) cannot exceed MaxBatchSize ({MaxBatchSize}).");
+        }
+
+        if (BatchTimeoutMs < 0)
+        {
+            throw new InvalidOperationException(
+                $"BatchTimeoutMs must be non-negative. Got: {BatchTimeoutMs}");
+        }
+
+        if (SpeculationDepth < 0)
+        {
+            throw new InvalidOperationException(
+                $"SpeculationDepth must be non-negative. Got: {SpeculationDepth}");
+        }
+    }
+
+    #endregion
+
     #region Speculative Decoding Settings
 
     /// <summary>
