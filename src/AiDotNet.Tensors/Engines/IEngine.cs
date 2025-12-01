@@ -1980,6 +1980,118 @@ public interface IEngine
     Tensor<T> SoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, int axis = -1);
 
     /// <summary>
+    /// Applies Gumbel-Softmax activation to produce differentiable categorical samples.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor of logits.</param>
+    /// <param name="temperature">Temperature parameter controlling the softness. Must be positive.</param>
+    /// <param name="hard">If true, uses straight-through estimator for discrete outputs.</param>
+    /// <param name="axis">The axis along which to apply Gumbel-Softmax. Default is -1 (last axis).</param>
+    /// <returns>A tensor with Gumbel-Softmax applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// Gumbel-Softmax provides a differentiable approximation to categorical sampling.
+    /// As temperature approaches 0, outputs approach one-hot categorical samples.
+    /// When hard=true, uses straight-through estimator for discrete outputs with gradient pass-through.
+    /// </para>
+    /// </remarks>
+    Tensor<T> GumbelSoftmax<T>(Tensor<T> input, double temperature = 1.0, bool hard = false, int axis = -1);
+
+    /// <summary>
+    /// Computes the backward pass for Gumbel-Softmax.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="output">The output from the forward Gumbel-Softmax pass.</param>
+    /// <param name="temperature">Temperature parameter used in forward pass.</param>
+    /// <param name="axis">The axis along which Gumbel-Softmax was applied.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> GumbelSoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, double temperature, int axis = -1);
+
+    /// <summary>
+    /// Applies Taylor-Softmax activation using polynomial approximation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="order">The order of Taylor expansion. Default is 2.</param>
+    /// <param name="axis">The axis along which to apply Taylor-Softmax. Default is -1 (last axis).</param>
+    /// <returns>A tensor with Taylor-Softmax applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// TaylorSoftmax uses Taylor series approximation of exp(x):
+    /// exp(x) ≈ 1 + x + x²/2! + x³/3! + ... + xⁿ/n!
+    /// Then normalizes like standard softmax.
+    /// More computationally efficient than standard softmax for some hardware.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TaylorSoftmax<T>(Tensor<T> input, int order = 2, int axis = -1);
+
+    /// <summary>
+    /// Computes the backward pass for Taylor-Softmax.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <param name="output">The output from the forward Taylor-Softmax pass.</param>
+    /// <param name="order">The order of Taylor expansion used in forward pass.</param>
+    /// <param name="axis">The axis along which Taylor-Softmax was applied.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> TaylorSoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> output, int order, int axis = -1);
+
+    /// <summary>
+    /// Applies Sparsemax activation to produce sparse probability distributions.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="axis">The axis along which to apply Sparsemax. Default is -1 (last axis).</param>
+    /// <returns>A tensor with Sparsemax applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// Sparsemax produces sparse probability distributions where some outputs are exactly zero.
+    /// Unlike softmax which always gives positive probabilities to all classes, sparsemax
+    /// can assign exactly zero to low-scoring classes.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Sparsemax<T>(Tensor<T> input, int axis = -1);
+
+    /// <summary>
+    /// Computes the backward pass for Sparsemax.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="output">The output from the forward Sparsemax pass (used to determine support set).</param>
+    /// <param name="axis">The axis along which Sparsemax was applied.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> SparsemaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, int axis = -1);
+
+    /// <summary>
+    /// Applies Spherical-Softmax activation (L2-normalized softmax).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="axis">The axis along which to apply Spherical-Softmax. Default is -1 (last axis).</param>
+    /// <returns>A tensor with Spherical-Softmax applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// SphericalSoftmax = softmax(x / ||x||₂)
+    /// First L2-normalizes the input, then applies softmax.
+    /// This improves numerical stability for inputs with varying magnitudes.
+    /// </para>
+    /// </remarks>
+    Tensor<T> SphericalSoftmax<T>(Tensor<T> input, int axis = -1);
+
+    /// <summary>
+    /// Computes the backward pass for Spherical-Softmax.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <param name="output">The output from the forward Spherical-Softmax pass.</param>
+    /// <param name="axis">The axis along which Spherical-Softmax was applied.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> SphericalSoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> output, int axis = -1);
+
+    /// <summary>
     /// Applies batch normalization to a 2D tensor [batch, features].
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>

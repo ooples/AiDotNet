@@ -3291,6 +3291,526 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
+    public Tensor<T> GumbelSoftmax<T>(Tensor<T> input, double temperature = 1.0, bool hard = false, int axis = -1)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (temperature <= 0)
+            throw new ArgumentOutOfRangeException(nameof(temperature), temperature, "Temperature must be positive.");
+        if (double.IsNaN(temperature) || double.IsInfinity(temperature))
+            throw new ArgumentOutOfRangeException(nameof(temperature), temperature, "Temperature must be a finite number.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rank = input.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        var inputData = input.ToArray();
+        var shape = input.Shape;
+        const double eps = 1e-10;
+
+        // Add Gumbel noise: -log(-log(U)) where U ~ Uniform(0, 1)
+        var random = new Random();
+        var perturbedData = new T[inputData.Length];
+        for (int i = 0; i < inputData.Length; i++)
+        {
+            var u = random.NextDouble();
+            u = Math.Max(u, eps);
+            u = Math.Min(u, 1 - eps);
+            var gumbel = numOps.FromDouble(-Math.Log(-Math.Log(u)));
+            var val = numOps.Add(inputData[i], gumbel);
+            perturbedData[i] = numOps.Divide(val, numOps.FromDouble(temperature));
+        }
+
+        // Apply softmax
+        var perturbedTensor = new Tensor<T>(shape, new Vector<T>(perturbedData));
+        var softResult = Softmax(perturbedTensor, axis);
+
+        if (!hard)
+            return softResult;
+
+        // Hard mode: create one-hot and use straight-through estimator
+        var softData = softResult.ToArray();
+        var hardData = new T[softData.Length];
+        int outerSize = 1, axisSize = shape[axis], innerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= shape[i];
+        for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+        Parallel.For(0, outerSize * innerSize, idx =>
+        {
+            int outer = idx / innerSize;
+            int inner = idx % innerSize;
+
+            // Find argmax
+            int maxIdx = 0;
+            T maxVal = softData[(outer * axisSize) * innerSize + inner];
+            for (int i = 1; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                if (numOps.GreaterThan(softData[flatIdx], maxVal))
+                {
+                    maxVal = softData[flatIdx];
+                    maxIdx = i;
+                }
+            }
+
+            // Create one-hot
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                hardData[flatIdx] = i == maxIdx ? numOps.One : numOps.Zero;
+            }
+        });
+
+        return new Tensor<T>(shape, new Vector<T>(hardData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GumbelSoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, double temperature, int axis = -1)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (output == null) throw new ArgumentNullException(nameof(output));
+        if (temperature <= 0)
+            throw new ArgumentOutOfRangeException(nameof(temperature), temperature, "Temperature must be positive.");
+
+        // Gradient flows through softmax, scaled by 1/temperature
+        var softmaxGrad = SoftmaxBackward(gradOutput, output, axis);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var gradData = softmaxGrad.ToArray();
+        var scale = numOps.FromDouble(1.0 / temperature);
+
+        for (int i = 0; i < gradData.Length; i++)
+        {
+            gradData[i] = numOps.Multiply(gradData[i], scale);
+        }
+
+        return new Tensor<T>(output.Shape, new Vector<T>(gradData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TaylorSoftmax<T>(Tensor<T> input, int order = 2, int axis = -1)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (order < 1)
+            throw new ArgumentOutOfRangeException(nameof(order), order, "Order must be at least 1.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rank = input.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        var inputData = input.ToArray();
+        var shape = input.Shape;
+        var outputData = new T[inputData.Length];
+
+        // Precompute factorials
+        var factorials = new double[order + 1];
+        factorials[0] = 1;
+        for (int i = 1; i <= order; i++)
+            factorials[i] = factorials[i - 1] * i;
+
+        int outerSize = 1, axisSize = shape[axis], innerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= shape[i];
+        for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+        Parallel.For(0, outerSize * innerSize, idx =>
+        {
+            int outer = idx / innerSize;
+            int inner = idx % innerSize;
+
+            // Find max for numerical stability (similar to standard softmax)
+            var maxVal = inputData[(outer * axisSize) * innerSize + inner];
+            for (int i = 1; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                if (numOps.GreaterThan(inputData[flatIdx], maxVal))
+                    maxVal = inputData[flatIdx];
+            }
+
+            // Compute Taylor approximation of exp for each position along axis
+            var expApprox = new T[axisSize];
+            T sumExp = numOps.Zero;
+
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                // Subtract max for numerical stability
+                var x = numOps.Subtract(inputData[flatIdx], maxVal);
+
+                // Taylor: 1 + x + x^2/2! + x^3/3! + ...
+                var taylorExp = numOps.One;
+                var xPower = numOps.One;
+                for (int n = 1; n <= order; n++)
+                {
+                    xPower = numOps.Multiply(xPower, x);
+                    taylorExp = numOps.Add(taylorExp, numOps.Divide(xPower, numOps.FromDouble(factorials[n])));
+                }
+
+                // Ensure non-negative for numerical stability
+                if (numOps.LessThan(taylorExp, numOps.Zero))
+                    taylorExp = numOps.FromDouble(1e-10);
+
+                expApprox[i] = taylorExp;
+                sumExp = numOps.Add(sumExp, taylorExp);
+            }
+
+            // Guard against zero sum (shouldn't happen with proper max subtraction, but just in case)
+            if (numOps.Equals(sumExp, numOps.Zero))
+                sumExp = numOps.FromDouble(1e-10);
+
+            // Normalize
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                outputData[flatIdx] = numOps.Divide(expApprox[i], sumExp);
+            }
+        });
+
+        return new Tensor<T>(shape, new Vector<T>(outputData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TaylorSoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> output, int order, int axis = -1)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (output == null) throw new ArgumentNullException(nameof(output));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rank = output.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+        var outputData = output.ToArray();
+        var shape = output.Shape;
+        var gradInputData = new T[outputData.Length];
+
+        // Precompute factorials for derivative
+        var factorials = new double[order + 1];
+        factorials[0] = 1;
+        for (int i = 1; i <= order; i++)
+            factorials[i] = factorials[i - 1] * i;
+
+        int outerSize = 1, axisSize = shape[axis], innerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= shape[i];
+        for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+        Parallel.For(0, outerSize * innerSize, idx =>
+        {
+            int outer = idx / innerSize;
+            int inner = idx % innerSize;
+
+            // Compute g(x) and g'(x) for each position
+            var gValues = new T[axisSize];
+            var gPrimeValues = new T[axisSize];
+            T sumG = numOps.Zero;
+
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                var x = inputData[flatIdx];
+
+                // g(x) = Taylor approximation
+                var g = numOps.One;
+                var xPower = numOps.One;
+                for (int n = 1; n <= order; n++)
+                {
+                    xPower = numOps.Multiply(xPower, x);
+                    g = numOps.Add(g, numOps.Divide(xPower, numOps.FromDouble(factorials[n])));
+                }
+
+                // g'(x) = derivative of Taylor = 1 + x + x^2/2! + ... (shifted)
+                var gPrime = numOps.One;
+                xPower = numOps.One;
+                for (int n = 1; n < order; n++)
+                {
+                    xPower = numOps.Multiply(xPower, x);
+                    gPrime = numOps.Add(gPrime, numOps.Divide(xPower, numOps.FromDouble(factorials[n])));
+                }
+
+                gValues[i] = g;
+                gPrimeValues[i] = gPrime;
+                sumG = numOps.Add(sumG, g);
+            }
+
+            // Compute gradient using chain rule: grad = softmaxGrad * g'(x) / g(x)
+            T dotProduct = numOps.Zero;
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                dotProduct = numOps.Add(dotProduct, numOps.Multiply(gradOutputData[flatIdx], outputData[flatIdx]));
+            }
+
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                var softmaxGrad = numOps.Multiply(outputData[flatIdx], numOps.Subtract(gradOutputData[flatIdx], dotProduct));
+                var gPrimeOverG = numOps.Divide(gPrimeValues[i], gValues[i]);
+                gradInputData[flatIdx] = numOps.Multiply(softmaxGrad, gPrimeOverG);
+            }
+        });
+
+        return new Tensor<T>(shape, new Vector<T>(gradInputData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Sparsemax<T>(Tensor<T> input, int axis = -1)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rank = input.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        var inputData = input.ToArray();
+        var shape = input.Shape;
+        var outputData = new T[inputData.Length];
+
+        int outerSize = 1, axisSize = shape[axis], innerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= shape[i];
+        for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+        Parallel.For(0, outerSize * innerSize, idx =>
+        {
+            int outer = idx / innerSize;
+            int inner = idx % innerSize;
+
+            // Extract values along axis and sort by value (descending)
+            var indexed = new List<(T value, int idx)>();
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                indexed.Add((inputData[flatIdx], i));
+            }
+
+            indexed.Sort((a, b) =>
+            {
+                if (numOps.GreaterThan(a.value, b.value)) return -1;
+                if (numOps.LessThan(a.value, b.value)) return 1;
+                return 0;
+            });
+
+            // Find threshold tau using the sparsemax algorithm
+            T cumSum = numOps.Zero;
+            int k = 0;
+            T threshold = numOps.Zero;
+
+            for (int i = 0; i < axisSize; i++)
+            {
+                cumSum = numOps.Add(cumSum, indexed[i].value);
+                // Check if z[i] > (cumSum - 1) / (i + 1)
+                var kPlusOne = numOps.FromDouble(i + 1);
+                var testThreshold = numOps.Divide(numOps.Subtract(cumSum, numOps.One), kPlusOne);
+                if (numOps.GreaterThan(indexed[i].value, testThreshold))
+                {
+                    k = i + 1;
+                    threshold = testThreshold;
+                }
+            }
+
+            // Compute output: max(0, z - tau)
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                var val = numOps.Subtract(inputData[flatIdx], threshold);
+                outputData[flatIdx] = numOps.GreaterThan(val, numOps.Zero) ? val : numOps.Zero;
+            }
+        });
+
+        return new Tensor<T>(shape, new Vector<T>(outputData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SparsemaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, int axis = -1)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (output == null) throw new ArgumentNullException(nameof(output));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rank = output.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        var gradOutputData = gradOutput.ToArray();
+        var outputData = output.ToArray();
+        var shape = output.Shape;
+        var gradInputData = new T[outputData.Length];
+
+        int outerSize = 1, axisSize = shape[axis], innerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= shape[i];
+        for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+        Parallel.For(0, outerSize * innerSize, idx =>
+        {
+            int outer = idx / innerSize;
+            int inner = idx % innerSize;
+
+            // Find support set (non-zero outputs) and compute mean of gradients in support
+            T sumGradSupport = numOps.Zero;
+            int supportSize = 0;
+
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                if (numOps.GreaterThan(outputData[flatIdx], numOps.Zero))
+                {
+                    sumGradSupport = numOps.Add(sumGradSupport, gradOutputData[flatIdx]);
+                    supportSize++;
+                }
+            }
+
+            T meanGradSupport = supportSize > 0
+                ? numOps.Divide(sumGradSupport, numOps.FromDouble(supportSize))
+                : numOps.Zero;
+
+            // Gradient: grad_input = grad_output - mean(grad_output[support]) for support, 0 otherwise
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                if (numOps.GreaterThan(outputData[flatIdx], numOps.Zero))
+                {
+                    gradInputData[flatIdx] = numOps.Subtract(gradOutputData[flatIdx], meanGradSupport);
+                }
+                else
+                {
+                    gradInputData[flatIdx] = numOps.Zero;
+                }
+            }
+        });
+
+        return new Tensor<T>(shape, new Vector<T>(gradInputData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SphericalSoftmax<T>(Tensor<T> input, int axis = -1)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rank = input.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        var inputData = input.ToArray();
+        var shape = input.Shape;
+        var normalizedData = new T[inputData.Length];
+
+        int outerSize = 1, axisSize = shape[axis], innerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= shape[i];
+        for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+        Parallel.For(0, outerSize * innerSize, idx =>
+        {
+            int outer = idx / innerSize;
+            int inner = idx % innerSize;
+
+            // Compute L2 norm along axis
+            T sumSquares = numOps.Zero;
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                var val = inputData[flatIdx];
+                sumSquares = numOps.Add(sumSquares, numOps.Multiply(val, val));
+            }
+            var norm = numOps.Sqrt(sumSquares);
+
+            // Avoid division by zero
+            if (numOps.Equals(norm, numOps.Zero))
+                norm = numOps.FromDouble(1e-10);
+
+            // Normalize by L2 norm
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                normalizedData[flatIdx] = numOps.Divide(inputData[flatIdx], norm);
+            }
+        });
+
+        // Apply softmax to normalized data
+        var normalizedTensor = new Tensor<T>(shape, new Vector<T>(normalizedData));
+        return Softmax(normalizedTensor, axis);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SphericalSoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> output, int axis = -1)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (output == null) throw new ArgumentNullException(nameof(output));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rank = input.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        var inputData = input.ToArray();
+        var shape = input.Shape;
+
+        int outerSize = 1, axisSize = shape[axis], innerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= shape[i];
+        for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+        // First compute the normalized input
+        var normalizedData = new T[inputData.Length];
+        var norms = new T[outerSize * innerSize];
+
+        Parallel.For(0, outerSize * innerSize, idx =>
+        {
+            int outer = idx / innerSize;
+            int inner = idx % innerSize;
+
+            // Compute L2 norm
+            T sumSquares = numOps.Zero;
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                var val = inputData[flatIdx];
+                sumSquares = numOps.Add(sumSquares, numOps.Multiply(val, val));
+            }
+            var norm = numOps.Sqrt(sumSquares);
+            if (numOps.Equals(norm, numOps.Zero))
+                norm = numOps.FromDouble(1e-10);
+            norms[idx] = norm;
+
+            // Normalize
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                normalizedData[flatIdx] = numOps.Divide(inputData[flatIdx], norm);
+            }
+        });
+
+        // Get softmax gradient with respect to normalized input
+        var normalizedTensor = new Tensor<T>(shape, new Vector<T>(normalizedData));
+        var softmaxGrad = SoftmaxBackward(gradOutput, output, axis);
+        var softmaxGradData = softmaxGrad.ToArray();
+
+        // Chain rule through L2 normalization
+        var gradInputData = new T[inputData.Length];
+
+        Parallel.For(0, outerSize * innerSize, idx =>
+        {
+            int outer = idx / innerSize;
+            int inner = idx % innerSize;
+            var norm = norms[idx];
+            var normCubed = numOps.Multiply(norm, numOps.Multiply(norm, norm));
+
+            // Compute dot product of x and grad_normalized
+            T dotProduct = numOps.Zero;
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                dotProduct = numOps.Add(dotProduct, numOps.Multiply(inputData[flatIdx], softmaxGradData[flatIdx]));
+            }
+
+            // grad_x = (grad_normalized - normalized * dot_product) / norm
+            for (int i = 0; i < axisSize; i++)
+            {
+                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                var term = numOps.Multiply(normalizedData[flatIdx], dotProduct);
+                gradInputData[flatIdx] = numOps.Divide(numOps.Subtract(softmaxGradData[flatIdx], term), norm);
+            }
+        });
+
+        return new Tensor<T>(shape, new Vector<T>(gradInputData));
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> BatchNorm<T>(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon, out Tensor<T> mean, out Tensor<T> variance)
     {
         if (input == null) throw new ArgumentNullException(nameof(input));

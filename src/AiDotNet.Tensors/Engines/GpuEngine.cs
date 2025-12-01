@@ -528,6 +528,38 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int>? _reduceMeanBackwardKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int>? _reduceMeanBackwardKernelDouble;
 
+    // GumbelSoftmax kernels (input, gumbelNoise, output, temperature, outerSize, axisSize, innerSize)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, int, int, int>? _gumbelSoftmaxKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, double, int, int, int>? _gumbelSoftmaxKernelDouble;
+
+    // GumbelSoftmax backward kernels (gradOutput, output, gradInput, temperature, outerSize, axisSize, innerSize)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, int, int, int>? _gumbelSoftmaxBackwardKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, double, int, int, int>? _gumbelSoftmaxBackwardKernelDouble;
+
+    // TaylorSoftmax kernels (input, output, order, outerSize, axisSize, innerSize)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int>? _taylorSoftmaxKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int>? _taylorSoftmaxKernelDouble;
+
+    // TaylorSoftmax backward kernels (gradOutput, input, output, gradInput, order, outerSize, axisSize, innerSize)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>? _taylorSoftmaxBackwardKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _taylorSoftmaxBackwardKernelDouble;
+
+    // Sparsemax kernels (input, output, outerSize, axisSize, innerSize)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int>? _sparsemaxKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int>? _sparsemaxKernelDouble;
+
+    // Sparsemax backward kernels (gradOutput, output, gradInput, outerSize, axisSize, innerSize)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int>? _sparsemaxBackwardKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int>? _sparsemaxBackwardKernelDouble;
+
+    // SphericalSoftmax kernels (input, output, outerSize, axisSize, innerSize)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int>? _sphericalSoftmaxKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int>? _sphericalSoftmaxKernelDouble;
+
+    // SphericalSoftmax backward kernels (gradOutput, input, output, gradInput, outerSize, axisSize, innerSize)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int>? _sphericalSoftmaxBackwardKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int>? _sphericalSoftmaxBackwardKernelDouble;
+
     /// <inheritdoc/>
     public string Name => _accelerator != null
         ? $"GPU Engine ({_accelerator.Name})"
@@ -1693,6 +1725,660 @@ public class GpuEngine : IEngine, IDisposable
                         }
                     });
                 Console.WriteLine("[GpuEngine] TensorSoftmax kernels pre-compiled");
+
+                // GumbelSoftmax forward kernel - applies Gumbel noise and temperature-scaled softmax
+                // input: logits, gumbelNoise: pre-generated Gumbel noise, output: result
+                _gumbelSoftmaxKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, int, int, int>(
+                    (flatIdx, input, gumbelNoise, output, temperature, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        // Find max for numerical stability
+                        float maxVal = float.MinValue;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            float perturbed = (input[idx] + gumbelNoise[idx]) / temperature;
+                            if (perturbed > maxVal) maxVal = perturbed;
+                        }
+
+                        // Compute exp and sum
+                        float sum = 0.0f;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            float perturbed = (input[idx] + gumbelNoise[idx]) / temperature;
+                            float expVal = XMath.Exp(perturbed - maxVal);
+                            output[idx] = expVal;
+                            sum += expVal;
+                        }
+
+                        // Normalize
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            output[idx] /= sum;
+                        }
+                    });
+                _gumbelSoftmaxKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, double, int, int, int>(
+                    (flatIdx, input, gumbelNoise, output, temperature, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        double maxVal = double.MinValue;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            double perturbed = (input[idx] + gumbelNoise[idx]) / temperature;
+                            if (perturbed > maxVal) maxVal = perturbed;
+                        }
+
+                        double sum = 0.0;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            double perturbed = (input[idx] + gumbelNoise[idx]) / temperature;
+                            double expVal = XMath.Exp(perturbed - maxVal);
+                            output[idx] = expVal;
+                            sum += expVal;
+                        }
+
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            output[idx] /= sum;
+                        }
+                    });
+                Console.WriteLine("[GpuEngine] GumbelSoftmax kernels pre-compiled");
+
+                // GumbelSoftmax backward kernel - gradient flows through softmax scaled by 1/temperature
+                _gumbelSoftmaxBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, float, int, int, int>(
+                    (flatIdx, gradOutput, output, gradInput, temperature, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        // Compute dot product of gradient and output
+                        float dotProduct = 0.0f;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            dotProduct += gradOutput[idx] * output[idx];
+                        }
+
+                        // Softmax gradient scaled by 1/temperature
+                        float scale = 1.0f / temperature;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            gradInput[idx] = output[idx] * (gradOutput[idx] - dotProduct) * scale;
+                        }
+                    });
+                _gumbelSoftmaxBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, double, int, int, int>(
+                    (flatIdx, gradOutput, output, gradInput, temperature, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        double dotProduct = 0.0;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            dotProduct += gradOutput[idx] * output[idx];
+                        }
+
+                        double scale = 1.0 / temperature;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            gradInput[idx] = output[idx] * (gradOutput[idx] - dotProduct) * scale;
+                        }
+                    });
+                Console.WriteLine("[GpuEngine] GumbelSoftmax backward kernels pre-compiled");
+
+                // TaylorSoftmax forward kernel - uses Taylor series approximation of exp
+                _taylorSoftmaxKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int>(
+                    (flatIdx, input, output, order, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        // Find max for numerical stability
+                        float maxVal = float.MinValue;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            if (input[idx] > maxVal) maxVal = input[idx];
+                        }
+
+                        // Compute Taylor exp approximation and sum
+                        float sum = 0.0f;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            float x = input[idx] - maxVal;
+
+                            // Taylor: 1 + x + x^2/2! + x^3/3! + ...
+                            float taylorExp = 1.0f;
+                            float xPower = 1.0f;
+                            float factorial = 1.0f;
+                            for (int n = 1; n <= order; n++)
+                            {
+                                xPower *= x;
+                                factorial *= n;
+                                taylorExp += xPower / factorial;
+                            }
+
+                            // Ensure non-negative
+                            if (taylorExp < 1e-10f) taylorExp = 1e-10f;
+                            output[idx] = taylorExp;
+                            sum += taylorExp;
+                        }
+
+                        // Normalize
+                        if (sum < 1e-10f) sum = 1e-10f;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            output[idx] /= sum;
+                        }
+                    });
+                _taylorSoftmaxKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int>(
+                    (flatIdx, input, output, order, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        double maxVal = double.MinValue;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            if (input[idx] > maxVal) maxVal = input[idx];
+                        }
+
+                        double sum = 0.0;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            double x = input[idx] - maxVal;
+
+                            double taylorExp = 1.0;
+                            double xPower = 1.0;
+                            double factorial = 1.0;
+                            for (int n = 1; n <= order; n++)
+                            {
+                                xPower *= x;
+                                factorial *= n;
+                                taylorExp += xPower / factorial;
+                            }
+
+                            if (taylorExp < 1e-10) taylorExp = 1e-10;
+                            output[idx] = taylorExp;
+                            sum += taylorExp;
+                        }
+
+                        if (sum < 1e-10) sum = 1e-10;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            output[idx] /= sum;
+                        }
+                    });
+                Console.WriteLine("[GpuEngine] TaylorSoftmax kernels pre-compiled");
+
+                // TaylorSoftmax backward kernel
+                _taylorSoftmaxBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>(
+                    (flatIdx, gradOutput, input, output, gradInput, order, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        // Find max for stability (same as forward)
+                        float maxVal = float.MinValue;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            if (input[idx] > maxVal) maxVal = input[idx];
+                        }
+
+                        // Compute dot product
+                        float dotProduct = 0.0f;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            dotProduct += gradOutput[idx] * output[idx];
+                        }
+
+                        // Compute gradient with g'(x)/g(x) factor
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            float x = input[idx] - maxVal;
+
+                            // Compute g(x) and g'(x)
+                            float g = 1.0f;
+                            float gPrime = 1.0f;
+                            float xPower = 1.0f;
+                            float factorial = 1.0f;
+                            for (int n = 1; n <= order; n++)
+                            {
+                                xPower *= x;
+                                factorial *= n;
+                                g += xPower / factorial;
+                            }
+                            // g'(x) = 1 + x + x^2/2! + ... (order-1 terms)
+                            xPower = 1.0f;
+                            factorial = 1.0f;
+                            for (int n = 1; n < order; n++)
+                            {
+                                xPower *= x;
+                                factorial *= n;
+                                gPrime += xPower / factorial;
+                            }
+
+                            float softmaxGrad = output[idx] * (gradOutput[idx] - dotProduct);
+                            float ratio = (g > 1e-10f) ? gPrime / g : 0.0f;
+                            gradInput[idx] = softmaxGrad * ratio;
+                        }
+                    });
+                _taylorSoftmaxBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>(
+                    (flatIdx, gradOutput, input, output, gradInput, order, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        double maxVal = double.MinValue;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            if (input[idx] > maxVal) maxVal = input[idx];
+                        }
+
+                        double dotProduct = 0.0;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            dotProduct += gradOutput[idx] * output[idx];
+                        }
+
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            double x = input[idx] - maxVal;
+
+                            double g = 1.0;
+                            double gPrime = 1.0;
+                            double xPower = 1.0;
+                            double factorial = 1.0;
+                            for (int n = 1; n <= order; n++)
+                            {
+                                xPower *= x;
+                                factorial *= n;
+                                g += xPower / factorial;
+                            }
+                            xPower = 1.0;
+                            factorial = 1.0;
+                            for (int n = 1; n < order; n++)
+                            {
+                                xPower *= x;
+                                factorial *= n;
+                                gPrime += xPower / factorial;
+                            }
+
+                            double softmaxGrad = output[idx] * (gradOutput[idx] - dotProduct);
+                            double ratio = (g > 1e-10) ? gPrime / g : 0.0;
+                            gradInput[idx] = softmaxGrad * ratio;
+                        }
+                    });
+                Console.WriteLine("[GpuEngine] TaylorSoftmax backward kernels pre-compiled");
+
+                // Sparsemax forward kernel
+                _sparsemaxKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, int, int, int>(
+                    (flatIdx, input, output, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        // Copy values and sort (bubble sort for GPU - small axisSize expected)
+                        // Use local array for sorting
+                        float cumSum = 0.0f;
+                        int k = 0;
+                        float threshold = 0.0f;
+
+                        // Find max k values using selection approach
+                        for (int kCand = 1; kCand <= axisSize; kCand++)
+                        {
+                            // Find k-th largest value
+                            float kthLargest = float.MinValue;
+                            for (int i = 0; i < axisSize; i++)
+                            {
+                                int idx = (outer * axisSize + i) * innerSize + inner;
+                                float val = input[idx];
+                                int larger = 0;
+                                for (int j = 0; j < axisSize; j++)
+                                {
+                                    int jdx = (outer * axisSize + j) * innerSize + inner;
+                                    if (input[jdx] > val || (input[jdx] == val && j < i)) larger++;
+                                }
+                                if (larger == kCand - 1)
+                                {
+                                    kthLargest = val;
+                                    break;
+                                }
+                            }
+
+                            cumSum += kthLargest;
+                            // t_k = 1 + k * z_k - cumSum
+                            float t = 1.0f + kCand * kthLargest - cumSum;
+                            if (t > 0)
+                            {
+                                k = kCand;
+                                threshold = (cumSum - 1.0f) / k;
+                            }
+                        }
+
+                        // Compute output
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            float val = input[idx] - threshold;
+                            output[idx] = val > 0 ? val : 0.0f;
+                        }
+                    });
+                _sparsemaxKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, int, int, int>(
+                    (flatIdx, input, output, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        double cumSum = 0.0;
+                        int k = 0;
+                        double threshold = 0.0;
+
+                        for (int kCand = 1; kCand <= axisSize; kCand++)
+                        {
+                            double kthLargest = double.MinValue;
+                            for (int i = 0; i < axisSize; i++)
+                            {
+                                int idx = (outer * axisSize + i) * innerSize + inner;
+                                double val = input[idx];
+                                int larger = 0;
+                                for (int j = 0; j < axisSize; j++)
+                                {
+                                    int jdx = (outer * axisSize + j) * innerSize + inner;
+                                    if (input[jdx] > val || (input[jdx] == val && j < i)) larger++;
+                                }
+                                if (larger == kCand - 1)
+                                {
+                                    kthLargest = val;
+                                    break;
+                                }
+                            }
+
+                            cumSum += kthLargest;
+                            double t = 1.0 + kCand * kthLargest - cumSum;
+                            if (t > 0)
+                            {
+                                k = kCand;
+                                threshold = (cumSum - 1.0) / k;
+                            }
+                        }
+
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            double val = input[idx] - threshold;
+                            output[idx] = val > 0 ? val : 0.0;
+                        }
+                    });
+                Console.WriteLine("[GpuEngine] Sparsemax kernels pre-compiled");
+
+                // Sparsemax backward kernel
+                _sparsemaxBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int>(
+                    (flatIdx, gradOutput, output, gradInput, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        // Find support set and compute mean gradient
+                        float sumGrad = 0.0f;
+                        int supportSize = 0;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            if (output[idx] > 0)
+                            {
+                                sumGrad += gradOutput[idx];
+                                supportSize++;
+                            }
+                        }
+
+                        float meanGrad = supportSize > 0 ? sumGrad / supportSize : 0.0f;
+
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            if (output[idx] > 0)
+                                gradInput[idx] = gradOutput[idx] - meanGrad;
+                            else
+                                gradInput[idx] = 0.0f;
+                        }
+                    });
+                _sparsemaxBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int>(
+                    (flatIdx, gradOutput, output, gradInput, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        double sumGrad = 0.0;
+                        int supportSize = 0;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            if (output[idx] > 0)
+                            {
+                                sumGrad += gradOutput[idx];
+                                supportSize++;
+                            }
+                        }
+
+                        double meanGrad = supportSize > 0 ? sumGrad / supportSize : 0.0;
+
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            if (output[idx] > 0)
+                                gradInput[idx] = gradOutput[idx] - meanGrad;
+                            else
+                                gradInput[idx] = 0.0;
+                        }
+                    });
+                Console.WriteLine("[GpuEngine] Sparsemax backward kernels pre-compiled");
+
+                // SphericalSoftmax forward kernel - L2 normalize then softmax
+                _sphericalSoftmaxKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, int, int, int>(
+                    (flatIdx, input, output, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        // Compute L2 norm
+                        float sumSquares = 0.0f;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            sumSquares += input[idx] * input[idx];
+                        }
+                        float norm = XMath.Sqrt(sumSquares);
+                        if (norm < 1e-10f) norm = 1e-10f;
+
+                        // Normalize and find max
+                        float maxVal = float.MinValue;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            float normalized = input[idx] / norm;
+                            output[idx] = normalized; // Temporarily store normalized
+                            if (normalized > maxVal) maxVal = normalized;
+                        }
+
+                        // Compute softmax
+                        float sum = 0.0f;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            float expVal = XMath.Exp(output[idx] - maxVal);
+                            output[idx] = expVal;
+                            sum += expVal;
+                        }
+
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            output[idx] /= sum;
+                        }
+                    });
+                _sphericalSoftmaxKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, int, int, int>(
+                    (flatIdx, input, output, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        double sumSquares = 0.0;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            sumSquares += input[idx] * input[idx];
+                        }
+                        double norm = XMath.Sqrt(sumSquares);
+                        if (norm < 1e-10) norm = 1e-10;
+
+                        double maxVal = double.MinValue;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            double normalized = input[idx] / norm;
+                            output[idx] = normalized;
+                            if (normalized > maxVal) maxVal = normalized;
+                        }
+
+                        double sum = 0.0;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            double expVal = XMath.Exp(output[idx] - maxVal);
+                            output[idx] = expVal;
+                            sum += expVal;
+                        }
+
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            output[idx] /= sum;
+                        }
+                    });
+                Console.WriteLine("[GpuEngine] SphericalSoftmax kernels pre-compiled");
+
+                // SphericalSoftmax backward kernel
+                _sphericalSoftmaxBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int>(
+                    (flatIdx, gradOutput, input, output, gradInput, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        // Compute norm
+                        float sumSquares = 0.0f;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            sumSquares += input[idx] * input[idx];
+                        }
+                        float norm = XMath.Sqrt(sumSquares);
+                        if (norm < 1e-10f) norm = 1e-10f;
+                        float normCubed = norm * norm * norm;
+
+                        // Softmax backward: compute g_z
+                        float dotProduct = 0.0f;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            dotProduct += gradOutput[idx] * output[idx];
+                        }
+
+                        // Compute x dot g_z
+                        float xDotGz = 0.0f;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            float gZ = output[idx] * (gradOutput[idx] - dotProduct);
+                            xDotGz += input[idx] * gZ;
+                        }
+
+                        // Final gradient
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            float gZ = output[idx] * (gradOutput[idx] - dotProduct);
+                            gradInput[idx] = gZ / norm - input[idx] * xDotGz / normCubed;
+                        }
+                    });
+                _sphericalSoftmaxBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int>(
+                    (flatIdx, gradOutput, input, output, gradInput, outerSize, axisSize, innerSize) => {
+                        int outer = (int)flatIdx / innerSize;
+                        int inner = (int)flatIdx % innerSize;
+                        if (outer >= outerSize) return;
+
+                        double sumSquares = 0.0;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            sumSquares += input[idx] * input[idx];
+                        }
+                        double norm = XMath.Sqrt(sumSquares);
+                        if (norm < 1e-10) norm = 1e-10;
+                        double normCubed = norm * norm * norm;
+
+                        double dotProduct = 0.0;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            dotProduct += gradOutput[idx] * output[idx];
+                        }
+
+                        double xDotGz = 0.0;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            double gZ = output[idx] * (gradOutput[idx] - dotProduct);
+                            xDotGz += input[idx] * gZ;
+                        }
+
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            int idx = (outer * axisSize + i) * innerSize + inner;
+                            double gZ = output[idx] * (gradOutput[idx] - dotProduct);
+                            gradInput[idx] = gZ / norm - input[idx] * xDotGz / normCubed;
+                        }
+                    });
+                Console.WriteLine("[GpuEngine] SphericalSoftmax backward kernels pre-compiled");
 
                 // BatchNorm forward - normalizes across batch dimension
                 // Parameters: input, output, gamma, beta, mean, variance, epsilon, batch, features
@@ -13832,6 +14518,1051 @@ public class GpuEngine : IEngine, IDisposable
             _memoryPoolDouble.Return(gpuGradOutput);
             _memoryPoolDouble.Return(gpuOutput);
             _memoryPoolDouble.Return(gpuGradInput);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GumbelSoftmax<T>(Tensor<T> input, double temperature = 1.0, bool hard = false, int axis = -1)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (temperature <= 0)
+            throw new ArgumentOutOfRangeException(nameof(temperature), temperature, "Temperature must be positive.");
+        if (double.IsNaN(temperature) || double.IsInfinity(temperature))
+            throw new ArgumentOutOfRangeException(nameof(temperature), temperature, "Temperature must be a finite number.");
+
+        int rank = input.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        // Small tensors use CPU
+        if (input.Length < _thresholds.VectorAdd || !SupportsGpu || !_gpuHealthy)
+        {
+            return _cpuFallback.GumbelSoftmax(input, temperature, hard, axis);
+        }
+
+        if (typeof(T) == typeof(float))
+            return (Tensor<T>)(object)GumbelSoftmaxGpuFloat((Tensor<float>)(object)input, (float)temperature, hard, axis);
+        if (typeof(T) == typeof(double))
+            return (Tensor<T>)(object)GumbelSoftmaxGpuDouble((Tensor<double>)(object)input, temperature, hard, axis);
+
+        return _cpuFallback.GumbelSoftmax(input, temperature, hard, axis);
+    }
+
+    private Tensor<float> GumbelSoftmaxGpuFloat(Tensor<float> input, float temperature, bool hard, int axis)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<float>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            // Generate Gumbel noise on CPU (random number generation not well-suited for GPU)
+            var gumbelNoise = new float[input.Length];
+            var random = new Random();
+            const float eps = 1e-10f;
+            for (int i = 0; i < gumbelNoise.Length; i++)
+            {
+                var u = (float)random.NextDouble();
+                u = Math.Max(u, eps);
+                u = Math.Min(u, 1 - eps);
+                gumbelNoise[i] = -(float)Math.Log(-Math.Log(u));
+            }
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuNoise = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuNoise.View.BaseView.CopyFromCPU(gumbelNoise);
+
+                lock (_gpuLock)
+                {
+                    (_gumbelSoftmaxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuInput.View, gpuNoise.View, gpuOutput.View, temperature, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+
+                if (hard)
+                {
+                    // Apply hard one-hot on CPU (argmax + one-hot creation)
+                    var resultData = result.AsWritableSpan();
+                    for (int outer = 0; outer < outerSize; outer++)
+                    {
+                        for (int inner = 0; inner < innerSize; inner++)
+                        {
+                            // Find argmax
+                            int maxIdx = 0;
+                            float maxVal = resultData[(outer * axisSize) * innerSize + inner];
+                            for (int i = 1; i < axisSize; i++)
+                            {
+                                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                                if (resultData[flatIdx] > maxVal)
+                                {
+                                    maxVal = resultData[flatIdx];
+                                    maxIdx = i;
+                                }
+                            }
+
+                            // Create one-hot
+                            for (int i = 0; i < axisSize; i++)
+                            {
+                                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                                resultData[flatIdx] = i == maxIdx ? 1.0f : 0.0f;
+                            }
+                        }
+                    }
+                }
+
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuNoise);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU GumbelSoftmax (float) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.GumbelSoftmax(input, temperature, hard, axis);
+        }
+    }
+
+    private Tensor<double> GumbelSoftmaxGpuDouble(Tensor<double> input, double temperature, bool hard, int axis)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<double>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gumbelNoise = new double[input.Length];
+            var random = new Random();
+            const double eps = 1e-10;
+            for (int i = 0; i < gumbelNoise.Length; i++)
+            {
+                var u = random.NextDouble();
+                u = Math.Max(u, eps);
+                u = Math.Min(u, 1 - eps);
+                gumbelNoise[i] = -Math.Log(-Math.Log(u));
+            }
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuNoise = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuNoise.View.BaseView.CopyFromCPU(gumbelNoise);
+
+                lock (_gpuLock)
+                {
+                    (_gumbelSoftmaxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuInput.View, gpuNoise.View, gpuOutput.View, temperature, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+
+                if (hard)
+                {
+                    var resultData = result.AsWritableSpan();
+                    for (int outer = 0; outer < outerSize; outer++)
+                    {
+                        for (int inner = 0; inner < innerSize; inner++)
+                        {
+                            int maxIdx = 0;
+                            double maxVal = resultData[(outer * axisSize) * innerSize + inner];
+                            for (int i = 1; i < axisSize; i++)
+                            {
+                                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                                if (resultData[flatIdx] > maxVal)
+                                {
+                                    maxVal = resultData[flatIdx];
+                                    maxIdx = i;
+                                }
+                            }
+
+                            for (int i = 0; i < axisSize; i++)
+                            {
+                                int flatIdx = (outer * axisSize + i) * innerSize + inner;
+                                resultData[flatIdx] = i == maxIdx ? 1.0 : 0.0;
+                            }
+                        }
+                    }
+                }
+
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuNoise);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU GumbelSoftmax (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.GumbelSoftmax(input, temperature, hard, axis);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> GumbelSoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, double temperature, int axis = -1)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (output == null) throw new ArgumentNullException(nameof(output));
+        if (temperature <= 0)
+            throw new ArgumentOutOfRangeException(nameof(temperature), temperature, "Temperature must be positive.");
+
+        int rank = output.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        if (output.Length < _thresholds.VectorAdd || !SupportsGpu || !_gpuHealthy)
+        {
+            return _cpuFallback.GumbelSoftmaxBackward(gradOutput, output, temperature, axis);
+        }
+
+        if (typeof(T) == typeof(float))
+            return (Tensor<T>)(object)GumbelSoftmaxBackwardGpuFloat((Tensor<float>)(object)gradOutput, (Tensor<float>)(object)output, (float)temperature, axis);
+        if (typeof(T) == typeof(double))
+            return (Tensor<T>)(object)GumbelSoftmaxBackwardGpuDouble((Tensor<double>)(object)gradOutput, (Tensor<double>)(object)output, temperature, axis);
+
+        return _cpuFallback.GumbelSoftmaxBackward(gradOutput, output, temperature, axis);
+    }
+
+    private Tensor<float> GumbelSoftmaxBackwardGpuFloat(Tensor<float> gradOutput, Tensor<float> output, float temperature, int axis)
+    {
+        try
+        {
+            var shape = output.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<float>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuGradInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuOutput.View.BaseView.CopyFromCPU(output.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_gumbelSoftmaxBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuGradOutput.View, gpuOutput.View, gpuGradInput.View, temperature, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGradOutput);
+                _memoryPoolFloat.Return(gpuOutput);
+                _memoryPoolFloat.Return(gpuGradInput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU GumbelSoftmaxBackward (float) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.GumbelSoftmaxBackward(gradOutput, output, temperature, axis);
+        }
+    }
+
+    private Tensor<double> GumbelSoftmaxBackwardGpuDouble(Tensor<double> gradOutput, Tensor<double> output, double temperature, int axis)
+    {
+        try
+        {
+            var shape = output.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<double>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuGradInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuOutput.View.BaseView.CopyFromCPU(output.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_gumbelSoftmaxBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuGradOutput.View, gpuOutput.View, gpuGradInput.View, temperature, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGradOutput);
+                _memoryPoolDouble.Return(gpuOutput);
+                _memoryPoolDouble.Return(gpuGradInput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU GumbelSoftmaxBackward (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.GumbelSoftmaxBackward(gradOutput, output, temperature, axis);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TaylorSoftmax<T>(Tensor<T> input, int order = 2, int axis = -1)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (order < 1)
+            throw new ArgumentOutOfRangeException(nameof(order), order, "Order must be at least 1.");
+
+        int rank = input.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        if (input.Length < _thresholds.VectorAdd || !SupportsGpu || !_gpuHealthy)
+        {
+            return _cpuFallback.TaylorSoftmax(input, order, axis);
+        }
+
+        if (typeof(T) == typeof(float))
+            return (Tensor<T>)(object)TaylorSoftmaxGpuFloat((Tensor<float>)(object)input, order, axis);
+        if (typeof(T) == typeof(double))
+            return (Tensor<T>)(object)TaylorSoftmaxGpuDouble((Tensor<double>)(object)input, order, axis);
+
+        return _cpuFallback.TaylorSoftmax(input, order, axis);
+    }
+
+    private Tensor<float> TaylorSoftmaxGpuFloat(Tensor<float> input, int order, int axis)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<float>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_taylorSoftmaxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuInput.View, gpuOutput.View, order, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU TaylorSoftmax (float) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TaylorSoftmax(input, order, axis);
+        }
+    }
+
+    private Tensor<double> TaylorSoftmaxGpuDouble(Tensor<double> input, int order, int axis)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<double>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_taylorSoftmaxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuInput.View, gpuOutput.View, order, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU TaylorSoftmax (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TaylorSoftmax(input, order, axis);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TaylorSoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> output, int order, int axis = -1)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (output == null) throw new ArgumentNullException(nameof(output));
+
+        int rank = output.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        if (output.Length < _thresholds.VectorAdd || !SupportsGpu || !_gpuHealthy)
+        {
+            return _cpuFallback.TaylorSoftmaxBackward(gradOutput, input, output, order, axis);
+        }
+
+        if (typeof(T) == typeof(float))
+            return (Tensor<T>)(object)TaylorSoftmaxBackwardGpuFloat((Tensor<float>)(object)gradOutput, (Tensor<float>)(object)input, (Tensor<float>)(object)output, order, axis);
+        if (typeof(T) == typeof(double))
+            return (Tensor<T>)(object)TaylorSoftmaxBackwardGpuDouble((Tensor<double>)(object)gradOutput, (Tensor<double>)(object)input, (Tensor<double>)(object)output, order, axis);
+
+        return _cpuFallback.TaylorSoftmaxBackward(gradOutput, input, output, order, axis);
+    }
+
+    private Tensor<float> TaylorSoftmaxBackwardGpuFloat(Tensor<float> gradOutput, Tensor<float> input, Tensor<float> output, int order, int axis)
+    {
+        try
+        {
+            var shape = output.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<float>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuGradInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuOutput.View.BaseView.CopyFromCPU(output.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_taylorSoftmaxBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuGradOutput.View, gpuInput.View, gpuOutput.View, gpuGradInput.View, order, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGradOutput);
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+                _memoryPoolFloat.Return(gpuGradInput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU TaylorSoftmaxBackward (float) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TaylorSoftmaxBackward(gradOutput, input, output, order, axis);
+        }
+    }
+
+    private Tensor<double> TaylorSoftmaxBackwardGpuDouble(Tensor<double> gradOutput, Tensor<double> input, Tensor<double> output, int order, int axis)
+    {
+        try
+        {
+            var shape = output.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<double>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuGradInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuOutput.View.BaseView.CopyFromCPU(output.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_taylorSoftmaxBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuGradOutput.View, gpuInput.View, gpuOutput.View, gpuGradInput.View, order, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGradOutput);
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+                _memoryPoolDouble.Return(gpuGradInput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU TaylorSoftmaxBackward (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TaylorSoftmaxBackward(gradOutput, input, output, order, axis);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> Sparsemax<T>(Tensor<T> input, int axis = -1)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+
+        int rank = input.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        if (input.Length < _thresholds.VectorAdd || !SupportsGpu || !_gpuHealthy)
+        {
+            return _cpuFallback.Sparsemax(input, axis);
+        }
+
+        if (typeof(T) == typeof(float))
+            return (Tensor<T>)(object)SparsemaxGpuFloat((Tensor<float>)(object)input, axis);
+        if (typeof(T) == typeof(double))
+            return (Tensor<T>)(object)SparsemaxGpuDouble((Tensor<double>)(object)input, axis);
+
+        return _cpuFallback.Sparsemax(input, axis);
+    }
+
+    private Tensor<float> SparsemaxGpuFloat(Tensor<float> input, int axis)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<float>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_sparsemaxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuInput.View, gpuOutput.View, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU Sparsemax (float) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Sparsemax(input, axis);
+        }
+    }
+
+    private Tensor<double> SparsemaxGpuDouble(Tensor<double> input, int axis)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<double>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_sparsemaxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuInput.View, gpuOutput.View, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU Sparsemax (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Sparsemax(input, axis);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SparsemaxBackward<T>(Tensor<T> gradOutput, Tensor<T> output, int axis = -1)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (output == null) throw new ArgumentNullException(nameof(output));
+
+        int rank = output.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        if (output.Length < _thresholds.VectorAdd || !SupportsGpu || !_gpuHealthy)
+        {
+            return _cpuFallback.SparsemaxBackward(gradOutput, output, axis);
+        }
+
+        if (typeof(T) == typeof(float))
+            return (Tensor<T>)(object)SparsemaxBackwardGpuFloat((Tensor<float>)(object)gradOutput, (Tensor<float>)(object)output, axis);
+        if (typeof(T) == typeof(double))
+            return (Tensor<T>)(object)SparsemaxBackwardGpuDouble((Tensor<double>)(object)gradOutput, (Tensor<double>)(object)output, axis);
+
+        return _cpuFallback.SparsemaxBackward(gradOutput, output, axis);
+    }
+
+    private Tensor<float> SparsemaxBackwardGpuFloat(Tensor<float> gradOutput, Tensor<float> output, int axis)
+    {
+        try
+        {
+            var shape = output.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<float>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuGradInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuOutput.View.BaseView.CopyFromCPU(output.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_sparsemaxBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuGradOutput.View, gpuOutput.View, gpuGradInput.View, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGradOutput);
+                _memoryPoolFloat.Return(gpuOutput);
+                _memoryPoolFloat.Return(gpuGradInput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU SparsemaxBackward (float) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.SparsemaxBackward(gradOutput, output, axis);
+        }
+    }
+
+    private Tensor<double> SparsemaxBackwardGpuDouble(Tensor<double> gradOutput, Tensor<double> output, int axis)
+    {
+        try
+        {
+            var shape = output.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<double>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuGradInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuOutput.View.BaseView.CopyFromCPU(output.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_sparsemaxBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuGradOutput.View, gpuOutput.View, gpuGradInput.View, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGradOutput);
+                _memoryPoolDouble.Return(gpuOutput);
+                _memoryPoolDouble.Return(gpuGradInput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU SparsemaxBackward (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.SparsemaxBackward(gradOutput, output, axis);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SphericalSoftmax<T>(Tensor<T> input, int axis = -1)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+
+        int rank = input.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        if (input.Length < _thresholds.VectorAdd || !SupportsGpu || !_gpuHealthy)
+        {
+            return _cpuFallback.SphericalSoftmax(input, axis);
+        }
+
+        if (typeof(T) == typeof(float))
+            return (Tensor<T>)(object)SphericalSoftmaxGpuFloat((Tensor<float>)(object)input, axis);
+        if (typeof(T) == typeof(double))
+            return (Tensor<T>)(object)SphericalSoftmaxGpuDouble((Tensor<double>)(object)input, axis);
+
+        return _cpuFallback.SphericalSoftmax(input, axis);
+    }
+
+    private Tensor<float> SphericalSoftmaxGpuFloat(Tensor<float> input, int axis)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<float>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_sphericalSoftmaxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuInput.View, gpuOutput.View, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU SphericalSoftmax (float) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.SphericalSoftmax(input, axis);
+        }
+    }
+
+    private Tensor<double> SphericalSoftmaxGpuDouble(Tensor<double> input, int axis)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<double>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_sphericalSoftmaxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuInput.View, gpuOutput.View, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuOutput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU SphericalSoftmax (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.SphericalSoftmax(input, axis);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SphericalSoftmaxBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> output, int axis = -1)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (output == null) throw new ArgumentNullException(nameof(output));
+
+        int rank = output.Rank;
+        if (axis < 0) axis = rank + axis;
+
+        if (output.Length < _thresholds.VectorAdd || !SupportsGpu || !_gpuHealthy)
+        {
+            return _cpuFallback.SphericalSoftmaxBackward(gradOutput, input, output, axis);
+        }
+
+        if (typeof(T) == typeof(float))
+            return (Tensor<T>)(object)SphericalSoftmaxBackwardGpuFloat((Tensor<float>)(object)gradOutput, (Tensor<float>)(object)input, (Tensor<float>)(object)output, axis);
+        if (typeof(T) == typeof(double))
+            return (Tensor<T>)(object)SphericalSoftmaxBackwardGpuDouble((Tensor<double>)(object)gradOutput, (Tensor<double>)(object)input, (Tensor<double>)(object)output, axis);
+
+        return _cpuFallback.SphericalSoftmaxBackward(gradOutput, input, output, axis);
+    }
+
+    private Tensor<float> SphericalSoftmaxBackwardGpuFloat(Tensor<float> gradOutput, Tensor<float> input, Tensor<float> output, int axis)
+    {
+        try
+        {
+            var shape = output.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<float>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuGradInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuOutput.View.BaseView.CopyFromCPU(output.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_sphericalSoftmaxBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuGradOutput.View, gpuInput.View, gpuOutput.View, gpuGradInput.View, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGradOutput);
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuOutput);
+                _memoryPoolFloat.Return(gpuGradInput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU SphericalSoftmaxBackward (float) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.SphericalSoftmaxBackward(gradOutput, input, output, axis);
+        }
+    }
+
+    private Tensor<double> SphericalSoftmaxBackwardGpuDouble(Tensor<double> gradOutput, Tensor<double> input, Tensor<double> output, int axis)
+    {
+        try
+        {
+            var shape = output.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var result = new Tensor<double>(shape);
+            int numWorkItems = outerSize * innerSize;
+
+            var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+            var gpuGradInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(output.Length);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuOutput.View.BaseView.CopyFromCPU(output.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_sphericalSoftmaxBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numWorkItems, gpuGradOutput.View, gpuInput.View, gpuOutput.View, gpuGradInput.View, outerSize, axisSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradInput.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGradOutput);
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuOutput);
+                _memoryPoolDouble.Return(gpuGradInput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU SphericalSoftmaxBackward (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.SphericalSoftmaxBackward(gradOutput, input, output, axis);
         }
     }
 

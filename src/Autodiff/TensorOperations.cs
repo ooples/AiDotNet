@@ -8162,6 +8162,12 @@ public static class TensorOperations<T>
     /// </remarks>
     public static ComputationNode<T> GumbelSoftmax(ComputationNode<T> logits, double temperature = 1.0, bool hard = false)
     {
+        // Validate temperature: must be positive and finite
+        if (temperature <= 0)
+            throw new ArgumentOutOfRangeException(nameof(temperature), temperature, "Temperature must be positive.");
+        if (double.IsNaN(temperature) || double.IsInfinity(temperature))
+            throw new ArgumentOutOfRangeException(nameof(temperature), temperature, "Temperature must be a finite number.");
+
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
         var shape = logits.Value.Shape;
@@ -9919,12 +9925,12 @@ public static class TensorOperations<T>
                         for (int i = 0; i < capturedAxisSize; i++)
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
-                            // Softmax gradient part
+                            // Softmax gradient part: s_i * (grad_i - dot(grad, s))
                             var softmaxGrad = numOps.Multiply(result[flatIdx],
                                 numOps.Subtract(gradient[flatIdx], dotProduct));
 
-                            // Taylor exp derivative: d/dx[1 + x + x²/2! + ...] = 1 + x + x²/2! + ... (almost)
-                            // Actually: d/dx[Taylor_n(x)] = Taylor_{n-1}(x) for exp
+                            // Taylor exp derivative: d/dx[1 + x + x²/2! + ... + x^n/n!] = 1 + x + ... + x^(n-1)/(n-1)!
+                            // This is Taylor_{n-1}(x) for exp
                             var x = a.Value[flatIdx];
                             var taylorExpDeriv = numOps.One;
                             var xPower = numOps.One;
@@ -9935,9 +9941,12 @@ public static class TensorOperations<T>
                                 taylorExpDeriv = numOps.Add(taylorExpDeriv, term);
                             }
 
-                            // Chain rule: d(softmax)/d(taylorExp) * d(taylorExp)/dx
-                            var normFactor = numOps.Divide(taylorExpDeriv, expSum);
-                            gradA[flatIdx] = numOps.Multiply(softmaxGrad, normFactor);
+                            // For y_i = g(x_i) / sum_j(g(x_j)), the chain rule requires:
+                            // grad_x_i = softmaxGrad * g'(x_i) / g(x_i)
+                            // where g is the Taylor approximation of exp
+                            var gVal = taylorExpValues[flatIdx];
+                            var gPrimeOverG = numOps.Divide(taylorExpDeriv, gVal);
+                            gradA[flatIdx] = numOps.Multiply(softmaxGrad, gPrimeOverG);
                         }
                     }
                 }
@@ -10027,7 +10036,9 @@ public static class TensorOperations<T>
                     return 0;
                 });
 
-                // Find k (support size) and threshold tau
+                // Find k (support size) and threshold tau using standard sparsemax algorithm
+                // Standard algorithm: find k* = max{k : 1 + k * z_k > sum_{j<=k} z_j}
+                // Then tau = (sum_{j<=k*} z_j - 1) / k*
                 var cumSum = numOps.Zero;
                 int k = 0;
                 var tau = numOps.Zero;
@@ -10035,27 +10046,22 @@ public static class TensorOperations<T>
                 for (int i = 0; i < axisSize; i++)
                 {
                     cumSum = numOps.Add(cumSum, indexed[i].value);
-                    var avg = numOps.Divide(
-                        numOps.Subtract(cumSum, numOps.One),
-                        numOps.FromDouble(i + 1));
+                    int kCandidate = i + 1;
 
-                    if (numOps.GreaterThanOrEquals(indexed[i].value, avg))
-                    {
-                        k = i + 1;
-                        tau = avg;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
+                    // t_k = 1 + k * z_k - sum_{j<=k} z_j
+                    var t = numOps.Subtract(
+                        numOps.Add(
+                            numOps.One,
+                            numOps.Multiply(numOps.FromDouble(kCandidate), indexed[i].value)),
+                        cumSum);
 
-                // If we didn't break early, recalculate tau with all elements
-                if (k == axisSize)
-                {
-                    tau = numOps.Divide(
-                        numOps.Subtract(cumSum, numOps.One),
-                        numOps.FromDouble(axisSize));
+                    if (numOps.GreaterThan(t, numOps.Zero))
+                    {
+                        k = kCandidate;
+                        tau = numOps.Divide(
+                            numOps.Subtract(cumSum, numOps.One),
+                            numOps.FromDouble(k));
+                    }
                 }
 
                 // Compute output and support mask
