@@ -495,30 +495,23 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
         try
         {
             // Rebuild node-related indices
-            foreach (var nodeId in _nodeIndex.GetAllKeys())
+            foreach (var node in _nodeIndex.GetAllKeys().Select(GetNode).OfType<GraphNode<T>>())
             {
-                var node = GetNode(nodeId);
-                if (node != null)
-                {
-                    // Rebuild label index
-                    if (!_nodesByLabel.ContainsKey(node.Label))
-                        _nodesByLabel[node.Label] = new HashSet<string>();
-                    _nodesByLabel[node.Label].Add(node.Id);
+                // Rebuild label index
+                if (!_nodesByLabel.ContainsKey(node.Label))
+                    _nodesByLabel[node.Label] = new HashSet<string>();
+                _nodesByLabel[node.Label].Add(node.Id);
 
-                    // Initialize edge indices
-                    if (!_outgoingEdges.ContainsKey(node.Id))
-                        _outgoingEdges[node.Id] = new HashSet<string>();
-                    if (!_incomingEdges.ContainsKey(node.Id))
-                        _incomingEdges[node.Id] = new HashSet<string>();
-                }
+                // Initialize edge indices
+                if (!_outgoingEdges.ContainsKey(node.Id))
+                    _outgoingEdges[node.Id] = new HashSet<string>();
+                if (!_incomingEdges.ContainsKey(node.Id))
+                    _incomingEdges[node.Id] = new HashSet<string>();
             }
 
             // Rebuild edge indices
-            foreach (var edgeId in _edgeIndex.GetAllKeys())
+            foreach (var edge in _edgeIndex.GetAllKeys().Select(GetEdge).OfType<GraphEdge<T>>())
             {
-                var edge = GetEdge(edgeId);
-                if (edge == null) continue;
-
                 if (_outgoingEdges.TryGetValue(edge.SourceId, out var outgoingSet))
                     outgoingSet.Add(edge.Id);
                 if (_incomingEdges.TryGetValue(edge.TargetId, out var incomingSet))
@@ -806,14 +799,9 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
         if (!_outgoingEdges.TryGetValue(nodeId, out var edgeIds))
             return Enumerable.Empty<GraphEdge<T>>();
 
-        var edges = new List<GraphEdge<T>>();
-        foreach (var id in edgeIds)
-        {
-            var edge = await GetEdgeAsync(id);
-            if (edge != null)
-                edges.Add(edge);
-        }
-        return edges;
+        var tasks = edgeIds.Select(id => GetEdgeAsync(id));
+        var results = await Task.WhenAll(tasks);
+        return results.OfType<GraphEdge<T>>().ToList();
     }
 
     /// <inheritdoc/>
@@ -822,14 +810,9 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
         if (!_incomingEdges.TryGetValue(nodeId, out var edgeIds))
             return Enumerable.Empty<GraphEdge<T>>();
 
-        var edges = new List<GraphEdge<T>>();
-        foreach (var id in edgeIds)
-        {
-            var edge = await GetEdgeAsync(id);
-            if (edge != null)
-                edges.Add(edge);
-        }
-        return edges;
+        var tasks = edgeIds.Select(id => GetEdgeAsync(id));
+        var results = await Task.WhenAll(tasks);
+        return results.OfType<GraphEdge<T>>().ToList();
     }
 
     /// <inheritdoc/>
@@ -838,40 +821,25 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
         if (!_nodesByLabel.TryGetValue(label, out var nodeIds))
             return Enumerable.Empty<GraphNode<T>>();
 
-        var nodes = new List<GraphNode<T>>();
-        foreach (var id in nodeIds)
-        {
-            var node = await GetNodeAsync(id);
-            if (node != null)
-                nodes.Add(node);
-        }
-        return nodes;
+        var tasks = nodeIds.Select(id => GetNodeAsync(id));
+        var results = await Task.WhenAll(tasks);
+        return results.OfType<GraphNode<T>>().ToList();
     }
 
     /// <inheritdoc/>
     public async Task<IEnumerable<GraphNode<T>>> GetAllNodesAsync()
     {
-        var nodes = new List<GraphNode<T>>();
-        foreach (var id in _nodeIndex.GetAllKeys())
-        {
-            var node = await GetNodeAsync(id);
-            if (node != null)
-                nodes.Add(node);
-        }
-        return nodes;
+        var tasks = _nodeIndex.GetAllKeys().Select(id => GetNodeAsync(id));
+        var results = await Task.WhenAll(tasks);
+        return results.OfType<GraphNode<T>>().ToList();
     }
 
     /// <inheritdoc/>
     public async Task<IEnumerable<GraphEdge<T>>> GetAllEdgesAsync()
     {
-        var edges = new List<GraphEdge<T>>();
-        foreach (var id in _edgeIndex.GetAllKeys())
-        {
-            var edge = await GetEdgeAsync(id);
-            if (edge != null)
-                edges.Add(edge);
-        }
-        return edges;
+        var tasks = _edgeIndex.GetAllKeys().Select(id => GetEdgeAsync(id));
+        var results = await Task.WhenAll(tasks);
+        return results.OfType<GraphEdge<T>>().ToList();
     }
 
     /// <inheritdoc/>
