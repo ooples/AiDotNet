@@ -132,11 +132,8 @@ public class HybridGraphRetriever<T>
             // Get neighbors from graph
             var neighbors = GetNeighbors(currentId);
 
-            foreach (var neighborId in neighbors)
+            foreach (var neighborId in neighbors.Where(n => !visited.Contains(n)))
             {
-                if (visited.Contains(neighborId))
-                    continue;
-
                 visited.Add(neighborId);
 
                 // Get neighbor's embedding from graph node
@@ -240,11 +237,8 @@ public class HybridGraphRetriever<T>
 
             var outgoingEdges = _graph.GetOutgoingEdges(candidate.Id);
 
-            foreach (var edge in outgoingEdges)
+            foreach (var edge in outgoingEdges.Where(e => !results.ContainsKey(e.TargetId)))
             {
-                if (results.ContainsKey(edge.TargetId))
-                    continue;
-
                 // Get relationship weight (default to 1.0)
                 var weight = relationshipWeights.TryGetValue(edge.RelationType, out var w) ? w : 1.0;
 
