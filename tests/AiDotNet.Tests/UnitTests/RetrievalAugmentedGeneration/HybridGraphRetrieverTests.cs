@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
@@ -379,7 +380,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         #region Async Tests
 
         [Fact]
-        public async void RetrieveAsync_WorksCorrectly()
+        public async Task RetrieveAsync_WorksCorrectly()
         {
             // Arrange
             var query = new Vector<double>(new double[] { 1.0, 0.0, 0.0 });
