@@ -90,7 +90,12 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
     {
         // Configure from options or use defaults optimized for continuous batching
         _maxConcurrentRequests = Options.MaxBatchSize > 0 ? Options.MaxBatchSize : 32;
-        _iterationIntervalMs = Math.Max(1, Options.BatchingWindowMs / 10); // Run loop faster than traditional batching
+
+        // Validate BatchingWindowMs - must be positive for meaningful iteration intervals
+        // If invalid or zero, use sensible default (100ms window / 10 = 10ms iteration)
+        var batchingWindowMs = Options.BatchingWindowMs > 0 ? Options.BatchingWindowMs : 100;
+        _iterationIntervalMs = Math.Max(1, batchingWindowMs / 10); // Run loop faster than traditional batching
+
         _enableAdaptiveConcurrency = Options.AdaptiveBatchSize;
         _targetLatencyMs = Options.TargetLatencyMs > 0 ? Options.TargetLatencyMs : 50;
 

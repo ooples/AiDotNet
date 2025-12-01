@@ -203,11 +203,33 @@ public class ModelStartupService : IHostedService
         // Get dimensions from the model metadata
         var metadata = modelResult.GetModelMetadata();
         var inputDim = metadata.FeatureCount > 0 ? metadata.FeatureCount : 1;
+
         // Output dimension defaults to 1 for most regression/classification models
-        // For multi-output models, this could be extended via metadata properties
-        var outputDim = metadata.Properties.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue is int dim
-            ? dim
-            : 1;
+        // Use Convert.ToInt32 to handle various numeric types from JSON deserialization
+        // (e.g., long, double, JsonElement)
+        var outputDim = 1;
+        if (metadata.Properties.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue != null)
+        {
+            try
+            {
+                outputDim = Convert.ToInt32(outputDimValue);
+            }
+            catch (Exception)
+            {
+                // If conversion fails, keep default of 1
+                _logger.LogWarning("Failed to parse OutputDimension from metadata, defaulting to 1");
+            }
+        }
+
+        // PredictionModelResult.Predict returns Vector<T> (single output per sample)
+        // Multi-output models are not currently supported in the serving layer
+        if (outputDim > 1)
+        {
+            _logger.LogWarning(
+                "Multi-output models (outputDim={OutputDim}) are not fully supported in serving layer; using outputDim=1",
+                outputDim);
+            outputDim = 1;
+        }
 
         // Create predict functions that delegate to PredictionModelResult
         // This preserves all facade functionality (LoRA, inference opts, etc.)
@@ -230,8 +252,8 @@ public class ModelStartupService : IHostedService
             // PredictionModelResult.Predict(Matrix<T>) returns Vector<T> with one value per sample
             var predictions = modelResult.Predict(inputs);
 
-            // Convert Vector<T> result to Matrix<T> format
-            var results = new Matrix<T>(inputs.Rows, outputDim);
+            // Convert Vector<T> result to Matrix<T> format (single output per sample)
+            var results = new Matrix<T>(inputs.Rows, 1);
             for (int i = 0; i < predictions.Length && i < inputs.Rows; i++)
             {
                 results[i, 0] = predictions[i];
