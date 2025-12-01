@@ -161,7 +161,11 @@ public class HybridGraphRetriever<T>
                     ParentNodeId = currentId
                 };
 
-                results[neighborId] = result;
+                // Only update if new score is higher to preserve best path
+                if (!results.TryGetValue(neighborId, out var existing) || result.Score > existing.Score)
+                {
+                    results[neighborId] = result;
+                }
 
                 // Continue expanding
                 if (currentDepth + 1 < expansionDepth)
