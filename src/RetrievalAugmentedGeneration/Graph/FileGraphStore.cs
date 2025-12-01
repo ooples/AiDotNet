@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.Json;
 using System.Threading.Tasks;
 using AiDotNet.Interfaces;
+using Newtonsoft.Json;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
@@ -64,7 +64,7 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
     private readonly Dictionary<string, HashSet<string>> _incomingEdges; // nodeId -> edge IDs
     private readonly Dictionary<string, HashSet<string>> _nodesByLabel; // label -> node IDs
 
-    private readonly JsonSerializerOptions _jsonOptions;
+    private readonly JsonSerializerSettings _jsonSettings;
     private bool _disposed;
 
     /// <inheritdoc/>
@@ -101,10 +101,9 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
         _incomingEdges = new Dictionary<string, HashSet<string>>();
         _nodesByLabel = new Dictionary<string, HashSet<string>>();
 
-        _jsonOptions = new JsonSerializerOptions
+        _jsonSettings = new JsonSerializerSettings
         {
-            WriteIndented = false,
-            PropertyNameCaseInsensitive = true
+            Formatting = Formatting.None
         };
 
         // Rebuild in-memory indices from persisted data
@@ -123,7 +122,7 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             _wal?.LogAddNode(node);
 
             // Serialize node to JSON
-            var json = JsonSerializer.Serialize(node, _jsonOptions);
+            var json = JsonConvert.SerializeObject(node, _jsonSettings);
             var bytes = Encoding.UTF8.GetBytes(json);
 
             // Get current file position (or reuse existing offset if updating)
@@ -189,7 +188,7 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             _wal?.LogAddEdge(edge);
 
             // Serialize edge to JSON
-            var json = JsonSerializer.Serialize(edge, _jsonOptions);
+            var json = JsonConvert.SerializeObject(edge, _jsonSettings);
             var bytes = Encoding.UTF8.GetBytes(json);
 
             // Get current file position
@@ -249,7 +248,7 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             var json = Encoding.UTF8.GetString(jsonBytes);
 
             // Deserialize
-            return JsonSerializer.Deserialize<GraphNode<T>>(json, _jsonOptions);
+            return JsonConvert.DeserializeObject<GraphNode<T>>(json, _jsonSettings);
         }
         catch (Exception ex)
         {
@@ -283,7 +282,7 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             var json = Encoding.UTF8.GetString(jsonBytes);
 
             // Deserialize
-            return JsonSerializer.Deserialize<GraphEdge<T>>(json, _jsonOptions);
+            return JsonConvert.DeserializeObject<GraphEdge<T>>(json, _jsonSettings);
         }
         catch (Exception ex)
         {
@@ -510,7 +509,7 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             _wal?.LogAddNode(node);
 
             // Serialize node to JSON
-            var json = JsonSerializer.Serialize(node, _jsonOptions);
+            var json = JsonConvert.SerializeObject(node, _jsonSettings);
             var bytes = Encoding.UTF8.GetBytes(json);
 
             // Get current file position
@@ -574,7 +573,7 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             _wal?.LogAddEdge(edge);
 
             // Serialize edge to JSON
-            var json = JsonSerializer.Serialize(edge, _jsonOptions);
+            var json = JsonConvert.SerializeObject(edge, _jsonSettings);
             var bytes = Encoding.UTF8.GetBytes(json);
 
             // Get current file position
@@ -634,7 +633,7 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             var json = Encoding.UTF8.GetString(jsonBytes);
 
             // Deserialize
-            return JsonSerializer.Deserialize<GraphNode<T>>(json, _jsonOptions);
+            return JsonConvert.DeserializeObject<GraphNode<T>>(json, _jsonSettings);
         }
         catch (Exception ex)
         {
@@ -668,7 +667,7 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             var json = Encoding.UTF8.GetString(jsonBytes);
 
             // Deserialize
-            return JsonSerializer.Deserialize<GraphEdge<T>>(json, _jsonOptions);
+            return JsonConvert.DeserializeObject<GraphEdge<T>>(json, _jsonSettings);
         }
         catch (Exception ex)
         {

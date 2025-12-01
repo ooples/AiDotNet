@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
 using System.Threading.Tasks;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
@@ -37,26 +39,22 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// - Graph connections provide context vectors can't capture!
 /// </para>
 /// </remarks>
-public class HybridGraphRetriever<T> where T : struct, INumber<T>
+public class HybridGraphRetriever<T>
 {
     private readonly KnowledgeGraph<T> _graph;
-    private readonly IVectorDatabase<T> _vectorDb;
-    private readonly ISimilarityMetric<T> _similarityMetric;
+    private readonly IDocumentStore<T> _documentStore;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HybridGraphRetriever{T}"/> class.
     /// </summary>
     /// <param name="graph">The knowledge graph containing entity relationships.</param>
-    /// <param name="vectorDb">The vector database for similarity search.</param>
-    /// <param name="similarityMetric">The similarity metric to use (e.g., cosine similarity).</param>
+    /// <param name="documentStore">The document store for similarity search.</param>
     public HybridGraphRetriever(
         KnowledgeGraph<T> graph,
-        IVectorDatabase<T> vectorDb,
-        ISimilarityMetric<T> similarityMetric)
+        IDocumentStore<T> documentStore)
     {
         _graph = graph ?? throw new ArgumentNullException(nameof(graph));
-        _vectorDb = vectorDb ?? throw new ArgumentNullException(nameof(vectorDb));
-        _similarityMetric = similarityMetric ?? throw new ArgumentNullException(nameof(similarityMetric));
+        _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
     }
 
     /// <summary>
@@ -68,7 +66,7 @@ public class HybridGraphRetriever<T> where T : struct, INumber<T>
     /// <param name="maxResults">Maximum total results to return after expansion.</param>
     /// <returns>List of retrieved nodes with their relevance scores.</returns>
     public List<RetrievalResult<T>> Retrieve(
-        T[] queryEmbedding,
+        Vector<T> queryEmbedding,
         int topK = 5,
         int expansionDepth = 1,
         int maxResults = 10)
@@ -80,20 +78,20 @@ public class HybridGraphRetriever<T> where T : struct, INumber<T>
         if (expansionDepth < 0)
             throw new ArgumentOutOfRangeException(nameof(expansionDepth), "expansionDepth cannot be negative");
 
-        // Stage 1: Vector similarity search for initial candidates
-        var initialCandidates = _vectorDb.SearchSimilar(queryEmbedding, topK);
+        // Stage 1: Vector similarity search for initial candidates using document store
+        var initialCandidates = _documentStore.GetSimilar(queryEmbedding, topK).ToList();
 
         if (expansionDepth == 0)
         {
             // No graph expansion - return vector results only
             return initialCandidates
                 .Take(maxResults)
-                .Select(r => new RetrievalResult<T>
+                .Select(doc => new RetrievalResult<T>
                 {
-                    NodeId = r.Id,
-                    Score = r.Similarity,
+                    NodeId = doc.Id,
+                    Score = doc.HasRelevanceScore ? Convert.ToDouble(doc.RelevanceScore) : 0.0,
                     Source = RetrievalSource.VectorSearch,
-                    Embedding = r.Embedding
+                    Embedding = doc.Embedding
                 })
                 .ToList();
         }
@@ -108,7 +106,7 @@ public class HybridGraphRetriever<T> where T : struct, INumber<T>
             var result = new RetrievalResult<T>
             {
                 NodeId = candidate.Id,
-                Score = candidate.Similarity,
+                Score = candidate.HasRelevanceScore ? Convert.ToDouble(candidate.RelevanceScore) : 0.0,
                 Source = RetrievalSource.VectorSearch,
                 Embedding = candidate.Embedding,
                 Depth = 0
@@ -141,13 +139,14 @@ public class HybridGraphRetriever<T> where T : struct, INumber<T>
 
                 visited.Add(neighborId);
 
-                // Get neighbor's embedding if available
-                var neighborEmbedding = _vectorDb.GetEmbedding(neighborId);
+                // Get neighbor's embedding from graph node
+                var neighborNode = _graph.GetNode(neighborId);
+                var neighborEmbedding = neighborNode?.Embedding;
                 double score = 0.0;
 
-                if (neighborEmbedding != null)
+                if (neighborEmbedding != null && neighborEmbedding.Length > 0)
                 {
-                    // Calculate similarity to query
+                    // Calculate similarity to query using StatisticsHelper
                     score = CalculateSimilarity(queryEmbedding, neighborEmbedding);
 
                     // Apply depth penalty (closer nodes are more relevant)
@@ -186,7 +185,7 @@ public class HybridGraphRetriever<T> where T : struct, INumber<T>
     /// Retrieves relevant nodes asynchronously using hybrid approach.
     /// </summary>
     public async Task<List<RetrievalResult<T>>> RetrieveAsync(
-        T[] queryEmbedding,
+        Vector<T> queryEmbedding,
         int topK = 5,
         int expansionDepth = 1,
         int maxResults = 10)
@@ -205,7 +204,7 @@ public class HybridGraphRetriever<T> where T : struct, INumber<T>
     /// <param name="maxResults">Maximum results to return.</param>
     /// <returns>List of retrieved nodes with relationship-aware scores.</returns>
     public List<RetrievalResult<T>> RetrieveWithRelationships(
-        T[] queryEmbedding,
+        Vector<T> queryEmbedding,
         int topK = 5,
         Dictionary<string, double>? relationshipWeights = null,
         int maxResults = 10)
@@ -216,7 +215,7 @@ public class HybridGraphRetriever<T> where T : struct, INumber<T>
         relationshipWeights ??= new Dictionary<string, double>();
 
         // Stage 1: Vector similarity search
-        var initialCandidates = _vectorDb.SearchSimilar(queryEmbedding, topK);
+        var initialCandidates = _documentStore.GetSimilar(queryEmbedding, topK).ToList();
         var results = new Dictionary<string, RetrievalResult<T>>();
 
         // Add initial candidates
@@ -225,7 +224,7 @@ public class HybridGraphRetriever<T> where T : struct, INumber<T>
             results[candidate.Id] = new RetrievalResult<T>
             {
                 NodeId = candidate.Id,
-                Score = candidate.Similarity,
+                Score = candidate.HasRelevanceScore ? Convert.ToDouble(candidate.RelevanceScore) : 0.0,
                 Source = RetrievalSource.VectorSearch,
                 Embedding = candidate.Embedding,
                 Depth = 0
@@ -249,11 +248,12 @@ public class HybridGraphRetriever<T> where T : struct, INumber<T>
                 // Get relationship weight (default to 1.0)
                 var weight = relationshipWeights.TryGetValue(edge.RelationType, out var w) ? w : 1.0;
 
-                // Get target node's embedding
-                var targetEmbedding = _vectorDb.GetEmbedding(edge.TargetId);
+                // Get target node's embedding from graph
+                var targetNode = _graph.GetNode(edge.TargetId);
+                var targetEmbedding = targetNode?.Embedding;
                 double score = 0.0;
 
-                if (targetEmbedding != null)
+                if (targetEmbedding != null && targetEmbedding.Length > 0)
                 {
                     score = CalculateSimilarity(queryEmbedding, targetEmbedding);
                     score *= weight; // Apply relationship weight
@@ -303,14 +303,15 @@ public class HybridGraphRetriever<T> where T : struct, INumber<T>
     }
 
     /// <summary>
-    /// Calculates similarity between two embeddings.
+    /// Calculates similarity between two embeddings using cosine similarity.
     /// </summary>
-    private double CalculateSimilarity(T[] embedding1, T[] embedding2)
+    private double CalculateSimilarity(Vector<T> embedding1, Vector<T> embedding2)
     {
         if (embedding1.Length != embedding2.Length)
             return 0.0;
 
-        return Convert.ToDouble(_similarityMetric.CalculateSimilarity(embedding1, embedding2));
+        var similarity = StatisticsHelper<T>.CosineSimilarity(embedding1, embedding2);
+        return Convert.ToDouble(similarity);
     }
 }
 
@@ -338,7 +339,7 @@ public class RetrievalResult<T>
     /// <summary>
     /// Gets or sets the embedding vector.
     /// </summary>
-    public T[]? Embedding { get; set; }
+    public Vector<T>? Embedding { get; set; }
 
     /// <summary>
     /// Gets or sets the graph traversal depth (0 for initial candidates).

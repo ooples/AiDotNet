@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Text.Json;
+using Newtonsoft.Json;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
@@ -85,7 +85,7 @@ public class WriteAheadLog : IDisposable
                 Timestamp = DateTime.UtcNow,
                 OperationType = WALOperationType.AddNode,
                 NodeId = node.Id,
-                Data = JsonSerializer.Serialize(node)
+                Data = JsonConvert.SerializeObject(node)
             };
 
             WriteEntry(entry);
@@ -110,7 +110,7 @@ public class WriteAheadLog : IDisposable
                 Timestamp = DateTime.UtcNow,
                 OperationType = WALOperationType.AddEdge,
                 EdgeId = edge.Id,
-                Data = JsonSerializer.Serialize(edge)
+                Data = JsonConvert.SerializeObject(edge)
             };
 
             WriteEntry(entry);
@@ -207,7 +207,7 @@ public class WriteAheadLog : IDisposable
             {
                 try
                 {
-                    var entry = JsonSerializer.Deserialize<WALEntry>(line);
+                    var entry = JsonConvert.DeserializeObject<WALEntry>(line);
                     if (entry != null)
                         entries.Add(entry);
                 }
@@ -252,7 +252,7 @@ public class WriteAheadLog : IDisposable
     /// </summary>
     private void WriteEntry(WALEntry entry)
     {
-        var json = JsonSerializer.Serialize(entry);
+        var json = JsonConvert.SerializeObject(entry);
         _writer?.WriteLine(json);
         // AutoFlush ensures it's written to disk immediately
     }
