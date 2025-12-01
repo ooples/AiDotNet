@@ -1665,13 +1665,19 @@ public static class TensorOperations<T>
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        // Forward pass: ln(1 + e^x)
-        // Using numerically stable version: max(0, x) + ln(1 + exp(-|x|))
+        // Forward pass: numerically stable softplus
+        // softplus(x) = max(0, x) + ln(1 + exp(-|x|))
+        // For large positive x, this avoids exp(x) overflow
+        // For large negative x, exp(-|x|) approaches 0, so result ≈ 0
         var result = a.Value.Transform((x, idx) =>
         {
-            var expX = numOps.Exp(x);
-            var onePlusExpX = numOps.Add(numOps.One, expX);
-            return numOps.Log(onePlusExpX);
+            // Compute |x|: if x >= 0, absX = x, else absX = -x
+            var absX = numOps.GreaterThanOrEquals(x, numOps.Zero) ? x : numOps.Negate(x);
+            var negAbsX = numOps.Negate(absX);
+            var expNegAbsX = numOps.Exp(negAbsX);
+            var log1pExpNegAbsX = numOps.Log(numOps.Add(numOps.One, expNegAbsX));
+            var maxZeroX = numOps.GreaterThan(x, numOps.Zero) ? x : numOps.Zero;
+            return numOps.Add(maxZeroX, log1pExpNegAbsX);
         });
 
         void BackwardFunction(Tensor<T> gradient)

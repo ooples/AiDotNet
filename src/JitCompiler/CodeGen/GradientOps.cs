@@ -201,6 +201,102 @@ public static class GradientOps
     }
 
     /// <summary>
+    /// Gradient of HardSigmoid operation.
+    /// Forward: y = clip((x + 3) / 6, 0, 1)
+    /// Backward: grad_x = grad_y * (1/6 if -3 &lt; x &lt; 3, else 0)
+    /// </summary>
+    public static Tensor<T> GradHardSigmoid<T>(Tensor<T> gradOutput, Tensor<T> forwardInput)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputData = forwardInput.ToArray();
+        var gradData = gradOutput.ToArray();
+        var resultData = new T[inputData.Length];
+
+        var negThree = numOps.FromDouble(-3.0);
+        var three = numOps.FromDouble(3.0);
+        var oneSixth = numOps.FromDouble(1.0 / 6.0);
+
+        for (int i = 0; i < inputData.Length; i++)
+        {
+            // Gradient is 1/6 only when -3 < x < 3, else 0
+            var x = inputData[i];
+            var inLinearRegion = numOps.GreaterThan(x, negThree) && numOps.LessThan(x, three);
+            var derivative = inLinearRegion ? oneSixth : numOps.Zero;
+            resultData[i] = numOps.Multiply(gradData[i], derivative);
+        }
+
+        return new Tensor<T>(gradOutput.Shape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Gradient of HardTanh operation.
+    /// Forward: y = clip(x, minVal, maxVal)
+    /// Backward: grad_x = grad_y * (1 if minVal &lt; x &lt; maxVal, else 0)
+    /// </summary>
+    public static Tensor<T> GradHardTanh<T>(Tensor<T> gradOutput, Tensor<T> forwardInput, double minVal = -1.0, double maxVal = 1.0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputData = forwardInput.ToArray();
+        var gradData = gradOutput.ToArray();
+        var resultData = new T[inputData.Length];
+
+        var minT = numOps.FromDouble(minVal);
+        var maxT = numOps.FromDouble(maxVal);
+
+        for (int i = 0; i < inputData.Length; i++)
+        {
+            // Gradient is 1 only when minVal < x < maxVal, else 0
+            var x = inputData[i];
+            var inLinearRegion = numOps.GreaterThan(x, minT) && numOps.LessThan(x, maxT);
+            var derivative = inLinearRegion ? numOps.One : numOps.Zero;
+            resultData[i] = numOps.Multiply(gradData[i], derivative);
+        }
+
+        return new Tensor<T>(gradOutput.Shape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
+    /// Gradient of SoftPlus operation.
+    /// Forward: y = log(1 + exp(x)) (numerically stable)
+    /// Backward: grad_x = grad_y * sigmoid(x)
+    /// </summary>
+    public static Tensor<T> GradSoftPlus<T>(Tensor<T> gradOutput, Tensor<T> forwardInput, double beta = 1.0, double threshold = 20.0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputData = forwardInput.ToArray();
+        var gradData = gradOutput.ToArray();
+        var resultData = new T[inputData.Length];
+
+        var betaT = numOps.FromDouble(beta);
+        var thresholdT = numOps.FromDouble(threshold);
+
+        for (int i = 0; i < inputData.Length; i++)
+        {
+            var x = inputData[i];
+            var betaX = numOps.Multiply(betaT, x);
+
+            T derivative;
+            // For numerical stability: when beta*x > threshold, sigmoid(beta*x) ≈ 1
+            if (numOps.GreaterThan(betaX, thresholdT))
+            {
+                derivative = numOps.One;
+            }
+            else
+            {
+                // sigmoid(beta * x) = 1 / (1 + exp(-beta * x))
+                var negBetaX = numOps.Negate(betaX);
+                var expVal = numOps.Exp(negBetaX);
+                var onePlusExp = numOps.Add(numOps.One, expVal);
+                derivative = numOps.Divide(numOps.One, onePlusExp);
+            }
+
+            resultData[i] = numOps.Multiply(gradData[i], derivative);
+        }
+
+        return new Tensor<T>(gradOutput.Shape, new Vector<T>(resultData));
+    }
+
+    /// <summary>
     /// Helper: Creates a mask tensor where elements > 0 are 1, else 0.
     /// </summary>
     private static Tensor<T> CreateMask<T>(Tensor<T> input)
