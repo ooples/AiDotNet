@@ -24,12 +24,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history for accurate versioning
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+
+      # Cache NuGet packages for faster restores
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
       - name: Determine version from conventional commits
         id: version
@@ -39,22 +48,17 @@ jobs:
 
           echo "=== Automated Semantic Versioning from Conventional Commits ==="
 
-          # Get the latest tag, default to 0.0.0 if none exists
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           echo "Latest tag: $LATEST_TAG"
 
-          # Remove 'v' prefix if present
           CURRENT_VERSION=${LATEST_TAG#v}
           echo "Current version: $CURRENT_VERSION"
 
-          # Parse version components
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-          # Remove any pre-release suffix from PATCH (e.g., "5-preview" -> "5")
           PATCH=${PATCH%%-*}
 
           echo "Parsed version: $MAJOR.$MINOR.$PATCH"
 
-          # Get commits since last tag
           if git rev-parse "$LATEST_TAG" >/dev/null 2>&1; then
             COMMITS=$(git log "$LATEST_TAG..HEAD" --oneline --no-merges)
           else
@@ -65,29 +69,23 @@ jobs:
           echo "$COMMITS"
           echo "==========================="
 
-          # Initialize bump type
           BUMP_TYPE="none"
 
-          # Check for BREAKING CHANGE (triggers MAJOR bump)
-          # Supports both "BREAKING CHANGE:" footer and "!" notation (e.g., feat!:, fix(scope)!:)
           if echo "$COMMITS" | grep -iE "(BREAKING CHANGE:|BREAKING:|^[a-f0-9]+ [a-z]+(\([^)]*\))?!:)" > /dev/null; then
             BUMP_TYPE="major"
             echo "Found BREAKING CHANGE - will bump MAJOR version"
           fi
 
-          # Check for feat: (triggers MINOR bump if no BREAKING CHANGE)
           if [ "$BUMP_TYPE" = "none" ] && echo "$COMMITS" | grep -iE "^[a-f0-9]+ feat(\(.*\))?:" > /dev/null; then
             BUMP_TYPE="minor"
             echo "Found feat: commits - will bump MINOR version"
           fi
 
-          # Check for fix:, refactor:, perf:, docs: (triggers MINOR bump per requirements)
           if [ "$BUMP_TYPE" = "none" ] && echo "$COMMITS" | grep -iE "^[a-f0-9]+ (fix|refactor|perf|docs)(\(.*\))?:" > /dev/null; then
             BUMP_TYPE="minor"
             echo "Found fix:/refactor:/perf:/docs: commits - will bump MINOR version"
           fi
 
-          # Apply version bump
           case $BUMP_TYPE in
             major)
               MAJOR=$((MAJOR + 1))
@@ -112,11 +110,9 @@ jobs:
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
           echo "New version: $NEW_VERSION"
 
-          # Generate changelog
           echo "=== Generating Changelog ==="
           CHANGELOG="## Changes in v$NEW_VERSION"$'\n\n'
 
-          # Breaking changes
           BREAKING=$(echo "$COMMITS" | grep -iE "BREAKING CHANGE:|BREAKING:" || true)
           if [ -n "$BREAKING" ]; then
             CHANGELOG+="### Breaking Changes"$'\n'
@@ -126,7 +122,6 @@ jobs:
             CHANGELOG+=$'\n'
           fi
 
-          # Features
           FEATURES=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ feat(\(.*\))?:" || true)
           if [ -n "$FEATURES" ]; then
             CHANGELOG+="### Features"$'\n'
@@ -137,7 +132,6 @@ jobs:
             CHANGELOG+=$'\n'
           fi
 
-          # Fixes
           FIXES=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ fix(\(.*\))?:" || true)
           if [ -n "$FIXES" ]; then
             CHANGELOG+="### Bug Fixes"$'\n'
@@ -148,7 +142,6 @@ jobs:
             CHANGELOG+=$'\n'
           fi
 
-          # Performance improvements
           PERF=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ perf(\(.*\))?:" || true)
           if [ -n "$PERF" ]; then
             CHANGELOG+="### Performance Improvements"$'\n'
@@ -159,7 +152,6 @@ jobs:
             CHANGELOG+=$'\n'
           fi
 
-          # Refactoring
           REFACTOR=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ refactor(\(.*\))?:" || true)
           if [ -n "$REFACTOR" ]; then
             CHANGELOG+="### Code Refactoring"$'\n'
@@ -170,7 +162,6 @@ jobs:
             CHANGELOG+=$'\n'
           fi
 
-          # Documentation
           DOCS=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ docs(\(.*\))?:" || true)
           if [ -n "$DOCS" ]; then
             CHANGELOG+="### Documentation"$'\n'
@@ -183,11 +174,9 @@ jobs:
 
           echo "$CHANGELOG"
 
-          # Output results
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "should_release=true" >> $GITHUB_OUTPUT
 
-          # Save changelog to file for multi-line output
           echo "$CHANGELOG" > /tmp/changelog.txt
           {
             echo 'changelog<<EOF'
@@ -203,7 +192,18 @@ jobs:
         if: steps.version.outputs.should_release == 'true'
         run: dotnet build -c Release --no-restore
 
-  # Parallel test execution using matrix strategy
+      # Upload build artifacts for test jobs to reuse
+      - name: Upload build artifacts
+        if: steps.version.outputs.should_release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            **/bin/Release/
+            **/obj/
+          retention-days: 1
+
+  # Fast parallel test execution - downloads pre-built artifacts
   test:
     name: Test (${{ matrix.project }})
     runs-on: ubuntu-latest
@@ -225,21 +225,32 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Restore and build
-        run: |
-          dotnet restore
-          dotnet build -c Release --no-restore
-
-      - name: Run tests for ${{ matrix.project }}
-        run: dotnet test ${{ matrix.project }} -c Release --framework net8.0 -v n
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
+      # Restore NuGet cache
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
         with:
-          name: test-results-${{ strategy.job-index }}
-          path: ./TestResults/
-          retention-days: 7
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # Download pre-built artifacts - NO REBUILD NEEDED
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: .
+
+      # Run tests with parallel execution enabled and no build
+      - name: Run tests for ${{ matrix.project }}
+        run: |
+          dotnet test ${{ matrix.project }} \
+            -c Release \
+            --framework net8.0 \
+            --no-build \
+            --no-restore \
+            -v n \
+            -- xUnit.ParallelizeTestCollections=true xUnit.MaxParallelThreads=0
 
   # Pack NuGet after all tests pass
   pack:
@@ -256,15 +267,24 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Restore and Build
-        run: |
-          dotnet restore
-          dotnet build -c Release --no-restore
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: .
 
       - name: Pack NuGet
         run: |
           if [ -f "src/AiDotNet.csproj" ]; then
-            dotnet pack src/AiDotNet.csproj -c Release -o out /p:PackageVersion=${{ needs.version-and-build.outputs.package_version }}
+            dotnet pack src/AiDotNet.csproj -c Release -o out --no-build --no-restore /p:PackageVersion=${{ needs.version-and-build.outputs.package_version }}
             echo "Package created: AiDotNet.${{ needs.version-and-build.outputs.package_version }}.nupkg"
           else
             echo "Error: src/AiDotNet.csproj not found"
@@ -285,7 +305,6 @@ jobs:
             echo "Inspecting $pkg"
             files=$(unzip -Z1 "$pkg")
 
-            # Check for net471 and net8.0 (matching csproj TargetFrameworks)
             for tfm in net471 net8.0; do
               if ! echo "$files" | grep -qE "^lib/${tfm}/.+\\.dll$"; then
                 echo "Error: Missing ${tfm} lib in package"
