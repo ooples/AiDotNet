@@ -13,7 +13,8 @@ namespace AiDotNet.Tokenization.Vocabulary
         private readonly Dictionary<string, int> _tokenToId;
         private readonly Dictionary<int, string> _idToToken;
         private int _nextId;
-        private readonly int _unkTokenId;
+        private int _unkTokenId;
+        private readonly string _unkToken;
 
         /// <summary>
         /// Gets the vocabulary size.
@@ -39,6 +40,7 @@ namespace AiDotNet.Tokenization.Vocabulary
             _tokenToId = new Dictionary<string, int>();
             _idToToken = new Dictionary<int, string>();
             _nextId = 0;
+            _unkToken = unkToken;
 
             // Add unknown token first
             _unkTokenId = AddToken(unkToken);
@@ -54,7 +56,19 @@ namespace AiDotNet.Tokenization.Vocabulary
             _tokenToId = new Dictionary<string, int>(tokenToId);
             _idToToken = tokenToId.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
             _nextId = tokenToId.Count > 0 ? tokenToId.Values.Max() + 1 : 0;
-            _unkTokenId = _tokenToId.TryGetValue(unkToken, out var unkId) ? unkId : 0;
+            _unkToken = unkToken;
+
+            // If unkToken is not in the vocabulary, add it
+            if (_tokenToId.TryGetValue(unkToken, out var unkId))
+            {
+                _unkTokenId = unkId;
+            }
+            else
+            {
+                _unkTokenId = _nextId++;
+                _tokenToId[unkToken] = _unkTokenId;
+                _idToToken[_unkTokenId] = unkToken;
+            }
         }
 
         /// <summary>
@@ -138,13 +152,18 @@ namespace AiDotNet.Tokenization.Vocabulary
         }
 
         /// <summary>
-        /// Clears the vocabulary.
+        /// Clears the vocabulary and re-adds the unknown token.
         /// </summary>
         public void Clear()
         {
             _tokenToId.Clear();
             _idToToken.Clear();
             _nextId = 0;
+
+            // Re-add the unknown token to maintain consistency
+            _unkTokenId = _nextId++;
+            _tokenToId[_unkToken] = _unkTokenId;
+            _idToToken[_unkTokenId] = _unkToken;
         }
     }
 }
