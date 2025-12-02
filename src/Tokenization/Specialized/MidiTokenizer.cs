@@ -160,10 +160,10 @@ namespace AiDotNet.Tokenization.Specialized
 
             var tokens = new List<string>();
             var events = text.Split(new[] { '\n', ';' }, StringSplitOptions.RemoveEmptyEntries);
+            var eventParts = events.Select(e => e.Trim().Split(':'));
 
-            foreach (var eventStr in events)
+            foreach (var parts in eventParts)
             {
-                var parts = eventStr.Trim().Split(':');
                 if (parts.Length == 0) continue;
 
                 var eventType = parts[0].ToUpperInvariant();
