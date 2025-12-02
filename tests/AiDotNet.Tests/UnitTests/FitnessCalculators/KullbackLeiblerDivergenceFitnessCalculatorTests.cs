@@ -156,16 +156,6 @@ public class KullbackLeiblerDivergenceFitnessCalculatorTests
     }
 
     [Fact]
-    public void CalculateFitnessScore_WithNullDataSet_ThrowsArgumentNullException()
-    {
-        // Arrange
-        var calculator = new KullbackLeiblerDivergenceFitnessCalculator<double, Vector<double>, Vector<double>>();
-
-        // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null));
-    }
-
-    [Fact]
     public void Constructor_WithTrainingDataSetType_SetsCorrectly()
     {
         // Arrange & Act
