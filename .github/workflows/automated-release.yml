@@ -233,13 +233,14 @@ jobs:
       - name: Run tests for ${{ matrix.project }}
         run: |
           # Run only net8.0 tests - Linux runners cannot execute .NET Framework
-          dotnet test ${{ matrix.project }} \
+          dotnet test "${{ matrix.project }}" \
             -c Release \
             --no-build \
             --framework net8.0 \
-            --collect:"XPlat Code Coverage" \
+            --collect "XPlat Code Coverage" \
             --results-directory ./TestResults \
             --logger "trx;LogFileName=test-results.trx"
+        shell: bash
 
       - name: Upload test results
         if: always()
