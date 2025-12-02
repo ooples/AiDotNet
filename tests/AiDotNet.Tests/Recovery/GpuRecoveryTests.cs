@@ -28,7 +28,13 @@ namespace AiDotNet.Tests.Recovery;
 /// <code>
 /// dotnet test --filter "FullyQualifiedName~GpuRecoveryTests"
 /// </code>
+///
+/// <para><b>CI Quarantine:</b></para>
+/// This test class is quarantined from CI using [Trait("Category", "GPU")].
+/// GPU tests require physical GPU hardware which is not available in CI runners.
+/// Run locally with: dotnet test --filter "Category=GPU"
 /// </remarks>
+[Trait("Category", "GPU")]
 public class GpuRecoveryTests
 {
     [Fact(DisplayName = "GPU Recovery: Health Diagnostics Available")]
