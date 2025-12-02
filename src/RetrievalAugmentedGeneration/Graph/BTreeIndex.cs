@@ -302,12 +302,18 @@ public class BTreeIndex : IDisposable
         if (_disposed)
             return;
 
-        if (disposing)
+        try
         {
-            // Flush managed resources
-            Flush();
+            if (disposing)
+            {
+                // Flush managed resources
+                Flush();
+            }
         }
-
-        _disposed = true;
+        finally
+        {
+            // Ensure _disposed is set even if Flush throws
+            _disposed = true;
+        }
     }
 }
