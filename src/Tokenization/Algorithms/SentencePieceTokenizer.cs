@@ -199,9 +199,11 @@ namespace AiDotNet.Tokenization.Algorithms
             {
                 if (backtrack[pos] == -1)
                 {
-                    // Fallback: use unknown token
+                    // Fallback: emit single character as unknown and continue
+                    // This ensures we don't lose characters when no valid path exists
                     tokens.Insert(0, SpecialTokens.UnkToken);
-                    break;
+                    pos--;
+                    continue;
                 }
 
                 var start = backtrack[pos];
