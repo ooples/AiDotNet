@@ -44,16 +44,12 @@ namespace AiDotNet.Tokenization.Specialized
                 return new List<string>();
 
             var phonemes = new List<string>();
+            // Regex matches word characters (\w+) or non-whitespace punctuation ([^\w\s])
+            // Whitespace is never matched, so no IsNullOrWhiteSpace check needed
             var words = Regex.Matches(text, @"(\w+|[^\w\s])").Cast<Match>().Select(m => m.Value);
 
             foreach (var word in words)
             {
-                if (string.IsNullOrWhiteSpace(word))
-                {
-                    phonemes.Add("<space>");
-                    continue;
-                }
-
                 var wordPhonemes = ConvertToPhonemes(word.ToLowerInvariant());
                 phonemes.AddRange(wordPhonemes);
                 phonemes.Add("<space>");
@@ -112,15 +108,15 @@ namespace AiDotNet.Tokenization.Specialized
                 {
                     {'a', "AE"}, {'b', "B"}, {'c', "K"}, {'d', "D"}, {'e', "EH"}, {'f', "F"},
                     {'g', "G"}, {'h', "HH"}, {'i', "IH"}, {'j', "JH"}, {'k', "K"}, {'l', "L"},
-                    {'m', "M"}, {'n', "N"}, {'o', "AA"}, {'p', "P"}, {'r', "R"}, {'s', "S"},
-                    {'t', "T"}, {'u', "AH"}, {'v', "V"}, {'w', "W"}, {'y', "Y"}, {'z', "Z"}
+                    {'m', "M"}, {'n', "N"}, {'o', "AA"}, {'p', "P"}, {'q', "K"}, {'r', "R"}, {'s', "S"},
+                    {'t', "T"}, {'u', "AH"}, {'v', "V"}, {'w', "W"}, {'x', "K S"}, {'y', "Y"}, {'z', "Z"}
                 }
                 : new Dictionary<char, string>
                 {
                     {'a', "ae"}, {'b', "b"}, {'c', "k"}, {'d', "d"}, {'e', "E"}, {'f', "f"},
                     {'g', "g"}, {'h', "h"}, {'i', "I"}, {'j', "dZ"}, {'k', "k"}, {'l', "l"},
-                    {'m', "m"}, {'n', "n"}, {'o', "A"}, {'p', "p"}, {'r', "r"}, {'s', "s"},
-                    {'t', "t"}, {'u', "V"}, {'v', "v"}, {'w', "w"}, {'y', "j"}, {'z', "z"}
+                    {'m', "m"}, {'n', "n"}, {'o', "A"}, {'p', "p"}, {'q', "k"}, {'r', "r"}, {'s', "s"},
+                    {'t', "t"}, {'u', "V"}, {'v', "v"}, {'w', "w"}, {'x', "ks"}, {'y', "j"}, {'z', "z"}
                 };
 
             return mappings.TryGetValue(char.ToLowerInvariant(c), out string? phoneme) ? phoneme ?? string.Empty : string.Empty;
