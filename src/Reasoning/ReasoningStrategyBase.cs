@@ -130,7 +130,7 @@ public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-        config ??= ReasoningConfig.Default();
+        config ??= new ReasoningConfig();
         ClearTrace();
 
         var stopwatch = Stopwatch.StartNew();

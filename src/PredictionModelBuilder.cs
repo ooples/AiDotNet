@@ -309,7 +309,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig)
-    ///     .ConfigureReasoning(ReasoningConfig.Default())
+    ///     .ConfigureReasoning()
     ///     .BuildAsync(data, labels);
     ///
     /// // Use reasoning on the trained model
@@ -323,7 +323,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureReasoning(ReasoningConfig? config = null)
     {
-        _reasoningConfig = config ?? ReasoningConfig.Default();
+        _reasoningConfig = config ?? new ReasoningConfig();
         return this;
     }
 

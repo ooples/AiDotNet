@@ -1047,7 +1047,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig)
-    ///     .ConfigureReasoning(ReasoningConfig.Default())
+    ///     .ConfigureReasoning()
     ///     .BuildAsync(data, labels);
     ///
     /// // Use reasoning on the trained model

@@ -170,7 +170,7 @@ public class LogicalReasoner<T>
         bool useTreeSearch = false,
         CancellationToken cancellationToken = default)
     {
-        config ??= ReasoningConfig.Default();
+        config ??= new ReasoningConfig();
 
         // Build logic-specific prompt
         string enhancedProblem = BuildLogicalPrompt(problem, logicType);
@@ -209,7 +209,7 @@ public class LogicalReasoner<T>
         ReasoningConfig? config = null,
         CancellationToken cancellationToken = default)
     {
-        config ??= ReasoningConfig.Default();
+        config ??= new ReasoningConfig();
         config.ExplorationDepth = Math.Max(config.ExplorationDepth, 5); // Deeper for puzzles
 
         string prompt = $@"Logic Puzzle:
@@ -241,7 +241,7 @@ Show your reasoning clearly at each step:";
         ReasoningConfig? config = null,
         CancellationToken cancellationToken = default)
     {
-        config ??= ReasoningConfig.Default();
+        config ??= new ReasoningConfig();
 
         string premisesStr = string.Join("\n", premises.Select((p, i) => $"Premise {i + 1}: {p}"));
 
@@ -274,7 +274,7 @@ Provide a detailed logical analysis:";
         ReasoningConfig? config = null,
         CancellationToken cancellationToken = default)
     {
-        config ??= ReasoningConfig.Default();
+        config ??= new ReasoningConfig();
 
         string prompt = $@"Fallacy Detection:
 
@@ -314,7 +314,7 @@ Provide your analysis:";
         ReasoningConfig? config = null,
         CancellationToken cancellationToken = default)
     {
-        config ??= ReasoningConfig.Default();
+        config ??= new ReasoningConfig();
 
         string axiomsStr = axioms != null && axioms.Count > 0
             ? "Given axioms:\n" + string.Join("\n", axioms.Select((a, i) => $"{i + 1}. {a}"))
@@ -348,7 +348,7 @@ Provide a rigorous proof:";
         ReasoningConfig? config = null,
         CancellationToken cancellationToken = default)
     {
-        config ??= ReasoningConfig.Default();
+        config ??= new ReasoningConfig();
 
         string prompt = $@"Logical Relationship Analysis:
 

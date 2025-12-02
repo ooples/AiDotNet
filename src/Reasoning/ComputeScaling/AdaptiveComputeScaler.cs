@@ -54,7 +54,7 @@ internal class AdaptiveComputeScaler
     /// </remarks>
     public AdaptiveComputeScaler(ReasoningConfig? baselineConfig = null, double maxScalingFactor = 5.0)
     {
-        _baselineConfig = baselineConfig ?? ReasoningConfig.Default();
+        _baselineConfig = baselineConfig ?? new ReasoningConfig();
         _maxScalingFactor = Math.Max(2.0, maxScalingFactor);
     }
 

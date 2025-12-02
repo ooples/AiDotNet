@@ -42,7 +42,7 @@ namespace AiDotNet.Reasoning;
 /// var result = await reasoner.SolveAsync(
 ///     "Design a sustainable transportation system for a city of 1 million people",
 ///     ReasoningMode.TreeOfThoughts,
-///     ReasoningConfig.Thorough()
+///     new ReasoningConfig { ExplorationDepth = 5, EnableVerification = true }
 /// );
 /// </code>
 /// </para>
@@ -83,7 +83,7 @@ internal class Reasoner<T> : IReasoner<T>
         if (string.IsNullOrWhiteSpace(problem))
             throw new ArgumentException("Problem cannot be null or empty", nameof(problem));
 
-        config ??= ReasoningConfig.Default();
+        config ??= new ReasoningConfig();
 
         // Select the appropriate strategy based on mode
         var strategy = CreateStrategy(mode, config);
@@ -97,10 +97,22 @@ internal class Reasoner<T> : IReasoner<T>
         string problem,
         CancellationToken cancellationToken = default)
     {
+        // Fast config: minimal steps and no verification
+        var fastConfig = new ReasoningConfig
+        {
+            MaxSteps = 5,
+            ExplorationDepth = 1,
+            NumSamples = 1,
+            BeamWidth = 2,
+            EnableVerification = false,
+            EnableTestTimeCompute = false,
+            MaxReasoningTimeSeconds = 10
+        };
+
         var result = await SolveAsync(
             problem,
             ReasoningMode.ChainOfThought,
-            ReasoningConfig.Fast(),
+            fastConfig,
             cancellationToken);
 
         return result.FinalAnswer;
@@ -111,10 +123,30 @@ internal class Reasoner<T> : IReasoner<T>
         string problem,
         CancellationToken cancellationToken = default)
     {
+        // Thorough config: extensive exploration and verification
+        var thoroughConfig = new ReasoningConfig
+        {
+            MaxSteps = 20,
+            ExplorationDepth = 5,
+            BranchingFactor = 5,
+            NumSamples = 10,
+            BeamWidth = 10,
+            Temperature = 0.5,
+            EnableVerification = true,
+            EnableSelfRefinement = true,
+            MaxRefinementAttempts = 3,
+            EnableExternalVerification = true,
+            EnableTestTimeCompute = true,
+            ComputeScalingFactor = 3.0,
+            EnableContradictionDetection = true,
+            EnableDiversitySampling = true,
+            MaxReasoningTimeSeconds = 300
+        };
+
         return await SolveAsync(
             problem,
             ReasoningMode.TreeOfThoughts,
-            ReasoningConfig.Thorough(),
+            thoroughConfig,
             cancellationToken);
     }
 

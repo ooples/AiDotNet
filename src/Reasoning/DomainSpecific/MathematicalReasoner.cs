@@ -93,7 +93,7 @@ public class MathematicalReasoner<T>
         if (string.IsNullOrWhiteSpace(problem))
             throw new ArgumentException("Problem cannot be null or empty", nameof(problem));
 
-        config ??= ReasoningConfig.Default();
+        config ??= new ReasoningConfig();
 
         // Configure for mathematical reasoning
         config.EnableExternalVerification = useVerification;

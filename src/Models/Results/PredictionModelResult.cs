@@ -2287,7 +2287,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         // Use stored config if none provided
-        var effectiveConfig = config ?? ReasoningConfig ?? ReasoningConfig.Default();
+        var effectiveConfig = config ?? ReasoningConfig ?? new ReasoningConfig();
 
         // Create chat model from agent config
         var chatModel = CreateChatModelFromAgentConfig();

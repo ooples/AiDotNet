@@ -43,7 +43,7 @@ namespace AiDotNet.Reasoning.Strategies;
 ///
 /// var result = await strategy.ReasonAsync(
 ///     "If a train travels 60 mph for 2.5 hours, how far does it go?",
-///     ReasoningConfig.Default()
+///     new ReasoningConfig()
 /// );
 ///
 /// Console.WriteLine(result.FinalAnswer); // "150 miles"
