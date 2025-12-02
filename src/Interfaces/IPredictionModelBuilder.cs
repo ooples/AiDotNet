@@ -945,6 +945,47 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(string? modelNameOrPath = null, TokenizationConfig? config = null);
 
     /// <summary>
+    /// Asynchronously configures the tokenizer by loading a pretrained model from HuggingFace Hub.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the async version of ConfigureTokenizerFromPretrained.
+    /// Use this when you want to avoid blocking the thread while downloading tokenizer files
+    /// from HuggingFace Hub. This is especially important in UI applications or web servers.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Async configuration
+    /// await builder.ConfigureTokenizerFromPretrainedAsync(PretrainedTokenizerModel.BertBaseUncased);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The pretrained tokenizer model to use.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <returns>A task that completes with the builder instance for method chaining.</returns>
+    Task<IPredictionModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(PretrainedTokenizerModel model = PretrainedTokenizerModel.BertBaseUncased, TokenizationConfig? config = null);
+
+    /// <summary>
+    /// Asynchronously configures the tokenizer by loading a pretrained model from HuggingFace Hub using a model name or path.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the async version that accepts a custom model name or path.
+    /// Use this when loading custom or community models without blocking the thread.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Async configuration with custom model
+    /// await builder.ConfigureTokenizerFromPretrainedAsync("sentence-transformers/all-MiniLM-L6-v2");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="modelNameOrPath">The HuggingFace model name or local path. Defaults to "bert-base-uncased" if not specified.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <returns>A task that completes with the builder instance for method chaining.</returns>
+    Task<IPredictionModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(string? modelNameOrPath = null, TokenizationConfig? config = null);
+
+    /// <summary>
     /// Enables GPU acceleration for training and inference with optional configuration.
     /// </summary>
     /// <remarks>
