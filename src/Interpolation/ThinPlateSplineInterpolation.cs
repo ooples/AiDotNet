@@ -236,7 +236,7 @@ public class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
     /// <para>
     /// <b>For Beginners:</b> This function is a mathematical formula that determines how the
     /// influence of each data point spreads out in space. For Thin Plate Splines,
-    /// this function is r² × log(r), where r is the distance from a point.
+    /// this function is rÂ² Ã— log(r), where r is the distance from a point.
     /// </para>
     /// <para>
     /// Think of it as defining how the "bending" of our imaginary metal plate works

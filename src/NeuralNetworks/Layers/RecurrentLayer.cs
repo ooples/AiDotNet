@@ -257,7 +257,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// 3. The outputs at each time step become the overall output of the layer
     /// 
     /// The formula at each step is approximately:
-    /// new_memory = activation(input_weights � current_input + hidden_weights � previous_memory + bias)
+    /// new_memory = activation(input_weights × current_input + hidden_weights × previous_memory + bias)
     /// 
     /// This step-by-step processing allows the layer to build up an understanding of the entire sequence.
     /// The layer saves all inputs, hidden states, and outputs for later use during training.

@@ -104,11 +104,11 @@ public class ReshapeLayer<T> : LayerBase<T>
     /// - outputShape: The desired organization of your data (not including the batch dimension)
     /// 
     /// For example:
-    /// - If inputShape is [28, 28] (like a 28�28 image)
+    /// - If inputShape is [28, 28] (like a 28×28 image)
     /// - You could set outputShape to [784] to flatten it into a single vector
     /// 
     /// The constructor checks that the total number of elements stays the same:
-    /// - For the example above, 28�28 = 784, so the shapes are compatible
+    /// - For the example above, 28×28 = 784, so the shapes are compatible
     /// - If the total elements don't match, you'll get an error
     /// 
     /// The batch dimension (first dimension) is handled automatically and not included in these shapes.

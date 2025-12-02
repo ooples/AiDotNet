@@ -97,7 +97,7 @@ public class SimpleRegression<T> : RegressionBase<T>
     /// 4. Once found, this line gives you the formula to predict new values
     /// 
     /// For example, after training on house data, the model might learn that:
-    /// price = $100,000 + ($100 × square_footage)
+    /// price = $100,000 + ($100 Ã— square_footage)
     /// This means a house has a base price of $100,000 plus $100 for each square foot.
     /// </para>
     /// </remarks>

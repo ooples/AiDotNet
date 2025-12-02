@@ -142,7 +142,7 @@ public static class MatrixSolutionHelper
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The normal equations approach transforms the original system Ax = b
-    /// into A^T稟穢 = A^T穊 (where A^T is the transpose of A). This creates a symmetric,
+    /// into A^T路A路x = A^T路b (where A^T is the transpose of A). This creates a symmetric,
     /// positive-definite matrix that can be solved efficiently using Cholesky decomposition.
     /// This method is commonly used in linear regression and least squares problems where
     /// you're trying to find the best-fit line or curve for a set of data points.
@@ -191,7 +191,7 @@ public static class MatrixSolutionHelper
     /// <returns>The solution vector x that satisfies Ax = b.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Schur decomposition factors a matrix A into Q稵稱^H, where Q is unitary
+    /// <b>For Beginners:</b> Schur decomposition factors a matrix A into Q路T路Q^H, where Q is unitary
     /// (its inverse equals its conjugate transpose), T is upper triangular, and Q^H is the
     /// conjugate transpose of Q. This decomposition is useful for calculating eigenvalues and
     /// can be used to solve linear systems. It's particularly valuable in stability analysis

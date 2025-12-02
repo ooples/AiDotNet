@@ -83,11 +83,11 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> Kernel size is how big the "spotlight" or "magnifying glass" is.
     /// 
     /// For example:
-    /// - A kernel size of 3 means a 3�3 area (9 pixels in an image)
-    /// - A kernel size of 5 means a 5�5 area (25 pixels)
+    /// - A kernel size of 3 means a 3×3 area (9 pixels in an image)
+    /// - A kernel size of 5 means a 5×5 area (25 pixels)
     /// 
-    /// Smaller kernels (like 3�3) are good for detecting fine details.
-    /// Larger kernels (like 7�7) can see broader patterns but may miss small details.
+    /// Smaller kernels (like 3×3) are good for detecting fine details.
+    /// Larger kernels (like 7×7) can see broader patterns but may miss small details.
     /// </para>
     /// </remarks>
     public int KernelSize { get; private set; }
@@ -433,7 +433,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// - Pass all three dimensions in a single array
     /// - Specify the other settings in a more intuitive way
     /// 
-    /// For example, if your input is 3-channel images that are 28�28 pixels:
+    /// For example, if your input is 3-channel images that are 28×28 pixels:
     /// - You would use inputShape = [3, 28, 28]
     /// - Rather than listing all dimensions separately
     /// 

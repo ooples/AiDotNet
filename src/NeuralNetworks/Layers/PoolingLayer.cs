@@ -16,14 +16,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para><b>For Beginners:</b> This layer helps reduce the size of your data while keeping the important information.
 /// 
 /// Think of it like creating a thumbnail of an image:
-/// - The pooling layer divides your input into small regions (e.g., 2�2 squares)
+/// - The pooling layer divides your input into small regions (e.g., 2×2 squares)
 /// - For each region, it either:
 ///   - Takes the maximum value (max pooling): good for detecting features like edges
 ///   - Takes the average value (average pooling): good for preserving background information
 /// - This creates a smaller output with fewer pixels but retains the important features
 /// 
-/// For example, using 2�2 max pooling on a 4�4 image would give you a 2�2 output,
-/// where each value is the maximum from its corresponding 2�2 region in the input.
+/// For example, using 2×2 max pooling on a 4×4 image would give you a 2×2 output,
+/// where each value is the maximum from its corresponding 2×2 region in the input.
 /// 
 /// Pooling helps make your neural network:
 /// - More efficient (by reducing the amount of data)
@@ -43,13 +43,13 @@ public class PoolingLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This property indicates the size of the square window used for pooling operations.
-    /// For example, a pool size of 2 means that pooling is performed on 2�2 regions of the input.
+    /// For example, a pool size of 2 means that pooling is performed on 2×2 regions of the input.
     /// </para>
     /// <para><b>For Beginners:</b> This property defines how large each pooling region is.
     /// 
     /// For example:
-    /// - PoolSize = 2 means each pooling region is 2�2 pixels
-    /// - PoolSize = 3 means each pooling region is 3�3 pixels
+    /// - PoolSize = 2 means each pooling region is 2×2 pixels
+    /// - PoolSize = 3 means each pooling region is 3×3 pixels
     /// 
     /// Larger pool sizes reduce the output dimensions more dramatically but might lose more detail.
     /// Common values are 2 and 3.
@@ -185,13 +185,13 @@ public class PoolingLayer<T> : LayerBase<T>
     /// - inputDepth: The number of channels in your input (e.g., 3 for RGB images)
     /// - inputHeight: The height of your input
     /// - inputWidth: The width of your input
-    /// - poolSize: The size of the pooling regions (e.g., 2 for 2�2 regions)
+    /// - poolSize: The size of the pooling regions (e.g., 2 for 2×2 regions)
     /// - stride: How far to move the pooling window each step
     /// - type: Whether to use max pooling or average pooling (defaults to max)
     /// 
     /// The constructor automatically calculates what the output dimensions will be
-    /// based on these parameters. For example, a 28�28 input with pool size 2 and
-    /// stride 2 would produce a 14�14 output.
+    /// based on these parameters. For example, a 28×28 input with pool size 2 and
+    /// stride 2 would produce a 14×14 output.
     /// </para>
     /// </remarks>
     public PoolingLayer(int inputDepth, int inputHeight, int inputWidth, int poolSize, int stride, PoolingType type = PoolingType.Max)
@@ -362,7 +362,7 @@ public class PoolingLayer<T> : LayerBase<T>
     ///
     /// For average pooling:
     /// - The gradient is divided equally among all positions in the pooling region
-    /// - Each position gets (output gradient) / (pool size � pool size)
+    /// - Each position gets (output gradient) / (pool size × pool size)
     /// - This is because each input position contributes equally to the average
     ///
     /// This approach follows the chain rule of calculus for the respective pooling operations.

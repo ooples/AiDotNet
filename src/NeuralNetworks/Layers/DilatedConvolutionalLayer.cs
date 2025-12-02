@@ -13,11 +13,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para><b>For Beginners:</b> A dilated convolutional layer is like looking at an image with a special magnifying glass.
 /// 
 /// Regular convolutions look at pixels that are right next to each other, like this:
-/// - Looking at a 3�3 area of an image (9 adjacent pixels)
+/// - Looking at a 3×3 area of an image (9 adjacent pixels)
 /// 
 /// Dilated convolutions skip some pixels, creating gaps, like this:
 /// - With dilation=2, it looks at pixels with a gap of 1 pixel between them
-/// - The 3�3 filter now covers a 5�5 area (still using only 9 values)
+/// - The 3×3 filter now covers a 5×5 area (still using only 9 values)
 /// 
 /// Benefits:
 /// - Sees a larger area without needing more computing power
@@ -79,16 +79,16 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This field represents the size of the square filter used in the convolution operation.
-    /// Common kernel sizes are 3�3, 5�5, and 7�7.
+    /// Common kernel sizes are 3×3, 5×5, and 7×7.
     /// </para>
     /// <para><b>For Beginners:</b> This is the size of the "window" that looks at the input data.
     /// 
     /// The kernel size determines how much local context is considered:
-    /// - Small kernels (3�3): Look at very local patterns
-    /// - Larger kernels (7�7): Look at wider patterns
+    /// - Small kernels (3×3): Look at very local patterns
+    /// - Larger kernels (7×7): Look at wider patterns
     /// 
-    /// For example, with a 3�3 kernel, each output value is calculated by looking at 
-    /// a 3�3 grid of input values (accounting for dilation).
+    /// For example, with a 3×3 kernel, each output value is calculated by looking at 
+    /// a 3×3 grid of input values (accounting for dilation).
     /// </para>
     /// </remarks>
     private readonly int _kernelSize;
@@ -113,7 +113,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// - Reduce computation time
     /// - Can lose some information
     /// 
-    /// For example, with stride=2, a 100�100 image would become roughly 50�50 after the convolution.
+    /// For example, with stride=2, a 100×100 image would become roughly 50×50 after the convolution.
     /// </para>
     /// </remarks>
     private readonly int _stride;
@@ -134,7 +134,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// - With padding, the output can stay the same size as the input
     /// - It helps the network pay attention to features at the edges
     /// 
-    /// For example, with padding=1 and a 3�3 kernel, a single row of zeros is added 
+    /// For example, with padding=1 and a 3×3 kernel, a single row of zeros is added 
     /// around the entire input before applying the convolution.
     /// </para>
     /// </remarks>
@@ -161,7 +161,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// - Captures long-range dependencies
     /// - Efficient way to increase the "field of view"
     /// 
-    /// For example, a 3�3 filter with dilation=2 would cover a 5�5 area,
+    /// For example, a 3×3 filter with dilation=2 would cover a 5×5 area,
     /// but still only use 9 values from that area.
     /// </para>
     /// </remarks>
@@ -344,12 +344,12 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// The layer automatically initializes the filters with small random values
     /// that are carefully scaled to work well with training.
     /// 
-    /// Example: For processing 32�32 color images with 16 filters of size 3�3 and dilation of 2:
+    /// Example: For processing 32×32 color images with 16 filters of size 3×3 and dilation of 2:
     /// ```csharp
     /// var convLayer = new DilatedConvolutionalLayer<float>(
     ///     inputDepth: 3,           // RGB input
     ///     outputDepth: 16,         // 16 different feature detectors
-    ///     kernelSize: 3,           // 3�3 filters
+    ///     kernelSize: 3,           // 3×3 filters
     ///     inputHeight: 32,         // Image height
     ///     inputWidth: 32,          // Image width
     ///     dilation: 2,             // Look at every other pixel
@@ -963,7 +963,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// - How big the stride is
     /// 
     /// For example:
-    /// - With a 32�32 input, 3�3 kernel, stride of 1, padding of 1, and dilation of 1:
+    /// - With a 32×32 input, 3×3 kernel, stride of 1, padding of 1, and dilation of 1:
     ///   Output size = (32 + 2*1 - 1*(3-1) - 1)/1 + 1 = 32
     ///   (The output stays the same size as the input)
     /// 

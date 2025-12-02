@@ -1,19 +1,19 @@
 namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
-/// Implements a Matérn Radial Basis Function (RBF) that provides a flexible family of kernels.
+/// Implements a MatÃ©rn Radial Basis Function (RBF) that provides a flexible family of kernels.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
-/// This class implements the Matérn family of radial basis functions, which are defined using modified Bessel functions
-/// and provide a flexible set of kernels with varying degrees of smoothness. The Matérn RBF is defined as:
-/// f(r) = [2^(1-?)/G(?)] × (v(2?)r/l)^? × K_?(v(2?)r/l)
+/// This class implements the MatÃ©rn family of radial basis functions, which are defined using modified Bessel functions
+/// and provide a flexible set of kernels with varying degrees of smoothness. The MatÃ©rn RBF is defined as:
+/// f(r) = [2^(1-?)/G(?)] Ã— (v(2?)r/l)^? Ã— K_?(v(2?)r/l)
 /// where r is the radial distance, ? (nu) is a smoothness parameter, l is the length scale parameter,
 /// G is the Gamma function, and K_? is the modified Bessel function of the second kind of order ?.
 /// </para>
 /// <para>
-/// The Matérn function is commonly used in spatial statistics, machine learning, and geostatistics.
+/// The MatÃ©rn function is commonly used in spatial statistics, machine learning, and geostatistics.
 /// It generalizes many other RBFs; for example, when ? ? 8, it becomes the Gaussian RBF, and
 /// when ? = 0.5, it becomes the exponential RBF. Special half-integer values of ? (0.5, 1.5, 2.5)
 /// result in simpler forms that can be computed without Bessel functions.
@@ -21,7 +21,7 @@ namespace AiDotNet.RadialBasisFunctions;
 /// <para><b>For Beginners:</b> A Radial Basis Function (RBF) is a special type of mathematical function
 /// that depends only on the distance from a center point.
 /// 
-/// The Matérn RBF is like a "Swiss Army knife" of radial basis functions - it provides a whole family
+/// The MatÃ©rn RBF is like a "Swiss Army knife" of radial basis functions - it provides a whole family
 /// of different shapes by adjusting a parameter called nu (?). This makes it very flexible for
 /// different types of data.
 /// 
@@ -33,7 +33,7 @@ namespace AiDotNet.RadialBasisFunctions;
 /// When nu = 1.5, the function is smoother and decreases more gradually.
 /// As nu increases, the function becomes even smoother, approaching a bell curve shape.
 /// 
-/// The Matérn RBF is popular in machine learning and statistics because you can adjust its
+/// The MatÃ©rn RBF is popular in machine learning and statistics because you can adjust its
 /// smoothness to match the characteristics of your data.
 /// </para>
 /// </remarks>
@@ -61,12 +61,12 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
     /// <param name="lengthScale">The length scale parameter, defaults to 1.0.</param>
     /// <remarks>
     /// <para>
-    /// The constructor initializes the Matérn Radial Basis Function with specified nu and length scale parameters.
+    /// The constructor initializes the MatÃ©rn Radial Basis Function with specified nu and length scale parameters.
     /// The nu parameter controls the smoothness of the function, with higher values giving smoother functions.
     /// Common values for nu are 0.5, 1.5, and 2.5. The length scale parameter controls how quickly the 
     /// function decreases with distance.
     /// </para>
-    /// <para><b>For Beginners:</b> This creates a new Matérn RBF with specific smoothness and width settings.
+    /// <para><b>For Beginners:</b> This creates a new MatÃ©rn RBF with specific smoothness and width settings.
     /// 
     /// The two parameters you can adjust are:
     /// - nu: Controls how smooth the function is. Smaller values (like 0.5) make it less smooth, while
@@ -91,18 +91,18 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
     }
 
     /// <summary>
-    /// Computes the value of the Matérn Radial Basis Function for a given radius.
+    /// Computes the value of the MatÃ©rn Radial Basis Function for a given radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
     /// <returns>The computed function value.</returns>
     /// <remarks>
     /// <para>
-    /// This method calculates the value of the Matérn RBF for a given radius r. The formula used is
-    /// f(r) = [2^(1-?)/G(?)] × (v(2?)r/l)^? × K_?(v(2?)r/l), where G is the Gamma function
+    /// This method calculates the value of the MatÃ©rn RBF for a given radius r. The formula used is
+    /// f(r) = [2^(1-?)/G(?)] Ã— (v(2?)r/l)^? Ã— K_?(v(2?)r/l), where G is the Gamma function
     /// and K_? is the modified Bessel function of the second kind of order ?.
     /// For r = 0, the function returns 1 to avoid numerical issues.
     /// </para>
-    /// <para><b>For Beginners:</b> This method computes the "height" or "value" of the Matérn function
+    /// <para><b>For Beginners:</b> This method computes the "height" or "value" of the MatÃ©rn function
     /// at a specific distance (r) from the center.
     /// 
     /// The calculation involves several steps including specialized mathematical functions like
@@ -136,13 +136,13 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
     }
 
     /// <summary>
-    /// Computes the derivative of the Matérn RBF with respect to the radius.
+    /// Computes the derivative of the MatÃ©rn RBF with respect to the radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
     /// <returns>The derivative value of the function with respect to r.</returns>
     /// <remarks>
     /// <para>
-    /// This method calculates the derivative of the Matérn RBF with respect to the radius r.
+    /// This method calculates the derivative of the MatÃ©rn RBF with respect to the radius r.
     /// The derivative has different formulations depending on the value of ?. Special cases are
     /// implemented for ? = 0.5 and ? = 1.5, which have simpler forms. For other values of ?,
     /// the derivative is computed using the general formula involving Bessel functions.
@@ -152,7 +152,7 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
     /// as you move away from the center point.
     /// 
     /// The derivative tells you the "slope" or "rate of change" of the function at a specific distance.
-    /// For the Matérn RBF:
+    /// For the MatÃ©rn RBF:
     /// - At the center point (r = 0), the derivative is zero (flat)
     /// - As you move away from the center, the function starts to decrease, so the derivative becomes negative
     /// - The exact behavior of the derivative depends on the nu parameter
@@ -252,13 +252,13 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
     }
 
     /// <summary>
-    /// Computes the derivative of the Matérn RBF with respect to the length scale parameter.
+    /// Computes the derivative of the MatÃ©rn RBF with respect to the length scale parameter.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
     /// <returns>The derivative value of the function with respect to the length scale.</returns>
     /// <remarks>
     /// <para>
-    /// This method calculates the derivative of the Matérn RBF with respect to the length scale parameter.
+    /// This method calculates the derivative of the MatÃ©rn RBF with respect to the length scale parameter.
     /// The derivative has different formulations depending on the value of ?. Special cases are
     /// implemented for ? = 0.5 and ? = 1.5, which have simpler forms. For other values of ?,
     /// the derivative is computed using the general formula involving Bessel functions.
@@ -268,7 +268,7 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
     /// if you were to adjust the length scale parameter.
     /// 
     /// This is particularly important in machine learning applications:
-    /// - When training a model with Matérn RBFs, we often need to adjust the length scale to fit the data better
+    /// - When training a model with MatÃ©rn RBFs, we often need to adjust the length scale to fit the data better
     /// - This derivative tells us exactly how changing the length scale affects the output of the function
     /// - With this information, learning algorithms can automatically find the optimal value of length scale
     /// 
@@ -303,7 +303,7 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
         double besselKnu = MathHelper.BesselK(_nu, xDouble);
         T term4 = _numOps.FromDouble(besselKnu);
         
-        // The width derivative involves d/dl[x] = -v(2?)r/l²
+        // The width derivative involves d/dl[x] = -v(2?)r/lÂ²
         T dxdl = _numOps.Negate(_numOps.Divide(x, _lengthScale));
         
         // For special case ? = 0.5, the width derivative has a simpler form

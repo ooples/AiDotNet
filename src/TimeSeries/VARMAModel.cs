@@ -304,12 +304,12 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// This method finds the best coefficients for a linear regression model using
     /// the Ordinary Least Squares (OLS) approach.
     /// 
-    /// It solves the equation: � = (X'X)?�X'y, where:
+    /// It solves the equation: λ = (X'X)⁻¹X'y, where:
     /// - X is the input matrix (lagged residuals in this case)
     /// - y is the target vector (current residuals)
-    /// - � is the vector of coefficients we're solving for
+    /// - β is the vector of coefficients we're solving for
     /// - X' is the transpose of X
-    /// - (X'X)?� is the inverse of X'X
+    /// - (X'X)⁻¹ is the inverse of X'X
     /// 
     /// The result is a set of coefficients that minimize the sum of squared errors
     /// between the model's predictions and the actual values.

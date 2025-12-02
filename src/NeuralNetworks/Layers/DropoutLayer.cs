@@ -69,7 +69,7 @@ public class DropoutLayer<T> : LayerBase<T>
     /// When some neurons are turned off:
     /// - The total signal would be weaker (reduced by the dropout percentage)
     /// - To compensate, we make the remaining neurons stronger
-    /// - If we drop 50% of neurons, we make the remaining ones 2� stronger
+    /// - If we drop 50% of neurons, we make the remaining ones 2 × stronger
     /// 
     /// The formula is simple: scale = 1 / (1 - dropout_rate)
     /// 

@@ -698,10 +698,10 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// 3. Average all these squared differences
     /// 
     /// Using the same example as before, for the first feature with mean 5.5:
-    /// - (1.0 - 5.5)� = (-4.5)� = 20.25
-    /// - (4.0 - 5.5)� = (-1.5)� = 2.25
-    /// - (7.0 - 5.5)� = (1.5)� = 2.25
-    /// - (10.0 - 5.5)� = (4.5)� = 20.25
+    /// - (1.0 - 5.5)λ = (-4.5)λ = 20.25
+    /// - (4.0 - 5.5)λ = (-1.5)λ = 2.25
+    /// - (7.0 - 5.5)λ = (1.5)λ = 2.25
+    /// - (10.0 - 5.5)λ = (4.5)λ = 20.25
     /// - Average: (20.25 + 2.25 + 2.25 + 20.25) / 4 = 11.25
     /// 
     /// The variance is used in the normalization process to scale the data to have

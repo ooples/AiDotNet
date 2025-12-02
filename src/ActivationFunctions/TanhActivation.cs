@@ -97,7 +97,7 @@ public class TanhActivation<T> : ActivationFunctionBase<T>
     /// when its input changes slightly. This is crucial during neural network training to determine
     /// how to adjust weights.
     /// 
-    /// The formula is: f'(x) = 1 - tanh�(x)
+    /// The formula is: f'(x) = 1 - tanh²(x)
     /// 
     /// Key properties of this derivative:
     /// - It's highest (equal to 1) at x = 0, where the function is steepest

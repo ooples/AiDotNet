@@ -131,7 +131,7 @@ public class MorletWavelet<T> : IWaveletFunction<T>
     /// <para>
     /// This method computes the value of the Morlet wavelet function at the given input point.
     /// The Morlet wavelet is defined as a cosine function modulated by a Gaussian envelope:
-    /// ?(x) = cos(?·x) · exp(-x²/2), where ? is the central frequency parameter.
+    /// ?(x) = cos(?Â·x) Â· exp(-xÂ²/2), where ? is the central frequency parameter.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates the height of the Morlet wavelet at a specific point.
     /// 

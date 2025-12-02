@@ -14,7 +14,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// 
 /// Think of it like multiplying numbers together in corresponding positions:
 /// - If you have two vectors [1, 2, 3] and [4, 5, 6]
-/// - The result would be [1�4, 2�5, 3�6] = [4, 10, 18]
+/// - The result would be [1×4, 2×5, 3×6] = [4, 10, 18]
 /// 
 /// This is useful for:
 /// - Controlling information flow (like gates in LSTM or GRU cells)
