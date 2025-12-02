@@ -14,6 +14,7 @@ using AiDotNet.Deployment.TensorRT;
 using AiDotNet.Deployment.Mobile.CoreML;
 using AiDotNet.Deployment.Mobile.TensorFlowLite;
 using AiDotNet.Deployment.Runtime;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Models.Results;
 
@@ -219,13 +220,25 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// relationships. When you query the model, it can traverse these relationships to find related context
     /// that pure vector similarity might miss.
     /// </para>
+    /// <para>
+    /// This property is excluded from JSON serialization because it contains runtime infrastructure
+    /// (graph store, file handles) that should be reconfigured when the model is loaded.
+    /// </para>
     /// </remarks>
+    [JsonIgnore]
     internal KnowledgeGraph<T>? KnowledgeGraph { get; private set; }
 
     /// <summary>
     /// Gets or sets the graph store backend for persistent graph storage.
     /// </summary>
     /// <value>The graph storage backend, or null if Graph RAG is not configured.</value>
+    /// <remarks>
+    /// <para>
+    /// This property is excluded from JSON serialization because it represents runtime storage
+    /// infrastructure (file handles, WAL) that must be reconfigured when the model is loaded.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
     internal IGraphStore<T>? GraphStore { get; private set; }
 
     /// <summary>
@@ -237,7 +250,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// then expands the context by traversing the knowledge graph to find related entities. This provides
     /// richer context than pure vector search alone.
     /// </para>
+    /// <para>
+    /// This property is excluded from JSON serialization because it contains references to
+    /// runtime infrastructure (knowledge graph, document store) that must be reconfigured when loaded.
+    /// </para>
     /// </remarks>
+    [JsonIgnore]
     internal HybridGraphRetriever<T>? HybridGraphRetriever { get; private set; }
 
     /// <summary>
@@ -1776,9 +1794,10 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Gets all edges (relationships) connected to a node in the knowledge graph.
     /// </summary>
     /// <param name="nodeId">The ID of the node to query.</param>
-    /// <param name="direction">The direction of edges to retrieve ("outgoing", "incoming", or "both").</param>
+    /// <param name="direction">The direction of edges to retrieve.</param>
     /// <returns>Collection of edges connected to the node.</returns>
     /// <exception cref="InvalidOperationException">Thrown when knowledge graph is not configured.</exception>
+    /// <exception cref="ArgumentException">Thrown when nodeId is null or empty.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method finds all relationships connected to an entity.
     ///
@@ -1787,7 +1806,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// - Incoming: INFLUENCED_BY→Newton
     /// </para>
     /// </remarks>
-    public IEnumerable<GraphEdge<T>> GetNodeRelationships(string nodeId, string direction = "both")
+    public IEnumerable<GraphEdge<T>> GetNodeRelationships(string nodeId, EdgeDirection direction = EdgeDirection.Both)
     {
         if (KnowledgeGraph == null)
         {
@@ -1800,12 +1819,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         var result = new List<GraphEdge<T>>();
 
-        if (direction == "outgoing" || direction == "both")
+        if (direction == EdgeDirection.Outgoing || direction == EdgeDirection.Both)
         {
             result.AddRange(KnowledgeGraph.GetOutgoingEdges(nodeId));
         }
 
-        if (direction == "incoming" || direction == "both")
+        if (direction == EdgeDirection.Incoming || direction == EdgeDirection.Both)
         {
             result.AddRange(KnowledgeGraph.GetIncomingEdges(nodeId));
         }

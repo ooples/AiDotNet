@@ -1338,6 +1338,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         KnowledgeGraph<T>? knowledgeGraph = null,
         IDocumentStore<T>? documentStore = null)
     {
+        // If all parameters are null, disable Graph RAG by clearing all related fields
+        if (graphStore == null && knowledgeGraph == null && documentStore == null)
+        {
+            _graphStore = null;
+            _knowledgeGraph = null;
+            _hybridGraphRetriever = null;
+            return this;
+        }
+
         _graphStore = graphStore;
 
         // Use provided knowledge graph or create one from the store
@@ -1349,11 +1358,21 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         {
             _knowledgeGraph = new KnowledgeGraph<T>(graphStore);
         }
+        else
+        {
+            // No knowledge graph source provided, clear the field
+            _knowledgeGraph = null;
+        }
 
-        // Create hybrid retriever if both graph and document store are available
+        // Create or clear hybrid retriever based on available components
         if (_knowledgeGraph != null && documentStore != null)
         {
             _hybridGraphRetriever = new HybridGraphRetriever<T>(_knowledgeGraph, documentStore);
+        }
+        else
+        {
+            // Clear hybrid retriever if dependencies are missing
+            _hybridGraphRetriever = null;
         }
 
         return this;

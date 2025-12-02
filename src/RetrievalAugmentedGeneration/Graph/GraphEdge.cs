@@ -113,11 +113,19 @@ public class GraphEdge<T>
     /// </summary>
     /// <typeparam name="TValue">The expected type of the property value.</typeparam>
     /// <param name="key">The property key.</param>
-    /// <returns>The property value, or default if not found.</returns>
+    /// <returns>The property value, or default if not found or conversion fails.</returns>
     /// <remarks>
+    /// <para>
     /// This method handles JSON deserialization quirks where numeric types may differ
     /// (e.g., int stored as long after JSON round-trip). It uses Convert.ChangeType
     /// for IConvertible types to handle such conversions gracefully.
+    /// </para>
+    /// <para>
+    /// The method catches and handles the following exceptions during conversion:
+    /// - InvalidCastException: When the types are incompatible
+    /// - FormatException: When the string representation is invalid
+    /// - OverflowException: When the value is outside the target type's range
+    /// </para>
     /// </remarks>
     public TValue? GetProperty<TValue>(string key)
     {
@@ -140,6 +148,10 @@ public class GraphEdge<T>
                 return default;
             }
             catch (FormatException)
+            {
+                return default;
+            }
+            catch (OverflowException)
             {
                 return default;
             }

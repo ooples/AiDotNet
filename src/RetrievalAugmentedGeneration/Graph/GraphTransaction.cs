@@ -6,16 +6,23 @@ using System.IO;
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
 /// <summary>
-/// Transaction coordinator for managing ACID transactions on graph stores.
+/// Transaction coordinator for managing transactions on graph stores with best-effort rollback.
 /// </summary>
 /// <typeparam name="T">The numeric type used for vector operations.</typeparam>
 /// <remarks>
 /// <para>
-/// This class provides transaction management with full ACID guarantees:
-/// - Atomicity: All operations succeed or all fail
-/// - Consistency: Graph remains in valid state
-/// - Isolation: Transactions don't interfere
-/// - Durability: Committed changes survive crashes (via WAL)
+/// This class provides transaction management with the following guarantees:
+/// - <b>Atomicity (Best-Effort)</b>: If an operation fails during commit, compensating rollback
+///   is attempted in reverse order. However, if an undo operation fails, it is swallowed and
+///   rollback continues with remaining operations. Full atomicity is not guaranteed.
+/// - <b>Consistency</b>: Graph validation rules are enforced during operations.
+/// - <b>Isolation</b>: Single-threaded; no concurrent transaction support.
+/// - <b>Durability</b>: When a WAL is provided, operations are logged before execution.
+///   Without a WAL, durability is not guaranteed.
+/// </para>
+/// <para>
+/// <b>Important:</b> This is a lightweight transaction implementation suitable for single-process
+/// use cases. For full ACID compliance with crash recovery, ensure a WriteAheadLog is configured.
 /// </para>
 /// <para><b>For Beginners:</b> Transactions ensure your changes are safe.
 ///
@@ -168,13 +175,22 @@ public class GraphTransaction<T> : IDisposable
     }
 
     /// <summary>
-    /// Commits the transaction, applying all operations atomically.
+    /// Commits the transaction, applying all operations with best-effort atomicity.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown if transaction not active.</exception>
     /// <remarks>
+    /// <para>
     /// If an operation fails mid-way, compensating rollback logic is executed
-    /// to undo already-applied operations in reverse order, restoring the graph
-    /// to its previous state before the transaction began.
+    /// to undo already-applied operations in reverse order. However, this is
+    /// <b>best-effort</b>: if an undo operation throws an exception, it is
+    /// caught and swallowed, and rollback continues with remaining operations.
+    /// </para>
+    /// <para>
+    /// This means that after a failed commit, the graph may be left in a
+    /// partially modified state if undo operations also fail. For production
+    /// use cases requiring strict atomicity, consider using a database-backed
+    /// graph store with native transaction support.
+    /// </para>
     /// </remarks>
     public void Commit()
     {
@@ -302,13 +318,17 @@ public class GraphTransaction<T> : IDisposable
     /// Undoes an already-applied operation (compensating action).
     /// </summary>
     /// <remarks>
+    /// <para>
     /// This method performs the reverse of each operation type:
-    /// - AddNode → RemoveNode
-    /// - AddEdge → RemoveEdge
-    /// - RemoveNode → AddNode (if node was captured before removal)
-    /// - RemoveEdge → AddEdge (if edge was captured before removal)
-    /// Note: For remove operations, the original data must be stored in the operation
-    /// for proper undo. Currently, remove undos attempt to re-add but may have incomplete data.
+    /// - AddNode → RemoveNode (using the stored node's ID)
+    /// - AddEdge → RemoveEdge (using the stored edge's ID)
+    /// - RemoveNode → AddNode (re-adds the captured original node)
+    /// - RemoveEdge → AddEdge (re-adds the captured original edge)
+    /// </para>
+    /// <para>
+    /// The original node/edge data is captured during the RecordRemoveNode/RecordRemoveEdge
+    /// operations, allowing complete restoration during undo.
+    /// </para>
     /// </remarks>
     private void UndoOperation(TransactionOperation<T> op)
     {
