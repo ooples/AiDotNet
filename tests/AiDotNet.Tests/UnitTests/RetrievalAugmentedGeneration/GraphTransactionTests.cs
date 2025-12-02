@@ -498,6 +498,13 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Assert - Nothing should be committed (Atomicity)
             // Because the commit failed, the entire transaction should be reverted
             Assert.Equal(TransactionState.Failed, txn.State);
+
+            // Verify store state was rolled back - no nodes should remain
+            // The compensating rollback should have removed alice and bob
+            Assert.Equal(0, store.NodeCount);
+            Assert.Equal(0, store.EdgeCount);
+            Assert.Null(store.GetNode("alice"));
+            Assert.Null(store.GetNode("bob"));
         }
 
         [Fact]
