@@ -24,7 +24,8 @@ public class TeacherModelFactoryTests
         // Act
         var teacher = TeacherModelFactory<double>.CreateTeacher(
             TeacherModelType.NeuralNetwork,
-            model: mockModel);
+            model: mockModel,
+            outputDimension: 5);
 
         // Assert
         Assert.NotNull(teacher);
