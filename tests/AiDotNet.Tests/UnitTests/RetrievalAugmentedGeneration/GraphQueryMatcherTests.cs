@@ -6,6 +6,14 @@ using Xunit;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 {
+    /// <summary>
+    /// Unit tests for GraphQueryMatcher.
+    /// </summary>
+    /// <remarks>
+    /// Note: xUnit creates a fresh instance of this test class for each [Fact] test method,
+    /// so the constructor runs for each test, ensuring a fresh _graph and _matcher for every test.
+    /// This provides test isolation without needing IClassFixture or explicit per-test setup.
+    /// </remarks>
     public class GraphQueryMatcherTests
     {
         private readonly KnowledgeGraph<double> _graph;
