@@ -19,6 +19,9 @@ global using AiDotNet.KnowledgeDistillation;
 global using AiDotNet.Deployment.Configuration;
 global using AiDotNet.Reasoning.Models;
 global using AiDotNet.RetrievalAugmentedGeneration.Graph;
+global using AiDotNet.Tokenization.Interfaces;
+global using AiDotNet.Tokenization.Configuration;
+global using AiDotNet.Tokenization.HuggingFace;
 
 namespace AiDotNet;
 
@@ -85,6 +88,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private ExportConfig? _exportConfig;
     private GpuAccelerationConfig? _gpuAccelerationConfig;
     private ReasoningConfig? _reasoningConfig;
+
+    // Tokenization configuration
+    private ITokenizer? _tokenizer;
+    private TokenizationConfig? _tokenizationConfig;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -628,6 +635,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             graphStore: _graphStore,
             hybridGraphRetriever: _hybridGraphRetriever);
 
+        // Attach tokenizer if configured
+        if (_tokenizer != null)
+        {
+            result.AttachTokenizer(_tokenizer, _tokenizationConfig);
+        }
+
         return Task.FromResult(result);
     }
 
@@ -984,6 +997,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _graphStore,
             _hybridGraphRetriever);
 
+        // Attach tokenizer if configured
+        if (_tokenizer != null)
+        {
+            finalResult.AttachTokenizer(_tokenizer, _tokenizationConfig);
+        }
+
         return finalResult;
     }
 
@@ -1172,6 +1191,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             graphStore: _graphStore,
             hybridGraphRetriever: _hybridGraphRetriever);
 
+        // Attach tokenizer if configured
+        if (_tokenizer != null)
+        {
+            result.AttachTokenizer(_tokenizer, _tokenizationConfig);
+        }
+
         return result;
     }
 
@@ -1283,6 +1308,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         if (_knowledgeGraph != null || _graphStore != null || _hybridGraphRetriever != null)
         {
             result.AttachGraphComponents(_knowledgeGraph, _graphStore, _hybridGraphRetriever);
+        }
+
+        // Reattach tokenizer if configured
+        if (_tokenizer != null)
+        {
+            result.AttachTokenizer(_tokenizer, _tokenizationConfig);
         }
 
         return result;
@@ -1788,6 +1819,83 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null)
     {
         _exportConfig = config;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures tokenization for text-based input processing.
+    /// </summary>
+    /// <param name="tokenizer">The tokenizer to use for text processing.</param>
+    /// <param name="config">Optional tokenization configuration. If null, default settings are used.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Tokenization is the process of breaking text into smaller pieces (tokens) that can be processed
+    /// by machine learning models. This is essential for NLP and text-based models.
+    /// </para>
+    /// <para><b>For Beginners:</b> Tokenization converts human-readable text into numbers that AI models understand.
+    ///
+    /// Different tokenization strategies include:
+    /// - BPE (Byte Pair Encoding): Used by GPT models, learns subword units from data
+    /// - WordPiece: Used by BERT, splits unknown words into known subwords
+    /// - SentencePiece: Language-independent tokenization used by many multilingual models
+    ///
+    /// Example:
+    /// <code>
+    /// // Using BPE tokenizer
+    /// var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 32000);
+    /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    ///     .ConfigureTokenizer(tokenizer)
+    ///     .ConfigureModel(new TransformerModel())
+    ///     .Build(trainingData);
+    ///
+    /// // Or use AutoTokenizer for HuggingFace models
+    /// var tokenizer = AutoTokenizer.FromPretrained("bert-base-uncased");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizer(
+        ITokenizer tokenizer,
+        TokenizationConfig? config = null)
+    {
+        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        _tokenizationConfig = config ?? new TokenizationConfig();
+        return this;
+    }
+
+    /// <summary>
+    /// Configures tokenization using a pretrained tokenizer from HuggingFace Hub.
+    /// </summary>
+    /// <param name="modelNameOrPath">The HuggingFace model name (e.g., "bert-base-uncased") or local path.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the easiest way to use industry-standard tokenizers.
+    ///
+    /// Simply specify a model name from HuggingFace Hub:
+    /// <code>
+    /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    ///     .ConfigureTokenizerFromPretrained("bert-base-uncased")
+    ///     .ConfigureModel(new BertModel())
+    ///     .Build(trainingData);
+    /// </code>
+    ///
+    /// Popular pretrained tokenizers include:
+    /// - "bert-base-uncased": BERT tokenizer for English text
+    /// - "gpt2": GPT-2 tokenizer for text generation
+    /// - "roberta-base": RoBERTa tokenizer (improved BERT)
+    /// - "t5-base": T5 tokenizer for text-to-text tasks
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(
+        string modelNameOrPath,
+        TokenizationConfig? config = null)
+    {
+        if (string.IsNullOrWhiteSpace(modelNameOrPath))
+            throw new ArgumentException("Model name or path cannot be empty", nameof(modelNameOrPath));
+
+        _tokenizer = AutoTokenizer.FromPretrained(modelNameOrPath);
+        _tokenizationConfig = config ?? new TokenizationConfig();
         return this;
     }
 

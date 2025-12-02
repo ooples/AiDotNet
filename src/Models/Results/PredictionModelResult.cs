@@ -18,6 +18,9 @@ using AiDotNet.Reasoning;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.LanguageModels;
 using AiDotNet.Enums;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Tokenization.Configuration;
+using AiDotNet.Tokenization.Models;
 
 namespace AiDotNet.Models.Results;
 
@@ -189,6 +192,32 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     /// <value>An implementation of IFairnessEvaluator&lt;T&gt; for evaluating fairness metrics, or null if not configured.</value>
     internal IFairnessEvaluator<T>? FairnessEvaluator { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the tokenizer used for text processing.
+    /// </summary>
+    /// <value>An implementation of ITokenizer for encoding/decoding text, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The tokenizer converts text into tokens (numbers) that the model can process.
+    ///
+    /// When working with text-based models:
+    /// - Text must be tokenized before being fed into the model
+    /// - The tokenizer stores the vocabulary mapping between tokens and IDs
+    /// - Use the Tokenize() method to convert text to tokens for inference
+    ///
+    /// Example usage:
+    /// <code>
+    /// var result = modelResult.Tokenize("Hello world");
+    /// // result contains token IDs, attention masks, etc.
+    /// </code>
+    /// </para>
+    /// </remarks>
+    internal ITokenizer? Tokenizer { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the tokenization configuration.
+    /// </summary>
+    internal TokenizationConfig? TokenizationConfig { get; private set; }
 
     /// <summary>
     /// Gets or sets the retriever used for RAG document retrieval during inference.
@@ -1895,6 +1924,83 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         GraphStore = graphStore;
         HybridGraphRetriever = hybridGraphRetriever;
     }
+
+    /// <summary>
+    /// Attaches tokenization components to the model result.
+    /// </summary>
+    /// <param name="tokenizer">The tokenizer to attach.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <remarks>
+    /// This method is internal and used by PredictionModelBuilder during model construction.
+    /// </remarks>
+    internal void AttachTokenizer(
+        ITokenizer? tokenizer,
+        TokenizationConfig? config = null)
+    {
+        Tokenizer = tokenizer;
+        TokenizationConfig = config;
+    }
+
+    /// <summary>
+    /// Tokenizes text using the configured tokenizer.
+    /// </summary>
+    /// <param name="text">The text to tokenize.</param>
+    /// <returns>The tokenization result containing token IDs, attention mask, etc.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no tokenizer is configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method converts your text into the format the model needs.
+    ///
+    /// Example:
+    /// <code>
+    /// var result = modelResult.Tokenize("Hello, how are you?");
+    /// // result.TokenIds contains [101, 7592, 1010, 2129, 2024, 2017, 1029, 102]
+    /// // result.AttentionMask contains [1, 1, 1, 1, 1, 1, 1, 1]
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public TokenizationResult Tokenize(string text)
+    {
+        if (Tokenizer == null)
+            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in PredictionModelBuilder.");
+
+        var options = TokenizationConfig?.ToEncodingOptions();
+        return Tokenizer.Encode(text, options);
+    }
+
+    /// <summary>
+    /// Tokenizes multiple texts in a batch.
+    /// </summary>
+    /// <param name="texts">The texts to tokenize.</param>
+    /// <returns>A list of tokenization results.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no tokenizer is configured.</exception>
+    public List<TokenizationResult> TokenizeBatch(List<string> texts)
+    {
+        if (Tokenizer == null)
+            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in PredictionModelBuilder.");
+
+        var options = TokenizationConfig?.ToEncodingOptions();
+        return Tokenizer.EncodeBatch(texts, options);
+    }
+
+    /// <summary>
+    /// Decodes token IDs back into text.
+    /// </summary>
+    /// <param name="tokenIds">The token IDs to decode.</param>
+    /// <param name="skipSpecialTokens">Whether to skip special tokens in the output.</param>
+    /// <returns>The decoded text.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no tokenizer is configured.</exception>
+    public string Detokenize(List<int> tokenIds, bool skipSpecialTokens = true)
+    {
+        if (Tokenizer == null)
+            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in PredictionModelBuilder.");
+
+        return Tokenizer.Decode(tokenIds, skipSpecialTokens);
+    }
+
+    /// <summary>
+    /// Gets whether a tokenizer is configured for this model.
+    /// </summary>
+    public bool HasTokenizer => Tokenizer != null;
 
     /// <summary>
     /// Saves the prediction model result's current state to a stream.
