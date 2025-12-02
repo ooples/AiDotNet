@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
