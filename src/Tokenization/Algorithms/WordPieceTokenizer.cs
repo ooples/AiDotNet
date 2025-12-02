@@ -79,12 +79,10 @@ namespace AiDotNet.Tokenization.Algorithms
             }
 
             // Step 3: Initialize with character vocabulary
-            var charSet = new HashSet<char>();
             foreach (var word in wordFreqs.Keys)
             {
                 foreach (var c in word)
                 {
-                    charSet.Add(c);
                     vocabulary.AddToken(c.ToString());
                 }
             }
@@ -141,9 +139,9 @@ namespace AiDotNet.Tokenization.Algorithms
             // Basic whitespace tokenization
             var words = text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
 
-            foreach (var word in words)
+            foreach (var word in words.Select(w => w.ToLowerInvariant()))
             {
-                var wordTokens = TokenizeWord(word.ToLowerInvariant());
+                var wordTokens = TokenizeWord(word);
                 outputTokens.AddRange(wordTokens);
             }
 

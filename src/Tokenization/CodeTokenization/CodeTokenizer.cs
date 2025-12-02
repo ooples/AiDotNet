@@ -159,14 +159,10 @@ namespace AiDotNet.Tokenization.CodeTokenization
             var regex = new Regex(pattern, RegexOptions.IgnorePatternWhitespace);
             var matches = regex.Matches(code);
 
-            foreach (Match match in matches)
-            {
-                var token = match.Value;
-                if (!string.IsNullOrWhiteSpace(token))
-                {
-                    tokens.Add(token.Trim());
-                }
-            }
+            tokens.AddRange(matches.Cast<Match>()
+                .Select(m => m.Value)
+                .Where(token => !string.IsNullOrWhiteSpace(token))
+                .Select(token => token.Trim()));
 
             return tokens;
         }
