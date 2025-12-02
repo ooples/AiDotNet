@@ -181,7 +181,7 @@ foreach (var result in results)
 
 ## Architecture
 
-```
+```text
 Tokenization/
 ├── Interfaces/
 │   ├── ITokenizer.cs          # Main tokenizer interface

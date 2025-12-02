@@ -103,9 +103,9 @@ namespace AiDotNet.Tokenization.Algorithms
 
             // Build initial vocabulary from substrings
             var substringCounts = new Dictionary<string, int>();
-            foreach (var text in corpusList)
+            var normalizedTexts = corpusList.Select(text => text.Replace(" ", "\u2581"));
+            foreach (var normalized in normalizedTexts)
             {
-                var normalized = text.Replace(" ", "\u2581");
                 for (int i = 0; i < normalized.Length; i++)
                 {
                     for (int len = 1; len <= Math.Min(16, normalized.Length - i); len++)
@@ -126,6 +126,9 @@ namespace AiDotNet.Tokenization.Algorithms
 
             // Convert counts to log probabilities
             double total = topSubstrings.Values.Sum();
+            if (total < double.Epsilon)
+                throw new InvalidOperationException("Cannot compute log probabilities: total count is zero.");
+
             var tokenScores = topSubstrings.ToDictionary(
                 kvp => kvp.Key,
                 kvp => Math.Log(kvp.Value / total));
