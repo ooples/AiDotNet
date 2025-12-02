@@ -10,6 +10,12 @@ namespace AiDotNet.Tests.IntegrationTests;
 /// Integration tests for end-to-end JIT compilation workflow.
 /// Tests the full pipeline: PredictionModelBuilder -> JIT compilation -> PredictionModelResult.Predict()
 /// </summary>
+/// <remarks>
+/// These tests are quarantined because they trigger GPU initialization which can fail
+/// on machines without proper GPU support or drivers. The tests should only run on
+/// systems with compatible GPU hardware.
+/// </remarks>
+[Trait("Category", "GPU")]
 public class JitCompilationIntegrationTests
 {
     /// <summary>
@@ -19,16 +25,22 @@ public class JitCompilationIntegrationTests
     public async Task SimpleRegression_WithJitEnabled_ProducesSameResultsAsWithoutJit()
     {
         // Arrange: Create training data for simple linear regression (y = 2x + 3)
+        // Need at least 10 samples to ensure non-empty validation set (default 15% validation split)
         var xData = new Matrix<float>(new float[,]
         {
             { 1.0f },
             { 2.0f },
             { 3.0f },
             { 4.0f },
-            { 5.0f }
+            { 5.0f },
+            { 6.0f },
+            { 7.0f },
+            { 8.0f },
+            { 9.0f },
+            { 10.0f }
         });
 
-        var yData = new Vector<float>(new float[] { 5.0f, 7.0f, 9.0f, 11.0f, 13.0f });
+        var yData = new Vector<float>(new float[] { 5.0f, 7.0f, 9.0f, 11.0f, 13.0f, 15.0f, 17.0f, 19.0f, 21.0f, 23.0f });
 
         // Train model WITHOUT JIT
         var modelWithoutJit = new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
@@ -150,14 +162,22 @@ public class JitCompilationIntegrationTests
     public async Task SimpleRegression_JitCompilationFails_FallsBackGracefully()
     {
         // Arrange: Create training data
+        // Need at least 10 samples to ensure non-empty validation set (default 15% validation split)
         var xData = new Matrix<float>(new float[,]
         {
             { 1.0f },
             { 2.0f },
-            { 3.0f }
+            { 3.0f },
+            { 4.0f },
+            { 5.0f },
+            { 6.0f },
+            { 7.0f },
+            { 8.0f },
+            { 9.0f },
+            { 10.0f }
         });
 
-        var yData = new Vector<float>(new float[] { 5.0f, 7.0f, 9.0f });
+        var yData = new Vector<float>(new float[] { 5.0f, 7.0f, 9.0f, 11.0f, 13.0f, 15.0f, 17.0f, 19.0f, 21.0f, 23.0f });
 
         // Configure JIT with ThrowOnFailure = false (graceful fallback)
         var model = new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
@@ -186,8 +206,13 @@ public class JitCompilationIntegrationTests
     public async Task SimpleRegression_WithJitRequired_BuildsSuccessfully()
     {
         // Arrange: Create training data
-        var xData = new Matrix<float>(new float[,] { { 1.0f }, { 2.0f }, { 3.0f } });
-        var yData = new Vector<float>(new float[] { 5.0f, 7.0f, 9.0f });
+        // Need at least 10 samples to ensure non-empty validation set (default 15% validation split)
+        var xData = new Matrix<float>(new float[,]
+        {
+            { 1.0f }, { 2.0f }, { 3.0f }, { 4.0f }, { 5.0f },
+            { 6.0f }, { 7.0f }, { 8.0f }, { 9.0f }, { 10.0f }
+        });
+        var yData = new Vector<float>(new float[] { 5.0f, 7.0f, 9.0f, 11.0f, 13.0f, 15.0f, 17.0f, 19.0f, 21.0f, 23.0f });
 
         var model = new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
             .ConfigureModel(new SimpleRegression<float>())
@@ -214,13 +239,19 @@ public class JitCompilationIntegrationTests
     public async Task SimpleRegression_MultipleFeatures_JitCompilationWorks()
     {
         // Arrange: Create dataset with multiple features
+        // Need at least 10 samples to ensure non-empty validation set (default 15% validation split)
         var xData = new Matrix<float>(new float[,]
         {
             { 1.0f, 2.0f, 3.0f },
             { 2.0f, 3.0f, 4.0f },
             { 3.0f, 4.0f, 5.0f },
             { 4.0f, 5.0f, 6.0f },
-            { 5.0f, 6.0f, 7.0f }
+            { 5.0f, 6.0f, 7.0f },
+            { 6.0f, 7.0f, 8.0f },
+            { 7.0f, 8.0f, 9.0f },
+            { 8.0f, 9.0f, 10.0f },
+            { 9.0f, 10.0f, 11.0f },
+            { 10.0f, 11.0f, 12.0f }
         });
 
         // y = x1 + 2*x2 + 3*x3 + noise
@@ -230,7 +261,12 @@ public class JitCompilationIntegrationTests
             20.0f,  // 2 + 2*3 + 3*4 = 20
             26.0f,  // 3 + 2*4 + 3*5 = 26
             32.0f,  // 4 + 2*5 + 3*6 = 32
-            38.0f   // 5 + 2*6 + 3*7 = 38
+            38.0f,  // 5 + 2*6 + 3*7 = 38
+            44.0f,  // 6 + 2*7 + 3*8 = 44
+            50.0f,  // 7 + 2*8 + 3*9 = 50
+            56.0f,  // 8 + 2*9 + 3*10 = 56
+            62.0f,  // 9 + 2*10 + 3*11 = 62
+            68.0f   // 10 + 2*11 + 3*12 = 68
         });
 
         // Train with JIT
