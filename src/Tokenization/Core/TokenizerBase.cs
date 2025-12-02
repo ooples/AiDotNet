@@ -103,6 +103,11 @@ namespace AiDotNet.Tokenization.Core
                 result.TokenTypeIds = Enumerable.Repeat(0, tokenIds.Count).ToList();
             }
 
+            if (options.ReturnPositionIds)
+            {
+                result.PositionIds = Enumerable.Range(0, tokenIds.Count).ToList();
+            }
+
             return result;
         }
 
