@@ -79,13 +79,8 @@ public class WordPieceTokenizerTests
         // Assert
         Assert.NotNull(tokens);
         // WordPiece uses ## for continuation tokens
-        var hasSubwords = tokens.Count > 1;
-        if (hasSubwords)
-        {
-            // Some tokens should have ## prefix (continuation)
-            var continuationTokens = tokens.Skip(1).Where(t => t.StartsWith("##")).ToList();
-            // May or may not have continuation depending on vocabulary
-        }
+        // May or may not have continuation depending on vocabulary
+        Assert.True(tokens.Count > 0, "Should produce at least one token");
     }
 
     [Fact]

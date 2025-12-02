@@ -309,7 +309,6 @@ public class BpeTokenizerTests
 
         // Assert
         // Normalize whitespace for comparison
-        var normalizedOriginal = originalText.ToLowerInvariant().Trim();
         var normalizedDecoded = decoded.ToLowerInvariant().Trim();
 
         // Should contain the core content
