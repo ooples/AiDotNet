@@ -158,10 +158,14 @@ namespace AiDotNet.Tokenization.CodeTokenization
             var tokens = new List<string>();
 
             // Pattern for code tokenization (strings, comments, identifiers, operators, etc.)
+            // Supports multiple languages: C#, Python, JavaScript, etc.
             var pattern = @"
-                ""(?:\\.|[^""\\])*""|           # Double-quoted strings
+                @""(?:""""|[^""])*""|           # C# verbatim strings (@""..."")
+                \$""(?:\\.|[^""\\])*""|         # C# interpolated strings ($""..."")
+                [rf]?""(?:\\.|[^""\\])*""|      # Python raw/f-strings and double-quoted strings
                 '(?:\\.|[^'\\])*'|              # Single-quoted strings
-                //[^\n]*|                       # Single-line comments
+                \#[^\n]*|                       # Python-style single-line comments
+                //[^\n]*|                       # C-style single-line comments
                 /\*[\s\S]*?\*/|                 # Multi-line comments
                 \b[a-zA-Z_][a-zA-Z0-9_]*\b|     # Identifiers
                 \b\d+\.?\d*\b|                  # Numbers
