@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
@@ -14,6 +17,9 @@ namespace AiDotNet.Tokenization.HuggingFace
     /// </summary>
     public static class HuggingFaceTokenizerLoader
     {
+        private static readonly HttpClient _httpClient = new HttpClient();
+        private const string HuggingFaceHubUrl = "https://huggingface.co";
+
         /// <summary>
         /// Loads a HuggingFace tokenizer from a directory.
         /// </summary>
@@ -23,6 +29,13 @@ namespace AiDotNet.Tokenization.HuggingFace
         {
             if (!Directory.Exists(modelPath))
                 throw new DirectoryNotFoundException($"Tokenizer directory not found: {modelPath}");
+
+            // Check for tokenizer.json first (modern format)
+            var tokenizerJsonPath = Path.Combine(modelPath, "tokenizer.json");
+            if (File.Exists(tokenizerJsonPath))
+            {
+                return LoadFromTokenizerJson(tokenizerJsonPath);
+            }
 
             var configPath = Path.Combine(modelPath, "tokenizer_config.json");
             var vocabPath = Path.Combine(modelPath, "vocab.json");
@@ -207,6 +220,197 @@ namespace AiDotNet.Tokenization.HuggingFace
 
             var configJson = JsonConvert.SerializeObject(config, Formatting.Indented);
             File.WriteAllText(configPath, configJson);
+        }
+
+        /// <summary>
+        /// Loads a tokenizer from HuggingFace Hub by model name.
+        /// </summary>
+        /// <param name="modelName">The model name (e.g., "bert-base-uncased", "gpt2").</param>
+        /// <param name="cacheDir">Optional cache directory.</param>
+        /// <returns>The loaded tokenizer.</returns>
+        public static ITokenizer LoadFromHub(string modelName, string? cacheDir = null)
+        {
+            return LoadFromHubAsync(modelName, cacheDir).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// Asynchronously loads a tokenizer from HuggingFace Hub.
+        /// </summary>
+        public static async Task<ITokenizer> LoadFromHubAsync(string modelName, string? cacheDir = null)
+        {
+            if (string.IsNullOrWhiteSpace(modelName))
+                throw new ArgumentException("Model name cannot be empty", nameof(modelName));
+
+            cacheDir ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache", "huggingface", "tokenizers");
+            var modelCacheDir = Path.Combine(cacheDir, modelName.Replace("/", "--"));
+
+            if (!Directory.Exists(modelCacheDir))
+                Directory.CreateDirectory(modelCacheDir);
+
+            var filesToDownload = new[] { "tokenizer.json", "tokenizer_config.json", "vocab.json", "vocab.txt", "merges.txt" };
+
+            foreach (var fileName in filesToDownload)
+            {
+                var localPath = Path.Combine(modelCacheDir, fileName);
+                if (!File.Exists(localPath))
+                {
+                    await DownloadFileAsync(modelName, fileName, localPath);
+                }
+            }
+
+            return LoadFromDirectory(modelCacheDir);
+        }
+
+        private static async Task DownloadFileAsync(string modelName, string fileName, string localPath)
+        {
+            var url = $"{HuggingFaceHubUrl}/{modelName}/resolve/main/{fileName}";
+            try
+            {
+                var response = await _httpClient.GetAsync(url);
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsByteArrayAsync();
+                    File.WriteAllBytes(localPath, content);
+                }
+            }
+            catch (HttpRequestException)
+            {
+                // Silently ignore - not all tokenizers have all files
+            }
+        }
+
+        /// <summary>
+        /// Loads a tokenizer from a tokenizer.json file.
+        /// </summary>
+        public static ITokenizer LoadFromTokenizerJson(string tokenizerJsonPath)
+        {
+            if (!File.Exists(tokenizerJsonPath))
+                throw new FileNotFoundException($"tokenizer.json not found: {tokenizerJsonPath}");
+
+            var json = File.ReadAllText(tokenizerJsonPath);
+            var root = JObject.Parse(json);
+
+            var model = root["model"] as JObject;
+            if (model == null)
+                throw new InvalidOperationException("Invalid tokenizer.json: missing 'model' section");
+
+            var modelType = model["type"]?.Value<string>()?.ToLowerInvariant() ?? "";
+            var specialTokens = ExtractSpecialTokensFromJson(root);
+
+            if (modelType == "bpe")
+                return LoadBpeFromTokenizerJson(model, specialTokens);
+            else if (modelType == "wordpiece")
+                return LoadWordPieceFromTokenizerJson(model, specialTokens);
+            else if (modelType == "unigram")
+                return LoadUnigramFromTokenizerJson(model, specialTokens);
+            else if (model["merges"] != null)
+                return LoadBpeFromTokenizerJson(model, specialTokens);
+            else
+                return LoadWordPieceFromTokenizerJson(model, specialTokens);
+        }
+
+        private static SpecialTokens ExtractSpecialTokensFromJson(JObject root)
+        {
+            var specialTokens = new SpecialTokens();
+            var addedTokens = root["added_tokens"] as JArray;
+
+            if (addedTokens != null)
+            {
+                foreach (var token in addedTokens)
+                {
+                    var content = token["content"]?.Value<string>();
+                    var special = token["special"]?.Value<bool>() ?? false;
+
+                    if (content != null && special)
+                    {
+                        var lower = content.ToLowerInvariant();
+                        if (lower.Contains("unk")) specialTokens.UnkToken = content;
+                        else if (lower.Contains("pad")) specialTokens.PadToken = content;
+                        else if (lower.Contains("cls")) specialTokens.ClsToken = content;
+                        else if (lower.Contains("sep")) specialTokens.SepToken = content;
+                        else if (lower.Contains("mask")) specialTokens.MaskToken = content;
+                        else if (lower.Contains("bos") || lower == "<s>") specialTokens.BosToken = content;
+                        else if (lower.Contains("eos") || lower == "</s>") specialTokens.EosToken = content;
+                    }
+                }
+            }
+
+            if (string.IsNullOrEmpty(specialTokens.UnkToken)) specialTokens.UnkToken = "[UNK]";
+            return specialTokens;
+        }
+
+        private static BpeTokenizer LoadBpeFromTokenizerJson(JObject model, SpecialTokens specialTokens)
+        {
+            var vocabObj = model["vocab"] as JObject;
+            if (vocabObj == null)
+                throw new InvalidOperationException("Invalid tokenizer.json: missing 'vocab'");
+
+            var vocabDict = new Dictionary<string, int>();
+            foreach (var prop in vocabObj.Properties())
+                vocabDict[prop.Name] = prop.Value.Value<int>();
+
+            var vocabulary = new Vocabulary.Vocabulary(vocabDict, specialTokens.UnkToken);
+
+            var merges = new Dictionary<(string, string), int>();
+            var mergesArray = model["merges"] as JArray;
+            if (mergesArray != null)
+            {
+                int order = 0;
+                foreach (var merge in mergesArray)
+                {
+                    var mergeStr = merge.Value<string>();
+                    if (mergeStr != null)
+                    {
+                        var parts = mergeStr.Split(' ');
+                        if (parts.Length >= 2)
+                            merges[(parts[0], parts[1])] = order++;
+                    }
+                }
+            }
+
+            return new BpeTokenizer(vocabulary, merges, specialTokens);
+        }
+
+        private static WordPieceTokenizer LoadWordPieceFromTokenizerJson(JObject model, SpecialTokens specialTokens)
+        {
+            var vocabObj = model["vocab"] as JObject;
+            if (vocabObj == null)
+                throw new InvalidOperationException("Invalid tokenizer.json: missing 'vocab'");
+
+            var vocabDict = new Dictionary<string, int>();
+            foreach (var prop in vocabObj.Properties())
+                vocabDict[prop.Name] = prop.Value.Value<int>();
+
+            var vocabulary = new Vocabulary.Vocabulary(vocabDict, specialTokens.UnkToken);
+            return new WordPieceTokenizer(vocabulary, specialTokens);
+        }
+
+        private static UnigramTokenizer LoadUnigramFromTokenizerJson(JObject model, SpecialTokens specialTokens)
+        {
+            var vocabArray = model["vocab"] as JArray;
+            if (vocabArray == null)
+                throw new InvalidOperationException("Invalid tokenizer.json: missing 'vocab' in unigram model");
+
+            var vocabDict = new Dictionary<string, int>();
+            var tokenScores = new Dictionary<string, double>();
+            int id = 0;
+
+            foreach (var item in vocabArray)
+            {
+                if (item is JArray pair && pair.Count >= 2)
+                {
+                    var token = pair[0].Value<string>();
+                    var score = pair[1].Value<double>();
+                    if (token != null)
+                    {
+                        vocabDict[token] = id++;
+                        tokenScores[token] = score;
+                    }
+                }
+            }
+
+            var vocabulary = new Vocabulary.Vocabulary(vocabDict, specialTokens.UnkToken);
+            return new UnigramTokenizer(vocabulary, tokenScores, specialTokens);
         }
     }
 }
