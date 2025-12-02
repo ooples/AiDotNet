@@ -160,7 +160,13 @@ public class KnowledgeGraph<T>
         while (queue.Count > 0)
         {
             var (nodeId, depth) = queue.Dequeue();
-            yield return _store.GetNode(nodeId)!;
+            var node = _store.GetNode(nodeId);
+
+            // Skip if node was removed between queue add and dequeue
+            if (node == null)
+                continue;
+
+            yield return node;
 
             if (depth >= maxDepth)
                 continue;
