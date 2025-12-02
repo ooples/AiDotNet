@@ -1224,6 +1224,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var result = new PredictionModelResult<T, TInput, TOutput>();
         result.Deserialize(modelData);
 
+        // Automatically reattach Graph RAG components if they were configured on this builder
+        // Graph RAG components cannot be serialized (file handles, WAL, etc.), so we reattach
+        // them from the builder's configuration to provide a seamless experience for users
+        if (_knowledgeGraph != null || _graphStore != null || _hybridGraphRetriever != null)
+        {
+            result.AttachGraphComponents(_knowledgeGraph, _graphStore, _hybridGraphRetriever);
+        }
+
         return result;
     }
 

@@ -1113,7 +1113,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // Create new result with updated optimization result
         // Preserve all configuration properties to ensure deployment behavior, model adaptation,
-        // and training history are maintained across parameter updates
+        // training history, and Graph RAG configuration are maintained across parameter updates
         return new PredictionModelResult<T, TInput, TOutput>(
             updatedOptimizationResult,
             NormalizationInfo,
@@ -1127,7 +1127,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             crossValidationResult: CrossValidationResult,
             agentConfig: AgentConfig,
             agentRecommendation: AgentRecommendation,
-            deploymentConfiguration: DeploymentConfiguration);
+            deploymentConfiguration: DeploymentConfiguration,
+            jitCompiledFunction: null, // JIT compilation is parameter-specific, don't copy
+            inferenceOptimizationConfig: InferenceOptimizationConfig,
+            knowledgeGraph: KnowledgeGraph,
+            graphStore: GraphStore,
+            hybridGraphRetriever: HybridGraphRetriever);
     }
 
     /// <summary>
@@ -1214,7 +1219,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var clonedNormalizationInfo = NormalizationInfo.DeepCopy();
 
         // Preserve all configuration properties to ensure deployment behavior, model adaptation,
-        // and training history are maintained across deep copy
+        // training history, and Graph RAG configuration are maintained across deep copy
         return new PredictionModelResult<T, TInput, TOutput>(
             clonedOptimizationResult,
             clonedNormalizationInfo,
@@ -1228,7 +1233,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             crossValidationResult: CrossValidationResult,
             agentConfig: AgentConfig,
             agentRecommendation: AgentRecommendation,
-            deploymentConfiguration: DeploymentConfiguration);
+            deploymentConfiguration: DeploymentConfiguration,
+            jitCompiledFunction: null, // JIT compilation is model-specific, don't copy
+            inferenceOptimizationConfig: InferenceOptimizationConfig,
+            knowledgeGraph: KnowledgeGraph,
+            graphStore: GraphStore,
+            hybridGraphRetriever: HybridGraphRetriever);
     }
 
     /// <summary>
@@ -1830,6 +1840,28 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Attaches Graph RAG components to a PredictionModelResult instance.
+    /// </summary>
+    /// <param name="knowledgeGraph">The knowledge graph to attach.</param>
+    /// <param name="graphStore">The graph store backend to attach.</param>
+    /// <param name="hybridGraphRetriever">The hybrid retriever to attach.</param>
+    /// <remarks>
+    /// This method is internal and used by PredictionModelBuilder when loading/deserializing models.
+    /// Graph RAG components cannot be serialized (they contain file handles, WAL references, etc.),
+    /// so the builder automatically reattaches them when loading a model that was configured with Graph RAG.
+    /// Users should use PredictionModelBuilder.LoadModel() which handles this automatically.
+    /// </remarks>
+    internal void AttachGraphComponents(
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IGraphStore<T>? graphStore = null,
+        HybridGraphRetriever<T>? hybridGraphRetriever = null)
+    {
+        KnowledgeGraph = knowledgeGraph;
+        GraphStore = graphStore;
+        HybridGraphRetriever = hybridGraphRetriever;
     }
 
     /// <summary>
