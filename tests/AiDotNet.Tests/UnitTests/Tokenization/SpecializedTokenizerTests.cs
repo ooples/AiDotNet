@@ -302,6 +302,173 @@ public class MidiTokenizerTests
         Assert.True(tokenizer.Vocabulary.ContainsToken("Velocity_0"));
         Assert.True(tokenizer.Vocabulary.ContainsToken("Velocity_16"));
     }
+
+    // CPWord Strategy Tests
+
+    [Fact]
+    public void CreateCPWord_CreatesValidTokenizer()
+    {
+        // Act
+        var tokenizer = MidiTokenizer.CreateCPWord();
+
+        // Assert
+        Assert.NotNull(tokenizer);
+        Assert.True(tokenizer.VocabularySize > 0);
+    }
+
+    [Fact]
+    public void CPWord_TokenizeNotes_SingleNote_ReturnsCompoundToken()
+    {
+        // Arrange
+        var tokenizer = MidiTokenizer.CreateCPWord();
+        var notes = new List<MidiTokenizer.MidiNote>
+        {
+            new MidiTokenizer.MidiNote { Pitch = 60, Velocity = 100, StartTick = 0, Duration = 480 }
+        };
+
+        // Act
+        var tokens = tokenizer.TokenizeNotes(notes);
+
+        // Assert
+        Assert.NotEmpty(tokens);
+        // CPWord uses compound tokens: Note_Pitch_VelocityBin_Duration
+        Assert.Contains(tokens, t => t.StartsWith("Note_60_"));
+    }
+
+    [Fact]
+    public void CPWord_TokenizeNotes_MultipleNotes_IncludesTimeShift()
+    {
+        // Arrange
+        var tokenizer = MidiTokenizer.CreateCPWord();
+        var notes = new List<MidiTokenizer.MidiNote>
+        {
+            new MidiTokenizer.MidiNote { Pitch = 60, Velocity = 100, StartTick = 0, Duration = 480 },
+            new MidiTokenizer.MidiNote { Pitch = 64, Velocity = 90, StartTick = 960, Duration = 480 }
+        };
+
+        // Act
+        var tokens = tokenizer.TokenizeNotes(notes);
+
+        // Assert
+        Assert.NotEmpty(tokens);
+        Assert.Contains(tokens, t => t.StartsWith("TimeShift_"));
+    }
+
+    [Fact]
+    public void CPWord_Vocabulary_ContainsCompoundTokens()
+    {
+        // Arrange
+        var tokenizer = MidiTokenizer.CreateCPWord();
+
+        // Assert - CPWord uses compound tokens: Note_Pitch_VelocityBin_Duration
+        Assert.True(tokenizer.Vocabulary.ContainsToken("Note_60_8_1"));
+        Assert.True(tokenizer.Vocabulary.ContainsToken("Note_0_0_1"));
+        Assert.True(tokenizer.Vocabulary.ContainsToken("Bar"));
+    }
+
+    [Fact]
+    public void CPWord_Encode_ReturnsValidTokenIds()
+    {
+        // Arrange
+        var tokenizer = MidiTokenizer.CreateCPWord();
+        var midiText = "NOTE:60:120:100";
+
+        // Act
+        var result = tokenizer.Encode(midiText);
+
+        // Assert
+        Assert.NotEmpty(result.TokenIds);
+    }
+
+    // SimpleNote Strategy Tests
+
+    [Fact]
+    public void CreateSimpleNote_CreatesValidTokenizer()
+    {
+        // Act
+        var tokenizer = MidiTokenizer.CreateSimpleNote();
+
+        // Assert
+        Assert.NotNull(tokenizer);
+        Assert.True(tokenizer.VocabularySize > 0);
+    }
+
+    [Fact]
+    public void SimpleNote_TokenizeNotes_SingleNote_ReturnsPitchAndDuration()
+    {
+        // Arrange
+        var tokenizer = MidiTokenizer.CreateSimpleNote();
+        var notes = new List<MidiTokenizer.MidiNote>
+        {
+            new MidiTokenizer.MidiNote { Pitch = 60, Velocity = 100, StartTick = 0, Duration = 480 }
+        };
+
+        // Act
+        var tokens = tokenizer.TokenizeNotes(notes);
+
+        // Assert
+        Assert.NotEmpty(tokens);
+        // SimpleNote uses separate Pitch and Duration tokens
+        Assert.Contains(tokens, t => t.StartsWith("Pitch_"));
+        Assert.Contains(tokens, t => t.StartsWith("Duration_"));
+    }
+
+    [Fact]
+    public void SimpleNote_TokenizeNotes_MultipleNotes_IncludesRest()
+    {
+        // Arrange
+        var tokenizer = MidiTokenizer.CreateSimpleNote();
+        var notes = new List<MidiTokenizer.MidiNote>
+        {
+            new MidiTokenizer.MidiNote { Pitch = 60, Velocity = 100, StartTick = 0, Duration = 480 },
+            new MidiTokenizer.MidiNote { Pitch = 64, Velocity = 90, StartTick = 960, Duration = 480 }
+        };
+
+        // Act
+        var tokens = tokenizer.TokenizeNotes(notes);
+
+        // Assert
+        Assert.NotEmpty(tokens);
+        // SimpleNote uses Rest_ tokens to represent gaps between notes
+        Assert.Contains(tokens, t => t.StartsWith("Rest_"));
+    }
+
+    [Fact]
+    public void SimpleNote_Vocabulary_ContainsPitchTokens()
+    {
+        // Arrange
+        var tokenizer = MidiTokenizer.CreateSimpleNote();
+
+        // Assert
+        Assert.True(tokenizer.Vocabulary.ContainsToken("Pitch_60"));
+        Assert.True(tokenizer.Vocabulary.ContainsToken("Pitch_0"));
+        Assert.True(tokenizer.Vocabulary.ContainsToken("Pitch_127"));
+    }
+
+    [Fact]
+    public void SimpleNote_Vocabulary_ContainsDurationTokens()
+    {
+        // Arrange
+        var tokenizer = MidiTokenizer.CreateSimpleNote();
+
+        // Assert
+        Assert.True(tokenizer.Vocabulary.ContainsToken("Duration_1"));
+        Assert.True(tokenizer.Vocabulary.ContainsToken("Duration_16"));
+    }
+
+    [Fact]
+    public void SimpleNote_Encode_ReturnsValidTokenIds()
+    {
+        // Arrange
+        var tokenizer = MidiTokenizer.CreateSimpleNote();
+        var midiText = "NOTE:60:120:100";
+
+        // Act
+        var result = tokenizer.Encode(midiText);
+
+        // Assert
+        Assert.NotEmpty(result.TokenIds);
+    }
 }
 
 /// <summary>
