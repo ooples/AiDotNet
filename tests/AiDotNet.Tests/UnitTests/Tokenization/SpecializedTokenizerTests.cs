@@ -23,7 +23,7 @@ public class PhonemeTokenizerTests
     }
 
     [Fact]
-    public void Tokenize_SimpleWord_ReturnsPhonemess()
+    public void Tokenize_SimpleWord_ReturnsPhonemes()
     {
         // Arrange
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
