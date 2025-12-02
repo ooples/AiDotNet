@@ -30,6 +30,11 @@ namespace AiDotNet.Tokenization.Models
         public List<int> TokenTypeIds { get; set; } = new List<int>();
 
         /// <summary>
+        /// Gets or sets the position IDs for positional embeddings.
+        /// </summary>
+        public List<int> PositionIds { get; set; } = new List<int>();
+
+        /// <summary>
         /// Gets or sets character-level offsets for each token.
         /// </summary>
         public List<(int Start, int End)> Offsets { get; set; } = new List<(int, int)>();

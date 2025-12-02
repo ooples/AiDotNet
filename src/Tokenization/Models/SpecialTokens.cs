@@ -99,5 +99,10 @@ namespace AiDotNet.Tokenization.Models
             PadToken = "<pad>",
             EosToken = "</s>"
         };
+
+        /// <summary>
+        /// Creates default special tokens (BERT-style).
+        /// </summary>
+        public static SpecialTokens Default() => Bert();
     }
 }
