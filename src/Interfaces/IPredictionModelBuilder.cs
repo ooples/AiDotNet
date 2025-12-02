@@ -3,6 +3,7 @@ using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Reasoning.Models;
+using AiDotNet.RetrievalAugmentedGeneration.Graph;
 
 namespace AiDotNet.Interfaces;
 
@@ -343,31 +344,52 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// RAG enhances text generation by retrieving relevant documents from a knowledge base
     /// and using them as context for generating grounded, factual answers.
-    ///
+    /// </para>
+    /// <para>
+    /// <b>Graph RAG:</b> When graphStore or knowledgeGraph is provided, enables knowledge graph-based
+    /// retrieval that finds related entities and their relationships, providing richer context than
+    /// vector similarity alone. If documentStore is also provided, hybrid retrieval combines both
+    /// vector search and graph traversal.
+    /// </para>
+    /// <para>
     /// <b>For Beginners:</b> RAG is like giving your AI access to a library before answering questions.
     /// Instead of relying only on what it learned during training, it can:
-    /// 1. Search a document collection for relevant information
-    /// 2. Read the relevant documents
-    /// 3. Generate an answer based on those documents
-    /// 4. Cite its sources
-    ///
-    /// This makes answers more accurate, up-to-date, and traceable to source materials.
-    /// 
-    /// RAG operations (GenerateAnswer, RetrieveDocuments) are performed during inference via PredictionModelResult,
-    /// not during model building.
+    /// <list type="number">
+    /// <item><description>Search a document collection for relevant information</description></item>
+    /// <item><description>Read the relevant documents</description></item>
+    /// <item><description>Generate an answer based on those documents</description></item>
+    /// <item><description>Cite its sources</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Graph RAG Example:</b> If you ask about "Paris", Graph RAG can find not just documents
+    /// mentioning Paris, but also related concepts like France, Eiffel Tower, and Seine River
+    /// by traversing the knowledge graph.
+    /// </para>
+    /// <para>
+    /// RAG operations (GenerateAnswer, RetrieveDocuments, GraphQuery, etc.) are performed during
+    /// inference via PredictionModelResult, not during model building.
+    /// </para>
     /// </remarks>
-    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, RAG won't be available.</param>
+    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, standard RAG won't be available.</param>
     /// <param name="reranker">Optional reranker for improving document ranking quality. Default provided if retriever is set.</param>
     /// <param name="generator">Optional generator for producing grounded answers. Default provided if retriever is set.</param>
     /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
+    /// <param name="graphStore">Optional graph storage backend for Graph RAG (e.g., MemoryGraphStore, FileGraphStore).</param>
+    /// <param name="knowledgeGraph">Optional pre-configured knowledge graph. If null but graphStore is provided, a new one is created.</param>
+    /// <param name="documentStore">Optional document store for hybrid vector + graph retrieval.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
         IRetriever<T>? retriever = null,
         IReranker<T>? reranker = null,
         IGenerator<T>? generator = null,
-        IEnumerable<IQueryProcessor>? queryProcessors = null);
+        IEnumerable<IQueryProcessor>? queryProcessors = null,
+        IGraphStore<T>? graphStore = null,
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IDocumentStore<T>? documentStore = null);
 
     /// <summary>
     /// Configures AI agent assistance during model building and inference.

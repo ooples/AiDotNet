@@ -18,6 +18,7 @@ global using AiDotNet.MixedPrecision;
 global using AiDotNet.KnowledgeDistillation;
 global using AiDotNet.Deployment.Configuration;
 global using AiDotNet.Reasoning.Models;
+global using AiDotNet.RetrievalAugmentedGeneration.Graph;
 
 namespace AiDotNet;
 
@@ -55,6 +56,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IReranker<T>? _ragReranker;
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
+
+    // Graph RAG components for knowledge graph-enhanced retrieval
+    private KnowledgeGraph<T>? _knowledgeGraph;
+    private IGraphStore<T>? _graphStore;
+    private HybridGraphRetriever<T>? _hybridGraphRetriever;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
     private ICommunicationBackend<T>? _distributedBackend;
     private DistributedStrategy _distributedStrategy = DistributedStrategy.DDP;
@@ -617,7 +623,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             queryProcessors: _queryProcessors,
             agentConfig: _agentConfig,
             deploymentConfiguration: deploymentConfig,
-            reasoningConfig: _reasoningConfig);
+            reasoningConfig: _reasoningConfig,
+            knowledgeGraph: _knowledgeGraph,
+            graphStore: _graphStore,
+            hybridGraphRetriever: _hybridGraphRetriever);
 
         return Task.FromResult(result);
     }
@@ -970,7 +979,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             deploymentConfig,
             jitCompiledFunction,
             _inferenceOptimizationConfig,
-            _reasoningConfig);
+            _reasoningConfig,
+            _knowledgeGraph,
+            _graphStore,
+            _hybridGraphRetriever);
 
         return finalResult;
     }
@@ -1139,6 +1151,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _gpuAccelerationConfig);
 
         // Return standard PredictionModelResult
+        // Note: This Build() overload doesn't perform JIT compilation (only the main Build() does),
+        // so jitCompiledFunction uses its default value of null
         var result = new PredictionModelResult<T, TInput, TOutput>(
             optimizationResult,
             normInfo,
@@ -1152,7 +1166,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             crossValidationResult: null,
             _agentConfig,
             agentRecommendation: null,
-            deploymentConfig);
+            deploymentConfiguration: deploymentConfig,
+            inferenceOptimizationConfig: _inferenceOptimizationConfig,
+            knowledgeGraph: _knowledgeGraph,
+            graphStore: _graphStore,
+            hybridGraphRetriever: _hybridGraphRetriever);
 
         return result;
     }
@@ -1259,6 +1277,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var result = new PredictionModelResult<T, TInput, TOutput>();
         result.Deserialize(modelData);
 
+        // Automatically reattach Graph RAG components if they were configured on this builder
+        // Graph RAG components cannot be serialized (file handles, WAL, etc.), so we reattach
+        // them from the builder's configuration to provide a seamless experience for users
+        if (_knowledgeGraph != null || _graphStore != null || _hybridGraphRetriever != null)
+        {
+            result.AttachGraphComponents(_knowledgeGraph, _graphStore, _hybridGraphRetriever);
+        }
+
         return result;
     }
 
@@ -1316,31 +1342,96 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// <summary>
     /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
     /// </summary>
-    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, RAG functionality won't be available.</param>
+    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, standard RAG won't be available.</param>
     /// <param name="reranker">Optional reranker for improving document ranking quality. If not provided, a default reranker will be used if RAG is configured.</param>
     /// <param name="generator">Optional generator for producing grounded answers. If not provided, a default generator will be used if RAG is configured.</param>
     /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
+    /// <param name="graphStore">Optional graph storage backend for Graph RAG (e.g., MemoryGraphStore, FileGraphStore).</param>
+    /// <param name="knowledgeGraph">Optional pre-configured knowledge graph. If null but graphStore is provided, a new one is created.</param>
+    /// <param name="documentStore">Optional document store for hybrid vector + graph retrieval.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
+    /// <para>
     /// <b>For Beginners:</b> RAG combines retrieval and generation to create answers backed by real documents.
     /// Configure it with:
-    /// - A retriever (finds relevant documents from your collection) - required for RAG
-    /// - A reranker (improves the ordering of retrieved documents) - optional, defaults provided
-    /// - A generator (creates answers based on the documents) - optional, defaults provided
-    /// - Optional query processors (improve search queries before retrieval)
-    /// 
+    /// <list type="bullet">
+    /// <item><description>A retriever (finds relevant documents from your collection) - required for standard RAG</description></item>
+    /// <item><description>A reranker (improves the ordering of retrieved documents) - optional, defaults provided</description></item>
+    /// <item><description>A generator (creates answers based on the documents) - optional, defaults provided</description></item>
+    /// <item><description>Optional query processors (improve search queries before retrieval)</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Graph RAG:</b> When graphStore or knowledgeGraph is provided, enables knowledge graph-based
+    /// retrieval that finds related entities and their relationships, providing richer context than
+    /// vector similarity alone. Traditional RAG finds similar documents using vectors. Graph RAG goes further by
+    /// also exploring relationships between entities. For example, if you ask about "Paris", it can find
+    /// not just documents mentioning Paris, but also related concepts like France, Eiffel Tower, and Seine River.
+    /// </para>
+    /// <para>
+    /// <b>Hybrid Retrieval:</b> When both knowledgeGraph and documentStore are provided, creates a
+    /// HybridGraphRetriever that combines vector search and graph traversal for optimal results.
+    /// </para>
+    /// <para>
+    /// <b>Disabling RAG:</b> Call with all parameters as null to disable RAG functionality completely.
+    /// </para>
+    /// <para>
     /// RAG operations are performed during inference (after model training) via the PredictionModelResult.
+    /// </para>
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
         IRetriever<T>? retriever = null,
         IReranker<T>? reranker = null,
         IGenerator<T>? generator = null,
-        IEnumerable<IQueryProcessor>? queryProcessors = null)
+        IEnumerable<IQueryProcessor>? queryProcessors = null,
+        IGraphStore<T>? graphStore = null,
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IDocumentStore<T>? documentStore = null)
     {
+        // Configure standard RAG components
         _ragRetriever = retriever;
         _ragReranker = reranker;
         _ragGenerator = generator;
         _queryProcessors = queryProcessors;
+
+        // Configure Graph RAG components
+        // If all Graph RAG parameters are null, clear Graph RAG fields
+        if (graphStore == null && knowledgeGraph == null && documentStore == null)
+        {
+            _graphStore = null;
+            _knowledgeGraph = null;
+            _hybridGraphRetriever = null;
+            return this;
+        }
+
+        _graphStore = graphStore;
+
+        // Use provided knowledge graph or create one from the store
+        if (knowledgeGraph != null)
+        {
+            _knowledgeGraph = knowledgeGraph;
+        }
+        else if (graphStore != null)
+        {
+            _knowledgeGraph = new KnowledgeGraph<T>(graphStore);
+        }
+        else
+        {
+            // No knowledge graph source provided, clear the field
+            _knowledgeGraph = null;
+        }
+
+        // Create or clear hybrid retriever based on available components
+        if (_knowledgeGraph != null && documentStore != null)
+        {
+            _hybridGraphRetriever = new HybridGraphRetriever<T>(_knowledgeGraph, documentStore);
+        }
+        else
+        {
+            // Clear hybrid retriever if dependencies are missing
+            _hybridGraphRetriever = null;
+        }
+
         return this;
     }
 

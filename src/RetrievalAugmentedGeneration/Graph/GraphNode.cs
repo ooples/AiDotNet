@@ -99,11 +99,50 @@ public class GraphNode<T>
     /// </summary>
     /// <typeparam name="TValue">The expected type of the property value.</typeparam>
     /// <param name="key">The property key.</param>
-    /// <returns>The property value, or default if not found.</returns>
+    /// <returns>The property value, or default if not found or conversion fails.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method handles JSON deserialization quirks where numeric types may differ
+    /// (e.g., int stored as long after JSON round-trip). It uses Convert.ChangeType
+    /// for IConvertible types to handle such conversions gracefully.
+    /// </para>
+    /// <para>
+    /// The method catches and handles the following exceptions during conversion:
+    /// - InvalidCastException: When the types are incompatible
+    /// - FormatException: When the string representation is invalid
+    /// - OverflowException: When the value is outside the target type's range
+    /// </para>
+    /// </remarks>
     public TValue? GetProperty<TValue>(string key)
     {
-        if (Properties.TryGetValue(key, out var value) && value is TValue typedValue)
+        if (!Properties.TryGetValue(key, out var value) || value == null)
+            return default;
+
+        // Direct type match
+        if (value is TValue typedValue)
             return typedValue;
+
+        // Handle numeric type conversions (JSON deserializes integers as long)
+        if (value is IConvertible && typeof(TValue).IsValueType)
+        {
+            try
+            {
+                return (TValue)Convert.ChangeType(value, typeof(TValue));
+            }
+            catch (InvalidCastException)
+            {
+                return default;
+            }
+            catch (FormatException)
+            {
+                return default;
+            }
+            catch (OverflowException)
+            {
+                return default;
+            }
+        }
+
         return default;
     }
     
