@@ -491,22 +491,35 @@ namespace AiDotNet.Tokenization.Specialized
             vocabulary.AddTokens(specialTokens.GetAllSpecialTokens());
 
             vocabulary.AddToken("Bar");
-            for (int i = 0; i < 16; i++)
-                vocabulary.AddToken($"Position_{i}");
+            AddRangedTokens(vocabulary, "Position", 0, 15);
+            AddRangedTokens(vocabulary, "Pitch", 0, 127);
+            AddRangedTokens(vocabulary, "Velocity", 0, numVelocityBins - 1);
+            AddDurationAndTimeShiftTokens(vocabulary);
 
-            for (int pitch = 0; pitch < 128; pitch++)
-                vocabulary.AddToken($"Pitch_{pitch}");
+            return vocabulary;
+        }
 
-            for (int v = 0; v < numVelocityBins; v++)
-                vocabulary.AddToken($"Velocity_{v}");
+        /// <summary>
+        /// Adds ranged tokens with a prefix to the vocabulary.
+        /// </summary>
+        private static void AddRangedTokens(Vocabulary.Vocabulary vocabulary, string prefix, int start, int end)
+        {
+            for (int i = start; i <= end; i++)
+            {
+                vocabulary.AddToken($"{prefix}_{i}");
+            }
+        }
 
+        /// <summary>
+        /// Adds Duration and TimeShift tokens (1-128) to the vocabulary.
+        /// </summary>
+        private static void AddDurationAndTimeShiftTokens(Vocabulary.Vocabulary vocabulary)
+        {
             for (int d = 1; d <= 128; d++)
             {
                 vocabulary.AddToken($"Duration_{d}");
                 vocabulary.AddToken($"TimeShift_{d}");
             }
-
-            return vocabulary;
         }
 
         /// <summary>
@@ -523,29 +536,50 @@ namespace AiDotNet.Tokenization.Specialized
             vocabulary.AddTokens(specialTokens.GetAllSpecialTokens());
 
             vocabulary.AddToken("Bar");
+            AddTimeShiftAndRestTokens(vocabulary);
+            AddCompoundNoteTokens(vocabulary, numVelocityBins);
 
-            // Time shift tokens
+            return vocabulary;
+        }
+
+        /// <summary>
+        /// Adds TimeShift and Rest tokens (1-128) to the vocabulary.
+        /// </summary>
+        private static void AddTimeShiftAndRestTokens(Vocabulary.Vocabulary vocabulary)
+        {
             for (int d = 1; d <= 128; d++)
             {
                 vocabulary.AddToken($"TimeShift_{d}");
                 vocabulary.AddToken($"Rest_{d}");
             }
+        }
 
+        /// <summary>
+        /// Adds compound note tokens (Note_Pitch_VelocityBin_Duration) to the vocabulary.
+        /// </summary>
+        private static void AddCompoundNoteTokens(Vocabulary.Vocabulary vocabulary, int numVelocityBins)
+        {
             // Compound note tokens: Note_Pitch_VelocityBin_Duration
             // This creates a large vocabulary but is more efficient for sequence modeling
             for (int pitch = 0; pitch < 128; pitch++)
             {
-                for (int v = 0; v < numVelocityBins; v++)
+                AddCompoundNoteTokensForPitch(vocabulary, pitch, numVelocityBins);
+            }
+        }
+
+        /// <summary>
+        /// Adds compound note tokens for a specific pitch value.
+        /// </summary>
+        private static void AddCompoundNoteTokensForPitch(Vocabulary.Vocabulary vocabulary, int pitch, int numVelocityBins)
+        {
+            for (int v = 0; v < numVelocityBins; v++)
+            {
+                // Only create tokens for common durations (1-16) to keep vocabulary manageable
+                for (int d = 1; d <= 16; d++)
                 {
-                    // Only create tokens for common durations (1-16) to keep vocabulary manageable
-                    for (int d = 1; d <= 16; d++)
-                    {
-                        vocabulary.AddToken($"Note_{pitch}_{v}_{d}");
-                    }
+                    vocabulary.AddToken($"Note_{pitch}_{v}_{d}");
                 }
             }
-
-            return vocabulary;
         }
 
         /// <summary>
@@ -560,16 +594,22 @@ namespace AiDotNet.Tokenization.Specialized
             var vocabulary = new Vocabulary.Vocabulary(specialTokens.UnkToken);
             vocabulary.AddTokens(specialTokens.GetAllSpecialTokens());
 
-            for (int pitch = 0; pitch < 128; pitch++)
-                vocabulary.AddToken($"Pitch_{pitch}");
+            AddRangedTokens(vocabulary, "Pitch", 0, 127);
+            AddDurationAndRestTokens(vocabulary);
 
+            return vocabulary;
+        }
+
+        /// <summary>
+        /// Adds Duration and Rest tokens (1-128) to the vocabulary.
+        /// </summary>
+        private static void AddDurationAndRestTokens(Vocabulary.Vocabulary vocabulary)
+        {
             for (int d = 1; d <= 128; d++)
             {
                 vocabulary.AddToken($"Duration_{d}");
                 vocabulary.AddToken($"Rest_{d}");
             }
-
-            return vocabulary;
         }
     }
 }
