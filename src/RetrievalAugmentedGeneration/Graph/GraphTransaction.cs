@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
@@ -342,13 +344,17 @@ public class GraphTransaction<T> : IDisposable
             {
                 Rollback();
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException ex)
             {
-                // Ignore rollback errors during dispose - transaction may already be in invalid state
+                // Rollback errors during dispose are suppressed per IDisposable contract,
+                // but traced for diagnostics. Transaction may already be in invalid state.
+                Debug.WriteLine($"GraphTransaction.Dispose: Rollback failed with InvalidOperationException: {ex.Message}");
             }
-            catch (IOException)
+            catch (IOException ex)
             {
-                // Ignore I/O errors during dispose - underlying store may be unavailable
+                // I/O errors during dispose are suppressed per IDisposable contract,
+                // but traced for diagnostics. Underlying store may be unavailable.
+                Debug.WriteLine($"GraphTransaction.Dispose: Rollback failed with IOException: {ex.Message}");
             }
         }
 
