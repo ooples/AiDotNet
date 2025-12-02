@@ -20,9 +20,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - It creates a single number that represents that entire feature map
 /// - This dramatically reduces the amount of data while preserving the most important information
 /// 
-/// For example, with 64 feature maps of size 7�7:
-/// - Input: 7�7�64 (3,136 values)
-/// - Output: 1�1�64 (64 values, one per feature map)
+/// For example, with 64 feature maps of size 7×7:
+/// - Input: 7×7—64 (3,136 values)
+/// - Output: 1×1—64 (64 values, one per feature map)
 /// 
 /// There are two main types of global pooling:
 /// - Global Max Pooling: Takes the maximum value from each feature map
@@ -150,7 +150,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// <para>
     /// This constructor creates a new global pooling layer with the specified input shape,
     /// pooling type, and activation function. The output shape is calculated to have the same
-    /// batch size and number of channels as the input, but with spatial dimensions reduced to 1�1.
+    /// batch size and number of channels as the input, but with spatial dimensions reduced to 1×1.
     /// The activation function operates on individual scalar values in the output tensor.
     /// </para>
     /// <para><b>For Beginners:</b> This sets up the global pooling layer with your chosen settings.
@@ -162,7 +162,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// 
     /// For example:
     /// ```csharp
-    /// // Create a global average pooling layer for 28�28 feature maps with 64 channels
+    /// // Create a global average pooling layer for 28×28 feature maps with 64 channels
     /// var globalAvgPool = new GlobalPoolingLayer<float>(
     ///     new int[] { batchSize, 28, 28, 64 }, 
     ///     PoolingType.Average
@@ -176,7 +176,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// );
     /// ```
     /// 
-    /// The output will always have spatial dimensions of 1�1, preserving the batch size and number of channels.
+    /// The output will always have spatial dimensions of 1×1, preserving the batch size and number of channels.
     /// </para>
     /// </remarks>
     public GlobalPoolingLayer(int[] inputShape, PoolingType poolingType, IActivationFunction<T>? activationFunction = null)
@@ -195,7 +195,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// <para>
     /// This constructor creates a new global pooling layer with the specified input shape,
     /// pooling type, and vector activation function. The output shape is calculated to have the same
-    /// batch size and number of channels as the input, but with spatial dimensions reduced to 1�1.
+    /// batch size and number of channels as the input, but with spatial dimensions reduced to 1×1.
     /// Unlike the other constructor, this one accepts a vector activation function that operates on
     /// entire vectors rather than individual scalar values.
     /// </para>
@@ -222,11 +222,11 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// Calculates the output shape of the global pooling layer based on the input shape.
     /// </summary>
     /// <param name="inputShape">The shape of the input tensor (typically [batchSize, height, width, channels]).</param>
-    /// <returns>The calculated output shape with spatial dimensions reduced to 1�1.</returns>
+    /// <returns>The calculated output shape with spatial dimensions reduced to 1×1.</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the output shape for the global pooling layer. Global pooling reduces
-    /// the spatial dimensions (height and width) to 1�1 while preserving the batch size and number of channels.
+    /// the spatial dimensions (height and width) to 1×1 while preserving the batch size and number of channels.
     /// </para>
     /// <para><b>For Beginners:</b> This determines what shape the output data will have after pooling.
     /// 
@@ -236,8 +236,8 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// - Reduces height and width to 1
     /// 
     /// For example:
-    /// - Input shape: [32, 7, 7, 64] (32 examples, 7�7 spatial dimensions, 64 channels)
-    /// - Output shape: [32, 1, 1, 64] (32 examples, 1�1 spatial dimensions, 64 channels)
+    /// - Input shape: [32, 7, 7, 64] (32 examples, 7×7 spatial dimensions, 64 channels)
+    /// - Output shape: [32, 1, 1, 64] (32 examples, 1×1 spatial dimensions, 64 channels)
     /// 
     /// This dramatic reduction in spatial dimensions helps prepare the feature maps for
     /// classification or other tasks that require a fixed-size vector input.
@@ -260,7 +260,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// it applies the specified pooling operation (max or average) across the entire spatial dimensions.
     /// For max pooling, it finds the maximum value in each channel. For average pooling, it computes the
     /// mean of all values in each channel. The result is a tensor with the same batch size and number of
-    /// channels, but with spatial dimensions reduced to 1�1.
+    /// channels, but with spatial dimensions reduced to 1×1.
     /// </para>
     /// <para><b>For Beginners:</b> This is where the layer processes input data by pooling across entire feature maps.
     /// 

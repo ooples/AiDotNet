@@ -287,7 +287,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// For example, if yesterday's temperature was high, today's might also be high.
     /// 
     /// The prediction is calculated as:
-    /// prediction = (coefficient1 � value1) + (coefficient2 � value2) + ... + (coefficientp � valuep)
+    /// prediction = (coefficient1 × value1) + (coefficient2 × value2) + ... + (coefficientp × valuep)
     /// 
     /// Where:
     /// - coefficientn is the importance of each past value

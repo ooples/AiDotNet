@@ -13,6 +13,11 @@ namespace AiDotNet.Tests.UnitTests.JitCompiler;
 /// Tests for JIT compilation support in regression models.
 /// Verifies that linear and kernel-based regression models support JIT compilation correctly.
 /// </summary>
+/// <remarks>
+/// These tests are quarantined because they trigger GPU initialization which can fail
+/// on machines without proper GPU support or drivers.
+/// </remarks>
+[Trait("Category", "GPU")]
 public class RegressionJitCompilationTests
 {
     // ========== SimpleRegression Tests ==========

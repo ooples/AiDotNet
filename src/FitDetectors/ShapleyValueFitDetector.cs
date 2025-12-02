@@ -268,7 +268,7 @@ public class ShapleyValueFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TI
     /// </summary>
     /// <param name="evaluationData">Data containing the model and its performance metrics.</param>
     /// <param name="features">The set of feature names to include in the calculation.</param>
-    /// <returns>A performance metric (R� score) for the model using only the specified features.</returns>
+    /// <returns>A performance metric (R² score) for the model using only the specified features.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method measures how well your model performs when using only certain features.
@@ -277,7 +277,7 @@ public class ShapleyValueFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TI
     /// test how good the recipe would be if you only used, say, 5 specific ingredients. It helps 
     /// determine which ingredients are most important for making the dish taste good.
     /// 
-    /// The R� score returned is a measure of how well your model fits the data - higher values 
+    /// The R² score returned is a measure of how well your model fits the data - higher values 
     /// (closer to 1.0) mean better performance.
     /// </para>
     /// </remarks>

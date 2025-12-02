@@ -132,8 +132,9 @@ namespace AiDotNet.Tests.Tokenization
             // Act
             vocab.Clear();
 
-            // Assert
-            Assert.Equal(0, vocab.Size);
+            // Assert - Clear() re-adds UNK token to maintain consistency
+            Assert.Equal(1, vocab.Size);
+            Assert.True(vocab.ContainsToken("[UNK]"));
         }
     }
 }

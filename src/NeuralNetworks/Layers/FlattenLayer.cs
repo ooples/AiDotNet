@@ -49,7 +49,7 @@ public class FlattenLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This remembers the original shape of the input data.
     /// 
     /// For example:
-    /// - For a 28�28 grayscale image: [28, 28, 1]
+    /// - For a 28×28 grayscale image: [28, 28, 1]
     /// - For RGB color channels: [height, width, 3]
     /// - For a feature map with multiple channels: [height, width, channels]
     /// 
@@ -75,8 +75,8 @@ public class FlattenLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This is the total number of values after flattening.
     /// 
     /// The output size is calculated by multiplying all the dimensions of the input:
-    /// - For a 28�28 image: 28 � 28 = 784 values
-    /// - For a 16�16�32 feature map: 16 � 16 � 32 = 8,192 values
+    /// - For a 28×28 image: 28 × 28 = 784 values
+    /// - For a 16×16×32 feature map: 16 × 16 × 32 = 8,192 values
     /// 
     /// This number tells us:
     /// - How long the flattened vector will be
@@ -154,10 +154,10 @@ public class FlattenLayer<T> : LayerBase<T>
     /// 
     /// For example:
     /// ```csharp
-    /// // Create a flatten layer for 28�28 grayscale images
+    /// // Create a flatten layer for 28×28 grayscale images
     /// var flattenLayer = new FlattenLayer<float>(new int[] { 28, 28, 1 });
     /// 
-    /// // Create a flatten layer for output from a convolutional layer with 64 feature maps of size 7�7
+    /// // Create a flatten layer for output from a convolutional layer with 64 feature maps of size 7×7
     /// var flattenConvOutput = new FlattenLayer<float>(new int[] { 7, 7, 64 });
     /// ```
     /// 
@@ -194,8 +194,8 @@ public class FlattenLayer<T> : LayerBase<T>
     /// 3. Return a tensor with shape [batchSize, flattenedSize]
     /// 
     /// For example, with a batch of 3D data like [batchSize, height, width, channels]:
-    /// - Input shape: [32, 7, 7, 64] (32 examples, each 7�7 with 64 channels)
-    /// - Output shape: [32, 3136] (32 examples, each with 7�7�64=3136 values)
+    /// - Input shape: [32, 7, 7, 64] (32 examples, each 7×7 with 64 channels)
+    /// - Output shape: [32, 3136] (32 examples, each with 7×7—64=3136 values)
     /// 
     /// The method carefully preserves the order of values so they can be
     /// "unflattened" back to the original shape during backpropagation.

@@ -182,9 +182,9 @@ public class TokenizerBenchmarks
     public int BpeThroughput()
     {
         int totalTokens = 0;
-        foreach (var text in _batchTexts)
+        var tokenLists = _batchTexts.Select(text => _bpeTokenizer.Tokenize(text));
+        foreach (var tokens in tokenLists)
         {
-            var tokens = _bpeTokenizer.Tokenize(text);
             totalTokens += tokens.Count;
         }
         return totalTokens;
@@ -194,9 +194,9 @@ public class TokenizerBenchmarks
     public int WordPieceThroughput()
     {
         int totalTokens = 0;
-        foreach (var text in _batchTexts)
+        var tokenLists = _batchTexts.Select(text => _wordPieceTokenizer.Tokenize(text));
+        foreach (var tokens in tokenLists)
         {
-            var tokens = _wordPieceTokenizer.Tokenize(text);
             totalTokens += tokens.Count;
         }
         return totalTokens;

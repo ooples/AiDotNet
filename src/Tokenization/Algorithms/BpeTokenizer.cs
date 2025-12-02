@@ -10,22 +10,54 @@ using AiDotNet.Tokenization.Models;
 namespace AiDotNet.Tokenization.Algorithms
 {
     /// <summary>
-    /// Byte-Pair Encoding (BPE) tokenizer implementation.
-    /// Used by GPT models and other modern language models.
+    /// Byte-Pair Encoding (BPE) tokenizer implementation for subword tokenization.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// BPE is a data compression algorithm adapted for NLP that learns to merge frequent
+    /// character sequences into subword units. It's used by GPT, GPT-2, GPT-3, and many
+    /// other modern language models.
+    /// </para>
+    /// <para><b>For Beginners:</b> BPE is like learning common letter combinations. Imagine
+    /// you're creating shorthand notes:
+    ///
+    /// 1. Start with individual letters: "t", "h", "e", " ", "c", "a", "t"
+    /// 2. Notice "th" appears often, so create a symbol for it: "th", "e", " ", ...
+    /// 3. Notice "the" appears often, merge again: "the", " ", "cat"
+    /// 4. Keep merging until you have a good vocabulary size
+    ///
+    /// This way, common words like "the" become single tokens, while rare words like
+    /// "cryptocurrency" might be split into "crypt" + "ocurrency" or similar subwords.
+    ///
+    /// Benefits:
+    /// - No out-of-vocabulary words (any text can be tokenized)
+    /// - Common words are single tokens (efficient)
+    /// - Rare words are split into meaningful subwords (handles new words)
+    ///
+    /// Example tokenization of "unhappiness":
+    /// - Full word not in vocabulary, so split into subwords
+    /// - Possible result: ["un", "happiness"] or ["un", "happy", "ness"]
+    /// </para>
+    /// </remarks>
     public class BpeTokenizer : TokenizerBase
     {
         private readonly Dictionary<(string, string), int> _bpeMerges;
-        private readonly Dictionary<string, string> _cache;
+        private readonly Dictionary<string, List<string>> _cache;
         private readonly Regex _patternRegex;
 
         /// <summary>
-        /// Creates a new BPE tokenizer.
+        /// Creates a new BPE tokenizer with the specified vocabulary and merge rules.
         /// </summary>
-        /// <param name="vocabulary">The vocabulary.</param>
-        /// <param name="merges">The BPE merges (pairs of tokens to merge and their priority).</param>
-        /// <param name="specialTokens">The special tokens.</param>
-        /// <param name="pattern">The regex pattern for pre-tokenization (default: GPT-2 pattern).</param>
+        /// <param name="vocabulary">The vocabulary containing all valid tokens.</param>
+        /// <param name="merges">The BPE merges (pairs of tokens to merge and their priority order).</param>
+        /// <param name="specialTokens">The special tokens configuration. Defaults to GPT-style tokens.</param>
+        /// <param name="pattern">The regex pattern for pre-tokenization. Defaults to GPT-2 pattern.</param>
+        /// <remarks>
+        /// <para><b>For Beginners:</b> Most users should use the Train method or load a pretrained
+        /// tokenizer instead of calling this constructor directly. The merges dictionary contains
+        /// rules like ("t", "h") -> 0 meaning "merge t and h first" (lower number = higher priority).
+        /// </para>
+        /// </remarks>
         public BpeTokenizer(
             IVocabulary vocabulary,
             Dictionary<(string, string), int> merges,
@@ -34,7 +66,7 @@ namespace AiDotNet.Tokenization.Algorithms
             : base(vocabulary, specialTokens ?? SpecialTokens.Gpt())
         {
             _bpeMerges = merges ?? throw new ArgumentNullException(nameof(merges));
-            _cache = new Dictionary<string, string>();
+            _cache = new Dictionary<string, List<string>>();
 
             // Default GPT-2 pattern for pre-tokenization
             pattern ??= @"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+";
@@ -42,19 +74,39 @@ namespace AiDotNet.Tokenization.Algorithms
         }
 
         /// <summary>
-        /// Trains a BPE tokenizer from a corpus.
+        /// Trains a BPE tokenizer from a text corpus by learning merge rules.
         /// </summary>
-        /// <param name="corpus">The training corpus.</param>
-        /// <param name="vocabSize">The desired vocabulary size.</param>
-        /// <param name="specialTokens">The special tokens.</param>
-        /// <param name="pattern">The regex pattern for pre-tokenization.</param>
-        /// <returns>A trained BPE tokenizer.</returns>
+        /// <param name="corpus">The training corpus - a collection of text strings.</param>
+        /// <param name="vocabSize">The desired vocabulary size (number of unique tokens).</param>
+        /// <param name="specialTokens">The special tokens configuration. Defaults to GPT-style tokens.</param>
+        /// <param name="pattern">The regex pattern for pre-tokenization. Defaults to GPT-2 pattern.</param>
+        /// <returns>A trained BPE tokenizer ready to tokenize text.</returns>
+        /// <remarks>
+        /// <para><b>For Beginners:</b> Training learns which letter combinations appear most
+        /// frequently in your text. For example, if training on English text:
+        ///
+        /// 1. The algorithm starts with all individual characters as tokens
+        /// 2. It counts all adjacent character pairs in the corpus
+        /// 3. The most frequent pair (e.g., "t" + "h") becomes a new token "th"
+        /// 4. This repeats until reaching the desired vocabulary size
+        ///
+        /// Larger vocabulary = longer sequences become single tokens = faster inference
+        /// but more memory. Typical sizes: 30,000-50,000 tokens.
+        /// </para>
+        /// </remarks>
         public static BpeTokenizer Train(
             IEnumerable<string> corpus,
             int vocabSize,
             SpecialTokens? specialTokens = null,
             string? pattern = null)
         {
+            if (corpus == null)
+                throw new ArgumentNullException(nameof(corpus));
+
+            var corpusList = corpus.ToList();
+            if (corpusList.Count == 0)
+                throw new ArgumentException("Corpus cannot be empty.", nameof(corpus));
+
             specialTokens ??= SpecialTokens.Gpt();
 
             // Step 1: Build character vocabulary
@@ -71,10 +123,13 @@ namespace AiDotNet.Tokenization.Algorithms
             var preTokenRegex = new Regex(pattern, RegexOptions.Compiled);
 
             var wordFreqs = new Dictionary<string, int>();
-            foreach (var text in corpus)
+            foreach (var text in corpusList)
             {
-                var matches = preTokenRegex.Matches(text);
-                foreach (var word in matches.Cast<Match>().Select(m => m.Value))
+                var words = preTokenRegex.Matches(text)
+                    .Cast<Match>()
+                    .Select(m => m.Value);
+
+                foreach (var word in words)
                 {
                     wordFreqs[word] = wordFreqs.GetValueOrDefault(word, 0) + 1;
                 }
@@ -170,13 +225,13 @@ namespace AiDotNet.Tokenization.Algorithms
                 // Check cache
                 if (_cache.TryGetValue(word, out var cachedTokens))
                 {
-                    tokens.AddRange(cachedTokens.Split(' '));
+                    tokens.AddRange(cachedTokens);
                     continue;
                 }
 
                 // Apply BPE
                 var bpeTokens = BpeEncode(word);
-                _cache[word] = string.Join(" ", bpeTokens);
+                _cache[word] = bpeTokens;
                 tokens.AddRange(bpeTokens);
             }
 

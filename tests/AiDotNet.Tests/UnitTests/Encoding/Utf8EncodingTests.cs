@@ -36,7 +36,7 @@ public class Utf8EncodingTests
     {
         var rootDir = GetRepositoryRoot();
         var csFiles = Directory.GetFiles(rootDir, "*.cs", SearchOption.AllDirectories)
-            .Where(f => !f.Contains("bin") && !f.Contains("obj") && !f.Contains(".git"))
+            .Where(f => !f.Contains("bin") && !f.Contains("obj") && !f.Contains(".git") && !f.Contains(".worktrees") && !f.Contains("worktrees"))
             .ToList();
 
         var filesWithIssues = new List<(string file, int count)>();

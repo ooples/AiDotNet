@@ -141,10 +141,35 @@ namespace AiDotNet.Tokenization.Algorithms
             // Replace spaces with whitespace symbol
             var processedText = text.Replace(" ", WhitespaceSymbol);
 
-            // Use Viterbi algorithm to find best segmentation
-            var tokens = ViterbiSegmentation(processedText);
+            if (_treatWhitespaceAsSpecialToken)
+            {
+                // Split on whitespace symbol and tokenize each segment separately
+                // This ensures whitespace symbols are kept as separate tokens
+                var segments = processedText.Split(new[] { WhitespaceSymbol }, StringSplitOptions.None);
+                var tokens = new List<string>();
 
-            return tokens;
+                for (int i = 0; i < segments.Length; i++)
+                {
+                    // Add whitespace symbol token before each segment except the first
+                    if (i > 0)
+                    {
+                        tokens.Add(WhitespaceSymbol);
+                    }
+
+                    // Tokenize the segment if it's not empty
+                    if (!string.IsNullOrEmpty(segments[i]))
+                    {
+                        tokens.AddRange(ViterbiSegmentation(segments[i]));
+                    }
+                }
+
+                return tokens;
+            }
+            else
+            {
+                // Use Viterbi algorithm on the entire text, allowing whitespace to merge
+                return ViterbiSegmentation(processedText);
+            }
         }
 
         /// <summary>

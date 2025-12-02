@@ -222,7 +222,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// 
     /// For example:
     /// ```csharp
-    /// // Create a hidden layer with 784 inputs (e.g., from a 28�28 image), 
+    /// // Create a hidden layer with 784 inputs (e.g., from a 28×28 image), 
     /// // 128 outputs, and ReLU activation
     /// var hiddenLayer = new FullyConnectedLayer<float>(784, 128);
     /// 
@@ -799,7 +799,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// - Advanced optimization techniques that need all parameters together
     /// 
     /// For example, a layer with 100 inputs and 10 outputs would have:
-    /// - 1,000 weight parameters (100 � 10)
+    /// - 1,000 weight parameters (100 × 10)
     /// - 10 bias parameters (one per output)
     /// - Totaling 1,010 parameters in the returned vector
     /// </para>

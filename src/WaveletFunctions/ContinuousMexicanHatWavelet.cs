@@ -60,7 +60,7 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
     /// - The scale (width) of the wavelet is adjusted during the transform process, not in the constructor
     /// 
     /// The Mexican Hat wavelet is defined by the formula:
-    /// ?(t) = (2/v3) · p^(-1/4) · (1-t²) · e^(-t²/2)
+    /// ?(t) = (2/v3) Â· p^(-1/4) Â· (1-tÂ²) Â· e^(-tÂ²/2)
     /// 
     /// This formula creates the characteristic central peak with symmetric valleys on either side.
     /// </para>
@@ -81,16 +81,16 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
     /// This method gives you the actual value of the Mexican Hat wavelet at a specific point.
     /// 
     /// The Mexican Hat wavelet is defined by the formula:
-    /// ?(t) = (2/v3) · p^(-1/4) · (1-t²) · e^(-t²/2)
+    /// ?(t) = (2/v3) Â· p^(-1/4) Â· (1-tÂ²) Â· e^(-tÂ²/2)
     /// 
     /// Breaking this down:
-    /// 1. (1-t²): This term creates the basic shape with a positive center and negative sides
-    /// 2. e^(-t²/2): This is the Gaussian envelope that makes the function decay to zero as t moves away from the center
-    /// 3. (2/v3) · p^(-1/4): This is a normalization factor that ensures the wavelet has unit energy
+    /// 1. (1-tÂ²): This term creates the basic shape with a positive center and negative sides
+    /// 2. e^(-tÂ²/2): This is the Gaussian envelope that makes the function decay to zero as t moves away from the center
+    /// 3. (2/v3) Â· p^(-1/4): This is a normalization factor that ensures the wavelet has unit energy
     /// 
     /// The result is a function that:
     /// - Equals 1 at x=0 (after normalization)
-    /// - Has negative valleys at x = ±v2
+    /// - Has negative valleys at x = Â±v2
     /// - Approaches zero as x moves further from the center
     /// 
     /// You might use this method to visualize the wavelet or to directly apply the wavelet
@@ -224,7 +224,7 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
     /// For the Mexican Hat wavelet, these coefficients are a discretized version of the
     /// Mexican Hat function:
     /// 
-    /// ?(t) = (1-t²) · e^(-t²/2)
+    /// ?(t) = (1-tÂ²) Â· e^(-tÂ²/2)
     /// 
     /// This method:
     /// 1. Creates a discretized Mexican Hat wavelet of specified length

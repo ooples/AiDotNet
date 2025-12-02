@@ -78,7 +78,7 @@ public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
     ///    - Default value of 1.0 provides a balanced trade-off
     /// 
     /// The relationship between these parameters determines the wavelet's properties:
-    /// - The product ?·s should be > 5 to ensure admissibility (a mathematical requirement)
+    /// - The product ?Â·s should be > 5 to ensure admissibility (a mathematical requirement)
     /// - The default values (?=5, s=1) satisfy this condition
     /// 
     /// You might adjust these parameters when:
@@ -104,11 +104,11 @@ public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
     /// This method gives you the actual value of the Complex Morlet wavelet at a specific point.
     /// 
     /// The Complex Morlet wavelet is defined as:
-    /// ?(t) = (e^(i?t) · e^(-t²/(2s²)))
+    /// ?(t) = (e^(i?t) Â· e^(-tÂ²/(2sÂ²)))
     /// 
     /// Which can be broken down into:
-    /// - e^(i?t) = cos(?t) + i·sin(?t): The complex exponential (oscillating part)
-    /// - e^(-t²/(2s²)): The Gaussian envelope (bell-shaped curve)
+    /// - e^(i?t) = cos(?t) + iÂ·sin(?t): The complex exponential (oscillating part)
+    /// - e^(-tÂ²/(2sÂ²)): The Gaussian envelope (bell-shaped curve)
     /// 
     /// For a complex input z = x + iy, this function:
     /// 1. Calculates the Gaussian envelope based on the distance from the origin
@@ -248,12 +248,12 @@ public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
     /// For Complex Morlet wavelets, these coefficients are a discretized version of the
     /// Complex Morlet wavelet function:
     /// 
-    /// ?(t) = e^(i?t) · e^(-t²/(2s²))
+    /// ?(t) = e^(i?t) Â· e^(-tÂ²/(2sÂ²))
     /// 
     /// This method:
     /// 1. Creates a discretized Complex Morlet wavelet of specified length
-    /// 2. The real part is the Gaussian-modulated cosine: e^(-t²/(2s²)) · cos(?t)
-    /// 3. The imaginary part is the Gaussian-modulated sine: e^(-t²/(2s²)) · sin(?t)
+    /// 2. The real part is the Gaussian-modulated cosine: e^(-tÂ²/(2sÂ²)) Â· cos(?t)
+    /// 3. The imaginary part is the Gaussian-modulated sine: e^(-tÂ²/(2sÂ²)) Â· sin(?t)
     /// 4. Normalizes the coefficients to ensure energy preservation
     /// 
     /// The resulting filter is sensitive to oscillations at frequency ?, making it

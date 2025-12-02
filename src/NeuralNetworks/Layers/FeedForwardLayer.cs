@@ -24,7 +24,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - Input: [0.2, 0.5, 0.1] (representing features from previous layer)
 /// - Weights: [[0.1, 0.8], [0.4, 0.3], [0.7, 0.2]] (each input's influence on each output)
 /// - Biases: [0.1, -0.2] (starting values for each output)
-/// - Output before activation: [0.2�0.1 + 0.5�0.4 + 0.1�0.7 + 0.1, 0.2�0.8 + 0.5�0.3 + 0.1�0.2 - 0.2]
+/// - Output before activation: [0.2×0.1 + 0.5×0.4 + 0.1×0.7 + 0.1, 0.2×0.8 + 0.5×0.3 + 0.1×0.2 - 0.2]
 ///                           = [0.39, 0.33]
 /// - After activation (e.g., ReLU): [0.39, 0.33] (since both are already positive)
 /// 
@@ -242,7 +242,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// 
     /// For example:
     /// ```csharp
-    /// // Create a layer with 784 inputs (e.g., from a 28�28 image), 
+    /// // Create a layer with 784 inputs (e.g., from a 28×28 image), 
     /// // 128 outputs, and ReLU activation
     /// var hiddenLayer = new FeedForwardLayer<float>(784, 128, new ReLUActivation<float>());
     /// 
@@ -606,7 +606,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// - Advanced optimization techniques that need all parameters together
     /// 
     /// For example, a layer with 100 inputs and 10 outputs would have:
-    /// - 1,000 weight parameters (100 � 10)
+    /// - 1,000 weight parameters (100 × 10)
     /// - 10 bias parameters (one per output)
     /// - Totaling 1,010 parameters in the returned vector
     /// </para>

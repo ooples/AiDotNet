@@ -158,7 +158,7 @@ public static class ModelHelper<T, TInput, TOutput>
                 if (index < 0 || index >= tensor.Shape[1])
                 {
                     throw new ArgumentOutOfRangeException(nameof(indices), 
-                        $"Column index {index} is out of range for tensor with shape {string.Join("�", tensor.Shape)}");
+                        $"Column index {index} is out of range for tensor with shape {string.Join("×", tensor.Shape)}");
                 }
             
                 // Create a vector from the column
