@@ -449,10 +449,22 @@ namespace AiDotNet.Tokenization.HuggingFace
         /// <returns>The combined path, guaranteed to be within basePath.</returns>
         private static string GetSafePath(string basePath, string fileName)
         {
-            var normalizedBase = Path.GetFullPath(basePath);
-            var combined = Path.GetFullPath(Path.Combine(normalizedBase, fileName));
+            // Validate filename doesn't contain path traversal characters
+            if (fileName.Contains("..") || fileName.Contains('/') || fileName.Contains('\\'))
+            {
+                throw new ArgumentException($"Invalid file path: {fileName} contains path traversal characters");
+            }
 
-            // Ensure the resulting path is within the base directory
+            var normalizedBase = Path.GetFullPath(basePath);
+            // Ensure base path ends with directory separator for proper concatenation
+            if (!normalizedBase.EndsWith(Path.DirectorySeparatorChar.ToString()))
+            {
+                normalizedBase += Path.DirectorySeparatorChar;
+            }
+
+            var combined = Path.GetFullPath(normalizedBase + fileName);
+
+            // Double-check the resulting path is within the base directory
             if (!combined.StartsWith(normalizedBase, StringComparison.OrdinalIgnoreCase))
             {
                 throw new ArgumentException($"Invalid file path: {fileName} attempts path traversal");
