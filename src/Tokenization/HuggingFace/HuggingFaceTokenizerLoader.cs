@@ -178,11 +178,20 @@ namespace AiDotNet.Tokenization.HuggingFace
 
             var vocabulary = new Vocabulary.Vocabulary(vocabDict, specialTokens.UnkToken);
 
-            // Create default scores (would ideally load from model file)
+            // Create default scores based on token position as a proxy for frequency
+            // Lower index = more common = higher score (less negative)
+            // This approximates the log probability distribution of real tokenizers
             var pieceScores = new Dictionary<string, double>();
+            int index = 0;
+            int vocabSize = vocabDict.Count;
             foreach (var token in vocabDict.Keys)
             {
-                pieceScores[token] = 0.0; // Default score
+                // Use negative log of relative position to approximate frequency-based scores
+                // Common tokens (lower index) get higher scores (closer to 0)
+                // Rare tokens (higher index) get lower scores (more negative)
+                double relativePosition = (double)(index + 1) / vocabSize;
+                pieceScores[token] = Math.Log(1.0 / (relativePosition + 0.1));
+                index++;
             }
 
             return new SentencePieceTokenizer(vocabulary, pieceScores, specialTokens);
@@ -225,12 +234,20 @@ namespace AiDotNet.Tokenization.HuggingFace
         /// <summary>
         /// Loads a tokenizer from HuggingFace Hub by model name.
         /// </summary>
+        /// <remarks>
+        /// <para><b>Warning:</b> This method uses sync-over-async internally and may cause deadlocks
+        /// in UI applications or ASP.NET contexts with synchronization contexts.
+        /// Prefer using <see cref="LoadFromHubAsync"/> when possible.</para>
+        /// <para>Files are cached locally, so subsequent calls will not make network requests.</para>
+        /// </remarks>
         /// <param name="modelName">The model name (e.g., "bert-base-uncased", "gpt2").</param>
         /// <param name="cacheDir">Optional cache directory.</param>
         /// <returns>The loaded tokenizer.</returns>
         public static ITokenizer LoadFromHub(string modelName, string? cacheDir = null)
         {
-            return LoadFromHubAsync(modelName, cacheDir).GetAwaiter().GetResult();
+            // Note: Using Task.Run to avoid deadlocks in contexts with synchronization contexts
+            // This is a workaround for the sync-over-async pattern
+            return Task.Run(() => LoadFromHubAsync(modelName, cacheDir)).GetAwaiter().GetResult();
         }
 
         /// <summary>
