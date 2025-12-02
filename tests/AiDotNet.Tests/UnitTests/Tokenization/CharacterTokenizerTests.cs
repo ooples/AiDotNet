@@ -157,7 +157,8 @@ public class CharacterTokenizerTests
         // Assert
         Assert.True(tokenizer.Vocabulary.ContainsToken("a"));
         Assert.True(tokenizer.Vocabulary.ContainsToken("b"));
-        // c might be replaced with UNK since it's below frequency
+        // c should NOT be in vocabulary since it appears only once (below minFrequency of 2)
+        Assert.False(tokenizer.Vocabulary.ContainsToken("c"));
     }
 
     [Fact]
