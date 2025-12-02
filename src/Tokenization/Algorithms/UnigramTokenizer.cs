@@ -126,7 +126,7 @@ namespace AiDotNet.Tokenization.Algorithms
 
             // Convert counts to log probabilities
             double total = topSubstrings.Values.Sum();
-            if (total == 0)
+            if (total < double.Epsilon)
                 throw new InvalidOperationException("Cannot compute log probabilities: total count is zero.");
 
             var tokenScores = topSubstrings.ToDictionary(
