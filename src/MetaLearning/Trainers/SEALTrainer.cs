@@ -386,35 +386,50 @@ public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
 
     /// <summary>
     /// Calculates confidence scores (max probability) for each prediction.
+    /// Supports both Tensor and Vector output types.
     /// </summary>
     private Vector<T> CalculateConfidences(TOutput predictions)
     {
-        if (predictions is not Tensor<T> tensor)
+        if (predictions is Tensor<T> tensor)
         {
-            throw new NotSupportedException($"Confidence calculation only supports Tensor<T>, got {typeof(TOutput)}");
-        }
+            // For classification: confidence = max probability per example
+            // predictions shape: (N, C) where N = examples, C = classes
+            int numExamples = tensor.Shape[0];
+            int numClasses = tensor.Shape.Length > 1 ? tensor.Shape[1] : 1;
+            var confidences = new Vector<T>(numExamples);
 
-        // For classification: confidence = max probability per example
-        // predictions shape: (N, C) where N = examples, C = classes
-        int numExamples = tensor.Shape[0];
-        int numClasses = tensor.Shape.Length > 1 ? tensor.Shape[1] : 1;
-        var confidences = new Vector<T>(numExamples);
-
-        for (int i = 0; i < numExamples; i++)
-        {
-            T maxProb = NumOps.Zero;
-            for (int j = 0; j < numClasses; j++)
+            for (int i = 0; i < numExamples; i++)
             {
-                T prob = tensor[i, j];
-                if (NumOps.GreaterThan(prob, maxProb))
+                T maxProb = NumOps.Zero;
+                for (int j = 0; j < numClasses; j++)
                 {
-                    maxProb = prob;
+                    T prob = tensor[i, j];
+                    if (NumOps.GreaterThan(prob, maxProb))
+                    {
+                        maxProb = prob;
+                    }
                 }
+                confidences[i] = maxProb;
             }
-            confidences[i] = maxProb;
-        }
 
-        return confidences;
+            return confidences;
+        }
+        else if (predictions is Vector<T> vector)
+        {
+            // For Vector output (e.g., class predictions), use uniform confidence
+            // since we don't have probability distributions
+            var confidences = new Vector<T>(vector.Length);
+            T defaultConfidence = NumOps.FromDouble(0.5);
+            for (int i = 0; i < vector.Length; i++)
+            {
+                confidences[i] = defaultConfidence;
+            }
+            return confidences;
+        }
+        else
+        {
+            throw new NotSupportedException($"Confidence calculation only supports Tensor<T> or Vector<T>, got {typeof(TOutput)}");
+        }
     }
 
     /// <summary>
@@ -483,167 +498,249 @@ public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     }
 
     /// <summary>
-    /// Extracts selected examples from input tensor.
+    /// Extracts selected examples from input (supports both Tensor and Matrix).
     /// </summary>
     private TInput ExtractExamples(TInput input, List<int> indices)
     {
-        if (input is not Tensor<T> tensor)
+        if (input is Tensor<T> tensor)
         {
-            throw new NotSupportedException($"Example extraction only supports Tensor<T>, got {typeof(TInput)}");
+            int[] newShape = (int[])tensor.Shape.Clone();
+            newShape[0] = indices.Count;
+
+            var extracted = new Tensor<T>(newShape);
+
+            for (int i = 0; i < indices.Count; i++)
+            {
+                int srcIdx = indices[i];
+                CopyTensorSlice(tensor, extracted, srcIdx, i);
+            }
+
+            return (TInput)(object)extracted;
         }
-
-        int[] newShape = (int[])tensor.Shape.Clone();
-        newShape[0] = indices.Count;
-
-        var extracted = new Tensor<T>(newShape);
-
-        for (int i = 0; i < indices.Count; i++)
+        else if (input is Matrix<T> matrix)
         {
-            int srcIdx = indices[i];
-            CopyTensorSlice(tensor, extracted, srcIdx, i);
-        }
+            var extracted = new Matrix<T>(indices.Count, matrix.Columns);
 
-        return (TInput)(object)extracted;
+            for (int i = 0; i < indices.Count; i++)
+            {
+                int srcIdx = indices[i];
+                for (int j = 0; j < matrix.Columns; j++)
+                {
+                    extracted[i, j] = matrix[srcIdx, j];
+                }
+            }
+
+            return (TInput)(object)extracted;
+        }
+        else
+        {
+            throw new NotSupportedException($"Example extraction only supports Tensor<T> or Matrix<T>, got {typeof(TInput)}");
+        }
     }
 
     /// <summary>
     /// Extracts pseudo-labels (argmax of predictions) for selected examples.
+    /// Supports both Tensor and Vector output types.
     /// </summary>
     private TOutput ExtractPseudoLabels(TOutput predictions, List<int> indices)
     {
-        if (predictions is not Tensor<T> tensor)
+        if (predictions is Tensor<T> tensor)
         {
-            throw new NotSupportedException($"Pseudo-label extraction only supports Tensor<T>, got {typeof(TOutput)}");
-        }
+            int numClasses = tensor.Shape.Length > 1 ? tensor.Shape[1] : 1;
+            var pseudoLabels = new Tensor<T>(new[] { indices.Count, numClasses });
 
-        int numClasses = tensor.Shape.Length > 1 ? tensor.Shape[1] : 1;
-        var pseudoLabels = new Tensor<T>(new[] { indices.Count, numClasses });
-
-        for (int i = 0; i < indices.Count; i++)
-        {
-            int srcIdx = indices[i];
-
-            // Find argmax (predicted class)
-            int predictedClass = 0;
-            T maxProb = NumOps.Zero;
-            for (int j = 0; j < numClasses; j++)
+            for (int i = 0; i < indices.Count; i++)
             {
-                T prob = tensor[srcIdx, j];
-                if (NumOps.GreaterThan(prob, maxProb))
+                int srcIdx = indices[i];
+
+                // Find argmax (predicted class)
+                int predictedClass = 0;
+                T maxProb = NumOps.Zero;
+                for (int j = 0; j < numClasses; j++)
                 {
-                    maxProb = prob;
-                    predictedClass = j;
+                    T prob = tensor[srcIdx, j];
+                    if (NumOps.GreaterThan(prob, maxProb))
+                    {
+                        maxProb = prob;
+                        predictedClass = j;
+                    }
+                }
+
+                // Create one-hot encoding
+                for (int j = 0; j < numClasses; j++)
+                {
+                    pseudoLabels[i, j] = (j == predictedClass) ? NumOps.One : NumOps.Zero;
                 }
             }
 
-            // Create one-hot encoding
-            for (int j = 0; j < numClasses; j++)
-            {
-                pseudoLabels[i, j] = (j == predictedClass) ? NumOps.One : NumOps.Zero;
-            }
+            return (TOutput)(object)pseudoLabels;
         }
-
-        return (TOutput)(object)pseudoLabels;
+        else if (predictions is Vector<T> vector)
+        {
+            // For Vector output, extract labels at the given indices
+            var pseudoLabels = new Vector<T>(indices.Count);
+            for (int i = 0; i < indices.Count; i++)
+            {
+                pseudoLabels[i] = vector[indices[i]];
+            }
+            return (TOutput)(object)pseudoLabels;
+        }
+        else
+        {
+            throw new NotSupportedException($"Pseudo-label extraction only supports Tensor<T> or Vector<T>, got {typeof(TOutput)}");
+        }
     }
 
     /// <summary>
-    /// Combines two input tensors along the first dimension.
+    /// Combines two inputs along the first dimension (supports both Tensor and Matrix).
     /// </summary>
     private TInput CombineInputs(TInput input1, TInput input2)
     {
-        if (input1 is not Tensor<T> tensor1 || input2 is not Tensor<T> tensor2)
+        if (input1 is Tensor<T> tensor1 && input2 is Tensor<T> tensor2)
         {
-            throw new NotSupportedException($"Combining only supports Tensor<T>, got {typeof(TInput)}");
-        }
-
-        // Validate tensors are not empty
-        if (tensor1.Shape.Length == 0 || tensor2.Shape.Length == 0)
-        {
-            throw new ArgumentException("Cannot combine empty tensors");
-        }
-
-        // Validate shape compatibility (all dimensions except first must match)
-        if (tensor1.Shape.Length != tensor2.Shape.Length)
-        {
-            throw new ArgumentException($"Tensors must have same number of dimensions. Got {tensor1.Shape.Length} and {tensor2.Shape.Length}");
-        }
-
-        for (int i = 1; i < tensor1.Shape.Length; i++)
-        {
-            if (tensor1.Shape[i] != tensor2.Shape[i])
+            // Validate tensors are not empty
+            if (tensor1.Shape.Length == 0 || tensor2.Shape.Length == 0)
             {
-                throw new ArgumentException($"Tensor shapes must match in dimension {i}. Got {tensor1.Shape[i]} and {tensor2.Shape[i]}");
+                throw new ArgumentException("Cannot combine empty tensors");
             }
+
+            // Validate shape compatibility (all dimensions except first must match)
+            if (tensor1.Shape.Length != tensor2.Shape.Length)
+            {
+                throw new ArgumentException($"Tensors must have same number of dimensions. Got {tensor1.Shape.Length} and {tensor2.Shape.Length}");
+            }
+
+            for (int i = 1; i < tensor1.Shape.Length; i++)
+            {
+                if (tensor1.Shape[i] != tensor2.Shape[i])
+                {
+                    throw new ArgumentException($"Tensor shapes must match in dimension {i}. Got {tensor1.Shape[i]} and {tensor2.Shape[i]}");
+                }
+            }
+
+            int[] newShape = (int[])tensor1.Shape.Clone();
+            newShape[0] = tensor1.Shape[0] + tensor2.Shape[0];
+
+            var combined = new Tensor<T>(newShape);
+
+            // Copy first tensor
+            for (int i = 0; i < tensor1.Shape[0]; i++)
+            {
+                CopyTensorSlice(tensor1, combined, i, i);
+            }
+
+            // Copy second tensor
+            for (int i = 0; i < tensor2.Shape[0]; i++)
+            {
+                CopyTensorSlice(tensor2, combined, i, tensor1.Shape[0] + i);
+            }
+
+            return (TInput)(object)combined;
         }
-
-        int[] newShape = (int[])tensor1.Shape.Clone();
-        newShape[0] = tensor1.Shape[0] + tensor2.Shape[0];
-
-        var combined = new Tensor<T>(newShape);
-
-        // Copy first tensor
-        for (int i = 0; i < tensor1.Shape[0]; i++)
+        else if (input1 is Matrix<T> matrix1 && input2 is Matrix<T> matrix2)
         {
-            CopyTensorSlice(tensor1, combined, i, i);
-        }
+            // Validate matrices have same number of columns
+            if (matrix1.Columns != matrix2.Columns)
+            {
+                throw new ArgumentException($"Matrices must have same number of columns. Got {matrix1.Columns} and {matrix2.Columns}");
+            }
 
-        // Copy second tensor
-        for (int i = 0; i < tensor2.Shape[0]; i++)
+            var combined = new Matrix<T>(matrix1.Rows + matrix2.Rows, matrix1.Columns);
+
+            // Copy first matrix
+            for (int i = 0; i < matrix1.Rows; i++)
+            {
+                for (int j = 0; j < matrix1.Columns; j++)
+                {
+                    combined[i, j] = matrix1[i, j];
+                }
+            }
+
+            // Copy second matrix
+            for (int i = 0; i < matrix2.Rows; i++)
+            {
+                for (int j = 0; j < matrix2.Columns; j++)
+                {
+                    combined[matrix1.Rows + i, j] = matrix2[i, j];
+                }
+            }
+
+            return (TInput)(object)combined;
+        }
+        else
         {
-            CopyTensorSlice(tensor2, combined, i, tensor1.Shape[0] + i);
+            throw new NotSupportedException($"Combining only supports Tensor<T> or Matrix<T>, got {typeof(TInput)}");
         }
-
-        return (TInput)(object)combined;
     }
 
     /// <summary>
-    /// Combines two output tensors along the first dimension.
+    /// Combines two outputs along the first dimension (supports both Tensor and Vector).
     /// </summary>
     private TOutput CombineOutputs(TOutput output1, TOutput output2)
     {
-        if (output1 is not Tensor<T> tensor1 || output2 is not Tensor<T> tensor2)
+        if (output1 is Tensor<T> tensor1 && output2 is Tensor<T> tensor2)
         {
-            throw new NotSupportedException($"Combining only supports Tensor<T>, got {typeof(TOutput)}");
-        }
-
-        // Validate tensors are not empty
-        if (tensor1.Shape.Length == 0 || tensor2.Shape.Length == 0)
-        {
-            throw new ArgumentException("Cannot combine empty tensors");
-        }
-
-        // Validate shape compatibility (all dimensions except first must match)
-        if (tensor1.Shape.Length != tensor2.Shape.Length)
-        {
-            throw new ArgumentException($"Tensors must have same number of dimensions. Got {tensor1.Shape.Length} and {tensor2.Shape.Length}");
-        }
-
-        for (int i = 1; i < tensor1.Shape.Length; i++)
-        {
-            if (tensor1.Shape[i] != tensor2.Shape[i])
+            // Validate tensors are not empty
+            if (tensor1.Shape.Length == 0 || tensor2.Shape.Length == 0)
             {
-                throw new ArgumentException($"Tensor shapes must match in dimension {i}. Got {tensor1.Shape[i]} and {tensor2.Shape[i]}");
+                throw new ArgumentException("Cannot combine empty tensors");
             }
+
+            // Validate shape compatibility (all dimensions except first must match)
+            if (tensor1.Shape.Length != tensor2.Shape.Length)
+            {
+                throw new ArgumentException($"Tensors must have same number of dimensions. Got {tensor1.Shape.Length} and {tensor2.Shape.Length}");
+            }
+
+            for (int i = 1; i < tensor1.Shape.Length; i++)
+            {
+                if (tensor1.Shape[i] != tensor2.Shape[i])
+                {
+                    throw new ArgumentException($"Tensor shapes must match in dimension {i}. Got {tensor1.Shape[i]} and {tensor2.Shape[i]}");
+                }
+            }
+
+            int[] newShape = (int[])tensor1.Shape.Clone();
+            newShape[0] = tensor1.Shape[0] + tensor2.Shape[0];
+
+            var combined = new Tensor<T>(newShape);
+
+            // Copy first tensor
+            for (int i = 0; i < tensor1.Shape[0]; i++)
+            {
+                CopyTensorSlice(tensor1, combined, i, i);
+            }
+
+            // Copy second tensor
+            for (int i = 0; i < tensor2.Shape[0]; i++)
+            {
+                CopyTensorSlice(tensor2, combined, i, tensor1.Shape[0] + i);
+            }
+
+            return (TOutput)(object)combined;
         }
-
-        int[] newShape = (int[])tensor1.Shape.Clone();
-        newShape[0] = tensor1.Shape[0] + tensor2.Shape[0];
-
-        var combined = new Tensor<T>(newShape);
-
-        // Copy first tensor
-        for (int i = 0; i < tensor1.Shape[0]; i++)
+        else if (output1 is Vector<T> vector1 && output2 is Vector<T> vector2)
         {
-            CopyTensorSlice(tensor1, combined, i, i);
-        }
+            var combined = new Vector<T>(vector1.Length + vector2.Length);
 
-        // Copy second tensor
-        for (int i = 0; i < tensor2.Shape[0]; i++)
+            // Copy first vector
+            for (int i = 0; i < vector1.Length; i++)
+            {
+                combined[i] = vector1[i];
+            }
+
+            // Copy second vector
+            for (int i = 0; i < vector2.Length; i++)
+            {
+                combined[vector1.Length + i] = vector2[i];
+            }
+
+            return (TOutput)(object)combined;
+        }
+        else
         {
-            CopyTensorSlice(tensor2, combined, i, tensor1.Shape[0] + i);
+            throw new NotSupportedException($"Combining only supports Tensor<T> or Vector<T>, got {typeof(TOutput)}");
         }
-
-        return (TOutput)(object)combined;
     }
 
     /// <summary>
