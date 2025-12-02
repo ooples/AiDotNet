@@ -234,12 +234,11 @@ public class ModifiedHuberLossFitnessCalculatorTests
     }
 
     [Fact]
-    public void CalculateFitnessScore_RobustToOutliers_ComparedToSquared()
+    public void CalculateFitnessScore_WithOutliers_ReturnsPositiveLoss()
     {
         // Arrange
         var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
 
-        // Dataset with one extreme outlier
         var dataSet = new DataSetStats<double, Vector<double>, Vector<double>>
         {
             Predicted = new Vector<double>(new double[] { 1.0, 1.0, -10.0 }), // One extreme outlier
@@ -249,7 +248,7 @@ public class ModifiedHuberLossFitnessCalculatorTests
         // Act
         var result = calculator.CalculateFitnessScore(dataSet);
 
-        // Assert - Should handle outliers more gracefully than pure squared loss
+        // Assert
         Assert.True(result > 0.0);
     }
 
@@ -297,5 +296,38 @@ public class ModifiedHuberLossFitnessCalculatorTests
 
         // Assert
         Assert.True(result1 < result2);
+    }
+
+    [Fact]
+    public void CalculateFitnessScore_WithMismatchedVectorLengths_ThrowsArgumentException()
+    {
+        // Arrange
+        var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
+        var dataSet = new DataSetStats<double, Vector<double>, Vector<double>>
+        {
+            Predicted = new Vector<double>(new double[] { 1.0, -1.0, 1.0 }),
+            Actual = new Vector<double>(new double[] { 1.0, -1.0 }) // Different length
+        };
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => calculator.CalculateFitnessScore(dataSet));
+    }
+
+    [Fact]
+    public void CalculateFitnessScore_WithEmptyVectors_ReturnsNaN()
+    {
+        // Arrange
+        var calculator = new ModifiedHuberLossFitnessCalculator<double, Vector<double>, Vector<double>>();
+        var dataSet = new DataSetStats<double, Vector<double>, Vector<double>>
+        {
+            Predicted = new Vector<double>(Array.Empty<double>()),
+            Actual = new Vector<double>(Array.Empty<double>())
+        };
+
+        // Act
+        var result = calculator.CalculateFitnessScore(dataSet);
+
+        // Assert - Empty vectors cause division by zero which returns NaN for floating point
+        Assert.True(double.IsNaN(result));
     }
 }
