@@ -35,6 +35,9 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-nuget-
 
+    - name: Restore NuGet Packages
+      run: dotnet restore
+
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
       with:
