@@ -93,6 +93,19 @@ namespace AiDotNet.Tokenization.CodeTokenization
                     "function", "if", "import", "in", "instanceof", "let", "new", "null", "return", "super",
                     "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with", "yield"
                 },
+                ProgrammingLanguage.TypeScript => new HashSet<string>
+                {
+                    // JavaScript keywords
+                    "async", "await", "break", "case", "catch", "class", "const", "continue", "debugger",
+                    "default", "delete", "do", "else", "export", "extends", "false", "finally", "for",
+                    "function", "if", "import", "in", "instanceof", "let", "new", "null", "return", "super",
+                    "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with", "yield",
+                    // TypeScript-specific keywords
+                    "abstract", "any", "as", "asserts", "bigint", "boolean", "declare", "enum", "implements",
+                    "infer", "interface", "is", "keyof", "module", "namespace", "never", "number", "object",
+                    "override", "private", "protected", "public", "readonly", "require", "static", "string",
+                    "symbol", "type", "undefined", "unique", "unknown"
+                },
                 _ => new HashSet<string>()
             };
         }
