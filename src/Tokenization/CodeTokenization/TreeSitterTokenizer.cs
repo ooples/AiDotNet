@@ -33,7 +33,7 @@ namespace AiDotNet.Tokenization.CodeTokenization
     /// rather than just their text content.
     /// </para>
     /// </remarks>
-    public class TreeSitterTokenizer : TokenizerBase, IDisposable
+    public sealed class TreeSitterTokenizer : TokenizerBase, IDisposable
     {
         private readonly Language _language;
         private readonly Parser _parser;
@@ -192,9 +192,14 @@ namespace AiDotNet.Tokenization.CodeTokenization
                     return _baseTokenizer.Tokenize(text);
                 }
             }
-            catch (Exception)
+            catch (InvalidOperationException)
             {
                 // If Tree-sitter parsing fails, fall back to base tokenizer
+                return _baseTokenizer.Tokenize(text);
+            }
+            catch (ArgumentException)
+            {
+                // If argument is invalid, fall back to base tokenizer
                 return _baseTokenizer.Tokenize(text);
             }
 
@@ -244,10 +249,14 @@ namespace AiDotNet.Tokenization.CodeTokenization
                     }
                 }
             }
-            catch
+            catch (InvalidOperationException)
             {
                 // If query fails, fall back to simple text tokenization
                 // This can happen with invalid query patterns for certain languages
+            }
+            catch (ArgumentException)
+            {
+                // If argument is invalid for query execution
             }
         }
 
@@ -408,7 +417,7 @@ namespace AiDotNet.Tokenization.CodeTokenization
         /// Releases the resources used by the Tree-sitter parser.
         /// </summary>
         /// <param name="disposing">True if called from Dispose(), false if called from finalizer.</param>
-        protected virtual void Dispose(bool disposing)
+        private void Dispose(bool disposing)
         {
             if (!_disposed)
             {
