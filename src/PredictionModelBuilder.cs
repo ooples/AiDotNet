@@ -1929,9 +1929,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         TokenizationConfig? config = null)
     {
         // Default to bert-base-uncased, the most widely-used pretrained tokenizer
-        var modelName = string.IsNullOrWhiteSpace(modelNameOrPath)
-            ? PretrainedTokenizerModel.BertBaseUncased.ToModelId()
-            : modelNameOrPath;
+        // Use null-coalescing to ensure a non-null model name
+        string defaultModel = PretrainedTokenizerModel.BertBaseUncased.ToModelId();
+        string modelName = modelNameOrPath is not null && !string.IsNullOrWhiteSpace(modelNameOrPath)
+            ? modelNameOrPath
+            : defaultModel;
         _tokenizer = AutoTokenizer.FromPretrained(modelName);
         _tokenizationConfig = config ?? new TokenizationConfig();
         return this;

@@ -1,4 +1,3 @@
-using System.Linq;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
