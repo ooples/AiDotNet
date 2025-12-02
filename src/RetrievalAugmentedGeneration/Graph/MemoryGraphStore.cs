@@ -192,7 +192,10 @@ public class MemoryGraphStore<T> : IGraphStore<T>
         if (!_outgoingEdges.TryGetValue(nodeId, out var edgeIds))
             return Enumerable.Empty<GraphEdge<T>>();
 
-        return edgeIds.Select(id => _edges[id]);
+        // Use TryGetValue to safely handle edges that may have been removed
+        return edgeIds
+            .Select(id => _edges.TryGetValue(id, out var edge) ? edge : null)
+            .OfType<GraphEdge<T>>();
     }
 
     /// <inheritdoc/>
@@ -201,7 +204,10 @@ public class MemoryGraphStore<T> : IGraphStore<T>
         if (!_incomingEdges.TryGetValue(nodeId, out var edgeIds))
             return Enumerable.Empty<GraphEdge<T>>();
 
-        return edgeIds.Select(id => _edges[id]);
+        // Use TryGetValue to safely handle edges that may have been removed
+        return edgeIds
+            .Select(id => _edges.TryGetValue(id, out var edge) ? edge : null)
+            .OfType<GraphEdge<T>>();
     }
 
     /// <inheritdoc/>
@@ -210,7 +216,10 @@ public class MemoryGraphStore<T> : IGraphStore<T>
         if (!_nodesByLabel.TryGetValue(label, out var nodeIds))
             return Enumerable.Empty<GraphNode<T>>();
 
-        return nodeIds.Select(id => _nodes[id]);
+        // Use TryGetValue to safely handle nodes that may have been removed
+        return nodeIds
+            .Select(id => _nodes.TryGetValue(id, out var node) ? node : null)
+            .OfType<GraphNode<T>>();
     }
 
     /// <inheritdoc/>
