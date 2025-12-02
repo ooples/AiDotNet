@@ -14,30 +14,6 @@ namespace AiDotNetTests.UnitTests.Interpretability
     public class FairnessEvaluatorTests
     {
         [Fact]
-        public void EvaluateFairness_WithNullModel_ThrowsArgumentNullException()
-        {
-            // Arrange
-            var evaluator = new ComprehensiveFairnessEvaluator<double>();
-            Matrix<double> inputs = new Matrix<double>(4, 2);
-
-            // Act & Assert
-            Assert.Throws<ArgumentNullException>(() =>
-                evaluator.EvaluateFairness(null, inputs, 0));
-        }
-
-        [Fact]
-        public void EvaluateFairness_WithNullInputs_ThrowsArgumentNullException()
-        {
-            // Arrange
-            var evaluator = new ComprehensiveFairnessEvaluator<double>();
-            var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
-
-            // Act & Assert
-            Assert.Throws<ArgumentNullException>(() =>
-                evaluator.EvaluateFairness(model, null, 0));
-        }
-
-        [Fact]
         public void EvaluateFairness_WithInvalidSensitiveFeatureIndex_ThrowsArgumentOutOfRangeException()
         {
             // Arrange

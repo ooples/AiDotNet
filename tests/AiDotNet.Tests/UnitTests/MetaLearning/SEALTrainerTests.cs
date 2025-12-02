@@ -213,8 +213,8 @@ public class SEALTrainerTests
         // Create mock model
         var model = new SEALMockModel(parameterCount: 100);
 
-        // Create self-supervised loss
-        var selfSupervisedLoss = new RotationPredictionLoss<double>();
+        // Create mock self-supervised loss that works with Matrix input
+        var selfSupervisedLoss = new MockSelfSupervisedLoss();
 
         return (dataLoader, model, selfSupervisedLoss);
     }
@@ -415,5 +415,43 @@ internal class SEALMockModel : IFullModel<double, Matrix<double>, Vector<double>
         // Simple computation: mean of input weighted by first few parameters
         var meanNode = TensorOperations<double>.Mean(inputNode);
         return meanNode;
+    }
+}
+
+/// <summary>
+/// Mock self-supervised loss that works with Matrix input for testing SEAL trainer.
+/// </summary>
+internal class MockSelfSupervisedLoss : ISelfSupervisedLoss<double>
+{
+    public (TInput augmentedX, TOutput augmentedY) CreateTask<TInput, TOutput>(TInput input)
+    {
+        if (input is Matrix<double> matrix)
+        {
+            // Create a simple self-supervised task: predict row index mod 4
+            // This simulates rotation prediction without requiring Tensor input
+            int numRows = matrix.Rows;
+            int numCols = matrix.Columns;
+
+            // Augmented X: return the same matrix (in practice, would apply transformations)
+            var augmentedMatrix = new Matrix<double>(numRows, numCols);
+            for (int i = 0; i < numRows; i++)
+            {
+                for (int j = 0; j < numCols; j++)
+                {
+                    augmentedMatrix[i, j] = matrix[i, j];
+                }
+            }
+
+            // Augmented Y: simple labels (row index mod 4 to simulate 4 rotation classes)
+            var labels = new Vector<double>(numRows);
+            for (int i = 0; i < numRows; i++)
+            {
+                labels[i] = i % 4;
+            }
+
+            return ((TInput)(object)augmentedMatrix, (TOutput)(object)labels);
+        }
+
+        throw new NotSupportedException($"MockSelfSupervisedLoss only supports Matrix<double> input, but received {input?.GetType().Name ?? "null"}");
     }
 }
