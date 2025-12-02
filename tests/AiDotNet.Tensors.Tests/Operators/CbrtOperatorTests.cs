@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Tensors.Tests.TestHelpers;
 using Xunit;
 
 namespace AiDotNet.Tensors.Tests.Operators
@@ -15,7 +16,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 0.0;
             double expected = 0.0;
-            double result = Math.Cbrt(input);
+            double result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -24,7 +25,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 1.0;
             double expected = 1.0;
-            double result = Math.Cbrt(input);
+            double result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -33,7 +34,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 8.0;
             double expected = 2.0;
-            double result = Math.Cbrt(input);
+            double result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -42,7 +43,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 27.0;
             double expected = 3.0;
-            double result = Math.Cbrt(input);
+            double result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -51,7 +52,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = -8.0;
             double expected = -2.0;
-            double result = Math.Cbrt(input);
+            double result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -60,7 +61,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 0.125;
             double expected = 0.5;
-            double result = Math.Cbrt(input);
+            double result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -69,7 +70,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 1000.0;
             double expected = 10.0;
-            double result = Math.Cbrt(input);
+            double result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -79,7 +80,7 @@ namespace AiDotNet.Tensors.Tests.Operators
             // cbrt(x^3) = x
             double input = 5.0;
             double cubed = input * input * input;
-            double result = Math.Cbrt(cubed);
+            double result = MathCompat.Cbrt(cubed);
             Assert.Equal(input, result, DoubleTolerance);
         }
 
@@ -92,7 +93,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 0.0f;
             float expected = 0.0f;
-            float result = MathF.Cbrt(input);
+            float result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -101,7 +102,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 1.0f;
             float expected = 1.0f;
-            float result = MathF.Cbrt(input);
+            float result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -110,7 +111,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 8.0f;
             float expected = 2.0f;
-            float result = MathF.Cbrt(input);
+            float result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -119,7 +120,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 27.0f;
             float expected = 3.0f;
-            float result = MathF.Cbrt(input);
+            float result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -128,7 +129,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = -8.0f;
             float expected = -2.0f;
-            float result = MathF.Cbrt(input);
+            float result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -137,7 +138,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 0.125f;
             float expected = 0.5f;
-            float result = MathF.Cbrt(input);
+            float result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -146,7 +147,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 1000.0f;
             float expected = 10.0f;
-            float result = MathF.Cbrt(input);
+            float result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -156,7 +157,7 @@ namespace AiDotNet.Tensors.Tests.Operators
             // cbrt(x^3) = x
             float input = 5.0f;
             float cubed = input * input * input;
-            float result = MathF.Cbrt(cubed);
+            float result = MathCompat.Cbrt(cubed);
             Assert.Equal(input, result, FloatTolerance);
         }
 
@@ -169,7 +170,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = -27.0;
             double expected = -3.0;
-            double result = Math.Cbrt(input);
+            double result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -178,7 +179,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = -27.0f;
             float expected = -3.0f;
-            float result = MathF.Cbrt(input);
+            float result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -187,7 +188,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 64.0;
             double expected = 4.0;
-            double result = Math.Cbrt(input);
+            double result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -196,7 +197,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 64.0f;
             float expected = 4.0f;
-            float result = MathF.Cbrt(input);
+            float result = MathCompat.Cbrt(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
