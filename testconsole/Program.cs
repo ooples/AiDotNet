@@ -1,11 +1,12 @@
 ﻿using AiDotNet.Examples;
+using AiDotNet.Prototypes;
 using AiDotNetTestConsole.Examples;
 
 namespace AiDotNetTestConsole;
 
 class Program
 {
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
         Console.WriteLine("AiDotNet Examples");
         Console.WriteLine("================");
@@ -15,9 +16,10 @@ class Program
         Console.WriteLine("4. Enhanced Regression Example (Real Estate Analysis)");
         Console.WriteLine("5. Enhanced Neural Network Example (Customer Churn Prediction)");
         Console.WriteLine("6. Enhanced Time Series Example (Energy Demand Forecasting)");
+        Console.WriteLine("7. Phase A GPU Acceleration Integration Tests");
         Console.WriteLine("0. Exit");
         Console.WriteLine();
-        Console.Write("Select an example to run (0-6): ");
+        Console.Write("Select an example to run (0-7): ");
 
         if (int.TryParse(Console.ReadLine(), out int choice))
         {
@@ -34,15 +36,15 @@ class Program
                     break;
                 case 2:
                     var regExample = new RegressionExample();
-                    regExample.RunExample();
+                    await regExample.RunExample();
                     break;
                 case 3:
                     var tsExample = new TimeSeriesExample();
-                    tsExample.RunExample();
+                    await tsExample.RunExample();
                     break;
                 case 4:
                     var enhancedRegExample = new EnhancedRegressionExample();
-                    enhancedRegExample.RunExample();
+                    await enhancedRegExample.RunExample();
                     break;
                 case 5:
                     var enhancedNNExample = new EnhancedNeuralNetworkExample();
@@ -50,10 +52,15 @@ class Program
                     break;
                 case 6:
                     var enhancedTSExample = new EnhancedTimeSeriesExample();
-                    enhancedTSExample.RunExample();
+                    await enhancedTSExample.RunExample();
+                    break;
+                case 7:
+                    Console.WriteLine("Running Phase A GPU Acceleration Integration Tests...");
+                    Console.WriteLine();
+                    PrototypeIntegrationTests.RunAll();
                     break;
                 default:
-                    Console.WriteLine("Invalid choice. Please select a number between 0 and 6.");
+                    Console.WriteLine("Invalid choice. Please select a number between 0 and 7.");
                     break;
             }
         }

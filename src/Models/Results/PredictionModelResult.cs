@@ -2,8 +2,19 @@ global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
 using AiDotNet.Data.Abstractions;
 using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using AiDotNet.Interpretability;
 using AiDotNet.Serialization;
+using AiDotNet.Agents;
+using AiDotNet.Models;
+using AiDotNet.Deployment.Configuration;
+using AiDotNet.Deployment.Export;
+using AiDotNet.Deployment.Export.Onnx;
+using AiDotNet.Deployment.TensorRT;
+using AiDotNet.Deployment.Mobile.CoreML;
+using AiDotNet.Deployment.Mobile.TensorFlowLite;
+using AiDotNet.Deployment.Runtime;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Models.Results;
 
@@ -201,6 +212,53 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal IEnumerable<IQueryProcessor>? QueryProcessors { get; private set; }
 
     /// <summary>
+    /// Gets or sets the knowledge graph for graph-enhanced retrieval.
+    /// </summary>
+    /// <value>A knowledge graph containing entities and relationships, or null if Graph RAG is not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The knowledge graph stores entities (like people, places, concepts) and their
+    /// relationships. When you query the model, it can traverse these relationships to find related context
+    /// that pure vector similarity might miss.
+    /// </para>
+    /// <para>
+    /// This property is excluded from JSON serialization because it contains runtime infrastructure
+    /// (graph store, file handles) that should be reconfigured when the model is loaded.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal KnowledgeGraph<T>? KnowledgeGraph { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the graph store backend for persistent graph storage.
+    /// </summary>
+    /// <value>The graph storage backend, or null if Graph RAG is not configured.</value>
+    /// <remarks>
+    /// <para>
+    /// This property is excluded from JSON serialization because it represents runtime storage
+    /// infrastructure (file handles, WAL) that must be reconfigured when the model is loaded.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal IGraphStore<T>? GraphStore { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the hybrid graph retriever for combined vector + graph retrieval.
+    /// </summary>
+    /// <value>A hybrid retriever combining vector similarity with graph traversal, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The hybrid retriever first finds similar documents using vector search,
+    /// then expands the context by traversing the knowledge graph to find related entities. This provides
+    /// richer context than pure vector search alone.
+    /// </para>
+    /// <para>
+    /// This property is excluded from JSON serialization because it contains references to
+    /// runtime infrastructure (knowledge graph, document store) that must be reconfigured when loaded.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal HybridGraphRetriever<T>? HybridGraphRetriever { get; private set; }
+
+    /// <summary>
     /// Gets or sets the meta-learner used for few-shot adaptation and fine-tuning.
     /// </summary>
     /// <value>An implementation of IMetaLearner for meta-learning capabilities, or null if this is a standard supervised model.</value>
@@ -276,6 +334,93 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal ILoRAConfiguration<T>? LoRAConfiguration { get; private set; }
 
     /// <summary>
+    /// Gets the agent configuration used during model building.
+    /// </summary>
+    /// <value>Agent configuration containing API keys and settings, or null if agent assistance wasn't used.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If you enabled agent assistance during model building with ConfigureAgentAssistance(),
+    /// this property stores the configuration. The API key is stored here so you can use AskAsync() on the trained
+    /// model without providing the key again.
+    ///
+    /// Note: API keys are NOT serialized when saving the model to disk for security reasons.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal AgentConfiguration<T>? AgentConfig { get; private set; }
+
+    /// <summary>
+    /// Gets the agent's recommendations made during model building.
+    /// </summary>
+    /// <value>Agent recommendations including suggested models and reasoning, or null if agent assistance wasn't used.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If you used agent assistance during building, this contains all the recommendations
+    /// the agent made, such as:
+    /// - Which model type to use (e.g., "RidgeRegression")
+    /// - Why that model was chosen
+    /// - Suggested hyperparameter values
+    ///
+    /// You can examine these recommendations to understand why the agent made certain choices.
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.AgentRecommendation != null)
+    /// {
+    ///     Console.WriteLine($"Agent selected: {result.AgentRecommendation.SuggestedModelType}");
+    ///     Console.WriteLine($"Reasoning: {result.AgentRecommendation.ModelSelectionReasoning}");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    internal AgentRecommendation<T, TInput, TOutput>? AgentRecommendation { get; private set; }
+
+    /// <summary>
+    /// Gets the deployment configuration for model export, caching, versioning, A/B testing, and telemetry.
+    /// </summary>
+    /// <value>Deployment configuration aggregating all deployment-related settings, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This contains all deployment-related settings configured during model building,
+    /// including:
+    /// - Quantization: Model compression settings (Float16/Int8)
+    /// - Caching: Model caching and eviction policies
+    /// - Versioning: Model version management
+    /// - A/B Testing: Traffic splitting between model versions
+    /// - Telemetry: Performance monitoring and metrics
+    /// - Export: Platform-specific export settings
+    ///
+    /// These settings enable advanced deployment features like exporting models for mobile devices,
+    /// managing multiple model versions, and monitoring production performance.
+    ///
+    /// If null, deployment features were not configured and will use defaults when needed.
+    /// </para>
+    /// </remarks>
+    internal DeploymentConfiguration? DeploymentConfiguration { get; private set; }
+
+    /// <summary>
+    /// Gets the JIT-compiled prediction function for accelerated inference.
+    /// </summary>
+    /// <value>A compiled function for fast predictions, or null if JIT compilation was not enabled or not supported.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is an optimized, pre-compiled version of your model's prediction logic.
+    ///
+    /// When JIT compilation is enabled and the model supports it:
+    /// - The model's computation graph is compiled to fast native code during building
+    /// - This compiled function is stored here
+    /// - Predict() automatically uses it for 5-10x faster predictions
+    ///
+    /// If this is null:
+    /// - JIT was not enabled during model building, OR
+    /// - The model doesn't support JIT compilation (e.g., layer-based neural networks)
+    /// - Predictions use the normal execution path (still works, just not JIT-accelerated)
+    ///
+    /// The JIT-compiled function takes an array of Tensor&lt;T&gt; inputs and returns an array of Tensor&lt;T&gt; outputs,
+    /// matching the model's computation graph structure.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]  // Don't serialize - will need to be recompiled after deserialization
+    private Func<Tensor<T>[], Tensor<T>[]>? JitCompiledFunction { get; set; }
+    private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
     /// </summary>
     /// <param name="model">The underlying model used for making predictions.</param>
@@ -328,6 +473,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
     /// <param name="loraConfiguration">Optional LoRA configuration for parameter-efficient fine-tuning.</param>
     /// <param name="crossValidationResult">Optional cross-validation results from training.</param>
+    /// <param name="agentConfig">Optional agent configuration used during model building.</param>
+    /// <param name="agentRecommendation">Optional agent recommendations from model building.</param>
+    /// <param name="deploymentConfiguration">Optional deployment configuration for export, caching, versioning, A/B testing, and telemetry.</param>
+    /// <param name="knowledgeGraph">Optional knowledge graph for graph-enhanced retrieval.</param>
+    /// <param name="graphStore">Optional graph store backend for persistent storage.</param>
+    /// <param name="hybridGraphRetriever">Optional hybrid retriever for combined vector + graph search.</param>
     public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo,
         IBiasDetector<T>? biasDetector = null,
@@ -337,7 +488,15 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IGenerator<T>? ragGenerator = null,
         IEnumerable<IQueryProcessor>? queryProcessors = null,
         ILoRAConfiguration<T>? loraConfiguration = null,
-        CrossValidationResult<T, TInput, TOutput>? crossValidationResult = null)
+        CrossValidationResult<T, TInput, TOutput>? crossValidationResult = null,
+        AgentConfiguration<T>? agentConfig = null,
+        AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null,
+        DeploymentConfiguration? deploymentConfiguration = null,
+        Func<Tensor<T>[], Tensor<T>[]>? jitCompiledFunction = null,
+        AiDotNet.Configuration.InferenceOptimizationConfig? inferenceOptimizationConfig = null,
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IGraphStore<T>? graphStore = null,
+        HybridGraphRetriever<T>? hybridGraphRetriever = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
@@ -351,6 +510,14 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         QueryProcessors = queryProcessors;
         LoRAConfiguration = loraConfiguration;
         CrossValidationResult = crossValidationResult;
+        AgentConfig = agentConfig;
+        AgentRecommendation = agentRecommendation;
+        DeploymentConfiguration = deploymentConfiguration;
+        JitCompiledFunction = jitCompiledFunction;
+        InferenceOptimizationConfig = inferenceOptimizationConfig;
+        KnowledgeGraph = knowledgeGraph;
+        GraphStore = graphStore;
+        HybridGraphRetriever = hybridGraphRetriever;
     }
 
     /// <summary>
@@ -365,6 +532,11 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="ragReranker">Optional reranker for RAG functionality during inference.</param>
     /// <param name="ragGenerator">Optional generator for RAG functionality during inference.</param>
     /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
+    /// <param name="agentConfig">Optional agent configuration for AI assistance during inference.</param>
+    /// <param name="deploymentConfiguration">Optional deployment configuration for export, caching, versioning, A/B testing, and telemetry.</param>
+    /// <param name="knowledgeGraph">Optional knowledge graph for graph-enhanced retrieval.</param>
+    /// <param name="graphStore">Optional graph store backend for persistent storage.</param>
+    /// <param name="hybridGraphRetriever">Optional hybrid retriever for combined vector + graph search.</param>
     /// <remarks>
     /// <para>
     /// This constructor is used when a model has been trained using meta-learning (e.g., MAML, Reptile, SEAL).
@@ -388,6 +560,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// - The meta-learner itself (for adaptation)
     /// - Training history (loss curves, performance metrics)
     /// - Optional LoRA configuration (for efficient adaptation)
+    /// - Optional agent configuration (for AI assistance)
     /// </para>
     /// </remarks>
     public PredictionModelResult(
@@ -399,7 +572,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IRetriever<T>? ragRetriever = null,
         IReranker<T>? ragReranker = null,
         IGenerator<T>? ragGenerator = null,
-        IEnumerable<IQueryProcessor>? queryProcessors = null)
+        IEnumerable<IQueryProcessor>? queryProcessors = null,
+        AgentConfiguration<T>? agentConfig = null,
+        DeploymentConfiguration? deploymentConfiguration = null,
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IGraphStore<T>? graphStore = null,
+        HybridGraphRetriever<T>? hybridGraphRetriever = null)
     {
         Model = metaLearner.BaseModel;
         MetaLearner = metaLearner;
@@ -412,6 +590,11 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         RagReranker = ragReranker;
         RagGenerator = ragGenerator;
         QueryProcessors = queryProcessors;
+        AgentConfig = agentConfig;
+        DeploymentConfiguration = deploymentConfiguration;
+        KnowledgeGraph = knowledgeGraph;
+        GraphStore = graphStore;
+        HybridGraphRetriever = hybridGraphRetriever;
 
         // Create placeholder OptimizationResult and NormalizationInfo for consistency
         OptimizationResult = new OptimizationResult<T, TInput, TOutput>();
@@ -523,9 +706,112 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         var (normalizedNewData, _) = NormalizationInfo.Normalizer.NormalizeInput(newData);
-        var normalizedPredictions = Model.Predict(normalizedNewData);
+
+        // Use JIT-compiled function if available for 5-10x faster predictions
+        TOutput normalizedPredictions;
+        if (JitCompiledFunction != null && normalizedNewData is Tensor<T> inputTensor)
+        {
+            // JIT PATH: Use compiled function for accelerated inference
+            var jitResult = JitCompiledFunction(new[] { inputTensor });
+            if (jitResult != null && jitResult.Length > 0 && jitResult[0] is TOutput output)
+            {
+                normalizedPredictions = output;
+            }
+            else
+            {
+                // Fallback to model if JIT result is unexpected
+                normalizedPredictions = Model.Predict(normalizedNewData);
+            }
+        }
+        else
+        {
+            // NORMAL PATH: Use model's standard prediction
+            normalizedPredictions = Model.Predict(normalizedNewData);
+        }
 
         return NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, NormalizationInfo.YParams);
+    }
+
+    /// <summary>
+    /// Gets the default loss function used by this model for gradient computation.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">If Model is not initialized.</exception>
+    public ILossFunction<T> DefaultLossFunction
+    {
+        get
+        {
+            if (Model == null)
+            {
+                throw new InvalidOperationException("Model is not initialized.");
+            }
+            return Model.DefaultLossFunction;
+        }
+    }
+
+    /// <summary>
+    /// Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.
+    /// </summary>
+    /// <param name="input">The input data (will be normalized automatically).</param>
+    /// <param name="target">The target/expected output (will be normalized automatically).</param>
+    /// <param name="lossFunction">The loss function to use. If null, uses the model's default loss function.</param>
+    /// <returns>A vector containing gradients with respect to all model parameters.</returns>
+    /// <exception cref="InvalidOperationException">If Model or Normalizer is not initialized.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method normalizes input and target before computing gradients, maintaining consistency
+    /// with the Predict method. Gradients are computed on normalized data and returned as-is
+    /// (gradients are with respect to parameters, not outputs, so no denormalization is needed).
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This calculates which direction to adjust the model's parameters to reduce error,
+    /// without actually changing them. Input and target are automatically normalized before
+    /// gradient computation, just like Predict normalizes input automatically.
+    /// </para>
+    /// </remarks>
+    public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        if (NormalizationInfo.Normalizer == null)
+        {
+            throw new InvalidOperationException("Normalizer is not initialized.");
+        }
+
+        // Normalize input and target to maintain API consistency with Predict
+        var (normalizedInput, _) = NormalizationInfo.Normalizer.NormalizeInput(input);
+        var (normalizedTarget, _) = NormalizationInfo.Normalizer.NormalizeOutput(target);
+
+        // Compute gradients on normalized data (gradients are wrt parameters, no denormalization needed)
+        return Model.ComputeGradients(normalizedInput, normalizedTarget, lossFunction);
+    }
+
+    /// <summary>
+    /// Applies pre-computed gradients to update the model parameters.
+    /// </summary>
+    /// <param name="gradients">The gradient vector to apply.</param>
+    /// <param name="learningRate">The learning rate for the update.</param>
+    /// <exception cref="InvalidOperationException">If Model is not initialized.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to the underlying model's ApplyGradients implementation.
+    /// Updates parameters using: θ = θ - learningRate * gradients
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// After computing gradients, this method actually updates the model's parameters
+    /// by moving them in the direction that reduces error. It delegates to the wrapped model.
+    /// </para>
+    /// </remarks>
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        Model.ApplyGradients(gradients, learningRate);
     }
 
     /// <summary>
@@ -826,7 +1112,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         updatedOptimizationResult.BestSolution = newModel;
 
         // Create new result with updated optimization result
-        // Use constructor that preserves BiasDetector, FairnessEvaluator, and RAG components
+        // Preserve all configuration properties to ensure deployment behavior, model adaptation,
+        // training history, and Graph RAG configuration are maintained across parameter updates
         return new PredictionModelResult<T, TInput, TOutput>(
             updatedOptimizationResult,
             NormalizationInfo,
@@ -835,7 +1122,17 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             RagRetriever,
             RagReranker,
             RagGenerator,
-            QueryProcessors);
+            QueryProcessors,
+            loraConfiguration: LoRAConfiguration,
+            crossValidationResult: CrossValidationResult,
+            agentConfig: AgentConfig,
+            agentRecommendation: AgentRecommendation,
+            deploymentConfiguration: DeploymentConfiguration,
+            jitCompiledFunction: null, // JIT compilation is parameter-specific, don't copy
+            inferenceOptimizationConfig: InferenceOptimizationConfig,
+            knowledgeGraph: KnowledgeGraph,
+            graphStore: GraphStore,
+            hybridGraphRetriever: HybridGraphRetriever);
     }
 
     /// <summary>
@@ -921,7 +1218,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         var clonedNormalizationInfo = NormalizationInfo.DeepCopy();
 
-        // Use constructor that preserves BiasDetector, FairnessEvaluator, and RAG components
+        // Preserve all configuration properties to ensure deployment behavior, model adaptation,
+        // training history, and Graph RAG configuration are maintained across deep copy
         return new PredictionModelResult<T, TInput, TOutput>(
             clonedOptimizationResult,
             clonedNormalizationInfo,
@@ -930,7 +1228,17 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             RagRetriever,
             RagReranker,
             RagGenerator,
-            QueryProcessors);
+            QueryProcessors,
+            loraConfiguration: LoRAConfiguration,
+            crossValidationResult: CrossValidationResult,
+            agentConfig: AgentConfig,
+            agentRecommendation: AgentRecommendation,
+            deploymentConfiguration: DeploymentConfiguration,
+            jitCompiledFunction: null, // JIT compilation is model-specific, don't copy
+            inferenceOptimizationConfig: InferenceOptimizationConfig,
+            knowledgeGraph: KnowledgeGraph,
+            graphStore: GraphStore,
+            hybridGraphRetriever: HybridGraphRetriever);
     }
 
     /// <summary>
@@ -1049,6 +1357,17 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 ModelMetaData = deserializedObject.ModelMetaData;
                 BiasDetector = deserializedObject.BiasDetector;
                 FairnessEvaluator = deserializedObject.FairnessEvaluator;
+
+                // Preserve RAG components and all configuration properties
+                RagRetriever = deserializedObject.RagRetriever;
+                RagReranker = deserializedObject.RagReranker;
+                RagGenerator = deserializedObject.RagGenerator;
+                QueryProcessors = deserializedObject.QueryProcessors;
+                LoRAConfiguration = deserializedObject.LoRAConfiguration;
+                CrossValidationResult = deserializedObject.CrossValidationResult;
+                AgentConfig = deserializedObject.AgentConfig;
+                AgentRecommendation = deserializedObject.AgentRecommendation;
+                DeploymentConfiguration = deserializedObject.DeploymentConfiguration;
             }
             else
             {
@@ -1342,4 +1661,665 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
         return processedQuery;
     }
+
+    /// <summary>
+    /// Queries the knowledge graph to find related nodes by entity name or label.
+    /// </summary>
+    /// <param name="query">The search query (entity name or partial match).</param>
+    /// <param name="topK">Maximum number of results to return.</param>
+    /// <returns>Collection of matching graph nodes.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when Graph RAG is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method searches the knowledge graph for entities matching your query.
+    /// Unlike vector search which finds similar documents, this finds entities by name or label.
+    ///
+    /// Example:
+    /// <code>
+    /// var nodes = result.QueryKnowledgeGraph("Einstein", topK: 5);
+    /// foreach (var node in nodes)
+    /// {
+    ///     Console.WriteLine($"{node.Label}: {node.Id}");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IEnumerable<GraphNode<T>> QueryKnowledgeGraph(string query, int topK = 10)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or empty", nameof(query));
+
+        return KnowledgeGraph.FindRelatedNodes(query, topK);
+    }
+
+    /// <summary>
+    /// Retrieves results using hybrid vector + graph search for enhanced context retrieval.
+    /// </summary>
+    /// <param name="queryEmbedding">The query embedding vector.</param>
+    /// <param name="topK">Number of initial candidates from vector search.</param>
+    /// <param name="expansionDepth">How many hops to traverse in the graph (0 = no expansion).</param>
+    /// <param name="maxResults">Maximum total results to return.</param>
+    /// <returns>List of retrieval results with scores and source information.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when hybrid retriever is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method combines the best of both worlds:
+    /// 1. First, it finds similar documents using vector similarity (like traditional RAG)
+    /// 2. Then, it expands the context by traversing the knowledge graph to find related entities
+    ///
+    /// For example, searching for "photosynthesis" might:
+    /// - Find documents about photosynthesis via vector search
+    /// - Then traverse the graph to also include chlorophyll, plants, carbon dioxide
+    ///
+    /// This provides richer, more complete context than vector search alone.
+    /// </para>
+    /// </remarks>
+    public List<RetrievalResult<T>> HybridRetrieve(
+        Vector<T> queryEmbedding,
+        int topK = 5,
+        int expansionDepth = 1,
+        int maxResults = 10)
+    {
+        if (HybridGraphRetriever == null)
+        {
+            throw new InvalidOperationException(
+                "Hybrid graph retriever not configured. Configure Graph RAG with a document store using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (queryEmbedding == null || queryEmbedding.Length == 0)
+            throw new ArgumentException("Query embedding cannot be null or empty", nameof(queryEmbedding));
+
+        return HybridGraphRetriever.Retrieve(queryEmbedding, topK, expansionDepth, maxResults);
+    }
+
+    /// <summary>
+    /// Traverses the knowledge graph starting from a node using breadth-first search.
+    /// </summary>
+    /// <param name="startNodeId">The ID of the starting node.</param>
+    /// <param name="maxDepth">Maximum traversal depth.</param>
+    /// <returns>Collection of nodes reachable from the starting node in BFS order.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when knowledge graph is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method explores the graph starting from a specific entity,
+    /// discovering all connected entities up to a specified depth.
+    ///
+    /// Example: Starting from "Paris", depth=2 might find:
+    /// - Depth 1: France, Eiffel Tower, Seine River
+    /// - Depth 2: Europe, Iron, Water
+    ///
+    /// This is useful for understanding the context around a specific entity.
+    /// </para>
+    /// </remarks>
+    public IEnumerable<GraphNode<T>> TraverseGraph(string startNodeId, int maxDepth = 2)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(startNodeId))
+            throw new ArgumentException("Start node ID cannot be null or empty", nameof(startNodeId));
+
+        return KnowledgeGraph.BreadthFirstTraversal(startNodeId, maxDepth);
+    }
+
+    /// <summary>
+    /// Finds the shortest path between two nodes in the knowledge graph.
+    /// </summary>
+    /// <param name="startNodeId">The ID of the starting node.</param>
+    /// <param name="endNodeId">The ID of the target node.</param>
+    /// <returns>List of node IDs representing the path, or empty list if no path exists.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when knowledge graph is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method finds how two entities are connected.
+    ///
+    /// Example: Finding the path between "Einstein" and "Princeton University" might return:
+    /// ["einstein", "worked_at_princeton", "princeton_university"]
+    ///
+    /// This is useful for understanding the relationships between concepts.
+    /// </para>
+    /// </remarks>
+    public List<string> FindPathInGraph(string startNodeId, string endNodeId)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(startNodeId))
+            throw new ArgumentException("Start node ID cannot be null or empty", nameof(startNodeId));
+        if (string.IsNullOrWhiteSpace(endNodeId))
+            throw new ArgumentException("End node ID cannot be null or empty", nameof(endNodeId));
+
+        return KnowledgeGraph.FindShortestPath(startNodeId, endNodeId);
+    }
+
+    /// <summary>
+    /// Gets all edges (relationships) connected to a node in the knowledge graph.
+    /// </summary>
+    /// <param name="nodeId">The ID of the node to query.</param>
+    /// <param name="direction">The direction of edges to retrieve.</param>
+    /// <returns>Collection of edges connected to the node.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when knowledge graph is not configured.</exception>
+    /// <exception cref="ArgumentException">Thrown when nodeId is null or empty.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method finds all relationships connected to an entity.
+    ///
+    /// Example: Getting edges for "Einstein" might return:
+    /// - Outgoing: STUDIED→Physics, WORKED_AT→Princeton, BORN_IN→Germany
+    /// - Incoming: INFLUENCED_BY→Newton
+    /// </para>
+    /// </remarks>
+    public IEnumerable<GraphEdge<T>> GetNodeRelationships(string nodeId, EdgeDirection direction = EdgeDirection.Both)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(nodeId))
+            throw new ArgumentException("Node ID cannot be null or empty", nameof(nodeId));
+
+        var result = new List<GraphEdge<T>>();
+
+        if (direction == EdgeDirection.Outgoing || direction == EdgeDirection.Both)
+        {
+            result.AddRange(KnowledgeGraph.GetOutgoingEdges(nodeId));
+        }
+
+        if (direction == EdgeDirection.Incoming || direction == EdgeDirection.Both)
+        {
+            result.AddRange(KnowledgeGraph.GetIncomingEdges(nodeId));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Attaches Graph RAG components to a PredictionModelResult instance.
+    /// </summary>
+    /// <param name="knowledgeGraph">The knowledge graph to attach.</param>
+    /// <param name="graphStore">The graph store backend to attach.</param>
+    /// <param name="hybridGraphRetriever">The hybrid retriever to attach.</param>
+    /// <remarks>
+    /// This method is internal and used by PredictionModelBuilder when loading/deserializing models.
+    /// Graph RAG components cannot be serialized (they contain file handles, WAL references, etc.),
+    /// so the builder automatically reattaches them when loading a model that was configured with Graph RAG.
+    /// Users should use PredictionModelBuilder.LoadModel() which handles this automatically.
+    /// </remarks>
+    internal void AttachGraphComponents(
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IGraphStore<T>? graphStore = null,
+        HybridGraphRetriever<T>? hybridGraphRetriever = null)
+    {
+        KnowledgeGraph = knowledgeGraph;
+        GraphStore = graphStore;
+        HybridGraphRetriever = hybridGraphRetriever;
+    }
+
+    /// <summary>
+    /// Saves the prediction model result's current state to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the entire PredictionModelResult, including the underlying model,
+    /// optimization results, normalization information, and metadata. It uses the existing
+    /// Serialize method and writes the data to the provided stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a snapshot of your complete trained model package.
+    ///
+    /// When you call SaveState:
+    /// - The trained model and all its parameters are written to the stream
+    /// - Training results and metrics are saved
+    /// - Normalization settings are preserved
+    /// - All metadata is included
+    ///
+    /// This is particularly useful for:
+    /// - Checkpointing during long optimization runs
+    /// - Saving the best model found during training
+    /// - Knowledge distillation workflows
+    /// - Creating model backups before deployment
+    ///
+    /// You can later use LoadState to restore the complete model package.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanWrite)
+            throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+        try
+        {
+            var data = this.Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to save prediction model result state to stream: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Unexpected error while saving prediction model result state: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads the prediction model result's state from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes a complete PredictionModelResult that was previously saved with SaveState,
+    /// restoring the model, optimization results, normalization information, and all metadata.
+    /// It uses the existing Deserialize method after reading data from the stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your complete trained model package.
+    ///
+    /// When you call LoadState:
+    /// - The trained model and all its parameters are read from the stream
+    /// - Training results and metrics are restored
+    /// - Normalization settings are reapplied
+    /// - All metadata is recovered
+    ///
+    /// After loading, the model package can:
+    /// - Make predictions using the restored model
+    /// - Access training history and metrics
+    /// - Apply the same normalization as during training
+    /// - Be deployed to production
+    ///
+    /// This is essential for:
+    /// - Resuming interrupted optimization
+    /// - Loading the best model after training
+    /// - Deploying trained models to production
+    /// - Knowledge distillation workflows
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanRead)
+            throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+        try
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            var data = ms.ToArray();
+
+            if (data.Length == 0)
+                throw new InvalidOperationException("Stream contains no data.");
+
+            this.Deserialize(data);
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to read prediction model result state from stream: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw InvalidOperationException from Deserialize
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to deserialize prediction model result state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Exports the model to ONNX format for cross-platform deployment.
+    /// </summary>
+    /// <param name="outputPath">The file path where the ONNX model will be saved.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> ONNX (Open Neural Network Exchange) is a universal format for AI models
+    /// that works across different frameworks and platforms. Use this for:
+    /// - Cross-platform deployment (Windows, Linux, macOS)
+    /// - Cloud deployment
+    /// - General-purpose production serving
+    ///
+    /// The exported model will use the export configuration specified during model building,
+    /// or sensible defaults if no configuration was provided.
+    ///
+    /// Example:
+    /// <code>
+    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CPU })
+    ///     .BuildAsync(x, y);
+    /// model.ExportToOnnx("model.onnx");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void ExportToOnnx(string outputPath)
+    {
+        if (Model == null)
+            throw new InvalidOperationException("Cannot export: Model is null");
+
+        var exportConfig = DeploymentConfiguration?.Export ?? new ExportConfig();
+
+        var onnxConfig = new ExportConfiguration
+        {
+            ModelName = exportConfig.ModelName,
+            TargetPlatform = exportConfig.TargetPlatform,
+            OptimizeModel = exportConfig.OptimizeModel,
+            BatchSize = exportConfig.BatchSize
+        };
+
+        var exporter = new OnnxModelExporter<T, TInput, TOutput>();
+        exporter.Export(Model, outputPath, onnxConfig);
+    }
+
+    /// <summary>
+    /// Exports the model to TensorRT format for high-performance inference on NVIDIA GPUs.
+    /// </summary>
+    /// <param name="outputPath">The file path where the TensorRT model will be saved.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> TensorRT is NVIDIA's high-performance inference engine.
+    /// Use this when:
+    /// - Deploying to servers with NVIDIA GPUs
+    /// - Maximum inference speed is required
+    /// - You need GPU-optimized inference
+    ///
+    /// TensorRT provides 2-4x faster inference than ONNX on NVIDIA hardware.
+    /// Requires NVIDIA GPU to run.
+    ///
+    /// Example:
+    /// <code>
+    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TensorRT, Quantization = QuantizationMode.Float16 })
+    ///     .BuildAsync(x, y);
+    /// model.ExportToTensorRT("model.trt");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void ExportToTensorRT(string outputPath)
+    {
+        if (Model == null)
+            throw new InvalidOperationException("Cannot export: Model is null");
+
+        var exportConfig = DeploymentConfiguration?.Export ?? new ExportConfig { TargetPlatform = TargetPlatform.TensorRT };
+
+        var tensorRTConfig = new TensorRTConfiguration
+        {
+            MaxBatchSize = exportConfig.BatchSize,
+            UseFp16 = exportConfig.Quantization == QuantizationMode.Float16,
+            UseInt8 = exportConfig.Quantization == QuantizationMode.Int8
+        };
+
+        var converter = new TensorRTConverter<T, TInput, TOutput>();
+        converter.ConvertToTensorRT(Model, outputPath, tensorRTConfig);
+    }
+
+    /// <summary>
+    /// Exports the model to CoreML format for deployment on Apple devices (iOS, macOS).
+    /// </summary>
+    /// <param name="outputPath">The file path where the CoreML model will be saved.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> CoreML is Apple's machine learning framework.
+    /// Use this when deploying to:
+    /// - iPhone/iPad apps
+    /// - macOS applications
+    /// - Apple Watch apps
+    ///
+    /// CoreML models are optimized for Apple Silicon and Neural Engine,
+    /// providing excellent performance on Apple devices.
+    ///
+    /// Example:
+    /// <code>
+    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CoreML, Quantization = QuantizationMode.Float16 })
+    ///     .BuildAsync(x, y);
+    /// model.ExportToCoreML("model.mlmodel");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void ExportToCoreML(string outputPath)
+    {
+        if (Model == null)
+            throw new InvalidOperationException("Cannot export: Model is null");
+
+        var exportConfig = DeploymentConfiguration?.Export ?? new ExportConfig { TargetPlatform = TargetPlatform.CoreML };
+
+        var coreMLConfig = new ExportConfiguration
+        {
+            ModelName = exportConfig.ModelName,
+            TargetPlatform = exportConfig.TargetPlatform,
+            OptimizeModel = exportConfig.OptimizeModel,
+            BatchSize = exportConfig.BatchSize
+        };
+
+        var exporter = new CoreMLExporter<T, TInput, TOutput>();
+        exporter.Export(Model, outputPath, coreMLConfig);
+    }
+
+    /// <summary>
+    /// Exports the model to TensorFlow Lite format for mobile and edge deployment.
+    /// </summary>
+    /// <param name="outputPath">The file path where the TFLite model will be saved.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> TensorFlow Lite is designed for mobile and edge devices.
+    /// Use this when deploying to:
+    /// - Android apps
+    /// - Raspberry Pi and edge devices
+    /// - Embedded systems
+    /// - IoT devices
+    ///
+    /// TFLite models are highly optimized for size and speed on resource-constrained devices.
+    ///
+    /// Example:
+    /// <code>
+    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TFLite, Quantization = QuantizationMode.Int8 })
+    ///     .BuildAsync(x, y);
+    /// model.ExportToTFLite("model.tflite");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void ExportToTFLite(string outputPath)
+    {
+        if (Model == null)
+            throw new InvalidOperationException("Cannot export: Model is null");
+
+        var exportConfig = DeploymentConfiguration?.Export ?? new ExportConfig { TargetPlatform = TargetPlatform.TFLite };
+
+        var tfliteConfig = new ExportConfiguration
+        {
+            ModelName = exportConfig.ModelName,
+            TargetPlatform = exportConfig.TargetPlatform,
+            OptimizeModel = exportConfig.OptimizeModel,
+            BatchSize = exportConfig.BatchSize
+        };
+
+        var exporter = new TFLiteExporter<T, TInput, TOutput>();
+        exporter.Export(Model, outputPath, tfliteConfig);
+    }
+
+    /// <summary>
+    /// Creates a deployment runtime for production features like versioning, A/B testing, caching, and telemetry.
+    /// </summary>
+    /// <param name="modelPath">The path to the exported ONNX model file.</param>
+    /// <param name="modelName">The name of the model (e.g., "HousePricePredictor").</param>
+    /// <param name="version">The version identifier (e.g., "1.0.0").</param>
+    /// <returns>A deployment runtime instance.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The deployment runtime provides production features:
+    /// - **Model Versioning**: Manage multiple model versions and roll back if needed
+    /// - **A/B Testing**: Split traffic between different model versions
+    /// - **Telemetry**: Track latency, throughput, errors, and metrics
+    /// - **Caching**: Keep frequently-used models in memory for faster inference
+    ///
+    /// Before using this, you must first export your model to ONNX format.
+    ///
+    /// Example:
+    /// <code>
+    /// // Export model to ONNX
+    /// model.ExportToOnnx("model.onnx");
+    ///
+    /// // Create runtime with deployed model
+    /// var runtime = model.CreateDeploymentRuntime("model.onnx", "MyModel", "1.0.0");
+    ///
+    /// // Use runtime for inference with production features
+    /// var prediction = await runtime.InferAsync("MyModel", "1.0.0", inputData);
+    /// var stats = runtime.GetModelStatistics("MyModel");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public DeploymentRuntime<T> CreateDeploymentRuntime(string modelPath, string modelName, string version)
+    {
+        var runtimeConfig = new RuntimeConfiguration
+        {
+            EnableCaching = DeploymentConfiguration?.Caching?.Enabled ?? true,
+            EnableTelemetry = DeploymentConfiguration?.Telemetry?.Enabled ?? true,
+            EnableGpuAcceleration = DeploymentConfiguration?.Export?.TargetPlatform == TargetPlatform.GPU
+                                    || DeploymentConfiguration?.Export?.TargetPlatform == TargetPlatform.TensorRT
+        };
+
+        var runtime = new DeploymentRuntime<T>(runtimeConfig);
+        runtime.RegisterModel(modelName, version, modelPath);
+
+        return runtime;
+    }
+
+    #region IJitCompilable Implementation
+
+    /// <summary>
+    /// Gets whether the underlying model currently supports JIT compilation.
+    /// </summary>
+    /// <value>Returns true if the wrapped model implements IJitCompilable and supports JIT, false otherwise.</value>
+    /// <remarks>
+    /// <para>
+    /// This property delegates to the wrapped model's SupportsJitCompilation property if the model
+    /// implements IJitCompilable. If the model does not implement this interface or does not support
+    /// JIT compilation, this returns false.
+    /// </para>
+    /// <para><b>For Beginners:</b> Whether you can use JIT compilation depends on the type of model you trained.
+    ///
+    /// Models that support JIT compilation (SupportsJitCompilation = true):
+    /// - Linear regression models
+    /// - Polynomial regression models
+    /// - Ridge/Lasso regression models
+    /// - Models using differentiable operations
+    ///
+    /// Models that do NOT support JIT (SupportsJitCompilation = false):
+    /// - Decision trees
+    /// - Random forests
+    /// - Gradient boosted trees
+    /// - Models using discrete logic
+    ///
+    /// If your model supports JIT:
+    /// - Predictions will be 5-10x faster
+    /// - The computation graph is compiled to optimized native code
+    /// - You get this speedup automatically when calling Predict()
+    ///
+    /// If your model doesn't support JIT:
+    /// - Predictions still work normally
+    /// - No JIT acceleration, but still optimized for the model type
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when Model is null.</exception>
+    public bool SupportsJitCompilation
+    {
+        get
+        {
+            if (Model == null)
+            {
+                throw new InvalidOperationException("Model is not initialized.");
+            }
+
+            // Check if the model implements IJitCompilable and supports JIT
+            if (Model is IJitCompilable<T> jitModel)
+            {
+                return jitModel.SupportsJitCompilation;
+            }
+
+            // Model doesn't implement IJitCompilable
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Exports the underlying model's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the model's prediction.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when Model is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the underlying model does not support JIT compilation.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to the wrapped model's ExportComputationGraph method if the model
+    /// implements IJitCompilable and supports JIT compilation. If the model does not implement
+    /// this interface or does not support JIT, this throws NotSupportedException.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a "recipe" of your model's calculations for JIT compilation.
+    ///
+    /// If your model supports JIT (SupportsJitCompilation = true):
+    /// - This method creates a computation graph from your model
+    /// - The graph represents all the mathematical operations your model performs
+    /// - The JIT compiler uses this to create fast optimized code
+    ///
+    /// If your model doesn't support JIT (SupportsJitCompilation = false):
+    /// - This method will throw an exception
+    /// - Check SupportsJitCompilation before calling this
+    /// - Decision trees, random forests, etc. cannot export computation graphs
+    ///
+    /// You typically don't call this method directly. It's used internally by:
+    /// - PredictionModelBuilder when building models with JIT enabled
+    /// - The prediction pipeline to compile models for faster inference
+    ///
+    /// Example of what happens inside:
+    /// - Linear model: Creates graph with MatMul(X, Coefficients) + Intercept
+    /// - Neural network: Creates graph with all layers and activations
+    /// - Decision tree: Throws exception - cannot create computation graph
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Autodiff.ComputationNode<T> ExportComputationGraph(List<AiDotNet.Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        // Check if the model implements IJitCompilable
+        if (Model is IJitCompilable<T> jitModel)
+        {
+            // Check if it actually supports JIT before delegating
+            if (!jitModel.SupportsJitCompilation)
+            {
+                throw new NotSupportedException(
+                    $"The underlying model type ({Model.GetType().Name}) does not support JIT compilation. " +
+                    "Check SupportsJitCompilation property before calling ExportComputationGraph.");
+            }
+
+            // Delegate to the wrapped model
+            return jitModel.ExportComputationGraph(inputNodes);
+        }
+
+        // Model doesn't implement IJitCompilable at all
+        throw new NotSupportedException(
+            $"The underlying model type ({Model.GetType().Name}) does not implement IJitCompilable<T>. " +
+            "JIT compilation is only supported for models that use differentiable computation graphs, such as " +
+            "linear models, polynomial models, and neural networks. Tree-based models (decision trees, random forests, " +
+            "gradient boosting) cannot be JIT compiled due to their discrete branching logic.");
+    }
+
+    #endregion
 }

@@ -53,7 +53,8 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <param name="gradientCache">The gradient cache to use.</param>
     public NesterovAcceleratedGradientOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>? options = null)
+        NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
         : base(model, options ?? new())
     {
         _options = options ?? new NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>();
@@ -153,12 +154,12 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <returns>A predicted future solution.</returns>
     private IFullModel<T, TInput, TOutput> GetLookaheadSolution(IFullModel<T, TInput, TOutput> currentSolution)
     {
+        // === Vectorized NAG Lookahead using IEngine (Phase B: US-GPU-015) ===
+        // lookahead = params - momentum * velocity
+
         var parameters = currentSolution.GetParameters();
-        var lookaheadCoefficients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            lookaheadCoefficients[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(CurrentMomentum, _velocity![i]));
-        }
+        var momentumVelocity = (Vector<T>)Engine.Multiply(_velocity!, CurrentMomentum);
+        var lookaheadCoefficients = (Vector<T>)Engine.Subtract(parameters, momentumVelocity);
 
         return currentSolution.WithParameters(lookaheadCoefficients);
     }
@@ -179,13 +180,13 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <returns>The updated velocity vector.</returns>
     private Vector<T> UpdateVelocity(Vector<T> gradient)
     {
-        for (int i = 0; i < _velocity!.Length; i++)
-        {
-            _velocity[i] = NumOps.Add(
-                NumOps.Multiply(CurrentMomentum, _velocity[i]),
-                NumOps.Multiply(CurrentLearningRate, gradient[i])
-            );
-        }
+        // === Vectorized NAG Velocity Update using IEngine (Phase B: US-GPU-015) ===
+        // velocity = momentum * velocity + learningRate * gradient
+
+        var momentumVelocity = (Vector<T>)Engine.Multiply(_velocity!, CurrentMomentum);
+        var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
+        _velocity = (Vector<T>)Engine.Add(momentumVelocity, scaledGradient);
+
         return _velocity;
     }
 
@@ -205,14 +206,92 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <returns>The updated solution.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> velocity)
     {
+        // === Vectorized NAG Update using IEngine (Phase B: US-GPU-015) ===
+        // params = params - velocity
+
         var parameters = currentSolution.GetParameters();
-        var newCoefficients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            newCoefficients[i] = NumOps.Subtract(parameters[i], velocity[i]);
-        }
+        var newCoefficients = (Vector<T>)Engine.Subtract(parameters, velocity);
 
         return currentSolution.WithParameters(newCoefficients);
+    }
+
+    /// <summary>
+    /// Updates a vector of parameters using the Nesterov Accelerated Gradient algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter vector to be updated.</param>
+    /// <param name="gradient">The gradient vector corresponding to the parameters.</param>
+    /// <returns>The updated parameter vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// NAG uses a lookahead mechanism where it evaluates the gradient at a predicted future position,
+    /// then uses that gradient to update velocity. This lookahead gives NAG better convergence properties
+    /// than standard momentum.
+    /// </para>
+    /// <para><b>For Beginners:</b> NAG is like looking ahead while skiing - you peek at the slope
+    /// ahead before making your move, which helps you make smarter adjustments to your speed and direction.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        if (_velocity == null || _velocity.Length != parameters.Length)
+        {
+            _velocity = new Vector<T>(parameters.Length);
+        }
+
+        // === Vectorized NAG Update using IEngine (Phase B: US-GPU-015) ===
+        // Note: In NAG, the gradient is evaluated at the lookahead position
+
+        // Update velocity: velocity = momentum * velocity + lr * gradient
+        var momentumVelocity = (Vector<T>)Engine.Multiply(_velocity, CurrentMomentum);
+        var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
+        _velocity = (Vector<T>)Engine.Add(momentumVelocity, scaledGradient);
+
+        // Update parameters: params = params - velocity
+        var updatedParams = (Vector<T>)Engine.Subtract(parameters, _velocity);
+
+        return updatedParams;
+    }
+
+    /// <summary>
+    /// Reverses a Nesterov Accelerated Gradient update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after NAG update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// NAG's reverse update requires the optimizer's internal velocity state from the forward pass.
+    /// This method must be called immediately after UpdateParameters while the velocity is fresh.
+    /// NAG evaluates gradients at a lookahead position, but the reversal only needs the final velocity.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before a NAG update.
+    /// NAG uses velocity (built from lookahead gradients) to update parameters. To reverse,
+    /// we just need to know what velocity was used to take the step.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        if (_velocity == null || _velocity.Length != updatedParameters.Length)
+        {
+            throw new InvalidOperationException(
+                "NAG optimizer velocity is not initialized. ReverseUpdate must be called after UpdateParameters.");
+        }
+
+        // === Vectorized Reverse NAG Update (Phase B: US-GPU-015) ===
+        // Reverse the update: original = updated + velocity
+        return (Vector<T>)Engine.Add(updatedParameters, _velocity);
     }
 
     /// <summary>

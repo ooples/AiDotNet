@@ -4,7 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.FeatureSelectors;
 using AiDotNet.FitnessCalculators;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Normalizers;
@@ -15,7 +15,7 @@ using AiDotNet.Regularization;
 
 public class EnhancedRegressionExample
 {
-    public void RunExample()
+    public async Task RunExample()
     {
         Console.WriteLine("Enhanced Regression Example - Real Estate Analysis");
         Console.WriteLine("================================================\n");
@@ -80,7 +80,7 @@ public class EnhancedRegressionExample
 
             // Linear regression model
             Console.WriteLine("\n1. Training Multiple Linear Regression model...");
-            var linearModel = modelBuilder
+            var linearModel = await modelBuilder
                 .ConfigureDataPreprocessor(dataPreprocessor)
                 .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(null, new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
                 {
@@ -94,12 +94,12 @@ public class EnhancedRegressionExample
                     UseIntercept = true
                 }))
                 .ConfigureFitnessCalculator(new RSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>())
-                .Build(features, prices);
+                .BuildAsync(features, prices);
 
             // Ridge regression model (with L2 regularization)
             Console.WriteLine("\n2. Training Ridge Regression model (with regularization)...");
             double alpha = 1.0;
-            var ridgeModel = modelBuilder
+            var ridgeModel = await modelBuilder
                 .ConfigureDataPreprocessor(dataPreprocessor)
                 .ConfigureRegularization(new L2Regularization<double, Matrix<double>, Vector<double>>(new RegularizationOptions
                 {
@@ -118,7 +118,7 @@ public class EnhancedRegressionExample
                     UseIntercept = true
                 }))
                 .ConfigureFitnessCalculator(new RSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>())
-                .Build(features, prices);
+                .BuildAsync(features, prices);
 
             // 6. Evaluate models on test set
             Console.WriteLine("\nEvaluating models on test set:");

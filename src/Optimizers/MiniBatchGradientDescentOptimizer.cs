@@ -47,7 +47,8 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// <param name="model">The model to optimize.</param>
     public MiniBatchGradientDescentOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        MiniBatchGradientDescentOptions<T, TInput, TOutput>? options = null)
+        MiniBatchGradientDescentOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
         : base(model, options ?? new())
     {
         _options = options ?? new MiniBatchGradientDescentOptions<T, TInput, TOutput>();
@@ -165,14 +166,51 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// <returns>An updated symbolic model with improved coefficients.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        // === Vectorized Mini-Batch GD Update using IEngine (Phase B: US-GPU-015) ===
+        // params = params - learningRate * gradient
+
         var parameters = currentSolution.GetParameters();
-        var newCoefficients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            newCoefficients[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(CurrentLearningRate, gradient[i]));
-        }
+        var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
+        var newCoefficients = (Vector<T>)Engine.Subtract(parameters, scaledGradient);
 
         return currentSolution.WithParameters(newCoefficients);
+    }
+
+    /// <summary>
+    /// Reverses a Mini-Batch Gradient Descent update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after Mini-Batch GD update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// Mini-Batch Gradient Descent uses vanilla SGD update rule: params_new = params_old - lr * gradient.
+    /// The reverse is straightforward: params_old = params_new + lr * gradient.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before a Mini-Batch GD update.
+    /// Since Mini-Batch GD uses simple steps (parameter minus learning_rate times gradient), reversing
+    /// just means adding back that step.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        // === Vectorized Reverse Mini-Batch GD Update (Phase B: US-GPU-015) ===
+        // Reverse: original = updated + lr * gradient
+        var currentLrVec = Vector<T>.CreateDefault(appliedGradients.Length, CurrentLearningRate);
+        var gradientStep = (Vector<T>)Engine.Multiply(currentLrVec, appliedGradients);
+        return (Vector<T>)Engine.Add(updatedParameters, gradientStep);
     }
 
     /// <summary>

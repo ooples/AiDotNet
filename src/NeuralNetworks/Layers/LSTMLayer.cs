@@ -1,3 +1,6 @@
+using AiDotNet.Autodiff;
+
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -569,7 +572,8 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public LSTMLayer(int inputSize, int hiddenSize, int[] inputShape,
         IActivationFunction<T>? activation = null,
-        IActivationFunction<T>? recurrentActivation = null)
+        IActivationFunction<T>? recurrentActivation = null,
+        IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, hiddenSize), activation ?? new TanhActivation<T>())
     {
         _inputSize = inputSize;
@@ -633,7 +637,8 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public LSTMLayer(int inputSize, int hiddenSize, int[] inputShape,
         IVectorActivationFunction<T>? activation = null,
-        IVectorActivationFunction<T>? recurrentActivation = null)
+        IVectorActivationFunction<T>? recurrentActivation = null,
+        IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, hiddenSize), activation ?? new TanhActivation<T>())
     {
         _inputSize = inputSize;
@@ -722,7 +727,7 @@ public class LSTMLayer<T> : LayerBase<T>
     private void InitializeWeights()
     {
         // Xavier/Glorot initialization
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputSize + _hiddenSize)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (_inputSize + _hiddenSize))));
 
         InitializeWeight(_weightsFi, scale);
         InitializeWeight(_weightsIi, scale);
@@ -880,23 +885,33 @@ public class LSTMLayer<T> : LayerBase<T>
 
         if (_useVectorActivation)
         {
-            f = _sigmoidVectorActivation!.Activate(f);
-            i = _sigmoidVectorActivation!.Activate(i);
-            c = _tanhVectorActivation!.Activate(c);
-            o = _sigmoidVectorActivation!.Activate(o);
+            // Use Engine methods for optimized activations (CPU SIMD / GPU kernels)
+            f = Engine.Sigmoid(f);
+            i = Engine.Sigmoid(i);
+            c = Engine.Tanh(c);
+            o = Engine.Sigmoid(o);
         }
         else
         {
-            f = f.Transform((x, _) => _sigmoidActivation!.Activate(x));
-            i = i.Transform((x, _) => _sigmoidActivation!.Activate(x));
-            c = c.Transform((x, _) => _tanhActivation!.Activate(x));
-            o = o.Transform((x, _) => _sigmoidActivation!.Activate(x));
+            if (_sigmoidActivation == null)
+                throw new InvalidOperationException("Sigmoid activation is null when not using vector activation");
+            if (_tanhActivation == null)
+                throw new InvalidOperationException("Tanh activation is null when not using vector activation");
+
+            f = f.Transform((x, _) => _sigmoidActivation.Activate(x));
+            i = i.Transform((x, _) => _sigmoidActivation.Activate(x));
+            c = c.Transform((x, _) => _tanhActivation.Activate(x));
+            o = o.Transform((x, _) => _sigmoidActivation.Activate(x));
         }
 
         var newC = f.ElementwiseMultiply(prevC).Add(i.ElementwiseMultiply(c));
-        var newH = o.ElementwiseMultiply(_useVectorActivation 
-            ? _tanhVectorActivation!.Activate(newC) 
-            : newC.Transform((x, _) => _tanhActivation!.Activate(x)));
+        var newH = o.ElementwiseMultiply(_useVectorActivation
+            ? Engine.Tanh(newC)
+            : newC.Transform((x, _) => {
+                if (_tanhActivation == null)
+                    throw new InvalidOperationException("Tanh activation is null");
+                return _tanhActivation.Activate(x);
+            }));
 
         return (newH, newC);
     }
@@ -915,18 +930,44 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's inputs
     /// should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass:
     /// - The layer processes the sequence in reverse order (last step to first)
     /// - At each step, it calculates how each part contributed to the error
     /// - It computes gradients for all weights, biases, and inputs
     /// - These gradients show how to adjust the parameters to improve performance
-    /// 
+    ///
     /// This process is part of the "backpropagation through time" algorithm that helps
     /// recurrent neural networks learn from their mistakes.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using Backpropagation Through Time (BPTT) for LSTM.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the backward pass using manual gradient calculations optimized for
+    /// LSTM networks. It performs backpropagation through time (BPTT), processing the
+    /// sequence in reverse order and computing gradients for all gate parameters (forget, input,
+    /// cell, output), hidden states, and cell states.
+    /// </para>
+    /// <para>
+    /// Autodiff Note: LSTM backward pass involves complex gate interactions and cell state dynamics.
+    /// Implementing this with automatic differentiation would require handling temporal dependencies,
+    /// gate-specific gradient flows, and the memory cell update mechanism. The manual implementation
+    /// provides efficient and correct gradient calculations for all LSTM components.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastHiddenState == null || _lastCellState == null)
         {
@@ -959,7 +1000,7 @@ public class LSTMLayer<T> : LayerBase<T>
             var prevH = t > 0 ? _lastHiddenState.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
             var prevC = t > 0 ? _lastCellState.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
 
-            var (dxt, dprevH, dprevC, dWfi, dWii, dWci, dWoi, dWfh, dWih, dWch, dWoh, dbf, dbi, dbc, dbo) = 
+            var (dxt, dprevH, dprevC, dWfi, dWii, dWci, dWoi, dWfh, dWih, dWch, dWoh, dbf, dbi, dbc, dbo) =
                 BackwardStep(dh, dNextC, xt, prevH, prevC);
 
             inputGradient.SetSlice(t, dxt);
@@ -989,6 +1030,201 @@ public class LSTMLayer<T> : LayerBase<T>
         };
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation for LSTM.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients for the LSTM layer.
+    /// It processes the sequence through time, creating a computation graph for each time step
+    /// that includes all gate computations (forget, input, cell, output) and state updates.
+    /// The autodiff system then handles gradient propagation through these operations.
+    /// </para>
+    /// <para>
+    /// Note: This implementation is slower than BackwardManual but provides:
+    /// - Gradient verification capability
+    /// - Easier experimentation with gate modifications
+    /// - Educational value for understanding LSTM gradient flow
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastHiddenState == null || _lastCellState == null)
+        {
+            throw new InvalidOperationException("Backward pass called before forward pass.");
+        }
+
+        int batchSize = _lastInput.Shape[0];
+        int timeSteps = _lastInput.Shape[1];
+
+        // Initialize gradient accumulators for all parameters
+        var dWeightsFi = new Tensor<T>(_weightsFi.Shape);
+        var dWeightsIi = new Tensor<T>(_weightsIi.Shape);
+        var dWeightsCi = new Tensor<T>(_weightsCi.Shape);
+        var dWeightsOi = new Tensor<T>(_weightsOi.Shape);
+        var dWeightsFh = new Tensor<T>(_weightsFh.Shape);
+        var dWeightsIh = new Tensor<T>(_weightsIh.Shape);
+        var dWeightsCh = new Tensor<T>(_weightsCh.Shape);
+        var dWeightsOh = new Tensor<T>(_weightsOh.Shape);
+        var dBiasF = new Tensor<T>(_biasF.Shape);
+        var dBiasI = new Tensor<T>(_biasI.Shape);
+        var dBiasC = new Tensor<T>(_biasC.Shape);
+        var dBiasO = new Tensor<T>(_biasO.Shape);
+
+        var inputGradient = new Tensor<T>(_lastInput.Shape);
+
+        // Process each time step using autodiff
+        for (int t = timeSteps - 1; t >= 0; t--)
+        {
+            // Get input and states for this time step
+            var xt = _lastInput.GetSlice(t);
+            var prevH = t > 0 ? _lastHiddenState.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
+            var prevC = t > 0 ? _lastCellState.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
+            var gradSlice = outputGradient.GetSlice(t);
+
+            // Convert parameters to computation nodes with gradient tracking
+            var inputNode = Autodiff.TensorOperations<T>.Variable(xt, "input", requiresGradient: true);
+            var prevHNode = Autodiff.TensorOperations<T>.Variable(prevH, "prevH", requiresGradient: true);
+            var prevCNode = Autodiff.TensorOperations<T>.Variable(prevC, "prevC", requiresGradient: true);
+
+            var weightsFiNode = Autodiff.TensorOperations<T>.Variable(_weightsFi, "weightsFi", requiresGradient: true);
+            var weightsIiNode = Autodiff.TensorOperations<T>.Variable(_weightsIi, "weightsIi", requiresGradient: true);
+            var weightsCiNode = Autodiff.TensorOperations<T>.Variable(_weightsCi, "weightsCi", requiresGradient: true);
+            var weightsOiNode = Autodiff.TensorOperations<T>.Variable(_weightsOi, "weightsOi", requiresGradient: true);
+
+            var weightsFhNode = Autodiff.TensorOperations<T>.Variable(_weightsFh, "weightsFh", requiresGradient: true);
+            var weightsIhNode = Autodiff.TensorOperations<T>.Variable(_weightsIh, "weightsIh", requiresGradient: true);
+            var weightsChNode = Autodiff.TensorOperations<T>.Variable(_weightsCh, "weightsCh", requiresGradient: true);
+            var weightsOhNode = Autodiff.TensorOperations<T>.Variable(_weightsOh, "weightsOh", requiresGradient: true);
+
+            var biasFNode = Autodiff.TensorOperations<T>.Variable(_biasF, "biasF", requiresGradient: true);
+            var biasINode = Autodiff.TensorOperations<T>.Variable(_biasI, "biasI", requiresGradient: true);
+            var biasCNode = Autodiff.TensorOperations<T>.Variable(_biasC, "biasC", requiresGradient: true);
+            var biasONode = Autodiff.TensorOperations<T>.Variable(_biasO, "biasO", requiresGradient: true);
+
+            // Compute LSTM gates using autodiff operations
+            // Forget gate: f = sigmoid(xt @ Wfi + prevH @ Wfh + bf)
+            var fInput = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, Autodiff.TensorOperations<T>.Transpose(weightsFiNode));
+            var fHidden = Autodiff.TensorOperations<T>.MatrixMultiply(prevHNode, Autodiff.TensorOperations<T>.Transpose(weightsFhNode));
+            var fPreActivation = Autodiff.TensorOperations<T>.Add(Autodiff.TensorOperations<T>.Add(fInput, fHidden), biasFNode);
+            var f = Autodiff.TensorOperations<T>.Sigmoid(fPreActivation);
+
+            // Input gate: i = sigmoid(xt @ Wii + prevH @ Wih + bi)
+            var iInput = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, Autodiff.TensorOperations<T>.Transpose(weightsIiNode));
+            var iHidden = Autodiff.TensorOperations<T>.MatrixMultiply(prevHNode, Autodiff.TensorOperations<T>.Transpose(weightsIhNode));
+            var iPreActivation = Autodiff.TensorOperations<T>.Add(Autodiff.TensorOperations<T>.Add(iInput, iHidden), biasINode);
+            var i = Autodiff.TensorOperations<T>.Sigmoid(iPreActivation);
+
+            // Cell candidate: c_tilde = tanh(xt @ Wci + prevH @ Wch + bc)
+            var cInput = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, Autodiff.TensorOperations<T>.Transpose(weightsCiNode));
+            var cHidden = Autodiff.TensorOperations<T>.MatrixMultiply(prevHNode, Autodiff.TensorOperations<T>.Transpose(weightsChNode));
+            var cPreActivation = Autodiff.TensorOperations<T>.Add(Autodiff.TensorOperations<T>.Add(cInput, cHidden), biasCNode);
+            var cTilde = Autodiff.TensorOperations<T>.Tanh(cPreActivation);
+
+            // Output gate: o = sigmoid(xt @ Woi + prevH @ Woh + bo)
+            var oInput = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, Autodiff.TensorOperations<T>.Transpose(weightsOiNode));
+            var oHidden = Autodiff.TensorOperations<T>.MatrixMultiply(prevHNode, Autodiff.TensorOperations<T>.Transpose(weightsOhNode));
+            var oPreActivation = Autodiff.TensorOperations<T>.Add(Autodiff.TensorOperations<T>.Add(oInput, oHidden), biasONode);
+            var o = Autodiff.TensorOperations<T>.Sigmoid(oPreActivation);
+
+            // Cell state update: newC = f * prevC + i * c_tilde
+            var forgetGated = Autodiff.TensorOperations<T>.ElementwiseMultiply(f, prevCNode);
+            var inputGated = Autodiff.TensorOperations<T>.ElementwiseMultiply(i, cTilde);
+            var newC = Autodiff.TensorOperations<T>.Add(forgetGated, inputGated);
+
+            // Hidden state update: newH = o * tanh(newC)
+            var newCActivated = Autodiff.TensorOperations<T>.Tanh(newC);
+            var newH = Autodiff.TensorOperations<T>.ElementwiseMultiply(o, newCActivated);
+
+            // Set gradient at output and propagate backward
+            newH.Gradient = gradSlice;
+
+            // Perform topological sort and backward pass
+            var topoOrder = GetTopologicalOrder(newH);
+            for (int idx = topoOrder.Count - 1; idx >= 0; idx--)
+            {
+                var node = topoOrder[idx];
+                if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+                {
+                    node.BackwardFunction(node.Gradient);
+                }
+            }
+
+            // Accumulate gradients
+            if (inputNode.Gradient != null)
+            {
+                inputGradient.SetSlice(t, inputNode.Gradient);
+            }
+
+            if (weightsFiNode.Gradient != null) dWeightsFi = dWeightsFi.Add(weightsFiNode.Gradient);
+            if (weightsIiNode.Gradient != null) dWeightsIi = dWeightsIi.Add(weightsIiNode.Gradient);
+            if (weightsCiNode.Gradient != null) dWeightsCi = dWeightsCi.Add(weightsCiNode.Gradient);
+            if (weightsOiNode.Gradient != null) dWeightsOi = dWeightsOi.Add(weightsOiNode.Gradient);
+            if (weightsFhNode.Gradient != null) dWeightsFh = dWeightsFh.Add(weightsFhNode.Gradient);
+            if (weightsIhNode.Gradient != null) dWeightsIh = dWeightsIh.Add(weightsIhNode.Gradient);
+            if (weightsChNode.Gradient != null) dWeightsCh = dWeightsCh.Add(weightsChNode.Gradient);
+            if (weightsOhNode.Gradient != null) dWeightsOh = dWeightsOh.Add(weightsOhNode.Gradient);
+            if (biasFNode.Gradient != null) dBiasF = dBiasF.Add(biasFNode.Gradient);
+            if (biasINode.Gradient != null) dBiasI = dBiasI.Add(biasINode.Gradient);
+            if (biasCNode.Gradient != null) dBiasC = dBiasC.Add(biasCNode.Gradient);
+            if (biasONode.Gradient != null) dBiasO = dBiasO.Add(biasONode.Gradient);
+        }
+
+        // Store gradients for UpdateParameters
+        Gradients = new Dictionary<string, Tensor<T>>
+        {
+            {"weightsFi", dWeightsFi}, {"weightsIi", dWeightsIi}, {"weightsCi", dWeightsCi}, {"weightsOi", dWeightsOi},
+            {"weightsFh", dWeightsFh}, {"weightsIh", dWeightsIh}, {"weightsCh", dWeightsCh}, {"weightsOh", dWeightsOh},
+            {"biasF", dBiasF}, {"biasI", dBiasI}, {"biasC", dBiasC}, {"biasO", dBiasO}
+        };
+
+        return inputGradient;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -1334,9 +1570,11 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private void CopyTensorToVector(Tensor<T> tensor, Vector<T> vector, ref int startIndex)
     {
-        for (int i = 0; i < tensor.Length; i++)
+        // Use optimized ToVector and copy range instead of element-by-element loop
+        var tensorVec = tensor.ToVector();
+        for (int i = 0; i < tensorVec.Length; i++)
         {
-            vector[startIndex++] = tensor[i];
+            vector[startIndex++] = tensorVec[i];
         }
     }
 
@@ -1417,9 +1655,19 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private void CopyVectorToTensor(Vector<T> vector, Tensor<T> tensor, ref int startIndex)
     {
+        // Use optimized array copy instead of element-by-element loop
+        var tempArray = new T[tensor.Length];
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor[i] = vector[startIndex++];
+            tempArray[i] = vector[startIndex++];
+        }
+        var tempVec = new Vector<T>(tempArray);
+        var tempTensor = Tensor<T>.FromVector(tempVec);
+
+        // Copy data to target tensor
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = tempTensor[i];
         }
     }
 
@@ -1456,5 +1704,154 @@ public class LSTMLayer<T> : LayerBase<T>
         _lastHiddenState = null;
         _lastCellState = null;
         Gradients.Clear();
+    }
+
+    /// <summary>
+    /// Exports the LSTM layer's single time-step computation as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the hidden state at one time step.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method exports a single LSTM cell computation for JIT compilation.
+    /// The graph computes: h_t, c_t = LSTMCell(x_t, h_{t-1}, c_{t-1})
+    /// using the standard LSTM equations with forget, input, output gates and cell candidate.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_weightsFi == null || _weightsIi == null || _weightsCi == null || _weightsOi == null)
+            throw new InvalidOperationException("LSTM weights not initialized. Call Initialize() first.");
+
+        if (_weightsFh == null || _weightsIh == null || _weightsCh == null || _weightsOh == null)
+            throw new InvalidOperationException("LSTM recurrent weights not initialized. Call Initialize() first.");
+
+        if (_biasF == null || _biasI == null || _biasC == null || _biasO == null)
+            throw new InvalidOperationException("LSTM biases not initialized. Call Initialize() first.");
+
+        // Create placeholders for single time-step inputs
+        // x_t shape: [batchSize, inputSize]
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, _inputSize });
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "x_t");
+
+        // h_{t-1} shape: [batchSize, hiddenSize]
+        var prevHiddenPlaceholder = new Tensor<T>(new int[] { 1, _hiddenSize });
+        var prevHiddenNode = TensorOperations<T>.Variable(prevHiddenPlaceholder, "h_prev");
+
+        // c_{t-1} shape: [batchSize, hiddenSize]
+        var prevCellPlaceholder = new Tensor<T>(new int[] { 1, _hiddenSize });
+        var prevCellNode = TensorOperations<T>.Variable(prevCellPlaceholder, "c_prev");
+
+        // Create weight and bias nodes
+        var weightsFiNode = TensorOperations<T>.Variable(_weightsFi, "W_fi");
+        var weightsIiNode = TensorOperations<T>.Variable(_weightsIi, "W_ii");
+        var weightsCiNode = TensorOperations<T>.Variable(_weightsCi, "W_ci");
+        var weightsOiNode = TensorOperations<T>.Variable(_weightsOi, "W_oi");
+
+        var weightsFhNode = TensorOperations<T>.Variable(_weightsFh, "W_fh");
+        var weightsIhNode = TensorOperations<T>.Variable(_weightsIh, "W_ih");
+        var weightsChNode = TensorOperations<T>.Variable(_weightsCh, "W_ch");
+        var weightsOhNode = TensorOperations<T>.Variable(_weightsOh, "W_oh");
+
+        var biasFNode = TensorOperations<T>.Variable(_biasF, "b_f");
+        var biasINode = TensorOperations<T>.Variable(_biasI, "b_i");
+        var biasCNode = TensorOperations<T>.Variable(_biasC, "b_c");
+        var biasONode = TensorOperations<T>.Variable(_biasO, "b_o");
+
+        // Add inputs to the list
+        inputNodes.Add(inputNode);
+        inputNodes.Add(prevHiddenNode);
+        inputNodes.Add(prevCellNode);
+        inputNodes.Add(weightsFiNode);
+        inputNodes.Add(weightsIiNode);
+        inputNodes.Add(weightsCiNode);
+        inputNodes.Add(weightsOiNode);
+        inputNodes.Add(weightsFhNode);
+        inputNodes.Add(weightsIhNode);
+        inputNodes.Add(weightsChNode);
+        inputNodes.Add(weightsOhNode);
+        inputNodes.Add(biasFNode);
+        inputNodes.Add(biasINode);
+        inputNodes.Add(biasCNode);
+        inputNodes.Add(biasONode);
+
+        // Build LSTM computation graph (single time step)
+        // Forget gate: f_t = sigmoid(W_fi @ x_t + W_fh @ h_{t-1} + b_f)
+        var weightsFiT = TensorOperations<T>.Transpose(weightsFiNode);
+        var weightsFhT = TensorOperations<T>.Transpose(weightsFhNode);
+        var f_input = TensorOperations<T>.MatrixMultiply(inputNode, weightsFiT);
+        var f_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, weightsFhT);
+        var f_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(f_input, f_hidden), biasFNode);
+        var f_t = TensorOperations<T>.Sigmoid(f_preact);
+
+        // Input gate: i_t = sigmoid(W_ii @ x_t + W_ih @ h_{t-1} + b_i)
+        var weightsIiT = TensorOperations<T>.Transpose(weightsIiNode);
+        var weightsIhT = TensorOperations<T>.Transpose(weightsIhNode);
+        var i_input = TensorOperations<T>.MatrixMultiply(inputNode, weightsIiT);
+        var i_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, weightsIhT);
+        var i_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(i_input, i_hidden), biasINode);
+        var i_t = TensorOperations<T>.Sigmoid(i_preact);
+
+        // Cell candidate: c_tilde = tanh(W_ci @ x_t + W_ch @ h_{t-1} + b_c)
+        var weightsCiT = TensorOperations<T>.Transpose(weightsCiNode);
+        var weightsChT = TensorOperations<T>.Transpose(weightsChNode);
+        var c_input = TensorOperations<T>.MatrixMultiply(inputNode, weightsCiT);
+        var c_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, weightsChT);
+        var c_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(c_input, c_hidden), biasCNode);
+        var c_tilde = TensorOperations<T>.Tanh(c_preact);
+
+        // Output gate: o_t = sigmoid(W_oi @ x_t + W_oh @ h_{t-1} + b_o)
+        var weightsOiT = TensorOperations<T>.Transpose(weightsOiNode);
+        var weightsOhT = TensorOperations<T>.Transpose(weightsOhNode);
+        var o_input = TensorOperations<T>.MatrixMultiply(inputNode, weightsOiT);
+        var o_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, weightsOhT);
+        var o_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(o_input, o_hidden), biasONode);
+        var o_t = TensorOperations<T>.Sigmoid(o_preact);
+
+        // Cell state: c_t = f_t ⊙ c_{t-1} + i_t ⊙ c_tilde
+        var forget_gated = TensorOperations<T>.ElementwiseMultiply(f_t, prevCellNode);
+        var input_gated = TensorOperations<T>.ElementwiseMultiply(i_t, c_tilde);
+        var c_t = TensorOperations<T>.Add(forget_gated, input_gated);
+
+        // Hidden state: h_t = o_t ⊙ tanh(c_t)
+        var c_t_tanh = TensorOperations<T>.Tanh(c_t);
+        var h_t = TensorOperations<T>.ElementwiseMultiply(o_t, c_t_tanh);
+
+        return h_t;
+    }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// True for LSTM layers, as single time-step JIT compilation is supported.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Converts a Matrix to a 2D Tensor for use in computation graphs.
+    /// </summary>
+    private static Tensor<T> MatrixToTensor(Matrix<T> matrix)
+    {
+        var tensor = new Tensor<T>(new int[] { matrix.Rows, matrix.Columns });
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                tensor[i, j] = matrix[i, j];
+            }
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a Vector to a 1D Tensor for use in computation graphs.
+    /// </summary>
+    private static Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        return Tensor<T>.FromVector(vector);
     }
 }

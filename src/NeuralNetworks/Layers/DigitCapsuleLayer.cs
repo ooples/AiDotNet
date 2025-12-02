@@ -429,6 +429,18 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null || _lastOutput == null || _lastCouplings == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
@@ -482,6 +494,26 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
 
         return inputGradient;
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Specialized operations
+    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // DigitCapsuleLayer is the final capsule layer with margin loss
+        // The manual implementation provides correct gradient computation with routing
+        // The iterative routing procedure is specific to capsule networks
+        return BackwardManual(outputGradient);
+    }
+
 
     /// <summary>
     /// Updates the layer's weights using the calculated gradients and the specified learning rate.
@@ -643,4 +675,77 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         _lastCouplings = null;
         _weightsGradient = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var input = inputNodes[0];
+
+        // Create weight tensor as constant node [inputCapsules, numClasses, inputCapsuleDimension, outputCapsuleDimension]
+        var weightsTensor = new Tensor<T>(
+            new[] { _inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension },
+            _weights.ToVector());
+        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "DigitCapsWeights");
+
+        // Transform input capsules to predictions for each class
+        // For each input capsule i and class j: predictions[i,j] = input[i] @ weights[i,j]
+        var predictions = TensorOperations<T>.MatrixMultiply(input, weightsNode);
+
+        // Initialize coupling coefficients to zero
+        var couplingsData = new T[_inputCapsules * _numClasses];
+        var couplingsTensor = new Tensor<T>(new[] { _inputCapsules, _numClasses }, new Vector<T>(couplingsData));
+        var couplings = TensorOperations<T>.Constant(couplingsTensor, "InitialCouplings");
+
+        ComputationNode<T> output = predictions;
+
+        // Unroll routing iterations
+        for (int iter = 0; iter < _routingIterations; iter++)
+        {
+            // Apply softmax to couplings along numClasses dimension
+            var routingWeights = TensorOperations<T>.Softmax(couplings, axis: 1);
+
+            // Weighted sum for each class: output[j] = sum_i(routingWeights[i,j] * predictions[i,j])
+            var weighted = TensorOperations<T>.ElementwiseMultiply(predictions, routingWeights);
+            var weightedSum = TensorOperations<T>.Sum(weighted, [0]); // Sum over inputCapsules
+
+            // Apply squash activation: v = ||s||^2 / (1 + ||s||^2) * s / ||s||
+            var squaredNorm = TensorOperations<T>.Sum(TensorOperations<T>.Square(weightedSum), [1]);
+            var oneTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.One }));
+            var oneNode = TensorOperations<T>.Constant(oneTensor, "One");
+            var normPlusOne = TensorOperations<T>.Add(squaredNorm, oneNode);
+            var scaleFactor = TensorOperations<T>.Divide(squaredNorm, normPlusOne);
+            var norm = TensorOperations<T>.Sqrt(squaredNorm);
+            var normalizedVec = TensorOperations<T>.Divide(weightedSum, norm);
+            output = TensorOperations<T>.ElementwiseMultiply(normalizedVec, scaleFactor);
+
+            // Update couplings if not last iteration
+            if (iter < _routingIterations - 1)
+            {
+                // Agreement: dot product between predictions and output for each input capsule/class pair
+                var agreement = TensorOperations<T>.Sum(
+                    TensorOperations<T>.ElementwiseMultiply(predictions, output), [2]);
+                couplings = TensorOperations<T>.Add(couplings, agreement);
+            }
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> because DigitCapsuleLayer uses dynamic routing with a fixed number of iterations
+    /// that can be unrolled into a static computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
+
 }

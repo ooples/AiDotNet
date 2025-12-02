@@ -13,15 +13,8 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// calculations much faster and more efficient.
 /// </para>
 /// </remarks>
-public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
+public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
-    /// Gets the original matrix being decomposed.
-    /// </summary>
-    public Matrix<T> A { get; }
-    
     /// <summary>
     /// Gets the orthogonal matrix Q in the decomposition A = Q*T*Q^T.
     /// </summary>
@@ -32,12 +25,14 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// This property makes orthogonal matrices very useful in many calculations.
     /// </para>
     /// </remarks>
-    public Matrix<T> QMatrix { get; private set; }
-    
+    public Matrix<T> QMatrix { get; private set; } = new Matrix<T>(0, 0);
+
     /// <summary>
     /// Gets the tridiagonal matrix T in the decomposition A = Q*T*Q^T.
     /// </summary>
-    public Matrix<T> TMatrix { get; private set; }
+    public Matrix<T> TMatrix { get; private set; } = new Matrix<T>(0, 0);
+
+    private readonly TridiagonalAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the TridiagonalDecomposition class.
@@ -45,20 +40,27 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="matrix">The matrix to decompose</param>
     /// <param name="algorithm">The algorithm to use for decomposition (default is Householder)</param>
     public TridiagonalDecomposition(Matrix<T> matrix, TridiagonalAlgorithmType algorithm = TridiagonalAlgorithmType.Householder)
+        : base(matrix)
     {
-        A = matrix;
-        _numOps = MathHelper.GetNumericOperations<T>();
-        QMatrix = new Matrix<T>(matrix.Rows, matrix.Columns);
-        TMatrix = new Matrix<T>(matrix.Rows, matrix.Columns);
-        Decompose(algorithm);
+        _algorithm = algorithm;
+
+        Decompose();
     }
 
     /// <summary>
-    /// Performs the tridiagonal decomposition using the specified algorithm.
+    /// Performs the tridiagonal decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        ComputeDecomposition(_algorithm);
+    }
+
+    /// <summary>
+    /// Computes the tridiagonal decomposition using the specified algorithm.
     /// </summary>
     /// <param name="algorithm">The algorithm to use for decomposition</param>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified</exception>
-    public void Decompose(TridiagonalAlgorithmType algorithm = TridiagonalAlgorithmType.Householder)
+    private void ComputeDecomposition(TridiagonalAlgorithmType algorithm)
     {
         switch (algorithm)
         {
@@ -95,16 +97,18 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
         for (int k = 0; k < n - 2; k++)
         {
             Vector<T> x = TMatrix.GetColumn(k).GetSubVector(k + 1, n - k - 1);
-            T alpha = _numOps.Multiply(_numOps.SignOrZero(x[0]), x.Norm());
+            T alpha = NumOps.Multiply(NumOps.SignOrZero(x[0]), x.Norm());
             Vector<T> u = x.Subtract(Vector<T>.CreateDefault(x.Length, alpha).SetValue(0, x[0]));
             u = u.Divide(u.Norm());
 
+            // VECTORIZED: Construct Householder reflection matrix using outer product
             Matrix<T> P = Matrix<T>.CreateIdentity(n);
+            Matrix<T> uOuter = u.OuterProduct(u).Multiply(NumOps.FromDouble(2));
             for (int i = k + 1; i < n; i++)
             {
                 for (int j = k + 1; j < n; j++)
                 {
-                    P[i, j] = _numOps.Subtract(P[i, j], _numOps.Multiply(_numOps.FromDouble(2), _numOps.Multiply(u[i - k - 1], u[j - k - 1])));
+                    P[i, j] = NumOps.Subtract(P[i, j], uOuter[i - k - 1, j - k - 1]);
                 }
             }
 
@@ -133,32 +137,30 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int j = i + 2; j < n; j++)
             {
-                if (!_numOps.Equals(TMatrix[j, i], _numOps.Zero))
+                if (!NumOps.Equals(TMatrix[j, i], NumOps.Zero))
                 {
                     // Calculate Givens rotation
                     T a = TMatrix[i + 1, i];
                     T b = TMatrix[j, i];
-                    T r = _numOps.Sqrt(_numOps.Add(_numOps.Multiply(a, a), _numOps.Multiply(b, b)));
-                    T c = _numOps.Divide(a, r);
-                    T s = _numOps.Divide(b, r);
+                    T r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(a, a), NumOps.Multiply(b, b)));
+                    T c = NumOps.Divide(a, r);
+                    T s = NumOps.Divide(b, r);
 
-                    // Apply Givens rotation to TMatrix
-                    for (int k = i; k < n; k++)
-                    {
-                        T temp1 = TMatrix[i + 1, k];
-                        T temp2 = TMatrix[j, k];
-                        TMatrix[i + 1, k] = _numOps.Add(_numOps.Multiply(c, temp1), _numOps.Multiply(s, temp2));
-                        TMatrix[j, k] = _numOps.Subtract(_numOps.Multiply(_numOps.Negate(s), temp1), _numOps.Multiply(c, temp2));
-                    }
+                    // VECTORIZED: Apply Givens rotation to TMatrix rows using vector operations
+                    Vector<T> rowI1 = TMatrix.GetRow(i + 1);
+                    Vector<T> rowJ = TMatrix.GetRow(j);
+                    Vector<T> newRowI1 = rowI1.Multiply(c).Add(rowJ.Multiply(s));
+                    Vector<T> newRowJ = rowI1.Multiply(NumOps.Negate(s)).Add(rowJ.Multiply(c));
+                    TMatrix.SetRow(i + 1, newRowI1);
+                    TMatrix.SetRow(j, newRowJ);
 
-                    // Update QMatrix
-                    for (int k = 0; k < n; k++)
-                    {
-                        T temp1 = QMatrix[k, i + 1];
-                        T temp2 = QMatrix[k, j];
-                        QMatrix[k, i + 1] = _numOps.Add(_numOps.Multiply(c, temp1), _numOps.Multiply(s, temp2));
-                        QMatrix[k, j] = _numOps.Subtract(_numOps.Multiply(_numOps.Negate(s), temp1), _numOps.Multiply(c, temp2));
-                    }
+                    // VECTORIZED: Update QMatrix columns using vector operations
+                    Vector<T> colI1 = QMatrix.GetColumn(i + 1);
+                    Vector<T> colJ = QMatrix.GetColumn(j);
+                    Vector<T> newColI1 = colI1.Multiply(c).Add(colJ.Multiply(s));
+                    Vector<T> newColJ = colI1.Multiply(NumOps.Negate(s)).Add(colJ.Multiply(c));
+                    QMatrix.SetColumn(i + 1, newColI1);
+                    QMatrix.SetColumn(j, newColJ);
                 }
             }
         }
@@ -170,7 +172,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
             {
                 if (Math.Abs(i - j) > 1)
                 {
-                    TMatrix[i, j] = _numOps.Zero;
+                    TMatrix[i, j] = NumOps.Zero;
                 }
             }
         }
@@ -194,10 +196,12 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
         TMatrix = new Matrix<T>(n, n);
 
         Vector<T> v = new Vector<T>(n);
-        v[0] = _numOps.One;
+        v[0] = NumOps.One;
         Vector<T> w = A.Multiply(v);
         T alpha = w.DotProduct(v);
-        w = w.Subtract(v.Multiply(alpha));
+        // VECTORIZED: Subtract projection using Engine operations
+        var proj1 = (Vector<T>)Engine.Multiply(v, alpha);
+        w = (Vector<T>)Engine.Subtract(w, proj1);
         T beta = w.Norm();
 
         QMatrix.SetColumn(0, v);
@@ -205,17 +209,21 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
 
         for (int j = 1; j < n; j++)
         {
-            if (_numOps.Equals(beta, _numOps.Zero))
+            if (NumOps.Equals(beta, NumOps.Zero))
             {
                 break; // Early termination if beta becomes zero
             }
 
-            v = w.Divide(beta);
+            // VECTORIZED: Normalize using Engine division
+            v = (Vector<T>)Engine.Divide(w, beta);
             QMatrix.SetColumn(j, v);
 
-            w = A.Multiply(v).Subtract(v.Multiply(beta));
+            // VECTORIZED: Subtract projection using Engine operations
+            var proj2 = (Vector<T>)Engine.Multiply(v, beta);
+            w = (Vector<T>)Engine.Subtract(A.Multiply(v), proj2);
             alpha = w.DotProduct(v);
-            w = w.Subtract(v.Multiply(alpha));
+            var proj3 = (Vector<T>)Engine.Multiply(v, alpha);
+            w = (Vector<T>)Engine.Subtract(w, proj3);
 
             if (j < n - 1)
             {
@@ -249,7 +257,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// this process much more efficient than directly solving the original system.
     /// </para>
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         // Solve Tx = Q^T b
         Vector<T> y = QMatrix.Transpose().Multiply(b);
@@ -284,16 +292,16 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
         x[0] = b[0];
         for (int i = 1; i < n; i++)
         {
-            temp[i] = _numOps.Divide(TMatrix[i, i - 1], d[i - 1]);
-            d[i] = _numOps.Subtract(TMatrix[i, i], _numOps.Multiply(temp[i], TMatrix[i - 1, i]));
-            x[i] = _numOps.Subtract(b[i], _numOps.Multiply(temp[i], x[i - 1]));
+            temp[i] = NumOps.Divide(TMatrix[i, i - 1], d[i - 1]);
+            d[i] = NumOps.Subtract(TMatrix[i, i], NumOps.Multiply(temp[i], TMatrix[i - 1, i]));
+            x[i] = NumOps.Subtract(b[i], NumOps.Multiply(temp[i], x[i - 1]));
         }
 
         // Back substitution
-        x[n - 1] = _numOps.Divide(x[n - 1], d[n - 1]);
+        x[n - 1] = NumOps.Divide(x[n - 1], d[n - 1]);
         for (int i = n - 2; i >= 0; i--)
         {
-            x[i] = _numOps.Divide(_numOps.Subtract(x[i], _numOps.Multiply(TMatrix[i, i + 1], x[i + 1])), d[i]);
+            x[i] = NumOps.Divide(NumOps.Subtract(x[i], NumOps.Multiply(TMatrix[i, i + 1], x[i + 1])), d[i]);
         }
 
         return x;
@@ -306,12 +314,12 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number. Just as 1/3 is the
-    /// reciprocal of 3 (because 3 × 1/3 = 1), the inverse of a matrix A is another matrix that,
+    /// reciprocal of 3 (because 3 * 1/3 = 1), the inverse of a matrix A is another matrix that,
     /// when multiplied by A, gives the identity matrix (the matrix equivalent of the number 1).
     /// Finding the inverse is useful for solving multiple systems of equations with the same coefficient matrix.
     /// </para>
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         // Invert T
         Matrix<T> invT = InvertTridiagonal();

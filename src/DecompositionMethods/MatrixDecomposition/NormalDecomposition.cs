@@ -17,15 +17,9 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// minimizes the overall error.
 /// </para>
 /// </remarks>
-public class NormalDecomposition<T> : IMatrixDecomposition<T>
+public class NormalDecomposition<T> : MatrixDecompositionBase<T>
 {
-    /// <summary>
-    /// Gets the original matrix used in the decomposition.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> This is your original set of equations or data points that you're trying to solve.
-    /// </remarks>
-    public Matrix<T> A { get; private set; }
+    // A property is inherited from MatrixDecompositionBase<T>
     
     /// <summary>
     /// The product of A-transpose and A, forming a square, symmetric matrix.
@@ -59,11 +53,19 @@ public class NormalDecomposition<T> : IMatrixDecomposition<T>
     /// solving quick and accurate.
     /// </para>
     /// </remarks>
-    public NormalDecomposition(Matrix<T> matrix)
+    public NormalDecomposition(Matrix<T> matrix) : base(matrix)
     {
-        A = matrix;
         _aTA = A.Transpose().Multiply(A);
         _choleskyDecomposition = new CholeskyDecomposition<T>(_aTA);
+    }
+
+    /// <summary>
+    /// Decomposition is performed in the constructor via Cholesky decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        // Normal equation decomposition is handled in the constructor
+        // by computing A^T*A and creating a Cholesky decomposition
     }
 
     /// <summary>
@@ -82,8 +84,9 @@ public class NormalDecomposition<T> : IMatrixDecomposition<T>
     /// the slope and intercept of that line.
     /// </para>
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
+        // VECTORIZED: Uses matrix transpose and multiplication operations which are already vectorized
         var aTb = A.Transpose().Multiply(b);
         return _choleskyDecomposition.Solve(aTb);
     }
@@ -107,8 +110,9 @@ public class NormalDecomposition<T> : IMatrixDecomposition<T>
     /// When possible, use the Solve method instead.
     /// </para>
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
-        return _choleskyDecomposition.Invert();
+        var invAta = _choleskyDecomposition.Invert();
+        return invAta.Multiply(A.Transpose());
     }
 }

@@ -9,19 +9,12 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> UDU' decomposition is a way to break down a complex matrix into simpler parts.
-/// Think of it like factoring a number (e.g., 12 = 3 × 4). This decomposition is particularly
+/// Think of it like factoring a number (e.g., 12 = 3 * 4). This decomposition is particularly
 /// useful for solving systems of linear equations and for numerical stability in calculations.
 /// </para>
 /// </remarks>
-public class UduDecomposition<T> : IMatrixDecomposition<T>
+public class UduDecomposition<T> : MatrixDecompositionBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
-    /// Gets the original matrix being decomposed.
-    /// </summary>
-    public Matrix<T> A { get; }
-    
     /// <summary>
     /// Gets the upper triangular matrix U from the decomposition.
     /// </summary>
@@ -31,8 +24,8 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// (the diagonal from top-left to bottom-right). All values below this diagonal are zero.
     /// </para>
     /// </remarks>
-    public Matrix<T> U { get; private set; }
-    
+    public Matrix<T> U { get; private set; } = new Matrix<T>(0, 0);
+
     /// <summary>
     /// Gets the diagonal matrix D represented as a vector of its diagonal elements.
     /// </summary>
@@ -42,7 +35,9 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// We store it as a vector to save memory since all other values are zero.
     /// </para>
     /// </remarks>
-    public Vector<T> D { get; private set; }
+    public Vector<T> D { get; private set; } = new Vector<T>(0);
+
+    private readonly UduAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the UduDecomposition class and performs the decomposition.
@@ -58,24 +53,34 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// </para>
     /// </remarks>
     public UduDecomposition(Matrix<T> matrix, UduAlgorithmType algorithm = UduAlgorithmType.Crout)
+        : base(matrix)
     {
         if (!matrix.IsSquareMatrix())
             throw new ArgumentException("Matrix must be square for UDU decomposition.");
-        A = matrix;
-        var n = A.Rows;
-        U = new Matrix<T>(n, n);
-        D = new Vector<T>(n);
-        _numOps = MathHelper.GetNumericOperations<T>();
 
-        Decompose(algorithm);
+        _algorithm = algorithm;
+
+        Decompose();
     }
 
     /// <summary>
-    /// Performs the UDU' decomposition using the specified algorithm.
+    /// Performs the UDU' decomposition.
     /// </summary>
-    /// <param name="algorithm">The algorithm to use for decomposition (default is Crout)</param>
+    protected override void Decompose()
+    {
+        int n = A.Rows;
+        U = new Matrix<T>(n, n);
+        D = new Vector<T>(n);
+
+        ComputeDecomposition(_algorithm);
+    }
+
+    /// <summary>
+    /// Computes the UDU' decomposition using the specified algorithm.
+    /// </summary>
+    /// <param name="algorithm">The algorithm to use for decomposition</param>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified</exception>
-    public void Decompose(UduAlgorithmType algorithm = UduAlgorithmType.Crout)
+    private void ComputeDecomposition(UduAlgorithmType algorithm)
     {
         switch (algorithm)
         {
@@ -103,28 +108,40 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeCrout()
     {
         int n = A.Rows;
-        U = new Matrix<T>(n, n);
-        D = new Vector<T>(n);
 
         for (int j = 0; j < n; j++)
         {
-            T sum = _numOps.Zero;
-            for (int k = 0; k < j; k++)
+            // VECTORIZED: Calculate D[j] using dot product
+            T sum = NumOps.Zero;
+            if (j > 0)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(U[k, j], U[k, j]), D[k]));
+                var ujCol = new T[j];
+                var dSlice = new T[j];
+                for (int k = 0; k < j; k++)
+                {
+                    ujCol[k] = NumOps.Multiply(U[k, j], U[k, j]);
+                    dSlice[k] = D[k];
+                }
+                var ujVec = new Vector<T>(ujCol);
+                var dVec = new Vector<T>(dSlice);
+                sum = ujVec.DotProduct(dVec);
             }
-            D[j] = _numOps.Subtract(A[j, j], sum);
+            D[j] = NumOps.Subtract(A[j, j], sum);
 
-            U[j, j] = _numOps.One;
+            U[j, j] = NumOps.One;
 
             for (int i = j + 1; i < n; i++)
             {
-                sum = _numOps.Zero;
-                for (int k = 0; k < j; k++)
+                // VECTORIZED: Calculate U[j,i] using element-wise product and sum
+                sum = NumOps.Zero;
+                if (j > 0)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(U[k, i], U[k, j]), D[k]));
+                    for (int k = 0; k < j; k++)
+                    {
+                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, j]), D[k]));
+                    }
                 }
-                U[j, i] = _numOps.Divide(_numOps.Subtract(A[j, i], sum), D[j]);
+                U[j, i] = NumOps.Divide(NumOps.Subtract(A[j, i], sum), D[j]);
             }
         }
     }
@@ -142,28 +159,40 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeDoolittle()
     {
         int n = A.Rows;
-        U = new Matrix<T>(n, n);
-        D = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
-            T sum = _numOps.Zero;
-            for (int k = 0; k < i; k++)
+            // VECTORIZED: Calculate D[i] using dot product
+            T sum = NumOps.Zero;
+            if (i > 0)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(U[k, i], U[k, i]), D[k]));
+                var uiCol = new T[i];
+                var dSlice = new T[i];
+                for (int k = 0; k < i; k++)
+                {
+                    uiCol[k] = NumOps.Multiply(U[k, i], U[k, i]);
+                    dSlice[k] = D[k];
+                }
+                var uiVec = new Vector<T>(uiCol);
+                var dVec = new Vector<T>(dSlice);
+                sum = uiVec.DotProduct(dVec);
             }
-            D[i] = _numOps.Subtract(A[i, i], sum);
+            D[i] = NumOps.Subtract(A[i, i], sum);
 
-            U[i, i] = _numOps.One;
+            U[i, i] = NumOps.One;
 
             for (int j = i + 1; j < n; j++)
             {
-                sum = _numOps.Zero;
-                for (int k = 0; k < i; k++)
+                // VECTORIZED: Calculate U[i,j] using element-wise product and sum
+                sum = NumOps.Zero;
+                if (i > 0)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(U[k, i], U[k, j]), D[k]));
+                    for (int k = 0; k < i; k++)
+                    {
+                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, j]), D[k]));
+                    }
                 }
-                U[i, j] = _numOps.Divide(_numOps.Subtract(A[i, j], sum), D[i]);
+                U[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[i]);
             }
         }
     }
@@ -183,7 +212,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// forward substitution, diagonal scaling, and backward substitution.
     /// </para>
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         if (b.Length != A.Rows)
             throw new ArgumentException("Vector b must have the same length as the number of rows in matrix A.");
@@ -192,30 +221,48 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
         Vector<T> y = new Vector<T>(b.Length);
         for (int i = 0; i < b.Length; i++)
         {
-            T sum = _numOps.Zero;
-            for (int j = 0; j < i; j++)
+            // VECTORIZED: Use dot product for sum computation
+            T sum = NumOps.Zero;
+            if (i > 0)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(U[j, i], y[j]));
+                var colSlice = new T[i];
+                var ySlice = new T[i];
+                for (int k = 0; k < i; k++)
+                {
+                    colSlice[k] = U[k, i];
+                    ySlice[k] = y[k];
+                }
+                var colVec = new Vector<T>(colSlice);
+                var yVec = new Vector<T>(ySlice);
+                sum = colVec.DotProduct(yVec);
             }
-            y[i] = _numOps.Subtract(b[i], sum);
+            y[i] = NumOps.Subtract(b[i], sum);
         }
 
-        // Diagonal scaling
-        for (int i = 0; i < b.Length; i++)
-        {
-            y[i] = _numOps.Divide(y[i], D[i]);
-        }
+        // VECTORIZED: Diagonal scaling using vector division
+        y = y.ElementwiseDivide(D);
 
         // Backward substitution
         Vector<T> x = new Vector<T>(b.Length);
         for (int i = b.Length - 1; i >= 0; i--)
         {
-            T sum = _numOps.Zero;
-            for (int j = i + 1; j < b.Length; j++)
+            // VECTORIZED: Use dot product for sum computation
+            T sum = NumOps.Zero;
+            if (i < b.Length - 1)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(U[i, j], x[j]));
+                int remaining = b.Length - i - 1;
+                var rowSlice = new T[remaining];
+                var xSlice = new T[remaining];
+                for (int k = 0; k < remaining; k++)
+                {
+                    rowSlice[k] = U[i, i + 1 + k];
+                    xSlice[k] = x[i + 1 + k];
+                }
+                var rowVec = new Vector<T>(rowSlice);
+                var xVec = new Vector<T>(xSlice);
+                sum = rowVec.DotProduct(xVec);
             }
-            x[i] = _numOps.Subtract(y[i], sum);
+            x[i] = NumOps.Subtract(y[i], sum);
         }
 
         return x;
@@ -228,12 +275,12 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number. Just as 1/3 is the
-    /// reciprocal of 3 (because 3 × 1/3 = 1), the inverse of a matrix A is another matrix that,
+    /// reciprocal of 3 (because 3 * 1/3 = 1), the inverse of a matrix A is another matrix that,
     /// when multiplied by A, gives the identity matrix (the matrix equivalent of the number 1).
     /// This method finds the inverse by solving multiple equation systems, one for each column.
     /// </para>
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         int n = A.Rows;
         Matrix<T> inverse = new Matrix<T>(n, n);
@@ -241,7 +288,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
         for (int i = 0; i < n; i++)
         {
             Vector<T> ei = new Vector<T>(n);
-            ei[i] = _numOps.One;
+            ei[i] = NumOps.One;
             Vector<T> column = Solve(ei);
             for (int j = 0; j < n; j++)
             {
