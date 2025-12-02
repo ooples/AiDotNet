@@ -301,8 +301,10 @@ namespace AiDotNet.Tokenization.Specialized
         {
             int velocityBin = Math.Min((velocity * _numVelocityBins) / 128, _numVelocityBins - 1);
             int quantizedDuration = QuantizeDuration(duration);
+            // Clamp duration to vocabulary range (1-16) for CPWord compound tokens
+            int clampedDuration = Math.Min(quantizedDuration, 16);
             // Compound token: Note_Pitch_VelocityBin_Duration
-            return new List<string> { $"Note_{pitch}_{velocityBin}_{quantizedDuration}" };
+            return new List<string> { $"Note_{pitch}_{velocityBin}_{clampedDuration}" };
         }
 
         private List<string> TokenizeNotesCPWord(List<MidiNote> noteList)
@@ -334,7 +336,9 @@ namespace AiDotNet.Tokenization.Specialized
                 // Compound token: Note_Pitch_VelocityBin_Duration
                 int velocityBin = Math.Min((note.Velocity * _numVelocityBins) / 128, _numVelocityBins - 1);
                 int quantizedDuration = QuantizeDuration(note.Duration);
-                tokens.Add($"Note_{note.Pitch}_{velocityBin}_{quantizedDuration}");
+                // Clamp duration to vocabulary range (1-16) for CPWord compound tokens
+                int clampedDuration = Math.Min(quantizedDuration, 16);
+                tokens.Add($"Note_{note.Pitch}_{velocityBin}_{clampedDuration}");
 
                 lastTick = note.StartTick;
             }
