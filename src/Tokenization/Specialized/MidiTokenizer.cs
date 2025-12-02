@@ -8,16 +8,35 @@ using AiDotNet.Tokenization.Models;
 namespace AiDotNet.Tokenization.Specialized
 {
     /// <summary>
-    /// MIDI tokenizer for symbolic music representation.
-    /// Supports multiple tokenization strategies for different use cases.
+    /// MIDI tokenizer for symbolic music representation using configurable tokenization strategies.
     /// </summary>
     /// <remarks>
-    /// <para><b>REMI</b>: Revamped MIDI - Uses Position, Bar, Pitch, Velocity, Duration tokens.
-    /// Most expressive, preserves timing and dynamics.</para>
-    /// <para><b>CPWord</b>: Compound Word - Combines note attributes into single tokens (e.g., Note_60_16_480).
-    /// More compact vocabulary, better for sequence models.</para>
-    /// <para><b>SimpleNote</b>: Basic pitch-duration pairs without velocity or position tracking.
-    /// Simplest representation, good for melody extraction.</para>
+    /// <para>
+    /// This tokenizer converts MIDI music data into sequences of tokens that can be used for
+    /// training machine learning models on music generation, classification, or analysis tasks.
+    /// It supports three tokenization strategies, each offering different trade-offs between
+    /// expressiveness and vocabulary size.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of this tokenizer as a translator between musical notes
+    /// and a language that machine learning models can understand. Just like how text tokenizers
+    /// convert words into numbers, this tokenizer converts musical notes into tokens.
+    ///
+    /// Imagine a piano: each key has a pitch (which note), and when you press it, you control
+    /// the velocity (how hard), duration (how long), and timing (when in the song). This tokenizer
+    /// captures all these aspects in different ways:
+    ///
+    /// - <b>REMI</b>: Like detailed sheet music notation - captures everything (pitch, velocity,
+    ///   duration, timing) as separate tokens. Use this when you need to preserve all musical details.
+    ///   Example output: ["Bar", "Position_0", "Pitch_60", "Velocity_16", "Duration_4"]
+    ///
+    /// - <b>CPWord</b>: Like a condensed notation - combines note information into single tokens.
+    ///   Use this when you want a smaller vocabulary for your model.
+    ///   Example output: ["Bar", "TimeShift_2", "Note_60_16_4"]
+    ///
+    /// - <b>SimpleNote</b>: Like a basic melody line - just pitch and duration, no dynamics.
+    ///   Use this for simple melody generation or when velocity doesn't matter.
+    ///   Example output: ["Pitch_60", "Duration_4", "Rest_2", "Pitch_64", "Duration_4"]
+    /// </para>
     /// </remarks>
     public class MidiTokenizer : TokenizerBase
     {
@@ -26,60 +45,95 @@ namespace AiDotNet.Tokenization.Specialized
         private readonly int _numVelocityBins;
 
         /// <summary>
-        /// MIDI tokenization strategies.
+        /// MIDI tokenization strategies that control how musical notes are converted to tokens.
         /// </summary>
+        /// <remarks>
+        /// <para><b>For Beginners:</b> Choose your strategy based on your use case:
+        /// - Use REMI for tasks requiring full musical expression (composition, arrangement)
+        /// - Use CPWord for models that benefit from smaller vocabularies (faster training)
+        /// - Use SimpleNote for melody-focused tasks where dynamics don't matter
+        /// </para>
+        /// </remarks>
         public enum TokenizationStrategy
         {
             /// <summary>
-            /// Revamped MIDI: Position, Bar, Pitch, Velocity, Duration as separate tokens.
+            /// Revamped MIDI (REMI): Position, Bar, Pitch, Velocity, Duration as separate tokens.
+            /// Most expressive strategy, preserves all timing and dynamic information.
             /// </summary>
             REMI,
 
             /// <summary>
-            /// Compound Word: Combines note attributes into single compound tokens.
+            /// Compound Word (CPWord): Combines note attributes into single compound tokens.
+            /// More compact vocabulary, better for sequence models with limited context windows.
             /// </summary>
             CPWord,
 
             /// <summary>
-            /// Simple Note: Basic pitch-duration pairs without velocity or position.
+            /// Simple Note: Basic pitch-duration pairs without velocity or position tracking.
+            /// Simplest representation, ideal for melody extraction and basic music generation.
             /// </summary>
             SimpleNote
         }
 
         /// <summary>
-        /// Represents a MIDI note event.
+        /// Represents a MIDI note event with timing, pitch, and velocity information.
         /// </summary>
+        /// <remarks>
+        /// <para><b>For Beginners:</b> A MIDI note is like a single key press on a piano:
+        /// - StartTick: When in the song the note starts (like a timestamp)
+        /// - Duration: How long the key is held down
+        /// - Pitch: Which key is pressed (60 = middle C, higher = higher notes)
+        /// - Velocity: How hard the key is pressed (louder = higher velocity)
+        ///
+        /// Example: A middle C played for one beat at medium volume might be:
+        /// StartTick=0, Duration=480, Pitch=60, Velocity=64
+        /// </para>
+        /// </remarks>
         public class MidiNote
         {
             /// <summary>
             /// Gets or sets the start tick of the note in MIDI ticks.
             /// </summary>
+            /// <value>The absolute position in MIDI ticks where the note begins. Default ticks per beat is 480.</value>
             public int StartTick { get; set; }
 
             /// <summary>
             /// Gets or sets the duration of the note in MIDI ticks.
             /// </summary>
+            /// <value>The length of the note in MIDI ticks. 480 ticks = 1 quarter note at default resolution.</value>
             public int Duration { get; set; }
 
             /// <summary>
             /// Gets or sets the pitch (0-127) representing the musical note.
             /// </summary>
+            /// <value>MIDI pitch value where 60 = middle C, 69 = A4 (440Hz). Range is 0-127.</value>
             public int Pitch { get; set; }
 
             /// <summary>
             /// Gets or sets the velocity (0-127) representing the note intensity.
             /// </summary>
+            /// <value>How forcefully the note is played. 0 = silent, 64 = medium, 127 = maximum. Range is 0-127.</value>
             public int Velocity { get; set; }
         }
 
         /// <summary>
-        /// Creates a new MIDI tokenizer.
+        /// Creates a new MIDI tokenizer with the specified configuration.
         /// </summary>
-        /// <param name="vocabulary">The vocabulary to use.</param>
-        /// <param name="specialTokens">Special tokens configuration.</param>
-        /// <param name="strategy">The tokenization strategy to use.</param>
-        /// <param name="ticksPerBeat">MIDI ticks per beat (default: 480).</param>
+        /// <param name="vocabulary">The vocabulary containing all valid MIDI tokens.</param>
+        /// <param name="specialTokens">Special tokens configuration for padding, unknown, etc.</param>
+        /// <param name="strategy">The tokenization strategy (REMI, CPWord, or SimpleNote).</param>
+        /// <param name="ticksPerBeat">MIDI ticks per beat for timing resolution (default: 480).</param>
         /// <param name="numVelocityBins">Number of velocity bins for quantization (default: 32).</param>
+        /// <remarks>
+        /// <para><b>For Beginners:</b> Most users should use the factory methods (CreateREMI, CreateCPWord,
+        /// CreateSimpleNote) instead of this constructor, as they automatically create the correct
+        /// vocabulary and special tokens for each strategy.
+        ///
+        /// The ticksPerBeat parameter controls timing precision (480 is standard MIDI resolution).
+        /// The numVelocityBins parameter controls how many different volume levels are distinguished
+        /// (32 bins means velocity values 0-127 are grouped into 32 categories).
+        /// </para>
+        /// </remarks>
         public MidiTokenizer(
             IVocabulary vocabulary,
             SpecialTokens specialTokens,
