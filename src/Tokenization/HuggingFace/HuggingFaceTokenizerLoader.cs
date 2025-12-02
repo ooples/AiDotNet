@@ -126,7 +126,7 @@ namespace AiDotNet.Tokenization.HuggingFace
             {
                 vocabDict = JsonConvert.DeserializeObject<Dictionary<string, int>>(vocabJson);
             }
-            catch
+            catch (JsonException)
             {
                 // If JSON parsing fails, try as text file
                 vocabDict = new Dictionary<string, int>();

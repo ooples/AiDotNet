@@ -82,7 +82,7 @@ namespace AiDotNet.Tokenization.Core
                         tokens.AddRange(Enumerable.Repeat(SpecialTokens.PadToken, paddingLength));
                         attentionMask.AddRange(paddingMask);
                     }
-                    else
+                    
                     {
                         tokenIds.InsertRange(0, padding);
                         tokens.InsertRange(0, Enumerable.Repeat(SpecialTokens.PadToken, paddingLength));
@@ -188,10 +188,10 @@ namespace AiDotNet.Tokenization.Core
             if (tokens.Count <= maxLength)
                 return tokens;
 
-            if (side == "left")
-                return tokens.Skip(tokens.Count - maxLength).ToList();
-            else
-                return tokens.Take(maxLength).ToList();
+            return side == "left"
+                ? tokens.Skip(tokens.Count - maxLength).ToList()
+            
+                : tokens.Take(maxLength).ToList();
         }
 
         /// <summary>

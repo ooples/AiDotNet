@@ -54,7 +54,7 @@ namespace AiDotNet.Tokenization.Vocabulary
             _tokenToId = new Dictionary<string, int>(tokenToId);
             _idToToken = tokenToId.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
             _nextId = tokenToId.Count > 0 ? tokenToId.Values.Max() + 1 : 0;
-            _unkTokenId = _tokenToId.ContainsKey(unkToken) ? _tokenToId[unkToken] : 0;
+            _unkTokenId = _tokenToId.TryGetValue(unkToken, out var unkId) ? unkId : 0;
         }
 
         /// <summary>
@@ -67,8 +67,8 @@ namespace AiDotNet.Tokenization.Vocabulary
             if (string.IsNullOrEmpty(token))
                 throw new ArgumentException("Token cannot be null or empty.", nameof(token));
 
-            if (_tokenToId.ContainsKey(token))
-                return _tokenToId[token];
+            if (_tokenToId.TryGetValue(token, out var existingId))
+                return existingId;
 
             var id = _nextId++;
             _tokenToId[token] = id;

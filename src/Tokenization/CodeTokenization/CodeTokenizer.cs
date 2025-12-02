@@ -42,9 +42,10 @@ namespace AiDotNet.Tokenization.CodeTokenization
             ITokenizer baseTokenizer,
             ProgrammingLanguage language = ProgrammingLanguage.Generic,
             bool splitIdentifiers = true)
-            : base(baseTokenizer.Vocabulary, baseTokenizer.SpecialTokens)
+            : base(baseTokenizer?.Vocabulary ?? throw new ArgumentNullException(nameof(baseTokenizer)),
+                   baseTokenizer.SpecialTokens)
         {
-            _baseTokenizer = baseTokenizer ?? throw new ArgumentNullException(nameof(baseTokenizer));
+            _baseTokenizer = baseTokenizer;
             _language = language;
             _splitIdentifiers = splitIdentifiers;
             _keywords = GetLanguageKeywords(language);
