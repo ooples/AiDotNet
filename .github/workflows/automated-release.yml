@@ -231,7 +231,7 @@ jobs:
           dotnet build -c Release --no-restore
 
       - name: Run tests for ${{ matrix.project }}
-        run: dotnet test "${{ matrix.project }}" -c Release --no-build --framework net8.0 --results-directory ./TestResults --logger "trx;LogFileName=test-results.trx"
+        run: dotnet test ${{ matrix.project }} -c Release --no-build --framework net8.0
 
       - name: Upload test results
         if: always()
