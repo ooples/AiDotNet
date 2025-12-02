@@ -103,9 +103,9 @@ namespace AiDotNet.Tokenization.Algorithms
 
             // Build initial vocabulary from substrings
             var substringCounts = new Dictionary<string, int>();
-            foreach (var text in corpusList)
+            var normalizedTexts = corpusList.Select(text => text.Replace(" ", "\u2581"));
+            foreach (var normalized in normalizedTexts)
             {
-                var normalized = text.Replace(" ", "\u2581");
                 for (int i = 0; i < normalized.Length; i++)
                 {
                     for (int len = 1; len <= Math.Min(16, normalized.Length - i); len++)
