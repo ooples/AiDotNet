@@ -10,6 +10,10 @@ namespace AiDotNet.Tokenization.Specialized
     /// <summary>
     /// MIDI tokenizer for symbolic music representation.
     /// </summary>
+    /// <remarks>
+    /// Currently only the REMI (Revamped MIDI) tokenization strategy is implemented.
+    /// CPWord and SimpleNote strategies are planned for future releases.
+    /// </remarks>
     public class MidiTokenizer : TokenizerBase
     {
         private readonly TokenizationStrategy _strategy;
@@ -19,6 +23,9 @@ namespace AiDotNet.Tokenization.Specialized
         /// <summary>
         /// MIDI tokenization strategies.
         /// </summary>
+        /// <remarks>
+        /// Currently only REMI is implemented. Using other strategies will throw NotImplementedException.
+        /// </remarks>
         public enum TokenizationStrategy { REMI, CPWord, SimpleNote }
 
         /// <summary>
@@ -35,6 +42,9 @@ namespace AiDotNet.Tokenization.Specialized
         /// <summary>
         /// Creates a new MIDI tokenizer.
         /// </summary>
+        /// <exception cref="NotImplementedException">
+        /// Thrown when a strategy other than REMI is specified.
+        /// </exception>
         public MidiTokenizer(
             IVocabulary vocabulary,
             SpecialTokens specialTokens,
@@ -43,6 +53,13 @@ namespace AiDotNet.Tokenization.Specialized
             int numVelocityBins = 32)
             : base(vocabulary, specialTokens)
         {
+            if (strategy != TokenizationStrategy.REMI)
+            {
+                throw new NotImplementedException(
+                    $"TokenizationStrategy.{strategy} is not yet implemented. " +
+                    "Currently only REMI strategy is supported.");
+            }
+
             _strategy = strategy;
             _ticksPerBeat = ticksPerBeat;
             _numVelocityBins = numVelocityBins;
