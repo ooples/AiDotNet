@@ -3,12 +3,18 @@ using AiDotNet.Enums;
 using AiDotNet.JitCompiler;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
+using Xunit;
 
 namespace AiDotNet.Tests.Benchmarks;
 
 /// <summary>
 /// Performance benchmarks comparing JIT compiled vs interpreted graph execution.
 /// </summary>
+/// <remarks>
+/// These benchmarks are quarantined because they trigger GPU initialization which can fail
+/// on machines without proper GPU support or drivers.
+/// </remarks>
+[Trait("Category", "GPU")]
 [MemoryDiagnoser]
 [SimpleJob(launchCount: 1, warmupCount: 5, iterationCount: 20)]
 public class JitCompilerBenchmarks
