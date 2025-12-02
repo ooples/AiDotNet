@@ -1,154 +1,170 @@
-using System;
-
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.Diffusion.Schedulers
+namespace AiDotNet.Diffusion.Schedulers;
+
+/// <summary>
+/// DDIM (Denoising Diffusion Implicit Models) scheduler implementation.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> DDIM is a faster variant of DDPM (Denoising Diffusion Probabilistic Models).
+/// While DDPM requires many steps (often 1000) to generate samples, DDIM can achieve similar
+/// quality with far fewer steps (e.g., 50) by using a different mathematical formulation.
+///
+/// Key features:
+/// - Deterministic when eta=0: Same noise produces same output every time
+/// - Stochastic when eta=1: Behaves like DDPM
+/// - Supports epsilon prediction: Model predicts the noise added to clean data
+/// - Linear beta schedule: Noise increases linearly across timesteps
+/// </para>
+/// </remarks>
+public sealed class DDIMScheduler<T> : IStepScheduler<T>
 {
-    // Minimal DDIM scheduler supporting epsilon prediction and linear beta schedule.
-    public sealed class DDIMScheduler<T> : IStepScheduler<T>
+    private readonly SchedulerConfig<T> _config;
+    private readonly INumericOperations<T> _ops;
+
+    private T[] _betas = Array.Empty<T>();
+    private T[] _alphas = Array.Empty<T>();
+    private T[] _alphasCumprod = Array.Empty<T>();
+
+    /// <inheritdoc />
+    public int[] Timesteps { get; private set; }
+
+    /// <summary>
+    /// Initializes a new instance of the DDIM scheduler.
+    /// </summary>
+    /// <param name="config">Configuration for the scheduler including beta schedule parameters.</param>
+    public DDIMScheduler(SchedulerConfig<T> config)
     {
-        private readonly SchedulerConfig<T> _config;
-        private readonly INumericOperations<T> _ops;
+        _config = config ?? throw new ArgumentNullException(nameof(config));
+        _ops = MathHelper.GetNumericOperations<T>();
+        InitializeTrainSchedule();
+        Timesteps = Array.Empty<int>();
+    }
 
-        private T[] _betas = Array.Empty<T>();
-        private T[] _alphas = Array.Empty<T>();
-        private T[] _alphasCumprod = Array.Empty<T>();
-
-        public int[] Timesteps { get; private set; }
-
-        public DDIMScheduler(SchedulerConfig<T> config)
+    private void InitializeTrainSchedule()
+    {
+        int steps = _config.TrainTimesteps;
+        _betas = new T[steps];
+        if (_config.BetaSchedule == BetaSchedule.Linear)
         {
-            _config = config ?? throw new ArgumentNullException("config");
-            _ops = MathHelper.GetNumericOperations<T>();
-            InitializeTrainSchedule();
-            Timesteps = Array.Empty<int>();
-        }
-
-        private void InitializeTrainSchedule()
-        {
-            int steps = _config.TrainTimesteps;
-            _betas = new T[steps];
-            if (_config.BetaSchedule == BetaSchedule.Linear)
-            {
-                // Linear interpolation between BetaStart and BetaEnd
-                for (int i = 0; i < steps; i++)
-                {
-                    // beta = start + (end-start) * i/(steps-1)
-                    var delta = _ops.Subtract(_config.BetaEnd, _config.BetaStart);
-                    var ratio = _ops.Divide(_ops.FromDouble(i), _ops.FromDouble(steps - 1));
-                    _betas[i] = _ops.Add(_config.BetaStart, _ops.Multiply(delta, ratio));
-                }
-            }
-            else
-            {
-                throw new NotSupportedException("Beta schedule not supported");
-            }
-
-            _alphas = new T[steps];
-            _alphasCumprod = new T[steps];
-            var cum = _ops.One;
+            // Linear interpolation between BetaStart and BetaEnd
             for (int i = 0; i < steps; i++)
             {
-                _alphas[i] = _ops.Subtract(_ops.One, _betas[i]);
-                cum = _ops.Multiply(cum, _alphas[i]);
-                _alphasCumprod[i] = cum;
+                // beta = start + (end-start) * i/(steps-1)
+                var delta = _ops.Subtract(_config.BetaEnd, _config.BetaStart);
+                var ratio = _ops.Divide(_ops.FromDouble(i), _ops.FromDouble(steps - 1));
+                _betas[i] = _ops.Add(_config.BetaStart, _ops.Multiply(delta, ratio));
             }
         }
-
-        public void SetTimesteps(int inferenceSteps)
+        else
         {
-            if (inferenceSteps <= 0 || inferenceSteps > _config.TrainTimesteps)
-                throw new ArgumentOutOfRangeException("inferenceSteps");
-
-            int T = _config.TrainTimesteps;
-            int stride = T / inferenceSteps;
-            if (stride < 1) stride = 1;
-
-            int[] ts = new int[inferenceSteps];
-            int idx = 0;
-            for (int i = T - 1; i >= 0 && idx < inferenceSteps; i -= stride)
-            {
-                ts[idx++] = i;
-            }
-            if (idx < inferenceSteps)
-            {
-                Array.Resize(ref ts, idx);
-            }
-            Timesteps = ts;
+            throw new NotSupportedException("Beta schedule not supported");
         }
 
-        public Vector<T> Step(Vector<T> modelOutput, int timestep, Vector<T> sample, T eta, Vector<T>? noise = null)
+        _alphas = new T[steps];
+        _alphasCumprod = new T[steps];
+        var cum = _ops.One;
+        for (int i = 0; i < steps; i++)
         {
-            if (modelOutput == null) throw new ArgumentNullException("modelOutput");
-            if (sample == null) throw new ArgumentNullException("sample");
-            if (modelOutput.Length != sample.Length) throw new ArgumentException("modelOutput and sample length mismatch");
-            if (timestep < 0 || timestep >= _alphasCumprod.Length) throw new ArgumentOutOfRangeException("timestep");
+            _alphas[i] = _ops.Subtract(_ops.One, _betas[i]);
+            cum = _ops.Multiply(cum, _alphas[i]);
+            _alphasCumprod[i] = cum;
+        }
+    }
 
-            int t = timestep;
-            int prevT = Math.Max(t - 1, 0);
+    /// <inheritdoc />
+    public void SetTimesteps(int inferenceSteps)
+    {
+        if (inferenceSteps <= 0 || inferenceSteps > _config.TrainTimesteps)
+            throw new ArgumentOutOfRangeException(nameof(inferenceSteps));
 
-            T ac = _alphasCumprod[t];
-            T acPrev = _alphasCumprod[prevT];
-            T sqrtAc = _ops.Sqrt(ac);
-            T oneMinusAc = _ops.Subtract(_ops.One, ac);
-            T sqrtOneMinusAc = _ops.Sqrt(oneMinusAc);
+        int trainSteps = _config.TrainTimesteps;
+        int stride = trainSteps / inferenceSteps;
+        if (stride < 1) stride = 1;
 
-            int n = sample.Length;
-            var predOriginal = new Vector<T>(n);
+        int[] ts = new int[inferenceSteps];
+        int idx = 0;
+        for (int i = trainSteps - 1; i >= 0 && idx < inferenceSteps; i -= stride)
+        {
+            ts[idx++] = i;
+        }
+        if (idx < inferenceSteps)
+        {
+            Array.Resize(ref ts, idx);
+        }
+        Timesteps = ts;
+    }
+
+    /// <inheritdoc />
+    public Vector<T> Step(Vector<T> modelOutput, int timestep, Vector<T> sample, T eta, Vector<T>? noise = null)
+    {
+        if (modelOutput == null) throw new ArgumentNullException(nameof(modelOutput));
+        if (sample == null) throw new ArgumentNullException(nameof(sample));
+        if (modelOutput.Length != sample.Length) throw new ArgumentException("modelOutput and sample length mismatch", nameof(modelOutput));
+        if (timestep < 0 || timestep >= _alphasCumprod.Length) throw new ArgumentOutOfRangeException(nameof(timestep));
+
+        int t = timestep;
+        int prevT = Math.Max(t - 1, 0);
+
+        T ac = _alphasCumprod[t];
+        T acPrev = _alphasCumprod[prevT];
+        T sqrtAc = _ops.Sqrt(ac);
+        T oneMinusAc = _ops.Subtract(_ops.One, ac);
+        T sqrtOneMinusAc = _ops.Sqrt(oneMinusAc);
+
+        int n = sample.Length;
+        var predOriginal = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            // epsilon prediction: x0 = (xt - sqrt(1-alpha_cumprod) * eps) / sqrt(alpha_cumprod)
+            var term = _ops.Subtract(sample[i], _ops.Multiply(sqrtOneMinusAc, modelOutput[i]));
+            predOriginal[i] = _ops.Divide(term, sqrtAc);
+        }
+
+        if (_config.ClipSample)
+        {
             for (int i = 0; i < n; i++)
             {
-                // epsilon prediction
-                var term = _ops.Subtract(sample[i], _ops.Multiply(sqrtOneMinusAc, modelOutput[i]));
-                predOriginal[i] = _ops.Divide(term, sqrtAc);
+                predOriginal[i] = MathHelper.Clamp(predOriginal[i], _ops.Negate(_ops.One), _ops.One);
             }
-
-            if (_config.ClipSample)
-            {
-                for (int i = 0; i < n; i++)
-                {
-                    predOriginal[i] = MathHelper.Clamp(predOriginal[i], _ops.Negate(_ops.One), _ops.One);
-                }
-            }
-
-            // DDIM variance
-            T sigma = _ops.Zero;
-            if (_ops.GreaterThan(eta, _ops.Zero))
-            {
-                // var = eta * sqrt((1 - acPrev) / (1 - ac) * (1 - ac/acPrev))
-                var oneMinusAcPrev = _ops.Subtract(_ops.One, acPrev);
-                var ratio = _ops.Divide(oneMinusAcPrev, oneMinusAc);
-                var frac = _ops.Subtract(_ops.One, _ops.Divide(ac, acPrev));
-                var inside = _ops.Multiply(ratio, frac);
-                sigma = _ops.Multiply(eta, _ops.Sqrt(inside));
-            }
-
-            var prevSample = new Vector<T>(n);
-            T coeffOrig = _ops.Sqrt(acPrev);
-            T sigmaSq = _ops.Multiply(sigma, sigma);
-            T coeffEps = _ops.Sqrt(_ops.Subtract(_ops.Subtract(_ops.One, acPrev), sigmaSq));
-
-            var noiseVec = noise;
-            if (_ops.GreaterThan(sigma, _ops.Zero) && noiseVec == null)
-            {
-                // Deterministic fallback if noise not supplied
-                noiseVec = new Vector<T>(new T[n]);
-            }
-
-            for (int i = 0; i < n; i++)
-            {
-                T termOrig = _ops.Multiply(coeffOrig, predOriginal[i]);
-                T termEps = _ops.Multiply(coeffEps, modelOutput[i]);
-                T termNoise = _ops.Zero;
-                if (_ops.GreaterThan(sigma, _ops.Zero))
-                {
-                    termNoise = _ops.Multiply(sigma, noiseVec![i]);
-                }
-                prevSample[i] = _ops.Add(_ops.Add(termOrig, termEps), termNoise);
-            }
-
-            return prevSample;
         }
+
+        // DDIM variance: sigma = eta * sqrt((1 - acPrev) / (1 - ac) * (1 - ac/acPrev))
+        T sigma = _ops.Zero;
+        if (_ops.GreaterThan(eta, _ops.Zero))
+        {
+            var oneMinusAcPrev = _ops.Subtract(_ops.One, acPrev);
+            var ratio = _ops.Divide(oneMinusAcPrev, oneMinusAc);
+            var frac = _ops.Subtract(_ops.One, _ops.Divide(ac, acPrev));
+            var inside = _ops.Multiply(ratio, frac);
+            sigma = _ops.Multiply(eta, _ops.Sqrt(inside));
+        }
+
+        var prevSample = new Vector<T>(n);
+        T coeffOrig = _ops.Sqrt(acPrev);
+        T sigmaSq = _ops.Multiply(sigma, sigma);
+        T coeffEps = _ops.Sqrt(_ops.Subtract(_ops.Subtract(_ops.One, acPrev), sigmaSq));
+
+        var noiseVec = noise;
+        if (_ops.GreaterThan(sigma, _ops.Zero) && noiseVec == null)
+        {
+            // Deterministic fallback if noise not supplied
+            noiseVec = new Vector<T>(new T[n]);
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            T termOrig = _ops.Multiply(coeffOrig, predOriginal[i]);
+            T termEps = _ops.Multiply(coeffEps, modelOutput[i]);
+            T termNoise = _ops.Zero;
+            if (_ops.GreaterThan(sigma, _ops.Zero))
+            {
+                termNoise = _ops.Multiply(sigma, noiseVec![i]);
+            }
+            prevSample[i] = _ops.Add(_ops.Add(termOrig, termEps), termNoise);
+        }
+
+        return prevSample;
     }
 }
