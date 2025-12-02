@@ -69,10 +69,34 @@ namespace AiDotNet.Tokenization.CodeTokenization
             allTokens.AddRange(codeTokens);
             allTokens.Add(_codeTokenizer.SpecialTokens.SepToken);
 
-            // Truncate if necessary
+            // Truncate if necessary, preserving NL/code boundary when naturalLanguage is provided
             if (options.Truncation && options.MaxLength.HasValue && allTokens.Count > options.MaxLength.Value)
             {
-                allTokens = allTokens.Take(options.MaxLength.Value - 1).ToList();
+                var maxLen = options.MaxLength.Value;
+
+                if (!string.IsNullOrEmpty(naturalLanguage))
+                {
+                    // Find the first SEP position to preserve NL/code boundary
+                    var firstSepIndex = allTokens.IndexOf(_codeTokenizer.SpecialTokens.SepToken);
+
+                    if (firstSepIndex >= 0 && firstSepIndex < maxLen - 1)
+                    {
+                        // Preserve tokens up to first SEP, truncate remaining
+                        var tokensBeforeSep = allTokens.Take(firstSepIndex + 1).ToList();
+                        var remaining = maxLen - tokensBeforeSep.Count - 1; // -1 for final SEP
+                        var tokensAfterSep = allTokens.Skip(firstSepIndex + 1).Take(remaining).ToList();
+                        allTokens = tokensBeforeSep.Concat(tokensAfterSep).ToList();
+                    }
+                    else
+                    {
+                        allTokens = allTokens.Take(maxLen - 1).ToList();
+                    }
+                }
+                else
+                {
+                    allTokens = allTokens.Take(maxLen - 1).ToList();
+                }
+
                 allTokens.Add(_codeTokenizer.SpecialTokens.SepToken);
             }
 
