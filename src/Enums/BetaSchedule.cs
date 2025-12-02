@@ -1,4 +1,4 @@
-namespace AiDotNet.Diffusion.Schedulers;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Defines the types of beta (noise variance) schedules available for diffusion models.

@@ -1,3 +1,5 @@
+using AiDotNet.Enums;
+
 namespace AiDotNet.Diffusion.Schedulers;
 
 /// <summary>
@@ -106,7 +108,7 @@ public sealed class SchedulerConfig<T>
     /// <b>Default:</b> Epsilon (most common)
     /// </para>
     /// </remarks>
-    public PredictionType PredictionType { get; }
+    public DiffusionPredictionType PredictionType { get; }
 
     /// <summary>
     /// Initializes a new scheduler configuration.
@@ -126,7 +128,7 @@ public sealed class SchedulerConfig<T>
         T betaEnd,
         BetaSchedule betaSchedule = BetaSchedule.Linear,
         bool clipSample = false,
-        PredictionType predictionType = PredictionType.Epsilon)
+        DiffusionPredictionType predictionType = DiffusionPredictionType.Epsilon)
     {
         if (trainTimesteps <= 1)
             throw new ArgumentOutOfRangeException(nameof(trainTimesteps),
@@ -163,7 +165,7 @@ public sealed class SchedulerConfig<T>
             betaEnd: ops.FromDouble(0.02),
             betaSchedule: BetaSchedule.Linear,
             clipSample: false,
-            predictionType: PredictionType.Epsilon);
+            predictionType: DiffusionPredictionType.Epsilon);
     }
 
     /// <summary>
@@ -189,6 +191,6 @@ public sealed class SchedulerConfig<T>
             betaEnd: ops.FromDouble(0.012),
             betaSchedule: BetaSchedule.ScaledLinear,
             clipSample: false,
-            predictionType: PredictionType.Epsilon);
+            predictionType: DiffusionPredictionType.Epsilon);
     }
 }

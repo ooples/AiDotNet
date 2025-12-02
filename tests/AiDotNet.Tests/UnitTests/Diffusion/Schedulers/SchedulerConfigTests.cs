@@ -1,4 +1,5 @@
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Enums;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion.Schedulers;
@@ -24,7 +25,7 @@ public class SchedulerConfigTests
         Assert.Equal(0.0001, config.BetaStart);
         Assert.Equal(0.02, config.BetaEnd);
         Assert.Equal(BetaSchedule.Linear, config.BetaSchedule);
-        Assert.Equal(PredictionType.Epsilon, config.PredictionType);
+        Assert.Equal(DiffusionPredictionType.Epsilon, config.PredictionType);
         Assert.False(config.ClipSample);
     }
 
@@ -37,7 +38,7 @@ public class SchedulerConfigTests
             betaStart: 0.001,
             betaEnd: 0.05,
             betaSchedule: BetaSchedule.ScaledLinear,
-            predictionType: PredictionType.VPrediction,
+            predictionType: DiffusionPredictionType.VPrediction,
             clipSample: true);
 
         // Assert
@@ -45,7 +46,7 @@ public class SchedulerConfigTests
         Assert.Equal(0.001, config.BetaStart);
         Assert.Equal(0.05, config.BetaEnd);
         Assert.Equal(BetaSchedule.ScaledLinear, config.BetaSchedule);
-        Assert.Equal(PredictionType.VPrediction, config.PredictionType);
+        Assert.Equal(DiffusionPredictionType.VPrediction, config.PredictionType);
         Assert.True(config.ClipSample);
     }
 
@@ -106,7 +107,7 @@ public class SchedulerConfigTests
         Assert.Equal(0.0001, config.BetaStart);
         Assert.Equal(0.02, config.BetaEnd);
         Assert.Equal(BetaSchedule.Linear, config.BetaSchedule);
-        Assert.Equal(PredictionType.Epsilon, config.PredictionType);
+        Assert.Equal(DiffusionPredictionType.Epsilon, config.PredictionType);
     }
 
     [Fact]
@@ -120,7 +121,7 @@ public class SchedulerConfigTests
         Assert.Equal(0.00085, config.BetaStart);
         Assert.Equal(0.012, config.BetaEnd);
         Assert.Equal(BetaSchedule.ScaledLinear, config.BetaSchedule);
-        Assert.Equal(PredictionType.Epsilon, config.PredictionType);
+        Assert.Equal(DiffusionPredictionType.Epsilon, config.PredictionType);
     }
 
     #endregion

@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Diffusion.Schedulers;

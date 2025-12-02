@@ -1,4 +1,4 @@
-namespace AiDotNet.Diffusion.Schedulers;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Defines what the diffusion model predicts during the denoising process.
@@ -19,7 +19,7 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// Most models use Epsilon prediction as it's the most common and well-studied approach.
 /// </para>
 /// </remarks>
-public enum PredictionType
+public enum DiffusionPredictionType
 {
     /// <summary>
     /// Model predicts the noise (epsilon) that was added to the clean sample.
