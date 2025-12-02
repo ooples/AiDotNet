@@ -82,7 +82,7 @@ namespace AiDotNet.Tokenization.Core
                         tokens.AddRange(Enumerable.Repeat(SpecialTokens.PadToken, paddingLength));
                         attentionMask.AddRange(paddingMask);
                     }
-                    
+                    else
                     {
                         tokenIds.InsertRange(0, padding);
                         tokens.InsertRange(0, Enumerable.Repeat(SpecialTokens.PadToken, paddingLength));
