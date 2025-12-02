@@ -76,7 +76,9 @@ namespace AiDotNet.Tokenization.Models
             PadToken = "[PAD]",
             ClsToken = "[CLS]",
             SepToken = "[SEP]",
-            MaskToken = "[MASK]"
+            MaskToken = "[MASK]",
+            BosToken = string.Empty,
+            EosToken = string.Empty
         };
 
         /// <summary>
@@ -87,7 +89,10 @@ namespace AiDotNet.Tokenization.Models
             UnkToken = "<|endoftext|>",
             PadToken = "<|endoftext|>",
             BosToken = "<|endoftext|>",
-            EosToken = "<|endoftext|>"
+            EosToken = "<|endoftext|>",
+            ClsToken = string.Empty,
+            SepToken = string.Empty,
+            MaskToken = string.Empty
         };
 
         /// <summary>
@@ -97,7 +102,11 @@ namespace AiDotNet.Tokenization.Models
         {
             UnkToken = "<unk>",
             PadToken = "<pad>",
-            EosToken = "</s>"
+            EosToken = "</s>",
+            BosToken = string.Empty,
+            ClsToken = string.Empty,
+            SepToken = string.Empty,
+            MaskToken = string.Empty
         };
 
         /// <summary>
