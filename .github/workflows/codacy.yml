@@ -54,7 +54,8 @@ jobs:
           gh-code-scanning-compat: true
           max-allowed-issues: 2147483647
           skip-uncommitted-files-check: true
-          # Auto-detect tools based on project files
+          # Enable parallel analysis for faster execution
+          parallel: 4
         continue-on-error: true
 
       - name: Upload SARIF results file
