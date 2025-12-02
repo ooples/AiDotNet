@@ -246,12 +246,12 @@ jobs:
       - name: Run tests for ${{ matrix.project }}
         run: |
           PROJECT_NAME=$(basename "${{ matrix.project }}" .csproj)
-          dotnet test ${{ matrix.project }} \
+          dotnet test "${{ matrix.project }}" \
             -c Release \
             --framework net8.0 \
             --no-build \
+            -v normal \
             --logger "trx;LogFileName=${PROJECT_NAME}.trx" \
-            --logger "console;verbosity=detailed" \
             --results-directory ./TestResults
 
       - name: Upload test results
