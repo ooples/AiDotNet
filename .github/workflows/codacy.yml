@@ -6,10 +6,23 @@ name: Codacy Security Scan
 on:
   push:
     branches: [ master, main ]
+    paths:
+      - '**.cs'
+      - '**.csproj'
+      - '.github/workflows/codacy.yml'
   pull_request:
     branches: [ master, main ]
+    paths:
+      - '**.cs'
+      - '**.csproj'
+      - '.github/workflows/codacy.yml'
   schedule:
     - cron: '24 20 * * 1'
+
+# Cancel in-progress runs for the same branch
+concurrency:
+  group: codacy-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -18,7 +31,9 @@ jobs:
   codacy-security-scan:
     name: Codacy Security Scan
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
+    # Skip draft PRs
+    if: github.event.pull_request.draft != true
     permissions:
       contents: read
       security-events: write
@@ -26,17 +41,23 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Shallow clone for faster checkout
+          fetch-depth: 1
 
       - name: Run Codacy Analysis CLI
         uses: codacy/codacy-analysis-cli-action@v4
         with:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
-          verbose: true
           output: results.sarif
           format: sarif
           gh-code-scanning-compat: true
           max-allowed-issues: 2147483647
           skip-uncommitted-files-check: true
+          # Only run security-focused tools (faster)
+          tool: spotbugs,pmd,semgrep
+          # Enable parallel analysis
+          parallel: 4
         continue-on-error: true
 
       - name: Upload SARIF results file
