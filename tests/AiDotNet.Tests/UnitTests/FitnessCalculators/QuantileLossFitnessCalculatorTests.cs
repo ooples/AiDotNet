@@ -8,18 +8,98 @@ using Xunit;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators;
 
-/// <summary>
-/// Tests for QuantileLossFitnessCalculator.
-///
-/// Note: The current implementation has a bug where it incorrectly uses OrdinalRegressionLoss
-/// with the quantile value (0.0-1.0) converted to an integer as the number of classes.
-/// This results in "Number of classes must be at least 2 for ordinal regression" errors.
-///
-/// These tests only validate the properties and non-calculation functionality until the
-/// underlying implementation is fixed to use a proper QuantileLoss function.
-/// </summary>
 public class QuantileLossFitnessCalculatorTests
 {
+    [Fact]
+    public void CalculateFitnessScore_WithPerfectPredictions_ReturnsZero()
+    {
+        // Arrange
+        var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.5);
+        var dataSet = new DataSetStats<double, Vector<double>, Vector<double>>
+        {
+            Predicted = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 }),
+            Actual = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 })
+        };
+
+        // Act
+        var result = calculator.CalculateFitnessScore(dataSet);
+
+        // Assert
+        Assert.Equal(0.0, result, 10);
+    }
+
+    [Fact]
+    public void CalculateFitnessScore_WithMedianQuantile_WorksCorrectly()
+    {
+        // Arrange
+        var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.5);
+        var dataSet = new DataSetStats<double, Vector<double>, Vector<double>>
+        {
+            Predicted = new Vector<double>(new double[] { 2.0, 4.0, 6.0 }),
+            Actual = new Vector<double>(new double[] { 1.0, 3.0, 5.0 })
+        };
+
+        // Act
+        var result = calculator.CalculateFitnessScore(dataSet);
+
+        // Assert
+        Assert.True(result >= 0.0);
+    }
+
+    [Fact]
+    public void CalculateFitnessScore_WithHighQuantile_PenalizesUnderPrediction()
+    {
+        // Arrange
+        var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.9);
+        var dataSet = new DataSetStats<double, Vector<double>, Vector<double>>
+        {
+            Predicted = new Vector<double>(new double[] { 5.0, 10.0, 15.0 }),
+            Actual = new Vector<double>(new double[] { 10.0, 20.0, 30.0 })
+        };
+
+        // Act
+        var result = calculator.CalculateFitnessScore(dataSet);
+
+        // Assert
+        Assert.True(result > 0.0);
+    }
+
+    [Fact]
+    public void CalculateFitnessScore_WithLowQuantile_PenalizesOverPrediction()
+    {
+        // Arrange
+        var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.1);
+        var dataSet = new DataSetStats<double, Vector<double>, Vector<double>>
+        {
+            Predicted = new Vector<double>(new double[] { 10.0, 20.0, 30.0 }),
+            Actual = new Vector<double>(new double[] { 5.0, 10.0, 15.0 })
+        };
+
+        // Act
+        var result = calculator.CalculateFitnessScore(dataSet);
+
+        // Assert
+        Assert.True(result > 0.0);
+    }
+
+    [Fact]
+    public void CalculateFitnessScore_WithDefaultQuantile_UsesMedian()
+    {
+        // Arrange
+        var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>();
+        var dataSet = new DataSetStats<double, Vector<double>, Vector<double>>
+        {
+            Predicted = new Vector<double>(new double[] { 1.0, 2.0, 3.0 }),
+            Actual = new Vector<double>(new double[] { 1.0, 2.0, 3.0 })
+        };
+
+        // Act
+        var result = calculator.CalculateFitnessScore(dataSet);
+
+        // Assert
+        Assert.Equal(0.0, result, 10);
+    }
+
     [Fact]
     public void IsHigherScoreBetter_ReturnsFalse()
     {
@@ -54,6 +134,24 @@ public class QuantileLossFitnessCalculatorTests
 
         // Assert
         Assert.False(result);
+    }
+
+    [Fact]
+    public void CalculateFitnessScore_WithFloatType_WorksCorrectly()
+    {
+        // Arrange
+        var calculator = new QuantileLossFitnessCalculator<float, Vector<float>, Vector<float>>(quantile: 0.5f);
+        var dataSet = new DataSetStats<float, Vector<float>, Vector<float>>
+        {
+            Predicted = new Vector<float>(new float[] { 1.0f, 2.0f, 3.0f }),
+            Actual = new Vector<float>(new float[] { 1.0f, 2.0f, 3.0f })
+        };
+
+        // Act
+        var result = calculator.CalculateFitnessScore(dataSet);
+
+        // Assert
+        Assert.Equal(0.0f, result, 5);
     }
 
     [Fact]
@@ -107,5 +205,63 @@ public class QuantileLossFitnessCalculatorTests
         // Assert
         Assert.NotNull(calculator);
         Assert.False(calculator.IsHigherScoreBetter);
+    }
+
+    [Fact]
+    public void CalculateFitnessScore_WithQ75_WorksCorrectly()
+    {
+        // Arrange
+        var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.75);
+        var dataSet = new DataSetStats<double, Vector<double>, Vector<double>>
+        {
+            Predicted = new Vector<double>(new double[] { 5.0, 10.0, 15.0 }),
+            Actual = new Vector<double>(new double[] { 6.0, 11.0, 14.0 })
+        };
+
+        // Act
+        var result = calculator.CalculateFitnessScore(dataSet);
+
+        // Assert
+        Assert.True(result >= 0.0);
+    }
+
+    [Fact]
+    public void CalculateFitnessScore_WithQ25_WorksCorrectly()
+    {
+        // Arrange
+        var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.25);
+        var dataSet = new DataSetStats<double, Vector<double>, Vector<double>>
+        {
+            Predicted = new Vector<double>(new double[] { 3.0, 6.0, 9.0 }),
+            Actual = new Vector<double>(new double[] { 4.0, 5.0, 10.0 })
+        };
+
+        // Act
+        var result = calculator.CalculateFitnessScore(dataSet);
+
+        // Assert
+        Assert.True(result >= 0.0);
+    }
+
+    [Fact]
+    public void CalculateFitnessScore_AsymmetricPenalty_DifferentQuantiles()
+    {
+        // Arrange
+        var calculatorLow = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.1);
+        var calculatorHigh = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>(quantile: 0.9);
+
+        // Under-prediction scenario
+        var dataSet = new DataSetStats<double, Vector<double>, Vector<double>>
+        {
+            Predicted = new Vector<double>(new double[] { 5.0, 10.0, 15.0 }),
+            Actual = new Vector<double>(new double[] { 10.0, 20.0, 30.0 })
+        };
+
+        // Act
+        var resultLow = calculatorLow.CalculateFitnessScore(dataSet);
+        var resultHigh = calculatorHigh.CalculateFitnessScore(dataSet);
+
+        // Assert - High quantile should penalize under-prediction more
+        Assert.True(resultHigh > resultLow);
     }
 }
