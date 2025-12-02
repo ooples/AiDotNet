@@ -74,9 +74,8 @@ namespace AiDotNet.Tokenization.Algorithms
             foreach (var text in corpus)
             {
                 var matches = preTokenRegex.Matches(text);
-                foreach (Match match in matches)
+                foreach (var word in matches.Cast<Match>().Select(m => m.Value))
                 {
-                    var word = match.Value;
                     wordFreqs[word] = wordFreqs.GetValueOrDefault(word, 0) + 1;
                 }
             }
@@ -85,12 +84,13 @@ namespace AiDotNet.Tokenization.Algorithms
             var splits = new Dictionary<string, List<string>>();
             foreach (var word in wordFreqs.Keys)
             {
-                splits[word] = word.Select(c => c.ToString()).ToList();
+                var charStrings = word.Select(c => c.ToString()).ToList();
+                splits[word] = charStrings;
 
                 // Add characters to vocabulary
-                foreach (var c in word)
+                foreach (var charStr in charStrings)
                 {
-                    vocabulary.AddToken(c.ToString());
+                    vocabulary.AddToken(charStr);
                 }
             }
 
@@ -164,9 +164,8 @@ namespace AiDotNet.Tokenization.Algorithms
 
             // Pre-tokenize using the pattern
             var matches = _patternRegex.Matches(text);
-            foreach (Match match in matches)
+            foreach (var word in matches.Cast<Match>().Select(m => m.Value))
             {
-                var word = match.Value;
 
                 // Check cache
                 if (_cache.TryGetValue(word, out var cachedTokens))
