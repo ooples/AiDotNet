@@ -138,8 +138,9 @@ namespace AiDotNet.Tokenization.Algorithms
 
             // Basic whitespace tokenization
             var words = text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            var lowercaseWords = words.Select(w => w.ToLowerInvariant());
 
-            foreach (var word in words.Select(w => w.ToLowerInvariant()))
+            foreach (var word in lowercaseWords)
             {
                 var wordTokens = TokenizeWord(word);
                 outputTokens.AddRange(wordTokens);
