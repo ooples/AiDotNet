@@ -91,17 +91,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             // Find nearest clusters
             var nearestClusters = FindNearestClusters(query, _numProbes);
 
-            // Search within those clusters
-            var scores = new List<(string Id, T Score)>();
-            foreach (var clusterId in nearestClusters.Where(c => _clusters.ContainsKey(c)))
-            {
-                var vectorIds = _clusters[clusterId];
-                foreach (var id in vectorIds)
-                {
-                    var score = _metric.Calculate(query, _vectors[id]);
-                    scores.Add((id, score));
-                }
-            }
+            // Search within those clusters using LINQ for cleaner mapping
+            var scores = nearestClusters
+                .Where(clusterId => _clusters.ContainsKey(clusterId))
+                .SelectMany(clusterId => _clusters[clusterId])
+                .Select(id => (Id: id, Score: _metric.Calculate(query, _vectors[id])))
+                .ToList();
 
             var sorted = _metric.HigherIsBetter
                 ? scores.OrderByDescending(x => x.Score)
