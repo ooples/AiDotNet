@@ -53,7 +53,7 @@ namespace AiDotNet.Tokenization.Vocabulary
         {
             _tokenToId = new Dictionary<string, int>(tokenToId);
             _idToToken = tokenToId.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
-            _nextId = tokenToId.Values.Max() + 1;
+            _nextId = tokenToId.Count > 0 ? tokenToId.Values.Max() + 1 : 0;
             _unkTokenId = _tokenToId.ContainsKey(unkToken) ? _tokenToId[unkToken] : 0;
         }
 
