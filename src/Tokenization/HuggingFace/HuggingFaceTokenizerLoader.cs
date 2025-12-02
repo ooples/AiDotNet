@@ -31,7 +31,7 @@ namespace AiDotNet.Tokenization.HuggingFace
                 throw new DirectoryNotFoundException($"Tokenizer directory not found: {modelPath}");
 
             // Check for tokenizer.json first (modern format)
-            var tokenizerJsonPath = Path.Combine(modelPath, "tokenizer.json");
+            var tokenizerJsonPath = GetSafePath(modelPath, "tokenizer.json");
             if (File.Exists(tokenizerJsonPath))
             {
                 return LoadFromTokenizerJson(tokenizerJsonPath);
