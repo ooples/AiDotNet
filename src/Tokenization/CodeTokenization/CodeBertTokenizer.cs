@@ -58,9 +58,9 @@ namespace AiDotNet.Tokenization.CodeTokenization
             allTokens.Add(_codeTokenizer.SpecialTokens.ClsToken);
 
             // Add natural language tokens if provided
-            if (!string.IsNullOrEmpty(naturalLanguage))
+            if (naturalLanguage is string nl && !string.IsNullOrEmpty(nl))
             {
-                var nlTokens = _wordPieceTokenizer.Tokenize(naturalLanguage);
+                var nlTokens = _wordPieceTokenizer.Tokenize(nl);
                 allTokens.AddRange(nlTokens);
                 allTokens.Add(_codeTokenizer.SpecialTokens.SepToken);
             }
