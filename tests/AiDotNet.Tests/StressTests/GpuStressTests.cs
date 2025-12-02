@@ -39,7 +39,13 @@ namespace AiDotNet.Tests.StressTests;
 /// - Memory should remain stable (no unbounded growth)
 /// - Performance should remain consistent across iterations
 /// - GPU memory pool should effectively reuse buffers
+///
+/// <para><b>CI Quarantine:</b></para>
+/// This test class is quarantined from CI using [Trait("Category", "GPU")].
+/// GPU tests require physical GPU hardware which is not available in CI runners.
+/// Run locally with: dotnet test --filter "Category=GPU"
 /// </remarks>
+[Trait("Category", "GPU")]
 public class GpuStressTests
 {
     private const int LongRunIterations = 10_000;
