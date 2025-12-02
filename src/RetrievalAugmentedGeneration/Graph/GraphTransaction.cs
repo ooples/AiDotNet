@@ -137,10 +137,14 @@ public class GraphTransaction<T> : IDisposable
     {
         EnsureActive();
 
+        // Capture original node data for potential undo
+        var originalNode = _store.GetNode(nodeId);
+
         _operations.Add(new TransactionOperation<T>
         {
             Type = OperationType.RemoveNode,
-            NodeId = nodeId
+            NodeId = nodeId,
+            Node = originalNode // Store for undo
         });
     }
 
@@ -152,10 +156,14 @@ public class GraphTransaction<T> : IDisposable
     {
         EnsureActive();
 
+        // Capture original edge data for potential undo
+        var originalEdge = _store.GetEdge(edgeId);
+
         _operations.Add(new TransactionOperation<T>
         {
             Type = OperationType.RemoveEdge,
-            EdgeId = edgeId
+            EdgeId = edgeId,
+            Edge = originalEdge // Store for undo
         });
     }
 
