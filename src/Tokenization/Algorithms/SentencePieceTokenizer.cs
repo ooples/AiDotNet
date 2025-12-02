@@ -87,9 +87,8 @@ namespace AiDotNet.Tokenization.Algorithms
             // Step 3: Initialize seed vocabulary with characters
             var pieceScores = new Dictionary<string, double>();
 
-            foreach (var c in selectedChars)
+            foreach (var token in selectedChars.Select(c => c.ToString()))
             {
-                var token = c.ToString();
                 vocabulary.AddToken(token);
                 pieceScores[token] = 0.0; // Initial score
             }
@@ -97,11 +96,8 @@ namespace AiDotNet.Tokenization.Algorithms
             // Step 4: Generate subword candidates
             var subwordCandidates = new Dictionary<string, int>();
 
-            foreach (var text in corpus)
+            foreach (var processedText in corpus.Select(t => t.Replace(" ", WhitespaceSymbol)))
             {
-                // Replace spaces with whitespace symbol
-                var processedText = text.Replace(" ", WhitespaceSymbol);
-
                 // Generate subwords
                 for (int i = 0; i < processedText.Length; i++)
                 {
