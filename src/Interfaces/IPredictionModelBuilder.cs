@@ -4,6 +4,8 @@ using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Tokenization.Configuration;
 
 namespace AiDotNet.Interfaces;
 
@@ -859,6 +861,59 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="config">The export configuration (optional, uses CPU/ONNX if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null);
+
+    /// <summary>
+    /// Configures tokenization for text-based input processing.
+    /// </summary>
+    /// <remarks>
+    /// Tokenization is the process of breaking text into smaller pieces (tokens) that can be processed
+    /// by machine learning models. This is essential for NLP and text-based models.
+    ///
+    /// <b>For Beginners:</b> Tokenization converts human-readable text into numbers that AI models understand.
+    ///
+    /// Different tokenization strategies include:
+    /// - BPE (Byte Pair Encoding): Used by GPT models, learns subword units from data
+    /// - WordPiece: Used by BERT, splits unknown words into known subwords
+    /// - SentencePiece: Language-independent tokenization used by many multilingual models
+    ///
+    /// Example:
+    /// <code>
+    /// var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 32000);
+    /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    ///     .ConfigureTokenizer(tokenizer)
+    ///     .ConfigureModel(new TransformerModel())
+    ///     .BuildAsync(trainingData, labels);
+    /// </code>
+    /// </remarks>
+    /// <param name="tokenizer">The tokenizer to use for text processing.</param>
+    /// <param name="config">Optional tokenization configuration. If null, default settings are used.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizer(ITokenizer tokenizer, TokenizationConfig? config = null);
+
+    /// <summary>
+    /// Configures tokenization using a pretrained tokenizer from HuggingFace Hub.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is the easiest way to use industry-standard tokenizers.
+    ///
+    /// Simply specify a model name from HuggingFace Hub:
+    /// <code>
+    /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    ///     .ConfigureTokenizerFromPretrained("bert-base-uncased")
+    ///     .ConfigureModel(new BertModel())
+    ///     .BuildAsync(trainingData, labels);
+    /// </code>
+    ///
+    /// Popular pretrained tokenizers include:
+    /// - "bert-base-uncased": BERT tokenizer for English text
+    /// - "gpt2": GPT-2 tokenizer for text generation
+    /// - "roberta-base": RoBERTa tokenizer (improved BERT)
+    /// - "t5-base": T5 tokenizer for text-to-text tasks
+    /// </remarks>
+    /// <param name="modelNameOrPath">The HuggingFace model name (e.g., "bert-base-uncased") or local path.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(string modelNameOrPath, TokenizationConfig? config = null);
 
     /// <summary>
     /// Enables GPU acceleration for training and inference with optional configuration.
