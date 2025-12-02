@@ -203,16 +203,6 @@ jobs:
         if: steps.version.outputs.should_release == 'true'
         run: dotnet build -c Release --no-restore
 
-      - name: Upload build artifacts
-        if: steps.version.outputs.should_release == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-output-${{ github.sha }}
-          path: |
-            **/bin/Release/
-            **/obj/Release/
-          retention-days: 1
-
   # Parallel test execution using matrix strategy
   test:
     name: Test (${{ matrix.project }})
@@ -235,19 +225,13 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-output-${{ github.sha }}
+      - name: Restore and build
+        run: |
+          dotnet restore
+          dotnet build -c Release --no-restore
 
       - name: Run tests for ${{ matrix.project }}
-        run: |
-          dotnet test ${{ matrix.project }} \
-            -c Release \
-            --no-build \
-            --collect:"XPlat Code Coverage" \
-            --results-directory ./TestResults \
-            --logger "trx;LogFileName=${{ matrix.project }}.trx"
+        run: dotnet test ${{ matrix.project }} -c Release --no-build --framework net8.0
 
       - name: Upload test results
         if: always()

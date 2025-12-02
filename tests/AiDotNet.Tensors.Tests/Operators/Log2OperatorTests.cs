@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Tensors.Tests.TestHelpers;
 using Xunit;
 
 namespace AiDotNet.Tensors.Tests.Operators
@@ -15,7 +16,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 1.0;
             double expected = 0.0;
-            double result = Math.Log2(input);
+            double result = MathCompat.Log2(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -24,7 +25,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 2.0;
             double expected = 1.0;
-            double result = Math.Log2(input);
+            double result = MathCompat.Log2(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -33,7 +34,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 4.0;
             double expected = 2.0;
-            double result = Math.Log2(input);
+            double result = MathCompat.Log2(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -42,7 +43,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 8.0;
             double expected = 3.0;
-            double result = Math.Log2(input);
+            double result = MathCompat.Log2(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -51,7 +52,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 16.0;
             double expected = 4.0;
-            double result = Math.Log2(input);
+            double result = MathCompat.Log2(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -60,7 +61,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 0.5;
             double expected = -1.0;
-            double result = Math.Log2(input);
+            double result = MathCompat.Log2(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -69,7 +70,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 0.25;
             double expected = -2.0;
-            double result = Math.Log2(input);
+            double result = MathCompat.Log2(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -79,7 +80,7 @@ namespace AiDotNet.Tensors.Tests.Operators
             // log2(2^x) = x
             double exponent = 5.0;
             double input = Math.Pow(2.0, exponent);
-            double result = Math.Log2(input);
+            double result = MathCompat.Log2(input);
             Assert.Equal(exponent, result, DoubleTolerance);
         }
 
@@ -92,7 +93,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 1.0f;
             float expected = 0.0f;
-            float result = MathF.Log2(input);
+            float result = MathCompat.Log2(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -101,7 +102,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 2.0f;
             float expected = 1.0f;
-            float result = MathF.Log2(input);
+            float result = MathCompat.Log2(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -110,7 +111,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 4.0f;
             float expected = 2.0f;
-            float result = MathF.Log2(input);
+            float result = MathCompat.Log2(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -119,7 +120,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 8.0f;
             float expected = 3.0f;
-            float result = MathF.Log2(input);
+            float result = MathCompat.Log2(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -128,7 +129,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 16.0f;
             float expected = 4.0f;
-            float result = MathF.Log2(input);
+            float result = MathCompat.Log2(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -137,7 +138,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 0.5f;
             float expected = -1.0f;
-            float result = MathF.Log2(input);
+            float result = MathCompat.Log2(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -146,7 +147,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 0.25f;
             float expected = -2.0f;
-            float result = MathF.Log2(input);
+            float result = MathCompat.Log2(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
@@ -155,8 +156,8 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             // log2(2^x) = x
             float exponent = 5.0f;
-            float input = MathF.Pow(2.0f, exponent);
-            float result = MathF.Log2(input);
+            float input = (float)Math.Pow(2.0f, exponent);
+            float result = MathCompat.Log2(input);
             Assert.Equal(exponent, result, FloatTolerance);
         }
 
@@ -170,7 +171,7 @@ namespace AiDotNet.Tensors.Tests.Operators
             for (int exp = 0; exp <= 10; exp++)
             {
                 double input = Math.Pow(2.0, exp);
-                double result = Math.Log2(input);
+                double result = MathCompat.Log2(input);
                 Assert.Equal((double)exp, result, DoubleTolerance);
             }
         }
@@ -180,8 +181,8 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             for (int exp = 0; exp <= 10; exp++)
             {
-                float input = MathF.Pow(2.0f, exp);
-                float result = MathF.Log2(input);
+                float input = (float)Math.Pow(2.0f, exp);
+                float result = MathCompat.Log2(input);
                 Assert.Equal((float)exp, result, FloatTolerance);
             }
         }
@@ -191,7 +192,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             double input = 1024.0; // 2^10
             double expected = 10.0;
-            double result = Math.Log2(input);
+            double result = MathCompat.Log2(input);
             Assert.Equal(expected, result, DoubleTolerance);
         }
 
@@ -200,7 +201,7 @@ namespace AiDotNet.Tensors.Tests.Operators
         {
             float input = 1024.0f; // 2^10
             float expected = 10.0f;
-            float result = MathF.Log2(input);
+            float result = MathCompat.Log2(input);
             Assert.Equal(expected, result, FloatTolerance);
         }
 
