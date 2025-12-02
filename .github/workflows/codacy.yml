@@ -54,10 +54,7 @@ jobs:
           gh-code-scanning-compat: true
           max-allowed-issues: 2147483647
           skip-uncommitted-files-check: true
-          # Only run security-focused tools (faster)
-          tool: spotbugs,pmd,semgrep
-          # Enable parallel analysis
-          parallel: 4
+          # Auto-detect tools based on project files
         continue-on-error: true
 
       - name: Upload SARIF results file
