@@ -21,7 +21,7 @@ namespace AiDotNet.Interfaces;
 /// and revise our approach.
 /// </para>
 /// </remarks>
-public interface ISelfRefinementEngine<T>
+internal interface ISelfRefinementEngine<T>
 {
     /// <summary>
     /// Refines a reasoning step based on critic feedback.

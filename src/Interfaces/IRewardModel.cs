@@ -33,7 +33,7 @@ namespace AiDotNet.Interfaces;
 /// - Guiding search algorithms toward better solutions
 /// </para>
 /// </remarks>
-public interface IRewardModel<T>
+internal interface IRewardModel<T>
 {
     /// <summary>
     /// Calculates the reward for a reasoning step.

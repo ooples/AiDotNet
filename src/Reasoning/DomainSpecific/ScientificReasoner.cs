@@ -113,12 +113,14 @@ public class ScientificReasoner<T>
     /// <summary>
     /// Initializes a new instance of the <see cref="ScientificReasoner{T}"/> class.
     /// </summary>
+    /// <param name="chatModel">The chat model to use for reasoning.</param>
+    /// <param name="enableCriticalValidation">Whether to enable scientific validation with a critic model.</param>
     public ScientificReasoner(
         IChatModel<T> chatModel,
-        CriticModel<T>? criticModel = null)
+        bool enableCriticalValidation = false)
     {
         _chatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));
-        _criticModel = criticModel;
+        _criticModel = enableCriticalValidation ? new CriticModel<T>(chatModel) : null;
         _numOps = MathHelper.GetNumericOperations<T>();
 
         _cotStrategy = new ChainOfThoughtStrategy<T>(chatModel);

@@ -19,7 +19,7 @@ namespace AiDotNet.Interfaces;
 /// Returns a score (usually 0.0 to 1.0) indicating quality.
 /// </para>
 /// </remarks>
-public interface IThoughtEvaluator<T>
+internal interface IThoughtEvaluator<T>
 {
     /// <summary>
     /// Evaluates the quality of a thought node.

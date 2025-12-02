@@ -26,7 +26,7 @@ namespace AiDotNet.Reasoning.Components;
 /// The generator uses the language model to create these alternatives, with temperature controlling diversity.
 /// </para>
 /// </remarks>
-public class ThoughtGenerator<T> : IThoughtGenerator<T>
+internal class ThoughtGenerator<T> : IThoughtGenerator<T>
 {
     private readonly IChatModel<T> _chatModel;
 

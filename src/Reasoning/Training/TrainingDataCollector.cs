@@ -101,7 +101,7 @@ namespace AiDotNet.Reasoning.Training;
 /// - "STaR: Self-Taught Reasoner" (Zelikman et al., 2022) - Bootstrapping
 /// </para>
 /// </remarks>
-public class TrainingDataCollector<T>
+internal class TrainingDataCollector<T>
 {
     private readonly List<TrainingSample<T>> _samples;
     private readonly INumericOperations<T> _numOps;
@@ -376,7 +376,7 @@ public class TrainingDataCollector<T>
 /// <summary>
 /// Represents a single training sample.
 /// </summary>
-public class TrainingSample<T>
+internal class TrainingSample<T>
 {
     /// <summary>
     /// The problem or query.
@@ -432,7 +432,7 @@ public class TrainingSample<T>
 /// <summary>
 /// Statistics about collected training data.
 /// </summary>
-public class DataStatistics<T>
+internal class DataStatistics<T>
 {
     public int TotalSamples { get; set; }
     public T AverageChainReward { get; set; } = default!;

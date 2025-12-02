@@ -140,12 +140,14 @@ public class LogicalReasoner<T>
     /// <summary>
     /// Initializes a new instance of the <see cref="LogicalReasoner{T}"/> class.
     /// </summary>
+    /// <param name="chatModel">The chat model to use for reasoning.</param>
+    /// <param name="enableContradictionDetection">Whether to enable contradiction detection.</param>
     public LogicalReasoner(
         IChatModel<T> chatModel,
-        ContradictionDetector<T>? contradictionDetector = null)
+        bool enableContradictionDetection = false)
     {
         _chatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));
-        _contradictionDetector = contradictionDetector;
+        _contradictionDetector = enableContradictionDetection ? new ContradictionDetector<T>(chatModel) : null;
         _numOps = MathHelper.GetNumericOperations<T>();
 
         _cotStrategy = new ChainOfThoughtStrategy<T>(chatModel);

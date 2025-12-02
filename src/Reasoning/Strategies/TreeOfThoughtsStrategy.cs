@@ -108,13 +108,11 @@ public class TreeOfThoughtsStrategy<T> : ReasoningStrategyBase<T>
     public TreeOfThoughtsStrategy(
         IChatModel<T> chatModel,
         IEnumerable<ITool>? tools = null,
-        SearchAlgorithmType searchAlgorithmType = SearchAlgorithmType.BeamSearch,
-        IThoughtGenerator<T>? generator = null,
-        IThoughtEvaluator<T>? evaluator = null)
+        SearchAlgorithmType searchAlgorithmType = SearchAlgorithmType.BeamSearch)
         : base(chatModel, tools)
     {
-        _generator = generator ?? new ThoughtGenerator<T>(chatModel);
-        _evaluator = evaluator ?? new ThoughtEvaluator<T>(chatModel);
+        _generator = new ThoughtGenerator<T>(chatModel);
+        _evaluator = new ThoughtEvaluator<T>(chatModel);
         _searchAlgorithm = CreateSearchAlgorithm(searchAlgorithmType);
     }
 

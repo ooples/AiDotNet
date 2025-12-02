@@ -36,7 +36,7 @@ namespace AiDotNet.Reasoning.Search;
 /// ```
 /// </para>
 /// </remarks>
-public class BreadthFirstSearch<T> : ISearchAlgorithm<T>
+internal class BreadthFirstSearch<T> : ISearchAlgorithm<T>
 {
     /// <inheritdoc/>
     public string AlgorithmName => "Breadth-First Search";

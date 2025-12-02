@@ -45,7 +45,7 @@ namespace AiDotNet.Reasoning.Search;
 /// - Reasoning in large language models
 /// </para>
 /// </remarks>
-public class BeamSearch<T> : ISearchAlgorithm<T>
+internal class BeamSearch<T> : ISearchAlgorithm<T>
 {
     /// <inheritdoc/>
     public string AlgorithmName => "Beam Search";

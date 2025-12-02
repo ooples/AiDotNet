@@ -50,7 +50,7 @@ internal class DFSBestResult<T>
 /// ```
 /// </para>
 /// </remarks>
-public class DepthFirstSearch<T> : ISearchAlgorithm<T>
+internal class DepthFirstSearch<T> : ISearchAlgorithm<T>
 {
     /// <inheritdoc/>
     public string AlgorithmName => "Depth-First Search";

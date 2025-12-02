@@ -25,7 +25,7 @@ namespace AiDotNet.Interfaces;
 /// - Any task where accuracy is critical
 /// </para>
 /// </remarks>
-public interface IExternalToolVerifier<T>
+internal interface IExternalToolVerifier<T>
 {
     /// <summary>
     /// Verifies a reasoning step using external tools.

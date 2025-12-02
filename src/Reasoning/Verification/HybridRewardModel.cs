@@ -93,7 +93,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// - Hard problems: Higher PRM weight (process matters more for learning)
 /// </para>
 /// </remarks>
-public class HybridRewardModel<T> : IRewardModel<T>
+internal class HybridRewardModel<T> : IRewardModel<T>
 {
     private readonly IRewardModel<T> _prm;
     private readonly IRewardModel<T> _orm;
@@ -344,7 +344,7 @@ public class HybridRewardModel<T> : IRewardModel<T>
 /// Detailed breakdown of hybrid reward components.
 /// </summary>
 /// <typeparam name="T">The numeric type used for scoring.</typeparam>
-public class RewardBreakdown<T>
+internal class RewardBreakdown<T>
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="RewardBreakdown{T}"/> class.

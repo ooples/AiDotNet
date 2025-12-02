@@ -26,7 +26,7 @@ namespace AiDotNet.Interfaces;
 /// - Catching hallucinations or logical errors
 /// </para>
 /// </remarks>
-public interface ICriticModel<T>
+internal interface ICriticModel<T>
 {
     /// <summary>
     /// Critiques a reasoning step, providing a score and feedback.

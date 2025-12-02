@@ -28,7 +28,7 @@ namespace AiDotNet.Interfaces;
 /// Different algorithms have different tradeoffs in terms of completeness, optimality, and efficiency.
 /// </para>
 /// </remarks>
-public interface ISearchAlgorithm<T>
+internal interface ISearchAlgorithm<T>
 {
     /// <summary>
     /// Searches through a thought tree to find the best reasoning path.

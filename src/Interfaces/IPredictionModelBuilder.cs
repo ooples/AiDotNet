@@ -2,6 +2,7 @@ using AiDotNet.Models.Results;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
 using AiDotNet.Models;
+using AiDotNet.Reasoning.Models;
 
 namespace AiDotNet.Interfaces;
 
@@ -992,6 +993,51 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null);
+
+    /// <summary>
+    /// Configures advanced reasoning capabilities for the model using Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency strategies.
+    /// </summary>
+    /// <param name="config">The reasoning configuration (optional, uses defaults if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Reasoning capabilities make AI models "think step by step" instead of
+    /// giving quick answers that might be wrong. Just like a student showing their work on a math test,
+    /// reasoning strategies help the AI:
+    /// - Break down complex problems into manageable steps
+    /// - Explore multiple solution approaches
+    /// - Verify and refine its answers
+    /// - Provide transparent, explainable reasoning
+    ///
+    /// After building your model, use the reasoning methods on PredictionModelResult:
+    /// - ReasonAsync(): Solve problems with configurable reasoning strategies
+    /// - QuickReasonAsync(): Fast answers for simple problems
+    /// - DeepReasonAsync(): Thorough analysis for complex problems
+    ///
+    /// Example:
+    /// <code>
+    /// // Configure reasoning during model building
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig)
+    ///     .ConfigureReasoning(ReasoningConfig.Default())
+    ///     .BuildAsync(data, labels);
+    ///
+    /// // Use reasoning on the trained model
+    /// var reasoningResult = await result.ReasonAsync(
+    ///     "Explain why this prediction was made and what factors contributed most?",
+    ///     ReasoningMode.ChainOfThought
+    /// );
+    /// Console.WriteLine(reasoningResult.FinalAnswer);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureReasoning(ReasoningConfig? config = null);
 
     /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.

@@ -36,7 +36,7 @@ namespace AiDotNet.Reasoning.Components;
 /// Non-diverse sample (N=3): [solar panels, wind turbines, electric vehicles] - too energy-focused
 /// </para>
 /// </remarks>
-public class DiversitySampler<T> : IDiversitySampler<T>
+internal class DiversitySampler<T> : IDiversitySampler<T>
 {
     private readonly INumericOperations<T> _numOps;
 

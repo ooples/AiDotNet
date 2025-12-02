@@ -47,7 +47,7 @@ namespace AiDotNet.Reasoning.Search;
 /// ```
 /// </para>
 /// </remarks>
-public class BestFirstSearch<T> : ISearchAlgorithm<T>
+internal class BestFirstSearch<T> : ISearchAlgorithm<T>
 {
     /// <inheritdoc/>
     public string AlgorithmName => "Best-First Search";

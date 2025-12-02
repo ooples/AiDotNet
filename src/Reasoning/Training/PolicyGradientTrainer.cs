@@ -134,7 +134,7 @@ namespace AiDotNet.Reasoning.Training;
 /// - Used in ChatGPT o1/o3, DeepSeek-R1
 /// </para>
 /// </remarks>
-public class PolicyGradientTrainer<T>
+internal class PolicyGradientTrainer<T>
 {
     private readonly IChatModel<T> _model;
     private readonly IRewardModel<T>? _rewardModel;
@@ -451,7 +451,7 @@ public class PolicyGradientTrainer<T>
 /// <summary>
 /// Metrics from a training batch.
 /// </summary>
-public class TrainingMetrics<T>
+internal class TrainingMetrics<T>
 {
     public T PolicyLoss { get; set; } = default!;
     public T Entropy { get; set; } = default!;
@@ -475,7 +475,7 @@ Chains: {ChainCount}";
 /// <summary>
 /// Metrics from evaluation.
 /// </summary>
-public class EvaluationMetrics<T>
+internal class EvaluationMetrics<T>
 {
     public double Accuracy { get; set; }
     public T AverageReward { get; set; } = default!;

@@ -18,7 +18,7 @@ namespace AiDotNet.Interfaces;
 /// Used heavily in Tree-of-Thoughts and other exploratory reasoning strategies.
 /// </para>
 /// </remarks>
-public interface IThoughtGenerator<T>
+internal interface IThoughtGenerator<T>
 {
     /// <summary>
     /// Generates alternative thoughts or next steps from the current state.

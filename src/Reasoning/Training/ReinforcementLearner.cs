@@ -174,7 +174,7 @@ namespace AiDotNet.Reasoning.Training;
 /// - "Proximal Policy Optimization" (Schulman et al., 2017)
 /// </para>
 /// </remarks>
-public class ReinforcementLearner<T>
+internal class ReinforcementLearner<T>
 {
     private readonly IChatModel<T> _model;
     private readonly IRewardModel<T> _rewardModel;
@@ -603,7 +603,7 @@ internal class TrainingCheckpoint<T>
 /// <summary>
 /// Configuration for reinforcement learning training.
 /// </summary>
-public class RLConfig
+internal class RLConfig
 {
     public int Epochs { get; set; } = 10;
     public int BatchSize { get; set; } = 32;
@@ -620,7 +620,7 @@ public class RLConfig
 /// <summary>
 /// Metrics for a training epoch.
 /// </summary>
-public class EpochMetrics<T>
+internal class EpochMetrics<T>
 {
     public int Epoch { get; set; }
     public T AverageReward { get; set; } = default!;
@@ -632,7 +632,7 @@ public class EpochMetrics<T>
 /// <summary>
 /// Progress information for a training batch.
 /// </summary>
-public class BatchProgress
+internal class BatchProgress
 {
     public int BatchNumber { get; set; }
     public int TotalBatches { get; set; }
@@ -642,7 +642,7 @@ public class BatchProgress
 /// <summary>
 /// Results from complete training run.
 /// </summary>
-public class TrainingResults<T>
+internal class TrainingResults<T>
 {
     public int EpochsTrained { get; set; }
     public double BestAccuracy { get; set; }

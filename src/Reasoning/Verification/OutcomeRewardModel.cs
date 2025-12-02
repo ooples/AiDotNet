@@ -66,7 +66,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// 3. Simpler problems where process doesn't matter
 /// </para>
 /// </remarks>
-public class OutcomeRewardModel<T> : IRewardModel<T>
+internal class OutcomeRewardModel<T> : IRewardModel<T>
 {
     private readonly IChatModel<T>? _chatModel;
     private readonly INumericOperations<T> _numOps;

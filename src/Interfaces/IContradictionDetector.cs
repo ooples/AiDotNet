@@ -22,7 +22,7 @@ namespace AiDotNet.Interfaces;
 /// The detector can identify contradictions and suggest which steps need revision.
 /// </para>
 /// </remarks>
-public interface IContradictionDetector<T>
+internal interface IContradictionDetector<T>
 {
     /// <summary>
     /// Detects contradictions within a reasoning chain.

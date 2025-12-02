@@ -31,7 +31,7 @@ namespace AiDotNet.Reasoning.Aggregation;
 /// This is one of the simplest but most effective techniques for improving reasoning accuracy.
 /// </para>
 /// </remarks>
-public class MajorityVotingAggregator<T> : IAnswerAggregator<T>
+internal class MajorityVotingAggregator<T> : IAnswerAggregator<T>
 {
     /// <inheritdoc/>
     public string MethodName => "Majority Voting";

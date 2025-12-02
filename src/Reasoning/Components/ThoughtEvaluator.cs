@@ -24,7 +24,7 @@ namespace AiDotNet.Reasoning.Components;
 /// Returns a score (typically 0.0 to 1.0) where higher means more promising.
 /// </para>
 /// </remarks>
-public class ThoughtEvaluator<T> : IThoughtEvaluator<T>
+internal class ThoughtEvaluator<T> : IThoughtEvaluator<T>
 {
     private readonly IChatModel<T> _chatModel;
     private readonly INumericOperations<T> _numOps;

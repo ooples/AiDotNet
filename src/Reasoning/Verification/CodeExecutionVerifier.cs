@@ -56,7 +56,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// - CodeT: Code Generation with Generated Tests (Chen et al., 2022)
 /// </para>
 /// </remarks>
-public class CodeExecutionVerifier<T>
+internal class CodeExecutionVerifier<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _timeoutMilliseconds;
@@ -425,7 +425,7 @@ public class CodeExecutionVerifier<T>
 /// Result of code execution verification.
 /// </summary>
 /// <typeparam name="T">The numeric type used for scoring.</typeparam>
-public class CodeExecutionResult<T>
+internal class CodeExecutionResult<T>
 {
     private readonly INumericOperations<T> _numOps;
 
@@ -519,7 +519,7 @@ public class CodeExecutionResult<T>
 /// <summary>
 /// Result of a single test case execution.
 /// </summary>
-public class TestCaseResult
+internal class TestCaseResult
 {
     /// <summary>
     /// The test case that was executed.

@@ -19,7 +19,7 @@ namespace AiDotNet.Interfaces;
 /// majority voting would pick "36" as the final answer.
 /// </para>
 /// </remarks>
-public interface IAnswerAggregator<T>
+internal interface IAnswerAggregator<T>
 {
     /// <summary>
     /// Aggregates multiple candidate answers into a single final answer.

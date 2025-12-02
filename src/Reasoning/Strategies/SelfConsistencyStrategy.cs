@@ -86,12 +86,11 @@ public class SelfConsistencyStrategy<T> : ReasoningStrategyBase<T>
     /// </remarks>
     public SelfConsistencyStrategy(
         IChatModel<T> chatModel,
-        IEnumerable<ITool>? tools = null,
-        IAnswerAggregator<T>? aggregator = null)
+        IEnumerable<ITool>? tools = null)
         : base(chatModel, tools)
     {
         _cotStrategy = new ChainOfThoughtStrategy<T>(chatModel, tools);
-        _aggregator = aggregator ?? new Aggregation.MajorityVotingAggregator<T>();
+        _aggregator = new Aggregation.MajorityVotingAggregator<T>();
     }
 
     /// <inheritdoc/>

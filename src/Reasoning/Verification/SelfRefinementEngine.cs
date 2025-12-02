@@ -30,7 +30,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// ✓ Passes threshold
 /// </para>
 /// </remarks>
-public class SelfRefinementEngine<T> : ISelfRefinementEngine<T>
+internal class SelfRefinementEngine<T> : ISelfRefinementEngine<T>
 {
     private readonly IChatModel<T> _chatModel;
     private readonly int _maxIterations;

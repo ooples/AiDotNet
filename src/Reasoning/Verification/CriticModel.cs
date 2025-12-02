@@ -34,7 +34,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// This enables self-refinement loops where weak steps are improved based on feedback.
 /// </para>
 /// </remarks>
-public class CriticModel<T> : ICriticModel<T>
+internal class CriticModel<T> : ICriticModel<T>
 {
     private readonly IChatModel<T> _chatModel;
     private readonly INumericOperations<T> _numOps;

@@ -35,7 +35,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// - Multi-step expressions
 /// </para>
 /// </remarks>
-public class CalculatorVerifier<T> : IExternalToolVerifier<T>
+internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
 {
     private readonly INumericOperations<T> _numOps;
 

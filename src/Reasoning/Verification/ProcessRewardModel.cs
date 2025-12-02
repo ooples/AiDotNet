@@ -41,7 +41,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// PRMs significantly outperform ORMs for mathematical reasoning.
 /// </para>
 /// </remarks>
-public class ProcessRewardModel<T> : IRewardModel<T>
+internal class ProcessRewardModel<T> : IRewardModel<T>
 {
     private readonly IChatModel<T> _chatModel;
     private readonly INumericOperations<T> _numOps;

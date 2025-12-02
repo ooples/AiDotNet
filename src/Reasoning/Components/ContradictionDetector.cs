@@ -41,7 +41,7 @@ namespace AiDotNet.Reasoning.Components;
 /// - Self-consistency validation
 /// </para>
 /// </remarks>
-public class ContradictionDetector<T> : IContradictionDetector<T>
+internal class ContradictionDetector<T> : IContradictionDetector<T>
 {
     private readonly IChatModel<T> _chatModel;
 

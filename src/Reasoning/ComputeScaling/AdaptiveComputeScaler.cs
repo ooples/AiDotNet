@@ -37,7 +37,7 @@ namespace AiDotNet.Reasoning.ComputeScaling;
 /// "Let's Think Dot by Dot" (Zelikman et al., 2024)
 /// </para>
 /// </remarks>
-public class AdaptiveComputeScaler
+internal class AdaptiveComputeScaler
 {
     private readonly ReasoningConfig _baselineConfig;
     private readonly double _maxScalingFactor;

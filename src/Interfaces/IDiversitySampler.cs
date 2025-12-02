@@ -20,7 +20,7 @@ namespace AiDotNet.Interfaces;
 /// - Avoiding local optima (getting stuck on one type of solution)
 /// </para>
 /// </remarks>
-public interface IDiversitySampler<T>
+internal interface IDiversitySampler<T>
 {
     /// <summary>
     /// Samples a diverse set of thoughts from a larger pool of candidates.

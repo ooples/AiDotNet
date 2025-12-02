@@ -17,6 +17,7 @@ global using AiDotNet.Enums;
 global using AiDotNet.MixedPrecision;
 global using AiDotNet.KnowledgeDistillation;
 global using AiDotNet.Deployment.Configuration;
+global using AiDotNet.Reasoning.Models;
 
 namespace AiDotNet;
 
@@ -77,6 +78,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private TelemetryConfig? _telemetryConfig;
     private ExportConfig? _exportConfig;
     private GpuAccelerationConfig? _gpuAccelerationConfig;
+    private ReasoningConfig? _reasoningConfig;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -267,6 +269,55 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null)
     {
         _mixedPrecisionConfig = config ?? new MixedPrecisionConfig();
+        return this;
+    }
+
+    /// <summary>
+    /// Configures advanced reasoning capabilities for the model using Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency strategies.
+    /// </summary>
+    /// <param name="config">The reasoning configuration (optional, uses defaults if null).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Reasoning capabilities make AI models "think step by step" instead of
+    /// giving quick answers that might be wrong. Just like a student showing their work on a math test,
+    /// reasoning strategies help the AI:
+    /// - Break down complex problems into manageable steps
+    /// - Explore multiple solution approaches
+    /// - Verify and refine its answers
+    /// - Provide transparent, explainable reasoning
+    ///
+    /// After building your model, use the reasoning methods on PredictionModelResult:
+    /// - ReasonAsync(): Solve problems with configurable reasoning strategies
+    /// - QuickReasonAsync(): Fast answers for simple problems
+    /// - DeepReasonAsync(): Thorough analysis for complex problems
+    ///
+    /// Example:
+    /// <code>
+    /// // Configure reasoning during model building
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig)
+    ///     .ConfigureReasoning(ReasoningConfig.Default())
+    ///     .BuildAsync(data, labels);
+    ///
+    /// // Use reasoning on the trained model
+    /// var reasoningResult = await result.ReasonAsync(
+    ///     "Explain why this prediction was made and what factors contributed most?",
+    ///     ReasoningMode.ChainOfThought
+    /// );
+    /// Console.WriteLine(reasoningResult.FinalAnswer);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureReasoning(ReasoningConfig? config = null)
+    {
+        _reasoningConfig = config ?? ReasoningConfig.Default();
         return this;
     }
 
@@ -565,7 +616,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             ragGenerator: _ragGenerator,
             queryProcessors: _queryProcessors,
             agentConfig: _agentConfig,
-            deploymentConfiguration: deploymentConfig);
+            deploymentConfiguration: deploymentConfig,
+            reasoningConfig: _reasoningConfig);
 
         return Task.FromResult(result);
     }
@@ -901,7 +953,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             }
         }
 
-        // Return PredictionModelResult with CV results, agent data, and JIT compilation
+        // Return PredictionModelResult with CV results, agent data, JIT compilation, and reasoning config
         var finalResult = new PredictionModelResult<T, TInput, TOutput>(
             optimizationResult,
             normInfo,
@@ -917,7 +969,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             agentRecommendation,
             deploymentConfig,
             jitCompiledFunction,
-            _inferenceOptimizationConfig);
+            _inferenceOptimizationConfig,
+            _reasoningConfig);
 
         return finalResult;
     }
