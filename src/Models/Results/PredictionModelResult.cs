@@ -14,6 +14,9 @@ using AiDotNet.Deployment.TensorRT;
 using AiDotNet.Deployment.Mobile.CoreML;
 using AiDotNet.Deployment.Mobile.TensorFlowLite;
 using AiDotNet.Deployment.Runtime;
+using AiDotNet.Reasoning;
+using AiDotNet.Reasoning.Models;
+using AiDotNet.LanguageModels;
 using AiDotNet.Enums;
 
 namespace AiDotNet.Models.Results;
@@ -421,6 +424,31 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
 
     /// <summary>
+    /// Gets the reasoning configuration for advanced Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency reasoning.
+    /// </summary>
+    /// <value>Reasoning configuration for advanced reasoning capabilities, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This configuration enables advanced reasoning capabilities that make AI
+    /// models "think step by step" instead of giving quick answers that might be wrong.
+    ///
+    /// When reasoning is configured:
+    /// - Use ReasonAsync() to solve complex problems with step-by-step reasoning
+    /// - Use QuickReasonAsync() for fast answers to simple problems
+    /// - Use DeepReasonAsync() for thorough analysis of complex problems
+    ///
+    /// The reasoning configuration controls:
+    /// - How many reasoning steps to take
+    /// - Whether to explore multiple solution paths (Tree-of-Thoughts)
+    /// - Whether to verify answers with multiple attempts (Self-Consistency)
+    /// - Step verification and refinement options
+    ///
+    /// If null, reasoning features were not configured. You can still use reasoning by providing
+    /// configuration directly to ReasonAsync(), but you must have agent configuration set up.
+    /// </para>
+    /// </remarks>
+    internal ReasoningConfig? ReasoningConfig { get; private set; }
+
+    /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
     /// </summary>
     /// <param name="model">The underlying model used for making predictions.</param>
@@ -494,6 +522,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         DeploymentConfiguration? deploymentConfiguration = null,
         Func<Tensor<T>[], Tensor<T>[]>? jitCompiledFunction = null,
         AiDotNet.Configuration.InferenceOptimizationConfig? inferenceOptimizationConfig = null,
+        ReasoningConfig? reasoningConfig = null,
         KnowledgeGraph<T>? knowledgeGraph = null,
         IGraphStore<T>? graphStore = null,
         HybridGraphRetriever<T>? hybridGraphRetriever = null)
@@ -515,6 +544,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         DeploymentConfiguration = deploymentConfiguration;
         JitCompiledFunction = jitCompiledFunction;
         InferenceOptimizationConfig = inferenceOptimizationConfig;
+        ReasoningConfig = reasoningConfig;
         KnowledgeGraph = knowledgeGraph;
         GraphStore = graphStore;
         HybridGraphRetriever = hybridGraphRetriever;
@@ -575,6 +605,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IEnumerable<IQueryProcessor>? queryProcessors = null,
         AgentConfiguration<T>? agentConfig = null,
         DeploymentConfiguration? deploymentConfiguration = null,
+        ReasoningConfig? reasoningConfig = null,
         KnowledgeGraph<T>? knowledgeGraph = null,
         IGraphStore<T>? graphStore = null,
         HybridGraphRetriever<T>? hybridGraphRetriever = null)
@@ -592,6 +623,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         QueryProcessors = queryProcessors;
         AgentConfig = agentConfig;
         DeploymentConfiguration = deploymentConfiguration;
+        ReasoningConfig = reasoningConfig;
         KnowledgeGraph = knowledgeGraph;
         GraphStore = graphStore;
         HybridGraphRetriever = hybridGraphRetriever;
@@ -2198,6 +2230,234 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         return runtime;
     }
+
+    #region Reasoning Methods
+
+    /// <summary>
+    /// Solves a problem using advanced reasoning strategies like Chain-of-Thought, Tree-of-Thoughts, or Self-Consistency.
+    /// </summary>
+    /// <param name="problem">The problem or question to solve.</param>
+    /// <param name="mode">The reasoning mode to use (default: Auto selects based on problem complexity).</param>
+    /// <param name="config">Optional reasoning configuration (uses pre-configured settings if null).</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A complete reasoning result with answer, steps, and metrics.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method uses advanced AI reasoning to solve problems step by step,
+    /// just like how a human would "show their work" on a complex problem.
+    ///
+    /// **What it does:**
+    /// - Breaks down the problem into logical steps
+    /// - Can explore multiple solution paths (Tree-of-Thoughts)
+    /// - Can verify answers with multiple attempts (Self-Consistency)
+    /// - Returns detailed reasoning chain for transparency
+    ///
+    /// **Reasoning modes:**
+    /// - Auto: Automatically selects the best strategy
+    /// - ChainOfThought: Step-by-step linear reasoning
+    /// - TreeOfThoughts: Explores multiple paths, backtracks if needed
+    /// - SelfConsistency: Solves multiple times, uses majority voting
+    ///
+    /// **Example:**
+    /// <code>
+    /// var result = await modelResult.ReasonAsync(
+    ///     "If a train travels 60 mph for 2.5 hours, how far does it go?",
+    ///     ReasoningMode.ChainOfThought
+    /// );
+    /// Console.WriteLine(result.FinalAnswer);  // "150 miles"
+    /// Console.WriteLine(result.ReasoningChain);  // Shows step-by-step work
+    /// </code>
+    ///
+    /// **Requirements:**
+    /// - Agent configuration must be set (ConfigureAgentAssistance during building)
+    /// - API key for LLM provider (OpenAI, Anthropic, etc.)
+    /// </para>
+    /// </remarks>
+    public async Task<ReasoningResult<T>> ReasonAsync(
+        string problem,
+        ReasoningMode mode = ReasoningMode.Auto,
+        ReasoningConfig? config = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (AgentConfig == null || !AgentConfig.IsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building " +
+                "to set up the LLM provider and API key required for reasoning capabilities.");
+        }
+
+        // Use stored config if none provided
+        var effectiveConfig = config ?? ReasoningConfig ?? new ReasoningConfig();
+
+        // Create chat model from agent config
+        var chatModel = CreateChatModelFromAgentConfig();
+
+        // Create internal Reasoner and delegate
+        var reasoner = new Reasoner<T>(chatModel);
+        return await reasoner.SolveAsync(problem, mode, effectiveConfig, cancellationToken);
+    }
+
+    /// <summary>
+    /// Quickly solves a problem with minimal reasoning overhead for fast answers.
+    /// </summary>
+    /// <param name="problem">The problem or question to solve.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The final answer as a string.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this for simple problems where you need a fast answer
+    /// without detailed reasoning steps. It's optimized for speed over thoroughness.
+    ///
+    /// **When to use:**
+    /// - Simple math problems
+    /// - Quick factual questions
+    /// - When speed matters more than detailed explanation
+    ///
+    /// **Example:**
+    /// <code>
+    /// string answer = await modelResult.QuickReasonAsync("What is 15% of 240?");
+    /// Console.WriteLine(answer);  // "36"
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public async Task<string> QuickReasonAsync(
+        string problem,
+        CancellationToken cancellationToken = default)
+    {
+        if (AgentConfig == null || !AgentConfig.IsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
+        }
+
+        var chatModel = CreateChatModelFromAgentConfig();
+        var reasoner = new Reasoner<T>(chatModel);
+        return await reasoner.QuickSolveAsync(problem, cancellationToken);
+    }
+
+    /// <summary>
+    /// Performs deep, thorough reasoning on a complex problem using extensive exploration and verification.
+    /// </summary>
+    /// <param name="problem">The complex problem to analyze.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A comprehensive reasoning result with extensive exploration.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this for complex problems that need careful analysis.
+    /// It explores multiple approaches, verifies reasoning, and provides high-confidence answers.
+    ///
+    /// **What it does:**
+    /// - Uses Tree-of-Thoughts to explore multiple solution paths
+    /// - Applies verification at each step
+    /// - Uses self-refinement to improve answers
+    /// - Takes longer but produces more reliable results
+    ///
+    /// **When to use:**
+    /// - Complex multi-step problems
+    /// - Important decisions requiring high confidence
+    /// - Problems with multiple valid approaches
+    /// - When you need to understand all possibilities
+    ///
+    /// **Example:**
+    /// <code>
+    /// var result = await modelResult.DeepReasonAsync(
+    ///     "Design an algorithm to find the shortest path in a weighted graph"
+    /// );
+    /// // Result includes multiple explored approaches and verification
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public async Task<ReasoningResult<T>> DeepReasonAsync(
+        string problem,
+        CancellationToken cancellationToken = default)
+    {
+        if (AgentConfig == null || !AgentConfig.IsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
+        }
+
+        var chatModel = CreateChatModelFromAgentConfig();
+        var reasoner = new Reasoner<T>(chatModel);
+        return await reasoner.DeepSolveAsync(problem, cancellationToken);
+    }
+
+    /// <summary>
+    /// Solves a problem multiple times using different approaches and returns the consensus answer.
+    /// </summary>
+    /// <param name="problem">The problem to solve.</param>
+    /// <param name="numAttempts">Number of independent solving attempts (default: 5).</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The consensus result with voting statistics.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method solves the same problem multiple times independently
+    /// and picks the most common answer. It's like asking 5 experts and going with the majority.
+    ///
+    /// **How it works:**
+    /// - Solves the problem N times independently
+    /// - Each attempt may use slightly different reasoning
+    /// - Uses majority voting to pick the final answer
+    /// - Reports confidence based on agreement level
+    ///
+    /// **When to use:**
+    /// - Math problems where errors are common
+    /// - When you need high confidence in the answer
+    /// - Problems where reasoning paths can vary
+    ///
+    /// **Example:**
+    /// <code>
+    /// var result = await modelResult.ReasonWithConsensusAsync(
+    ///     "What is the derivative of x^3?",
+    ///     numAttempts: 5
+    /// );
+    /// // If 4 out of 5 attempts say "3x^2", that's the answer
+    /// Console.WriteLine($"Consensus: {result.Metrics["consensus_ratio"]:P0}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public async Task<ReasoningResult<T>> ReasonWithConsensusAsync(
+        string problem,
+        int numAttempts = 5,
+        CancellationToken cancellationToken = default)
+    {
+        if (AgentConfig == null || !AgentConfig.IsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
+        }
+
+        var chatModel = CreateChatModelFromAgentConfig();
+        var reasoner = new Reasoner<T>(chatModel);
+        return await reasoner.SolveWithConsensusAsync(problem, numAttempts, cancellationToken);
+    }
+
+    /// <summary>
+    /// Creates a chat model from the agent configuration.
+    /// </summary>
+    private IChatModel<T> CreateChatModelFromAgentConfig()
+    {
+        if (AgentConfig == null)
+            throw new InvalidOperationException("Agent configuration is required.");
+
+        var apiKey = AgentKeyResolver.ResolveApiKey(
+            AgentConfig.ApiKey,
+            AgentConfig,
+            AgentConfig.Provider);
+
+        return AgentConfig.Provider switch
+        {
+            LLMProvider.OpenAI => new OpenAIChatModel<T>(apiKey),
+            LLMProvider.Anthropic => new AnthropicChatModel<T>(apiKey),
+            LLMProvider.AzureOpenAI => new AzureOpenAIChatModel<T>(
+                AgentConfig.AzureEndpoint ?? throw new InvalidOperationException("Azure endpoint required"),
+                apiKey,
+                AgentConfig.AzureDeployment ?? "gpt-4"),
+            _ => throw new ArgumentException($"Unknown provider: {AgentConfig.Provider}")
+        };
+    }
+
+    #endregion
 
     #region IJitCompilable Implementation
 
