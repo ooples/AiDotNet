@@ -1281,64 +1281,60 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// <summary>
     /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
     /// </summary>
-    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, RAG functionality won't be available.</param>
+    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, standard RAG won't be available.</param>
     /// <param name="reranker">Optional reranker for improving document ranking quality. If not provided, a default reranker will be used if RAG is configured.</param>
     /// <param name="generator">Optional generator for producing grounded answers. If not provided, a default generator will be used if RAG is configured.</param>
     /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
+    /// <param name="graphStore">Optional graph storage backend for Graph RAG (e.g., MemoryGraphStore, FileGraphStore).</param>
+    /// <param name="knowledgeGraph">Optional pre-configured knowledge graph. If null but graphStore is provided, a new one is created.</param>
+    /// <param name="documentStore">Optional document store for hybrid vector + graph retrieval.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
+    /// <para>
     /// <b>For Beginners:</b> RAG combines retrieval and generation to create answers backed by real documents.
     /// Configure it with:
-    /// - A retriever (finds relevant documents from your collection) - required for RAG
-    /// - A reranker (improves the ordering of retrieved documents) - optional, defaults provided
-    /// - A generator (creates answers based on the documents) - optional, defaults provided
-    /// - Optional query processors (improve search queries before retrieval)
-    /// 
+    /// <list type="bullet">
+    /// <item><description>A retriever (finds relevant documents from your collection) - required for standard RAG</description></item>
+    /// <item><description>A reranker (improves the ordering of retrieved documents) - optional, defaults provided</description></item>
+    /// <item><description>A generator (creates answers based on the documents) - optional, defaults provided</description></item>
+    /// <item><description>Optional query processors (improve search queries before retrieval)</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Graph RAG:</b> When graphStore or knowledgeGraph is provided, enables knowledge graph-based
+    /// retrieval that finds related entities and their relationships, providing richer context than
+    /// vector similarity alone. Traditional RAG finds similar documents using vectors. Graph RAG goes further by
+    /// also exploring relationships between entities. For example, if you ask about "Paris", it can find
+    /// not just documents mentioning Paris, but also related concepts like France, Eiffel Tower, and Seine River.
+    /// </para>
+    /// <para>
+    /// <b>Hybrid Retrieval:</b> When both knowledgeGraph and documentStore are provided, creates a
+    /// HybridGraphRetriever that combines vector search and graph traversal for optimal results.
+    /// </para>
+    /// <para>
+    /// <b>Disabling RAG:</b> Call with all parameters as null to disable RAG functionality completely.
+    /// </para>
+    /// <para>
     /// RAG operations are performed during inference (after model training) via the PredictionModelResult.
+    /// </para>
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
         IRetriever<T>? retriever = null,
         IReranker<T>? reranker = null,
         IGenerator<T>? generator = null,
-        IEnumerable<IQueryProcessor>? queryProcessors = null)
-    {
-        _ragRetriever = retriever;
-        _ragReranker = reranker;
-        _ragGenerator = generator;
-        _queryProcessors = queryProcessors;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures Graph RAG (Retrieval Augmented Generation with Knowledge Graphs) for enhanced context retrieval.
-    /// </summary>
-    /// <param name="graphStore">The graph storage backend (e.g., MemoryGraphStore, FileGraphStore).</param>
-    /// <param name="knowledgeGraph">Optional pre-configured knowledge graph. If null, a new one is created using the store.</param>
-    /// <param name="documentStore">Optional document store for hybrid vector + graph retrieval.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para>
-    /// Graph RAG combines traditional vector similarity search with knowledge graph traversal for richer context.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> Traditional RAG finds similar documents using vectors. Graph RAG goes further by
-    /// also exploring relationships between entities. For example, if you ask about "Paris", it can find
-    /// not just documents mentioning Paris, but also related concepts like France, Eiffel Tower, and Seine River.
-    /// </para>
-    /// <para>
-    /// Usage example:
-    /// <code>
-    /// var store = new FileGraphStore&lt;double&gt;("./graph_data");
-    /// builder.ConfigureGraphRAG(store);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureGraphRAG(
+        IEnumerable<IQueryProcessor>? queryProcessors = null,
         IGraphStore<T>? graphStore = null,
         KnowledgeGraph<T>? knowledgeGraph = null,
         IDocumentStore<T>? documentStore = null)
     {
-        // If all parameters are null, disable Graph RAG by clearing all related fields
+        // Configure standard RAG components
+        _ragRetriever = retriever;
+        _ragReranker = reranker;
+        _ragGenerator = generator;
+        _queryProcessors = queryProcessors;
+
+        // Configure Graph RAG components
+        // If all Graph RAG parameters are null, clear Graph RAG fields
         if (graphStore == null && knowledgeGraph == null && documentStore == null)
         {
             _graphStore = null;

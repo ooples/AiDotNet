@@ -1678,7 +1678,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (KnowledgeGraph == null)
         {
             throw new InvalidOperationException(
-                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureGraphRAG() before building the model.");
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
         }
 
         if (string.IsNullOrWhiteSpace(query))
@@ -1717,7 +1717,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (HybridGraphRetriever == null)
         {
             throw new InvalidOperationException(
-                "Hybrid graph retriever not configured. Configure Graph RAG with a document store using PredictionModelBuilder.ConfigureGraphRAG() before building the model.");
+                "Hybrid graph retriever not configured. Configure Graph RAG with a document store using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
         }
 
         if (queryEmbedding == null || queryEmbedding.Length == 0)
@@ -1749,7 +1749,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (KnowledgeGraph == null)
         {
             throw new InvalidOperationException(
-                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureGraphRAG() before building the model.");
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
         }
 
         if (string.IsNullOrWhiteSpace(startNodeId))
@@ -1779,7 +1779,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (KnowledgeGraph == null)
         {
             throw new InvalidOperationException(
-                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureGraphRAG() before building the model.");
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
         }
 
         if (string.IsNullOrWhiteSpace(startNodeId))
@@ -1811,7 +1811,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (KnowledgeGraph == null)
         {
             throw new InvalidOperationException(
-                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureGraphRAG() before building the model.");
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
         }
 
         if (string.IsNullOrWhiteSpace(nodeId))
