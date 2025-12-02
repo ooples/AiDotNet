@@ -156,8 +156,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             if (!_graph.TryGetValue(id, out var connections) || !_vectors.TryGetValue(id, out var vector))
                 return;
 
-            // Keep only the closest connections
+            // Keep only the closest connections (filter out any removed neighbors)
             var scored = connections
+                .Where(neighborId => _vectors.ContainsKey(neighborId))
                 .Select(neighborId => (
                     Id: neighborId,
                     Score: _metric.Calculate(vector, _vectors[neighborId])

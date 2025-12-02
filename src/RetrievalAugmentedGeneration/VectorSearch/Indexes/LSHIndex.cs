@@ -78,6 +78,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 throw new ArgumentException($"Vector dimension {vector.Length} does not match index dimension {_dimension}");
             }
 
+            // If ID already exists, remove old hash entries first
+            if (_vectors.TryGetValue(id, out var existingVector))
+            {
+                RemoveFromHashTables(id, existingVector);
+            }
+
             _vectors[id] = vector;
 
             // Add to hash tables
@@ -89,6 +95,25 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                     _hashTables[tableIdx][hash] = new List<string>();
                 }
                 _hashTables[tableIdx][hash].Add(id);
+            }
+        }
+
+        /// <summary>
+        /// Removes an ID from all hash tables based on the given vector's hash.
+        /// </summary>
+        private void RemoveFromHashTables(string id, Vector<T> vector)
+        {
+            for (int tableIdx = 0; tableIdx < _numHashTables; tableIdx++)
+            {
+                var hash = ComputeHash(vector, tableIdx);
+                if (_hashTables[tableIdx].TryGetValue(hash, out var bucket))
+                {
+                    bucket.Remove(id);
+                    if (bucket.Count == 0)
+                    {
+                        _hashTables[tableIdx].Remove(hash);
+                    }
+                }
             }
         }
 
@@ -157,20 +182,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 return false;
 
             _vectors.Remove(id);
-
-            // Remove from hash tables
-            for (int tableIdx = 0; tableIdx < _numHashTables; tableIdx++)
-            {
-                var hash = ComputeHash(vector, tableIdx);
-                if (_hashTables[tableIdx].TryGetValue(hash, out var bucket))
-                {
-                    bucket.Remove(id);
-                    if (bucket.Count == 0)
-                    {
-                        _hashTables[tableIdx].Remove(hash);
-                    }
-                }
-            }
+            RemoveFromHashTables(id, vector);
 
             return true;
         }

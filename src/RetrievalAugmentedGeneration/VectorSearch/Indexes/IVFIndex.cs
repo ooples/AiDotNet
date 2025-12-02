@@ -66,11 +66,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             if (vectors == null)
                 throw new ArgumentNullException(nameof(vectors));
 
+            // Reuse Add method to ensure consistent validation
             foreach (var kvp in vectors)
             {
-                _vectors[kvp.Key] = kvp.Value;
+                Add(kvp.Key, kvp.Value);
             }
-            _centroids = null;
         }
 
         /// <inheritdoc/>
