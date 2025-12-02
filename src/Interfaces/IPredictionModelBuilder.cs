@@ -4,6 +4,8 @@ using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Tokenization.Configuration;
 
 namespace AiDotNet.Interfaces;
 
@@ -859,6 +861,129 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="config">The export configuration (optional, uses CPU/ONNX if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null);
+
+    /// <summary>
+    /// Configures tokenization for text-based input processing.
+    /// </summary>
+    /// <remarks>
+    /// Tokenization is the process of breaking text into smaller pieces (tokens) that can be processed
+    /// by machine learning models. This is essential for NLP and text-based models.
+    ///
+    /// <b>For Beginners:</b> Tokenization converts human-readable text into numbers that AI models understand.
+    ///
+    /// Different tokenization strategies include:
+    /// - BPE (Byte Pair Encoding): Used by GPT models, learns subword units from data
+    /// - WordPiece: Used by BERT, splits unknown words into known subwords
+    /// - SentencePiece: Language-independent tokenization used by many multilingual models
+    ///
+    /// Example:
+    /// <code>
+    /// var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 32000);
+    /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    ///     .ConfigureTokenizer(tokenizer)
+    ///     .ConfigureModel(new TransformerModel())
+    ///     .BuildAsync(trainingData, labels);
+    /// </code>
+    /// </remarks>
+    /// <param name="tokenizer">The tokenizer to use for text processing. If null, no tokenizer is configured.</param>
+    /// <param name="config">Optional tokenization configuration. If null, default settings are used.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizer(ITokenizer? tokenizer = null, TokenizationConfig? config = null);
+
+    /// <summary>
+    /// Configures tokenization using a pretrained tokenizer from HuggingFace Hub.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is the easiest and most type-safe way to use industry-standard tokenizers.
+    /// Using the enum ensures you always specify a valid model name.
+    ///
+    /// Simply call without parameters for sensible defaults:
+    /// <code>
+    /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    ///     .ConfigureTokenizerFromPretrained()  // Uses BertBaseUncased by default
+    ///     .ConfigureModel(new BertModel())
+    ///     .BuildAsync(trainingData, labels);
+    /// </code>
+    ///
+    /// Or specify a model using the enum:
+    /// <code>
+    /// builder.ConfigureTokenizerFromPretrained(PretrainedTokenizerModel.Gpt2)
+    /// </code>
+    ///
+    /// Available models include:
+    /// - BertBaseUncased: BERT tokenizer for English text (default)
+    /// - Gpt2, Gpt2Medium, Gpt2Large: GPT-2 tokenizers for text generation
+    /// - RobertaBase, RobertaLarge: RoBERTa tokenizers (improved BERT)
+    /// - T5Small, T5Base, T5Large: T5 tokenizers for text-to-text tasks
+    /// - DistilBertBaseUncased: Faster, smaller BERT
+    /// - CodeBertBase: For code understanding tasks
+    /// </remarks>
+    /// <param name="model">The pretrained tokenizer model to use. Defaults to BertBaseUncased.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(PretrainedTokenizerModel model = PretrainedTokenizerModel.BertBaseUncased, TokenizationConfig? config = null);
+
+    /// <summary>
+    /// Configures tokenization using a pretrained tokenizer from a custom HuggingFace model name or local path.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Use this overload when you need to specify a custom model name or path
+    /// that isn't in the PretrainedTokenizerModel enum. For common models, prefer the enum-based overload
+    /// for type safety.
+    ///
+    /// Example with custom model:
+    /// <code>
+    /// // Use a custom or community model from HuggingFace
+    /// builder.ConfigureTokenizerFromPretrained("sentence-transformers/all-MiniLM-L6-v2")
+    /// </code>
+    ///
+    /// If null or empty, defaults to "bert-base-uncased".
+    /// </remarks>
+    /// <param name="modelNameOrPath">The HuggingFace model name or local path. Defaults to "bert-base-uncased" if not specified.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(string? modelNameOrPath = null, TokenizationConfig? config = null);
+
+    /// <summary>
+    /// Asynchronously configures the tokenizer by loading a pretrained model from HuggingFace Hub.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the async version of ConfigureTokenizerFromPretrained.
+    /// Use this when you want to avoid blocking the thread while downloading tokenizer files
+    /// from HuggingFace Hub. This is especially important in UI applications or web servers.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Async configuration
+    /// await builder.ConfigureTokenizerFromPretrainedAsync(PretrainedTokenizerModel.BertBaseUncased);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The pretrained tokenizer model to use.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <returns>A task that completes with the builder instance for method chaining.</returns>
+    Task<IPredictionModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(PretrainedTokenizerModel model = PretrainedTokenizerModel.BertBaseUncased, TokenizationConfig? config = null);
+
+    /// <summary>
+    /// Asynchronously configures the tokenizer by loading a pretrained model from HuggingFace Hub using a model name or path.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the async version that accepts a custom model name or path.
+    /// Use this when loading custom or community models without blocking the thread.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Async configuration with custom model
+    /// await builder.ConfigureTokenizerFromPretrainedAsync("sentence-transformers/all-MiniLM-L6-v2");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="modelNameOrPath">The HuggingFace model name or local path. Defaults to "bert-base-uncased" if not specified.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <returns>A task that completes with the builder instance for method chaining.</returns>
+    Task<IPredictionModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(string? modelNameOrPath = null, TokenizationConfig? config = null);
 
     /// <summary>
     /// Enables GPU acceleration for training and inference with optional configuration.
