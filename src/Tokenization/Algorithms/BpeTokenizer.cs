@@ -118,8 +118,11 @@ namespace AiDotNet.Tokenization.Algorithms
             var wordFreqs = new Dictionary<string, int>();
             foreach (var text in corpus)
             {
-                var matches = preTokenRegex.Matches(text);
-                foreach (var word in matches.Cast<Match>().Select(m => m.Value))
+                var words = preTokenRegex.Matches(text)
+                    .Cast<Match>()
+                    .Select(m => m.Value);
+
+                foreach (var word in words)
                 {
                     wordFreqs[word] = wordFreqs.GetValueOrDefault(word, 0) + 1;
                 }
