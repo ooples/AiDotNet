@@ -199,13 +199,9 @@ namespace AiDotNet.Tokenization.CodeTokenization
 
             if (matches.Count > 0)
             {
-                foreach (Match match in matches)
-                {
-                    if (!string.IsNullOrWhiteSpace(match.Value))
-                    {
-                        parts.Add(match.Value);
-                    }
-                }
+                parts.AddRange(matches.Cast<Match>()
+                    .Where(m => !string.IsNullOrWhiteSpace(m.Value))
+                    .Select(m => m.Value));
                 return parts;
             }
 
