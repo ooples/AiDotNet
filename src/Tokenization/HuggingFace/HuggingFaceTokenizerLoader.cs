@@ -37,10 +37,10 @@ namespace AiDotNet.Tokenization.HuggingFace
                 return LoadFromTokenizerJson(tokenizerJsonPath);
             }
 
-            var configPath = Path.Combine(modelPath, "tokenizer_config.json");
-            var vocabJsonPath = Path.Combine(modelPath, "vocab.json");
-            var vocabTxtPath = Path.Combine(modelPath, "vocab.txt");
-            var mergesPath = Path.Combine(modelPath, "merges.txt");
+            var configPath = GetSafePath(modelPath, "tokenizer_config.json");
+            var vocabJsonPath = GetSafePath(modelPath, "vocab.json");
+            var vocabTxtPath = GetSafePath(modelPath, "vocab.txt");
+            var mergesPath = GetSafePath(modelPath, "merges.txt");
 
             // Determine which vocab file exists (BERT uses vocab.txt, GPT uses vocab.json)
             var vocabPath = File.Exists(vocabJsonPath) ? vocabJsonPath : vocabTxtPath;
@@ -439,6 +439,26 @@ namespace AiDotNet.Tokenization.HuggingFace
 
             var vocabulary = new Vocabulary.Vocabulary(vocabDict, specialTokens.UnkToken);
             return new UnigramTokenizer(vocabulary, tokenScores, specialTokens);
+        }
+
+        /// <summary>
+        /// Safely combines a base path with a filename, preventing path traversal attacks.
+        /// </summary>
+        /// <param name="basePath">The base directory path.</param>
+        /// <param name="fileName">The filename to combine.</param>
+        /// <returns>The combined path, guaranteed to be within basePath.</returns>
+        private static string GetSafePath(string basePath, string fileName)
+        {
+            var normalizedBase = Path.GetFullPath(basePath);
+            var combined = Path.GetFullPath(Path.Combine(normalizedBase, fileName));
+
+            // Ensure the resulting path is within the base directory
+            if (!combined.StartsWith(normalizedBase, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException($"Invalid file path: {fileName} attempts path traversal");
+            }
+
+            return combined;
         }
     }
 }
