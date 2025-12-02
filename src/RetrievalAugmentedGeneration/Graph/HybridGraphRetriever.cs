@@ -258,7 +258,7 @@ public class HybridGraphRetriever<T>
                     score *= 0.8; // One-hop penalty
                 }
 
-                results[edge.TargetId] = new RetrievalResult<T>
+                var result = new RetrievalResult<T>
                 {
                     NodeId = edge.TargetId,
                     Score = score,
@@ -268,6 +268,12 @@ public class HybridGraphRetriever<T>
                     ParentNodeId = candidate.Id,
                     RelationType = edge.RelationType
                 };
+
+                // Only update if new score is higher to preserve best path
+                if (!results.TryGetValue(edge.TargetId, out var existing) || result.Score > existing.Score)
+                {
+                    results[edge.TargetId] = result;
+                }
             }
         }
 
