@@ -186,7 +186,7 @@ namespace AiDotNet.Tokenization.CodeTokenization
             // Handle snake_case
             if (identifier.Contains('_'))
             {
-                parts.AddRange(identifier.Split('_', StringSplitOptions.RemoveEmptyEntries));
+                parts.AddRange(identifier.Split(new[] { '_' }, StringSplitOptions.RemoveEmptyEntries));
                 return parts;
             }
 
