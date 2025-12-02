@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 
@@ -343,7 +344,7 @@ public class GraphQueryMatcher<T>
                 object value;
                 if (int.TryParse(valueStr, out var intValue))
                     value = intValue;
-                else if (double.TryParse(valueStr, out var doubleValue))
+                else if (double.TryParse(valueStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var doubleValue))
                     value = doubleValue;
                 else
                     value = valueStr;
