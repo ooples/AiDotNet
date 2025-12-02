@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -11,9 +13,9 @@ namespace AiDotNet.Interfaces;
 /// <b>For Beginners:</b> Activation functions are like "decision makers" in neural networks.
 /// 
 /// Imagine you're deciding whether to go outside based on the temperature:
-/// - If it's below 60°F, you definitely won't go (output = 0)
-/// - If it's above 75°F, you definitely will go (output = 1)
-/// - If it's between 60-75°F, you're somewhat likely to go (output between 0 and 1)
+/// - If it's below 60ï¿½F, you definitely won't go (output = 0)
+/// - If it's above 75ï¿½F, you definitely will go (output = 1)
+/// - If it's between 60-75ï¿½F, you're somewhat likely to go (output between 0 and 1)
 /// 
 /// This is similar to how activation functions work. They take the input from previous
 /// calculations in the neural network and transform it into an output that determines
@@ -90,11 +92,11 @@ public interface IVectorActivationFunction<T>
     /// </summary>
     /// <remarks>
     /// This method computes the derivatives of the activation function for all elements in the input tensor.
-    /// 
+    ///
     /// <b>For Beginners:</b> Similar to the vector version, this calculates how sensitive the activation
     /// function is to changes in each element of the input tensor. The difference is that this
     /// works with multi-dimensional data.
-    /// 
+    ///
     /// For example, with image data, this would tell us how a small change in each pixel's value
     /// would affect the output of the activation function. This information is used during the
     /// learning process to adjust the neural network's parameters.
@@ -102,4 +104,46 @@ public interface IVectorActivationFunction<T>
     /// <param name="input">The tensor to calculate derivatives for.</param>
     /// <returns>A tensor containing the derivatives of the activation function.</returns>
     Tensor<T> Derivative(Tensor<T> input);
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>True if the activation can be applied to computation graphs for JIT compilation.</value>
+    /// <remarks>
+    /// <para>
+    /// Activation functions return false if:
+    /// - Gradient computation (backward pass) is not yet implemented
+    /// - The activation uses operations not supported by TensorOperations
+    /// - The activation has dynamic behavior that cannot be represented in a static graph
+    /// </para>
+    /// <para>
+    /// Once gradient computation is implemented and tested, set this to true.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> JIT (Just-In-Time) compilation is an advanced optimization technique
+    /// that pre-compiles the neural network's operations into a faster execution graph.
+    /// This property indicates whether this activation function is ready to be part of that
+    /// optimized execution. If false, the activation will fall back to the standard execution path.
+    /// </para>
+    /// </remarks>
+    bool SupportsJitCompilation { get; }
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with the activation applied.</returns>
+    /// <exception cref="NotSupportedException">Thrown if SupportsJitCompilation is false.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method maps the activation to the corresponding TensorOperations method.
+    /// For example, Softmax returns TensorOperations&lt;T&gt;.Softmax(input).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method adds the activation function to the computation graph,
+    /// which is a data structure that represents all the operations in the neural network.
+    /// The graph can then be optimized and executed more efficiently through JIT compilation.
+    /// </para>
+    /// </remarks>
+    ComputationNode<T> ApplyToGraph(ComputationNode<T> input);
 }

@@ -18,9 +18,9 @@ namespace AiDotNet.NeuralNetworks;
 /// - The encoder part takes your original data (like an image) and compresses it into a smaller representation
 /// - The middle layer (latent space) holds this compressed version of your data
 /// - The decoder part takes this compressed version and tries to recreate the original data
-/// 
+///
 /// For example, with images:
-/// - You might compress a 256�256 pixel image (65,536 values) into just 100 numbers
+/// - You might compress a 256x256 pixel image (65,536 values) into just 100 numbers
 /// - The network learns which features are most important to preserve
 /// - It then learns to reconstruct the image from only those 100 numbers
 /// 
@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class Autoencoder<T> : NeuralNetworkBase<T>
+public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets the size of the encoded representation (latent space).
@@ -131,6 +131,39 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     private readonly ILossFunction<T> _lossFunction;
 
     /// <summary>
+    /// Target sparsity parameter (desired average activation level).
+    /// Default is 0.05 (5% of neurons should be active on average).
+    /// </summary>
+    private T _sparsityParameter;
+
+    /// <summary>
+    /// Stores the last encoder activations for auxiliary loss computation.
+    /// </summary>
+    private Tensor<T>? _lastEncoderActivations;
+
+    /// <summary>
+    /// Stores the last computed sparsity loss for diagnostics.
+    /// </summary>
+    private T _lastSparsityLoss;
+
+    /// <summary>
+    /// Stores the average activation level for diagnostics.
+    /// </summary>
+    private T _averageActivation;
+
+    /// <summary>
+    /// Gets or sets whether to use auxiliary loss (sparsity penalty) during training.
+    /// Default is false. Enable for sparse autoencoders.
+    /// </summary>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the sparsity penalty.
+    /// Default is 0.001. Typical range: 0.0001 to 0.01.
+    /// </summary>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="Autoencoder{T}"/> class.
     /// </summary>
     /// <param name="architecture">The architecture specification for the autoencoder.</param>
@@ -162,6 +195,12 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
         _epochs = epochs;
         _batchSize = batchSize;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+
+        // Initialize fields that require NumOps (must be done in constructor, not field initializers)
+        _sparsityParameter = NumOps.FromDouble(0.05);
+        _lastSparsityLoss = NumOps.Zero;
+        _averageActivation = NumOps.Zero;
+        AuxiliaryLossWeight = NumOps.FromDouble(0.001);
 
         InitializeLayers();
     }
@@ -413,6 +452,221 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Sets the target sparsity parameter for sparse autoencoder training.
+    /// </summary>
+    /// <param name="sparsity">Target average activation level (typically 0.01 to 0.1).</param>
+    /// <remarks>
+    /// <para>
+    /// The sparsity parameter controls how "active" the encoder's hidden units should be on average.
+    /// Lower values enforce stronger sparsity (fewer active neurons), while higher values allow more neurons to be active.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how selective the autoencoder is about which features to use.
+    ///
+    /// Sparsity means:
+    /// - Lower values (e.g., 0.01): Only 1% of neurons active on average - very selective, learns distinct features
+    /// - Medium values (e.g., 0.05): 5% active - good balance (default)
+    /// - Higher values (e.g., 0.1): 10% active - less sparse, more distributed representations
+    ///
+    /// Sparse representations often learn more interpretable and meaningful features.
+    /// </para>
+    /// </remarks>
+    public void SetSparsityParameter(T sparsity)
+    {
+        _sparsityParameter = sparsity;
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for sparse autoencoders, which penalizes non-sparse activations.
+    /// </summary>
+    /// <returns>The sparsity loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// The sparsity loss uses KL divergence between the target sparsity and actual average activation.
+    /// Formula: KL(ρ || ρ̂) = ρ * log(ρ/ρ̂) + (1-ρ) * log((1-ρ)/(1-ρ̂))
+    /// where ρ is target sparsity and ρ̂ is actual average activation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates a penalty for having too many neurons active at once.
+    ///
+    /// The sparsity loss:
+    /// - Measures how far the actual neuron activations are from the target sparsity
+    /// - Encourages only a few neurons to be active for each input
+    /// - Forces the autoencoder to learn more selective, meaningful features
+    /// - Results in better feature learning and interpretability
+    ///
+    /// Without sparsity:
+    /// - All neurons might activate for every input
+    /// - Features become less distinct and harder to interpret
+    /// - The autoencoder might just learn to memorize rather than extract key features
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || _lastEncoderActivations == null)
+        {
+            return NumOps.Zero;
+        }
+
+        // Compute average activation across the batch
+        T sumActivation = NumOps.Zero;
+        int totalElements = _lastEncoderActivations.Length;
+
+        for (int i = 0; i < totalElements; i++)
+        {
+            sumActivation = NumOps.Add(sumActivation, _lastEncoderActivations[i]);
+        }
+
+        _averageActivation = NumOps.Divide(sumActivation, NumOps.FromDouble(totalElements));
+
+        // Compute KL divergence: KL(ρ || ρ̂) = ρ * log(ρ/ρ̂) + (1-ρ) * log((1-ρ)/(1-ρ̂))
+        T epsilon = NumOps.FromDouble(1e-10); // Small value to prevent log(0)
+
+        // Clamp average activation to prevent numerical issues
+        T rhoHat = _averageActivation;
+        if (NumOps.LessThan(rhoHat, epsilon))
+        {
+            rhoHat = epsilon;
+        }
+        T oneMinusRhoHat = NumOps.Subtract(NumOps.One, rhoHat);
+        if (NumOps.LessThan(oneMinusRhoHat, epsilon))
+        {
+            oneMinusRhoHat = epsilon;
+        }
+
+        // KL divergence calculation
+        T term1 = NumOps.Multiply(
+            _sparsityParameter,
+            NumOps.Log(NumOps.Divide(_sparsityParameter, rhoHat))
+        );
+
+        T oneMinusRho = NumOps.Subtract(NumOps.One, _sparsityParameter);
+        T term2 = NumOps.Multiply(
+            oneMinusRho,
+            NumOps.Log(NumOps.Divide(oneMinusRho, oneMinusRhoHat))
+        );
+
+        _lastSparsityLoss = NumOps.Add(term1, term2);
+        return _lastSparsityLoss;
+    }
+
+    /// <summary>
+    /// Computes the gradient of the sparsity loss with respect to encoder activations.
+    /// </summary>
+    /// <returns>A tensor containing the sparsity loss gradients.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes the gradient of the KL divergence sparsity loss:
+    /// d(KL)/da = (1/n) * [-ρ/ρ̂ + (1-ρ)/(1-ρ̂)] * AuxiliaryLossWeight
+    /// where ρ is target sparsity, ρ̂ is average activation, n is number of activations.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ComputeSparsityGradient()
+    {
+        if (_lastEncoderActivations == null)
+        {
+            throw new InvalidOperationException("No encoder activations available for gradient computation.");
+        }
+
+        // Compute the gradient coefficient: -ρ/ρ̂ + (1-ρ)/(1-ρ̂)
+        T epsilon = NumOps.FromDouble(1e-10);
+        T rhoHat = _averageActivation;
+        if (NumOps.LessThan(rhoHat, epsilon))
+        {
+            rhoHat = epsilon;
+        }
+        T oneMinusRhoHat = NumOps.Subtract(NumOps.One, rhoHat);
+        if (NumOps.LessThan(oneMinusRhoHat, epsilon))
+        {
+            oneMinusRhoHat = epsilon;
+        }
+
+        T oneMinusRho = NumOps.Subtract(NumOps.One, _sparsityParameter);
+
+        // d(KL)/d(ρ̂) = -ρ/ρ̂ + (1-ρ)/(1-ρ̂)
+        T term1 = NumOps.Divide(NumOps.Negate(_sparsityParameter), rhoHat);
+        T term2 = NumOps.Divide(oneMinusRho, oneMinusRhoHat);
+        T dKL_drhoHat = NumOps.Add(term1, term2);
+
+        // d(ρ̂)/da = 1/n for each activation
+        int n = _lastEncoderActivations.Length;
+        T scalingFactor = NumOps.Divide(dKL_drhoHat, NumOps.FromDouble(n));
+
+        // Apply auxiliary loss weight
+        scalingFactor = NumOps.Multiply(scalingFactor, AuxiliaryLossWeight);
+
+        // Create gradient tensor with the same shape as encoder activations
+        var gradient = new Tensor<T>(_lastEncoderActivations.Shape);
+        for (int i = 0; i < gradient.Length; i++)
+        {
+            gradient[i] = scalingFactor;
+        }
+
+        return gradient;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the sparsity loss.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about sparsity.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides insights into the autoencoder's sparsity behavior, including:
+    /// - Current sparsity loss value
+    /// - Average activation level
+    /// - Target sparsity parameter
+    /// - Whether auxiliary loss is enabled
+    /// </para>
+    /// <para><b>For Beginners:</b> This gives you information to track sparsity during training.
+    ///
+    /// The diagnostics include:
+    /// - Sparsity Loss: How far from the target sparsity (lower is better)
+    /// - Average Activation: Current average neuron activity level
+    /// - Target Sparsity: The desired average activity level
+    /// - Sparsity Weight: How much the sparsity penalty influences training
+    ///
+    /// These values help you:
+    /// - Verify that sparsity is being enforced
+    /// - Tune the sparsity parameter and weight
+    /// - Detect if neurons are dying (too much sparsity) or too active (too little)
+    /// - Monitor training health and feature learning quality
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        var diagnostics = new Dictionary<string, string>
+        {
+            { "SparsityLoss", System.Convert.ToString(_lastSparsityLoss) ?? "0" },
+            { "AverageActivation", System.Convert.ToString(_averageActivation) ?? "0" },
+            { "TargetSparsity", System.Convert.ToString(_sparsityParameter) ?? "0.05" },
+            { "SparsityWeight", System.Convert.ToString(AuxiliaryLossWeight) ?? "0.001" },
+            { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
+        };
+
+        return diagnostics;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = new Dictionary<string, string>();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
+    }
+
+    /// <summary>
     /// Trains the autoencoder on the provided data.
     /// </summary>
     /// <param name="input">The input data to train on.</param>
@@ -468,16 +722,49 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
                 {
                     current = Layers[j].Forward(current);
                     layerOutputs.Add(current);
+
+                    // Store encoder activations for sparsity loss (at the middle layer)
+                    if (j == Layers.Count / 2)
+                    {
+                        _lastEncoderActivations = current;
+                    }
                 }
 
-                // Calculate loss
-                var loss = CalculateLoss(current, batchExpected);
+                // Calculate reconstruction loss
+                var reconstructionLoss = CalculateLoss(current, batchExpected);
+
+                // Calculate auxiliary loss (sparsity) if enabled
+                T auxiliaryLoss = NumOps.Zero;
+                if (UseAuxiliaryLoss)
+                {
+                    var sparsityLoss = ComputeAuxiliaryLoss();
+                    auxiliaryLoss = NumOps.Multiply(sparsityLoss, AuxiliaryLossWeight);
+                }
+
+                // Total loss combines reconstruction and sparsity
+                var loss = NumOps.Add(reconstructionLoss, auxiliaryLoss);
                 epochLoss = NumOps.Add(epochLoss, loss);
 
                 // Backward pass (calculate gradients)
                 var outputGradient = CalculateOutputGradient(current, batchExpected);
 
-                for (int j = Layers.Count - 1; j >= 0; j--)
+                // Backpropagate from output to middle layer (decoder layers)
+                int middleLayerIndex = Layers.Count / 2;
+                for (int j = Layers.Count - 1; j > middleLayerIndex; j--)
+                {
+                    outputGradient = Layers[j].Backward(outputGradient);
+                }
+
+                // Add sparsity gradient at the middle layer (encoder output)
+                if (UseAuxiliaryLoss && _lastEncoderActivations != null)
+                {
+                    var sparsityGradient = ComputeSparsityGradient();
+                    // Add weighted sparsity gradient to the reconstruction gradient
+                    outputGradient = outputGradient.Add(sparsityGradient);
+                }
+
+                // Continue backpropagation through encoder layers
+                for (int j = middleLayerIndex; j >= 0; j--)
                 {
                     outputGradient = Layers[j].Backward(outputGradient);
                 }
@@ -531,7 +818,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     public Tensor<T> GenerateSamples(int count, double mean = 0, double stdDev = 1)
     {
         // Create a random normal distribution in the latent space
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         var latentSamples = new Matrix<T>(count, EncodedSize);
     
         // Generate random points in the latent space

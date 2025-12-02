@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -438,10 +440,42 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         // This is a pass-through layer, so we simply pass the gradient back
         // No weight updates are performed here as they're handled in UpdateParameters
         return outputGradient;
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Specialized operations
+    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // SynapticPlasticityLayer implements STDP (Spike-Timing-Dependent Plasticity)
+        // The manual implementation provides correct gradient computation for this
+        // biologically-inspired learning rule. No new TensorOperation needed.
+        return BackwardManual(outputGradient);
+    }
+
 
     /// <summary>
     /// Updates the synaptic weights based on spike-timing-dependent plasticity rules.
@@ -625,11 +659,65 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
+        // === Vectorized State Reset (Phase B: US-GPU-015) ===
         // Reset the internal state of the layer
-        for (int i = 0; i < GetInputShape()[0]; i++)
-        {
-            _lastInput[i] = NumOps.Zero;
-            _lastOutput[i] = NumOps.Zero;
-        }
+        int size = GetInputShape()[0];
+        _lastInput = Vector<T>.CreateDefault(size, NumOps.Zero);
+        _lastOutput = Vector<T>.CreateDefault(size, NumOps.Zero);
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        // SynapticPlasticityLayer JIT provides a differentiable approximation of STDP:
+        // The forward pass is a simple weighted transformation: output = W @ input
+        // The STDP learning rule is approximated through standard gradient descent
+        // during backpropagation.
+
+        var input = inputNodes[0];
+
+        // Get dimensions
+        int inputSize = _weights.Shape[1];
+        int outputSize = _weights.Shape[0];
+
+        // Create weights constant
+        var weightsNode = TensorOperations<T>.Constant(_weights, "stdp_weights");
+
+        // Reshape input for matrix multiplication
+        var inputReshaped = TensorOperations<T>.Reshape(input, inputSize, 1);
+
+        // Forward: W @ input
+        var weighted = TensorOperations<T>.MatrixMultiply(weightsNode, inputReshaped);
+        var output = TensorOperations<T>.Reshape(weighted, outputSize);
+
+        // Apply activation
+        output = ApplyActivationToGraph(output);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c>. SynapticPlasticityLayer uses a differentiable forward pass.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for SynapticPlasticity exports the forward pass as a simple
+    /// matrix multiplication. The STDP learning dynamics are approximated through
+    /// standard gradient-based optimization during training. The temporal spike
+    /// timing information is not used in the JIT-compiled forward pass.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
 }

@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.LoRA;
 
 /// <summary>
@@ -573,5 +575,100 @@ public class LoRALayer<T> : LayerBase<T>
         _lastPreActivation = null;
         _loraAGradient = null;
         _loraBGradient = null;
+    }
+
+    /// <summary>
+    /// Gets whether this LoRA layer supports JIT compilation.
+    /// </summary>
+    /// <value>True if the LoRA matrices are initialized.</value>
+    /// <remarks>
+    /// <para>
+    /// LoRA layers support JIT compilation when their matrices (A and B) are properly initialized.
+    /// The JIT-compiled version computes output = input * A * B * scaling using optimized tensor operations.
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT compilation makes the LoRA layer run faster by converting
+    /// its math operations into optimized native code. This is especially beneficial for inference
+    /// when you want maximum speed.
+    ///
+    /// The layer can be JIT compiled as long as it has been initialized, which happens automatically
+    /// when the layer is created.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => _loraA != null && _loraB != null;
+
+    /// <summary>
+    /// Exports the computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to which input nodes will be added.</param>
+    /// <returns>The output computation node representing the LoRA transformation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when matrices are not initialized.</exception>
+    /// <remarks>
+    /// <para>
+    /// The computation graph implements: output = input * A * B * scaling
+    /// where:
+    /// - A is the low-rank projection matrix (inputSize × rank)
+    /// - B is the reconstruction matrix (rank × outputSize)
+    /// - scaling = alpha / rank
+    /// </para>
+    /// <para><b>For Beginners:</b> This exports the LoRA computation as a graph of operations
+    /// that can be optimized and compiled to fast native code.
+    ///
+    /// The graph represents:
+    /// 1. Input → multiply by matrix A (compress to low rank)
+    /// 2. Result → multiply by matrix B (expand to output size)
+    /// 3. Result → multiply by scaling factor
+    ///
+    /// The JIT compiler can then fuse these operations and apply optimizations like SIMD vectorization.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_loraA == null || _loraB == null)
+            throw new InvalidOperationException("LoRA matrices not initialized. Initialize the layer first.");
+
+        int inputSize = _loraA.Rows;
+        int outputSize = _loraB.Columns;
+
+        // Create input placeholder with symbolic batch dimension
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, inputSize });
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "lora_input");
+
+        // Create constant nodes for matrix A [inputSize, rank]
+        var matrixATensor = new Tensor<T>(new int[] { _loraA.Rows, _loraA.Columns }, _loraA);
+        var matrixANode = TensorOperations<T>.Constant(matrixATensor, "lora_A");
+
+        // Create constant node for matrix B [rank, outputSize]
+        var matrixBTensor = new Tensor<T>(new int[] { _loraB.Rows, _loraB.Columns }, _loraB);
+        var matrixBNode = TensorOperations<T>.Constant(matrixBTensor, "lora_B");
+
+        // Create constant node for scaling factor
+        var scalingTensor = new Tensor<T>(new int[] { 1 }, new Vector<T>(new[] { _scaling }));
+        var scalingNode = TensorOperations<T>.Constant(scalingTensor, "lora_scaling");
+
+        // Add input nodes
+        inputNodes.Add(inputNode);
+        inputNodes.Add(matrixANode);
+        inputNodes.Add(matrixBNode);
+        inputNodes.Add(scalingNode);
+
+        // Build computation graph: output = input * A * B * scaling
+        // Step 1: input * A -> [batch, rank]
+        var intermediateNode = TensorOperations<T>.MatrixMultiply(inputNode, matrixANode);
+
+        // Step 2: intermediate * B -> [batch, outputSize]
+        var preScaledNode = TensorOperations<T>.MatrixMultiply(intermediateNode, matrixBNode);
+
+        // Step 3: Apply scaling (element-wise multiply by scalar)
+        var outputNode = TensorOperations<T>.ElementwiseMultiply(preScaledNode, scalingNode);
+
+        // Apply activation using the inherited LayerBase method which properly delegates
+        // to the activation function's ApplyToGraph method (Open/Closed Principle)
+        var activatedOutput = ApplyActivationToGraph(outputNode);
+
+        return activatedOutput;
     }
 }

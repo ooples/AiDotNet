@@ -73,7 +73,7 @@ public class NeuralNetworkRegressionOptions<T, TInput, TOutput> : NonLinearRegre
     /// It's often best to start small and increase size if needed.
     /// </para>
     /// </remarks>
-    public List<int> LayerSizes { get; set; } = [1, 10, 1];  // Default: 1 input, 1 hidden layer with 10 neurons, 1 output
+    public List<int> LayerSizes { get; set; } = new List<int> { 1, 10, 1 };  // Default: 1 input, 1 hidden layer with 10 neurons, 1 output
 
     /// <summary>
     /// Gets or sets the number of complete passes through the training dataset during model training.

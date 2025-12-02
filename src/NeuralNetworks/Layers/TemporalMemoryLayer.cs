@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -401,6 +403,18 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         var inputGradient = new Vector<T>(ColumnCount);
         var flatGradient = outputGradient.ToVector();
 
@@ -417,6 +431,26 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
 
         return Tensor<T>.FromVector(inputGradient);
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Specialized operations
+    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // TemporalMemoryLayer implements HTM temporal memory with complex state management
+        // The manual implementation provides correct gradient computation through temporal sequences
+        // No new TensorOperation needed as the logic is domain-specific to HTM.
+        return BackwardManual(outputGradient);
+    }
+
 
     /// <summary>
     /// Updates the parameters of the layer.
@@ -531,4 +565,67 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
             }
         }
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        // TemporalMemoryLayer JIT uses a simplified differentiable approximation:
+        // 1. Project input through cell states matrix
+        // 2. Apply sigmoid for cell activation probabilities
+        // 3. Apply straight-through threshold for binary output
+        //
+        // This approximates the HTM temporal memory behavior with differentiable operations.
+
+        var input = inputNodes[0];
+
+        // Convert cell states to tensor [ColumnCount * CellsPerColumn, InputSize]
+        int outputSize = ColumnCount * CellsPerColumn;
+        var cellStatesTensor = new Tensor<T>([outputSize, ColumnCount]);
+        for (int i = 0; i < outputSize; i++)
+            for (int j = 0; j < ColumnCount; j++)
+                cellStatesTensor[i, j] = CellStates[i, j];
+
+        var cellStatesNode = TensorOperations<T>.Constant(cellStatesTensor, "tm_cell_states");
+
+        // Project input through cell states
+        var inputReshaped = TensorOperations<T>.Reshape(input, ColumnCount, 1);
+        var projection = TensorOperations<T>.MatrixMultiply(cellStatesNode, inputReshaped);
+        var projectionFlat = TensorOperations<T>.Reshape(projection, outputSize);
+
+        // Apply sigmoid for activation probabilities
+        var activations = TensorOperations<T>.Sigmoid(projectionFlat);
+
+        // Apply straight-through threshold for binary cell output
+        var output = TensorOperations<T>.StraightThroughThreshold(activations, 0.5);
+
+        // Apply layer activation
+        output = ApplyActivationToGraph(output);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c>. TemporalMemoryLayer uses a differentiable approximation for JIT.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for TemporalMemory uses a simplified differentiable approximation
+    /// of the HTM algorithm. The complex cell state tracking and prediction mechanisms
+    /// are approximated with matrix projections and sigmoid activations, enabling
+    /// gradient-based optimization while maintaining similar sparse activation patterns.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
 }

@@ -1,3 +1,6 @@
+using AiDotNet.Autodiff;
+
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -26,8 +29,95 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class DenseLayer<T> : LayerBase<T>
+public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Specifies the type of regularization to apply to the layer's weights.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This determines how the network prevents overfitting in this layer.
+    ///
+    /// Regularization types:
+    /// - None: No regularization (default)
+    /// - L1: Encourages weights to become exactly zero (creates sparse networks)
+    /// - L2: Encourages weights to be small but not necessarily zero (smooths the network)
+    /// - L1L2: Combines both L1 and L2 regularization
+    /// </para>
+    /// </remarks>
+    public enum RegularizationType
+    {
+        None,
+        L1,
+        L2,
+        L1L2
+    }
+
+    /// <summary>
+    /// Gets or sets whether auxiliary loss (weight regularization) should be used during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Weight regularization adds a penalty based on the magnitude of the weights to prevent overfitting.
+    /// This helps the network generalize better to unseen data by discouraging overly complex models.
+    /// </para>
+    /// <para><b>For Beginners:</b> Weight regularization is like encouraging simplicity in your model.
+    ///
+    /// Why use regularization:
+    /// - Prevents the network from memorizing training data (overfitting)
+    /// - Encourages the network to learn general patterns instead of specific details
+    /// - Makes the model work better on new, unseen data
+    ///
+    /// Think of it like learning to recognize cats:
+    /// - Without regularization: "This cat has exactly 157 whiskers" (too specific)
+    /// - With regularization: "Cats have fur, whiskers, and pointy ears" (general pattern)
+    ///
+    /// Regularization is especially helpful when you have limited training data.
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the regularization auxiliary loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This weight controls how much the regularization penalty contributes to the total loss.
+    /// The total loss is: main_loss + (auxiliary_weight * regularization_loss).
+    /// Typical values range from 0.0001 to 0.1.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much the network should prefer simple models.
+    ///
+    /// The weight determines the balance between:
+    /// - Fitting the training data well (main loss)
+    /// - Keeping the model simple (regularization loss)
+    ///
+    /// Common values:
+    /// - 0.01 (default): Moderate regularization
+    /// - 0.001-0.005: Light regularization
+    /// - 0.05-0.1: Strong regularization
+    ///
+    /// Higher values make the network simpler but might underfit the data.
+    /// Lower values allow more complexity but might overfit.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Gets or sets the type of regularization to apply.
+    /// </summary>
+    public RegularizationType Regularization { get; set; } = RegularizationType.None;
+
+    /// <summary>
+    /// Gets or sets the L1 regularization strength (used when Regularization is L1 or L1L2).
+    /// </summary>
+    public T L1Strength { get; set; }
+
+    /// <summary>
+    /// Gets or sets the L2 regularization strength (used when Regularization is L2 or L1L2).
+    /// </summary>
+    public T L2Strength { get; set; }
+
+    private T _lastRegularizationLoss;
     /// <summary>
     /// The weight matrix that connects input neurons to output neurons.
     /// </summary>
@@ -135,6 +225,7 @@ public class DenseLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T>? _lastInput;
+    private Tensor<T>? _lastOutput; // Pre-activation output for proper gradient computation
 
     /// <summary>
     /// Gets the total number of trainable parameters in the layer.
@@ -151,12 +242,12 @@ public class DenseLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This tells you how many individual numbers the layer can adjust during training.
     /// 
     /// The parameter count:
-    /// - Equals (number of inputs � number of outputs) + number of outputs
+    /// - Equals (number of inputs × number of outputs) + number of outputs
     /// - First part counts the weights, second part counts the biases
     /// - Higher numbers mean more flexibility but also more risk of overfitting
-    /// 
+    ///
     /// For example, a dense layer with 100 inputs and 50 outputs would have
-    /// 100 � 50 = 5,000 weights plus 50 biases, for a total of 5,050 parameters.
+    /// 100 × 50 = 5,000 weights plus 50 biases, for a total of 5,050 parameters.
     /// </para>
     /// </remarks>
     public override int ParameterCount => (_weights.Rows * _weights.Columns) + _biases.Length;
@@ -205,7 +296,7 @@ public class DenseLayer<T> : LayerBase<T>
     /// - What mathematical function to apply to the results (activation)
     /// 
     /// For example, a layer with inputSize=784 and outputSize=10 could connect the flattened
-    /// pixels of a 28�28 image to 10 output neurons (one for each digit 0-9).
+    /// pixels of a 28×28 image to 10 output neurons (one for each digit 0-9).
     /// 
     /// The layer automatically initializes all the weights and biases with carefully chosen
     /// starting values that help with training.
@@ -214,6 +305,11 @@ public class DenseLayer<T> : LayerBase<T>
     public DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        L1Strength = NumOps.FromDouble(0.01);
+        L2Strength = NumOps.FromDouble(0.01);
+        _lastRegularizationLoss = NumOps.Zero;
+
         _weights = new Matrix<T>(outputSize, inputSize);
         _biases = new Vector<T>(outputSize);
 
@@ -249,6 +345,11 @@ public class DenseLayer<T> : LayerBase<T>
     public DenseLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? vectorActivation = null)
         : base([inputSize], [outputSize], vectorActivation ?? new ReLUActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        L1Strength = NumOps.FromDouble(0.01);
+        L2Strength = NumOps.FromDouble(0.01);
+        _lastRegularizationLoss = NumOps.Zero;
+
         _weights = new Matrix<T>(outputSize, inputSize);
         _biases = new Vector<T>(outputSize);
 
@@ -282,19 +383,152 @@ public class DenseLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Initialize weights and biases (e.g., using Xavier/Glorot initialization)
-        var random = new Random();
-        var scale = Math.Sqrt(2.0 / (InputShape[0] + OutputShape[0]));
+        // === Vectorized Xavier/Glorot Initialization (Phase B: US-GPU-015) ===
+        // Initialize weights with random values scaled by Xavier initialization
+        // Initialize biases to zero using vectorized operation
 
+        T scaleT = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputShape[0] + OutputShape[0])));
+        var scale = Convert.ToDouble(scaleT);
+
+        // Initialize weights (still requires loop for individual random values)
         for (int i = 0; i < _weights.Rows; i++)
         {
             for (int j = 0; j < _weights.Columns; j++)
             {
                 _weights[i, j] = NumOps.FromDouble(Random.NextDouble() * scale - scale / 2);
             }
-
-            _biases[i] = NumOps.Zero; // Initialize biases to zero
         }
+
+        // Vectorized bias initialization - set all biases to zero at once
+        _biases = Vector<T>.CreateDefault(_biases.Length, NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for weight regularization (L1, L2, or both).
+    /// </summary>
+    /// <returns>The computed regularization auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes the regularization loss based on the magnitude of the weights.
+    /// L1 regularization computes the sum of absolute values of weights.
+    /// L2 regularization computes the sum of squared values of weights.
+    /// L1L2 combines both penalties.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates how "complex" the layer's weights are.
+    ///
+    /// Different regularization types:
+    /// 1. L1 (Lasso): Σ|weight|
+    ///    - Encourages many weights to become exactly zero
+    ///    - Creates sparse networks (many connections turned off)
+    ///    - Good for feature selection
+    ///
+    /// 2. L2 (Ridge): Σ(weight²)
+    ///    - Encourages all weights to be small
+    ///    - Prevents any single weight from dominating
+    ///    - Smooths the network's behavior
+    ///
+    /// 3. L1L2 (Elastic Net): Combines both
+    ///    - Gets benefits of both L1 and L2
+    ///    - More flexible regularization
+    ///
+    /// The loss is added to the main loss during training to discourage large weights.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || Regularization == RegularizationType.None)
+        {
+            _lastRegularizationLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        T regularizationLoss = NumOps.Zero;
+
+        // === Vectorized L1 Regularization: Σ|w| (Phase B: US-GPU-015) ===
+        if (Regularization == RegularizationType.L1 || Regularization == RegularizationType.L1L2)
+        {
+            var weightsVec = _weights.ToRowVector();
+            var absWeights = (Vector<T>)Engine.Abs(weightsVec);
+            T l1Loss = Engine.Sum(absWeights);
+            l1Loss = NumOps.Multiply(L1Strength, l1Loss);
+            regularizationLoss = NumOps.Add(regularizationLoss, l1Loss);
+        }
+
+        // === Vectorized L2 Regularization: Σ(w²) (Phase B: US-GPU-015) ===
+        if (Regularization == RegularizationType.L2 || Regularization == RegularizationType.L1L2)
+        {
+            var weightsVec = _weights.ToRowVector();
+            T l2Loss = Engine.DotProduct(weightsVec, weightsVec);  // weightsVec · weightsVec = Σ(w²)
+            // L2 regularization is typically 0.5 * lambda * Σ(w²)
+            l2Loss = NumOps.Multiply(L2Strength, l2Loss);
+            l2Loss = NumOps.Multiply(NumOps.FromDouble(0.5), l2Loss);
+            regularizationLoss = NumOps.Add(regularizationLoss, l2Loss);
+        }
+
+        _lastRegularizationLoss = regularizationLoss;
+        return regularizationLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the weight regularization auxiliary loss.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about regularization.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed diagnostics about the weight regularization, including
+    /// the computed regularization loss, type of regularization, strengths, and whether it's enabled.
+    /// This information is useful for monitoring training progress and debugging.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about how regularization is affecting the layer.
+    ///
+    /// The diagnostics include:
+    /// - Total regularization loss (penalty for large weights)
+    /// - Type of regularization being used (L1, L2, L1L2, or None)
+    /// - Strength parameters for L1 and L2
+    /// - Weight applied to the regularization loss
+    /// - Whether regularization is enabled
+    ///
+    /// This helps you:
+    /// - Monitor if regularization is helping prevent overfitting
+    /// - Debug issues with model complexity
+    /// - Understand the impact of different regularization settings
+    ///
+    /// You can use this information to adjust regularization parameters for better results.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalRegularizationLoss", _lastRegularizationLoss?.ToString() ?? "0" },
+            { "RegularizationType", Regularization.ToString() },
+            { "L1Strength", L1Strength?.ToString() ?? "0.01" },
+            { "L2Strength", L2Strength?.ToString() ?? "0.01" },
+            { "RegularizationWeight", AuxiliaryLossWeight?.ToString() ?? "0.01" },
+            { "UseRegularization", UseAuxiliaryLoss.ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
     }
 
     /// <summary>
@@ -341,6 +575,24 @@ public class DenseLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Gets the weights matrix of the layer.
+    /// </summary>
+    /// <returns>The weight matrix connecting input neurons to output neurons.</returns>
+    public override Matrix<T> GetWeights()
+    {
+        return _weights;
+    }
+
+    /// <summary>
+    /// Gets the biases vector of the layer.
+    /// </summary>
+    /// <returns>The bias values added to each output neuron.</returns>
+    public override Vector<T> GetBiases()
+    {
+        return _biases;
+    }
+
+    /// <summary>
     /// Processes the input data through the dense layer.
     /// </summary>
     /// <param name="input">The input tensor to process.</param>
@@ -371,11 +623,19 @@ public class DenseLayer<T> : LayerBase<T>
         int batchSize = input.Shape[0];
 
         var flattenedInput = input.Reshape(batchSize, input.Shape[1]);
-        var output = flattenedInput.Multiply(_weights.Transpose()).Add(_biases);
+        // Convert transposed weights matrix to tensor for 2D tensor multiplication
+        var weightsTransposed = Tensor<T>.FromMatrix(_weights.Transpose());
+        var output = flattenedInput.Multiply(weightsTransposed).Add(_biases);
+
+        // Cache pre-activation output for proper gradient computation in backward pass
+        _lastOutput = output;
 
         if (UsingVectorActivation)
         {
-            return VectorActivation!.Activate(output);
+            // Use centralized ActivationHelper for optimized activation dispatch
+            if (VectorActivation == null)
+                throw new InvalidOperationException("VectorActivation is null when UsingVectorActivation is true");
+            return ActivationHelper.ApplyActivation(VectorActivation, output, Engine);
         }
         else
         {
@@ -397,36 +657,69 @@ public class DenseLayer<T> : LayerBase<T>
     /// input gradient is returned for propagation to earlier layers.
     /// </para>
     /// <para><b>For Beginners:</b> This method helps the layer learn from its mistakes.
-    /// 
+    ///
     /// During the backward pass:
     /// - The layer receives information about how wrong its output was
     /// - It calculates how to adjust its weights and biases to be more accurate
     /// - It prepares the adjustments but doesn't apply them yet
     /// - It passes information back to previous layers so they can learn too
-    /// 
+    ///
     /// This is where the actual "learning" happens. The layer figures out which connections
     /// should be strengthened and which should be weakened based on the error in its output.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = _lastInput.Shape[0];
 
+        if (_lastOutput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Apply chain rule: dL/dz = dL/dy ⊙ f'(z)
+        // where f'(z) is the activation derivative evaluated at pre-activation values
         Tensor<T> activationGradient;
         if (UsingVectorActivation)
         {
-            activationGradient = VectorActivation!.Derivative(outputGradient);
-        }
-        else
-        {
-            // Apply scalar activation derivative element-wise
+            if (VectorActivation == null)
+                throw new InvalidOperationException("VectorActivation is null when UsingVectorActivation is true");
+
+            // Compute activation derivative at pre-activation values
+            var actDeriv = VectorActivation.Derivative(_lastOutput);
+
+            // Element-wise multiply with upstream gradient to apply chain rule
             activationGradient = new Tensor<T>(outputGradient.Shape);
             for (int i = 0; i < outputGradient.Length; i++)
             {
-                activationGradient[i] = ScalarActivation!.Derivative(outputGradient[i]);
+                activationGradient[i] = NumOps.Multiply(outputGradient[i], actDeriv[i]);
+            }
+        }
+        else
+        {
+            if (ScalarActivation == null)
+                throw new InvalidOperationException("ScalarActivation is null when UsingVectorActivation is false");
+
+            // Apply scalar activation derivative element-wise with chain rule
+            activationGradient = new Tensor<T>(outputGradient.Shape);
+            for (int i = 0; i < outputGradient.Length; i++)
+            {
+                // Compute derivative at pre-activation value and multiply with upstream gradient
+                var deriv = ScalarActivation.Derivative(_lastOutput[i]);
+                activationGradient[i] = NumOps.Multiply(outputGradient[i], deriv);
             }
         }
 
@@ -438,6 +731,228 @@ public class DenseLayer<T> : LayerBase<T>
         var inputGradient = activationGradient.Multiply(_weights);
 
         return inputGradient.Reshape(_lastInput.Shape);
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It's slower than the
+    /// manual implementation but can be useful for:
+    /// - Verifying gradient correctness
+    /// - Rapid prototyping with custom modifications
+    /// - Research and experimentation
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        int batchSize = _lastInput.Shape[0];
+        var flattenedInput = _lastInput.Reshape(batchSize, _lastInput.Shape[1]);
+
+        // Convert to computation nodes
+        var weightsTensor = MatrixToTensor(_weights);
+        var biasesTensor = VectorToTensor(_biases);
+
+        var input = Autodiff.TensorOperations<T>.Variable(flattenedInput, "input", requiresGradient: true);
+        var weights = Autodiff.TensorOperations<T>.Variable(weightsTensor, "weights", requiresGradient: true);
+        var biases = Autodiff.TensorOperations<T>.Variable(biasesTensor, "biases", requiresGradient: true);
+
+        // Forward computation using autodiff ops
+        // output = input @ weights.T + biases
+        var weightsTransposed = Autodiff.TensorOperations<T>.Transpose(weights);
+        var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weightsTransposed);
+
+        // Add biases directly - autodiff Add operation handles broadcasting and gradient reduction
+        // matmul is [batchSize, outputSize], biases is [outputSize]
+        // Add broadcasts biases and reduces gradients automatically
+        var output = Autodiff.TensorOperations<T>.Add(matmul, biases);
+
+        // Apply activation using autodiff
+        var activated = ApplyActivationAutodiff(output);
+
+        // Manually propagate gradients using the output gradient we received
+        // Set the gradient at the output and call backward functions manually
+        var flattenedOutputGradient = outputGradient.Reshape(batchSize, outputGradient.Shape[1]);
+        activated.Gradient = flattenedOutputGradient;
+
+        // Perform topological sort and backward pass
+        var topoOrder = GetTopologicalOrder(activated);
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients
+        if (weights.Gradient == null)
+            throw new InvalidOperationException("Weights gradient is null after backward pass");
+        if (biases.Gradient == null)
+            throw new InvalidOperationException("Biases gradient is null after backward pass");
+        if (input.Gradient == null)
+            throw new InvalidOperationException("Input gradient is null after backward pass");
+
+        _weightsGradient = TensorToMatrix(weights.Gradient);
+        _biasesGradient = TensorToVector(biases.Gradient);
+
+        return input.Gradient.Reshape(_lastInput.Shape);
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Applies activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (ScalarActivation is ReLUActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.ReLU(input);
+        }
+        else if (ScalarActivation is SigmoidActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Sigmoid(input);
+        }
+        else if (ScalarActivation is TanhActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Tanh(input);
+        }
+        else
+        {
+            // For unsupported activations, return input unchanged
+            // This is a limitation of autodiff - not all activations are implemented yet
+            return input;
+        }
+    }
+
+    /// <summary>
+    /// Broadcasts biases across the batch dimension.
+    /// </summary>
+    private Tensor<T> BroadcastBiases(Tensor<T> biases, int batchSize)
+    {
+        var biasLength = biases.Length;
+        var broadcasted = new Tensor<T>(new int[] { batchSize, biasLength });
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            for (int j = 0; j < biasLength; j++)
+            {
+                broadcasted[i, j] = biases[j];
+            }
+        }
+
+        return broadcasted;
+    }
+
+    /// <summary>
+    /// Converts a Matrix to a 2D Tensor.
+    /// </summary>
+    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
+    {
+        var tensor = new Tensor<T>(new int[] { matrix.Rows, matrix.Columns });
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                tensor[i, j] = matrix[i, j];
+            }
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a Vector to a 1D Tensor.
+    /// </summary>
+    private Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        // Use Tensor.FromVector for efficient conversion
+        return Tensor<T>.FromVector(vector);
+    }
+
+    /// <summary>
+    /// Converts a 2D Tensor to a Matrix.
+    /// </summary>
+    private Matrix<T> TensorToMatrix(Tensor<T> tensor)
+    {
+        if (tensor.Rank != 2)
+            throw new ArgumentException("Tensor must be 2D to convert to Matrix");
+
+        var matrix = new Matrix<T>(tensor.Shape[0], tensor.Shape[1]);
+        for (int i = 0; i < tensor.Shape[0]; i++)
+        {
+            for (int j = 0; j < tensor.Shape[1]; j++)
+            {
+                matrix[i, j] = tensor[i, j];
+            }
+        }
+        return matrix;
+    }
+
+    /// <summary>
+    /// Converts a 1D Tensor to a Vector.
+    /// </summary>
+    private Vector<T> TensorToVector(Tensor<T> tensor)
+    {
+        // Handle both 1D and 2D tensors (for column vectors)
+        int length = tensor.Length;
+        var vector = new Vector<T>(length);
+
+        for (int i = 0; i < length; i++)
+        {
+            vector[i] = tensor[i];
+        }
+
+        return vector;
     }
 
     /// <summary>
@@ -496,28 +1011,10 @@ public class DenseLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _weights.Rows * _weights.Columns + _biases.Length;
-        var parameters = new Vector<T>(totalParams);
-    
-        int index = 0;
-    
-        // Copy weight parameters
-        for (int i = 0; i < _weights.Rows; i++)
-        {
-            for (int j = 0; j < _weights.Columns; j++)
-            {
-                parameters[index++] = _weights[i, j];
-            }
-        }
-    
-        // Copy bias parameters
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            parameters[index++] = _biases[i];
-        }
-    
-        return parameters;
+        // === Vectorized Parameter Extraction (Phase B: US-GPU-015) ===
+        // Convert weight matrix to vector and concatenate with biases
+        var weightsVec = _weights.ToRowVector();
+        return Vector<T>.Concatenate(weightsVec, _biases);
     }
 
     /// <summary>
@@ -641,4 +1138,99 @@ public class DenseLayer<T> : LayerBase<T>
         copy.SetParameters(GetParameters());
         return copy;
     }
+
+    /// <summary>
+    /// Exports the dense layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes (input data, weights, biases).</param>
+    /// <returns>The output computation node representing the layer's prediction.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph that mirrors the layer's forward pass logic.
+    /// The graph uses TensorOperations which now integrates with IEngine for GPU acceleration
+    /// where supported (e.g., Add operations use IEngine.TensorAdd).
+    /// </para>
+    /// <para>
+    /// Current IEngine integration status:
+    /// - Addition operations: Fully GPU-accelerated via IEngine.TensorAdd
+    /// - Matrix multiplication: Uses Tensor.MatrixMultiply (pending IEngine integration)
+    /// - Transpose operations: Uses Tensor.Transpose (pending IEngine integration)
+    /// </para>
+    /// <para>
+    /// The computation graph enables:
+    /// - JIT compilation for optimized inference
+    /// - Operation fusion and dead code elimination
+    /// - Automatic differentiation via backpropagation
+    /// - Deferred execution with GPU acceleration
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        // Validate parameters
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_weights == null)
+            throw new InvalidOperationException("Layer weights not initialized. Call Initialize() or train the layer first.");
+
+        if (_biases == null)
+            throw new InvalidOperationException("Layer biases not initialized. Call Initialize() or train the layer first.");
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (!CanActivationBeJitted())
+        {
+            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax");
+        }
+
+        // Input shape: [batchSize, inputSize]
+        int inputSize = InputShape[0];
+
+        // Create placeholder for input data
+        // Note: Using batch size 1 for placeholder; actual batch size is determined at runtime
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, inputSize });
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+
+        // Create constant nodes for weights and biases
+        // Weights shape: [outputSize, inputSize] - transposed for efficient computation
+        var weightsNode = TensorOperations<T>.Variable(new Tensor<T>(new int[] { _weights.Rows, _weights.Columns }, _weights), "weights");
+
+        // Biases shape: [outputSize]
+        var biasesNode = TensorOperations<T>.Variable(new Tensor<T>(new int[] { _biases.Length }, _biases), "biases");
+
+        // Add input nodes in order: input, weights, biases
+        inputNodes.Add(inputNode);
+        inputNodes.Add(weightsNode);
+        inputNodes.Add(biasesNode);
+
+        // Build computation graph: output = (input x weights^T) + biases
+        // This mirrors the Forward() method logic at line 622
+
+        // Step 1: Transpose weights for matrix multiplication
+        var weightsTransposed = TensorOperations<T>.Transpose(weightsNode);
+
+        // Step 2: Matrix multiply: input x weights^T
+        var matmulResult = TensorOperations<T>.MatrixMultiply(inputNode, weightsTransposed);
+
+        // Step 3: Add biases (uses IEngine.TensorAdd for GPU acceleration!)
+        var outputNode = TensorOperations<T>.Add(matmulResult, biasesNode);
+
+        // Step 4: Apply activation function
+        var activatedOutput = ApplyActivationToGraph(outputNode);
+
+        return activatedOutput;
+    }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// True if the layer's activation function is supported for JIT compilation.
+    /// Supported activations: ReLU, Sigmoid, Tanh, Softmax, Identity.
+    /// </value>
+    public override bool SupportsJitCompilation => CanActivationBeJitted();
 }

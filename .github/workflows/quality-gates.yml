@@ -1,9 +1,9 @@
 name: Quality Gates (.NET)
 
+# Quality gates for pull requests only
+# Master/main builds are handled by automated-release.yml
 on:
   pull_request:
-    branches: [ '**' ]
-  push:
     branches: [ '**' ]
 
 concurrency:

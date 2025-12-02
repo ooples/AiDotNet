@@ -1,0 +1,77 @@
+name: CodeQL Analysis
+
+on:
+  push:
+    branches: [ master, main ]
+    paths:
+      - '**.cs'
+      - '**.csproj'
+      - '**/Directory.Build.props'
+      - '.github/workflows/codeql.yml'
+  pull_request:
+    branches: [ master, main ]
+    paths:
+      - '**.cs'
+      - '**.csproj'
+      - '**/Directory.Build.props'
+      - '.github/workflows/codeql.yml'
+  schedule:
+    - cron: '0 8 * * 1'
+
+# Cancel in-progress runs for the same branch
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (csharp)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Skip draft PRs
+    if: github.event.pull_request.draft != true
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        # Shallow clone for faster checkout
+        fetch-depth: 1
+
+    - name: Setup .NET 8.0.x
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Cache NuGet Packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    - name: Restore NuGet Packages
+      run: dotnet restore --verbosity minimal
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: csharp
+        # Use default queries (faster than security-extended)
+        # security-extended adds ~30% more analysis time
+        queries: security-and-quality
+
+    - name: Dotnet Build
+      run: dotnet build -c Release --no-restore --verbosity minimal
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: "/language:csharp"
+        # Upload results even if analysis times out
+        upload: always

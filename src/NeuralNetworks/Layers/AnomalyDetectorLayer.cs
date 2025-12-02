@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -132,6 +134,10 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     private double _smoothedAnomalyScore;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -180,10 +186,11 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public AnomalyDetectorLayer(
-        int inputSize, 
-        double anomalyThreshold, 
-        int historyCapacity = 100, 
-        double smoothingFactor = 0.1)
+        int inputSize,
+        double anomalyThreshold,
+        int historyCapacity = 100,
+        double smoothingFactor = 0.1,
+        IEngine? engine = null)
         : base([inputSize], [1])
     {
         _anomalyThreshold = anomalyThreshold;
@@ -226,14 +233,10 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         // Get actual and predicted values
         // The first half of the input is assumed to be the actual state
         // The second half is assumed to be the predicted state
-        var actual = new Vector<T>(halfSize);
-        var predicted = new Vector<T>(halfSize);
-        
-        for (int i = 0; i < halfSize; i++)
-        {
-            actual[i] = inputVector[i];
-            predicted[i] = inputVector[i + halfSize];
-        }
+
+        // === Vectorized Vector Slicing (Phase B: US-GPU-015) ===
+        var actual = inputVector.Slice(0, halfSize);
+        var predicted = inputVector.Slice(halfSize, halfSize);
         
         // Calculate the anomaly score
         double anomalyScore = CalculateAnomalyScore(actual, predicted);
@@ -464,12 +467,12 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// trainable parameters, it simply passes the gradient through to the previous layer.
     /// </para>
     /// <para><b>For Beginners:</b> This method passes error information backward during training.
-    /// 
+    ///
     /// The backward pass:
     /// - Takes an error gradient from the next layer
     /// - Propagates it back to the previous layer
     /// - Doesn't modify any parameters since this layer doesn't learn
-    /// 
+    ///
     /// This method exists to maintain compatibility with the neural network
     /// backpropagation mechanism, but it doesn't do much in this layer
     /// since there are no weights to adjust.
@@ -477,18 +480,46 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         // Since this layer doesn't have trainable parameters, we just propagate the gradient
         // back to the input. For anomaly detection, this is primarily a pass-through operation.
-        
-        // Create an input gradient of the same size as the input
-        var inputGradient = new Vector<T>(InputShape[0]);
-        
-        // Set all gradients to zero since we don't directly optimize for anomaly detection
-        for (int i = 0; i < inputGradient.Length; i++)
-        {
-            inputGradient[i] = NumOps.Zero;
-        }
-        
+
+        // === Vectorized Zero-Fill Gradient (Phase B: US-GPU-015) ===
+        // Create an input gradient filled with zeros since we don't directly optimize for anomaly detection
+        var inputGradient = Vector<T>.CreateDefault(InputShape[0], NumOps.Zero);
+
+        return Tensor<T>.FromVector(inputGradient);
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Since this layer
+    /// has no trainable parameters and serves as a monitoring layer, it returns zero gradients.
+    /// This matches the manual implementation behavior.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // === Vectorized Zero-Fill Gradient (Phase B: US-GPU-015) ===
+        // AnomalyDetectorLayer has no trainable parameters and is typically used for monitoring.
+        // Return zero gradients to match manual implementation.
+        var inputGradient = Vector<T>.CreateDefault(InputShape[0], NumOps.Zero);
         return Tensor<T>.FromVector(inputGradient);
     }
 
@@ -567,4 +598,48 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         // Reset smoothed anomaly score
         _smoothedAnomalyScore = 0.0;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (inputNodes.Count < 2)
+            throw new ArgumentException("AnomalyDetector requires two inputs: input and reconstruction.", nameof(inputNodes));
+
+        // AnomalyDetectorLayer JIT computes anomaly scores from reconstruction error:
+        // anomaly_score = mean((input - reconstruction)^2)
+        // This is differentiable and enables training of anomaly detection models.
+
+        var input = inputNodes[0];
+        var reconstruction = inputNodes[1];
+
+        // Compute anomaly score as mean squared error
+        var anomalyScore = TensorOperations<T>.AnomalyScore(input, reconstruction);
+
+        // Apply activation
+        var output = ApplyActivationToGraph(anomalyScore);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c>. AnomalyDetector uses differentiable reconstruction error.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for AnomalyDetector computes the anomaly score as the
+    /// reconstruction error (mean squared error between input and reconstruction).
+    /// This enables training of anomaly detection models with gradient descent.
+    /// The stateful historical tracking is not used in JIT mode.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
 }

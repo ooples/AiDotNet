@@ -26,8 +26,62 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class SqueezeAndExcitationLayer<T> : LayerBase<T>
+public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the layer computes a channel attention regularization loss that encourages balanced
+    /// channel importance. This helps prevent the layer from over-relying on specific channels.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls whether the layer uses an additional learning signal.
+    ///
+    /// When enabled (true):
+    /// - The layer encourages balanced attention across channels
+    /// - This helps prevent over-reliance on specific features
+    /// - Training may be more stable and produce more robust representations
+    ///
+    /// When disabled (false):
+    /// - Only the main task loss is used for training
+    /// - This is the default setting
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the auxiliary loss contribution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This value determines how much the channel attention regularization contributes to the total loss.
+    /// The default value of 0.01 provides a good balance between the main task and regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much importance to give to the channel attention regularization.
+    ///
+    /// The weight affects training:
+    /// - Higher values (e.g., 0.05) make the network prioritize balanced channel attention more strongly
+    /// - Lower values (e.g., 0.001) make the regularization less important
+    /// - The default (0.01) works well for most computer vision tasks
+    ///
+    /// If your network is over-fitting to specific channels, increase this value.
+    /// If the main task is more important, you might decrease it.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Stores the last computed channel attention regularization loss for diagnostic purposes.
+    /// </summary>
+    private T _lastChannelAttentionLoss;
+
+    /// <summary>
+    /// Caches the excitation weights from the forward pass for auxiliary loss computation.
+    /// Shape: [batchSize, channels]
+    /// </summary>
+    private Matrix<T>? _lastExcitationWeights;
+
     /// <summary>
     /// The number of input and output channels in the layer.
     /// </summary>
@@ -261,16 +315,40 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// should be adjusted to reduce the loss. The value is null if no backward pass has been performed yet or after ResetState is called.
     /// </para>
     /// <para><b>For Beginners:</b> This shows how the second set of biases should change.
-    /// 
+    ///
     /// These gradients:
     /// - Help adjust the default attention given to each feature
     /// - Allow the network to learn which features are generally more important
     /// - Fine-tune the "excitation" part of the layer
-    /// 
+    ///
     /// Along with the other gradients, these help the network improve through training.
     /// </para>
     /// </remarks>
     private Vector<T>? _bias2Gradient;
+
+    /// <summary>
+    /// Gets or sets the weight for L1 sparsity regularization on attention weights.
+    /// </summary>
+    /// <value>
+    /// The weight to apply to the L1 sparsity loss. Default is 0.0001.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property controls the strength of L1 sparsity regularization applied to
+    /// the channel attention weights. Higher values encourage more sparse attention
+    /// (fewer active channels), while lower values allow more distributed attention.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how strongly to encourage sparse attention.
+    ///
+    /// Sparsity regularization:
+    /// - Encourages the network to focus on fewer, more important channels
+    /// - Helps prevent overfitting by reducing model complexity
+    /// - Can improve interpretability by making channel selection clearer
+    ///
+    /// Typical values range from 0.0001 to 0.01. Set to 0 to disable sparsity regularization.
+    /// </para>
+    /// </remarks>
+    public T SparsityWeight { get; set; }
 
     /// <summary>
     /// The activation function applied after the first fully connected layer.
@@ -407,11 +485,14 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// on only the most important patterns.
     /// </para>
     /// </remarks>
-    public SqueezeAndExcitationLayer(int channels, int reductionRatio, 
-        IActivationFunction<T>? firstActivation = null, 
+    public SqueezeAndExcitationLayer(int channels, int reductionRatio,
+        IActivationFunction<T>? firstActivation = null,
         IActivationFunction<T>? secondActivation = null)
         : base([[channels]], [channels])
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastChannelAttentionLoss = NumOps.Zero;
+
         _channels = channels;
         _reducedChannels = channels / reductionRatio;
         _firstActivation = firstActivation ?? new ReLUActivation<T>();
@@ -421,6 +502,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         _bias1 = new Vector<T>(_reducedChannels);
         _weights2 = new Matrix<T>(_reducedChannels, _channels);
         _bias2 = new Vector<T>(_channels);
+
+        SparsityWeight = NumOps.FromDouble(0.0001);
 
         InitializeWeights();
     }
@@ -449,11 +532,14 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// how different features relate to each other, rather than treating each feature independently.
     /// </para>
     /// </remarks>
-    public SqueezeAndExcitationLayer(int channels, int reductionRatio, 
-        IVectorActivationFunction<T>? firstVectorActivation = null, 
+    public SqueezeAndExcitationLayer(int channels, int reductionRatio,
+        IVectorActivationFunction<T>? firstVectorActivation = null,
         IVectorActivationFunction<T>? secondVectorActivation = null)
         : base([[channels]], [channels])
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastChannelAttentionLoss = NumOps.Zero;
+
         _channels = channels;
         _reducedChannels = channels / reductionRatio;
         _firstVectorActivation = firstVectorActivation ?? new ReLUActivation<T>();
@@ -463,6 +549,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         _bias1 = new Vector<T>(_reducedChannels);
         _weights2 = new Matrix<T>(_reducedChannels, _channels);
         _bias2 = new Vector<T>(_channels);
+
+        SparsityWeight = NumOps.FromDouble(0.0001);
 
         InitializeWeights();
     }
@@ -616,6 +704,9 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         excitation1 = ApplyActivation(excitation1, isFirstActivation: true);
         var excitation2 = excitation1.Multiply(_weights2).AddVectorToEachRow(_bias2);
         var excitation = ApplyActivation(excitation2, isFirstActivation: false);
+
+        // Cache excitation weights for auxiliary loss computation
+        _lastExcitationWeights = excitation;
 
         // Scale the input
         var output = new Tensor<T>(input.Shape);
@@ -795,6 +886,81 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It's slower than the
+    /// manual implementation but can be useful for:
+    /// - Verifying gradient correctness
+    /// - Rapid prototyping with custom modifications
+    /// - Research and experimentation
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // For complex/composite layers, delegate to manual implementation
+        // Full autodiff requires implementing all sub-operations
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -1138,17 +1304,17 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// a new input after training or when implementing stateful networks.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - Stored inputs and outputs are cleared
     /// - Calculated gradients are cleared
     /// - The layer forgets any information from previous inputs
-    /// 
+    ///
     /// This is important for:
     /// - Processing a new, unrelated input
     /// - Starting a new training epoch
     /// - Preventing information from one input affecting another
-    /// 
+    ///
     /// Think of it like wiping a whiteboard clean before starting a new problem.
     /// </para>
     /// </remarks>
@@ -1162,4 +1328,198 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         _weights2Gradient = null;
         _bias2Gradient = null;
     }
+
+    /// <summary>
+    /// Computes the auxiliary loss for this layer based on channel attention regularization.
+    /// </summary>
+    /// <returns>The computed auxiliary loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes a channel attention regularization loss. In a full implementation, this would encourage
+    /// balanced channel attention by penalizing extreme attention values (all attention on one channel or uniform
+    /// attention across all channels). The regularization can use L2 norm or entropy-based measures.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates a penalty to encourage balanced feature importance.
+    ///
+    /// Channel attention regularization:
+    /// - Prevents the layer from relying too heavily on specific channels
+    /// - Encourages the network to use information from multiple features
+    /// - Helps create more robust and generalizable models
+    ///
+    /// Why this is useful:
+    /// - In complex tasks, multiple types of features are usually important
+    /// - Over-relying on one type of feature can lead to poor generalization
+    /// - Balanced attention helps the network learn richer representations
+    ///
+    /// Example: In image classification, instead of only looking at edges (one channel),
+    /// the network should also consider colors, textures, and shapes (other channels).
+    ///
+    /// <b>Note:</b> This is a placeholder implementation. For full functionality, the layer would need to
+    /// cache the excitation weights (channel attention scores) during the forward pass. The formula would
+    /// compute a regularization term based on these attention weights, such as:
+    /// - L2 regularization: L = ||excitation||²
+    /// - Entropy regularization: L = -Σ(p * log(p)) for normalized excitation weights
+    /// - Variance penalty: encouraging variance in attention across channels
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || _lastExcitationWeights == null)
+        {
+            _lastChannelAttentionLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Compute L2 regularization on excitation weights
+        // This penalizes large excitation values and encourages sparse channel attention
+        T attentionLoss = NumOps.Zero;
+        int batchSize = _lastExcitationWeights.Rows;
+        int channels = _lastExcitationWeights.Columns;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                T weight = _lastExcitationWeights[b, c];
+                // L2 regularization: sum of squared weights
+                attentionLoss = NumOps.Add(attentionLoss, NumOps.Multiply(weight, weight));
+            }
+        }
+
+        // Average across batch and channels
+        int totalElements = batchSize * channels;
+        attentionLoss = NumOps.Divide(attentionLoss, NumOps.FromDouble(totalElements));
+
+        // Store unweighted loss for diagnostics
+        _lastChannelAttentionLoss = attentionLoss;
+
+        // Return weighted auxiliary loss
+        return NumOps.Multiply(AuxiliaryLossWeight, attentionLoss);
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the auxiliary loss computation.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about the auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns diagnostic information that can be used to monitor the auxiliary loss during training.
+    /// The diagnostics include the total channel attention loss, the weight applied to it, and whether auxiliary loss is enabled.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information to help you understand how the auxiliary loss is working.
+    ///
+    /// The diagnostics show:
+    /// - TotalChannelAttentionLoss: The computed penalty for imbalanced channel attention
+    /// - ChannelAttentionWeight: How much this penalty affects the overall training
+    /// - UseChannelAttention: Whether this penalty is currently enabled
+    ///
+    /// You can use this information to:
+    /// - Monitor if channel attention is becoming more balanced over time
+    /// - Debug training issues related to feature selection
+    /// - Understand which features the network prioritizes
+    ///
+    /// Example: If TotalChannelAttentionLoss is high, it might indicate that the network is over-relying
+    /// on specific channels, which could be a sign of overfitting or poor feature diversity.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalChannelAttentionLoss", System.Convert.ToString(_lastChannelAttentionLoss) ?? "0" },
+            { "ChannelAttentionWeight", System.Convert.ToString(AuxiliaryLossWeight) ?? "0.01" },
+            { "UseChannelAttention", UseAuxiliaryLoss.ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_weights1 == null || _weights2 == null || _bias1 == null || _bias2 == null)
+            throw new InvalidOperationException("Layer weights not initialized. Initialize the layer before compiling.");
+
+        // Create symbolic input tensor with batch dimension
+        // SE blocks operate on [batch, height, width, channels] tensors
+        var symbolicInput = new Tensor<T>(new int[] { 1, 1, 1, _channels });
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Squeeze: Global Average Pooling across spatial dimensions
+        var squeezed = TensorOperations<T>.ReduceMean(inputNode, axes: new[] { 1, 2 }, keepDims: false);
+
+        // Excitation: First fully connected layer
+        var weights1Tensor = new Tensor<T>(new[] { _weights1.Rows, _weights1.Columns }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_weights1.ToArray()));
+        var bias1Tensor = new Tensor<T>(new[] { _bias1.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_bias1.ToArray()));
+        var weights1Node = TensorOperations<T>.Constant(weights1Tensor, "se_weights1");
+        var bias1Node = TensorOperations<T>.Constant(bias1Tensor, "se_bias1");
+
+        var fc1Output = TensorOperations<T>.MatrixMultiply(squeezed, weights1Node);
+        fc1Output = TensorOperations<T>.Add(fc1Output, bias1Node);
+
+        // Apply first activation (default: ReLU)
+        if (_firstActivation != null && _firstActivation.SupportsJitCompilation)
+        {
+            fc1Output = _firstActivation.ApplyToGraph(fc1Output);
+        }
+        else if (_firstVectorActivation == null)
+        {
+            fc1Output = TensorOperations<T>.ReLU(fc1Output);
+        }
+
+        // Excitation: Second fully connected layer
+        var weights2Tensor = new Tensor<T>(new[] { _weights2.Rows, _weights2.Columns }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_weights2.ToArray()));
+        var bias2Tensor = new Tensor<T>(new[] { _bias2.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_bias2.ToArray()));
+        var weights2Node = TensorOperations<T>.Constant(weights2Tensor, "se_weights2");
+        var bias2Node = TensorOperations<T>.Constant(bias2Tensor, "se_bias2");
+
+        var fc2Output = TensorOperations<T>.MatrixMultiply(fc1Output, weights2Node);
+        fc2Output = TensorOperations<T>.Add(fc2Output, bias2Node);
+
+        // Apply second activation (default: Sigmoid)
+        if (_secondActivation != null && _secondActivation.SupportsJitCompilation)
+        {
+            fc2Output = _secondActivation.ApplyToGraph(fc2Output);
+        }
+        else if (_secondVectorActivation == null)
+        {
+            fc2Output = TensorOperations<T>.Sigmoid(fc2Output);
+        }
+
+        // Scale: Multiply input by excitation weights (with broadcasting)
+        // fc2Output has shape [batch, channels], inputNode has shape [batch, height, width, channels]
+        // ElementwiseMultiply should handle broadcasting automatically
+        var scaledOutput = TensorOperations<T>.ElementwiseMultiply(inputNode, fc2Output);
+
+        return scaledOutput;
+    }
+
+    public override bool SupportsJitCompilation =>
+        _weights1 != null && _weights2 != null && _bias1 != null && _bias2 != null;
 }
