@@ -12,6 +12,11 @@ namespace AiDotNet.Tests.UnitTests.JitCompiler;
 /// Tests for JIT compilation support in Knowledge Distillation teacher models.
 /// Verifies conditional JIT support based on underlying model capabilities.
 /// </summary>
+/// <remarks>
+/// These tests are quarantined because they trigger GPU initialization which can fail
+/// on machines without proper GPU support or drivers.
+/// </remarks>
+[Trait("Category", "GPU")]
 public class KnowledgeDistillationJitCompilationTests
 {
     // ========== EnsembleTeacherModel Tests ==========
