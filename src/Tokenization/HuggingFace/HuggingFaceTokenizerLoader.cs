@@ -97,16 +97,14 @@ namespace AiDotNet.Tokenization.HuggingFace
             var mergeLines = File.ReadAllLines(mergesPath);
             int order = 0;
 
-            foreach (var line in mergeLines)
-            {
-                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
-                    continue;
+            var validMergeLines = mergeLines
+                .Where(line => !string.IsNullOrWhiteSpace(line) && !line.StartsWith("#"))
+                .Select(line => line.Split(' '))
+                .Where(parts => parts.Length >= 2);
 
-                var parts = line.Split(' ');
-                if (parts.Length >= 2)
-                {
-                    merges[(parts[0], parts[1])] = order++;
-                }
+            foreach (var parts in validMergeLines)
+            {
+                merges[(parts[0], parts[1])] = order++;
             }
 
             return new BpeTokenizer(vocabulary, merges, specialTokens);
