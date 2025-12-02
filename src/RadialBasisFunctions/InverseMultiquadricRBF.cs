@@ -1,13 +1,13 @@
 namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
-/// Implements an Inverse Multiquadric Radial Basis Function (RBF) of the form 1/v(r² + e²).
+/// Implements an Inverse Multiquadric Radial Basis Function (RBF) of the form 1/v(rÂ² + eÂ²).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides an implementation of a Radial Basis Function (RBF) that uses an inverse multiquadric form
-/// of f(r) = 1/v(r² + e²), where r is the radial distance and e (epsilon) is a shape parameter
+/// of f(r) = 1/v(rÂ² + eÂ²), where r is the radial distance and e (epsilon) is a shape parameter
 /// controlling the width of the function. The inverse multiquadric RBF is infinitely differentiable and
 /// decreases more slowly than the Gaussian RBF as distance increases. It is often used in interpolation
 /// problems and has good numerical properties for solving partial differential equations.
@@ -74,20 +74,20 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     /// Computes the value of the Inverse Multiquadric Radial Basis Function for a given radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
-    /// <returns>The computed function value 1/v(r² + e²).</returns>
+    /// <returns>The computed function value 1/v(rÂ² + eÂ²).</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the value of the Inverse Multiquadric RBF for a given radius r. The formula used is
-    /// 1/v(r² + e²), which decreases with distance. The function reaches its maximum value of 1/e at r = 0
+    /// 1/v(rÂ² + eÂ²), which decreases with distance. The function reaches its maximum value of 1/e at r = 0
     /// and approaches 0 as r approaches infinity.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes the "height" or "value" of the Inverse Multiquadric function
     /// at a specific distance (r) from the center.
     /// 
     /// The calculation involves:
-    /// 1. Squaring the distance (r² = r * r)
-    /// 2. Squaring the epsilon parameter (e² = e * e)
-    /// 3. Adding these squared values together (r² + e²)
+    /// 1. Squaring the distance (rÂ² = r * r)
+    /// 2. Squaring the epsilon parameter (eÂ² = e * e)
+    /// 3. Adding these squared values together (rÂ² + eÂ²)
     /// 4. Taking the square root of this sum
     /// 5. Dividing 1 by this square root
     /// 
@@ -113,7 +113,7 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Inverse Multiquadric RBF with respect to the radius r.
-    /// The formula for the derivative is -r/(r² + e²)^(3/2), which is negative for positive r,
+    /// The formula for the derivative is -r/(rÂ² + eÂ²)^(3/2), which is negative for positive r,
     /// indicating that the function always decreases with distance.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes how fast the function's value changes
@@ -131,25 +131,25 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeDerivative(T r)
     {
-        // Derivative with respect to r: -r/(r² + e²)^(3/2)
+        // Derivative with respect to r: -r/(rÂ² + eÂ²)^(3/2)
         
-        // Calculate r²
+        // Calculate rÂ²
         T rSquared = _numOps.Multiply(r, r);
         
-        // Calculate e²
+        // Calculate eÂ²
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
         
-        // Calculate r² + e²
+        // Calculate rÂ² + eÂ²
         T sum = _numOps.Add(rSquared, epsilonSquared);
         
-        // Calculate (r² + e²)^(3/2)
+        // Calculate (rÂ² + eÂ²)^(3/2)
         T sumSqrt = _numOps.Sqrt(sum);
         T sumPow3_2 = _numOps.Multiply(sum, sumSqrt);
         
         // Calculate -r
         T negativeR = _numOps.Negate(r);
         
-        // Return -r/(r² + e²)^(3/2)
+        // Return -r/(rÂ² + eÂ²)^(3/2)
         return _numOps.Divide(negativeR, sumPow3_2);
     }
     
@@ -161,7 +161,7 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Inverse Multiquadric RBF with respect to the shape parameter epsilon.
-    /// The formula for this derivative is -e/(r² + e²)^(3/2). The sign of this derivative is always negative,
+    /// The formula for this derivative is -e/(rÂ² + eÂ²)^(3/2). The sign of this derivative is always negative,
     /// indicating that increasing epsilon decreases the function value at any radius.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the function's value would change
@@ -178,25 +178,25 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeWidthDerivative(T r)
     {
-        // Derivative with respect to e: -e/(r² + e²)^(3/2)
+        // Derivative with respect to e: -e/(rÂ² + eÂ²)^(3/2)
         
-        // Calculate r²
+        // Calculate rÂ²
         T rSquared = _numOps.Multiply(r, r);
         
-        // Calculate e²
+        // Calculate eÂ²
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
         
-        // Calculate r² + e²
+        // Calculate rÂ² + eÂ²
         T sum = _numOps.Add(rSquared, epsilonSquared);
         
-        // Calculate (r² + e²)^(3/2)
+        // Calculate (rÂ² + eÂ²)^(3/2)
         T sumSqrt = _numOps.Sqrt(sum);
         T sumPow3_2 = _numOps.Multiply(sum, sumSqrt);
         
         // Calculate -e
         T negativeEpsilon = _numOps.Negate(_epsilon);
         
-        // Return -e/(r² + e²)^(3/2)
+        // Return -e/(rÂ² + eÂ²)^(3/2)
         return _numOps.Divide(negativeEpsilon, sumPow3_2);
     }
 }

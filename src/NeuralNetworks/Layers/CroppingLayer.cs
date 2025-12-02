@@ -249,8 +249,8 @@ public class CroppingLayer<T> : LayerBase<T>
     /// - Subtract how much you're trimming from the right
     /// - The result is the new size for that dimension
     ///
-    /// For example, if you start with an image that's 28�28 pixels and crop 2 pixels from each side,
-    /// the output will be 24�24 pixels (28 - 2 - 2 = 24).
+    /// For example, if you start with an image that's 28×28 pixels and crop 2 pixels from each side,
+    /// the output will be 24×24 pixels (28 - 2 - 2 = 24).
     /// </para>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int[] cropTop, int[] cropBottom, int[] cropLeft, int[] cropRight)

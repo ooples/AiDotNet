@@ -24,8 +24,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - Preventing loss of information at the edges of the data
 /// - Giving convolutional filters more context at the boundaries
 /// 
-/// For example, if you have a 28�28 image and add padding of 2 pixels on all sides,
-/// you get a 32�32 image with your original data in the center and zeros around the edges.
+/// For example, if you have a 28×28 image and add padding of 2 pixels on all sides,
+/// you get a 32×32 image with your original data in the center and zeros around the edges.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -89,7 +89,7 @@ public class PaddingLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This constructor sets up the layer with the necessary dimensions and padding values.
     /// 
     /// When creating a PaddingLayer, you need to specify:
-    /// - inputShape: The shape of your input data (e.g., [32, 28, 28, 3] for 32 images of size 28�28 with 3 color channels)
+    /// - inputShape: The shape of your input data (e.g., [32, 28, 28, 3] for 32 images of size 28×28 with 3 color channels)
     /// - padding: How much padding to add to each dimension (e.g., [0, 2, 2, 0] to add 2 pixels of padding around the height and width)
     /// - activationFunction: The function that processes the final output (optional)
     /// 
@@ -192,9 +192,9 @@ public class PaddingLayer<T> : LayerBase<T>
     /// - The areas around the edges are implicitly filled with zeros
     /// - Finally, it applies the activation function to the result
     /// 
-    /// For example, with a 3�3 image and padding of 1:
-    /// - The output is a 5�5 image
-    /// - The original 3�3 data is in the center
+    /// For example, with a 3×3 image and padding of 1:
+    /// - The output is a 5×5 image
+    /// - The original 3×3 data is in the center
     /// - The outer border of width 1 is filled with zeros
     /// 
     /// The method also saves the input for later use in backpropagation.

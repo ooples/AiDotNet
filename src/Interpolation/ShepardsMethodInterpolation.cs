@@ -145,7 +145,7 @@ public class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method calculates the straight-line distance between two points
-    /// using the Pythagorean theorem (a² + b² = c²).
+    /// using the Pythagorean theorem (aÂ² + bÂ² = cÂ²).
     /// </para>
     /// <para>
     /// In Shepard's Method, this distance is used to determine how much influence each known

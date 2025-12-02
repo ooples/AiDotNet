@@ -124,7 +124,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
                         if (i < selectedCase.Length)
                         {
                             // Add small perturbation to the case parameters
-                            double perturbation = (Random.NextDouble() * 0.2 - 0.1); // ±10% variation
+                            double perturbation = (Random.NextDouble() * 0.2 - 0.1); // Â±10% variation
                             parameters[i] = NumOps.Add(
                                 selectedCase[i],
                                 NumOps.FromDouble(perturbation * Convert.ToDouble(selectedCase[i]))
@@ -247,7 +247,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
                     parameters[i] = NumOps.FromDouble(value);
 
                     // Add small random noise to prevent exact duplication at grid points
-                    double noise = (Random.NextDouble() * 0.02) - 0.01; // ±1% noise
+                    double noise = (Random.NextDouble() * 0.02) - 0.01; // Â±1% noise
                     parameters[i] = NumOps.Add(parameters[i], NumOps.FromDouble(noise));
                 }
                 break;

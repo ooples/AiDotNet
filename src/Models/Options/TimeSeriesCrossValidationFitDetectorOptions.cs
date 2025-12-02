@@ -140,7 +140,7 @@ public class TimeSeriesCrossValidationFitDetectorOptions
     /// - It can't maintain consistent performance across the entire time range
     /// 
     /// The default value of 1.1 means:
-    /// - If the coefficient of variation (standard deviation ÷ mean) of errors exceeds 1.1, the model has high variance
+    /// - If the coefficient of variation (standard deviation Ã· mean) of errors exceeds 1.1, the model has high variance
     /// - This indicates the model's performance is too inconsistent across different periods
     /// 
     /// Think of it like this:

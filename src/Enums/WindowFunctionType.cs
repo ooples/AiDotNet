@@ -430,7 +430,7 @@ public enum WindowFunctionType
     /// A window function with a piecewise cubic shape that provides good frequency resolution.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> The Parzen window (also called the de la Vallée-Poussin window) 
+    /// <b>For Beginners:</b> The Parzen window (also called the de la VallÃ©e-Poussin window) 
     /// uses a smooth cubic curve shape that provides excellent sidelobe suppression.
     /// 
     /// Imagine a window shape that's even smoother than triangular, with a rounded peak

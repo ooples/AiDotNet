@@ -7,8 +7,8 @@ namespace AiDotNet.TimeSeries;
 /// <remarks>
 /// <para>
 /// MA models predict future values based on past prediction errors (residuals). 
-/// The model is defined as: Yt = � + et + ?1et-1 + ?2et-2 + ... + ?qet-q
-/// where Yt is the value at time t, � is the mean, et is the error term at time t,
+/// The model is defined as: Yt = μ + et + ?1et-1 + ?2et-2 + ... + ?qet-q
+/// where Yt is the value at time t, μ is the mean, et is the error term at time t,
 /// and ?i are the MA coefficients.
 /// </para>
 /// 
@@ -397,7 +397,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         {
             variance = NumOps.Divide(variance, NumOps.FromDouble(n));
             
-            // log-likelihood = -n/2 * log(2p) - n/2 * log(variance) - 1/(2*variance) * sum(errors�)
+            // log-likelihood = -n/2 * log(2p) - n/2 * log(variance) - 1/(2*variance) * sum(errors²)
             // We ignore the constant terms and return negative log-likelihood
             T logVariance = NumOps.Log(variance);
             T scaledVariance = NumOps.Multiply(NumOps.FromDouble(n), logVariance);
@@ -828,8 +828,8 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// get adjusted based on recent prediction errors. The input parameter is typically
     /// not used in pure MA models since predictions depend only on past errors.
     /// 
-    /// For example, if the average temperature is 70�F but we've been consistently
-    /// underestimating by 2�F recently, the model might predict 72�F for tomorrow.
+    /// For example, if the average temperature is 70—F but we've been consistently
+    /// underestimating by 2—F recently, the model might predict 72—F for tomorrow.
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {

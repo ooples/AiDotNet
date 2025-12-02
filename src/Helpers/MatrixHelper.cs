@@ -176,7 +176,7 @@ public static class MatrixHelper<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The outer product of two vectors results in a matrix. If you have a vector 
-    /// of size n and another of size m, their outer product is an n×m matrix where each element 
+    /// of size n and another of size m, their outer product is an nÃ—m matrix where each element 
     /// is the product of the corresponding elements from each vector. This operation is used in 
     /// various machine learning algorithms, including neural networks for weight updates.
     /// </para>
@@ -206,7 +206,7 @@ public static class MatrixHelper<T>
     /// <para>
     /// <b>For Beginners:</b> The hypotenuse is the longest side of a right triangle, opposite to the right angle.
     /// This method calculates it using a numerically stable algorithm that avoids overflow or underflow
-    /// issues that can occur with a direct application of the Pythagorean theorem (a² + b² = c²).
+    /// issues that can occur with a direct application of the Pythagorean theorem (aÂ² + bÂ² = cÂ²).
     /// </para>
     /// <para>
     /// This function is useful in many AI algorithms, particularly when calculating distances or norms.

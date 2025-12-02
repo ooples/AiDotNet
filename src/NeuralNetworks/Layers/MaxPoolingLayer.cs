@@ -25,7 +25,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> This determines how large of an area we look at when selecting the maximum value.
-    /// For example, a pool size of 2 means we look at 2�2 squares of the input.
+    /// For example, a pool size of 2 means we look at 2×2 squares of the input.
     /// </remarks>
     public int PoolSize { get; private set; }
 

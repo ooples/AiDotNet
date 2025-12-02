@@ -18,8 +18,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - First, the layer creates many detailed patterns from the input (convolution step)
 /// - Then, it rearranges these patterns to form a larger, higher-resolution output (pixel shuffling step)
 /// 
-/// For example, if you're working with a low-resolution image that's 32�32 pixels, this layer can help
-/// transform it into a higher-resolution image of 64�64 or 128�128 pixels by intelligently filling in 
+/// For example, if you're working with a low-resolution image that's 32×32 pixels, this layer can help
+/// transform it into a higher-resolution image of 64×64 or 128×128 pixels by intelligently filling in 
 /// the details between the original pixels.
 /// 
 /// This is often used in applications like:
@@ -81,9 +81,9 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This determines how much larger the output will be compared to the input.
     /// 
     /// For example:
-    /// - With an upscale factor of 2: A 32�32 image becomes 64�64
-    /// - With an upscale factor of 3: A 32�32 image becomes 96�96
-    /// - With an upscale factor of 4: A 32�32 image becomes 128�128
+    /// - With an upscale factor of 2: A 32×32 image becomes 64×64
+    /// - With an upscale factor of 3: A 32×32 image becomes 96×96
+    /// - With an upscale factor of 4: A 32×32 image becomes 128×128
     /// 
     /// Higher upscale factors create larger outputs but require more channels in the intermediate step,
     /// which makes the layer more computationally intensive.
@@ -97,16 +97,16 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This field stores the size of the square convolutional kernel used in the layer. A common value is 3,
-    /// which creates a 3�3 kernel that examines a 3�3 region of the input for each output value.
+    /// which creates a 3×3 kernel that examines a 3×3 region of the input for each output value.
     /// </para>
     /// <para><b>For Beginners:</b> This determines the area size that the network looks at when analyzing patterns.
     /// 
     /// The kernel is like a small window that slides over the input:
-    /// - A 3�3 kernel looks at each pixel and its 8 neighbors
-    /// - A 5�5 kernel examines a wider area around each pixel
+    /// - A 3×3 kernel looks at each pixel and its 8 neighbors
+    /// - A 5×5 kernel examines a wider area around each pixel
     /// - Larger kernels can detect larger patterns but require more computation
     /// 
-    /// Most commonly, a 3�3 kernel is used as it provides a good balance between detecting
+    /// Most commonly, a 3×3 kernel is used as it provides a good balance between detecting
     /// useful patterns and computational efficiency.
     /// </para>
     /// </remarks>
@@ -513,8 +513,8 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     ///    - The final output has higher resolution but fewer channels
     /// 
     /// For example, with upscaleFactor=2:
-    /// - A 32�32�64 input might become 32�32�256 after convolution
-    /// - Then become 64�64�64 after pixel shuffling (4 times more pixels, 1/4 the channels)
+    /// - A 32×32×64 input might become 32×32×256 after convolution
+    /// - Then become 64×64×64 after pixel shuffling (4 times more pixels, 1/4 the channels)
     /// </para>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
@@ -863,7 +863,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// - Width: How wide the input feature map is
     /// - Depth: How many channels or features each position has
     /// 
-    /// For example, a 32�32 RGB image would have a shape of [32, 32, 3].
+    /// For example, a 32×32 RGB image would have a shape of [32, 32, 3].
     /// This helps the layer know exactly what kind of data it should expect.
     /// </para>
     /// </remarks>
@@ -891,7 +891,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// - Width: How wide the output will be (upscaled from input)
     /// - Depth: How many channels the output will have
     /// 
-    /// For example, if upscaleFactor=2, a 32�32�64 input might produce a 64�64�32 output.
+    /// For example, if upscaleFactor=2, a 32×32×64 input might produce a 64×64×32 output.
     /// The spatial dimensions increase by the upscale factor, while the number of channels
     /// is determined by the outputDepth parameter.
     /// </para>

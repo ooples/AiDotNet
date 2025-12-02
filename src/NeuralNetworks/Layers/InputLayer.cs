@@ -18,7 +18,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - A pass-through that doesn't change your data
 /// 
 /// For example, if you're processing images that are 28x28 pixels, you would use an InputLayer
-/// with inputSize=784 (28�28) to tell the network about the size of each image.
+/// with inputSize=784 (28×28) to tell the network about the size of each image.
 /// 
 /// Unlike other layers, the InputLayer doesn't learn or transform anything - it just
 /// passes your data into the network.
