@@ -144,7 +144,14 @@ namespace AiDotNet.Tests.Tokenization
             var result = tokenizer.Encode("hello world", options);
 
             // Assert
-            Assert.True(result.TokenIds.Count <= 3);
+            // Verify truncation: token count should be exactly maxLength (or less if input is shorter)
+            Assert.True(result.TokenIds.Count <= 3, $"Token count {result.TokenIds.Count} should be <= 3");
+            // Verify that truncation actually happened if the original would have been longer
+            var untruncatedResult = tokenizer.Encode("hello world", new EncodingOptions { AddSpecialTokens = false });
+            if (untruncatedResult.TokenIds.Count > 3)
+            {
+                Assert.Equal(3, result.TokenIds.Count);
+            }
         }
     }
 }
