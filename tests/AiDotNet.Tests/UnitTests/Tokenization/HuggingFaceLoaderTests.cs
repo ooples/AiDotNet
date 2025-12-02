@@ -104,9 +104,10 @@ public class HuggingFaceLoaderTests : IDisposable
     [Fact]
     public void SaveToDirectory_ConfigContainsSpecialTokens()
     {
-        // Arrange
+        // Arrange - Use BERT special tokens to test BERT-style token saving
         var corpus = new List<string> { "Hello world" };
-        var tokenizer = AiDotNet.Tokenization.Algorithms.BpeTokenizer.Train(corpus, 100);
+        var tokenizer = AiDotNet.Tokenization.Algorithms.BpeTokenizer.Train(
+            corpus, 100, AiDotNet.Tokenization.Models.SpecialTokens.Bert());
         var outputDir = Path.Combine(_tempDir, "output2");
 
         // Act
