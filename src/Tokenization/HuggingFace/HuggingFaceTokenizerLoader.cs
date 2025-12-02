@@ -38,8 +38,12 @@ namespace AiDotNet.Tokenization.HuggingFace
             }
 
             var configPath = Path.Combine(modelPath, "tokenizer_config.json");
-            var vocabPath = Path.Combine(modelPath, "vocab.json");
+            var vocabJsonPath = Path.Combine(modelPath, "vocab.json");
+            var vocabTxtPath = Path.Combine(modelPath, "vocab.txt");
             var mergesPath = Path.Combine(modelPath, "merges.txt");
+
+            // Determine which vocab file exists (BERT uses vocab.txt, GPT uses vocab.json)
+            var vocabPath = File.Exists(vocabJsonPath) ? vocabJsonPath : vocabTxtPath;
 
             if (!File.Exists(configPath))
                 throw new FileNotFoundException("tokenizer_config.json not found");
@@ -200,6 +204,12 @@ namespace AiDotNet.Tokenization.HuggingFace
         /// <summary>
         /// Saves a tokenizer to HuggingFace format.
         /// </summary>
+        /// <remarks>
+        /// <para><b>Limitation:</b> This method saves vocabulary and configuration but does not save
+        /// BPE merge rules. BPE tokenizers saved with this method will not fully round-trip -
+        /// they will need to be retrained or loaded from a different source to recover merge information.</para>
+        /// <para>For full BPE tokenizer serialization, consider using the original HuggingFace tokenizer files.</para>
+        /// </remarks>
         /// <param name="tokenizer">The tokenizer to save.</param>
         /// <param name="outputPath">The output directory path.</param>
         public static void SaveToDirectory(ITokenizer tokenizer, string outputPath)
