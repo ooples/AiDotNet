@@ -234,10 +234,12 @@ public class WriteAheadLog : IDisposable
 
         lock (_lock)
         {
-            // Temporarily close writer to read
+            // Flush writer to ensure all entries are on disk
             _writer?.Flush();
 
-            using var reader = new StreamReader(_walFilePath, Encoding.UTF8);
+            // Use FileShare.ReadWrite to allow reading while writer is still open (Windows compatibility)
+            using var fileStream = new FileStream(_walFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(fileStream, Encoding.UTF8);
             string? line;
             while ((line = reader.ReadLine()) != null)
             {
