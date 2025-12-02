@@ -46,6 +46,11 @@ namespace AiDotNet.Tokenization.Models
         public bool ReturnTokenTypeIds { get; set; } = false;
 
         /// <summary>
+        /// Gets or sets whether to return position IDs.
+        /// </summary>
+        public bool ReturnPositionIds { get; set; } = false;
+
+        /// <summary>
         /// Gets or sets whether to return character offsets.
         /// </summary>
         public bool ReturnOffsets { get; set; } = false;
