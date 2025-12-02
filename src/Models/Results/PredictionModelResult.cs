@@ -2,6 +2,7 @@ global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
 using AiDotNet.Data.Abstractions;
 using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using AiDotNet.Interpretability;
 using AiDotNet.Serialization;
 using AiDotNet.Agents;
@@ -13,6 +14,7 @@ using AiDotNet.Deployment.TensorRT;
 using AiDotNet.Deployment.Mobile.CoreML;
 using AiDotNet.Deployment.Mobile.TensorFlowLite;
 using AiDotNet.Deployment.Runtime;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Models.Results;
 
@@ -208,6 +210,53 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     /// <value>Query processors for preprocessing queries, or null if not configured.</value>
     internal IEnumerable<IQueryProcessor>? QueryProcessors { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the knowledge graph for graph-enhanced retrieval.
+    /// </summary>
+    /// <value>A knowledge graph containing entities and relationships, or null if Graph RAG is not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The knowledge graph stores entities (like people, places, concepts) and their
+    /// relationships. When you query the model, it can traverse these relationships to find related context
+    /// that pure vector similarity might miss.
+    /// </para>
+    /// <para>
+    /// This property is excluded from JSON serialization because it contains runtime infrastructure
+    /// (graph store, file handles) that should be reconfigured when the model is loaded.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal KnowledgeGraph<T>? KnowledgeGraph { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the graph store backend for persistent graph storage.
+    /// </summary>
+    /// <value>The graph storage backend, or null if Graph RAG is not configured.</value>
+    /// <remarks>
+    /// <para>
+    /// This property is excluded from JSON serialization because it represents runtime storage
+    /// infrastructure (file handles, WAL) that must be reconfigured when the model is loaded.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal IGraphStore<T>? GraphStore { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the hybrid graph retriever for combined vector + graph retrieval.
+    /// </summary>
+    /// <value>A hybrid retriever combining vector similarity with graph traversal, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The hybrid retriever first finds similar documents using vector search,
+    /// then expands the context by traversing the knowledge graph to find related entities. This provides
+    /// richer context than pure vector search alone.
+    /// </para>
+    /// <para>
+    /// This property is excluded from JSON serialization because it contains references to
+    /// runtime infrastructure (knowledge graph, document store) that must be reconfigured when loaded.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal HybridGraphRetriever<T>? HybridGraphRetriever { get; private set; }
 
     /// <summary>
     /// Gets or sets the meta-learner used for few-shot adaptation and fine-tuning.
@@ -427,6 +476,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="agentConfig">Optional agent configuration used during model building.</param>
     /// <param name="agentRecommendation">Optional agent recommendations from model building.</param>
     /// <param name="deploymentConfiguration">Optional deployment configuration for export, caching, versioning, A/B testing, and telemetry.</param>
+    /// <param name="knowledgeGraph">Optional knowledge graph for graph-enhanced retrieval.</param>
+    /// <param name="graphStore">Optional graph store backend for persistent storage.</param>
+    /// <param name="hybridGraphRetriever">Optional hybrid retriever for combined vector + graph search.</param>
     public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo,
         IBiasDetector<T>? biasDetector = null,
@@ -441,7 +493,10 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null,
         DeploymentConfiguration? deploymentConfiguration = null,
         Func<Tensor<T>[], Tensor<T>[]>? jitCompiledFunction = null,
-        AiDotNet.Configuration.InferenceOptimizationConfig? inferenceOptimizationConfig = null)
+        AiDotNet.Configuration.InferenceOptimizationConfig? inferenceOptimizationConfig = null,
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IGraphStore<T>? graphStore = null,
+        HybridGraphRetriever<T>? hybridGraphRetriever = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
@@ -460,6 +515,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         DeploymentConfiguration = deploymentConfiguration;
         JitCompiledFunction = jitCompiledFunction;
         InferenceOptimizationConfig = inferenceOptimizationConfig;
+        KnowledgeGraph = knowledgeGraph;
+        GraphStore = graphStore;
+        HybridGraphRetriever = hybridGraphRetriever;
     }
 
     /// <summary>
@@ -476,6 +534,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
     /// <param name="agentConfig">Optional agent configuration for AI assistance during inference.</param>
     /// <param name="deploymentConfiguration">Optional deployment configuration for export, caching, versioning, A/B testing, and telemetry.</param>
+    /// <param name="knowledgeGraph">Optional knowledge graph for graph-enhanced retrieval.</param>
+    /// <param name="graphStore">Optional graph store backend for persistent storage.</param>
+    /// <param name="hybridGraphRetriever">Optional hybrid retriever for combined vector + graph search.</param>
     /// <remarks>
     /// <para>
     /// This constructor is used when a model has been trained using meta-learning (e.g., MAML, Reptile, SEAL).
@@ -513,7 +574,10 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IGenerator<T>? ragGenerator = null,
         IEnumerable<IQueryProcessor>? queryProcessors = null,
         AgentConfiguration<T>? agentConfig = null,
-        DeploymentConfiguration? deploymentConfiguration = null)
+        DeploymentConfiguration? deploymentConfiguration = null,
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IGraphStore<T>? graphStore = null,
+        HybridGraphRetriever<T>? hybridGraphRetriever = null)
     {
         Model = metaLearner.BaseModel;
         MetaLearner = metaLearner;
@@ -528,6 +592,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         QueryProcessors = queryProcessors;
         AgentConfig = agentConfig;
         DeploymentConfiguration = deploymentConfiguration;
+        KnowledgeGraph = knowledgeGraph;
+        GraphStore = graphStore;
+        HybridGraphRetriever = hybridGraphRetriever;
 
         // Create placeholder OptimizationResult and NormalizationInfo for consistency
         OptimizationResult = new OptimizationResult<T, TInput, TOutput>();
@@ -1046,7 +1113,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // Create new result with updated optimization result
         // Preserve all configuration properties to ensure deployment behavior, model adaptation,
-        // and training history are maintained across parameter updates
+        // training history, and Graph RAG configuration are maintained across parameter updates
         return new PredictionModelResult<T, TInput, TOutput>(
             updatedOptimizationResult,
             NormalizationInfo,
@@ -1060,7 +1127,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             crossValidationResult: CrossValidationResult,
             agentConfig: AgentConfig,
             agentRecommendation: AgentRecommendation,
-            deploymentConfiguration: DeploymentConfiguration);
+            deploymentConfiguration: DeploymentConfiguration,
+            jitCompiledFunction: null, // JIT compilation is parameter-specific, don't copy
+            inferenceOptimizationConfig: InferenceOptimizationConfig,
+            knowledgeGraph: KnowledgeGraph,
+            graphStore: GraphStore,
+            hybridGraphRetriever: HybridGraphRetriever);
     }
 
     /// <summary>
@@ -1147,7 +1219,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var clonedNormalizationInfo = NormalizationInfo.DeepCopy();
 
         // Preserve all configuration properties to ensure deployment behavior, model adaptation,
-        // and training history are maintained across deep copy
+        // training history, and Graph RAG configuration are maintained across deep copy
         return new PredictionModelResult<T, TInput, TOutput>(
             clonedOptimizationResult,
             clonedNormalizationInfo,
@@ -1161,7 +1233,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             crossValidationResult: CrossValidationResult,
             agentConfig: AgentConfig,
             agentRecommendation: AgentRecommendation,
-            deploymentConfiguration: DeploymentConfiguration);
+            deploymentConfiguration: DeploymentConfiguration,
+            jitCompiledFunction: null, // JIT compilation is model-specific, don't copy
+            inferenceOptimizationConfig: InferenceOptimizationConfig,
+            knowledgeGraph: KnowledgeGraph,
+            graphStore: GraphStore,
+            hybridGraphRetriever: HybridGraphRetriever);
     }
 
     /// <summary>
@@ -1583,6 +1660,208 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             processedQuery = processor.ProcessQuery(processedQuery);
         }
         return processedQuery;
+    }
+
+    /// <summary>
+    /// Queries the knowledge graph to find related nodes by entity name or label.
+    /// </summary>
+    /// <param name="query">The search query (entity name or partial match).</param>
+    /// <param name="topK">Maximum number of results to return.</param>
+    /// <returns>Collection of matching graph nodes.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when Graph RAG is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method searches the knowledge graph for entities matching your query.
+    /// Unlike vector search which finds similar documents, this finds entities by name or label.
+    ///
+    /// Example:
+    /// <code>
+    /// var nodes = result.QueryKnowledgeGraph("Einstein", topK: 5);
+    /// foreach (var node in nodes)
+    /// {
+    ///     Console.WriteLine($"{node.Label}: {node.Id}");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IEnumerable<GraphNode<T>> QueryKnowledgeGraph(string query, int topK = 10)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or empty", nameof(query));
+
+        return KnowledgeGraph.FindRelatedNodes(query, topK);
+    }
+
+    /// <summary>
+    /// Retrieves results using hybrid vector + graph search for enhanced context retrieval.
+    /// </summary>
+    /// <param name="queryEmbedding">The query embedding vector.</param>
+    /// <param name="topK">Number of initial candidates from vector search.</param>
+    /// <param name="expansionDepth">How many hops to traverse in the graph (0 = no expansion).</param>
+    /// <param name="maxResults">Maximum total results to return.</param>
+    /// <returns>List of retrieval results with scores and source information.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when hybrid retriever is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method combines the best of both worlds:
+    /// 1. First, it finds similar documents using vector similarity (like traditional RAG)
+    /// 2. Then, it expands the context by traversing the knowledge graph to find related entities
+    ///
+    /// For example, searching for "photosynthesis" might:
+    /// - Find documents about photosynthesis via vector search
+    /// - Then traverse the graph to also include chlorophyll, plants, carbon dioxide
+    ///
+    /// This provides richer, more complete context than vector search alone.
+    /// </para>
+    /// </remarks>
+    public List<RetrievalResult<T>> HybridRetrieve(
+        Vector<T> queryEmbedding,
+        int topK = 5,
+        int expansionDepth = 1,
+        int maxResults = 10)
+    {
+        if (HybridGraphRetriever == null)
+        {
+            throw new InvalidOperationException(
+                "Hybrid graph retriever not configured. Configure Graph RAG with a document store using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (queryEmbedding == null || queryEmbedding.Length == 0)
+            throw new ArgumentException("Query embedding cannot be null or empty", nameof(queryEmbedding));
+
+        return HybridGraphRetriever.Retrieve(queryEmbedding, topK, expansionDepth, maxResults);
+    }
+
+    /// <summary>
+    /// Traverses the knowledge graph starting from a node using breadth-first search.
+    /// </summary>
+    /// <param name="startNodeId">The ID of the starting node.</param>
+    /// <param name="maxDepth">Maximum traversal depth.</param>
+    /// <returns>Collection of nodes reachable from the starting node in BFS order.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when knowledge graph is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method explores the graph starting from a specific entity,
+    /// discovering all connected entities up to a specified depth.
+    ///
+    /// Example: Starting from "Paris", depth=2 might find:
+    /// - Depth 1: France, Eiffel Tower, Seine River
+    /// - Depth 2: Europe, Iron, Water
+    ///
+    /// This is useful for understanding the context around a specific entity.
+    /// </para>
+    /// </remarks>
+    public IEnumerable<GraphNode<T>> TraverseGraph(string startNodeId, int maxDepth = 2)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(startNodeId))
+            throw new ArgumentException("Start node ID cannot be null or empty", nameof(startNodeId));
+
+        return KnowledgeGraph.BreadthFirstTraversal(startNodeId, maxDepth);
+    }
+
+    /// <summary>
+    /// Finds the shortest path between two nodes in the knowledge graph.
+    /// </summary>
+    /// <param name="startNodeId">The ID of the starting node.</param>
+    /// <param name="endNodeId">The ID of the target node.</param>
+    /// <returns>List of node IDs representing the path, or empty list if no path exists.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when knowledge graph is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method finds how two entities are connected.
+    ///
+    /// Example: Finding the path between "Einstein" and "Princeton University" might return:
+    /// ["einstein", "worked_at_princeton", "princeton_university"]
+    ///
+    /// This is useful for understanding the relationships between concepts.
+    /// </para>
+    /// </remarks>
+    public List<string> FindPathInGraph(string startNodeId, string endNodeId)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(startNodeId))
+            throw new ArgumentException("Start node ID cannot be null or empty", nameof(startNodeId));
+        if (string.IsNullOrWhiteSpace(endNodeId))
+            throw new ArgumentException("End node ID cannot be null or empty", nameof(endNodeId));
+
+        return KnowledgeGraph.FindShortestPath(startNodeId, endNodeId);
+    }
+
+    /// <summary>
+    /// Gets all edges (relationships) connected to a node in the knowledge graph.
+    /// </summary>
+    /// <param name="nodeId">The ID of the node to query.</param>
+    /// <param name="direction">The direction of edges to retrieve.</param>
+    /// <returns>Collection of edges connected to the node.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when knowledge graph is not configured.</exception>
+    /// <exception cref="ArgumentException">Thrown when nodeId is null or empty.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method finds all relationships connected to an entity.
+    ///
+    /// Example: Getting edges for "Einstein" might return:
+    /// - Outgoing: STUDIED→Physics, WORKED_AT→Princeton, BORN_IN→Germany
+    /// - Incoming: INFLUENCED_BY→Newton
+    /// </para>
+    /// </remarks>
+    public IEnumerable<GraphEdge<T>> GetNodeRelationships(string nodeId, EdgeDirection direction = EdgeDirection.Both)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(nodeId))
+            throw new ArgumentException("Node ID cannot be null or empty", nameof(nodeId));
+
+        var result = new List<GraphEdge<T>>();
+
+        if (direction == EdgeDirection.Outgoing || direction == EdgeDirection.Both)
+        {
+            result.AddRange(KnowledgeGraph.GetOutgoingEdges(nodeId));
+        }
+
+        if (direction == EdgeDirection.Incoming || direction == EdgeDirection.Both)
+        {
+            result.AddRange(KnowledgeGraph.GetIncomingEdges(nodeId));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Attaches Graph RAG components to a PredictionModelResult instance.
+    /// </summary>
+    /// <param name="knowledgeGraph">The knowledge graph to attach.</param>
+    /// <param name="graphStore">The graph store backend to attach.</param>
+    /// <param name="hybridGraphRetriever">The hybrid retriever to attach.</param>
+    /// <remarks>
+    /// This method is internal and used by PredictionModelBuilder when loading/deserializing models.
+    /// Graph RAG components cannot be serialized (they contain file handles, WAL references, etc.),
+    /// so the builder automatically reattaches them when loading a model that was configured with Graph RAG.
+    /// Users should use PredictionModelBuilder.LoadModel() which handles this automatically.
+    /// </remarks>
+    internal void AttachGraphComponents(
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IGraphStore<T>? graphStore = null,
+        HybridGraphRetriever<T>? hybridGraphRetriever = null)
+    {
+        KnowledgeGraph = knowledgeGraph;
+        GraphStore = graphStore;
+        HybridGraphRetriever = hybridGraphRetriever;
     }
 
     /// <summary>
