@@ -1939,6 +1939,60 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         return this;
     }
 
+    /// <inheritdoc />
+    /// <summary>
+    /// Asynchronously configures the tokenizer by loading a pretrained model from HuggingFace Hub.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the async version of ConfigureTokenizerFromPretrained.
+    /// Use this when you want to avoid blocking the thread while downloading tokenizer files
+    /// from HuggingFace Hub. This is especially important in UI applications or web servers.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// await builder.ConfigureTokenizerFromPretrainedAsync(PretrainedTokenizerModel.BertBaseUncased);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public async Task<IPredictionModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(
+        PretrainedTokenizerModel model = PretrainedTokenizerModel.BertBaseUncased,
+        TokenizationConfig? config = null)
+    {
+        _tokenizer = await AutoTokenizer.FromPretrainedAsync(model.ToModelId());
+        _tokenizationConfig = config ?? new TokenizationConfig();
+        return this;
+    }
+
+    /// <inheritdoc />
+    /// <summary>
+    /// Asynchronously configures the tokenizer by loading a pretrained model from HuggingFace Hub using a model name or path.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the async version that accepts a custom model name or path.
+    /// Use this when loading custom or community models without blocking the thread.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// await builder.ConfigureTokenizerFromPretrainedAsync("sentence-transformers/all-MiniLM-L6-v2");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public async Task<IPredictionModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(
+        string? modelNameOrPath = null,
+        TokenizationConfig? config = null)
+    {
+        // Default to bert-base-uncased, the most widely-used pretrained tokenizer
+        string defaultModel = PretrainedTokenizerModel.BertBaseUncased.ToModelId();
+        string modelName = modelNameOrPath is not null && !string.IsNullOrWhiteSpace(modelNameOrPath)
+            ? modelNameOrPath
+            : defaultModel;
+        _tokenizer = await AutoTokenizer.FromPretrainedAsync(modelName);
+        _tokenizationConfig = config ?? new TokenizationConfig();
+        return this;
+    }
+
     // ============================================================================
     // Private Knowledge Distillation Helper Methods
     // ============================================================================
