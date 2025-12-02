@@ -57,6 +57,14 @@ public static class ModelHelper<T, TInput, TOutput>
 
             return (x, y, predictions);
         }
+        else if (typeof(TInput) == typeof(Vector<T>) && typeof(TOutput) == typeof(Vector<T>))
+        {
+            var x = (TInput)(object)Vector<T>.Empty();
+            var y = (TOutput)(object)Vector<T>.Empty();
+            var predictions = (TOutput)(object)Vector<T>.Empty();
+
+            return (x, y, predictions);
+        }
         else
         {
             throw new InvalidOperationException("Unsupported types for TInput and TOutput");
