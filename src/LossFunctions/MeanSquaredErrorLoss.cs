@@ -9,7 +9,7 @@ namespace AiDotNet.LossFunctions;
 /// <b>For Beginners:</b> Mean Squared Error is one of the most common loss functions used in regression problems.
 /// It measures the average squared difference between predicted and actual values.
 /// 
-/// The formula is: MSE = (1/n) * ?(predicted - actual)²
+/// The formula is: MSE = (1/n) * ?(predicted - actual)Â²
 /// 
 /// MSE has these key properties:
 /// - It heavily penalizes large errors due to the squaring operation

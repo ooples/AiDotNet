@@ -213,7 +213,7 @@ public enum ActivationFunction
     /// - Similar to ELU but with carefully chosen scaling parameters
     /// - For positive inputs: output equals input multiplied by a scale factor ?
     /// - For negative inputs: output equals ? * a * (e^x - 1)
-    ///   where ? � 1.0507 and a � 1.6733 are specific constants
+    ///   where ? ≈ 1.0507 and a ≈ 1.6733 are specific constants
     /// 
     /// Formula: f(x) = ? * x if x > 0, ? * a * (e^x - 1) if x = 0
     /// 

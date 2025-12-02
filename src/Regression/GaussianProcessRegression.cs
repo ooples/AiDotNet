@@ -163,7 +163,7 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         // Apply regularization to the kernel matrix
         Matrix<T> regularizedKernelMatrix = Regularization.Regularize(_kernelMatrix);
 
-        // Solve (K + s�I + R)a = y, where R is the regularization term
+        // Solve (K + s²I + R)a = y, where R is the regularization term
         _alpha = MatrixSolutionHelper.SolveLinearSystem(regularizedKernelMatrix, y, Options.DecompositionType);
 
         // Apply regularization to the alpha coefficients

@@ -379,7 +379,7 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     /// 
     /// The linear model:
     /// - Finds the relationship between features and the target value for this specific group
-    /// - Uses the equation: target = (weight1 × feature1) + (weight2 × feature2) + ... + constant
+    /// - Uses the equation: target = (weight1 Ã— feature1) + (weight2 Ã— feature2) + ... + constant
     /// - Calculates the optimal weights to make accurate predictions
     /// - Inherits the regularization settings to prevent overcomplicating the equation
     /// 

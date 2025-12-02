@@ -107,7 +107,7 @@ public class MexicanHatWavelet<T> : IWaveletFunction<T>
     /// <remarks>
     /// <para>
     /// This method computes the value of the Mexican Hat wavelet function at the given input point.
-    /// The Mexican Hat wavelet is defined as (2 - x²/s²) * e^(-x²/2s²), which is proportional to
+    /// The Mexican Hat wavelet is defined as (2 - xÂ²/sÂ²) * e^(-xÂ²/2sÂ²), which is proportional to
     /// the second derivative of a Gaussian function. This wavelet has a distinctive shape with a
     /// central peak flanked by two symmetric valleys.
     /// </para>

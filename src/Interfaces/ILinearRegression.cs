@@ -25,7 +25,7 @@ namespace AiDotNet.Interfaces;
 /// 3. Adds the intercept (if there is one)
 /// 
 /// So for a 2,000 sq ft, 3-bedroom, 10-year-old house:
-/// Price = $50,000 + (2,000 × $100) + (3 × $15,000) + (10 × -$500)
+/// Price = $50,000 + (2,000 Ã— $100) + (3 Ã— $15,000) + (10 Ã— -$500)
 /// Price = $50,000 + $200,000 + $45,000 - $5,000
 /// Price = $290,000
 /// 
@@ -87,11 +87,11 @@ public interface ILinearRegression<T> : IRegression<T>
     /// 
     /// When this is true:
     /// - The model includes an intercept term (the base value)
-    /// - Predictions are calculated as: Intercept + (Feature1 × Weight1) + (Feature2 × Weight2) + ...
+    /// - Predictions are calculated as: Intercept + (Feature1 Ã— Weight1) + (Feature2 Ã— Weight2) + ...
     /// 
     /// When this is false:
     /// - The model does not include an intercept term
-    /// - Predictions are calculated as: (Feature1 × Weight1) + (Feature2 × Weight2) + ...
+    /// - Predictions are calculated as: (Feature1 Ã— Weight1) + (Feature2 Ã— Weight2) + ...
     /// - When all features are zero, the prediction will be exactly zero
     /// 
     /// Most linear models include an intercept (HasIntercept = true) because it gives the model

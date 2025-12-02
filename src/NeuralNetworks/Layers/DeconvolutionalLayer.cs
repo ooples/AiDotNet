@@ -213,8 +213,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> Kernel size is how big each "pattern generator" is.
     /// 
     /// For example:
-    /// - A kernel size of 3 means a 3�3 grid (9 weights)
-    /// - A kernel size of 5 means a 5�5 grid (25 weights)
+    /// - A kernel size of 3 means a 3×3 grid (9 weights)
+    /// - A kernel size of 5 means a 5×5 grid (25 weights)
     /// 
     /// Larger kernels:
     /// - Can create more complex patterns
@@ -239,8 +239,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// - Stride of 2: Roughly doubles the size
     /// - Stride of 4: Roughly quadruples the size
     /// 
-    /// For example, if your input is 16�16 pixels and you use a stride of 2,
-    /// the output might be around 32�32 pixels (the exact size depends on other factors too).
+    /// For example, if your input is 16×16 pixels and you use a stride of 2,
+    /// the output might be around 32×32 pixels (the exact size depends on other factors too).
     /// </para>
     /// </remarks>
     public int Stride { get; }
@@ -401,11 +401,11 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// - How big your pattern generators are (kernel size)
     /// - Any adjustments needed (padding)
     /// 
-    /// For example, if you have a 16�16 input and use stride 2, kernel size 3, and no padding:
+    /// For example, if you have a 16×16 input and use stride 2, kernel size 3, and no padding:
     /// - The output height will be (16-1)*2 - 0 + 3 = 33
     /// - The output width will be (16-1)*2 - 0 + 3 = 33
     /// 
-    /// So your 16�16 input becomes approximately 33�33 output (about 4 times larger in area).
+    /// So your 16×16 input becomes approximately 33×33 output (about 4 times larger in area).
     /// </para>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int outputDepth, int kernelSize, int stride, int padding)

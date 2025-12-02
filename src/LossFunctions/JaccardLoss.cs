@@ -100,12 +100,12 @@ public class JaccardLoss<T> : LossFunctionBase<T>
         {
             if (NumOps.GreaterThan(predicted[i], actual[i]))
             {
-                // If predicted > actual, derivative = (union - intersection) / union�
+                // If predicted > actual, derivative = (union - intersection) / union²
                 derivative[i] = NumericalStabilityHelper.SafeDiv(numerator, unionSquared, NumericalStabilityHelper.SmallEpsilon);
             }
             else if (NumOps.LessThan(predicted[i], actual[i]))
             {
-                // If predicted < actual, derivative = -(union - intersection) / union�
+                // If predicted < actual, derivative = -(union - intersection) / union²
                 derivative[i] = NumOps.Negate(
                     NumericalStabilityHelper.SafeDiv(numerator, unionSquared, NumericalStabilityHelper.SmallEpsilon)
                 );

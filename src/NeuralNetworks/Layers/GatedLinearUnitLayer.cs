@@ -516,8 +516,8 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// The backward pass is more complex in GLU layers because of the two paths:
     /// 
     /// 1. First, compute gradients for both paths:
-    ///    - Linear path gradient: outputGradient � gate values
-    ///    - Gate path gradient: outputGradient � linear output
+    ///    - Linear path gradient: outputGradient × gate values
+    ///    - Gate path gradient: outputGradient × linear output
     /// 
     /// 2. For the gate path, apply the activation derivative
     ///    - This accounts for how the activation affected the gates
@@ -824,8 +824,8 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// - Advanced optimization techniques
     /// 
     /// For a layer with 100 inputs and 50 outputs, this would return:
-    /// - 5,000 linear weight parameters (100 � 50)
-    /// - 5,000 gate weight parameters (100 � 50)
+    /// - 5,000 linear weight parameters (100 × 50)
+    /// - 5,000 gate weight parameters (100 × 50)
     /// - 50 linear bias parameters
     /// - 50 gate bias parameters
     /// - Totaling 10,100 parameters

@@ -494,14 +494,14 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         T sinValue;
         if (NumOps.LessThan(angle, NumOps.FromDouble(Math.PI)))
         {
-            // Use sin(x) � x - x�/6 for small x
+            // Use sin(x) ≈ x - x²/6 for small x
             if (NumOps.LessThan(angle, NumOps.FromDouble(Math.PI / 2)))
             {
                 T xSquared = NumOps.Multiply(angle, angle);
                 T xCubed = NumOps.Multiply(xSquared, angle);
                 sinValue = NumOps.Subtract(angle, NumOps.Divide(xCubed, NumOps.FromDouble(6)));
             }
-            // For x near p/2, use sin(x) � 1 - (x - p/2)�/2
+            // For x near p/2, use sin(x) ≈ 1 - (x - p/2)²/2
             else
             {
                 T diff = NumOps.Subtract(angle, NumOps.FromDouble(Math.PI / 2));

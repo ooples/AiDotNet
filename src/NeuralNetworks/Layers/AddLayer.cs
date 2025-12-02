@@ -14,7 +14,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para><b>For Beginners:</b> This layer adds together multiple inputs of the same shape.
 /// 
 /// Think of this layer as performing element-wise addition:
-/// - If you have two 3�3 matrices, it adds corresponding elements together
+/// - If you have two 3×3 matrices, it adds corresponding elements together
 /// - All inputs must have exactly the same dimensions
 /// - After adding, it can optionally apply an activation function
 /// 
@@ -94,7 +94,7 @@ public class AddLayer<T> : LayerBase<T>
     /// 
     /// For example:
     /// ```csharp
-    /// // Create an AddLayer for combining two 28�28 feature maps with ReLU activation
+    /// // Create an AddLayer for combining two 28×28 feature maps with ReLU activation
     /// var addLayer = new AddLayer<float>(
     ///     new[] { new[] { 32, 28, 28, 64 }, new[] { 32, 28, 28, 64 } },
     ///     new ReLUActivation<float>()

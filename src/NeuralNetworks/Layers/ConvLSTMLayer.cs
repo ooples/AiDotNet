@@ -265,8 +265,8 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// - Strides determine how far to move the cropping tool each time
     /// - Filters determine how many different "versions" of the output we'll have
     /// 
-    /// For example, if you have a 64�64 image and use a kernel size of 3, padding of 1,
-    /// and strides of 1, the output height and width will still be 64�64, preserving
+    /// For example, if you have a 64×64 image and use a kernel size of 3, padding of 1,
+    /// and strides of 1, the output height and width will still be 64×64, preserving
     /// the spatial dimensions.
     /// </para>
     /// </remarks>

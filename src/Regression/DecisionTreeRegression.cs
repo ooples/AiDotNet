@@ -13,7 +13,7 @@ namespace AiDotNet.Regression;
 /// <para><b>For Beginners:</b> A decision tree regression is like a flowchart that helps predict numerical values.
 /// 
 /// Think of it like answering a series of yes/no questions to reach a prediction:
-/// - "Is the temperature above 75�F?"
+/// - "Is the temperature above 75—F?"
 /// - "Is the humidity below 50%?"
 /// - "Is it a weekend?"
 /// 

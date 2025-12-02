@@ -23,7 +23,7 @@ public enum MatrixType
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> A square matrix has the same number of rows and columns, like a square.
-    /// Example: A 3×3 matrix has 3 rows and 3 columns.
+    /// Example: A 3Ã—3 matrix has 3 rows and 3 columns.
     /// </para>
     /// </remarks>
     Square = 1, 
@@ -132,7 +132,7 @@ public enum MatrixType
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> A rectangular matrix has a different number of rows and columns, like a rectangle.
-    /// Example: A 2×3 matrix has 2 rows and 3 columns.
+    /// Example: A 2Ã—3 matrix has 2 rows and 3 columns.
     /// </para>
     /// </remarks>
     Rectangular = 8, 
@@ -358,7 +358,7 @@ public enum MatrixType
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> An idempotent matrix has the property that multiplying it by itself gives the same matrix.
-    /// That is, A² = A. This is like a light switch that's already on - flipping it again doesn't change anything.
+    /// That is, AÂ² = A. This is like a light switch that's already on - flipping it again doesn't change anything.
     /// Projection matrices are examples of idempotent matrices.
     /// </para>
     /// </remarks>
@@ -559,7 +559,7 @@ public enum MatrixType
     /// It's used to find polynomial roots and in control systems. The matrix has a specific pattern with
     /// 1s along the first subdiagonal and the coefficients of a polynomial in the last column.
     /// 
-    /// Example for polynomial x³ + 4x² + 5x + 2:
+    /// Example for polynomial xÂ³ + 4xÂ² + 5x + 2:
     /// [0 0 -2]
     /// [1 0 -5]
     /// [0 1 -4]
@@ -576,7 +576,7 @@ public enum MatrixType
     /// different powers. For example, if we have values [a, b, c], the matrix would look like:
     /// [1    1    1  ]
     /// [a    b    c  ]
-    /// [a²   b²   c² ]
+    /// [aÂ²   bÂ²   cÂ² ]
     /// These matrices are used in polynomial interpolation (finding a curve that passes through specific points)
     /// and in coding theory for error correction.
     /// </para>
@@ -589,7 +589,7 @@ public enum MatrixType
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> A Hilbert matrix has elements defined by the formula 1/(i+j-1), where i is the row number
-    /// and j is the column number. For example, a 3×3 Hilbert matrix looks like:
+    /// and j is the column number. For example, a 3Ã—3 Hilbert matrix looks like:
     /// [1    1/2   1/3]
     /// [1/2  1/3   1/4]
     /// [1/3  1/4   1/5]

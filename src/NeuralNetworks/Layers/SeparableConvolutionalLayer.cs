@@ -47,10 +47,10 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// These 1�1 kernels are applied after the depthwise convolution to combine information across channels.
+    /// These 1×1 kernels are applied after the depthwise convolution to combine information across channels.
     /// The shape is [inputDepth, 1, 1, outputDepth], which means they only operate across the channel dimension.
     /// </para>
-    /// <para><b>For Beginners:</b> These are tiny filters (just 1�1 in size) that combine information
+    /// <para><b>For Beginners:</b> These are tiny filters (just 1×1 in size) that combine information
     /// from all the input channels to create new feature maps. They don't look at spatial patterns
     /// (that's what the depthwise kernels do) but instead mix information between channels.
     /// </para>
@@ -184,8 +184,8 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// It determines the receptive field size for the depthwise convolution operation.
     /// </para>
     /// <para><b>For Beginners:</b> This is the size of the "window" that slides over the input data.
-    /// Larger values (like 5�5 or 7�7) can detect bigger patterns, while smaller values (like 3�3)
-    /// focus on fine details. Most common CNN layers use 3�3 kernels.
+    /// Larger values (like 5×5 or 7×7) can detect bigger patterns, while smaller values (like 3×3)
+    /// focus on fine details. Most common CNN layers use 3×3 kernels.
     /// </para>
     /// </remarks>
     private readonly int _kernelSize;
@@ -309,7 +309,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// The parameters control how the layer processes data:
     /// - inputShape: The size and structure of the incoming data (like image dimensions)
     /// - outputDepth: How many different features the layer will look for
-    /// - kernelSize: The size of the "window" that slides over the input (e.g., 3�3 or 5�5)
+    /// - kernelSize: The size of the "window" that slides over the input (e.g., 3×3 or 5×5)
     /// - stride: How many pixels to move the window each step (smaller = more overlap)
     /// - padding: Whether to add extra space around the input edges
     /// - scalarActivation: A function that adds non-linearity (helping the network learn complex patterns)
@@ -413,7 +413,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// - The height and width get smaller based on the kernel size, stride, and padding
     /// - The depth changes to match the outputDepth parameter
     /// 
-    /// For example, with a 28�28 image input, a 3�3 kernel, stride of 1, and no padding:
+    /// For example, with a 28×28 image input, a 3×3 kernel, stride of 1, and no padding:
     /// - Output height: (28 - 3 + 0) / 1 + 1 = 26
     /// - Output width: (28 - 3 + 0) / 1 + 1 = 26
     /// - So the output shape would be [batch, 26, 26, outputDepth]
@@ -514,7 +514,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     ///    - Captures spatial patterns within each channel independently
     ///
     /// 2. Pointwise convolution: Combines results across all channels
-    ///    - Uses 1�1 filters to mix information between channels
+    ///    - Uses 1×1 filters to mix information between channels
     ///    - Creates new feature maps that combine information from all inputs
     ///    - Adds bias values to each output channel
     ///
