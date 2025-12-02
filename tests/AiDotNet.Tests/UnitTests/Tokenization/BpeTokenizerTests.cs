@@ -103,17 +103,18 @@ public class BpeTokenizerTests
     [Fact]
     public void Encode_WithSpecialTokens_AddsClsAndSep()
     {
-        // Arrange
+        // Arrange - Use BERT special tokens which have non-empty CLS and SEP
+        var bertTokenizer = BpeTokenizer.Train(_trainingCorpus, 500, SpecialTokens.Bert());
         var text = "Hello world";
         var options = new EncodingOptions { AddSpecialTokens = true };
 
         // Act
-        var result = _tokenizer.Encode(text, options);
+        var result = bertTokenizer.Encode(text, options);
 
         // Assert
         Assert.NotNull(result.Tokens);
-        Assert.Contains(_tokenizer.SpecialTokens.ClsToken, result.Tokens);
-        Assert.Contains(_tokenizer.SpecialTokens.SepToken, result.Tokens);
+        Assert.Contains(bertTokenizer.SpecialTokens.ClsToken, result.Tokens);
+        Assert.Contains(bertTokenizer.SpecialTokens.SepToken, result.Tokens);
     }
 
     [Fact]
@@ -224,17 +225,18 @@ public class BpeTokenizerTests
     [Fact]
     public void Decode_SkipsSpecialTokens_ByDefault()
     {
-        // Arrange
+        // Arrange - Use BERT special tokens which have non-empty CLS and SEP
+        var bertTokenizer = BpeTokenizer.Train(_trainingCorpus, 500, SpecialTokens.Bert());
         var text = "Hello world";
         var options = new EncodingOptions { AddSpecialTokens = true };
-        var encoded = _tokenizer.Encode(text, options);
+        var encoded = bertTokenizer.Encode(text, options);
 
         // Act
-        var decoded = _tokenizer.Decode(encoded.TokenIds, skipSpecialTokens: true);
+        var decoded = bertTokenizer.Decode(encoded.TokenIds, skipSpecialTokens: true);
 
         // Assert
-        Assert.DoesNotContain(_tokenizer.SpecialTokens.ClsToken, decoded);
-        Assert.DoesNotContain(_tokenizer.SpecialTokens.SepToken, decoded);
+        Assert.DoesNotContain(bertTokenizer.SpecialTokens.ClsToken, decoded);
+        Assert.DoesNotContain(bertTokenizer.SpecialTokens.SepToken, decoded);
     }
 
     [Fact]
