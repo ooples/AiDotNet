@@ -885,10 +885,10 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///     .BuildAsync(trainingData, labels);
     /// </code>
     /// </remarks>
-    /// <param name="tokenizer">The tokenizer to use for text processing.</param>
+    /// <param name="tokenizer">The tokenizer to use for text processing. If null, no tokenizer is configured.</param>
     /// <param name="config">Optional tokenization configuration. If null, default settings are used.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizer(ITokenizer tokenizer, TokenizationConfig? config = null);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizer(ITokenizer? tokenizer = null, TokenizationConfig? config = null);
 
     /// <summary>
     /// Configures tokenization using a pretrained tokenizer from HuggingFace Hub.
@@ -896,24 +896,29 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <remarks>
     /// <b>For Beginners:</b> This is the easiest way to use industry-standard tokenizers.
     ///
-    /// Simply specify a model name from HuggingFace Hub:
+    /// Simply call without parameters for sensible defaults:
     /// <code>
     /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
-    ///     .ConfigureTokenizerFromPretrained("bert-base-uncased")
+    ///     .ConfigureTokenizerFromPretrained()  // Uses bert-base-uncased by default
     ///     .ConfigureModel(new BertModel())
     ///     .BuildAsync(trainingData, labels);
     /// </code>
     ///
+    /// Or specify a model name from HuggingFace Hub:
+    /// <code>
+    /// builder.ConfigureTokenizerFromPretrained("gpt2")
+    /// </code>
+    ///
     /// Popular pretrained tokenizers include:
-    /// - "bert-base-uncased": BERT tokenizer for English text
+    /// - "bert-base-uncased": BERT tokenizer for English text (default)
     /// - "gpt2": GPT-2 tokenizer for text generation
     /// - "roberta-base": RoBERTa tokenizer (improved BERT)
     /// - "t5-base": T5 tokenizer for text-to-text tasks
     /// </remarks>
-    /// <param name="modelNameOrPath">The HuggingFace model name (e.g., "bert-base-uncased") or local path.</param>
+    /// <param name="modelNameOrPath">The HuggingFace model name or local path. Defaults to "bert-base-uncased" if not specified.</param>
     /// <param name="config">Optional tokenization configuration.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(string modelNameOrPath, TokenizationConfig? config = null);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(string? modelNameOrPath = null, TokenizationConfig? config = null);
 
     /// <summary>
     /// Enables GPU acceleration for training and inference with optional configuration.

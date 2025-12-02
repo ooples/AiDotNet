@@ -1855,10 +1855,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </para>
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizer(
-        ITokenizer tokenizer,
+        ITokenizer? tokenizer = null,
         TokenizationConfig? config = null)
     {
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        _tokenizer = tokenizer;
         _tokenizationConfig = config ?? new TokenizationConfig();
         return this;
     }
@@ -1866,35 +1866,39 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// <summary>
     /// Configures tokenization using a pretrained tokenizer from HuggingFace Hub.
     /// </summary>
-    /// <param name="modelNameOrPath">The HuggingFace model name (e.g., "bert-base-uncased") or local path.</param>
+    /// <param name="modelNameOrPath">The HuggingFace model name (e.g., "bert-base-uncased") or local path. Defaults to "bert-base-uncased" if not specified.</param>
     /// <param name="config">Optional tokenization configuration.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> This is the easiest way to use industry-standard tokenizers.
     ///
-    /// Simply specify a model name from HuggingFace Hub:
+    /// Simply call without parameters for sensible defaults:
     /// <code>
     /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
-    ///     .ConfigureTokenizerFromPretrained("bert-base-uncased")
+    ///     .ConfigureTokenizerFromPretrained()  // Uses bert-base-uncased by default
     ///     .ConfigureModel(new BertModel())
     ///     .Build(trainingData);
     /// </code>
     ///
+    /// Or specify a model name from HuggingFace Hub:
+    /// <code>
+    /// builder.ConfigureTokenizerFromPretrained("gpt2")
+    /// </code>
+    ///
     /// Popular pretrained tokenizers include:
-    /// - "bert-base-uncased": BERT tokenizer for English text
+    /// - "bert-base-uncased": BERT tokenizer for English text (default)
     /// - "gpt2": GPT-2 tokenizer for text generation
     /// - "roberta-base": RoBERTa tokenizer (improved BERT)
     /// - "t5-base": T5 tokenizer for text-to-text tasks
     /// </para>
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(
-        string modelNameOrPath,
+        string? modelNameOrPath = null,
         TokenizationConfig? config = null)
     {
-        if (string.IsNullOrWhiteSpace(modelNameOrPath))
-            throw new ArgumentException("Model name or path cannot be empty", nameof(modelNameOrPath));
-
-        _tokenizer = AutoTokenizer.FromPretrained(modelNameOrPath);
+        // Default to bert-base-uncased, the most widely-used pretrained tokenizer
+        var modelName = string.IsNullOrWhiteSpace(modelNameOrPath) ? "bert-base-uncased" : modelNameOrPath;
+        _tokenizer = AutoTokenizer.FromPretrained(modelName);
         _tokenizationConfig = config ?? new TokenizationConfig();
         return this;
     }
