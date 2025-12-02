@@ -97,7 +97,11 @@ namespace AiDotNet.Tokenization.CodeTokenization
                     allTokens = allTokens.Take(maxLen - 1).ToList();
                 }
 
-                allTokens.Add(_codeTokenizer.SpecialTokens.SepToken);
+                // Add SEP only if not already present at end to avoid duplicates
+                if (allTokens.Count == 0 || allTokens[allTokens.Count - 1] != _codeTokenizer.SpecialTokens.SepToken)
+                {
+                    allTokens.Add(_codeTokenizer.SpecialTokens.SepToken);
+                }
             }
 
             // Convert to IDs

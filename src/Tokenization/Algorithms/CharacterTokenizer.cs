@@ -81,9 +81,9 @@ namespace AiDotNet.Tokenization.Algorithms
             specialTokens ??= SpecialTokens.Default();
             var charFrequencies = new Dictionary<char, int>();
 
-            foreach (var text in corpus)
+            var processedTexts = corpus.Select(text => lowercase ? text.ToLowerInvariant() : text);
+            foreach (var processedText in processedTexts)
             {
-                var processedText = lowercase ? text.ToLowerInvariant() : text;
                 foreach (char c in processedText)
                 {
                     if (!charFrequencies.ContainsKey(c))

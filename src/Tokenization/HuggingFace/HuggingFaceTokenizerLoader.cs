@@ -31,15 +31,19 @@ namespace AiDotNet.Tokenization.HuggingFace
                 throw new DirectoryNotFoundException($"Tokenizer directory not found: {modelPath}");
 
             // Check for tokenizer.json first (modern format)
-            var tokenizerJsonPath = Path.Combine(modelPath, "tokenizer.json");
+            var tokenizerJsonPath = GetSafePath(modelPath, "tokenizer.json");
             if (File.Exists(tokenizerJsonPath))
             {
                 return LoadFromTokenizerJson(tokenizerJsonPath);
             }
 
-            var configPath = Path.Combine(modelPath, "tokenizer_config.json");
-            var vocabPath = Path.Combine(modelPath, "vocab.json");
-            var mergesPath = Path.Combine(modelPath, "merges.txt");
+            var configPath = GetSafePath(modelPath, "tokenizer_config.json");
+            var vocabJsonPath = GetSafePath(modelPath, "vocab.json");
+            var vocabTxtPath = GetSafePath(modelPath, "vocab.txt");
+            var mergesPath = GetSafePath(modelPath, "merges.txt");
+
+            // Determine which vocab file exists (BERT uses vocab.txt, GPT uses vocab.json)
+            var vocabPath = File.Exists(vocabJsonPath) ? vocabJsonPath : vocabTxtPath;
 
             if (!File.Exists(configPath))
                 throw new FileNotFoundException("tokenizer_config.json not found");
@@ -200,6 +204,12 @@ namespace AiDotNet.Tokenization.HuggingFace
         /// <summary>
         /// Saves a tokenizer to HuggingFace format.
         /// </summary>
+        /// <remarks>
+        /// <para><b>Limitation:</b> This method saves vocabulary and configuration but does not save
+        /// BPE merge rules. BPE tokenizers saved with this method will not fully round-trip -
+        /// they will need to be retrained or loaded from a different source to recover merge information.</para>
+        /// <para>For full BPE tokenizer serialization, consider using the original HuggingFace tokenizer files.</para>
+        /// </remarks>
         /// <param name="tokenizer">The tokenizer to save.</param>
         /// <param name="outputPath">The output directory path.</param>
         public static void SaveToDirectory(ITokenizer tokenizer, string outputPath)
@@ -373,9 +383,9 @@ namespace AiDotNet.Tokenization.HuggingFace
             if (mergesArray != null)
             {
                 int order = 0;
-                foreach (var merge in mergesArray)
+                var mergeStrings = mergesArray.Select(m => m.Value<string>());
+                foreach (var mergeStr in mergeStrings)
                 {
-                    var mergeStr = merge.Value<string>();
                     if (mergeStr != null)
                     {
                         var parts = mergeStr.Split(' ');
@@ -412,22 +422,55 @@ namespace AiDotNet.Tokenization.HuggingFace
             var tokenScores = new Dictionary<string, double>();
             int id = 0;
 
-            foreach (var item in vocabArray)
+            var validPairs = vocabArray
+                .OfType<JArray>()
+                .Where(pair => pair.Count >= 2 && pair[0].Value<string>() != null);
+
+            foreach (var pair in validPairs)
             {
-                if (item is JArray pair && pair.Count >= 2)
+                var token = pair[0].Value<string>();
+                var score = pair[1].Value<double>();
+                if (token != null)
                 {
-                    var token = pair[0].Value<string>();
-                    var score = pair[1].Value<double>();
-                    if (token != null)
-                    {
-                        vocabDict[token] = id++;
-                        tokenScores[token] = score;
-                    }
+                    vocabDict[token] = id++;
+                    tokenScores[token] = score;
                 }
             }
 
             var vocabulary = new Vocabulary.Vocabulary(vocabDict, specialTokens.UnkToken);
             return new UnigramTokenizer(vocabulary, tokenScores, specialTokens);
+        }
+
+        /// <summary>
+        /// Safely combines a base path with a filename, preventing path traversal attacks.
+        /// </summary>
+        /// <param name="basePath">The base directory path.</param>
+        /// <param name="fileName">The filename to combine.</param>
+        /// <returns>The combined path, guaranteed to be within basePath.</returns>
+        private static string GetSafePath(string basePath, string fileName)
+        {
+            // Validate filename doesn't contain path traversal characters
+            if (fileName.Contains("..") || fileName.Contains('/') || fileName.Contains('\\'))
+            {
+                throw new ArgumentException($"Invalid file path: {fileName} contains path traversal characters");
+            }
+
+            var normalizedBase = Path.GetFullPath(basePath);
+            // Ensure base path ends with directory separator for proper concatenation
+            if (!normalizedBase.EndsWith(Path.DirectorySeparatorChar.ToString()))
+            {
+                normalizedBase += Path.DirectorySeparatorChar;
+            }
+
+            var combined = Path.GetFullPath(normalizedBase + fileName);
+
+            // Double-check the resulting path is within the base directory
+            if (!combined.StartsWith(normalizedBase, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException($"Invalid file path: {fileName} attempts path traversal");
+            }
+
+            return combined;
         }
     }
 }

@@ -90,9 +90,10 @@ public class CharacterTokenizerTests
         // Arrange
         var tokenizer = CharacterTokenizer.CreateAscii();
         var text = "AB";
+        var options = new EncodingOptions { AddSpecialTokens = false };
 
         // Act
-        var result = tokenizer.Encode(text);
+        var result = tokenizer.Encode(text, options);
 
         // Assert
         Assert.Equal(2, result.TokenIds.Count);
@@ -182,7 +183,7 @@ public class CharacterTokenizerTests
         // Arrange
         var tokenizer = CharacterTokenizer.CreateAscii();
         var text = "ABC";
-        var options = new EncodingOptions { ReturnPositionIds = true };
+        var options = new EncodingOptions { ReturnPositionIds = true, AddSpecialTokens = false };
 
         // Act
         var result = tokenizer.Encode(text, options);
