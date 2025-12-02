@@ -416,30 +416,32 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         }
 
         [Fact]
-        public void Flush_WithNoChanges_DoesNotWriteFile()
+        public void Flush_WithNoChanges_DoesNotModifyFileContent()
         {
             // Arrange
             var indexPath = GetTestIndexPath();
-            using var index = new BTreeIndex(indexPath);
+            byte[] initialContent;
 
-            // Track initial file timestamp
-            DateTime? initialTimestamp = null;
-            if (File.Exists(indexPath))
-                initialTimestamp = File.GetLastWriteTimeUtc(indexPath);
-
-            // Wait a bit to ensure timestamp would change
-            System.Threading.Thread.Sleep(10);
-
-            // Act
-            index.Flush();
-
-            // Assert
-            if (File.Exists(indexPath))
+            // Create index with some data and flush to establish baseline
+            using (var index = new BTreeIndex(indexPath))
             {
-                var currentTimestamp = File.GetLastWriteTimeUtc(indexPath);
-                if (initialTimestamp.HasValue)
-                    Assert.Equal(initialTimestamp.Value, currentTimestamp);
+                index.Add("key1", 1024);
+                index.Flush();
             }
+
+            // Read the initial file content
+            initialContent = File.ReadAllBytes(indexPath);
+
+            // Act - Open existing index and flush without changes
+            using (var index = new BTreeIndex(indexPath))
+            {
+                // No changes made, just flush
+                index.Flush();
+            }
+
+            // Assert - File content should be identical
+            var currentContent = File.ReadAllBytes(indexPath);
+            Assert.Equal(initialContent, currentContent);
         }
 
         #endregion
