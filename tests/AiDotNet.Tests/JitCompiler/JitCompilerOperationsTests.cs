@@ -11,6 +11,11 @@ namespace AiDotNet.Tests.JitCompiler
     /// <summary>
     /// Tests for JIT compiler operations, especially the newly added extended activation functions.
     /// </summary>
+    /// <remarks>
+    /// These tests are quarantined because they trigger GPU initialization which can fail
+    /// on machines without proper GPU support or drivers.
+    /// </remarks>
+    [Trait("Category", "GPU")]
     public class JitCompilerOperationsTests
     {
         [Fact]
