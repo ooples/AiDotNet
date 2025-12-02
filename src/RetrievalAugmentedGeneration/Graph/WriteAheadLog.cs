@@ -54,18 +54,54 @@ public class WriteAheadLog : IDisposable
     public WriteAheadLog(string walFilePath)
     {
         _walFilePath = walFilePath ?? throw new ArgumentNullException(nameof(walFilePath));
-        _currentTransactionId = 0;
 
         // Ensure directory exists
         var directory = Path.GetDirectoryName(walFilePath);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             Directory.CreateDirectory(directory);
 
+        // Restore transaction ID from existing log to prevent duplicates after restart
+        _currentTransactionId = RestoreLastTransactionId();
+
         // Open WAL file for append
         _writer = new StreamWriter(_walFilePath, append: true, Encoding.UTF8)
         {
             AutoFlush = true // Critical: flush immediately for durability
         };
+    }
+
+    /// <summary>
+    /// Restores the last transaction ID from an existing WAL file.
+    /// </summary>
+    /// <returns>The maximum transaction ID found in the log, or 0 if no log exists.</returns>
+    private long RestoreLastTransactionId()
+    {
+        if (!File.Exists(_walFilePath))
+            return 0;
+
+        long maxId = 0;
+        try
+        {
+            foreach (var line in File.ReadLines(_walFilePath))
+            {
+                try
+                {
+                    var entry = JsonConvert.DeserializeObject<WALEntry>(line);
+                    if (entry != null && entry.TransactionId > maxId)
+                        maxId = entry.TransactionId;
+                }
+                catch (JsonException)
+                {
+                    // Skip malformed lines
+                }
+            }
+        }
+        catch (IOException)
+        {
+            // If we can't read the file, start from 0
+            return 0;
+        }
+        return maxId;
     }
 
     /// <summary>
