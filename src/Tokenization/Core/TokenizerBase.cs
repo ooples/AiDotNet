@@ -48,16 +48,23 @@ namespace AiDotNet.Tokenization.Core
             // Tokenize the text
             var tokens = Tokenize(text);
 
-            // Add special tokens if requested
+            // Truncate BEFORE adding special tokens to preserve them
+            if (options.Truncation && options.MaxLength.HasValue)
+            {
+                // Reserve space for special tokens if they will be added
+                var reservedSpace = options.AddSpecialTokens ? 2 : 0; // [CLS] and [SEP]
+                var maxContentLength = options.MaxLength.Value - reservedSpace;
+
+                if (tokens.Count > maxContentLength)
+                {
+                    tokens = TruncateSequence(tokens, maxContentLength, options.TruncationSide);
+                }
+            }
+
+            // Add special tokens if requested (after truncation to preserve them)
             if (options.AddSpecialTokens)
             {
                 tokens = AddSpecialTokensToSequence(tokens);
-            }
-
-            // Truncate if necessary
-            if (options.Truncation && options.MaxLength.HasValue && tokens.Count > options.MaxLength.Value)
-            {
-                tokens = TruncateSequence(tokens, options.MaxLength.Value, options.TruncationSide);
             }
 
             // Convert tokens to IDs
