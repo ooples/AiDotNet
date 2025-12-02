@@ -64,10 +64,19 @@ namespace AiDotNet.Tokenization.Models
         /// <summary>
         /// Creates a tokenization result with the specified tokens and IDs.
         /// </summary>
+        /// <exception cref="ArgumentException">Thrown when tokens and tokenIds have different counts.</exception>
         public TokenizationResult(List<string> tokens, List<int> tokenIds)
         {
             Tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
             TokenIds = tokenIds ?? throw new ArgumentNullException(nameof(tokenIds));
+
+            if (tokens.Count != tokenIds.Count)
+            {
+                throw new ArgumentException(
+                    $"Tokens count ({tokens.Count}) must match tokenIds count ({tokenIds.Count}).",
+                    nameof(tokenIds));
+            }
+
             AttentionMask = Enumerable.Repeat(1, tokens.Count).ToList();
         }
     }
