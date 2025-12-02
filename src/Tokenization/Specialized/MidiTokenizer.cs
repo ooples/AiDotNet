@@ -74,7 +74,9 @@ namespace AiDotNet.Tokenization.Specialized
                         int.TryParse(parts[3], out int velocity))
                     {
                         tokens.Add($"Pitch_{pitch}");
-                        tokens.Add($"Velocity_{(velocity * _numVelocityBins) / 128}");
+                        // Clamp velocity bin to valid range [0, _numVelocityBins-1]
+                        int velocityBin = Math.Min((velocity * _numVelocityBins) / 128, _numVelocityBins - 1);
+                        tokens.Add($"Velocity_{velocityBin}");
                         tokens.Add($"Duration_{QuantizeDuration(duration)}");
                     }
                 }
@@ -114,7 +116,9 @@ namespace AiDotNet.Tokenization.Specialized
                 int positionInBar = (note.StartTick % (_ticksPerBeat * 4)) / (_ticksPerBeat / 4);
                 tokens.Add($"Position_{positionInBar}");
                 tokens.Add($"Pitch_{note.Pitch}");
-                tokens.Add($"Velocity_{(note.Velocity * _numVelocityBins) / 128}");
+                // Clamp velocity bin to valid range [0, _numVelocityBins-1]
+                int velocityBin = Math.Min((note.Velocity * _numVelocityBins) / 128, _numVelocityBins - 1);
+                tokens.Add($"Velocity_{velocityBin}");
                 tokens.Add($"Duration_{QuantizeDuration(note.Duration)}");
 
                 currentTick = note.StartTick + note.Duration;
@@ -126,7 +130,9 @@ namespace AiDotNet.Tokenization.Specialized
         private int QuantizeDuration(int ticks)
         {
             int quantumSize = _ticksPerBeat / 4;
-            return Math.Min(((ticks + quantumSize / 2) / quantumSize), 128);
+            // Clamp to valid range [1, 128] - vocabulary has Duration_1 through Duration_128
+            int quantized = (ticks + quantumSize / 2) / quantumSize;
+            return Math.Max(1, Math.Min(quantized, 128));
         }
 
         protected override string CleanupTokens(List<string> tokens)
