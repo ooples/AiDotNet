@@ -42,7 +42,7 @@ namespace AiDotNet.Tokenization.Algorithms
     public class BpeTokenizer : TokenizerBase
     {
         private readonly Dictionary<(string, string), int> _bpeMerges;
-        private readonly Dictionary<string, string> _cache;
+        private readonly Dictionary<string, List<string>> _cache;
         private readonly Regex _patternRegex;
 
         /// <summary>
@@ -66,7 +66,7 @@ namespace AiDotNet.Tokenization.Algorithms
             : base(vocabulary, specialTokens ?? SpecialTokens.Gpt())
         {
             _bpeMerges = merges ?? throw new ArgumentNullException(nameof(merges));
-            _cache = new Dictionary<string, string>();
+            _cache = new Dictionary<string, List<string>>();
 
             // Default GPT-2 pattern for pre-tokenization
             pattern ??= @"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+";
@@ -225,13 +225,13 @@ namespace AiDotNet.Tokenization.Algorithms
                 // Check cache
                 if (_cache.TryGetValue(word, out var cachedTokens))
                 {
-                    tokens.AddRange(cachedTokens.Split(' '));
+                    tokens.AddRange(cachedTokens);
                     continue;
                 }
 
                 // Apply BPE
                 var bpeTokens = BpeEncode(word);
-                _cache[word] = string.Join(" ", bpeTokens);
+                _cache[word] = bpeTokens;
                 tokens.AddRange(bpeTokens);
             }
 
