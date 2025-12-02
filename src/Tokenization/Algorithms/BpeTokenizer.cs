@@ -100,6 +100,13 @@ namespace AiDotNet.Tokenization.Algorithms
             SpecialTokens? specialTokens = null,
             string? pattern = null)
         {
+            if (corpus == null)
+                throw new ArgumentNullException(nameof(corpus));
+
+            var corpusList = corpus.ToList();
+            if (corpusList.Count == 0)
+                throw new ArgumentException("Corpus cannot be empty.", nameof(corpus));
+
             specialTokens ??= SpecialTokens.Gpt();
 
             // Step 1: Build character vocabulary
@@ -116,7 +123,7 @@ namespace AiDotNet.Tokenization.Algorithms
             var preTokenRegex = new Regex(pattern, RegexOptions.Compiled);
 
             var wordFreqs = new Dictionary<string, int>();
-            foreach (var text in corpus)
+            foreach (var text in corpusList)
             {
                 var words = preTokenRegex.Matches(text)
                     .Cast<Match>()
