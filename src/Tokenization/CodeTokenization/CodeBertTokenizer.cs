@@ -80,8 +80,7 @@ namespace AiDotNet.Tokenization.CodeTokenization
             var tokenIds = _codeTokenizer.ConvertTokensToIds(allTokens);
 
             // Create attention mask and token type IDs
-            var attentionMask = new List<int>(new int[tokenIds.Count]);
-            for (int i = 0; i < attentionMask.Count; i++) attentionMask[i] = 1;
+            var attentionMask = Enumerable.Repeat(1, tokenIds.Count).ToList();
 
             var tokenTypeIds = new List<int>();
             if (!string.IsNullOrEmpty(naturalLanguage))
