@@ -36,6 +36,8 @@ jobs:
           format: sarif
           gh-code-scanning-compat: true
           max-allowed-issues: 2147483647
+          directory: src
+          skip-uncommitted-files-check: true
         continue-on-error: true
 
       - name: Upload SARIF results file
