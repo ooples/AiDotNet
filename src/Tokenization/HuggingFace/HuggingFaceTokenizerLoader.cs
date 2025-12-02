@@ -383,9 +383,9 @@ namespace AiDotNet.Tokenization.HuggingFace
             if (mergesArray != null)
             {
                 int order = 0;
-                foreach (var merge in mergesArray)
+                var mergeStrings = mergesArray.Select(m => m.Value<string>());
+                foreach (var mergeStr in mergeStrings)
                 {
-                    var mergeStr = merge.Value<string>();
                     if (mergeStr != null)
                     {
                         var parts = mergeStr.Split(' ');
