@@ -720,8 +720,10 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             store.RemoveNode("bob");
 
             // Assert - Bob and his edges are gone
+            // Bob has 3 edges: edge1 (incoming from alice), edge2 (outgoing to charlie), edge4 (outgoing to acme)
+            // Only edge3 (alice -> acme) remains, so EdgeCount = 1
             Assert.Equal(3, store.NodeCount);
-            Assert.Equal(2, store.EdgeCount);
+            Assert.Equal(1, store.EdgeCount);
             Assert.Null(store.GetNode("bob"));
             Assert.Null(store.GetEdge(edge1.Id));
             Assert.Null(store.GetEdge(edge2.Id));

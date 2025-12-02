@@ -506,18 +506,19 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Reload and modify
             using (var store = new FileGraphStore<double>(storagePath))
             {
-                // Remove Bob
+                // Remove Bob - this removes his 3 edges: edge1 (alice->bob), edge2 (bob->charlie), edge4 (bob->acme)
+                // Only edge3 (alice->acme) remains
                 store.RemoveNode("bob");
 
                 Assert.Equal(3, store.NodeCount);
-                Assert.Equal(2, store.EdgeCount);
+                Assert.Equal(1, store.EdgeCount);
             }
 
             // Reload again and verify persistence
             using (var store = new FileGraphStore<double>(storagePath))
             {
                 Assert.Equal(3, store.NodeCount);
-                Assert.Equal(2, store.EdgeCount);
+                Assert.Equal(1, store.EdgeCount);
                 Assert.Null(store.GetNode("bob"));
                 Assert.Single(store.GetIncomingEdges("acme"));
             }

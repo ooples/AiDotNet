@@ -1098,6 +1098,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _gpuAccelerationConfig);
 
         // Return standard PredictionModelResult
+        // Note: This Build() overload doesn't perform JIT compilation (only the main Build() does),
+        // so jitCompiledFunction uses its default value of null
         var result = new PredictionModelResult<T, TInput, TOutput>(
             optimizationResult,
             normInfo,
@@ -1111,9 +1113,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             crossValidationResult: null,
             _agentConfig,
             agentRecommendation: null,
-            deploymentConfig,
-            jitCompiledFunction: null,
-            inferenceOptimizationConfig: null,
+            deploymentConfiguration: deploymentConfig,
+            inferenceOptimizationConfig: _inferenceOptimizationConfig,
             knowledgeGraph: _knowledgeGraph,
             graphStore: _graphStore,
             hybridGraphRetriever: _hybridGraphRetriever);
