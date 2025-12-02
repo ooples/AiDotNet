@@ -877,7 +877,14 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
         if (!_outgoingEdges.TryGetValue(nodeId, out var edgeIds))
             return Enumerable.Empty<GraphEdge<T>>();
 
-        var tasks = edgeIds.Select(id => GetEdgeAsync(id));
+        // Take snapshot of edgeIds to avoid race condition during enumeration
+        List<string> snapshot;
+        lock (_cacheLock)
+        {
+            snapshot = edgeIds.ToList();
+        }
+
+        var tasks = snapshot.Select(id => GetEdgeAsync(id));
         var results = await Task.WhenAll(tasks);
         return results.OfType<GraphEdge<T>>().ToList();
     }
@@ -888,7 +895,14 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
         if (!_incomingEdges.TryGetValue(nodeId, out var edgeIds))
             return Enumerable.Empty<GraphEdge<T>>();
 
-        var tasks = edgeIds.Select(id => GetEdgeAsync(id));
+        // Take snapshot of edgeIds to avoid race condition during enumeration
+        List<string> snapshot;
+        lock (_cacheLock)
+        {
+            snapshot = edgeIds.ToList();
+        }
+
+        var tasks = snapshot.Select(id => GetEdgeAsync(id));
         var results = await Task.WhenAll(tasks);
         return results.OfType<GraphEdge<T>>().ToList();
     }
@@ -899,7 +913,14 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
         if (!_nodesByLabel.TryGetValue(label, out var nodeIds))
             return Enumerable.Empty<GraphNode<T>>();
 
-        var tasks = nodeIds.Select(id => GetNodeAsync(id));
+        // Take snapshot of nodeIds to avoid race condition during enumeration
+        List<string> snapshot;
+        lock (_cacheLock)
+        {
+            snapshot = nodeIds.ToList();
+        }
+
+        var tasks = snapshot.Select(id => GetNodeAsync(id));
         var results = await Task.WhenAll(tasks);
         return results.OfType<GraphNode<T>>().ToList();
     }
