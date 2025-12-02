@@ -202,9 +202,8 @@ public async Task<CodeGenerationResult> GenerateAsync(
 public async Task<DebugResult> DebugAsync(string buggyCode, string errorMessage)
 {
     var debugPrompt = $@"Debug this code:
-```
+
 {buggyCode}
-```
 
 Error: {errorMessage}
 

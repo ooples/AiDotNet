@@ -32,7 +32,7 @@ namespace AiDotNet.Reasoning.Aggregation;
 /// - When combining results from different reasoning paths
 /// </para>
 /// </remarks>
-public class WeightedAggregator<T> : IAnswerAggregator<T>
+internal class WeightedAggregator<T> : IAnswerAggregator<T>
 {
     private readonly INumericOperations<T> _numOps;
 
@@ -87,10 +87,7 @@ public class WeightedAggregator<T> : IAnswerAggregator<T>
             throw new InvalidOperationException("No valid answers to aggregate");
 
         // Find the answer with the highest total weight
-        var winner = answerWeights.OrderByDescending(kvp =>
-        {
-            return Convert.ToDouble(kvp.Value);
-        }).First();
+        var winner = answerWeights.OrderByDescending(kvp => _numOps.ToDouble(kvp.Value)).First();
 
         return winner.Key;
     }

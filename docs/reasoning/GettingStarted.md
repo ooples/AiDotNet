@@ -1,6 +1,6 @@
 # Getting Started with AiDotNet Reasoning Framework
 
-Welcome to the AiDotNet Reasoning Framework - a cutting-edge system for advanced AI reasoning that rivals DeepSeek-R1 and ChatGPT o1/o3!
+Welcome to the AiDotNet Reasoning Framework - a comprehensive system for advanced AI reasoning implementing state-of-the-art techniques from recent research papers.
 
 ## Table of Contents
 - [Quick Start](#quick-start)
@@ -191,7 +191,7 @@ Console.WriteLine(result);
 ```
 
 **Output:**
-```
+```text
 Problem: A store has 347 apples...
 
 Reasoning Steps:
@@ -348,10 +348,10 @@ var result = await mathReasoner.SolveAsync(problem, useVerification: true);
 
 ## Community & Support
 
-- **Documentation**: https://docs.aidotnet.com
-- **GitHub**: https://github.com/ooples/AiDotNet
-- **Issues**: https://github.com/ooples/AiDotNet/issues
-- **Discussions**: https://github.com/ooples/AiDotNet/discussions
+- **Documentation**: [AiDotNet Docs](https://docs.aidotnet.com)
+- **GitHub**: [AiDotNet Repository](https://github.com/ooples/AiDotNet)
+- **Issues**: [Report Issues](https://github.com/ooples/AiDotNet/issues)
+- **Discussions**: [Community Discussions](https://github.com/ooples/AiDotNet/discussions)
 
 ## What's Next?
 

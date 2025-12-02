@@ -2,7 +2,7 @@
 
 ## Overview
 
-The AiDotNet Reasoning Framework is a **cutting-edge system for advanced AI reasoning** that rivals DeepSeek-R1 and ChatGPT o1/o3. It implements state-of-the-art techniques from recent research papers and provides a comprehensive toolkit for building reasoning systems.
+The AiDotNet Reasoning Framework is a **comprehensive system for advanced AI reasoning** that implements state-of-the-art techniques from recent research papers and provides a complete toolkit for building reasoning systems.
 
 ### Key Features
 
@@ -62,7 +62,7 @@ foreach (var step in result.ReasoningChain.Steps)
 ```
 
 **Output:**
-```
+```text
 Answer: 150 miles
 Confidence: 0.95
 Step 1: Calculate distance using the formula: distance = speed × time
@@ -100,7 +100,7 @@ Console.WriteLine($"Consensus: {result.Metrics["consensus_ratio"]:P}");
 ```
 
 **Output:**
-```
+```text
 Final Answer: 100
 Based on 10 different reasoning paths
 Consensus: 90% (9/10 paths agreed)
@@ -157,7 +157,7 @@ Console.WriteLine($"Answer: {result.FinalAnswer}");
 ```
 
 **Output:**
-```
+```text
 All calculations verified: True
 Answer: Janet sells 9 eggs, making $18 daily
 ```
@@ -214,7 +214,7 @@ Console.WriteLine($"Compute scaling: {hardConfig.ComputeScalingFactor}x");
 ```
 
 **Output:**
-```
+```text
 Easy problem config: MaxSteps=3, Verification=False
 Hard problem config: MaxSteps=50, Verification=True
 Compute scaling: 5.0x
@@ -255,7 +255,7 @@ Console.WriteLine(results.GetSummary());
 ```
 
 **Output:**
-```
+```text
 Benchmark: GSM8K
 Problems Evaluated: 50
 Correct: 43
@@ -432,7 +432,7 @@ Inspired by:
 
 ## Architecture Overview
 
-```
+```text
 src/Reasoning/
 ├── Models/                  # Core data models
 │   ├── ReasoningConfig     # Configuration
@@ -494,4 +494,4 @@ For more information, see the API documentation and source code comments.
 **Framework Version:** 1.0
 **Last Updated:** 2025
 **License:** Follow AiDotNet project license
-**Issues:** https://github.com/ooples/AiDotNet/issues/417
+**Issues:** [Report Issues](https://github.com/ooples/AiDotNet/issues/417)
