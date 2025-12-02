@@ -17,6 +17,7 @@ global using AiDotNet.Enums;
 global using AiDotNet.MixedPrecision;
 global using AiDotNet.KnowledgeDistillation;
 global using AiDotNet.Deployment.Configuration;
+global using AiDotNet.RetrievalAugmentedGeneration.Graph;
 
 namespace AiDotNet;
 
@@ -54,6 +55,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IReranker<T>? _ragReranker;
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
+
+    // Graph RAG components for knowledge graph-enhanced retrieval
+    private KnowledgeGraph<T>? _knowledgeGraph;
+    private IGraphStore<T>? _graphStore;
+    private HybridGraphRetriever<T>? _hybridGraphRetriever;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
     private ICommunicationBackend<T>? _distributedBackend;
     private DistributedStrategy _distributedStrategy = DistributedStrategy.DDP;
@@ -565,7 +571,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             ragGenerator: _ragGenerator,
             queryProcessors: _queryProcessors,
             agentConfig: _agentConfig,
-            deploymentConfiguration: deploymentConfig);
+            deploymentConfiguration: deploymentConfig,
+            knowledgeGraph: _knowledgeGraph,
+            graphStore: _graphStore,
+            hybridGraphRetriever: _hybridGraphRetriever);
 
         return Task.FromResult(result);
     }
@@ -917,7 +926,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             agentRecommendation,
             deploymentConfig,
             jitCompiledFunction,
-            _inferenceOptimizationConfig);
+            _inferenceOptimizationConfig,
+            _knowledgeGraph,
+            _graphStore,
+            _hybridGraphRetriever);
 
         return finalResult;
     }
@@ -1099,7 +1111,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             crossValidationResult: null,
             _agentConfig,
             agentRecommendation: null,
-            deploymentConfig);
+            deploymentConfig,
+            jitCompiledFunction: null,
+            inferenceOptimizationConfig: null,
+            knowledgeGraph: _knowledgeGraph,
+            graphStore: _graphStore,
+            hybridGraphRetriever: _hybridGraphRetriever);
 
         return result;
     }
@@ -1288,6 +1305,56 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         _ragReranker = reranker;
         _ragGenerator = generator;
         _queryProcessors = queryProcessors;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures Graph RAG (Retrieval Augmented Generation with Knowledge Graphs) for enhanced context retrieval.
+    /// </summary>
+    /// <param name="graphStore">The graph storage backend (e.g., MemoryGraphStore, FileGraphStore).</param>
+    /// <param name="knowledgeGraph">Optional pre-configured knowledge graph. If null, a new one is created using the store.</param>
+    /// <param name="documentStore">Optional document store for hybrid vector + graph retrieval.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Graph RAG combines traditional vector similarity search with knowledge graph traversal for richer context.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Traditional RAG finds similar documents using vectors. Graph RAG goes further by
+    /// also exploring relationships between entities. For example, if you ask about "Paris", it can find
+    /// not just documents mentioning Paris, but also related concepts like France, Eiffel Tower, and Seine River.
+    /// </para>
+    /// <para>
+    /// Usage example:
+    /// <code>
+    /// var store = new FileGraphStore&lt;double&gt;("./graph_data");
+    /// builder.ConfigureGraphRAG(store);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureGraphRAG(
+        IGraphStore<T>? graphStore = null,
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IDocumentStore<T>? documentStore = null)
+    {
+        _graphStore = graphStore;
+
+        // Use provided knowledge graph or create one from the store
+        if (knowledgeGraph != null)
+        {
+            _knowledgeGraph = knowledgeGraph;
+        }
+        else if (graphStore != null)
+        {
+            _knowledgeGraph = new KnowledgeGraph<T>(graphStore);
+        }
+
+        // Create hybrid retriever if both graph and document store are available
+        if (_knowledgeGraph != null && documentStore != null)
+        {
+            _hybridGraphRetriever = new HybridGraphRetriever<T>(_knowledgeGraph, documentStore);
+        }
+
         return this;
     }
 

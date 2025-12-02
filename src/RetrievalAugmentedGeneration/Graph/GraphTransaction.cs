@@ -109,7 +109,7 @@ public class GraphTransaction<T> : IDisposable
 
         _operations.Add(new TransactionOperation<T>
         {
-            Type = OperationType.AddNode,
+            Type = GraphOperationType.AddNode,
             Node = node
         });
     }
@@ -124,7 +124,7 @@ public class GraphTransaction<T> : IDisposable
 
         _operations.Add(new TransactionOperation<T>
         {
-            Type = OperationType.AddEdge,
+            Type = GraphOperationType.AddEdge,
             Edge = edge
         });
     }
@@ -142,7 +142,7 @@ public class GraphTransaction<T> : IDisposable
 
         _operations.Add(new TransactionOperation<T>
         {
-            Type = OperationType.RemoveNode,
+            Type = GraphOperationType.RemoveNode,
             NodeId = nodeId,
             Node = originalNode // Store for undo
         });
@@ -161,7 +161,7 @@ public class GraphTransaction<T> : IDisposable
 
         _operations.Add(new TransactionOperation<T>
         {
-            Type = OperationType.RemoveEdge,
+            Type = GraphOperationType.RemoveEdge,
             EdgeId = edgeId,
             Edge = originalEdge // Store for undo
         });
@@ -257,16 +257,16 @@ public class GraphTransaction<T> : IDisposable
 
         switch (op.Type)
         {
-            case OperationType.AddNode:
+            case GraphOperationType.AddNode:
                 _wal.LogAddNode(op.Node!);
                 break;
-            case OperationType.AddEdge:
+            case GraphOperationType.AddEdge:
                 _wal.LogAddEdge(op.Edge!);
                 break;
-            case OperationType.RemoveNode:
+            case GraphOperationType.RemoveNode:
                 _wal.LogRemoveNode(op.NodeId!);
                 break;
-            case OperationType.RemoveEdge:
+            case GraphOperationType.RemoveEdge:
                 _wal.LogRemoveEdge(op.EdgeId!);
                 break;
         }
@@ -279,19 +279,19 @@ public class GraphTransaction<T> : IDisposable
     {
         switch (op.Type)
         {
-            case OperationType.AddNode:
+            case GraphOperationType.AddNode:
                 if (op.Node != null)
                     _store.AddNode(op.Node);
                 break;
-            case OperationType.AddEdge:
+            case GraphOperationType.AddEdge:
                 if (op.Edge != null)
                     _store.AddEdge(op.Edge);
                 break;
-            case OperationType.RemoveNode:
+            case GraphOperationType.RemoveNode:
                 if (op.NodeId != null)
                     _store.RemoveNode(op.NodeId);
                 break;
-            case OperationType.RemoveEdge:
+            case GraphOperationType.RemoveEdge:
                 if (op.EdgeId != null)
                     _store.RemoveEdge(op.EdgeId);
                 break;
@@ -314,22 +314,22 @@ public class GraphTransaction<T> : IDisposable
     {
         switch (op.Type)
         {
-            case OperationType.AddNode:
+            case GraphOperationType.AddNode:
                 // Undo add by removing the node
                 if (op.Node != null)
                     _store.RemoveNode(op.Node.Id);
                 break;
-            case OperationType.AddEdge:
+            case GraphOperationType.AddEdge:
                 // Undo add by removing the edge
                 if (op.Edge != null)
                     _store.RemoveEdge(op.Edge.Id);
                 break;
-            case OperationType.RemoveNode:
+            case GraphOperationType.RemoveNode:
                 // Undo remove by re-adding the node (if we have the original data)
                 if (op.Node != null)
                     _store.AddNode(op.Node);
                 break;
-            case OperationType.RemoveEdge:
+            case GraphOperationType.RemoveEdge:
                 // Undo remove by re-adding the edge (if we have the original data)
                 if (op.Edge != null)
                     _store.AddEdge(op.Edge);
@@ -376,7 +376,7 @@ public class GraphTransaction<T> : IDisposable
 /// <typeparam name="T">The numeric type.</typeparam>
 internal class TransactionOperation<T>
 {
-    public OperationType Type { get; set; }
+    public GraphOperationType Type { get; set; }
     public GraphNode<T>? Node { get; set; }
     public GraphEdge<T>? Edge { get; set; }
     public string? NodeId { get; set; }
@@ -384,9 +384,9 @@ internal class TransactionOperation<T>
 }
 
 /// <summary>
-/// Types of operations supported in transactions.
+/// Types of operations supported in graph transactions.
 /// </summary>
-internal enum OperationType
+internal enum GraphOperationType
 {
     AddNode,
     AddEdge,
