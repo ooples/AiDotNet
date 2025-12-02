@@ -83,11 +83,12 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var storagePath = GetTestStoragePath();
 
-            // Act
-            using var store = new FileGraphStore<double>(storagePath);
-            var node = CreateTestNode("node1", "PERSON");
-            store.AddNode(node);
-            store.Dispose(); // Force flush
+            // Act - use explicit using block to ensure dispose before assertions
+            using (var store = new FileGraphStore<double>(storagePath))
+            {
+                var node = CreateTestNode("node1", "PERSON");
+                store.AddNode(node);
+            } // Dispose called here - flushes to disk
 
             // Assert
             Assert.True(File.Exists(Path.Combine(storagePath, "node_index.db")));
