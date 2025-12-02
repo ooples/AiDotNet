@@ -1,8 +1,9 @@
 name: Build
 
-# Fast checks on every commit to any branch
+# Build validation for pull requests only
+# Master/main builds are handled by automated-release.yml
 on:
-  push:
+  pull_request:
     branches: ['**']
   workflow_dispatch:
 

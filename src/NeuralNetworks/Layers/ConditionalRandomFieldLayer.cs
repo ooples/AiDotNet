@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -80,6 +82,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// <param name="numClasses">The number of possible label classes.</param>
     /// <param name="sequenceLength">The length of the input sequences.</param>
     /// <param name="scalarActivation">The scalar activation function to apply to inputs. Defaults to identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new CRF layer with the specified number of classes and sequence length.
@@ -119,6 +122,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// <param name="numClasses">The number of possible label classes.</param>
     /// <param name="sequenceLength">The length of the input sequences.</param>
     /// <param name="vectorActivation">The vector activation function to apply to inputs. Defaults to identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new CRF layer with the specified number of classes and sequence length.
@@ -407,7 +411,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// error gradients back through the network. It computes the gradients of the loss with respect to the
     /// layer's parameters (transition matrix, start scores, and end scores) and the layer's input.
     /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's inputs 
+    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's inputs
     /// and parameters should change to reduce errors.
     ///
     /// During the backward pass:
@@ -417,17 +421,29 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     ///    - How start and end scores should change
     /// 3. It calculates how the input features contributed to the error
     /// 4. If an activation function was used, its derivative is applied
-    /// 
+    ///
     /// This lets the network learn:
     /// - Which label is likely to follow another
     /// - Which labels commonly appear at the start or end of sequences
     /// - How input features relate to labels
-    /// 
+    ///
     /// This is part of the "backpropagation" algorithm that helps neural networks learn
     /// from their mistakes and improve over time.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -515,6 +531,25 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Viterbi algorithm and CRF-specific
+    /// operations are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // ConditionalRandomFieldLayer uses Forward-Backward algorithm and Viterbi decoding
+        // The manual implementation provides correct gradient computation through CRF inference
+        // These structured prediction algorithms are domain-specific to sequence labeling
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
     /// Updates the layer's parameters using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
@@ -544,18 +579,35 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (_transitionMatrixGradient == null || _startScoresGradient == null || _endScoresGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
+        // === Vectorized Parameter Updates using IEngine (Phase B: US-GPU-015) ===
+        // Update start and end scores (vectorized)
+        var scaledStartGrad = (Vector<T>)Engine.Multiply(_startScoresGradient, learningRate);
+        _startScores = (Vector<T>)Engine.Subtract(_startScores, scaledStartGrad);
+
+        var scaledEndGrad = (Vector<T>)Engine.Multiply(_endScoresGradient, learningRate);
+        _endScores = (Vector<T>)Engine.Subtract(_endScores, scaledEndGrad);
+
+        // Update transition matrix (row-wise vectorization)
         for (int i = 0; i < _numClasses; i++)
         {
+            // Extract row vectors
+            var transRow = new Vector<T>(_numClasses);
+            var gradRow = new Vector<T>(_numClasses);
             for (int j = 0; j < _numClasses; j++)
             {
-                _transitionMatrix[i, j] = NumOps.Subtract(_transitionMatrix[i, j], 
-                    NumOps.Multiply(learningRate, _transitionMatrixGradient[i, j]));
+                transRow[j] = _transitionMatrix[i, j];
+                gradRow[j] = _transitionMatrixGradient[i, j];
             }
 
-            _startScores[i] = NumOps.Subtract(_startScores[i], 
-                NumOps.Multiply(learningRate, _startScoresGradient[i]));
-            _endScores[i] = NumOps.Subtract(_endScores[i], 
-                NumOps.Multiply(learningRate, _endScoresGradient[i]));
+            // Vectorized: row = row - learningRate * gradRow
+            var scaledGrad = (Vector<T>)Engine.Multiply(gradRow, learningRate);
+            var updatedRow = (Vector<T>)Engine.Subtract(transRow, scaledGrad);
+
+            // Store back
+            for (int j = 0; j < _numClasses; j++)
+            {
+                _transitionMatrix[i, j] = updatedRow[j];
+            }
         }
     }
 
@@ -706,4 +758,56 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         _startScoresGradient = null;
         _endScoresGradient = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        // ConditionalRandomFieldLayer JIT uses the forward algorithm for differentiable inference:
+        // This computes the log partition function which can be used for CRF training.
+        // For inference at runtime, Viterbi decoding is still used, but training can use autodiff.
+
+        var input = inputNodes[0];
+
+        // Input is emissions [seqLen, numClasses]
+        // Convert transition matrix to computation node
+        var transitionsTensor = new Tensor<T>([_numClasses, _numClasses]);
+        for (int i = 0; i < _numClasses; i++)
+            for (int j = 0; j < _numClasses; j++)
+                transitionsTensor[i, j] = _transitionMatrix[i, j];
+
+        var transitionsNode = TensorOperations<T>.Variable(transitionsTensor, "crf_transitions", requiresGradient: true);
+
+        // Use CRF forward algorithm for log partition computation
+        var logPartition = TensorOperations<T>.CRFForward(input, transitionsNode);
+
+        // Apply activation
+        var output = ApplyActivationToGraph(logPartition);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c>. CRF uses the forward algorithm for differentiable training.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for CRF uses the forward algorithm to compute the log partition
+    /// function, which is differentiable with respect to emissions and transitions.
+    /// This enables gradient-based optimization of CRF parameters. For inference,
+    /// Viterbi decoding is used at runtime, but the JIT-compiled graph supports training.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
 }

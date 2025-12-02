@@ -1,3 +1,5 @@
+
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -7,7 +9,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para>
 /// A depthwise separable convolutional layer splits the standard convolution operation into two parts:
 /// a depthwise convolution, which applies a single filter per input channel, and a pointwise convolution,
-/// which uses 1×1 convolutions to combine the outputs. This approach dramatically reduces the number of
+/// which uses 1ï¿½1 convolutions to combine the outputs. This approach dramatically reduces the number of
 /// parameters and computational cost compared to standard convolution.
 /// </para>
 /// <para><b>For Beginners:</b> A depthwise separable convolution is like a more efficient way to filter an image.
@@ -54,13 +56,13 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This tensor stores the weights for the pointwise convolution. It has dimensions
-    /// [OutputDepth, InputDepth, 1, 1], which applies 1×1 convolutions to mix channels
+    /// [OutputDepth, InputDepth, 1, 1], which applies 1ï¿½1 convolutions to mix channels
     /// without spatial filtering.
     /// </para>
     /// <para><b>For Beginners:</b> These are the filters that combine channels after they've been processed.
     /// 
     /// After each channel has been filtered separately:
-    /// - These 1×1 filters mix the channels together
+    /// - These 1ï¿½1 filters mix the channels together
     /// - They learn how to combine the filtered channels to create useful output features
     /// - They don't look at spatial patterns (no width or height, just combining channels)
     /// 
@@ -257,16 +259,16 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This field stores the spatial size of the depthwise filter kernels. For example, a kernel size
-    /// of 3 means 3×3 kernels are used for the depthwise convolution.
+    /// of 3 means 3ï¿½3 kernels are used for the depthwise convolution.
     /// </para>
     /// <para><b>For Beginners:</b> This is how big each filter is when looking for patterns.
     /// 
     /// For example:
-    /// - A kernelSize of 3 means each filter is a 3×3 grid (9 points)
-    /// - A kernelSize of 5 means each filter is a 5×5 grid (25 points)
+    /// - A kernelSize of 3 means each filter is a 3ï¿½3 grid (9 points)
+    /// - A kernelSize of 5 means each filter is a 5ï¿½5 grid (25 points)
     /// 
-    /// Smaller kernels (3×3) look for simple patterns like edges.
-    /// Larger kernels (5×5 or 7×7) can detect more complex patterns but use more memory.
+    /// Smaller kernels (3ï¿½3) look for simple patterns like edges.
+    /// Larger kernels (5ï¿½5 or 7ï¿½7) can detect more complex patterns but use more memory.
     /// </para>
     /// </remarks>
     private readonly int _kernelSize;
@@ -471,8 +473,8 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        T depthwiseScale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_kernelSize * _kernelSize)));
-        T pointwiseScale = NumOps.Sqrt(NumOps.FromDouble(2.0 / _inputDepth));
+        T depthwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_kernelSize * _kernelSize)));
+        T pointwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_inputDepth)));
 
         InitializeTensor(_depthwiseKernels, depthwiseScale);
         InitializeTensor(_pointwiseKernels, pointwiseScale);
@@ -572,7 +574,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// - Includes height, width, and the number of output channels
     /// - Is used by the next layer in the network
     /// 
-    /// For example, if your layer creates 64 feature maps that are 112×112, 
+    /// For example, if your layer creates 64 feature maps that are 112ï¿½112, 
     /// the output shape would be [112, 112, 64], meaning:
     /// - 112 pixels tall
     /// - 112 pixels wide
@@ -795,14 +797,14 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// <returns>The output tensor after pointwise convolution.</returns>
     /// <remarks>
     /// <para>
-    /// This method performs the pointwise convolution step, which applies 1×1 convolutions to combine the
+    /// This method performs the pointwise convolution step, which applies 1ï¿½1 convolutions to combine the
     /// channels output by the depthwise convolution. This is where the channel mixing occurs, allowing
     /// the layer to learn relationships between features detected in different channels.
     /// </para>
     /// <para><b>For Beginners:</b> This method applies the second step of the filtering process.
     /// 
     /// Pointwise convolution:
-    /// - Uses 1×1 filters (just one pixel in size)
+    /// - Uses 1ï¿½1 filters (just one pixel in size)
     /// - Combines information across all channels
     /// - Creates new output channels based on combinations of input channels
     /// 
@@ -857,22 +859,35 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// These gradients indicate how each parameter should be adjusted to reduce the loss.
     /// </para>
     /// <para><b>For Beginners:</b> This method helps the layer learn from its mistakes.
-    /// 
+    ///
     /// During the backward pass:
     /// - The layer receives information about how wrong its output was
     /// - It calculates how to adjust each of its filters to be more accurate
     /// - It prepares the adjustments but doesn't apply them yet
     /// - It passes information back to previous layers so they can learn too
-    /// 
+    ///
     /// The layer has to figure out:
     /// - How to adjust the depthwise filters (first step)
     /// - How to adjust the pointwise filters (second step)
     /// - How to adjust the biases
-    /// 
+    ///
     /// This is where the actual "learning" happens in the neural network.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastDepthwiseOutput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -950,6 +965,281 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients using DepthwiseConv2D and Conv2D operations.
+    /// The layer performs two sequential operations:
+    /// 1. Depthwise convolution (each channel filtered separately)
+    /// 2. Pointwise convolution (1x1 conv to mix channels)
+    /// </para>
+    /// <para>
+    /// This provides:
+    /// - Automatic gradient computation through the computation graph
+    /// - Verification of manual gradient implementations
+    /// - Support for rapid prototyping with custom modifications
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
+        var inputNCHW = ConvertNHWCtoNCHW(_lastInput);
+        var depthwiseKernelsNCHW = ConvertDepthwiseKernelsToNCHW(_depthwiseKernels);
+        var pointwiseKernelsNCHW = ConvertPointwiseKernelsToNCHW(_pointwiseKernels);
+
+        // Create computation nodes
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputNCHW, "input", requiresGradient: true);
+        var depthwiseKernelNode = Autodiff.TensorOperations<T>.Variable(depthwiseKernelsNCHW, "depthwise_kernel", requiresGradient: true);
+        var pointwiseKernelNode = Autodiff.TensorOperations<T>.Variable(pointwiseKernelsNCHW, "pointwise_kernel", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(ConvertVectorToTensor(_biases), "bias", requiresGradient: true);
+
+        // Forward pass using autodiff operations
+        // Step 1: Depthwise convolution
+        var depthwiseOutput = Autodiff.TensorOperations<T>.DepthwiseConv2D(
+            inputNode,
+            depthwiseKernelNode,
+            bias: null,
+            stride: new int[] { _stride, _stride },
+            padding: new int[] { _padding, _padding });
+
+        // Step 2: Pointwise convolution (1x1 conv)
+        var pointwiseOutput = Autodiff.TensorOperations<T>.Conv2D(
+            depthwiseOutput,
+            pointwiseKernelNode,
+            biasNode,
+            stride: new int[] { 1, 1 },
+            padding: new int[] { 0, 0 });
+
+        // Apply activation function
+        Autodiff.ComputationNode<T> activatedOutput;
+        if (UsingVectorActivation)
+        {
+            // For vector activations, we need to handle them differently
+            // For now, approximate with element-wise operations
+            activatedOutput = ApplyActivationAutodiff(pointwiseOutput);
+        }
+        else
+        {
+            activatedOutput = ApplyActivationAutodiff(pointwiseOutput);
+        }
+
+        // Convert output gradient from NHWC to NCHW
+        var outputGradientNCHW = ConvertNHWCtoNCHW(outputGradient);
+
+        // Perform backward pass
+        activatedOutput.Gradient = outputGradientNCHW;
+        var topoOrder = GetTopologicalOrder(activatedOutput);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Update parameter gradients
+        if (depthwiseKernelNode.Gradient != null)
+            _depthwiseKernelsGradient = ConvertDepthwiseKernelsFromNCHW(depthwiseKernelNode.Gradient);
+
+        if (pointwiseKernelNode.Gradient != null)
+            _pointwiseKernelsGradient = ConvertPointwiseKernelsFromNCHW(pointwiseKernelNode.Gradient);
+
+        if (biasNode.Gradient != null)
+            _biasesGradient = ConvertTensorToVector(biasNode.Gradient);
+
+        // Convert input gradient from NCHW back to NHWC
+        var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        return ConvertNCHWtoNHWC(inputGradientNCHW);
+    }
+
+    /// <summary>
+    /// Converts tensor from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W] format.
+    /// </summary>
+    private Tensor<T> ConvertNHWCtoNCHW(Tensor<T> nhwc)
+    {
+        int batch = nhwc.Shape[0];
+        int height = nhwc.Shape[1];
+        int width = nhwc.Shape[2];
+        int channels = nhwc.Shape[3];
+
+        var nchw = new Tensor<T>([batch, channels, height, width]);
+        for (int b = 0; b < batch; b++)
+            for (int c = 0; c < channels; c++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
+                        nchw[b, c, h, w] = nhwc[b, h, w, c];
+
+        return nchw;
+    }
+
+    /// <summary>
+    /// Converts tensor from NCHW [batch, channels, H, W] to NHWC [batch, H, W, channels] format.
+    /// </summary>
+    private Tensor<T> ConvertNCHWtoNHWC(Tensor<T> nchw)
+    {
+        int batch = nchw.Shape[0];
+        int channels = nchw.Shape[1];
+        int height = nchw.Shape[2];
+        int width = nchw.Shape[3];
+
+        var nhwc = new Tensor<T>([batch, height, width, channels]);
+        for (int b = 0; b < batch; b++)
+            for (int h = 0; h < height; h++)
+                for (int w = 0; w < width; w++)
+                    for (int c = 0; c < channels; c++)
+                        nhwc[b, h, w, c] = nchw[b, c, h, w];
+
+        return nhwc;
+    }
+
+    /// <summary>
+    /// Converts depthwise kernels from [inputDepth, 1, kernelSize, kernelSize] to [inputDepth, 1, kernelSize, kernelSize] format.
+    /// </summary>
+    private Tensor<T> ConvertDepthwiseKernelsToNCHW(Tensor<T> kernels)
+    {
+        // Already in the correct format [inputDepth, multiplier, kH, kW]
+        return kernels;
+    }
+
+    /// <summary>
+    /// Converts depthwise kernels from NCHW back to original format.
+    /// </summary>
+    private Tensor<T> ConvertDepthwiseKernelsFromNCHW(Tensor<T> kernels)
+    {
+        // Already in the correct format
+        return kernels;
+    }
+
+    /// <summary>
+    /// Converts pointwise kernels from [outputDepth, inputDepth, 1, 1] to [outputDepth, inputDepth, 1, 1] format.
+    /// </summary>
+    private Tensor<T> ConvertPointwiseKernelsToNCHW(Tensor<T> kernels)
+    {
+        // Already in the correct format [outputDepth, inputDepth, 1, 1]
+        return kernels;
+    }
+
+    /// <summary>
+    /// Converts pointwise kernels from NCHW back to original format.
+    /// </summary>
+    private Tensor<T> ConvertPointwiseKernelsFromNCHW(Tensor<T> kernels)
+    {
+        // Already in the correct format
+        return kernels;
+    }
+
+    /// <summary>
+    /// Converts vector to 1D tensor.
+    /// </summary>
+    private Tensor<T> ConvertVectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>([vector.Length]);
+        for (int i = 0; i < vector.Length; i++)
+            tensor[i] = vector[i];
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts 1D tensor to vector.
+    /// </summary>
+    private Vector<T> ConvertTensorToVector(Tensor<T> tensor)
+    {
+        var vector = new Vector<T>(tensor.Shape[0]);
+        for (int i = 0; i < tensor.Shape[0]; i++)
+            vector[i] = tensor[i];
+        return vector;
+    }
+
+    /// <summary>
+    /// Applies activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        // Apply the appropriate activation function
+        if (UsingVectorActivation)
+        {
+            // For vector activation, use element-wise operations for now
+            // Common activations like ReLU work element-wise anyway
+            if (VectorActivation is ReLUActivation<T>)
+                return Autodiff.TensorOperations<T>.ReLU(input);
+            else if (VectorActivation is SigmoidActivation<T>)
+                return Autodiff.TensorOperations<T>.Sigmoid(input);
+            else if (VectorActivation is TanhActivation<T>)
+                return Autodiff.TensorOperations<T>.Tanh(input);
+            else
+            {
+                var activationType = VectorActivation?.GetType().Name ?? "Unknown";
+                throw new NotSupportedException($"Activation {activationType} not yet supported in autodiff");
+            }
+        }
+        else
+        {
+            if (ScalarActivation is ReLUActivation<T>)
+                return Autodiff.TensorOperations<T>.ReLU(input);
+            else if (ScalarActivation is SigmoidActivation<T>)
+                return Autodiff.TensorOperations<T>.Sigmoid(input);
+            else if (ScalarActivation is TanhActivation<T>)
+                return Autodiff.TensorOperations<T>.Tanh(input);
+            else
+            {
+                var activationType = ScalarActivation?.GetType().Name ?? "Unknown";
+                throw new NotSupportedException($"Activation {activationType} not yet supported in autodiff");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    /// <param name="root">The root node of the computation graph.</param>
+    /// <returns>A list of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -1248,5 +1538,95 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         _depthwiseKernelsGradient = null;
         _pointwiseKernelsGradient = null;
         _biasesGradient = null;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> when kernels are initialized and activation function supports JIT.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Depthwise separable convolutional layers support JIT compilation using DepthwiseConv2D and Conv2D
+    /// operations from TensorOperations. The layer performs depthwise convolution followed by
+    /// pointwise (1x1) convolution.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation =>
+        _depthwiseKernels != null && _pointwiseKernels != null && _biases != null &&
+        CanActivationBeJitted();
+
+    /// <summary>
+    /// Exports the depthwise separable convolutional layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the depthwise separable convolution output.</returns>
+    /// <remarks>
+    /// <para>
+    /// The depthwise separable convolution computation graph implements:
+    /// 1. Depthwise convolution: Applies separate filters to each input channel
+    /// 2. Pointwise convolution: 1x1 convolution to combine channels and add bias
+    /// 3. Activation function
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates an optimized version of the depthwise separable convolution.
+    /// It dramatically reduces computational cost compared to standard convolution.
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_depthwiseKernels == null || _pointwiseKernels == null || _biases == null)
+            throw new InvalidOperationException("Kernels and biases not initialized.");
+
+        if (InputShape == null || InputShape.Length < 3)
+            throw new InvalidOperationException("Layer input shape not configured. Expected [height, width, channels].");
+
+        // Validate activation can be JIT compiled
+        if (!CanActivationBeJitted())
+        {
+            var activationType = (ScalarActivation?.GetType() ?? VectorActivation?.GetType())?.Name ?? "Unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax, Identity");
+        }
+
+        // Create symbolic input node in NHWC format [batch, height, width, channels]
+        var symbolicInput = new Tensor<T>(new int[] { 1, InputShape[0], InputShape[1], InputShape[2] });
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "dw_separable_input");
+        inputNodes.Add(inputNode);
+
+        // Depthwise kernels are already in [inputDepth, 1, kernelSize, kernelSize] format
+        var depthwiseKernelNode = Autodiff.TensorOperations<T>.Constant(_depthwiseKernels, "depthwise_kernel");
+
+        // Pointwise kernels are already in [outputDepth, inputDepth, 1, 1] format
+        var pointwiseKernelNode = Autodiff.TensorOperations<T>.Constant(_pointwiseKernels, "pointwise_kernel");
+
+        // Convert bias to tensor
+        var biasTensor = ConvertVectorToTensor(_biases);
+        var biasNode = Autodiff.TensorOperations<T>.Constant(biasTensor, "bias");
+
+        // Step 1: Depthwise convolution (no bias)
+        var depthwiseOutput = Autodiff.TensorOperations<T>.DepthwiseConv2D(
+            inputNode,
+            depthwiseKernelNode,
+            bias: null,
+            stride: new int[] { _stride, _stride },
+            padding: new int[] { _padding, _padding });
+
+        // Step 2: Pointwise convolution (1x1 conv with bias)
+        var pointwiseOutput = Autodiff.TensorOperations<T>.Conv2D(
+            depthwiseOutput,
+            pointwiseKernelNode,
+            biasNode,
+            stride: new int[] { 1, 1 },
+            padding: new int[] { 0, 0 });
+
+        // Step 3: Apply activation function using base class helper
+        var output = ApplyActivationToGraph(pointwiseOutput);
+
+        return output;
     }
 }

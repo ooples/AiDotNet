@@ -30,8 +30,97 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
+public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets whether auxiliary loss (deep supervision) should be used during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Deep supervision adds auxiliary classifiers at intermediate layers to help gradient flow in very deep networks.
+    /// This is particularly useful for ResNets with 100+ layers to prevent vanishing gradients.
+    /// </para>
+    /// <para><b>For Beginners:</b> Deep supervision is like having multiple teachers check your work at different stages.
+    ///
+    /// In very deep networks:
+    /// - Gradients (learning signals) can become very weak by the time they reach early layers
+    /// - Adding intermediate classifiers helps maintain strong gradients throughout the network
+    /// - Each intermediate classifier provides additional supervision to guide learning
+    ///
+    /// When enabled, the network learns from both:
+    /// - The final output (main loss)
+    /// - Intermediate predictions (auxiliary losses)
+    ///
+    /// This is optional and most useful for very deep networks (100+ layers).
+    /// For shallower networks (< 50 layers), it may not provide significant benefits.
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the deep supervision auxiliary loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This weight controls how much the intermediate auxiliary classifiers contribute to the total loss.
+    /// The total loss is: main_loss + (auxiliary_weight * auxiliary_loss).
+    /// Typical values range from 0.1 to 0.5.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much the network should care about intermediate predictions.
+    ///
+    /// The weight determines the balance between:
+    /// - Final output accuracy (main loss)
+    /// - Intermediate prediction accuracy (auxiliary loss)
+    ///
+    /// Common values:
+    /// - 0.3 (default): Balanced contribution from intermediate classifiers
+    /// - 0.1-0.2: Less emphasis on intermediate predictions
+    /// - 0.4-0.5: More emphasis on intermediate predictions
+    ///
+    /// Higher values make the network focus more on getting intermediate predictions correct,
+    /// which can help with gradient flow but may slow convergence.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    private T _lastDeepSupervisionLoss;
+    private List<ILayer<T>> _auxiliaryClassifiers = new();
+    private readonly List<int> _auxiliaryClassifierPositions = new();
+    private List<List<ILayer<T>>> _auxiliaryClassifierLayers = new();
+    private Vector<T>? _lastExpectedOutput;
+
+    /// <summary>
+    /// Adds an auxiliary classifier at the specified layer position for deep supervision.
+    /// </summary>
+    /// <param name="classifier">The classifier layer to add for intermediate predictions.</param>
+    /// <param name="layerPosition">The layer index where this classifier should be applied.</param>
+    /// <remarks>
+    /// <para>
+    /// Auxiliary classifiers enable deep supervision by providing additional training signals
+    /// at intermediate layers. This helps with gradient flow and can improve training stability.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of auxiliary classifiers as "checkpoints" in your network.
+    /// They make predictions at intermediate stages, helping the network learn better representations
+    /// at each layer rather than only at the final output.
+    /// </para>
+    /// </remarks>
+    public void AddAuxiliaryClassifier(ILayer<T> classifier, int layerPosition)
+    {
+        if (classifier == null)
+        {
+            throw new ArgumentNullException(nameof(classifier));
+        }
+
+        if (layerPosition < 0 || layerPosition >= Layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerPosition),
+                $"Layer position must be between 0 and {Layers.Count - 1}");
+        }
+
+        _auxiliaryClassifiers.Add(classifier);
+        _auxiliaryClassifierPositions.Add(layerPosition);
+    }
+
     /// <summary>
     /// Gets or sets the learning rate for parameter updates.
     /// </summary>
@@ -162,6 +251,10 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
         _learningRate = learningRate ?? NumOps.FromDouble(0.01);
         _epochs = epochs;
         _batchSize = batchSize;
+
+        // Initialize NumOps-based fields
+        AuxiliaryLossWeight = NumOps.FromDouble(0.3);
+        _lastDeepSupervisionLoss = NumOps.Zero;
     }
 
     /// <summary>
@@ -202,6 +295,68 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             // Use default layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultResNetLayers(Architecture));
+        }
+
+        // Automatically add auxiliary classifiers for deep supervision if enabled
+        if (UseAuxiliaryLoss && Layers.Count > 3)
+        {
+            InitializeAuxiliaryClassifiers();
+        }
+    }
+
+    /// <summary>
+    /// Automatically initializes auxiliary classifiers at strategic positions based on network depth.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adds auxiliary classifiers at evenly-spaced positions throughout the network
+    /// to enable deep supervision. The number and positions are determined automatically based on
+    /// the total network depth. Each auxiliary classifier consists of a 2-layer fully connected
+    /// network that maps from intermediate representations to the final output space.
+    /// </para>
+    /// <para><b>For Beginners:</b> This automatically adds "checkpoints" throughout your network
+    /// that help it learn better by providing training signals at multiple depths, not just at the end.
+    /// </para>
+    /// </remarks>
+    private void InitializeAuxiliaryClassifiers()
+    {
+        // Determine how many auxiliary classifiers to add based on network depth
+        // Add one auxiliary classifier for every 10-15 layers, but at least 1 and at most 3
+        int totalLayers = Layers.Count;
+        int numAuxClassifiers = Math.Max(1, Math.Min(3, totalLayers / 12));
+
+        // Calculate positions evenly spaced through the network, avoiding first and last layers
+        int spacing = totalLayers / (numAuxClassifiers + 1);
+
+        for (int i = 1; i <= numAuxClassifiers; i++)
+        {
+            int position = spacing * i;
+
+            // Ensure position is valid and not too close to the end
+            if (position < totalLayers - 2 && position > 0)
+            {
+                // Get the output shape at this position
+                var layerOutputShape = Layers[position].GetOutputShape();
+                int intermediateSize = layerOutputShape[0];
+
+                // Create a simple 2-layer auxiliary classifier: intermediate -> hidden -> output
+                int hiddenSize = Math.Max(128, Architecture.OutputSize * 2);
+
+                // Create the auxiliary classifier layers using existing helpers
+                IActivationFunction<T> hiddenActivation = new ReLUActivation<T>();
+                IActivationFunction<T> outputActivation = NeuralNetworkHelper<T>.GetDefaultActivationFunction(Architecture.TaskType);
+
+                // First layer: intermediate representation -> hidden layer
+                var hiddenLayer = new DenseLayer<T>(intermediateSize, hiddenSize, hiddenActivation);
+
+                // Second layer: hidden -> output
+                var outputLayer = new DenseLayer<T>(hiddenSize, Architecture.OutputSize, outputActivation);
+
+                // Store layers as a list that will be executed sequentially
+                var classifierLayers = new List<ILayer<T>> { hiddenLayer, outputLayer };
+                _auxiliaryClassifierLayers.Add(classifierLayers);
+                _auxiliaryClassifierPositions.Add(position);
+            }
         }
     }
 
@@ -290,6 +445,152 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Computes the auxiliary loss for deep supervision from intermediate auxiliary classifiers.
+    /// </summary>
+    /// <returns>The computed deep supervision auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes the auxiliary loss from intermediate classifiers placed at strategic
+    /// positions in the network. For very deep ResNets, these intermediate classifiers help
+    /// maintain strong gradient signals throughout the network during backpropagation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates how well the network's intermediate layers are learning.
+    ///
+    /// Deep supervision works by:
+    /// 1. Adding small classifiers at intermediate points in the network
+    /// 2. Each classifier tries to predict the final output from intermediate features
+    /// 3. Computing loss for each intermediate prediction
+    /// 4. Averaging these losses to get the auxiliary loss
+    ///
+    /// This helps because:
+    /// - It provides learning signals to earlier layers
+    /// - It prevents gradients from becoming too weak in deep networks
+    /// - It encourages intermediate layers to learn meaningful features
+    ///
+    /// The auxiliary loss is combined with the main loss during training to guide learning.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || _auxiliaryClassifierLayers.Count == 0)
+        {
+            _lastDeepSupervisionLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Ensure we have intermediate activations and expected output
+        if (_layerOutputs.Count == 0 || _lastExpectedOutput == null)
+        {
+            _lastDeepSupervisionLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Compute auxiliary loss from each intermediate classifier
+        T totalAuxiliaryLoss = NumOps.Zero;
+        int validClassifiers = 0;
+
+        for (int i = 0; i < _auxiliaryClassifierLayers.Count; i++)
+        {
+            int layerPosition = _auxiliaryClassifierPositions[i];
+
+            // Check if we have the intermediate activation at this position
+            if (!_layerOutputs.ContainsKey(layerPosition))
+            {
+                continue;
+            }
+
+            var intermediateActivation = _layerOutputs[layerPosition];
+            var classifierLayers = _auxiliaryClassifierLayers[i];
+
+            // Pass intermediate activation through auxiliary classifier layers sequentially
+            var current = intermediateActivation;
+            foreach (var layer in classifierLayers)
+            {
+                current = layer.Forward(current);
+            }
+
+            // Compute loss for this auxiliary prediction
+            Vector<T> auxPredictionVector = current.ToVector();
+            T classifierLoss = LossFunction.CalculateLoss(auxPredictionVector, _lastExpectedOutput);
+
+            totalAuxiliaryLoss = NumOps.Add(totalAuxiliaryLoss, classifierLoss);
+            validClassifiers++;
+        }
+
+        // Average the losses across all auxiliary classifiers
+        if (validClassifiers > 0)
+        {
+            _lastDeepSupervisionLoss = NumOps.Divide(totalAuxiliaryLoss, NumOps.FromDouble(validClassifiers));
+        }
+        else
+        {
+            _lastDeepSupervisionLoss = NumOps.Zero;
+        }
+
+        return _lastDeepSupervisionLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the deep supervision auxiliary loss.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about auxiliary losses.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed diagnostics about the deep supervision system, including
+    /// the number of auxiliary classifiers, their positions in the network, and the computed losses.
+    /// This information is useful for monitoring training progress and debugging.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about how deep supervision is working.
+    ///
+    /// The diagnostics include:
+    /// - Total auxiliary loss from all intermediate classifiers
+    /// - Weight applied to the auxiliary loss
+    /// - Number of auxiliary classifiers in the network
+    /// - Whether deep supervision is enabled
+    ///
+    /// This helps you:
+    /// - Monitor if auxiliary classifiers are contributing to training
+    /// - Debug issues with deep supervision
+    /// - Understand the impact of intermediate supervision on learning
+    ///
+    /// You can use this information to adjust the auxiliary loss weight or
+    /// the placement of auxiliary classifiers for better training results.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalDeepSupervisionLoss", _lastDeepSupervisionLoss?.ToString() ?? "0" },
+            { "AuxiliaryWeight", AuxiliaryLossWeight?.ToString() ?? "0.3" },
+            { "UseDeepSupervision", UseAuxiliaryLoss.ToString() },
+            { "NumberOfAuxiliaryClassifiers", _auxiliaryClassifierLayers.Count.ToString() },
+            { "AuxiliaryClassifierPositions", string.Join(", ", _auxiliaryClassifierPositions) }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Includes auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including auxiliary loss diagnostics.
+    /// </returns>
+    public Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = new Dictionary<string, string>();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
+    }
+
+    /// <summary>
     /// Trains the Residual Neural Network on the provided data.
     /// </summary>
     /// <param name="input">The input training data.</param>
@@ -299,18 +600,20 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
     /// This method trains the Residual Neural Network on the provided data for the specified number of epochs.
     /// It divides the data into batches and trains on each batch using backpropagation and gradient descent.
     /// The method tracks and reports the average loss for each epoch to monitor training progress.
+    /// If deep supervision is enabled and auxiliary classifiers are configured, auxiliary losses from intermediate classifiers are included.
     /// </para>
     /// <para><b>For Beginners:</b> This method teaches the ResNet to recognize patterns in your data.
-    /// 
+    ///
     /// The training process works like this:
     /// 1. Divides your data into smaller batches for efficient processing
     /// 2. For each batch:
     ///    - Feeds the input data through the network
     ///    - Compares the prediction with the expected output
     ///    - Calculates how wrong the prediction was (the "loss")
+    ///    - If deep supervision is enabled, also computes losses from intermediate classifiers
     ///    - Adjusts the network's parameters to reduce errors
     /// 3. Repeats this process for multiple epochs (complete passes through the data)
-    /// 
+    ///
     /// The special residual connections in the ResNet help the error signals flow backward
     /// through the network more effectively, making it possible to train very deep networks
     /// that would otherwise suffer from the vanishing gradient problem.
@@ -352,8 +655,19 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
                     // Cache prediction vector to avoid repeated conversions
                     Vector<T> predictionVector = prediction.ToVector();
 
-                    // Calculate loss and gradients for this example
+                    // Calculate main loss
                     T loss = LossFunction.CalculateLoss(predictionVector, y);
+
+                    // Add auxiliary loss if enabled
+                    if (UseAuxiliaryLoss)
+                    {
+                        // Cache expected output for auxiliary classifiers
+                        _lastExpectedOutput = y;
+                        T auxLoss = ComputeAuxiliaryLoss();
+                        T weightedAuxLoss = NumOps.Multiply(AuxiliaryLossWeight, auxLoss);
+                        loss = NumOps.Add(loss, weightedAuxLoss);
+                    }
+
                     totalLoss = NumOps.Add(totalLoss, loss);
 
                     // Calculate output gradients

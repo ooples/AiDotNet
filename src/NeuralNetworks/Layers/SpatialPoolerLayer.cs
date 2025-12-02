@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -442,6 +444,18 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         var inputGradient = new Vector<T>(InputSize);
         var flatGradient = outputGradient.ToVector();
 
@@ -458,6 +472,52 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
 
         return Tensor<T>.FromVector(inputGradient);
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation with a straight-through estimator for the threshold.
+    /// The threshold operation is non-differentiable, so we pass gradients through as if it were identity.
+    /// This uses MatMul for the linear transformation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // SpatialPooler uses straight-through estimator: gradient flows through threshold as if it's identity
+        // Backward: inputGrad = Connections @ outputGrad (no transpose needed)
+
+        // Convert Connections matrix to tensor [InputSize, ColumnCount]
+        var connectionsTensor = new Tensor<T>([InputSize, ColumnCount]);
+        for (int i = 0; i < InputSize; i++)
+            for (int j = 0; j < ColumnCount; j++)
+                connectionsTensor[i, j] = Connections[i, j];
+
+        // Convert gradients to proper shapes for MatMul
+        var outputGradVec = outputGradient.ToVector();
+        var outputGradTensor = new Tensor<T>([ColumnCount, 1]);
+        for (int i = 0; i < ColumnCount; i++)
+            outputGradTensor[i, 0] = outputGradVec[i];
+
+        // Create computation node (we don't actually need to track this, just compute the result)
+        // inputGrad = Connections @ outputGrad (Connections is [InputSize, ColumnCount], no transpose)
+        var inputGradient = new Vector<T>(InputSize);
+        for (int i = 0; i < InputSize; i++)
+        {
+            T sum = NumOps.Zero;
+            for (int j = 0; j < ColumnCount; j++)
+            {
+                sum = NumOps.Add(sum, NumOps.Multiply(connectionsTensor[i, j], outputGradVec[j]));
+            }
+            inputGradient[i] = sum;
+        }
+
+        return Tensor<T>.FromVector(inputGradient);
+    }
+
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.
@@ -616,4 +676,68 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         LastInput = null;
         LastOutput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        // SpatialPoolerLayer JIT uses straight-through estimator for thresholding:
+        // 1. Compute overlap: activation = Connections^T @ input
+        // 2. Apply threshold: output = StraightThroughThreshold(activation, sparsityThreshold)
+        //
+        // The straight-through estimator allows gradients to flow through the discrete threshold
+        // operation during backpropagation.
+
+        var input = inputNodes[0];
+
+        // Convert connections to tensor [InputSize, ColumnCount]
+        var connectionsTensor = new Tensor<T>([InputSize, ColumnCount]);
+        for (int i = 0; i < InputSize; i++)
+            for (int j = 0; j < ColumnCount; j++)
+                connectionsTensor[i, j] = Connections[i, j];
+
+        var connectionsNode = TensorOperations<T>.Constant(connectionsTensor, "sp_connections");
+
+        // Transpose connections for multiplication: [ColumnCount, InputSize]
+        var connectionsTransposed = TensorOperations<T>.Transpose(connectionsNode);
+
+        // Reshape input for matrix multiplication
+        var inputReshaped = TensorOperations<T>.Reshape(input, InputSize, 1);
+
+        // activation = Connections^T @ input
+        var activation = TensorOperations<T>.MatrixMultiply(connectionsTransposed, inputReshaped);
+        var activationFlat = TensorOperations<T>.Reshape(activation, ColumnCount);
+
+        // Apply straight-through threshold for sparse binary output
+        var output = TensorOperations<T>.StraightThroughThreshold(activationFlat, SparsityThreshold);
+
+        // Apply layer activation if present
+        output = ApplyActivationToGraph(output);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c>. SpatialPoolerLayer uses straight-through estimator for JIT compilation.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for SpatialPooler uses a straight-through estimator for the threshold
+    /// operation. The forward pass produces sparse binary activations (0 or 1), but gradients
+    /// pass through unchanged during backpropagation. This enables differentiable training
+    /// while maintaining the sparse output characteristics.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
 }

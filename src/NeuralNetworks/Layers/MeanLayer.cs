@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -233,28 +235,41 @@ public class MeanLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
     /// should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass:
     /// - The layer receives the error gradient from the next layer
     /// - It needs to distribute this gradient back to its inputs
     /// - For a mean operation, each input that contributed to an average receives an equal portion of the gradient
-    /// 
+    ///
     /// For example:
     /// If 5 values were averaged to produce one output, and that output's gradient is 10,
     /// each of the 5 input values would receive a gradient of 10/5 = 2.
-    /// 
+    ///
     /// This process is part of the "backpropagation" algorithm that helps neural networks learn.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Performs the backward pass using manual gradient calculation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        
+
         var inputGradient = new Tensor<T>(_lastInput.Shape);
         int axisSize = _lastInput.Shape[Axis];
         T axisScale = NumOps.FromDouble(1.0 / axisSize);
-        
+
         // Iterate over all dimensions except the mean axis
         var indices = new int[_lastInput.Shape.Length];
         IterateOverDimensions(_lastInput, outputGradient, indices, 0, Axis, (_, outputGradient, indices) =>
@@ -265,8 +280,92 @@ public class MeanLayer<T> : LayerBase<T>
                 inputGradient[indices] = NumOps.Multiply(outputGradient[indices], axisScale);
             }
         });
-        
+
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Performs the backward pass using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Create computation node for the input
+        var inputNode = TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Replay forward pass using autodiff
+        // ReduceMean takes axes parameter as array
+        var outputNode = TensorOperations<T>.ReduceMean(inputNode, axes: new int[] { Axis }, keepDims: false);
+
+        // Set gradient at output and perform backward pass
+        outputNode.Gradient = outputGradient;
+
+        // Perform topological sort and backward pass
+        var topoOrder = GetTopologicalOrder(outputNode);
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract and return input gradient
+        if (inputNode.Gradient == null)
+            throw new InvalidOperationException("Gradient computation failed in automatic differentiation.");
+
+        return inputNode.Gradient;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<ComputationNode<T>> GetTopologicalOrder(ComputationNode<T> root)
+    {
+        var visited = new HashSet<ComputationNode<T>>();
+        var result = new List<ComputationNode<T>>();
+
+        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+                continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                        {
+                            stack.Push((parent, false));
+                        }
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -394,4 +493,21 @@ public class MeanLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastOutput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        return TensorOperations<T>.ReduceMean(inputNode, axes: new[] { Axis }, keepDims: false);
+    }
+
+    public override bool SupportsJitCompilation => true;
 }

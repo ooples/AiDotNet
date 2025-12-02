@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -17,8 +19,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - It's like stretching an image without adding any new information
 /// 
 /// For example, with a scale factor of 2:
-/// - A 4×4 image becomes an 8×8 image
-/// - Each pixel in the original image is copied to a 2×2 block in the output
+/// - A 4Ã—4 image becomes an 8Ã—8 image
+/// - Each pixel in the original image is copied to a 2Ã—2 block in the output
 /// - This creates a larger image that preserves the original content but with more pixels
 /// 
 /// This is useful for tasks like image generation or upscaling, where you need to increase
@@ -39,9 +41,9 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This determines how much larger the output will be compared to the input.
     /// 
     /// For example:
-    /// - With a scale factor of 2: A 10×10 image becomes 20×20
-    /// - With a scale factor of 3: A 10×10 image becomes 30×30
-    /// - With a scale factor of 4: A 10×10 image becomes 40×40
+    /// - With a scale factor of 2: A 10Ã—10 image becomes 20Ã—20
+    /// - With a scale factor of 3: A 10Ã—10 image becomes 30Ã—30
+    /// - With a scale factor of 4: A 10Ã—10 image becomes 40Ã—40
     /// 
     /// The scale factor applies equally to both height and width, so the total number of pixels
     /// increases by the square of the scale factor (e.g., a scale factor of 2 means 4 times more pixels).
@@ -110,7 +112,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// - inputShape: The dimensions of the data coming into this layer
     /// - scaleFactor: How much larger the output should be compared to the input
     /// 
-    /// For example, if inputShape is [3, 32, 32] (representing 3 channels of a 32×32 image)
+    /// For example, if inputShape is [3, 32, 32] (representing 3 channels of a 32Ã—32 image)
     /// and scaleFactor is 2, the output shape will be [3, 64, 64] - the same number of
     /// channels but twice the height and width.
     /// </para>
@@ -172,7 +174,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     ///    - These copies form a block in the output tensor
     /// 3. This creates an output that is larger but contains the same information
     /// 
-    /// For example, with a scale factor of 2, each pixel becomes a 2×2 block of identical pixels.
+    /// For example, with a scale factor of 2, each pixel becomes a 2Ã—2 block of identical pixels.
     /// This is the simplest form of upsampling, which preserves the original content
     /// but increases the spatial dimensions.
     /// </para>
@@ -215,7 +217,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// <para>
     /// This method implements the backward pass of the upsampling layer, which is used during training to propagate
     /// error gradients back through the network. For each position in the input gradient, it sums up the corresponding
-    /// gradients from the scale factor × scale factor region in the output gradient.
+    /// gradients from the scale factor Ã— scale factor region in the output gradient.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the layer's input should change to reduce errors.
     /// 
@@ -231,6 +233,18 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -264,6 +278,77 @@ public class UpsamplingLayer<T> : LayerBase<T>
         }
         return inputGradient;
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the Upsample TensorOperation for automatic gradient computation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert input to computation node
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Apply upsampling operation
+        var outputNode = Autodiff.TensorOperations<T>.Upsample(inputNode, _scaleFactor);
+
+        // Perform backward pass
+        outputNode.Gradient = outputGradient;
+        var topoOrder = GetTopologicalOrder(outputNode);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
+
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+                continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                        stack.Push((parent, false));
+                }
+            }
+        }
+
+        return result;
+    }
+
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.
@@ -318,6 +403,61 @@ public class UpsamplingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to which input variable nodes should be added.</param>
+    /// <returns>The output computation node representing this layer's operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representation of the upsampling operation using nearest-neighbor
+    /// interpolation. The operation repeats each value in the input based on the scale factor.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates an optimized version of the upsampling operation.
+    ///
+    /// For upsampling layers:
+    /// - Creates a placeholder for the input tensor
+    /// - Applies the upsampling operation (repeat values)
+    /// - Returns a computation graph for efficient execution
+    ///
+    /// This allows for faster inference by pre-compiling the upsampling operation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create placeholder for input tensor
+        // Input shape: [channels, height, width]
+        var inputPlaceholder = new Tensor<T>(InputShape);
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+        inputNodes.Add(inputNode);
+
+        // Apply upsampling operation
+        var outputNode = TensorOperations<T>.Upsample(inputNode, _scaleFactor);
+
+        // Upsampling layers typically don't use activation, but we return the result
+        // No activation to apply for upsampling layers (they use identity by default)
+        return outputNode;
+    }
+
+    /// <summary>
+    /// Gets whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>Always returns true as upsampling operations can be efficiently compiled.</value>
+    /// <remarks>
+    /// <para>
+    /// Upsampling layers support JIT compilation since the nearest-neighbor interpolation
+    /// is a straightforward operation that can be optimized at compile time.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -326,12 +466,12 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// This is useful when starting to process a new, unrelated input.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory of what it last processed.
-    /// 
+    ///
     /// When resetting the state:
     /// - The layer forgets what input it recently processed
     /// - This helps prepare it for processing new, unrelated inputs
     /// - It's like clearing a workspace before starting a new project
-    /// 
+    ///
     /// This is mostly important during training, where the layer needs to
     /// maintain consistency between forward and backward passes.
     /// </para>

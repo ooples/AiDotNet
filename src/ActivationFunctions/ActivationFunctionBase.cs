@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -26,6 +28,11 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     /// Provides mathematical operations for the numeric type T.
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Gets the global execution engine for vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// Determines if the activation function supports operations on individual scalar values.
@@ -132,5 +139,42 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>False by default; derived classes override to return true when gradient is implemented.</value>
+    /// <remarks>
+    /// <para>
+    /// The default implementation returns false, indicating the activation does not yet support
+    /// JIT compilation. Derived classes should override this to return true once their gradient
+    /// computation is fully implemented and tested.
+    /// </para>
+    /// </remarks>
+    public virtual bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with the activation applied.</returns>
+    /// <exception cref="NotSupportedException">Thrown because the default implementation does not support JIT compilation.</exception>
+    /// <remarks>
+    /// <para>
+    /// The default implementation throws NotSupportedException. Derived classes must override
+    /// this method to map their activation to the corresponding TensorOperations method.
+    /// </para>
+    /// <para>
+    /// For example, ReLUActivation should return TensorOperations&lt;T&gt;.ReLU(input).
+    /// </para>
+    /// </remarks>
+    public virtual ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not support JIT compilation yet. " +
+            $"SupportsJitCompilation = {SupportsJitCompilation}. " +
+            $"Either the gradient computation is not implemented, or the activation uses " +
+            $"operations not compatible with computation graphs.");
     }
 }

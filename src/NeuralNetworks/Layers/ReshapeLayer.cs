@@ -104,11 +104,11 @@ public class ReshapeLayer<T> : LayerBase<T>
     /// - outputShape: The desired organization of your data (not including the batch dimension)
     /// 
     /// For example:
-    /// - If inputShape is [28, 28] (like a 28×28 image)
+    /// - If inputShape is [28, 28] (like a 28ï¿½28 image)
     /// - You could set outputShape to [784] to flatten it into a single vector
     /// 
     /// The constructor checks that the total number of elements stays the same:
-    /// - For the example above, 28×28 = 784, so the shapes are compatible
+    /// - For the example above, 28ï¿½28 = 784, so the shapes are compatible
     /// - If the total elements don't match, you'll get an error
     /// 
     /// The batch dimension (first dimension) is handled automatically and not included in these shapes.
@@ -124,6 +124,15 @@ public class ReshapeLayer<T> : LayerBase<T>
         {
             throw new ArgumentException("Input and output shapes must have the same total number of elements.");
         }
+    }
+
+    /// <summary>
+    /// Gets the target shape for the reshape operation.
+    /// </summary>
+    /// <returns>The target shape array (excluding batch dimension).</returns>
+    public int[] GetTargetShape()
+    {
+        return _outputShape;
     }
 
     /// <summary>
@@ -180,20 +189,74 @@ public class ReshapeLayer<T> : LayerBase<T>
     /// gradients flow correctly to previous layers.
     /// </para>
     /// <para><b>For Beginners:</b> This method transforms the learning signals back to the original shape.
-    /// 
+    ///
     /// During the backward pass:
     /// 1. The layer receives gradients in the reshaped format (output shape)
     /// 2. It needs to convert these gradients back to the original format (input shape)
     /// 3. This allows previous layers to properly use these gradients for learning
-    /// 
+    ///
     /// Essentially, this is the reverse of the forward pass - it takes the learning signals
     /// and reorganizes them to match the original data structure, without changing their values.
-    /// 
+    ///
     /// This is necessary because each layer in the network expects gradients in the same shape
     /// as its original output.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Performs the backward pass using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert input to computation node
+        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Replay forward pass using autodiff operations
+        int batchSize = _lastInput.Shape[0];
+        int[] targetShape = [batchSize, .. _outputShape];
+        var reshaped = Autodiff.TensorOperations<T>.Reshape(input, targetShape);
+
+        // Set gradient at output and perform backward pass
+        reshaped.Gradient = outputGradient;
+
+        // Get topological order and execute backward pass
+        var topoOrder = GetTopologicalOrder(reshaped);
+
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract and return input gradient
+        if (input.Gradient == null)
+            throw new InvalidOperationException("Input gradient was not computed during backward pass.");
+
+        return input.Gradient;
+    }
+
+    /// <summary>
+    /// Performs the backward pass using manual gradient computation (optimized implementation).
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -207,6 +270,50 @@ public class ReshapeLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var item = stack.Pop();
+            var node = item.node;
+            var processed = item.processed;
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -387,5 +494,47 @@ public class ReshapeLayer<T> : LayerBase<T>
 
             indices[i] = 0;
         }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because reshape is a simple reshape operation that can be JIT compiled.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Exports the reshape layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the reshaped result.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph for the reshape operation using a reshape node.
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (OutputShape == null || OutputShape.Length == 0)
+            throw new InvalidOperationException("Layer output shape not configured.");
+
+        // Create placeholder for input data with symbolic batch dimension
+        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(_inputShape).ToArray());
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input");
+
+        inputNodes.Add(inputNode);
+
+        // Reshape operation: reshape to target shape
+        var targetShape = new int[] { -1 }.Concat(_outputShape).ToArray(); // -1 means variable batch size
+        var outputNode = Autodiff.TensorOperations<T>.Reshape(inputNode, targetShape);
+
+        return outputNode;
     }
 }

@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -12,7 +14,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para><b>For Beginners:</b> This layer adds together multiple inputs of the same shape.
 /// 
 /// Think of this layer as performing element-wise addition:
-/// - If you have two 3×3 matrices, it adds corresponding elements together
+/// - If you have two 3ï¿½3 matrices, it adds corresponding elements together
 /// - All inputs must have exactly the same dimensions
 /// - After adding, it can optionally apply an activation function
 /// 
@@ -92,10 +94,10 @@ public class AddLayer<T> : LayerBase<T>
     /// 
     /// For example:
     /// ```csharp
-    /// // Create an AddLayer for combining two 28×28 feature maps with ReLU activation
+    /// // Create an AddLayer for combining two 28ï¿½28 feature maps with ReLU activation
     /// var addLayer = new AddLayer<float>(
     ///     new[] { new[] { 32, 28, 28, 64 }, new[] { 32, 28, 28, 64 } },
-    ///     new ReLU<float>()
+    ///     new ReLUActivation<float>()
     /// );
     /// ```
     /// 
@@ -268,22 +270,36 @@ public class AddLayer<T> : LayerBase<T>
     /// interface, but internally it calculates gradients for all inputs.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the error gradient flows backward through this layer.
-    /// 
+    ///
     /// During backpropagation, this method:
     /// 1. Checks that Forward() was called first
     /// 2. Calculates how the gradient changes due to the activation function (if any)
     /// 3. Creates a copy of this gradient for each input
     /// 4. Returns the gradient for the first input
-    /// 
+    ///
     /// For addition, the gradient flows equally to all inputs. This means if the output
     /// needs to change by some amount, each input contributes equally to that change.
-    /// 
+    ///
     /// Note: This method only returns the gradient for the first input due to interface
     /// constraints. In a real network, you would need to handle returning all gradients
     /// to their respective sources.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        // Autodiff only supports scalar activations; fallback to manual for vector activations
+        if (UseAutodiff && !UsingVectorActivation)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInputs == null || _lastOutput == null)
         {
@@ -293,11 +309,14 @@ public class AddLayer<T> : LayerBase<T>
         Tensor<T> gradientWithActivation;
         if (UsingVectorActivation && VectorActivation != null)
         {
-            gradientWithActivation = VectorActivation.Derivative(_lastOutput).Multiply(outputGradient);
+            // Use element-wise multiplication for gradient computation
+            gradientWithActivation = Tensor<T>.ElementwiseMultiply(VectorActivation.Derivative(_lastOutput), outputGradient);
         }
         else if (ScalarActivation != null)
         {
-            gradientWithActivation = _lastOutput.Transform((x, i) => NumOps.Multiply(ScalarActivation.Derivative(x), outputGradient[i]));
+            // Vectorized: compute activation derivatives and multiply element-wise
+            var derivatives = _lastOutput.Transform((x, i) => ScalarActivation.Derivative(x));
+            gradientWithActivation = Tensor<T>.ElementwiseMultiply(derivatives, outputGradient);
         }
         else
         {
@@ -311,6 +330,123 @@ public class AddLayer<T> : LayerBase<T>
         }
 
         return inputGradients[0];
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients for addition operation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInputs == null || _lastOutput == null)
+        {
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+        }
+
+        // Convert to computation nodes
+        var inputNodes = new List<Autodiff.ComputationNode<T>>();
+        inputNodes.Add(Autodiff.TensorOperations<T>.Variable(_lastInputs[0], "input_0", requiresGradient: true));
+
+        // Forward computation using autodiff ops: result = input[0] + input[1] + ...
+        var result = inputNodes[0];
+        for (int i = 1; i < _lastInputs.Length; i++)
+        {
+            var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInputs[i], $"input_{i}", requiresGradient: false);
+            result = Autodiff.TensorOperations<T>.Add(result, inputNode);
+        }
+
+        // Apply activation using autodiff
+        var activated = ApplyActivationAutodiff(result);
+
+        // Set the gradient at the output
+        activated.Gradient = outputGradient;
+
+        // Perform topological sort and backward pass
+        var topoOrder = GetTopologicalOrder(activated);
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        return inputNodes[0].Gradient!;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Applies activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (ScalarActivation is ReLUActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.ReLU(input);
+        }
+        else if (ScalarActivation is SigmoidActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Sigmoid(input);
+        }
+        else if (ScalarActivation is TanhActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Tanh(input);
+        }
+        else
+        {
+            // For unsupported activations, return input unchanged
+            return input;
+        }
     }
 
     /// <summary>
@@ -378,6 +514,80 @@ public class AddLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to which input variable nodes should be added.</param>
+    /// <returns>The output computation node representing this layer's operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the activation function is not supported for JIT compilation.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representation of the addition operation that can be compiled
+    /// and optimized for efficient execution. The graph represents element-wise addition of multiple inputs
+    /// followed by optional activation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a reusable, optimized version of the layer for faster inference.
+    ///
+    /// For addition layers:
+    /// - Creates placeholder nodes for each input
+    /// - Chains addition operations together
+    /// - Applies the activation function to the result
+    /// - Returns a computation graph that can be executed efficiently
+    ///
+    /// This is used during inference to make predictions faster by pre-compiling the operations.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (!CanActivationBeJitted())
+        {
+            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax");
+        }
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create placeholder nodes for each input tensor
+        // AddLayer expects multiple inputs of the same shape
+        var input1Placeholder = new Tensor<T>(InputShape);
+        var input1Node = TensorOperations<T>.Variable(input1Placeholder, "input1");
+        inputNodes.Add(input1Node);
+
+        var input2Placeholder = new Tensor<T>(InputShape);
+        var input2Node = TensorOperations<T>.Variable(input2Placeholder, "input2");
+        inputNodes.Add(input2Node);
+
+        // Build computation graph: output = input1 + input2 + ... + inputN
+        var resultNode = TensorOperations<T>.Add(input1Node, input2Node);
+
+        // For simplicity, we support 2 inputs in JIT mode
+        // If more inputs are needed at runtime, they would be added iteratively
+
+        // Apply activation function using LayerBase helper
+        var activatedOutput = ApplyActivationToGraph(resultNode);
+
+        return activatedOutput;
+    }
+
+    /// <summary>
+    /// Gets whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>True if the activation function supports JIT compilation, false otherwise.</value>
+    /// <remarks>
+    /// <para>
+    /// Addition layers support JIT compilation as long as their activation function does.
+    /// The element-wise addition operation is straightforward to compile and optimize.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => CanActivationBeJitted();
+
+    /// <summary>
     /// Clears the layer's memory of previous inputs and outputs.
     /// </summary>
     /// <remarks>
@@ -388,18 +598,18 @@ public class AddLayer<T> : LayerBase<T>
     /// want to ensure the layer behaves deterministically.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory of previous calculations.
-    /// 
+    ///
     /// During training, the layer remembers the inputs and output from the last forward pass
     /// to help with backpropagation calculations. This method makes the layer "forget" those values.
-    /// 
+    ///
     /// You might need to reset state:
     /// - When starting a new batch of training data
     /// - Between training epochs
     /// - When switching from training to testing
     /// - When you want to ensure consistent behavior
-    /// 
+    ///
     /// For addition layers, this simply clears the saved input and output tensors.
-    /// 
+    ///
     /// This helps ensure that processing one batch doesn't accidentally affect
     /// the processing of the next batch.
     /// </para>

@@ -237,6 +237,18 @@ public class RBFLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
@@ -273,6 +285,161 @@ public class RBFLayer<T> : LayerBase<T>
 
         return inputGradient;
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation via the RBFKernel operation to compute gradients.
+    /// The operation handles Gaussian RBF computations with proper gradient flow.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert centers matrix to tensor [numCenters, inputSize]
+        var centersTensor = MatrixToTensor(_centers);
+
+        // Convert widths vector to tensor [numCenters]
+        var widthsTensor = VectorToTensor(_widths);
+
+        // Create computation nodes
+        var inputNode = Autodiff.TensorOperations<T>.Variable(
+            _lastInput,
+            "input",
+            requiresGradient: true);
+
+        var centersNode = Autodiff.TensorOperations<T>.Variable(
+            centersTensor,
+            "centers",
+            requiresGradient: true);
+
+        var widthsNode = Autodiff.TensorOperations<T>.Variable(
+            widthsTensor,
+            "widths",
+            requiresGradient: true);
+
+        // Apply RBFKernel operation
+        var outputNode = Autodiff.TensorOperations<T>.RBFKernel(
+            inputNode,
+            centersNode,
+            widthsNode);
+
+        // Set the output gradient
+        outputNode.Gradient = outputGradient;
+
+        // Perform backward pass
+        var topoOrder = GetTopologicalOrder(outputNode);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Update parameter gradients
+        if (centersNode.Gradient != null)
+            _centersGradient = TensorToMatrix(centersNode.Gradient, _centers.Rows, _centers.Columns);
+
+        if (widthsNode.Gradient != null)
+            _widthsGradient = TensorToVector(widthsNode.Gradient);
+
+        // Return input gradient
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
+
+    /// <summary>
+    /// Gets the computation nodes in topological order for backward pass.
+    /// </summary>
+    /// <param name="outputNode">The output node to start from.</param>
+    /// <returns>List of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> outputNode)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var order = new List<Autodiff.ComputationNode<T>>();
+
+        void Visit(Autodiff.ComputationNode<T> node)
+        {
+            if (visited.Contains(node)) return;
+            visited.Add(node);
+
+            foreach (var parent in node.Parents)
+            {
+                Visit(parent);
+            }
+
+            order.Add(node);
+        }
+
+        Visit(outputNode);
+        return order;
+    }
+
+    /// <summary>
+    /// Converts a Matrix to a Tensor.
+    /// </summary>
+    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
+    {
+        var tensor = new Tensor<T>([matrix.Rows, matrix.Columns]);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                tensor[i, j] = matrix[i, j];
+            }
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a Tensor back to a Matrix.
+    /// </summary>
+    private Matrix<T> TensorToMatrix(Tensor<T> tensor, int rows, int cols)
+    {
+        var matrix = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                matrix[i, j] = tensor[i, j];
+            }
+        }
+        return matrix;
+    }
+
+    /// <summary>
+    /// Converts a Vector to a Tensor.
+    /// </summary>
+    private Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>([vector.Length]);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            tensor[i] = vector[i];
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a Tensor back to a Vector.
+    /// </summary>
+    private Vector<T> TensorToVector(Tensor<T> tensor)
+    {
+        var vector = new Vector<T>(tensor.Shape[0]);
+        for (int i = 0; i < tensor.Shape[0]; i++)
+        {
+            vector[i] = tensor[i];
+        }
+        return vector;
+    }
+
 
     /// <summary>
     /// Updates the parameters of the RBF layer using the calculated gradients.
@@ -499,4 +666,51 @@ public class RBFLayer<T> : LayerBase<T>
 
         return NumOps.Sqrt(sum);
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_centers == null || _widths == null)
+            throw new InvalidOperationException("Layer not initialized. Call Initialize() first.");
+
+        // Create symbolic input [batch, inputSize]
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Convert centers matrix to tensor [numCenters, inputSize]
+        var centersTensor = new Tensor<T>(new int[] { _centers.Rows, _centers.Columns });
+        for (int i = 0; i < _centers.Rows; i++)
+        {
+            for (int j = 0; j < _centers.Columns; j++)
+            {
+                centersTensor[i, j] = _centers[i, j];
+            }
+        }
+        var centersNode = TensorOperations<T>.Constant(centersTensor, "centers");
+
+        // Convert widths to epsilons tensor [numCenters]
+        // epsilon = 1 / (2 * width²) for Gaussian RBF
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var epsilonsTensor = new Tensor<T>(new int[] { _widths.Length });
+        for (int i = 0; i < _widths.Length; i++)
+        {
+            // epsilon = 1 / (2 * width²)
+            T widthSquared = numOps.Multiply(_widths[i], _widths[i]);
+            T twoWidthSquared = numOps.Multiply(numOps.FromDouble(2.0), widthSquared);
+            epsilonsTensor[i] = numOps.Divide(numOps.One, twoWidthSquared);
+        }
+        var epsilonsNode = TensorOperations<T>.Constant(epsilonsTensor, "epsilons");
+
+        // Use RBFKernel operation: computes exp(-epsilon * distance²)
+        return TensorOperations<T>.RBFKernel(inputNode, centersNode, epsilonsNode);
+    }
+
+    public override bool SupportsJitCompilation => _centers != null && _widths != null;
+
 }

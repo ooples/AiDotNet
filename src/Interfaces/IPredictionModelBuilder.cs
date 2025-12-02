@@ -1,4 +1,9 @@
 using AiDotNet.Models.Results;
+using AiDotNet.DistributedTraining;
+using AiDotNet.Enums;
+using AiDotNet.Models;
+using AiDotNet.Reasoning.Models;
+using AiDotNet.RetrievalAugmentedGeneration.Graph;
 
 namespace AiDotNet.Interfaces;
 
@@ -188,23 +193,6 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureOutlierRemoval(IOutlierRemoval<T, TInput, TOutput> outlierRemoval);
 
     /// <summary>
-    /// Builds a predictive model using the configured components and training data.
-    /// </summary>
-    /// <remarks>
-    /// This method takes the input features and target values and creates a trained model
-    /// ready to make predictions.
-    /// 
-    /// <b>For Beginners:</b> After configuring all the components of your model, this method actually 
-    /// creates and trains the model using your data. It's like pressing "Start" after setting up 
-    /// all your preferences. The model will learn patterns from your training data so it can make 
-    /// predictions later.
-    /// </remarks>
-    /// <param name="x">The input features matrix, where each row is a data point and each column is a feature.</param>
-    /// <param name="y">The target values vector that the model will learn to predict.</param>
-    /// <returns>A trained predictive model ready to make predictions.</returns>
-    PredictionModelResult<T, TInput, TOutput> Build(TInput x, TOutput y);
-
-    /// <summary>
     /// Uses a trained model to make predictions on new data.
     /// </summary>
     /// <remarks>
@@ -356,31 +344,82 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// RAG enhances text generation by retrieving relevant documents from a knowledge base
     /// and using them as context for generating grounded, factual answers.
-    ///
+    /// </para>
+    /// <para>
+    /// <b>Graph RAG:</b> When graphStore or knowledgeGraph is provided, enables knowledge graph-based
+    /// retrieval that finds related entities and their relationships, providing richer context than
+    /// vector similarity alone. If documentStore is also provided, hybrid retrieval combines both
+    /// vector search and graph traversal.
+    /// </para>
+    /// <para>
     /// <b>For Beginners:</b> RAG is like giving your AI access to a library before answering questions.
     /// Instead of relying only on what it learned during training, it can:
-    /// 1. Search a document collection for relevant information
-    /// 2. Read the relevant documents
-    /// 3. Generate an answer based on those documents
-    /// 4. Cite its sources
-    ///
-    /// This makes answers more accurate, up-to-date, and traceable to source materials.
-    /// 
-    /// RAG operations (GenerateAnswer, RetrieveDocuments) are performed during inference via PredictionModelResult,
-    /// not during model building.
+    /// <list type="number">
+    /// <item><description>Search a document collection for relevant information</description></item>
+    /// <item><description>Read the relevant documents</description></item>
+    /// <item><description>Generate an answer based on those documents</description></item>
+    /// <item><description>Cite its sources</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Graph RAG Example:</b> If you ask about "Paris", Graph RAG can find not just documents
+    /// mentioning Paris, but also related concepts like France, Eiffel Tower, and Seine River
+    /// by traversing the knowledge graph.
+    /// </para>
+    /// <para>
+    /// RAG operations (GenerateAnswer, RetrieveDocuments, GraphQuery, etc.) are performed during
+    /// inference via PredictionModelResult, not during model building.
+    /// </para>
     /// </remarks>
-    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, RAG won't be available.</param>
+    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, standard RAG won't be available.</param>
     /// <param name="reranker">Optional reranker for improving document ranking quality. Default provided if retriever is set.</param>
     /// <param name="generator">Optional generator for producing grounded answers. Default provided if retriever is set.</param>
     /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
+    /// <param name="graphStore">Optional graph storage backend for Graph RAG (e.g., MemoryGraphStore, FileGraphStore).</param>
+    /// <param name="knowledgeGraph">Optional pre-configured knowledge graph. If null but graphStore is provided, a new one is created.</param>
+    /// <param name="documentStore">Optional document store for hybrid vector + graph retrieval.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
         IRetriever<T>? retriever = null,
         IReranker<T>? reranker = null,
         IGenerator<T>? generator = null,
-        IEnumerable<IQueryProcessor>? queryProcessors = null);
+        IEnumerable<IQueryProcessor>? queryProcessors = null,
+        IGraphStore<T>? graphStore = null,
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IDocumentStore<T>? documentStore = null);
+
+    /// <summary>
+    /// Configures AI agent assistance during model building and inference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Agent assistance adds AI-powered help during model creation.
+    /// The agent can analyze your data, suggest which model type to use, recommend hyperparameters,
+    /// and provide insights about feature importance.
+    ///
+    /// The configuration is stored securely and will be reused during inference if you call AskAsync() on the trained model.
+    /// </para>
+    /// <para>
+    /// Example usage:
+    /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="configuration">The agent configuration containing API keys, provider settings, and options.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(AgentConfiguration<T> configuration);
 
     /// <summary>
     /// Configures a meta-learning algorithm (MAML, Reptile, SEAL) for training models that can quickly adapt to new tasks.
@@ -397,6 +436,114 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="metaLearner">The meta-learning algorithm to use (e.g., ReptileTrainer with its episodic data loader).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner);
+
+    /// <summary>
+    /// Configures distributed training across multiple GPUs or machines.
+    /// </summary>
+    /// <param name="backend">Communication backend to use. If null, uses InMemoryCommunicationBackend.</param>
+    /// <param name="strategy">Distributed training strategy. Default is FSDP.</param>
+    /// <param name="autoSyncGradients">Whether to automatically synchronize gradients. Default is true.</param>
+    /// <param name="minimumParameterGroupSize">Minimum parameter group size for communication. Default is 1024.</param>
+    /// <param name="enableGradientCompression">Whether to enable gradient compression. Default is false.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// When distributed training is configured, the builder automatically wraps the model and optimizer
+    /// with their distributed counterparts based on the chosen strategy. This enables:
+    /// - Training models too large to fit on a single GPU
+    /// - Faster training by distributing work across multiple processes
+    /// - Automatic gradient synchronization and parameter sharding
+    /// </para>
+    /// <para>
+    /// <b>Important:</b> The strategy parameter controls BOTH the model and optimizer as a matched pair.
+    /// You cannot mix and match strategies between model and optimizer because they must be compatible:
+    /// </para>
+    /// <para>
+    /// - <b>DDP</b> → Uses DDPModel + DDPOptimizer (replicated parameters, AllReduce gradients)
+    /// </para>
+    /// <para>
+    /// - <b>FSDP</b> → Uses FSDPModel + FSDPOptimizer (fully sharded parameters)
+    /// </para>
+    /// <para>
+    /// - <b>ZeRO1/2/3</b> → Uses matching ZeRO models + optimizers (progressive sharding)
+    /// </para>
+    /// <para>
+    /// - <b>PipelineParallel</b> → Uses PipelineParallelModel + PipelineParallelOptimizer
+    /// </para>
+    /// <para>
+    /// - <b>TensorParallel</b> → Uses TensorParallelModel + TensorParallelOptimizer
+    /// </para>
+    /// <para>
+    /// - <b>Hybrid</b> → Uses HybridShardedModel + HybridShardedOptimizer (3D parallelism)
+    /// </para>
+    /// <para>
+    /// This design follows industry standards (PyTorch DDP/FSDP, DeepSpeed ZeRO, Megatron-LM) where
+    /// the distributed training strategy is a cohesive unit that applies to both model and optimizer.
+    /// Mixing strategies would cause incompatibilities - for example, a DDP model (replicated parameters)
+    /// cannot work with an FSDP optimizer (expects sharded parameters).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Call this method to enable distributed training across multiple GPUs.
+    /// You can use it with no parameters for sensible defaults, or customize each aspect.
+    /// The strategy you choose automatically configures both the model and optimizer to work together.
+    /// </para>
+    /// <para>
+    /// <b>Beginner Usage (no parameters):</b>
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining()  // InMemory backend, DDP strategy
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <b>Intermediate Usage (specify backend):</b>
+    /// <code>
+    /// var backend = new MPICommunicationBackend&lt;double&gt;();
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining(backend)  // MPI backend, DDP strategy
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <b>Advanced Usage (specify strategy):</b>
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining(
+    ///         backend: new NCCLCommunicationBackend&lt;double&gt;(),
+    ///         strategy: DistributedStrategy.FSDP)  // Use FSDP instead of DDP
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <b>Expert Usage (full control):</b>
+    /// <code>
+    /// var backend = new NCCLCommunicationBackend&lt;double&gt;();
+    /// var config = new ShardingConfiguration&lt;double&gt;(backend)
+    /// {
+    ///     AutoSyncGradients = true,
+    ///     MinimumParameterGroupSize = 2048,
+    ///     EnableGradientCompression = true
+    /// };
+    /// var result = builder
+    ///     .ConfigureDistributedTraining(
+    ///         backend: backend,
+    ///         strategy: DistributedStrategy.ZeRO2,
+    ///         configuration: config)  // Full control over all options
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="backend">Communication backend. If null, uses InMemoryCommunicationBackend.</param>
+    /// <param name="strategy">Distributed training strategy. Default is DDP (most common).</param>
+    /// <param name="configuration">Sharding configuration. If null, created from backend with defaults.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
+        ICommunicationBackend<T>? backend = null,
+        DistributedStrategy strategy = DistributedStrategy.DDP,
+        IShardingConfiguration<T>? configuration = null);
 
     /// <summary>
     /// Configures the model evaluator component for comprehensive model evaluation and cross-validation.
@@ -439,7 +586,483 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator);
 
     /// <summary>
-    /// Builds a meta-trained model that can quickly adapt to new tasks.
+    /// Configures an AutoML model for automatic machine learning optimization.
+    /// </summary>
+    /// <param name="autoMLModel">The AutoML model instance to use for hyperparameter search and model selection.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AutoML (Automated Machine Learning) automatically searches for the best
+    /// model and hyperparameters for your problem. Instead of manually trying different models and settings,
+    /// AutoML does this for you.
+    /// </para>
+    /// <para>
+    /// When you configure an AutoML model:
+    /// - The Build() method will run the AutoML search process
+    /// - AutoML will try different models and hyperparameters
+    /// - The best model found will be returned as your trained model
+    /// - You can configure search time limits, candidate models, and optimization metrics
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var autoML = new BayesianOptimizationAutoML&lt;double, double[][], double[]&gt;();
+    /// autoML.SetTimeLimit(TimeSpan.FromMinutes(30));
+    /// autoML.SetCandidateModels(new[] { ModelType.RandomForest, ModelType.GradientBoosting });
+    ///
+    /// var builder = new PredictionModelBuilder&lt;double, double[][], double[]&gt;()
+    ///     .ConfigureAutoML(autoML)
+    ///     .Build(trainingData, trainingLabels);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
+
+    /// <summary>
+    /// Configures the environment for reinforcement learning.
+    /// </summary>
+    /// <param name="environment">The RL environment to use for training.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> When training reinforcement learning agents, you need an environment
+    /// for the agent to interact with. This is like setting up a simulation or game for the agent
+    /// to learn from. Common environments include CartPole (balancing a pole), Atari games,
+    /// robotic simulations, etc.
+    ///
+    /// After configuring an environment, use BuildAsync(episodes) to train an RL agent.
+    ///
+    /// Example:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureEnvironment(new CartPoleEnvironment&lt;double&gt;())
+    ///     .ConfigureModel(new DQNAgent&lt;double&gt;())
+    ///     .BuildAsync(episodes: 1000);
+    /// </code>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureEnvironment(ReinforcementLearning.Interfaces.IEnvironment<T> environment);
+
+    /// <summary>
+    /// Configures knowledge distillation for training a smaller student model from a larger teacher model.
+    /// </summary>
+    /// <remarks>
+    /// Knowledge distillation enables model compression by transferring knowledge from a large,
+    /// accurate teacher model to a smaller, faster student model. The student learns to mimic
+    /// the teacher's predictions and internal representations.
+    ///
+    /// <b>For Beginners:</b> Knowledge distillation is like having an expert teacher help train
+    /// a smaller, faster student. The student model learns not just from the training labels,
+    /// but also from the teacher's "soft" predictions which contain richer information about
+    /// relationships between classes.
+    ///
+    /// Benefits:
+    /// - Model compression: Deploy 10x smaller models with 90%+ of original accuracy
+    /// - Faster inference: Smaller models run significantly faster
+    /// - Lower memory: Fits on edge devices and mobile platforms
+    /// - Better generalization: Learning from soft labels often improves accuracy
+    ///
+    /// Common use cases:
+    /// - DistilBERT: 40% smaller than BERT, 97% performance, 60% faster
+    /// - MobileNet: Distilled from ResNet for mobile deployment
+    /// - Edge AI: Deploy powerful models on resource-constrained devices
+    ///
+    /// <b>Quick Start Example:</b>
+    /// <code>
+    /// var distillationOptions = new KnowledgeDistillationOptions&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;
+    /// {
+    ///     TeacherModelType = TeacherModelType.NeuralNetwork,
+    ///     StrategyType = DistillationStrategyType.ResponseBased,
+    ///     Temperature = 3.0,
+    ///     Alpha = 0.3,
+    ///     Epochs = 20,
+    ///     BatchSize = 32
+    /// };
+    /// 
+    /// var builder = new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureKnowledgeDistillation(distillationOptions);
+    /// </code>
+    ///
+    /// <b>Note:</b> Current implementation requires student model to use Vector&lt;T&gt; for both input and output types.
+    /// </remarks>
+    /// <param name="options">The knowledge distillation configuration options (optional, uses sensible defaults if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureKnowledgeDistillation(
+        KnowledgeDistillationOptions<T, TInput, TOutput>? options = null);
+
+    /// <summary>
+    /// Configures model quantization for reducing model size and improving inference speed.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Quantization compresses your model by using smaller numbers (like 8-bit instead of 32-bit).
+    /// This makes your model:
+    /// - Smaller (50-75% size reduction)
+    /// - Faster (2-4x speedup)
+    /// - Use less memory
+    ///
+    /// The trade-off is a small accuracy loss (usually 1-5%). For most applications, this is acceptable.
+    ///
+    /// Example:
+    /// <code>
+    /// // Use Float16 quantization (recommended for most cases)
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureQuantization(new QuantizationConfig { Mode = QuantizationMode.Float16 })
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </remarks>
+    /// <param name="config">The quantization configuration (optional, uses no quantization if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureQuantization(QuantizationConfig? config = null);
+
+    /// <summary>
+    /// Configures model caching to avoid reloading models from disk repeatedly.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Caching keeps frequently-used models in memory so they load instantly.
+    /// Like keeping your favorite apps open on your phone instead of closing and reopening them.
+    ///
+    /// Benefits:
+    /// - Much faster inference (no model loading time)
+    /// - Better throughput for multiple requests
+    /// - Configurable cache size and eviction policies
+    ///
+    /// Example:
+    /// <code>
+    /// // Enable caching with default settings (10 models, LRU eviction)
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureCaching()
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </remarks>
+    /// <param name="config">The caching configuration (optional, uses default cache settings if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureCaching(CacheConfig? config = null);
+
+    /// <summary>
+    /// Configures model versioning for managing multiple versions of the same model.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Versioning helps you manage different versions of your model as it improves over time.
+    /// You can:
+    /// - Keep track of which version is deployed
+    /// - Roll back to previous versions if needed
+    /// - Use "latest" to always get the newest version
+    /// - Compare performance between versions
+    ///
+    /// Example:
+    /// <code>
+    /// // Enable versioning (defaults to "latest")
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureVersioning()
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </remarks>
+    /// <param name="config">The versioning configuration (optional, uses "latest" version if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureVersioning(VersioningConfig? config = null);
+
+    /// <summary>
+    /// Configures A/B testing to compare multiple model versions by splitting traffic.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> A/B testing lets you safely test a new model version on a small percentage
+    /// of users before fully deploying it. For example, you might send 10% of traffic to a new model
+    /// and 90% to the current model, then compare performance metrics to decide which is better.
+    ///
+    /// This is useful for:
+    /// - Testing new models in production safely
+    /// - Gradually rolling out changes
+    /// - Making data-driven decisions about which model to use
+    ///
+    /// Example:
+    /// <code>
+    /// // 90% on v1.0 (stable), 10% on v2.0 (experimental)
+    /// var abConfig = new ABTestingConfig
+    /// {
+    ///     Enabled = true,
+    ///     TrafficSplit = new Dictionary&lt;string, double&gt; { { "1.0", 0.9 }, { "2.0", 0.1 } },
+    ///     ControlVersion = "1.0"
+    /// };
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureABTesting(abConfig)
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </remarks>
+    /// <param name="config">The A/B testing configuration (optional, disables A/B testing if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureABTesting(ABTestingConfig? config = null);
+
+    /// <summary>
+    /// Configures telemetry for tracking and monitoring model inference metrics.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Telemetry collects performance data about your model in production, like:
+    /// - How long each inference takes (latency)
+    /// - How many inferences per second (throughput)
+    /// - When errors occur
+    /// - Cache hit/miss rates
+    /// - Which model versions are being used
+    ///
+    /// This helps you:
+    /// - Detect performance problems before users complain
+    /// - Understand usage patterns
+    /// - Debug production issues
+    /// - Make informed decisions about model updates
+    ///
+    /// Example:
+    /// <code>
+    /// // Enable telemetry with default settings
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureTelemetry()
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </remarks>
+    /// <param name="config">The telemetry configuration (optional, uses default telemetry settings if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null);
+
+    /// <summary>
+    /// Configures export settings for deploying the model to different platforms.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Export settings determine how your trained model will be saved for deployment.
+    /// Different platforms need different formats:
+    /// - **ONNX**: Universal format, works everywhere (recommended)
+    /// - **TensorRT**: NVIDIA GPUs, maximum performance
+    /// - **CoreML**: Apple devices (iPhone, iPad, Mac)
+    /// - **TFLite**: Android devices and edge hardware
+    /// - **WASM**: Run models in web browsers
+    ///
+    /// Configure this BEFORE training if you know your target platform, so the model can be
+    /// optimized accordingly. After training, use the Export methods on PredictionModelResult.
+    ///
+    /// Example:
+    /// <code>
+    /// // Configure for TensorRT deployment with FP16 quantization
+    /// var exportConfig = new ExportConfig
+    /// {
+    ///     TargetPlatform = TargetPlatform.TensorRT,
+    ///     Quantization = QuantizationMode.Float16
+    /// };
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureExport(exportConfig)
+    ///     .BuildAsync(x, y);
+    ///
+    /// // After training, export the model
+    /// result.ExportToTensorRT("model.trt");
+    /// </code>
+    /// </remarks>
+    /// <param name="config">The export configuration (optional, uses CPU/ONNX if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null);
+
+    /// <summary>
+    /// Enables GPU acceleration for training and inference with optional configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> GPU acceleration makes your model train 10-100x faster on large datasets
+    /// by using your graphics card (GPU) for parallel computation. It automatically uses GPU for large
+    /// operations and CPU for small ones, with zero code changes required.
+    /// </para>
+    /// <para>
+    /// Benefits:
+    /// - 10-100x faster training for large neural networks
+    /// - Automatic size-based routing (GPU for large ops, CPU for small)
+    /// - Supports NVIDIA (CUDA) and AMD/Intel (OpenCL) GPUs
+    /// - Automatic CPU fallback if GPU unavailable
+    /// - Works transparently with existing models
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Enable with defaults (recommended)
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureGpuAcceleration()
+    ///     .BuildAsync(data, labels);
+    ///
+    /// // Or with aggressive settings for high-end GPUs
+    /// builder.ConfigureGpuAcceleration(GpuAccelerationConfig.Aggressive());
+    ///
+    /// // Or CPU-only for debugging
+    /// builder.ConfigureGpuAcceleration(GpuAccelerationConfig.CpuOnly());
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="config">GPU acceleration configuration (optional, uses defaults if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureGpuAcceleration(GpuAccelerationConfig? config = null);
+
+    /// <summary>
+    /// Configures Just-In-Time (JIT) compilation for neural network forward and backward passes.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> JIT compilation is an optimization technique that converts your neural network's
+    /// operations into highly optimized native code at runtime, similar to how modern browsers optimize JavaScript.
+    /// </para>
+    /// <para>
+    /// Benefits:
+    /// - 2-10x faster inference through operation fusion and vectorization
+    /// - Reduced memory allocations during forward/backward passes
+    /// - Automatic optimization of computation graphs
+    /// - Zero code changes required - just enable the config
+    /// </para>
+    /// <para>
+    /// JIT compilation works by:
+    /// 1. Analyzing your neural network's computation graph
+    /// 2. Fusing compatible operations together (e.g., MatMul + Bias + ReLU)
+    /// 3. Generating optimized native code using System.Reflection.Emit
+    /// 4. Caching compiled code for subsequent runs
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Enable JIT with defaults (recommended)
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureJitCompilation()
+    ///     .BuildAsync(data, labels);
+    ///
+    /// // Or with custom settings
+    /// builder.ConfigureJitCompilation(new JitCompilationConfig
+    /// {
+    ///     Enabled = true,
+    ///     CompilerOptions = new JitCompilerOptions
+    ///     {
+    ///         EnableOperationFusion = true,
+    ///         EnableVectorization = true
+    ///     }
+    /// });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="config">JIT compilation configuration (optional, enables with defaults if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(AiDotNet.Configuration.JitCompilationConfig? config = null);
+
+    /// <summary>
+    /// Configures inference-time optimizations for faster predictions.
+    /// </summary>
+    /// <param name="config">Inference optimization configuration (optional, uses defaults if null).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Inference optimization makes your model's predictions faster and more efficient.
+    ///
+    /// Key features enabled:
+    /// - <b>KV Cache:</b> Speeds up transformer/attention models by 2-10x
+    /// - <b>Batching:</b> Groups predictions for higher throughput
+    /// - <b>Speculative Decoding:</b> Speeds up text generation by 1.5-3x
+    ///
+    /// Example:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, ...&gt;()
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
+    ///     .BuildAsync(x, y);
+    ///
+    /// // Or with custom settings:
+    /// var config = new InferenceOptimizationConfig
+    /// {
+    ///     EnableKVCache = true,
+    ///     MaxBatchSize = 64,
+    ///     EnableSpeculativeDecoding = true
+    /// };
+    ///
+    /// var result = await builder
+    ///     .ConfigureInferenceOptimizations(config)
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null);
+
+    /// <summary>
+    /// Configures mixed-precision training for faster neural network training with reduced memory usage.
+    /// </summary>
+    /// <param name="config">Mixed precision configuration (optional, uses defaults if null).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixed-precision training is a powerful optimization technique that uses
+    /// both 16-bit (half precision) and 32-bit (full precision) floating-point numbers during training.
+    /// This provides:
+    /// - **Up to 50% memory savings** allowing larger batch sizes or bigger models
+    /// - **2-3x faster training** on modern GPUs with Tensor Cores (NVIDIA Volta+)
+    /// - **Maintained accuracy** through careful precision management and loss scaling
+    ///
+    /// <b>Requirements:</b>
+    /// - Type parameter T must be float (FP32)
+    /// - Requires gradient-based optimizers (SGD, Adam, etc.)
+    /// - Best suited for neural networks with large parameter counts
+    ///
+    /// Example:
+    /// <code>
+    /// // Enable with default settings (recommended)
+    /// var result = await new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    ///     .ConfigureModel(network)
+    ///     .ConfigureOptimizer(optimizer)
+    ///     .ConfigureMixedPrecision()  // Enable mixed-precision
+    ///     .BuildAsync(trainingData, labels);
+    ///
+    /// // Or with custom configuration
+    /// builder.ConfigureMixedPrecision(MixedPrecisionConfig.Conservative());
+    /// </code>
+    /// </para>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null);
+
+    /// <summary>
+    /// Configures advanced reasoning capabilities for the model using Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency strategies.
+    /// </summary>
+    /// <param name="config">The reasoning configuration (optional, uses defaults if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Reasoning capabilities make AI models "think step by step" instead of
+    /// giving quick answers that might be wrong. Just like a student showing their work on a math test,
+    /// reasoning strategies help the AI:
+    /// - Break down complex problems into manageable steps
+    /// - Explore multiple solution approaches
+    /// - Verify and refine its answers
+    /// - Provide transparent, explainable reasoning
+    ///
+    /// After building your model, use the reasoning methods on PredictionModelResult:
+    /// - ReasonAsync(): Solve problems with configurable reasoning strategies
+    /// - QuickReasonAsync(): Fast answers for simple problems
+    /// - DeepReasonAsync(): Thorough analysis for complex problems
+    ///
+    /// Example:
+    /// <code>
+    /// // Configure reasoning during model building
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig)
+    ///     .ConfigureReasoning()
+    ///     .BuildAsync(data, labels);
+    ///
+    /// // Use reasoning on the trained model
+    /// var reasoningResult = await result.ReasonAsync(
+    ///     "Explain why this prediction was made and what factors contributed most?",
+    ///     ReasoningMode.ChainOfThought
+    /// );
+    /// Console.WriteLine(reasoningResult.FinalAnswer);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureReasoning(ReasoningConfig? config = null);
+
+    /// <summary>
+    /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -448,13 +1071,49 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// to new tasks with just a few examples.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> Use this method when you've configured meta-learning.
-    /// Unlike Build(x, y) which trains on one dataset, this trains your model to be good
+    /// <b>For Beginners:</b> Use this method when you've configured meta-learning and agent assistance.
+    /// Unlike BuildAsync(x, y) which trains on one dataset, this trains your model to be good
     /// at learning NEW tasks quickly. The training data comes from the episodic data loader
     /// you configured in your meta-learner.
     /// </para>
     /// </remarks>
-    /// <returns>A meta-trained model with rapid adaptation capabilities.</returns>
+    /// <returns>A task that represents the asynchronous operation, containing the meta-trained model.</returns>
     /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
-    PredictionModelResult<T, TInput, TOutput> Build();
+    Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync();
+
+    /// <summary>
+    /// Asynchronously builds a predictive model using the provided input features and output values.
+    /// If agent assistance is enabled, the agent will help with model selection and hyperparameter tuning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method trains your AI model on your specific dataset. It can leverage agent assistance
+    /// to help select appropriate models and tune hyperparameters based on your data characteristics.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method trains your AI model using the data you provide.
+    /// It's the async version that works with agent assistance features.
+    /// </para>
+    /// <para>
+    /// Example with agent assistance:
+    /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig)
+    ///     .BuildAsync(housingData, prices);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="x">Matrix of input features (required).</param>
+    /// <param name="y">Vector of output values (required).</param>
+    /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
+    /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no model has been specified for regular training.</exception>
+    Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput x, TOutput y);
 }

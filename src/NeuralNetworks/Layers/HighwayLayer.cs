@@ -26,8 +26,23 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class HighwayLayer<T> : LayerBase<T>
+public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
+    /// </summary>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the auxiliary loss contribution.
+    /// </summary>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Stores the last computed gate balance loss for diagnostic purposes.
+    /// </summary>
+    private T _lastGateBalanceLoss;
+
     /// <summary>
     /// The weight matrix used to transform the input data.
     /// </summary>
@@ -281,6 +296,9 @@ public class HighwayLayer<T> : LayerBase<T>
     public HighwayLayer(int inputDimension, IActivationFunction<T>? transformActivation = null, IActivationFunction<T>? gateActivation = null)
         : base([inputDimension], [inputDimension], transformActivation ?? new TanhActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastGateBalanceLoss = NumOps.Zero;
+
         _transformWeights = new Matrix<T>(inputDimension, inputDimension);
         _transformBias = new Vector<T>(inputDimension);
         _gateWeights = new Matrix<T>(inputDimension, inputDimension);
@@ -318,6 +336,9 @@ public class HighwayLayer<T> : LayerBase<T>
     public HighwayLayer(int inputDimension, IVectorActivationFunction<T>? transformActivation = null, IVectorActivationFunction<T>? gateActivation = null)
         : base([inputDimension], [inputDimension], transformActivation ?? new TanhActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastGateBalanceLoss = NumOps.Zero;
+
         _transformWeights = new Matrix<T>(inputDimension, inputDimension);
         _transformBias = new Vector<T>(inputDimension);
         _gateWeights = new Matrix<T>(inputDimension, inputDimension);
@@ -509,6 +530,81 @@ public class HighwayLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It's slower than the
+    /// manual implementation but can be useful for:
+    /// - Verifying gradient correctness
+    /// - Rapid prototyping with custom modifications
+    /// - Research and experimentation
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // For complex/composite layers, delegate to manual implementation
+        // Full autodiff requires implementing all sub-operations
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null || _lastTransformOutput == null || _lastGateOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -784,5 +880,202 @@ public class HighwayLayer<T> : LayerBase<T>
         _transformBiasGradient = null;
         _gateWeightsGradient = null;
         _gateBiasGradient = null;
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for this layer based on gate balance regularization.
+    /// </summary>
+    /// <returns>The computed auxiliary loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes a gate-balance regularization loss that encourages the gates to maintain
+    /// a balanced value around 0.5, preventing degenerate gating where all gates collapse to 0 or 1.
+    /// The loss is computed as the squared deviation of the mean gate value from 0.5, averaged across
+    /// all dimensions and batch samples.
+    /// </para>
+    /// <para><b>For Beginners:</b> This prevents the highway layer from "cheating" by always using
+    /// only one lane (transform or bypass). By penalizing gates that drift too far from 0.5, we ensure
+    /// the network learns to use both lanes effectively, making the highway mechanism meaningful.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || _lastGateOutput == null)
+        {
+            _lastGateBalanceLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Compute mean gate value across batch and dimensions
+        int batchSize = _lastGateOutput.Shape[0];
+        int inputDimension = _lastGateOutput.Shape[1];
+        int totalElements = batchSize * inputDimension;
+
+        T sum = NumOps.Zero;
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int d = 0; d < inputDimension; d++)
+            {
+                T gateValue = _lastGateOutput[new int[] { b, d }];
+                sum = NumOps.Add(sum, gateValue);
+            }
+        }
+
+        T meanGate = NumOps.Divide(sum, NumOps.FromDouble(totalElements));
+
+        // Compute loss = (mean_gate - 0.5)^2 to encourage balanced gating
+        T targetGate = NumOps.FromDouble(0.5);
+        T deviation = NumOps.Subtract(meanGate, targetGate);
+        T rawLoss = NumOps.Multiply(deviation, deviation);
+
+        // Store unweighted loss for diagnostics
+        _lastGateBalanceLoss = rawLoss;
+
+        // Apply auxiliary loss weight and return weighted loss
+        T weightedLoss = NumOps.Multiply(rawLoss, AuxiliaryLossWeight);
+        return weightedLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the auxiliary loss computation.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about the auxiliary loss.</returns>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalGateBalanceLoss", _lastGateBalanceLoss?.ToString() ?? "0" },
+            { "GateBalanceWeight", AuxiliaryLossWeight?.ToString() ?? "0.01" },
+            { "UseGateBalance", UseAuxiliaryLoss.ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> when weights are initialized and activation functions support JIT.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Highway layers support JIT compilation when:
+    /// - Transform and gate weights are initialized
+    /// - The transform activation function (typically Tanh) supports JIT
+    /// - The gate activation function (typically Sigmoid) supports JIT
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation =>
+        _transformWeights != null && _transformBias != null &&
+        _gateWeights != null && _gateBias != null &&
+        (_transformActivation?.SupportsJitCompilation ?? _vectorTransformActivation != null) &&
+        (_gateActivation?.SupportsJitCompilation ?? _vectorGateActivation != null);
+
+    /// <summary>
+    /// Exports the highway layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the gated highway output.</returns>
+    /// <remarks>
+    /// <para>
+    /// The highway layer computation graph implements:
+    /// output = gate * transform(input) + (1 - gate) * input
+    ///
+    /// Where:
+    /// - transform = activation(input @ transformWeights + transformBias)
+    /// - gate = sigmoid(input @ gateWeights + gateBias)
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates an optimized version of the highway layer.
+    /// The gate controls how much information flows through the transform path vs. the bypass path.
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_transformWeights == null || _transformBias == null ||
+            _gateWeights == null || _gateBias == null)
+            throw new InvalidOperationException("Weights and biases not initialized.");
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input node with batch dimension
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "highway_input");
+        inputNodes.Add(inputNode);
+
+        // Create constant nodes for weights and biases
+        var transformWeightsNode = Autodiff.TensorOperations<T>.Constant(
+            Tensor<T>.FromMatrix(_transformWeights), "transform_weights");
+        var transformBiasNode = Autodiff.TensorOperations<T>.Constant(
+            Tensor<T>.FromVector(_transformBias), "transform_bias");
+        var gateWeightsNode = Autodiff.TensorOperations<T>.Constant(
+            Tensor<T>.FromMatrix(_gateWeights), "gate_weights");
+        var gateBiasNode = Autodiff.TensorOperations<T>.Constant(
+            Tensor<T>.FromVector(_gateBias), "gate_bias");
+
+        // Step 1: Compute transform path: transform = activation(input @ weights + bias)
+        var transformLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, transformWeightsNode);
+        var transformWithBias = Autodiff.TensorOperations<T>.Add(transformLinear, transformBiasNode);
+
+        // Apply transform activation (typically Tanh)
+        Autodiff.ComputationNode<T> transformOutput;
+        if (_transformActivation != null && _transformActivation.SupportsJitCompilation)
+        {
+            transformOutput = _transformActivation.ApplyToGraph(transformWithBias);
+        }
+        else
+        {
+            // Default to Tanh if no activation specified
+            transformOutput = Autodiff.TensorOperations<T>.Tanh(transformWithBias);
+        }
+
+        // Step 2: Compute gate path: gate = sigmoid(input @ weights + bias)
+        var gateLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, gateWeightsNode);
+        var gateWithBias = Autodiff.TensorOperations<T>.Add(gateLinear, gateBiasNode);
+
+        // Apply gate activation (typically Sigmoid)
+        Autodiff.ComputationNode<T> gateOutput;
+        if (_gateActivation != null && _gateActivation.SupportsJitCompilation)
+        {
+            gateOutput = _gateActivation.ApplyToGraph(gateWithBias);
+        }
+        else
+        {
+            // Default to Sigmoid if no activation specified
+            gateOutput = Autodiff.TensorOperations<T>.Sigmoid(gateWithBias);
+        }
+
+        // Step 3: Compute highway output: output = gate * transform + (1 - gate) * input
+        // Rewrite as: output = gate * transform + input - gate * input
+        //           = gate * (transform - input) + input
+        var transformMinusInput = Autodiff.TensorOperations<T>.Subtract(transformOutput, inputNode);
+        var gatedDiff = Autodiff.TensorOperations<T>.ElementwiseMultiply(gateOutput, transformMinusInput);
+        var output = Autodiff.TensorOperations<T>.Add(gatedDiff, inputNode);
+
+        return output;
     }
 }

@@ -123,4 +123,107 @@ public interface IGradientBasedOptimizer<T, TInput, TOutput> : IOptimizer<T, TIn
     /// momentum or adaptive learning rates.
     /// </remarks>
     void UpdateParameters(List<ILayer<T>> layers);
+
+    /// <summary>
+    /// Gets the gradients computed during the last optimization step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property provides access to the gradients (partial derivatives) calculated
+    /// during the most recent optimization. Essential for distributed training, gradient clipping,
+    /// and debugging.
+    /// </para>
+    /// <para><b>For Beginners:</b> Gradients are "directions" showing how to adjust each parameter
+    /// to improve the model. This property lets you see those directions after optimization runs.
+    /// </para>
+    /// <para><b>Industry Standard:</b>
+    /// PyTorch, TensorFlow, and JAX all expose gradients for features like gradient clipping,
+    /// true Distributed Data Parallel (DDP), and gradient compression.
+    /// </para>
+    /// </remarks>
+    /// <value>
+    /// Vector of gradients for each parameter. Returns empty vector if no optimization performed yet.
+    /// </value>
+    Vector<T> LastComputedGradients { get; }
+
+    /// <summary>
+    /// Applies pre-computed gradients to a model's parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Allows applying externally-computed or modified gradients (averaged, compressed, clipped, etc.)
+    /// to update model parameters. Essential for production distributed training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This takes pre-calculated "directions" (gradients) and uses them
+    /// to update the model. Like having a GPS tell you which way to go, this method moves you there.
+    /// </para>
+    /// <para><b>Production Use Cases:</b>
+    /// - **True DDP**: Average gradients across GPUs, then apply
+    /// - **Gradient Compression**: Compress, sync, decompress, then apply
+    /// - **Federated Learning**: Average gradients from clients before applying
+    /// - **Gradient Clipping**: Clip gradients to prevent exploding, then apply
+    /// </para>
+    /// </remarks>
+    /// <param name="gradients">Gradients to apply (must match model parameter count)</param>
+    /// <param name="model">Model whose parameters should be updated</param>
+    /// <returns>Model with updated parameters</returns>
+    /// <exception cref="ArgumentNullException">If gradients or model is null</exception>
+    /// <exception cref="ArgumentException">If gradient size doesn't match parameters</exception>
+    IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> gradients, IFullModel<T, TInput, TOutput> model);
+
+    /// <summary>
+    /// Applies pre-computed gradients to explicit original parameters (double-step safe).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>⚠️ RECOMMENDED for Distributed Training:</b>
+    /// This overload accepts originalParameters explicitly, making it impossible to accidentally
+    /// apply gradients twice. Use this in distributed optimizers where you need explicit control
+    /// over which parameter state to start from.
+    /// </para>
+    /// <para>
+    /// Prevents double-stepping bug:
+    /// - WRONG: ApplyGradients(g_avg, modelWithLocalUpdate) → double step!
+    /// - RIGHT: ApplyGradients(originalParams, g_avg, modelTemplate) → single step!
+    /// </para>
+    /// <para><b>Distributed Pattern:</b>
+    /// 1. Save originalParams before local optimization
+    /// 2. Run local optimization → get localGradients
+    /// 3. Synchronize gradients → get avgGradients
+    /// 4. Call ApplyGradients(originalParams, avgGradients, model) → correct result!
+    /// </para>
+    /// </remarks>
+    /// <param name="originalParameters">Pre-update parameters to start from</param>
+    /// <param name="gradients">Gradients to apply</param>
+    /// <param name="model">Model template (only used for structure, parameters ignored)</param>
+    /// <returns>New model with updated parameters</returns>
+    IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> originalParameters, Vector<T> gradients, IFullModel<T, TInput, TOutput> model);
+
+    /// <summary>
+    /// Reverses a gradient update to recover original parameters before the update was applied.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method computes the original parameters given updated parameters and the gradients
+    /// that were applied. Each optimizer implements this differently based on its update rule.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like "undo" for a gradient update. Given where you are now
+    /// (updated parameters) and the directions you took (gradients), it calculates where you started.
+    /// </para>
+    /// <para><b>Optimizer-Specific Behavior:</b>
+    /// - **SGD**: params_old = params_new + learning_rate * gradients
+    /// - **Adam**: Requires reversing momentum and adaptive learning rate adjustments
+    /// - **RMSprop**: Requires reversing adaptive learning rate based on gradient history
+    /// </para>
+    /// <para><b>Production Use Cases:</b>
+    /// - **Distributed Training**: Reverse local updates before applying synchronized gradients
+    /// - **Checkpointing**: Recover previous parameter states
+    /// - **Debugging**: Validate gradient application correctness
+    /// </para>
+    /// </remarks>
+    /// <param name="updatedParameters">Parameters after gradient application</param>
+    /// <param name="appliedGradients">The gradients that were applied to produce updated parameters</param>
+    /// <returns>Original parameters before the gradient update</returns>
+    /// <exception cref="ArgumentNullException">If parameters or gradients are null</exception>
+    /// <exception cref="ArgumentException">If parameter and gradient sizes don't match</exception>
+    Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients);
 }

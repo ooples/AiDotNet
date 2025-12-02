@@ -96,7 +96,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         _options = options;
         _ensemble = [];
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -541,7 +541,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
             return (Tree: tree, Weight: (T)e.Weight);
         })];
 
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -570,4 +570,142 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new AdaBoostR2Regression<T>(_options, Regularization);
     }
+
+    #region IJitCompilable Implementation Override
+
+    /// <summary>
+    /// Gets whether this AdaBoost.R2 model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> when soft tree mode is enabled and the ensemble has been trained;
+    /// <c>false</c> otherwise.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// AdaBoost.R2 supports JIT compilation when soft tree mode is enabled. In soft mode,
+    /// each tree in the ensemble uses sigmoid-based soft gating instead of hard if-then splits,
+    /// making the weighted ensemble differentiable.
+    /// </para>
+    /// <para>
+    /// The computation graph follows the weighted averaging formula:
+    /// <code>prediction = Σ(weight_i × tree_i(input)) / Σ(weight_i)</code>
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT compilation is available when soft tree mode is enabled.
+    ///
+    /// In soft tree mode:
+    /// - Each tree in the AdaBoost ensemble uses smooth transitions
+    /// - Tree weights (based on training error) are embedded in the computation graph
+    /// - The weighted average is computed just like regular AdaBoost
+    ///
+    /// This gives you adaptive boosting benefits with JIT-compiled speed.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation =>
+        UseSoftTree && _ensemble.Count > 0;
+
+    /// <summary>
+    /// Exports the AdaBoost.R2 model's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The root node of the exported computation graph.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when soft tree mode is not enabled.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the ensemble has not been trained.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// When soft tree mode is enabled, this exports the entire AdaBoost.R2 ensemble as a
+    /// differentiable computation graph. The graph implements weighted averaging:
+    /// <code>output = Σ(weight_i × tree_i(input)) / Σ(weight_i)</code>
+    /// where each tree uses soft split operations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This exports the AdaBoost ensemble as a computation graph.
+    ///
+    /// AdaBoost uses weighted trees where:
+    /// - Each tree has a weight based on how well it performed during training
+    /// - Better-performing trees get higher weights
+    /// - The final prediction is a weighted average of all tree predictions
+    ///
+    /// The exported graph includes these weights for optimized inference.
+    /// </para>
+    /// </remarks>
+    public override AiDotNet.Autodiff.ComputationNode<T> ExportComputationGraph(
+        List<AiDotNet.Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (!UseSoftTree)
+        {
+            throw new NotSupportedException(
+                "AdaBoost.R2 does not support JIT compilation in hard tree mode because " +
+                "decision trees use discrete branching logic.\n\n" +
+                "To enable JIT compilation, set UseSoftTree = true to use soft (differentiable) " +
+                "decision trees with sigmoid-based gating.");
+        }
+
+        if (_ensemble.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Cannot export computation graph: the AdaBoost.R2 model has not been trained. " +
+                "Call Train() or TrainAsync() first to build the ensemble.");
+        }
+
+        // Ensure all trees have soft mode enabled
+        foreach (var (tree, _) in _ensemble)
+        {
+            tree.UseSoftTree = true;
+            tree.SoftTreeTemperature = SoftTreeTemperature;
+        }
+
+        // Compute total weight for normalization
+        T totalWeight = NumOps.Zero;
+        foreach (var (_, weight) in _ensemble)
+        {
+            totalWeight = NumOps.Add(totalWeight, weight);
+        }
+
+        // Export first tree to get input node
+        var tempInputNodes = new List<AiDotNet.Autodiff.ComputationNode<T>>();
+        var (firstTree, firstWeight) = _ensemble[0];
+        var firstTreeGraph = firstTree.ExportComputationGraph(tempInputNodes);
+
+        if (tempInputNodes.Count > 0)
+        {
+            inputNodes.Add(tempInputNodes[0]);
+        }
+
+        // Create weighted first tree contribution
+        var firstWeightTensor = new Tensor<T>(new[] { 1 });
+        firstWeightTensor[0] = firstWeight;
+        var firstWeightNode = TensorOperations<T>.Constant(firstWeightTensor, "weight_0");
+        var weightedSum = TensorOperations<T>.ElementwiseMultiply(firstWeightNode, firstTreeGraph);
+
+        // Add weighted contributions from remaining trees
+        for (int i = 1; i < _ensemble.Count; i++)
+        {
+            var (tree, weight) = _ensemble[i];
+            var treeInputNodes = new List<AiDotNet.Autodiff.ComputationNode<T>>();
+            var treeGraph = tree.ExportComputationGraph(treeInputNodes);
+
+            // Create weight constant
+            var weightTensor = new Tensor<T>(new[] { 1 });
+            weightTensor[0] = weight;
+            var weightNode = TensorOperations<T>.Constant(weightTensor, $"weight_{i}");
+
+            // weighted contribution: weight * tree_output
+            var weightedTree = TensorOperations<T>.ElementwiseMultiply(weightNode, treeGraph);
+
+            // Accumulate
+            weightedSum = TensorOperations<T>.Add(weightedSum, weightedTree);
+        }
+
+        // Normalize by total weight: weighted_sum / total_weight
+        var totalWeightTensor = new Tensor<T>(new[] { 1 });
+        totalWeightTensor[0] = totalWeight;
+        var totalWeightNode = TensorOperations<T>.Constant(totalWeightTensor, "total_weight");
+
+        return TensorOperations<T>.Divide(weightedSum, totalWeightNode);
+    }
+
+    #endregion
 }

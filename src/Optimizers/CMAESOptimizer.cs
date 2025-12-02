@@ -72,7 +72,8 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     /// </remarks>
     public CMAESOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        CMAESOptimizerOptions<T, TInput, TOutput>? options = null)
+        CMAESOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
         : base(model, options ?? new())
     {
         _options = (CMAESOptimizerOptions<T, TInput, TOutput>)Options;
@@ -197,10 +198,15 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
 
         for (int i = 0; i < _options.PopulationSize; i++)
         {
+            // === Vectorized Population Generation using IEngine (Phase B: US-GPU-015) ===
+            // population[i] = mean + sigma * sample
             var sample = GenerateMultivariateNormalSample(dimensions);
+            var scaledSample = (Vector<T>)AiDotNetEngine.Current.Multiply(sample, _sigma);
+            var individual = (Vector<T>)AiDotNetEngine.Current.Add(_mean, scaledSample);
+
             for (int j = 0; j < dimensions; j++)
             {
-                population[i, j] = NumOps.Add(_mean[j], NumOps.Multiply(_sigma, sample[j]));
+                population[i, j] = individual[j];
             }
         }
 
@@ -314,34 +320,58 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         int mu = lambda / 2;
 
         // Sort and select the best individuals
-        var sortedIndices = fitnessValues.Argsort().Reverse().ToArray();
+        // Create index-fitness pairs and sort by fitness descending
+        var indexedFitness = new List<(int index, T fitness)>();
+        for (int i = 0; i < lambda; i++)
+        {
+            indexedFitness.Add((i, fitnessValues[i]));
+        }
+
+        // Sort descending by fitness (best first)
+        indexedFitness.Sort((a, b) =>
+        {
+            if (NumOps.GreaterThan(a.fitness, b.fitness)) return -1;
+            if (NumOps.LessThan(a.fitness, b.fitness)) return 1;
+            return 0;
+        });
+
         var selectedPopulation = new Matrix<T>(mu, dimensions);
         for (int i = 0; i < mu; i++)
         {
+            int sourceIndex = indexedFitness[i].index;
             for (int j = 0; j < dimensions; j++)
             {
-                selectedPopulation[i, j] = population[sortedIndices[i], j];
+                selectedPopulation[i, j] = population[sourceIndex, j];
             }
         }
 
-        // Calculate weights
-        var weights = new Vector<T>(mu);
-        T sumWeights = NumOps.Zero;
+        // Calculate weights - vectorized
+        // Create vector of indices [0, 1, 2, ..., mu-1]
+        var indices = new Vector<T>(mu);
         for (int i = 0; i < mu; i++)
         {
-            weights[i] = NumOps.Log(NumOps.Add(NumOps.FromDouble(mu + 0.5), NumOps.FromDouble(i)));
-            weights[i] = NumOps.Subtract(NumOps.FromDouble(mu + 0.5), weights[i]);
-            sumWeights = NumOps.Add(sumWeights, weights[i]);
+            indices[i] = NumOps.FromDouble(i);
         }
+        
+        // weights[i] = (mu + 0.5) - log(mu + 0.5 + i)
+        var muPlusHalf = AiDotNetEngine.Current.Fill<T>(mu, NumOps.FromDouble(mu + 0.5));
+        var indexPlusMu = (Vector<T>)AiDotNetEngine.Current.Add(indices, muPlusHalf);
+        var logValues = (Vector<T>)AiDotNetEngine.Current.Log(indexPlusMu);
+        var weights = (Vector<T>)AiDotNetEngine.Current.Subtract(muPlusHalf, logValues);
+        
+        // Normalize weights
+        T sumWeights = AiDotNetEngine.Current.Sum(weights);
         weights = weights.Divide(sumWeights);
 
-        // Calculate effective mu
-        T muEff = NumOps.Zero;
-        for (int i = 0; i < mu; i++)
+        // Calculate effective mu - vectorized
+        // muEff = 1 / sum(weights^2)
+        var weightsSquared = new Vector<T>(weights.Length);
+        for (int i = 0; i < weights.Length; i++)
         {
-            muEff = NumOps.Add(muEff, NumOps.Square(weights[i]));
+            weightsSquared[i] = NumOps.Square(weights[i]);
         }
-        muEff = NumOps.Divide(NumOps.One, muEff);
+        T sumSquaredWeights = AiDotNetEngine.Current.Sum(weightsSquared);
+        T muEff = NumOps.Divide(NumOps.One, sumSquaredWeights);
 
         // Update mean
         var oldMean = _mean;

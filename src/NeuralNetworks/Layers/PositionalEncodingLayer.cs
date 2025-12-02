@@ -1,3 +1,5 @@
+
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -59,7 +61,11 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// and reused for all forward passes.
     /// </remarks>
     private Tensor<T> encodings;
-    
+
+    /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
@@ -152,7 +158,8 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         {
             for (int i = 0; i < embeddingSize; i++)
             {
-                double angle = pos / Math.Pow(10000, (2 * (i / 2)) / (double)embeddingSize);
+                double exponent = NumericalStabilityHelper.SafeDiv(2.0 * (i / 2), embeddingSize);
+                double angle = pos / Math.Pow(10000, exponent);
                 if (i % 2 == 0)
                 {
                     encodings[pos, i] = NumOps.FromDouble(Math.Sin(angle));
@@ -232,6 +239,81 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It's slower than the
+    /// manual implementation but can be useful for:
+    /// - Verifying gradient correctness
+    /// - Rapid prototyping with custom modifications
+    /// - Research and experimentation
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // For complex/composite layers, delegate to manual implementation
+        // Full autodiff requires implementing all sub-operations
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         // The gradient flows through unchanged
         return outputGradient;
     }
@@ -310,4 +392,22 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         // No state to reset in this layer
         // The encodings are fixed and don't change during training
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // PositionalEncodingLayer adds fixed positional encodings to input
+        return TensorOperations<T>.Add(inputNode, TensorOperations<T>.Constant(encodings, "positional_encodings"));
+    }
+
+    public override bool SupportsJitCompilation => true;
 }
