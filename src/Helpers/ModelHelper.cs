@@ -57,6 +57,16 @@ public static class ModelHelper<T, TInput, TOutput>
 
             return (x, y, predictions);
         }
+        else if (typeof(TInput) == typeof(Vector<T>) && typeof(TOutput) == typeof(Vector<T>))
+        {
+            // Note: The intermediate cast to object is required for generic type conversion in C#.
+            // We can't directly cast Vector<T> to TInput even when we know they're the same type at runtime.
+            var x = (TInput)(object)Vector<T>.Empty();
+            var y = (TOutput)(object)Vector<T>.Empty();
+            var predictions = (TOutput)(object)Vector<T>.Empty();
+
+            return (x, y, predictions);
+        }
         else
         {
             throw new InvalidOperationException("Unsupported types for TInput and TOutput");
