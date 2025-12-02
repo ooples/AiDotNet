@@ -1,5 +1,6 @@
 using System;
 
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -443,7 +444,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     private void InitializeParameters()
     {
         // Xavier/Glorot initialization
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (InputDepth + OutputDepth)));
+        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputDepth + OutputDepth)));
         for (int i = 0; i < _kernels.Length; i++)
         {
             _kernels[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
@@ -931,5 +932,47 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         _lastOutput = null;
         _kernelsGradient = null;
         _biasesGradient = null;
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_kernels == null || _biases == null)
+            throw new InvalidOperationException("Layer weights not initialized.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        var kernelNode = TensorOperations<T>.Constant(_kernels, "kernel");
+        var biasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { OutputDepth }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_biases.ToArray())), "bias");
+
+        var deconvNode = TensorOperations<T>.ConvTranspose2D(inputNode, kernelNode, biasNode, stride: new[] { Stride, Stride }, padding: new[] { Padding, Padding });
+
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+        {
+            return ScalarActivation.ApplyToGraph(deconvNode);
+        }
+
+        return deconvNode;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            if (_kernels == null || _biases == null)
+                return false;
+
+            if (ScalarActivation != null)
+                return ScalarActivation.SupportsJitCompilation;
+
+            return true;
+        }
     }
 }

@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -11,17 +13,22 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// function after the custom transformation.
 /// </para>
 /// <para><b>For Beginners:</b> This layer lets you create your own custom operations in a neural network.
-/// 
+///
 /// Think of the Lambda Layer as a "do-it-yourself" layer where:
 /// - You provide your own custom function to process the data
 /// - You can optionally provide a custom function for the learning process
 /// - It gives you flexibility to implement operations not covered by standard layers
-/// 
+///
 /// For example, if you wanted to apply a special mathematical transformation that isn't
 /// available in standard layers, you could define that transformation and use it in a Lambda Layer.
-/// 
+///
 /// This is an advanced feature that gives you complete control when standard layers
 /// don't provide what you need.
+/// </para>
+/// <para>
+/// <b>JIT Compilation Support:</b> To enable JIT compilation, use the constructor that accepts
+/// a traceable expression function (Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt;) instead of
+/// an opaque tensor function. The traceable function uses TensorOperations which can be compiled.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -59,19 +66,31 @@ public class LambdaLayer<T> : LayerBase<T>
     /// backward through this custom transformation during training.
     /// </para>
     /// <para><b>For Beginners:</b> This optional function handles the learning process for your custom layer.
-    /// 
+    ///
     /// The backward function:
     /// - Takes the original input and information about errors from later layers
     /// - Calculates how to adjust the input to reduce these errors
     /// - Is necessary if you want your network to learn through this custom layer
-    /// 
+    ///
     /// If you don't provide this function, the layer cannot participate in training,
     /// meaning that while it will transform data, the network cannot learn to optimize this transformation.
-    /// 
+    ///
     /// Writing this function correctly requires understanding of calculus and backpropagation.
     /// </para>
     /// </remarks>
     private readonly Func<Tensor<T>, Tensor<T>, Tensor<T>>? _backwardFunction;
+
+    /// <summary>
+    /// The optional traceable expression function for JIT compilation support.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When provided, this function defines the forward pass using TensorOperations on ComputationNodes,
+    /// enabling JIT compilation. The function takes a ComputationNode input and returns a ComputationNode output.
+    /// All operations within the function must use TensorOperations methods.
+    /// </para>
+    /// </remarks>
+    private readonly Func<ComputationNode<T>, ComputationNode<T>>? _traceableExpression;
 
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.
@@ -162,24 +181,71 @@ public class LambdaLayer<T> : LayerBase<T>
     /// dependencies between different elements of the vectors.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new custom layer with an advanced vector-based activation.
-    /// 
+    ///
     /// Vector activation functions:
     /// - Process entire groups of numbers together, not just one at a time
     /// - Can capture relationships between different features
     /// - May be more powerful for complex patterns
-    /// 
+    ///
     /// This constructor is useful when you need the layer to understand how different
     /// features interact with each other, rather than treating each feature independently.
     /// </para>
     /// </remarks>
-    public LambdaLayer(int[] inputShape, int[] outputShape, 
-                       Func<Tensor<T>, Tensor<T>> forwardFunction, 
+    public LambdaLayer(int[] inputShape, int[] outputShape,
+                       Func<Tensor<T>, Tensor<T>> forwardFunction,
                        Func<Tensor<T>, Tensor<T>, Tensor<T>>? backwardFunction = null,
                        IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base(inputShape, outputShape, vectorActivationFunction ?? new ReLUActivation<T>())
     {
         _forwardFunction = forwardFunction;
         _backwardFunction = backwardFunction;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LambdaLayer{T}"/> class with a traceable expression for JIT compilation support.
+    /// </summary>
+    /// <param name="inputShape">The shape of the input tensor.</param>
+    /// <param name="outputShape">The shape of the output tensor.</param>
+    /// <param name="traceableExpression">A function that defines the forward pass using TensorOperations on ComputationNodes.</param>
+    /// <param name="activationFunction">The activation function to apply after the custom transformation. Defaults to ReLU if not specified.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor creates a Lambda Layer that supports JIT compilation by accepting a traceable expression.
+    /// The traceable expression must use TensorOperations methods to define the forward pass, which allows
+    /// the computation graph to be captured and compiled.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a custom layer that can be JIT compiled for better performance.
+    ///
+    /// To use JIT compilation:
+    /// - Define your custom operation using TensorOperations methods
+    /// - Pass it as a function that takes and returns ComputationNodes
+    /// - The system can then compile and optimize your operation
+    ///
+    /// Example:
+    /// <code>
+    /// var layer = new LambdaLayer&lt;float&gt;(
+    ///     inputShape: new[] { 10 },
+    ///     outputShape: new[] { 10 },
+    ///     traceableExpression: x => TensorOperations&lt;float&gt;.Square(x)
+    /// );
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public LambdaLayer(int[] inputShape, int[] outputShape,
+                       Func<ComputationNode<T>, ComputationNode<T>> traceableExpression,
+                       IActivationFunction<T>? activationFunction = null)
+        : base(inputShape, outputShape, activationFunction ?? new ReLUActivation<T>())
+    {
+        _traceableExpression = traceableExpression;
+        // Create a forward function from the traceable expression for runtime use
+        _forwardFunction = input =>
+        {
+            var inputNode = TensorOperations<T>.Variable(input, "lambda_input", requiresGradient: false);
+            var outputNode = _traceableExpression(inputNode);
+            return outputNode.Value;
+        };
+        // Backward function is automatically derived from the computation graph
+        _backwardFunction = null;
     }
 
     /// <summary>
@@ -370,4 +436,49 @@ public class LambdaLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastOutput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        // Check if we have a traceable expression
+        if (_traceableExpression == null)
+        {
+            throw new NotSupportedException(
+                "LambdaLayer with opaque functions does not support JIT compilation. " +
+                "Use the constructor that accepts a traceable expression (Func<ComputationNode<T>, ComputationNode<T>>) " +
+                "to enable JIT compilation.");
+        }
+
+        // Apply the traceable expression to build the computation graph
+        var input = inputNodes[0];
+        var output = _traceableExpression(input);
+
+        // Apply activation if present
+        output = ApplyActivationToGraph(output);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> if a traceable expression was provided; otherwise, <c>false</c>.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation is only supported when the LambdaLayer was created with a traceable expression
+    /// that uses TensorOperations. Opaque user-defined functions cannot be compiled.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => _traceableExpression != null;
+
 }

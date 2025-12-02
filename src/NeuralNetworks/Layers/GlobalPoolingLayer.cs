@@ -1,3 +1,5 @@
+
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -309,7 +311,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
 
                 if (_poolingType == PoolingType.Average)
                 {
-                    pooledValue = NumOps.Divide(pooledValue, NumOps.FromDouble(height * width));
+                    pooledValue = NumericalStabilityHelper.SafeDiv(pooledValue, NumOps.FromDouble(height * width));
                 }
 
                 output[b, 0, 0, c] = pooledValue;
@@ -390,7 +392,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
 
                 if (_poolingType == PoolingType.Average)
                 {
-                    T averageGradient = NumOps.Divide(gradientValue, NumOps.FromDouble(height * width));
+                    T averageGradient = NumericalStabilityHelper.SafeDiv(gradientValue, NumOps.FromDouble(height * width));
                     for (int h = 0; h < height; h++)
                     {
                         for (int w = 0; w < width; w++)
@@ -635,5 +637,48 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Global pooling can be implemented as regular pooling with pool size = spatial dimensions
+        // InputShape for CNN: [channels, height, width]
+        if (InputShape.Length >= 3)
+        {
+            int height = InputShape[1];
+            int width = InputShape[2];
+            var poolSize = new int[] { height, width };
+            var strides = new int[] { 1, 1 };
+
+            if (_poolingType == PoolingType.Max)
+            {
+                return TensorOperations<T>.MaxPool2D(inputNode, poolSize: poolSize, strides: strides);
+            }
+            else // Average
+            {
+                return TensorOperations<T>.AvgPool2D(inputNode, poolSize: poolSize, strides: strides);
+            }
+        }
+
+        // Fallback for other shapes - return identity for now
+        return inputNode;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            return InputShape != null && InputShape.Length > 0;
+        }
     }
 }

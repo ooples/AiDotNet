@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   version-and-build:
-    name: Version, Build, Test, Pack
+    name: Version and Build
     runs-on: ubuntu-latest
     outputs:
       package_version: ${{ steps.version.outputs.version }}
@@ -119,7 +119,7 @@ jobs:
           # Breaking changes
           BREAKING=$(echo "$COMMITS" | grep -iE "BREAKING CHANGE:|BREAKING:" || true)
           if [ -n "$BREAKING" ]; then
-            CHANGELOG+="### 🚨 Breaking Changes"$'\n'
+            CHANGELOG+="### Breaking Changes"$'\n'
             while IFS= read -r line; do
               CHANGELOG+="- ${line#* }"$'\n'
             done < <(echo "$BREAKING")
@@ -129,7 +129,7 @@ jobs:
           # Features
           FEATURES=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ feat(\(.*\))?:" || true)
           if [ -n "$FEATURES" ]; then
-            CHANGELOG+="### ✨ Features"$'\n'
+            CHANGELOG+="### Features"$'\n'
             while IFS= read -r line; do
               MSG=$(echo "$line" | sed -E 's/^[a-f0-9]+ feat(\(.*\))?: //')
               CHANGELOG+="- $MSG"$'\n'
@@ -140,7 +140,7 @@ jobs:
           # Fixes
           FIXES=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ fix(\(.*\))?:" || true)
           if [ -n "$FIXES" ]; then
-            CHANGELOG+="### 🐛 Bug Fixes"$'\n'
+            CHANGELOG+="### Bug Fixes"$'\n'
             while IFS= read -r line; do
               MSG=$(echo "$line" | sed -E 's/^[a-f0-9]+ fix(\(.*\))?: //')
               CHANGELOG+="- $MSG"$'\n'
@@ -151,7 +151,7 @@ jobs:
           # Performance improvements
           PERF=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ perf(\(.*\))?:" || true)
           if [ -n "$PERF" ]; then
-            CHANGELOG+="### ⚡ Performance Improvements"$'\n'
+            CHANGELOG+="### Performance Improvements"$'\n'
             while IFS= read -r line; do
               MSG=$(echo "$line" | sed -E 's/^[a-f0-9]+ perf(\(.*\))?: //')
               CHANGELOG+="- $MSG"$'\n'
@@ -162,7 +162,7 @@ jobs:
           # Refactoring
           REFACTOR=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ refactor(\(.*\))?:" || true)
           if [ -n "$REFACTOR" ]; then
-            CHANGELOG+="### ♻️ Code Refactoring"$'\n'
+            CHANGELOG+="### Code Refactoring"$'\n'
             while IFS= read -r line; do
               MSG=$(echo "$line" | sed -E 's/^[a-f0-9]+ refactor(\(.*\))?: //')
               CHANGELOG+="- $MSG"$'\n'
@@ -173,7 +173,7 @@ jobs:
           # Documentation
           DOCS=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ docs(\(.*\))?:" || true)
           if [ -n "$DOCS" ]; then
-            CHANGELOG+="### 📚 Documentation"$'\n'
+            CHANGELOG+="### Documentation"$'\n'
             while IFS= read -r line; do
               MSG=$(echo "$line" | sed -E 's/^[a-f0-9]+ docs(\(.*\))?: //')
               CHANGELOG+="- $MSG"$'\n'
@@ -195,9 +195,6 @@ jobs:
             echo EOF
           } >> $GITHUB_OUTPUT
 
-      # Tag will be created by the github-release job using the GitHub API
-      # This avoids repository rule restrictions on direct git tag pushes
-
       - name: Restore dependencies
         if: steps.version.outputs.should_release == 'true'
         run: dotnet restore
@@ -206,25 +203,75 @@ jobs:
         if: steps.version.outputs.should_release == 'true'
         run: dotnet build -c Release --no-restore
 
-      # Temporarily skip tests for faster release pipeline testing
-      # TODO: Re-enable tests once pipeline is validated
-      # - name: Test
-      #   if: steps.version.outputs.should_release == 'true'
-      #   run: dotnet test -c Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
+  # Parallel test execution using matrix strategy
+  test:
+    name: Test (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    needs: version-and-build
+    if: needs.version-and-build.outputs.should_release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - tests/AiDotNet.Tests/AiDotNetTests.csproj
+          - tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj
+          - tests/AiDotNet.Tensors.Tests/AiDotNet.Tensors.Tests.csproj
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore and build
+        run: |
+          dotnet restore
+          dotnet build -c Release --no-restore
+
+      - name: Run tests for ${{ matrix.project }}
+        run: dotnet test ${{ matrix.project }} -c Release --framework net8.0 -v n
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ strategy.job-index }}
+          path: ./TestResults/
+          retention-days: 7
+
+  # Pack NuGet after all tests pass
+  pack:
+    name: Pack NuGet
+    runs-on: ubuntu-latest
+    needs: [version-and-build, test]
+    if: needs.version-and-build.outputs.should_release == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore and Build
+        run: |
+          dotnet restore
+          dotnet build -c Release --no-restore
 
       - name: Pack NuGet
-        if: steps.version.outputs.should_release == 'true'
         run: |
           if [ -f "src/AiDotNet.csproj" ]; then
-            dotnet pack src/AiDotNet.csproj -c Release -o out /p:PackageVersion=${{ steps.version.outputs.version }}
-            echo "Package created: AiDotNet.${{ steps.version.outputs.version }}.nupkg"
+            dotnet pack src/AiDotNet.csproj -c Release -o out /p:PackageVersion=${{ needs.version-and-build.outputs.package_version }}
+            echo "Package created: AiDotNet.${{ needs.version-and-build.outputs.package_version }}.nupkg"
           else
             echo "Error: src/AiDotNet.csproj not found"
             exit 1
           fi
 
-      - name: Verify TFMs in package (net462, net8.0)
-        if: steps.version.outputs.should_release == 'true'
+      - name: Verify TFMs in package (net471, net8.0)
         run: |
           set -e
           shopt -s nullglob
@@ -238,21 +285,20 @@ jobs:
             echo "Inspecting $pkg"
             files=$(unzip -Z1 "$pkg")
 
-            # Check for net462 and net8.0 (correct TFMs for this project)
-            for tfm in net462 net8.0; do
+            # Check for net471 and net8.0 (matching csproj TargetFrameworks)
+            for tfm in net471 net8.0; do
               if ! echo "$files" | grep -qE "^lib/${tfm}/.+\\.dll$"; then
                 echo "Error: Missing ${tfm} lib in package"
                 exit 1
               else
-                echo "✓ Found ${tfm} in package"
+                echo "Found ${tfm} in package"
               fi
             done
           done
 
-          echo "✓ All required TFMs verified successfully"
+          echo "All required TFMs verified successfully"
 
       - name: Upload package artifact
-        if: steps.version.outputs.should_release == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: nuget-package-${{ github.sha }}
@@ -262,7 +308,7 @@ jobs:
   publish-nuget:
     name: Publish to NuGet
     runs-on: ubuntu-latest
-    needs: version-and-build
+    needs: [version-and-build, pack]
     if: needs.version-and-build.outputs.should_release == 'true'
     steps:
       - name: Download package
@@ -277,9 +323,7 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Push to NuGet
-        continue-on-error: true
         run: |
-          # Enable nullglob to handle case where no .nupkg files exist
           shopt -s nullglob
           pkgs=(out/*.nupkg)
 
@@ -290,19 +334,22 @@ jobs:
 
           for pkg in "${pkgs[@]}"; do
             echo "Publishing $pkg to NuGet..."
-            dotnet nuget push "$pkg"               --api-key ${{ secrets.NUGET_API_KEY }}               --source https://api.nuget.org/v3/index.json               --skip-duplicate
+            dotnet nuget push "$pkg" \
+              --api-key ${{ secrets.NUGET_API_KEY }} \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
 
             if [ $? -eq 0 ]; then
-              echo "✓ Successfully published $pkg"
+              echo "Successfully published $pkg"
             else
-              echo "⚠ Failed to publish $pkg (may already exist)"
+              echo "Warning: Failed to publish $pkg (may already exist)"
             fi
           done
 
   github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: version-and-build
+    needs: [version-and-build, publish-nuget]
     if: needs.version-and-build.outputs.should_release == 'true'
     steps:
       - name: Download package

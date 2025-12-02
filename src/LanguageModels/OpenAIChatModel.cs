@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.LanguageModels.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using System.Net.Http;
@@ -162,14 +163,14 @@ public class OpenAIChatModel<T> : ChatModelBase<T>
         var requestPayload = new OpenAIRequest
         {
             Model = ModelName,
-            Messages = new[]
-            {
+            Messages =
+            [
                 new OpenAIMessage
                 {
                     Role = "user",
                     Content = prompt
                 }
-            },
+            ],
             Temperature = _temperature,
             MaxTokens = _maxTokens,
             TopP = _topP,
@@ -243,92 +244,4 @@ public class OpenAIChatModel<T> : ChatModelBase<T>
             _ => 4096 // Default fallback
         };
     }
-
-    #region OpenAI API Models
-
-    /// <summary>
-    /// Represents an OpenAI Chat Completions API request.
-    /// </summary>
-    private class OpenAIRequest
-    {
-        [JsonProperty("model")]
-        public string Model { get; set; } = "";
-
-        [JsonProperty("messages")]
-        public OpenAIMessage[] Messages { get; set; } = Array.Empty<OpenAIMessage>();
-
-        [JsonProperty("temperature")]
-        public double Temperature { get; set; }
-
-        [JsonProperty("max_tokens")]
-        public int MaxTokens { get; set; }
-
-        [JsonProperty("top_p")]
-        public double TopP { get; set; }
-
-        [JsonProperty("frequency_penalty")]
-        public double FrequencyPenalty { get; set; }
-
-        [JsonProperty("presence_penalty")]
-        public double PresencePenalty { get; set; }
-    }
-
-    /// <summary>
-    /// Represents a message in the OpenAI Chat Completions API.
-    /// </summary>
-    private class OpenAIMessage
-    {
-        [JsonProperty("role")]
-        public string Role { get; set; } = "";
-
-        [JsonProperty("content")]
-        public string Content { get; set; } = "";
-    }
-
-    /// <summary>
-    /// Represents an OpenAI Chat Completions API response.
-    /// </summary>
-    private class OpenAIResponse
-    {
-        [JsonProperty("id")]
-        public string? Id { get; set; }
-
-        [JsonProperty("choices")]
-        public OpenAIChoice[]? Choices { get; set; }
-
-        [JsonProperty("usage")]
-        public OpenAIUsage? Usage { get; set; }
-    }
-
-    /// <summary>
-    /// Represents a choice in the OpenAI API response.
-    /// </summary>
-    private class OpenAIChoice
-    {
-        [JsonProperty("index")]
-        public int Index { get; set; }
-
-        [JsonProperty("message")]
-        public OpenAIMessage? Message { get; set; }
-
-        [JsonProperty("finish_reason")]
-        public string? FinishReason { get; set; }
-    }
-
-    /// <summary>
-    /// Represents token usage information in the OpenAI API response.
-    /// </summary>
-    private class OpenAIUsage
-    {
-        [JsonProperty("prompt_tokens")]
-        public int PromptTokens { get; set; }
-
-        [JsonProperty("completion_tokens")]
-        public int CompletionTokens { get; set; }
-
-        [JsonProperty("total_tokens")]
-        public int TotalTokens { get; set; }
-    }
-
-    #endregion
 }

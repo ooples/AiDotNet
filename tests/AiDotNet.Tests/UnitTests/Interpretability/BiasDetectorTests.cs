@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Interpretability;
 using AiDotNet.LinearAlgebra;
 using Xunit;

@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -430,35 +432,31 @@ public class RBMLayer<T> : LayerBase<T>
         }
     
         // --- Update weights and biases ---
+        // Update hidden biases: hBias += learningRate * (h0 - hk) (vectorized)
+        var hiddenBiasDiff = (Vector<T>)Engine.Subtract(h0Probs, hkProbs);
+        var hiddenBiasDelta = (Vector<T>)Engine.Multiply(hiddenBiasDiff, learningRate);
+        _hiddenBiases = (Vector<T>)Engine.Add(_hiddenBiases, hiddenBiasDelta);
+
+        // Update visible biases: vBias += learningRate * (v0 - vk) (vectorized)
+        var visibleBiasDiff = (Vector<T>)Engine.Subtract(v0, vkProbs);
+        var visibleBiasDelta = (Vector<T>)Engine.Multiply(visibleBiasDiff, learningRate);
+        _visibleBiases = (Vector<T>)Engine.Add(_visibleBiases, visibleBiasDelta);
+
         // Update weights: W += learningRate * ((v0 * h0) - (vk * hk))
         for (int j = 0; j < _hiddenUnits; j++)
         {
-            // Update hidden biases: hBias += learningRate * (h0 - hk)
-            T hiddenBiasDelta = NumOps.Multiply(learningRate, 
-                NumOps.Subtract(h0Probs[j], hkProbs[j]));
-            _hiddenBiases[j] = NumOps.Add(_hiddenBiases[j], hiddenBiasDelta);
-        
             for (int i = 0; i < _visibleUnits; i++)
             {
                 // Positive phase correlation
                 T positiveGradient = NumOps.Multiply(v0[i], h0Probs[j]);
-            
+
                 // Negative phase correlation
                 T negativeGradient = NumOps.Multiply(vk[i], hkProbs[j]);
-            
+
                 // Weight update
-                T weightDelta = NumOps.Multiply(learningRate, 
+                T weightDelta = NumOps.Multiply(learningRate,
                     NumOps.Subtract(positiveGradient, negativeGradient));
                 _weights[j, i] = NumOps.Add(_weights[j, i], weightDelta);
-            
-                // Update visible biases (only once per training example)
-                if (j == 0)
-                {
-                    // vBias += learningRate * (v0 - vk)
-                    T visibleBiasDelta = NumOps.Multiply(learningRate, 
-                        NumOps.Subtract(v0[i], vkProbs[i]));
-                    _visibleBiases[i] = NumOps.Add(_visibleBiases[i], visibleBiasDelta);
-                }
             }
         }
     }
@@ -599,18 +597,22 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     private Vector<T> SampleHiddenGivenVisible(Vector<T> visible)
     {
+        // Compute activations: W * visible + bias (vectorized)
+        var activations = Engine.MatrixVectorMultiply(_weights, visible);
+        activations = (Vector<T>)Engine.Add(activations, _hiddenBiases);
+
+        // Apply activation function element-wise
         Vector<T> hiddenProbs = new Vector<T>(_hiddenUnits);
         for (int j = 0; j < _hiddenUnits; j++)
         {
-            T activation = _hiddenBiases[j];
-            for (int i = 0; i < _visibleUnits; i++)
+            if (ScalarActivation is not null)
             {
-                activation = NumOps.Add(activation, NumOps.Multiply(_weights[j, i], visible[i]));
+                hiddenProbs[j] = ScalarActivation.Activate(activations[j]);
             }
-
-            hiddenProbs[j] = ScalarActivation != null
-                ? ScalarActivation.Activate(activation)
-                : VectorActivation!.Activate(new Vector<T>([activation]))[0];
+            else if (VectorActivation is not null)
+            {
+                hiddenProbs[j] = VectorActivation.Activate(new Vector<T>([activations[j]]))[0];
+            }
         }
 
         return hiddenProbs;
@@ -641,18 +643,23 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     private Vector<T> SampleVisibleGivenHidden(Vector<T> hidden)
     {
+        // Compute activations: W^T * hidden + bias (vectorized)
+        var weightsTranspose = Engine.MatrixTranspose(_weights);
+        var activations = Engine.MatrixVectorMultiply(weightsTranspose, hidden);
+        activations = (Vector<T>)Engine.Add(activations, _visibleBiases);
+
+        // Apply activation function element-wise
         Vector<T> visibleProbs = new Vector<T>(_visibleUnits);
         for (int i = 0; i < _visibleUnits; i++)
         {
-            T activation = _visibleBiases[i];
-            for (int j = 0; j < _hiddenUnits; j++)
+            if (ScalarActivation is not null)
             {
-                activation = NumOps.Add(activation, NumOps.Multiply(_weights[j, i], hidden[j]));
+                visibleProbs[i] = ScalarActivation.Activate(activations[i]);
             }
-
-            visibleProbs[i] = ScalarActivation != null
-                ? ScalarActivation.Activate(activation)
-                : VectorActivation!.Activate(new Vector<T>([activation]))[0];
+            else if (VectorActivation is not null)
+            {
+                visibleProbs[i] = VectorActivation.Activate(new Vector<T>([activations[i]]))[0];
+            }
         }
 
         return visibleProbs;
@@ -812,4 +819,74 @@ public class RBMLayer<T> : LayerBase<T>
     /// Indicates whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        // RBMLayer JIT uses mean-field inference (deterministic approximation):
+        // Instead of stochastic sampling, we use hidden probabilities directly
+        // hidden_probs = sigmoid(W @ visible + hidden_bias)
+        // This provides a differentiable deterministic forward pass
+
+        var input = inputNodes[0];
+
+        // Convert weights to tensor [hiddenUnits, visibleUnits]
+        var weightsTensor = new Tensor<T>([_hiddenUnits, _visibleUnits]);
+        for (int j = 0; j < _hiddenUnits; j++)
+            for (int i = 0; i < _visibleUnits; i++)
+                weightsTensor[j, i] = _weights[j, i];
+
+        // Convert hidden biases to tensor [hiddenUnits]
+        var hiddenBiasTensor = new Tensor<T>([_hiddenUnits]);
+        for (int j = 0; j < _hiddenUnits; j++)
+            hiddenBiasTensor[j] = _hiddenBiases[j];
+
+        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "rbm_weights");
+        var biasNode = TensorOperations<T>.Constant(hiddenBiasTensor, "rbm_hidden_bias");
+
+        // Reshape input to column vector for matrix multiplication
+        var inputReshaped = TensorOperations<T>.Reshape(input, _visibleUnits, 1);
+
+        // W @ visible
+        var weighted = TensorOperations<T>.MatrixMultiply(weightsNode, inputReshaped);
+
+        // Reshape weighted to match bias
+        var weightedFlat = TensorOperations<T>.Reshape(weighted, _hiddenUnits);
+
+        // W @ visible + bias
+        var preActivation = TensorOperations<T>.Add(weightedFlat, biasNode);
+
+        // Apply sigmoid for mean-field inference (probability of hidden unit being active)
+        var hiddenProbs = TensorOperations<T>.Sigmoid(preActivation);
+
+        // Apply layer activation if different from sigmoid
+        var output = ApplyActivationToGraph(hiddenProbs);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c>. RBM uses mean-field inference for JIT compilation.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for RBM uses mean-field inference instead of stochastic sampling.
+    /// This provides a deterministic forward pass where hidden probabilities are computed
+    /// directly using sigmoid(W*v + b) without sampling. Training still uses Contrastive
+    /// Divergence with sampling, but inference/forward pass can be JIT compiled.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
 }

@@ -1,3 +1,6 @@
+using AiDotNet.Autodiff;
+
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -187,6 +190,10 @@ public class GRULayer<T> : LayerBase<T>
     private readonly bool _returnSequences;
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+
+    /// <summary>
     /// The activation function applied to the candidate hidden state.
     /// </summary>
     /// <remarks>
@@ -343,9 +350,9 @@ public class GRULayer<T> : LayerBase<T>
     /// and you want a 200-dimensional memory, you would use inputSize=100 and hiddenSize=200.
     /// </para>
     /// </remarks>
-    public GRULayer(int inputSize, int hiddenSize, 
+    public GRULayer(int inputSize, int hiddenSize,
                     bool returnSequences = false,
-                    IActivationFunction<T>? activation = null, 
+                    IActivationFunction<T>? activation = null,
                     IActivationFunction<T>? recurrentActivation = null)
         : base([inputSize], [hiddenSize], activation ?? new TanhActivation<T>())
     {
@@ -355,7 +362,7 @@ public class GRULayer<T> : LayerBase<T>
         _activation = activation ?? new TanhActivation<T>();
         _recurrentActivation = recurrentActivation ?? new SigmoidActivation<T>();
 
-        T scale = NumOps.Sqrt(NumOps.FromDouble(1.0 / _hiddenSize));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _hiddenSize)));
 
         _Wz = InitializeMatrix(_hiddenSize, _inputSize, scale);
         _Wr = InitializeMatrix(_hiddenSize, _inputSize, scale);
@@ -395,9 +402,9 @@ public class GRULayer<T> : LayerBase<T>
     /// features interact with each other, rather than treating each feature independently.
     /// </para>
     /// </remarks>
-    public GRULayer(int inputSize, int hiddenSize, 
+    public GRULayer(int inputSize, int hiddenSize,
                     bool returnSequences = false,
-                    IVectorActivationFunction<T>? vectorActivation = null, 
+                    IVectorActivationFunction<T>? vectorActivation = null,
                     IVectorActivationFunction<T>? vectorRecurrentActivation = null)
         : base([inputSize], [hiddenSize], vectorActivation ?? new TanhActivation<T>())
     {
@@ -407,7 +414,7 @@ public class GRULayer<T> : LayerBase<T>
         _vectorActivation = vectorActivation ?? new TanhActivation<T>();
         _vectorRecurrentActivation = vectorRecurrentActivation ?? new SigmoidActivation<T>();
 
-        T scale = NumOps.Sqrt(NumOps.FromDouble(1.0 / _hiddenSize));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _hiddenSize)));
 
         _Wz = InitializeMatrix(_hiddenSize, _inputSize, scale);
         _Wr = InitializeMatrix(_hiddenSize, _inputSize, scale);
@@ -522,8 +529,19 @@ public class GRULayer<T> : LayerBase<T>
             var z = ApplyActivation(xt.Multiply(_Wz).Add(currentHiddenState.Multiply(_Uz)).Add(_bz), true);
             var r = ApplyActivation(xt.Multiply(_Wr).Add(currentHiddenState.Multiply(_Ur)).Add(_br), true);
             var h_candidate = ApplyActivation(xt.Multiply(_Wh).Add(r.ElementwiseMultiply(currentHiddenState.Multiply(_Uh))).Add(_bh), false);
+            // Vectorized: compute (1 - z) using Tensor operations
+
+            var ones = new Tensor<T>(z.Shape);
+
+            ones.Fill(NumOps.One);
+
+            var oneMinusZ = ones.Subtract(z);
+
+
             var h = z.ElementwiseMultiply(currentHiddenState).Add(
-                z.Transform((x, _) => NumOps.Subtract(NumOps.One, x)).ElementwiseMultiply(h_candidate)
+
+                oneMinusZ.ElementwiseMultiply(h_candidate)
+
             );
     
             currentHiddenState = h;
@@ -587,19 +605,29 @@ public class GRULayer<T> : LayerBase<T>
         if (isRecurrent)
         {
             if (_vectorRecurrentActivation != null)
-                return _vectorRecurrentActivation.Activate(input);
+            {
+                // Use centralized ActivationHelper for optimized activation dispatch
+                return ActivationHelper.ApplyActivation(_vectorRecurrentActivation, input, Engine);
+            }
             else if (_recurrentActivation != null)
+            {
                 return input.Transform((x, _) => _recurrentActivation.Activate(x));
+            }
         }
         else
         {
             if (_vectorActivation != null)
-                return _vectorActivation.Activate(input);
+            {
+                // Use centralized ActivationHelper for optimized activation dispatch
+                return ActivationHelper.ApplyActivation(_vectorActivation, input, Engine);
+            }
             else if (_activation != null)
+            {
                 return input.Transform((x, _) => _activation.Activate(x));
+            }
         }
 
-        throw new InvalidOperationException("No activation function specified.");
+        throw new InvalidOperationException("No activation function specified");
     }
 
     /// <summary>
@@ -679,9 +707,12 @@ public class GRULayer<T> : LayerBase<T>
         {
             // Handle single timestep case (simple backward pass)
             var dh = outputGradient;
-            var dh_candidate = dh.ElementwiseMultiply(
-                _lastZ.Transform((x, _) => NumOps.Subtract(NumOps.One, x))
-            );
+            // Vectorized: compute (1 - _lastZ) using Tensor operations
+            var ones1 = new Tensor<T>(_lastZ.Shape);
+            ones1.Fill(NumOps.One);
+            var oneMinusLastZ = ones1.Subtract(_lastZ);
+
+            var dh_candidate = dh.ElementwiseMultiply(oneMinusLastZ);
             var dz = dh.ElementwiseMultiply(_lastHiddenState.Subtract(_lastH));
 
             var dr = ApplyActivationDerivative(_lastH, isRecurrent: false)
@@ -794,8 +825,13 @@ public class GRULayer<T> : LayerBase<T>
                     var r = ComputeGate(xt, currentH, _Wr, _Ur, _br, true);
                     var h_candidate = ComputeGate(xt, r.ElementwiseMultiply(currentH), _Wh, _Uh, _bh, false);
 
+                    // Vectorized: compute (1 - z) using Tensor operations
+                    var ones2 = new Tensor<T>(z.Shape);
+                    ones2.Fill(NumOps.One);
+                    var oneMinusZ2 = ones2.Subtract(z);
+
                     var newH = z.ElementwiseMultiply(currentH).Add(
-                        z.Transform((x, _) => NumOps.Subtract(NumOps.One, x)).ElementwiseMultiply(h_candidate)
+                        oneMinusZ2.ElementwiseMultiply(h_candidate)
                     );
 
                     currentH = newH;
@@ -827,9 +863,12 @@ public class GRULayer<T> : LayerBase<T>
                 var h_prev = t > 0 ? timeStepHidden[t - 1] : new Tensor<T>([batchSize, _hiddenSize]);
 
                 // Calculate gradients for this timestep
-                var dh_candidate = dh.ElementwiseMultiply(
-                    z.Transform((x, _) => NumOps.Subtract(NumOps.One, x))
-                );
+                // Vectorized: compute (1 - z) using Tensor operations
+                var ones3 = new Tensor<T>(z.Shape);
+                ones3.Fill(NumOps.One);
+                var oneMinusZ3 = ones3.Subtract(z);
+
+                var dh_candidate = dh.ElementwiseMultiply(oneMinusZ3);
                 var dz = dh.ElementwiseMultiply(h_prev.Subtract(h_candidate));
 
                 var dr = ApplyActivationDerivative(h_candidate, isRecurrent: false)
@@ -1186,6 +1225,108 @@ public class GRULayer<T> : LayerBase<T>
         _lastH = null;
         _allHiddenStates = null;
     }
+
+    /// <summary>
+    /// Exports the GRU layer's single time-step computation as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the hidden state at one time step.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method exports a single GRU cell computation for JIT compilation.
+    /// The graph computes: h_t = GRUCell(x_t, h_{t-1})
+    /// using the standard GRU equations with update gate, reset gate, and candidate hidden state.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        // Create placeholders for single time-step inputs
+        // x_t shape: [batchSize, inputSize]
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, _inputSize });
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "x_t");
+
+        // h_{t-1} shape: [batchSize, hiddenSize]
+        var prevHiddenPlaceholder = new Tensor<T>(new int[] { 1, _hiddenSize });
+        var prevHiddenNode = TensorOperations<T>.Variable(prevHiddenPlaceholder, "h_prev");
+
+        // Create weight and bias nodes
+        var WzNode = TensorOperations<T>.Variable(MatrixToTensor(_Wz), "W_z");
+        var WrNode = TensorOperations<T>.Variable(MatrixToTensor(_Wr), "W_r");
+        var WhNode = TensorOperations<T>.Variable(MatrixToTensor(_Wh), "W_h");
+        var UzNode = TensorOperations<T>.Variable(MatrixToTensor(_Uz), "U_z");
+        var UrNode = TensorOperations<T>.Variable(MatrixToTensor(_Ur), "U_r");
+        var UhNode = TensorOperations<T>.Variable(MatrixToTensor(_Uh), "U_h");
+        var bzNode = TensorOperations<T>.Variable(VectorToTensor(_bz), "b_z");
+        var brNode = TensorOperations<T>.Variable(VectorToTensor(_br), "b_r");
+        var bhNode = TensorOperations<T>.Variable(VectorToTensor(_bh), "b_h");
+
+        // Add inputs to the list
+        inputNodes.Add(inputNode);
+        inputNodes.Add(prevHiddenNode);
+        inputNodes.Add(WzNode);
+        inputNodes.Add(WrNode);
+        inputNodes.Add(WhNode);
+        inputNodes.Add(UzNode);
+        inputNodes.Add(UrNode);
+        inputNodes.Add(UhNode);
+        inputNodes.Add(bzNode);
+        inputNodes.Add(brNode);
+        inputNodes.Add(bhNode);
+
+        // Build GRU computation graph (single time step)
+        // Update gate: z_t = sigmoid(W_z @ x_t + U_z @ h_{t-1} + b_z)
+        var WzT = TensorOperations<T>.Transpose(WzNode);
+        var UzT = TensorOperations<T>.Transpose(UzNode);
+        var z_input = TensorOperations<T>.MatrixMultiply(inputNode, WzT);
+        var z_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, UzT);
+        var z_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(z_input, z_hidden), bzNode);
+        var z_t = TensorOperations<T>.Sigmoid(z_preact);
+
+        // Reset gate: r_t = sigmoid(W_r @ x_t + U_r @ h_{t-1} + b_r)
+        var WrT = TensorOperations<T>.Transpose(WrNode);
+        var UrT = TensorOperations<T>.Transpose(UrNode);
+        var r_input = TensorOperations<T>.MatrixMultiply(inputNode, WrT);
+        var r_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, UrT);
+        var r_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(r_input, r_hidden), brNode);
+        var r_t = TensorOperations<T>.Sigmoid(r_preact);
+
+        // Candidate hidden state: h_candidate = tanh(W_h @ x_t + U_h @ (r_t ⊙ h_{t-1}) + b_h)
+        var WhT = TensorOperations<T>.Transpose(WhNode);
+        var UhT = TensorOperations<T>.Transpose(UhNode);
+        var h_input = TensorOperations<T>.MatrixMultiply(inputNode, WhT);
+        var r_gated = TensorOperations<T>.ElementwiseMultiply(r_t, prevHiddenNode);
+        var h_hidden = TensorOperations<T>.MatrixMultiply(r_gated, UhT);
+        var h_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(h_input, h_hidden), bhNode);
+        var h_candidate = TensorOperations<T>.Tanh(h_preact);
+
+        // Final hidden state: h_t = z_t ⊙ h_{t-1} + (1 - z_t) ⊙ h_candidate
+        var z_gated = TensorOperations<T>.ElementwiseMultiply(z_t, prevHiddenNode);
+
+        // Compute (1 - z_t)
+        var onesTensor = new Tensor<T>(new int[] { 1, _hiddenSize });
+        for (int i = 0; i < onesTensor.Length; i++)
+        {
+            onesTensor[i] = NumOps.One;
+        }
+        var onesNode = TensorOperations<T>.Constant(onesTensor);
+        var one_minus_z = TensorOperations<T>.Subtract(onesNode, z_t);
+
+        var candidate_gated = TensorOperations<T>.ElementwiseMultiply(one_minus_z, h_candidate);
+        var h_t = TensorOperations<T>.Add(z_gated, candidate_gated);
+
+        return h_t;
+    }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// True for GRU layers, as single time-step JIT compilation is supported.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies the derivative of the appropriate activation function to the input tensor.

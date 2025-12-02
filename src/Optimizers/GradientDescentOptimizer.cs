@@ -46,7 +46,8 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// <param name="options">Options for the Gradient Descent optimizer.</param>
     public GradientDescentOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        GradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
+        GradientDescentOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
         : base(model, options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>())
     {
         _gdOptions = options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>();
@@ -113,11 +114,15 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// <param name="gradient">The calculated gradient.</param>
     /// <returns>The updated solution.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(
-        IFullModel<T, TInput, TOutput> currentSolution, 
+        IFullModel<T, TInput, TOutput> currentSolution,
         Vector<T> gradient)
     {
+        // === Vectorized Gradient Descent Update using IEngine (Phase B: US-GPU-015) ===
+        // params = params - learningRate * gradient
+
         Vector<T> currentParams = currentSolution.GetParameters();
-        Vector<T> updatedParams = currentParams.Subtract(gradient.Multiply(CurrentLearningRate));
+        var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
+        var updatedParams = (Vector<T>)Engine.Subtract(currentParams, scaledGradient);
 
         return currentSolution.WithParameters(updatedParams);
     }
@@ -152,16 +157,11 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
                 nameof(appliedGradients));
         }
 
-        var original = new T[updatedParameters.Length];
-
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            // Reverse: original = updated + lr * gradient
-            var gradientStep = NumOps.Multiply(CurrentLearningRate, appliedGradients[i]);
-            original[i] = NumOps.Add(updatedParameters[i], gradientStep);
-        }
-
-        return new Vector<T>(original);
+        // === Vectorized Reverse Gradient Descent Update using IEngine (Phase B: US-GPU-015) ===
+        // Reverse: original = updated + lr * gradient
+        var currentLrVec = Vector<T>.CreateDefault(appliedGradients.Length, CurrentLearningRate);
+        var gradientStep = (Vector<T>)Engine.Multiply(currentLrVec, appliedGradients);
+        return (Vector<T>)Engine.Add(updatedParameters, gradientStep);
     }
 
     /// <summary>

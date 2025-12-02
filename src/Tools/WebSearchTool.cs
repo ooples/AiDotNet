@@ -1,6 +1,5 @@
 using Newtonsoft.Json;
 using AiDotNet.Interfaces;
-using Newtonsoft.Json;
 using System.Net.Http;
 
 namespace AiDotNet.Tools;
@@ -45,22 +44,6 @@ public class WebSearchTool : ITool
     private readonly SearchProvider _provider;
     private readonly int _defaultResultCount;
     private readonly string _market;
-
-    /// <summary>
-    /// Defines the supported search providers.
-    /// </summary>
-    public enum SearchProvider
-    {
-        /// <summary>
-        /// Microsoft Bing Search API v7.
-        /// </summary>
-        Bing,
-
-        /// <summary>
-        /// SerpAPI (Google Search wrapper).
-        /// </summary>
-        SerpAPI
-    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WebSearchTool"/> class.
@@ -206,7 +189,7 @@ public class WebSearchTool : ITool
     /// <summary>
     /// Formats Bing search results into a readable string.
     /// </summary>
-    private string FormatBingResults(string query, BingWebPage[] results)
+    private static string FormatBingResults(string query, BingWebPage[] results)
     {
         var output = new System.Text.StringBuilder();
         output.AppendLine($"Web search results for '{query}':");
@@ -227,7 +210,7 @@ public class WebSearchTool : ITool
     /// <summary>
     /// Formats SerpAPI search results into a readable string.
     /// </summary>
-    private string FormatSerpAPIResults(string query, SerpAPIResult[] results)
+    private static string FormatSerpAPIResults(string query, SerpAPIResult[] results)
     {
         var output = new System.Text.StringBuilder();
         output.AppendLine($"Web search results for '{query}':");
@@ -244,52 +227,4 @@ public class WebSearchTool : ITool
 
         return output.ToString().TrimEnd();
     }
-
-    #region API Response Models
-
-    // Bing API models
-    private class BingSearchResponse
-    {
-        [JsonProperty("webPages")]
-        public BingWebPages? WebPages { get; set; }
-    }
-
-    private class BingWebPages
-    {
-        [JsonProperty("value")]
-        public BingWebPage[]? Value { get; set; }
-    }
-
-    private class BingWebPage
-    {
-        [JsonProperty("name")]
-        public string Name { get; set; } = "";
-
-        [JsonProperty("url")]
-        public string Url { get; set; } = "";
-
-        [JsonProperty("snippet")]
-        public string Snippet { get; set; } = "";
-    }
-
-    // SerpAPI models
-    private class SerpAPIResponse
-    {
-        [JsonProperty("organic_results")]
-        public SerpAPIResult[]? OrganicResults { get; set; }
-    }
-
-    private class SerpAPIResult
-    {
-        [JsonProperty("title")]
-        public string Title { get; set; } = "";
-
-        [JsonProperty("link")]
-        public string Link { get; set; } = "";
-
-        [JsonProperty("snippet")]
-        public string Snippet { get; set; } = "";
-    }
-
-    #endregion
 }

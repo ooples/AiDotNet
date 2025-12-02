@@ -140,16 +140,16 @@ public class MeasurementLayer<T> : LayerBase<T>
             var imagSquared = NumOps.Multiply(complexValue.Imaginary, complexValue.Imaginary);
             probabilities[i] = NumOps.Add(realSquared, imagSquared);
         }
+        // === Vectorized Probability Normalization (Phase B: US-GPU-015) ===
         // Normalize probabilities
+        var probVec = new Vector<T>(probabilities);
         var sum = NumOps.Zero;
         for (int i = 0; i < probabilities.Length; i++)
         {
             sum = NumOps.Add(sum, probabilities[i]);
         }
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            probabilities[i] = NumOps.Divide(probabilities[i], sum);
-        }
+        probVec = (Vector<T>)Engine.Divide(probVec, sum);
+        probabilities = probVec.ToArray();
         // Create a new tensor with the calculated probabilities
         _lastOutput = new Tensor<T>([input.Shape[0]], new Vector<T>(probabilities));
         return _lastOutput;
@@ -322,4 +322,54 @@ public class MeasurementLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastOutput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var input = inputNodes[0];
+        int size = InputShape[0];
+
+        // MeasurementLayer computes quantum measurement: probabilities = |amplitude|^2 / sum(|amplitude|^2)
+        // Input is complex-valued stored as [real_0, imag_0, real_1, imag_1, ...] or [real; imag] halves
+        // Assuming interleaved format: extract real and imaginary parts
+
+        // For interleaved format [r0, i0, r1, i1, ...]:
+        // Extract even indices (real) and odd indices (imaginary)
+        var realPart = TensorOperations<T>.Slice(input, 0, size, step: 2, axis: 0);
+        var imagPart = TensorOperations<T>.Slice(input, 1, size, step: 2, axis: 0);
+
+        // Compute |amplitude|^2 = real^2 + imag^2
+        var realSquared = TensorOperations<T>.Square(realPart);
+        var imagSquared = TensorOperations<T>.Square(imagPart);
+        var magnitudeSquared = TensorOperations<T>.Add(realSquared, imagSquared);
+
+        // Compute sum for normalization
+        var totalSum = TensorOperations<T>.Sum(magnitudeSquared);
+
+        // Normalize to get probabilities (add epsilon to avoid division by zero)
+        var epsilonTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(1e-10) }));
+        var epsilon = TensorOperations<T>.Constant(epsilonTensor, "Epsilon");
+        var safeDenom = TensorOperations<T>.Add(totalSum, epsilon);
+        var probabilities = TensorOperations<T>.Divide(magnitudeSquared, safeDenom);
+
+        return probabilities;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> because MeasurementLayer computes quantum measurement using only
+    /// standard arithmetic operations: |amplitude|^2 = real^2 + imag^2, normalized by sum.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
+
 }

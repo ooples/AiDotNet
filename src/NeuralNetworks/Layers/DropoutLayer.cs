@@ -244,24 +244,22 @@ public class DropoutLayer<T> : LayerBase<T>
         if (!IsTrainingMode)
             return input;
 
-        _dropoutMask = new Tensor<T>(input.Shape);
-        var output = new Tensor<T>(input.Shape);
-
+        // Generate dropout mask vectorized
+        var maskData = new T[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            if (Random.NextDouble() > Convert.ToDouble(_dropoutRate))
-            {
-                _dropoutMask[i] = _scale;
-                output[i] = NumOps.Multiply(input[i], _scale);
-            }
-            else
-            {
-                _dropoutMask[i] = NumOps.Zero;
-                output[i] = NumOps.Zero;
-            }
+            maskData[i] = Random.NextDouble() > Convert.ToDouble(_dropoutRate) ? _scale : NumOps.Zero;
         }
 
-        return output;
+        // Convert to tensors and apply mask using vectorized Engine operations
+        _dropoutMask = new Tensor<T>(input.Shape, new Vector<T>(maskData));
+
+        // Use Engine.Multiply for vectorized element-wise multiplication
+        var inputVec = input.ToVector();
+        var maskVec = _dropoutMask.ToVector();
+        var outputVec = (Vector<T>)Engine.Multiply(inputVec, maskVec);
+
+        return new Tensor<T>(input.Shape, outputVec);
     }
 
     /// <summary>
@@ -316,12 +314,11 @@ public class DropoutLayer<T> : LayerBase<T>
         if (!IsTrainingMode)
             return outputGradient;
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-
-        for (int i = 0; i < outputGradient.Length; i++)
-        {
-            inputGradient[i] = NumOps.Multiply(outputGradient[i], _dropoutMask[i]);
-        }
+        // === Vectorized Element-wise Multiplication (Phase B: US-GPU-015) ===
+        var outGradVec = outputGradient.ToVector();
+        var maskVec = _dropoutMask.ToVector();
+        var resultVec = (Vector<T>)Engine.Multiply(outGradVec, maskVec);
+        var inputGradient = Tensor<T>.FromVector(resultVec).Reshape(_lastInput.Shape);
 
         return inputGradient;
     }
@@ -526,4 +523,58 @@ public class DropoutLayer<T> : LayerBase<T>
         _lastInput = null;
         _dropoutMask = null;
     }
+
+    /// <summary>
+    /// Exports the dropout layer's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The input node unchanged (identity function during inference).</returns>
+    /// <remarks>
+    /// <para>
+    /// During inference, dropout is disabled and acts as an identity function (pass-through).
+    /// The method validates inputs and creates a symbolic input node with proper batch dimension.
+    /// </para>
+    /// <para><b>For Beginners:</b> Dropout only works during training, not during inference.
+    ///
+    /// When making predictions (inference), dropout doesn't do anything - it just passes
+    /// the data through unchanged. This is because:
+    /// - During training: Dropout randomly turns off neurons to prevent overfitting
+    /// - During inference: We want to use all neurons for best predictions
+    ///
+    /// For JIT compilation (used for fast inference), dropout is just an identity operation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Dropout is identity during inference (JIT is for inference, not training)
+        // Create symbolic input node (shape definition only, batch size adapts at runtime)
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        return inputNode; // Identity function
+    }
+
+    /// <summary>
+    /// Gets whether this dropout layer supports JIT compilation.
+    /// </summary>
+    /// <value>Always returns true since dropout is identity during inference.</value>
+    /// <remarks>
+    /// <para>
+    /// Dropout layers always support JIT compilation because they are identity functions
+    /// during inference (they pass data through unchanged).
+    /// </para>
+    /// <para><b>For Beginners:</b> Dropout layers can always be JIT compiled.
+    ///
+    /// This is because during inference (when JIT is used), dropout doesn't do anything special -
+    /// it just passes the data through. There's nothing complex to compile.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
 }

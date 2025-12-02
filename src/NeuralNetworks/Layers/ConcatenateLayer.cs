@@ -69,6 +69,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// <param name="inputShapes">The shapes of the input tensors to be concatenated.</param>
     /// <param name="axis">The axis along which to concatenate the inputs.</param>
     /// <param name="activationFunction">The activation function to apply after concatenation. Defaults to identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <exception cref="ArgumentException">Thrown when fewer than two input shapes are provided or when input shapes have different ranks.</exception>
     /// <remarks>
     /// <para>
@@ -102,6 +103,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// <param name="inputShapes">The shapes of the input tensors to be concatenated.</param>
     /// <param name="axis">The axis along which to concatenate the inputs.</param>
     /// <param name="vectorActivationFunction">The vector activation function to apply after concatenation. Defaults to identity if not specified.</param>
+    /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
     /// <exception cref="ArgumentException">Thrown when fewer than two input shapes are provided or when input shapes have different ranks.</exception>
     /// <remarks>
     /// <para>
@@ -554,4 +556,28 @@ public class ConcatenateLayer<T> : LayerBase<T>
         _lastInputs = null;
         _lastOutput = null;
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // ConcatenateLayer expects multiple inputs - create symbolic input
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // If multiple inputs are provided, concatenate them using TensorOperations.Concat()
+        if (inputNodes.Count > 1)
+        {
+            return TensorOperations<T>.Concat(inputNodes, axis: _axis);
+        }
+
+        return inputNode;
+    }
+
+    public override bool SupportsJitCompilation => true;
 }

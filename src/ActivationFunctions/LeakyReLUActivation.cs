@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -29,6 +31,11 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     private readonly T _alpha;
 
     /// <summary>
+    /// Gets the slope coefficient for negative input values.
+    /// </summary>
+    public T Alpha => _alpha;
+
+    /// <summary>
     /// Initializes a new instance of the Leaky ReLU activation function with the specified alpha parameter.
     /// </summary>
     /// <param name="alpha">
@@ -37,11 +44,11 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The alpha parameter determines how much of the negative inputs "leak through":
-    /// 
+    ///
     /// - With alpha = 0.01 (default), negative inputs are multiplied by 0.01 (reduced to 1% of their value)
     /// - With alpha = 0.1, negative inputs are multiplied by 0.1 (reduced to 10% of their value)
     /// - With alpha = 0.001, negative inputs are multiplied by 0.001 (reduced to 0.1% of their value)
-    /// 
+    ///
     /// A larger alpha means more information flows through for negative inputs, which can help with learning
     /// but might make the network less focused on positive features. The default value of 0.01 works well
     /// for most applications, but you can adjust it based on your specific needs.
@@ -162,5 +169,42 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
         }
 
         return jacobian;
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>True because gradient computation is fully implemented in TensorOperations.LeakyReLU.</value>
+    /// <remarks>
+    /// <para>
+    /// LeakyReLU supports JIT compilation because:
+    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
+    /// - The operation uses IEngine for GPU acceleration
+    /// - It can be represented as a static computation graph node
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with LeakyReLU activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method maps the LeakyReLU activation to TensorOperations&lt;T&gt;.LeakyReLU(input, alpha),
+    /// which handles both forward and backward passes for JIT compilation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        // Convert alpha to double for TensorOperations
+        double alphaDouble = Convert.ToDouble(_alpha);
+        return TensorOperations<T>.LeakyReLU(input, alphaDouble);
     }
 }

@@ -1,3 +1,5 @@
+
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -36,16 +38,10 @@ namespace AiDotNet.LossFunctions;
 public class JaccardLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
-    /// Small value to prevent division by zero.
-    /// </summary>
-    private readonly T _epsilon;
-    
-    /// <summary>
     /// Initializes a new instance of the JaccardLoss class.
     /// </summary>
     public JaccardLoss()
     {
-        _epsilon = NumOps.FromDouble(1e-15);
     }
     
     /// <summary>
@@ -65,16 +61,13 @@ public class JaccardLoss<T> : LossFunctionBase<T>
         {
             // Intersection is the sum of minimums
             intersection = NumOps.Add(intersection, MathHelper.Min(predicted[i], actual[i]));
-            
+
             // Union is the sum of maximums
             union = NumOps.Add(union, MathHelper.Max(predicted[i], actual[i]));
         }
-        
-        // Add epsilon to prevent division by zero
-        union = NumOps.Add(union, _epsilon);
-        
+
         // Jaccard loss = 1 - Jaccard Index
-        return NumOps.Subtract(NumOps.One, NumOps.Divide(intersection, union));
+        return NumOps.Subtract(NumOps.One, NumericalStabilityHelper.SafeDiv(intersection, union, NumericalStabilityHelper.SmallEpsilon));
     }
     
     /// <summary>
@@ -97,29 +90,24 @@ public class JaccardLoss<T> : LossFunctionBase<T>
             union = NumOps.Add(union, MathHelper.Max(predicted[i], actual[i]));
         }
         
-        // Add epsilon to prevent division by zero
-        union = NumOps.Add(union, _epsilon);
         
         // Calculate derivative for each element
         Vector<T> derivative = new Vector<T>(predicted.Length);
+        T unionSquared = NumOps.Power(union, NumOps.FromDouble(2));
+        T numerator = NumOps.Subtract(union, intersection);
+
         for (int i = 0; i < predicted.Length; i++)
         {
             if (NumOps.GreaterThan(predicted[i], actual[i]))
             {
-                // If predicted > actual, derivative = (union - intersection) / union²
-                derivative[i] = NumOps.Divide(
-                    NumOps.Subtract(union, intersection),
-                    NumOps.Power(union, NumOps.FromDouble(2))
-                );
+                // If predicted > actual, derivative = (union - intersection) / unionï¿½
+                derivative[i] = NumericalStabilityHelper.SafeDiv(numerator, unionSquared, NumericalStabilityHelper.SmallEpsilon);
             }
             else if (NumOps.LessThan(predicted[i], actual[i]))
             {
-                // If predicted < actual, derivative = -(union - intersection) / union²
+                // If predicted < actual, derivative = -(union - intersection) / unionï¿½
                 derivative[i] = NumOps.Negate(
-                    NumOps.Divide(
-                        NumOps.Subtract(union, intersection),
-                        NumOps.Power(union, NumOps.FromDouble(2))
-                    )
+                    NumericalStabilityHelper.SafeDiv(numerator, unionSquared, NumericalStabilityHelper.SmallEpsilon)
                 );
             }
             else
