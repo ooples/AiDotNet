@@ -422,17 +422,18 @@ namespace AiDotNet.Tokenization.HuggingFace
             var tokenScores = new Dictionary<string, double>();
             int id = 0;
 
-            foreach (var item in vocabArray)
+            var validPairs = vocabArray
+                .OfType<JArray>()
+                .Where(pair => pair.Count >= 2 && pair[0].Value<string>() != null);
+
+            foreach (var pair in validPairs)
             {
-                if (item is JArray pair && pair.Count >= 2)
+                var token = pair[0].Value<string>();
+                var score = pair[1].Value<double>();
+                if (token != null)
                 {
-                    var token = pair[0].Value<string>();
-                    var score = pair[1].Value<double>();
-                    if (token != null)
-                    {
-                        vocabDict[token] = id++;
-                        tokenScores[token] = score;
-                    }
+                    vocabDict[token] = id++;
+                    tokenScores[token] = score;
                 }
             }
 
