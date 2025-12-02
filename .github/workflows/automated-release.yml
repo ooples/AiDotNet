@@ -241,16 +241,27 @@ jobs:
       - name: Build
         run: dotnet build -c Release --no-restore
 
-      # Run tests with maximum parallelism
+      # Run tests with maximum parallelism and detailed logging
       # net8.0 only for CI speed - net471 compatibility verified in pack step
       - name: Run tests for ${{ matrix.project }}
         run: |
+          PROJECT_NAME=$(basename "${{ matrix.project }}" .csproj)
           dotnet test ${{ matrix.project }} \
             -c Release \
             --framework net8.0 \
             --no-build \
-            -v n \
+            --logger "trx;LogFileName=${PROJECT_NAME}.trx" \
+            --logger "console;verbosity=detailed" \
+            --results-directory ./TestResults \
             -- RunConfiguration.MaxCpuCount=0
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ strategy.job-index }}
+          path: ./TestResults/*.trx
+          retention-days: 7
 
   # Pack NuGet after all tests pass
   pack:
