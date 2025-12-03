@@ -623,9 +623,11 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Handle both 1D and 2D inputs
         Tensor<T> flattenedInput;
+        bool inputWas1D = false;
         if (input.Rank == 1)
         {
             // 1D input: reshape to (1, features) for single sample
+            inputWas1D = true;
             flattenedInput = input.Reshape(1, input.Shape[0]);
         }
         else if (input.Rank == 2)
@@ -646,17 +648,26 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Cache pre-activation output for proper gradient computation in backward pass
         _lastOutput = output;
 
+        Tensor<T> result;
         if (UsingVectorActivation)
         {
             // Use centralized ActivationHelper for optimized activation dispatch
             if (VectorActivation == null)
                 throw new InvalidOperationException("VectorActivation is null when UsingVectorActivation is true");
-            return ActivationHelper.ApplyActivation(VectorActivation, output, Engine);
+            result = ActivationHelper.ApplyActivation(VectorActivation, output, Engine);
         }
         else
         {
-            return ApplyActivation(output);
+            result = ApplyActivation(output);
         }
+
+        // If input was 1D, squeeze output back to 1D
+        if (inputWas1D && result.Rank == 2 && result.Shape[0] == 1)
+        {
+            result = result.Reshape(result.Shape[1]);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -701,8 +712,6 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int batchSize = _lastInput.Shape[0];
-
         if (_lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
@@ -739,7 +748,21 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
         }
 
-        var flattenedInput = _lastInput.Reshape(batchSize, _lastInput.Shape[1]);
+        // Handle both 1D and 2D inputs for gradient computation
+        Tensor<T> flattenedInput;
+        int batchSize;
+        if (_lastInput.Rank == 1)
+        {
+            // 1D input: reshape to (1, features) for matrix operations
+            batchSize = 1;
+            flattenedInput = _lastInput.Reshape(1, _lastInput.Shape[0]);
+        }
+        else
+        {
+            // 2D input: use as-is
+            batchSize = _lastInput.Shape[0];
+            flattenedInput = _lastInput.Reshape(batchSize, _lastInput.Shape[1]);
+        }
 
         // Ensure activation gradient is 2D [batchSize, outputSize] for matrix operations
         var flattenedGradient = activationGradient.Rank == 2
