@@ -204,11 +204,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         private void AddReverseEdgeAndPrune(string neighborId, string nodeId, int level, int maxConn)
         {
             if (!_layers[level].TryGetValue(neighborId, out var connections))
+            {
                 return;
+            }
 
             connections.Add(nodeId);
+
             if (connections.Count > maxConn)
+            {
                 PruneConnections(neighborId, level, maxConn);
+            }
         }
 
         /// <inheritdoc/>
@@ -466,9 +471,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         /// <summary>
         /// Returns true if score a is better than score b according to the metric.
         /// </summary>
-        private bool IsBetterScore(T a, T b)
-        {
-            return _metric.HigherIsBetter ? _numOps.GreaterThan(a, b) : _numOps.LessThan(a, b);
-        }
+        private bool IsBetterScore(T a, T b) =>
+            _metric.HigherIsBetter ? _numOps.GreaterThan(a, b) : _numOps.LessThan(a, b);
     }
 }
