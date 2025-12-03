@@ -57,8 +57,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         public HNSWIndex(ISimilarityMetric<T> metric, int maxConnections = 16, int efConstruction = 200, int efSearch = 50, int seed = 42)
         {
             _metric = metric ?? throw new ArgumentNullException(nameof(metric));
-            if (maxConnections <= 0)
-                throw new ArgumentException("Max connections must be positive", nameof(maxConnections));
+            if (maxConnections < 2)
+                throw new ArgumentException("Max connections (M) must be at least 2", nameof(maxConnections));
             if (efConstruction <= 0)
                 throw new ArgumentException("EF construction must be positive", nameof(efConstruction));
             if (efSearch <= 0)
