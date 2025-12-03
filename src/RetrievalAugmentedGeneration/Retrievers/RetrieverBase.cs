@@ -134,7 +134,10 @@ public abstract class RetrieverBase<T> : IRetriever<T>
     /// </remarks>
     protected virtual void ValidateTopK(int topK)
     {
-        if (topK <= 0)
+        if (topK < 0)
+            throw new ArgumentOutOfRangeException(nameof(topK), topK, "TopK must be non-negative");
+
+        if (topK == 0)
             throw new ArgumentException("TopK must be greater than zero", nameof(topK));
     }
 
