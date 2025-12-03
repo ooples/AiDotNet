@@ -1,5 +1,6 @@
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
 
 namespace AiDotNet.Diffusion;
 
@@ -60,42 +61,48 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     public override int ParameterCount => _parameters.Length;
 
     /// <summary>
-    /// Initializes a new instance of the DDPM model with a scheduler.
+    /// Initializes a new instance of the DDPM model.
     /// </summary>
-    /// <param name="scheduler">The step scheduler for the diffusion process. If null, uses DDIM scheduler with default config.</param>
+    /// <param name="options">Configuration options for the diffusion model. If null, uses default options.</param>
+    /// <param name="scheduler">Optional custom scheduler. If null, creates one from options.</param>
     /// <param name="noisePredictor">
     /// Optional custom noise prediction function. If null, uses a placeholder that returns zeros.
     /// In production, this would be a neural network.
     /// </param>
-    /// <param name="seed">Optional random seed for reproducibility.</param>
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Create a DDPM model by providing:
-    /// - A scheduler (controls the noise schedule) - optional, uses DDIM by default
-    /// - Optionally, a noise predictor (the neural network that learns patterns)
-    ///
+    /// <para><b>For Beginners:</b> Create a DDPM model by providing:
+    /// <list type="bullet">
+    /// <item><description>Options to configure learning rate, timesteps, and noise schedule</description></item>
+    /// <item><description>Optionally, a custom scheduler (otherwise one is created from options)</description></item>
+    /// <item><description>Optionally, a noise predictor (the neural network that learns patterns)</description></item>
+    /// </list>
     /// Without a noise predictor, this is a "skeleton" model useful for:
-    /// - Testing the scheduler integration
-    /// - Understanding the diffusion pipeline
-    /// - Serving as a template for custom implementations
-    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Testing the scheduler integration</description></item>
+    /// <item><description>Understanding the diffusion pipeline</description></item>
+    /// <item><description>Serving as a template for custom implementations</description></item>
+    /// </list></para>
     /// <example>
     /// <code>
     /// // Create a minimal DDPM for testing with defaults
     /// var model = new DDPMModel&lt;double&gt;();
     ///
-    /// // Or with custom scheduler
-    /// var config = SchedulerConfig&lt;double&gt;.CreateDefault();
-    /// var scheduler = new DDIMScheduler&lt;double&gt;(config);
-    /// var model = new DDPMModel&lt;double&gt;(scheduler);
+    /// // Or with custom options
+    /// var options = new DiffusionModelOptions&lt;double&gt;
+    /// {
+    ///     LearningRate = 0.0001,
+    ///     TrainTimesteps = 1000,
+    ///     DefaultInferenceSteps = 50
+    /// };
+    /// var model = new DDPMModel&lt;double&gt;(options);
     ///
     /// // Generate samples (note: without a trained noise predictor, results are random)
     /// var samples = model.Generate(new[] { 1, 3, 64, 64 }, numInferenceSteps: 50);
     /// </code>
     /// </example>
     /// </remarks>
-    public DDPMModel(IStepScheduler<T>? scheduler = null, Func<Tensor<T>, int, Tensor<T>>? noisePredictor = null, int? seed = null)
-        : base(scheduler, null, seed)
+    public DDPMModel(DiffusionModelOptions<T>? options = null, IStepScheduler<T>? scheduler = null, Func<Tensor<T>, int, Tensor<T>>? noisePredictor = null)
+        : base(options, scheduler)
     {
         _noisePredictor = noisePredictor;
         _parameters = new Vector<T>(0); // Placeholder - real model would have neural network weights
@@ -160,7 +167,7 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new DDPMModel<T>(Scheduler, _noisePredictor);
+        var clone = new DDPMModel<T>(null, Scheduler, _noisePredictor);
         clone.SetParameters(GetParameters());
         return clone;
     }
@@ -170,7 +177,7 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     {
         // Create a new scheduler with the same config for deep copy
         var newScheduler = new DDIMScheduler<T>(Scheduler.Config);
-        var copy = new DDPMModel<T>(newScheduler, _noisePredictor);
+        var copy = new DDPMModel<T>(null, newScheduler, _noisePredictor);
         copy.SetParameters(GetParameters());
         return copy;
     }
@@ -180,7 +187,6 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     /// </summary>
     /// <param name="config">The scheduler configuration.</param>
     /// <param name="noisePredictor">Optional custom noise prediction function.</param>
-    /// <param name="seed">Optional random seed.</param>
     /// <returns>A new DDPM model instance.</returns>
     /// <remarks>
     /// <para>
@@ -197,10 +203,9 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     /// </remarks>
     public static DDPMModel<T> Create(
         SchedulerConfig<T> config,
-        Func<Tensor<T>, int, Tensor<T>>? noisePredictor = null,
-        int? seed = null)
+        Func<Tensor<T>, int, Tensor<T>>? noisePredictor = null)
     {
         var scheduler = new DDIMScheduler<T>(config);
-        return new DDPMModel<T>(scheduler, noisePredictor, seed);
+        return new DDPMModel<T>(null, scheduler, noisePredictor);
     }
 }

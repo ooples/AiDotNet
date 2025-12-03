@@ -1,9 +1,11 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 
 namespace AiDotNet.Diffusion;
 
@@ -16,17 +18,16 @@ namespace AiDotNet.Diffusion;
 /// This abstract base class implements the common behavior for all diffusion models,
 /// including the generation loop, noise addition, loss computation, and state management.
 /// </para>
-/// <para>
-/// <b>For Beginners:</b> This is the foundation that all diffusion models build upon.
+/// <para><b>For Beginners:</b> This is the foundation that all diffusion models build upon.
 /// It handles the common tasks that every diffusion model needs:
-/// - The generation loop (iteratively denoising from noise)
-/// - Adding noise during training
-/// - Computing the training loss
-/// - Saving and loading the model
-///
+/// <list type="bullet">
+/// <item><description>The generation loop (iteratively denoising from noise)</description></item>
+/// <item><description>Adding noise during training</description></item>
+/// <item><description>Computing the training loss</description></item>
+/// <item><description>Saving and loading the model</description></item>
+/// </list>
 /// Specific diffusion models (like DDPM, Latent Diffusion) extend this base to implement
-/// their unique noise prediction architectures.
-/// </para>
+/// their unique noise prediction architectures.</para>
 /// </remarks>
 public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
 {
@@ -51,9 +52,19 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     protected readonly ILossFunction<T> LossFunction;
 
     /// <summary>
+    /// The configuration options for this diffusion model.
+    /// </summary>
+    private readonly DiffusionModelOptions<T> _options;
+
+    /// <summary>
     /// Active feature indices used by the model.
     /// </summary>
     private HashSet<int> _activeFeatureIndices = [];
+
+    /// <summary>
+    /// The learning rate converted to type T for training computations.
+    /// </summary>
+    protected T LearningRate;
 
     /// <inheritdoc />
     public IStepScheduler<T> Scheduler => _scheduler;
@@ -70,14 +81,37 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     /// <summary>
     /// Initializes a new instance of the DiffusionModelBase class.
     /// </summary>
-    /// <param name="scheduler">The step scheduler for the diffusion process. If null, uses DDIM scheduler with default config.</param>
-    /// <param name="lossFunction">Optional loss function. Defaults to Mean Squared Error.</param>
-    /// <param name="seed">Optional random seed for reproducibility.</param>
-    protected DiffusionModelBase(IStepScheduler<T>? scheduler = null, ILossFunction<T>? lossFunction = null, int? seed = null)
+    /// <param name="options">Configuration options for the diffusion model. If null, uses default options.</param>
+    /// <param name="scheduler">Optional custom scheduler. If null, creates one from options.</param>
+    protected DiffusionModelBase(DiffusionModelOptions<T>? options = null, IStepScheduler<T>? scheduler = null)
     {
-        _scheduler = scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateDefault());
-        LossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        RandomGenerator = seed.HasValue ? new Random(seed.Value) : new Random();
+        _options = options ?? new DiffusionModelOptions<T>();
+
+        // Create scheduler from options if not provided
+        if (scheduler != null)
+        {
+            _scheduler = scheduler;
+        }
+        else
+        {
+            var schedulerConfig = new SchedulerConfig<T>(
+                trainTimesteps: _options.TrainTimesteps,
+                betaStart: NumOps.FromDouble(_options.BetaStart),
+                betaEnd: NumOps.FromDouble(_options.BetaEnd),
+                betaSchedule: _options.BetaSchedule,
+                clipSample: _options.ClipSample,
+                predictionType: _options.PredictionType);
+            _scheduler = new DDIMScheduler<T>(schedulerConfig);
+        }
+
+        // Set loss function from options or default
+        LossFunction = _options.LossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        // Convert learning rate from double to T
+        LearningRate = NumOps.FromDouble(_options.LearningRate);
+
+        // Set up random generator
+        RandomGenerator = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
     }
 
     #region IDiffusionModel<T> Implementation
@@ -159,6 +193,18 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     #region IModel<Tensor<T>, Tensor<T>, ModelMetadata<T>> Implementation
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Performs one training step using the denoising score matching objective.
+    /// Computes gradients and updates model parameters using the configured learning rate.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method performs a single training iteration:
+    /// <list type="number">
+    /// <item><description>Computes how wrong the model's noise predictions are (gradients)</description></item>
+    /// <item><description>Adjusts the model's parameters using the learning rate to make better predictions</description></item>
+    /// </list>
+    /// You can control the step size by setting the LearningRate in the options.</para>
+    /// </remarks>
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // For diffusion models, training involves:
@@ -166,9 +212,12 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
         // 2. Add noise to input at those timesteps
         // 3. Predict the noise
         // 4. Update parameters to minimize prediction error
-        // This is a simplified implementation - derived classes can override for specific training logic
-        var timestep = RandomGenerator.Next(_scheduler.Config.TrainTimesteps);
-        _ = ComputeLoss(input, expectedOutput, [timestep]);
+
+        // Compute gradients using the denoising score matching objective
+        var gradients = ComputeGradients(input, expectedOutput, LossFunction);
+
+        // Apply gradients using the configured learning rate
+        ApplyGradients(gradients, LearningRate);
     }
 
     /// <inheritdoc />
@@ -176,7 +225,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     {
         // For diffusion models, prediction is generating samples
         // Use the input shape for generation
-        return Generate(input.Shape);
+        return Generate(input.Shape, _options.DefaultInferenceSteps);
     }
 
     /// <inheritdoc />
@@ -185,7 +234,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
         return new ModelMetadata<T>
         {
             Name = GetType().Name,
-            ModelType = ModelType.NeuralNetwork, // Diffusion models are generative neural network models
+            ModelType = ModelType.NeuralNetwork,
             FeatureCount = ParameterCount,
             Complexity = ParameterCount,
             Description = $"Diffusion model with {ParameterCount} parameters using {_scheduler.GetType().Name} scheduler."
@@ -260,7 +309,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
         // Save version for future compatibility
         writer.Write(1); // Version 1
 
-        // Save scheduler config (not mutable state - scheduler is recreated from config)
+        // Save scheduler config
         writer.Write(_scheduler.Config.TrainTimesteps);
         writer.Write(NumOps.ToDouble(_scheduler.Config.BetaStart));
         writer.Write(NumOps.ToDouble(_scheduler.Config.BetaEnd));
@@ -275,6 +324,16 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Loads model state from a stream, including scheduler configuration validation
+    /// and model parameters. Throws if the saved scheduler config doesn't match
+    /// the current instance's scheduler configuration.
+    /// </para>
+    /// <para><b>For Beginners:</b> This restores a previously saved model. The scheduler
+    /// settings must match between the saved model and this instance to ensure
+    /// the loaded parameters work correctly with the noise schedule.</para>
+    /// </remarks>
     public virtual void LoadState(Stream stream)
     {
         if (stream == null)
@@ -289,13 +348,56 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
         if (version != 1)
             throw new InvalidOperationException($"Unsupported model version: {version}");
 
-        // Read scheduler config (skip - we use the existing scheduler's config)
-        _ = reader.ReadInt32();  // TrainTimesteps
-        _ = reader.ReadDouble(); // BetaStart
-        _ = reader.ReadDouble(); // BetaEnd
-        _ = reader.ReadInt32();  // BetaSchedule
-        _ = reader.ReadInt32();  // PredictionType
-        _ = reader.ReadBoolean(); // ClipSample
+        // Read and validate scheduler config
+        var savedTrainTimesteps = reader.ReadInt32();
+        var savedBetaStart = reader.ReadDouble();
+        var savedBetaEnd = reader.ReadDouble();
+        var savedBetaSchedule = (BetaSchedule)reader.ReadInt32();
+        var savedPredictionType = (DiffusionPredictionType)reader.ReadInt32();
+        var savedClipSample = reader.ReadBoolean();
+
+        // Validate critical scheduler parameters match
+        if (savedTrainTimesteps != _scheduler.Config.TrainTimesteps)
+        {
+            throw new InvalidOperationException(
+                $"Scheduler config mismatch: saved TrainTimesteps={savedTrainTimesteps}, " +
+                $"current={_scheduler.Config.TrainTimesteps}. Create a model with matching scheduler config.");
+        }
+
+        if (Math.Abs(savedBetaStart - NumOps.ToDouble(_scheduler.Config.BetaStart)) > 1e-9)
+        {
+            throw new InvalidOperationException(
+                $"Scheduler config mismatch: saved BetaStart={savedBetaStart}, " +
+                $"current={NumOps.ToDouble(_scheduler.Config.BetaStart)}. Create a model with matching scheduler config.");
+        }
+
+        if (Math.Abs(savedBetaEnd - NumOps.ToDouble(_scheduler.Config.BetaEnd)) > 1e-9)
+        {
+            throw new InvalidOperationException(
+                $"Scheduler config mismatch: saved BetaEnd={savedBetaEnd}, " +
+                $"current={NumOps.ToDouble(_scheduler.Config.BetaEnd)}. Create a model with matching scheduler config.");
+        }
+
+        if (savedBetaSchedule != _scheduler.Config.BetaSchedule)
+        {
+            throw new InvalidOperationException(
+                $"Scheduler config mismatch: saved BetaSchedule={savedBetaSchedule}, " +
+                $"current={_scheduler.Config.BetaSchedule}. Create a model with matching scheduler config.");
+        }
+
+        if (savedPredictionType != _scheduler.Config.PredictionType)
+        {
+            throw new InvalidOperationException(
+                $"Scheduler config mismatch: saved PredictionType={savedPredictionType}, " +
+                $"current={_scheduler.Config.PredictionType}. Create a model with matching scheduler config.");
+        }
+
+        if (savedClipSample != _scheduler.Config.ClipSample)
+        {
+            throw new InvalidOperationException(
+                $"Scheduler config mismatch: saved ClipSample={savedClipSample}, " +
+                $"current={_scheduler.Config.ClipSample}. Create a model with matching scheduler config.");
+        }
 
         // Load model parameters using SerializationHelper
         SetParameters(SerializationHelper<T>.DeserializeVector(reader));
@@ -305,18 +407,24 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
 
     #region IFeatureAware Implementation
 
-    /// <inheritdoc />
-    public virtual IEnumerable<int> GetActiveFeatureIndices()
+    /// <summary>
+    /// Ensures active feature indices are initialized with default values if empty.
+    /// </summary>
+    private void EnsureActiveFeatureIndicesInitialized()
     {
-        // For diffusion models, all input features are typically used
-        if (_activeFeatureIndices.Count == 0)
+        if (_activeFeatureIndices.Count == 0 && ParameterCount > 0)
         {
-            // Default: assume all features up to ParameterCount are active
             for (int i = 0; i < ParameterCount; i++)
             {
                 _activeFeatureIndices.Add(i);
             }
         }
+    }
+
+    /// <inheritdoc />
+    public virtual IEnumerable<int> GetActiveFeatureIndices()
+    {
+        EnsureActiveFeatureIndicesInitialized();
         return _activeFeatureIndices;
     }
 
@@ -329,6 +437,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     /// <inheritdoc />
     public virtual bool IsFeatureUsed(int featureIndex)
     {
+        EnsureActiveFeatureIndicesInitialized();
         return _activeFeatureIndices.Contains(featureIndex);
     }
 
@@ -339,8 +448,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     /// <inheritdoc />
     public virtual Dictionary<string, T> GetFeatureImportance()
     {
-        // For diffusion models, feature importance is typically uniform
-        // Derived classes can override for more sophisticated importance measures
         var importance = new Dictionary<string, T>();
         var uniformImportance = NumOps.FromDouble(1.0 / Math.Max(1, ParameterCount));
 
@@ -382,21 +489,13 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     /// This default implementation uses automatic differentiation via GradientTape when available,
     /// with a fallback to numerical gradients. Derived classes can override for custom gradient computation.
     /// </para>
-    /// <para>
-    /// <b>Algorithm:</b>
-    /// 1. Sample a random timestep t
-    /// 2. Add noise to the clean input at timestep t: x_t = sqrt(alpha_t) * x_0 + sqrt(1-alpha_t) * noise
-    /// 3. Predict the noise using the model: predicted_noise = model(x_t, t)
-    /// 4. Compute MSE loss between predicted and actual noise
-    /// 5. Backpropagate to compute gradients with respect to model parameters
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is how the diffusion model learns:
-    /// - Take a clean sample and add random noise
-    /// - Try to predict what noise was added
-    /// - Measure how wrong the prediction was (the loss)
-    /// - Figure out how to adjust parameters to be less wrong (the gradients)
-    /// </para>
+    /// <para><b>For Beginners:</b> This is how the diffusion model learns:
+    /// <list type="bullet">
+    /// <item><description>Take a clean sample and add random noise</description></item>
+    /// <item><description>Try to predict what noise was added</description></item>
+    /// <item><description>Measure how wrong the prediction was (the loss)</description></item>
+    /// <item><description>Figure out how to adjust parameters to be less wrong (the gradients)</description></item>
+    /// </list></para>
     /// </remarks>
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
@@ -540,8 +639,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     /// <inheritdoc />
     public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        // Diffusion models typically don't support JIT compilation due to their iterative nature
-        // Derived classes can override if they support it
         throw new NotSupportedException("This diffusion model does not support JIT compilation. Override ExportComputationGraph in derived class if needed.");
     }
 
