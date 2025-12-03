@@ -1,0 +1,592 @@
+namespace AiDotNet.NeuralNetworks;
+
+/// <summary>
+/// Represents a Wasserstein Generative Adversarial Network (WGAN), which uses the Wasserstein distance
+/// (Earth Mover's distance) to measure the difference between the generated and real data distributions.
+/// </summary>
+/// <remarks>
+/// <para>
+/// WGAN addresses several training instabilities in vanilla GANs by:
+/// - Using Wasserstein distance instead of Jensen-Shannon divergence
+/// - Replacing the discriminator with a "critic" that doesn't output probabilities
+/// - Enforcing a Lipschitz constraint through weight clipping
+/// - Providing a loss that correlates with image quality
+/// - Enabling more stable training and better convergence
+/// </para>
+/// <para><b>For Beginners:</b> WGAN is an improved GAN that solves many training problems.
+///
+/// Key improvements over vanilla GAN:
+/// - More stable training (less likely to fail)
+/// - The loss value actually tells you how well training is going
+/// - No mode collapse issues (generating only a few types of outputs)
+/// - Can train the discriminator (critic) many times without problems
+///
+/// The main change is using a different mathematical way to measure the difference
+/// between real and fake images, which turns out to be much more stable.
+///
+/// Reference: Arjovsky et al., "Wasserstein GAN" (2017)
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+public class WGAN<T> : NeuralNetworkBase<T>
+{
+    private Vector<T> _momentum;
+    private Vector<T> _secondMoment;
+    private T _beta1Power;
+    private T _beta2Power;
+    private double _currentLearningRate;
+    private double _initialLearningRate;
+    private double _learningRateDecay;
+    private List<T> _criticLosses = [];
+    private List<T> _generatorLosses = [];
+
+    /// <summary>
+    /// The weight clipping threshold for enforcing the Lipschitz constraint.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In WGAN, the critic (discriminator) must be a 1-Lipschitz function. This is enforced
+    /// by clipping the weights to lie within [-c, c] where c is the clipping threshold.
+    /// A typical value is 0.01.
+    /// </para>
+    /// <para><b>For Beginners:</b> This limits how large the critic's weights can get.
+    ///
+    /// Weight clipping:
+    /// - Prevents the critic from becoming too powerful
+    /// - Ensures the mathematical properties needed for Wasserstein distance
+    /// - Typical value is 0.01 (weights stay between -0.01 and 0.01)
+    /// - This is a simple but effective way to enforce the required constraint
+    /// </para>
+    /// </remarks>
+    private double _weightClipValue = 0.01;
+
+    /// <summary>
+    /// The number of critic training iterations per generator iteration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// WGAN typically trains the critic multiple times for each generator update.
+    /// This ensures the critic provides meaningful gradients to the generator.
+    /// A typical value is 5.
+    /// </para>
+    /// <para><b>For Beginners:</b> How many times to train the critic vs. the generator.
+    ///
+    /// Training ratio:
+    /// - The critic (discriminator) needs to be well-trained to guide the generator
+    /// - For every 1 generator update, we do 5 critic updates
+    /// - This ensures the critic always stays "ahead" and provides useful feedback
+    /// - Unlike vanilla GANs, this doesn't cause training to fail
+    /// </para>
+    /// </remarks>
+    private int _criticIterations = 5;
+
+    /// <summary>
+    /// Gets the generator network that creates synthetic data.
+    /// </summary>
+    public ConvolutionalNeuralNetwork<T> Generator { get; private set; }
+
+    /// <summary>
+    /// Gets the critic network (called discriminator in vanilla GAN) that evaluates data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In WGAN, this is called a "critic" rather than "discriminator" because it doesn't
+    /// output a probability. Instead, it outputs a score that estimates the Wasserstein distance.
+    /// </para>
+    /// <para><b>For Beginners:</b> The critic is like a discriminator but better.
+    ///
+    /// Critic vs. Discriminator:
+    /// - Discriminator outputs probability (0-1): "Is this real?"
+    /// - Critic outputs a score (any number): "How real is this?"
+    /// - The critic's score directly relates to image quality
+    /// - Higher scores mean more realistic images
+    /// </para>
+    /// </remarks>
+    public ConvolutionalNeuralNetwork<T> Critic { get; private set; }
+
+    private ILossFunction<T> _lossFunction;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WGAN{T}"/> class.
+    /// </summary>
+    /// <param name="generatorArchitecture">The neural network architecture for the generator.</param>
+    /// <param name="criticArchitecture">The neural network architecture for the critic.</param>
+    /// <param name="inputType">The type of input the WGAN will process.</param>
+    /// <param name="lossFunction">Optional loss function (typically not used, as WGAN uses Wasserstein distance).</param>
+    /// <param name="initialLearningRate">The initial learning rate. Default is 0.00005 (lower than vanilla GAN).</param>
+    /// <param name="weightClipValue">The weight clipping threshold. Default is 0.01.</param>
+    /// <param name="criticIterations">Number of critic iterations per generator iteration. Default is 5.</param>
+    public WGAN(
+        NeuralNetworkArchitecture<T> generatorArchitecture,
+        NeuralNetworkArchitecture<T> criticArchitecture,
+        InputType inputType,
+        ILossFunction<T>? lossFunction = null,
+        double initialLearningRate = 0.00005,
+        double weightClipValue = 0.01,
+        int criticIterations = 5)
+        : base(new NeuralNetworkArchitecture<T>(
+            inputType,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Medium,
+            generatorArchitecture.InputSize,
+            criticArchitecture.OutputSize,
+            0, 0, 0,
+            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
+    {
+        _initialLearningRate = initialLearningRate;
+        _currentLearningRate = initialLearningRate;
+        _weightClipValue = weightClipValue;
+        _criticIterations = criticIterations;
+        _learningRateDecay = 0.9999;
+
+        // Initialize optimizer parameters
+        _beta1Power = NumOps.One;
+        _beta2Power = NumOps.One;
+
+        Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
+        Critic = new ConvolutionalNeuralNetwork<T>(criticArchitecture);
+        _momentum = Vector<T>.Empty();
+        _secondMoment = Vector<T>.Empty();
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
+
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Performs one training step for the WGAN using tensor batches.
+    /// </summary>
+    /// <param name="realImages">A tensor containing real images.</param>
+    /// <param name="noise">A tensor containing random noise for the generator.</param>
+    /// <returns>A tuple containing the critic and generator loss values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the WGAN training algorithm:
+    /// 1. Train the critic multiple times (typically 5) with weight clipping
+    /// 2. Train the generator once
+    /// 3. The critic is trained to maximize the difference between real and fake scores
+    /// 4. The generator is trained to maximize the critic's score on fake images
+    /// </para>
+    /// <para><b>For Beginners:</b> One training round for WGAN.
+    ///
+    /// The training process:
+    /// - Trains the critic several times to make it really good at judging quality
+    /// - Clips the critic's weights to keep it well-behaved
+    /// - Trains the generator once to improve its outputs
+    /// - Returns loss values that actually mean something (higher = better)
+    /// </para>
+    /// </remarks>
+    public (T criticLoss, T generatorLoss) TrainStep(Tensor<T> realImages, Tensor<T> noise)
+    {
+        Generator.SetTrainingMode(true);
+        Critic.SetTrainingMode(true);
+
+        T totalCriticLoss = NumOps.Zero;
+
+        // Train critic multiple times
+        for (int i = 0; i < _criticIterations; i++)
+        {
+            // Generate fake images
+            Tensor<T> fakeImages = GenerateImages(noise);
+
+            // Train critic on real images (maximize score)
+            T realScore = TrainCriticBatch(realImages, isReal: true);
+
+            // Train critic on fake images (minimize score)
+            T fakeScore = TrainCriticBatch(fakeImages, isReal: false);
+
+            // Wasserstein loss: E[D(real)] - E[D(fake)]
+            T criticLoss = NumOps.Subtract(realScore, fakeScore);
+
+            // We want to maximize this, so we negate for gradient descent
+            criticLoss = NumOps.Negate(criticLoss);
+
+            totalCriticLoss = NumOps.Add(totalCriticLoss, criticLoss);
+
+            // Clip weights to enforce Lipschitz constraint
+            ClipCriticWeights();
+        }
+
+        // Average critic loss across iterations
+        T avgCriticLoss = NumOps.Divide(totalCriticLoss, NumOps.FromDouble(_criticIterations));
+
+        // Train generator
+        Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
+        T generatorLoss = TrainGeneratorBatch(newNoise);
+
+        // Track losses
+        _criticLosses.Add(avgCriticLoss);
+        _generatorLosses.Add(generatorLoss);
+
+        if (_criticLosses.Count > 100)
+        {
+            _criticLosses.RemoveAt(0);
+            _generatorLosses.RemoveAt(0);
+        }
+
+        return (avgCriticLoss, generatorLoss);
+    }
+
+    /// <summary>
+    /// Clips the critic's weights to enforce the Lipschitz constraint.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method clips all weights in the critic network to lie within [-c, c] where c is
+    /// the weight clipping threshold. This is the key mechanism in WGAN for enforcing the
+    /// Lipschitz constraint required for the Wasserstein distance to be well-defined.
+    /// </para>
+    /// <para><b>For Beginners:</b> This keeps the critic's weights from getting too large.
+    ///
+    /// Weight clipping:
+    /// - Goes through all the critic's weights
+    /// - If any weight is above +0.01, clips it to +0.01
+    /// - If any weight is below -0.01, clips it to -0.01
+    /// - This ensures the mathematical properties needed for WGAN to work
+    /// </para>
+    /// </remarks>
+    private void ClipCriticWeights()
+    {
+        var parameters = Critic.GetParameters();
+        var clipMin = NumOps.FromDouble(-_weightClipValue);
+        var clipMax = NumOps.FromDouble(_weightClipValue);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Clip to [-c, c]
+            if (NumOps.GreaterThan(parameters[i], clipMax))
+            {
+                parameters[i] = clipMax;
+            }
+            else if (NumOps.LessThan(parameters[i], clipMin))
+            {
+                parameters[i] = clipMin;
+            }
+        }
+
+        Critic.UpdateParameters(parameters);
+    }
+
+    /// <summary>
+    /// Trains the critic on a batch of images.
+    /// </summary>
+    /// <param name="images">The tensor containing images to train on.</param>
+    /// <param name="isReal">True if the images are real, false if they are generated.</param>
+    /// <returns>The average critic score for this batch.</returns>
+    private T TrainCriticBatch(Tensor<T> images, bool isReal)
+    {
+        Critic.SetTrainingMode(true);
+
+        // Forward pass through critic
+        var criticScores = Critic.Predict(images);
+
+        // Calculate average score
+        int batchSize = images.Shape[0];
+        T totalScore = NumOps.Zero;
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            totalScore = NumOps.Add(totalScore, criticScores[i, 0]);
+        }
+
+        T avgScore = NumOps.Divide(totalScore, NumOps.FromDouble(batchSize));
+
+        // For WGAN, we want to:
+        // - Maximize critic output for real images
+        // - Minimize critic output for fake images
+        // This is equivalent to maximizing (realScore - fakeScore)
+
+        // Create gradients: +1 for real images, -1 for fake images
+        var gradients = new Tensor<T>(criticScores.Shape);
+        T gradientValue = isReal ? NumOps.One : NumOps.Negate(NumOps.One);
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            gradients[i, 0] = NumOps.Divide(gradientValue, NumOps.FromDouble(batchSize));
+        }
+
+        // Backpropagate
+        Critic.Backpropagate(gradients);
+
+        // Update parameters
+        UpdateNetworkParameters(Critic);
+
+        return avgScore;
+    }
+
+    /// <summary>
+    /// Trains the generator to fool the critic.
+    /// </summary>
+    /// <param name="noise">The tensor containing noise vectors.</param>
+    /// <returns>The generator loss value.</returns>
+    private T TrainGeneratorBatch(Tensor<T> noise)
+    {
+        Generator.SetTrainingMode(true);
+        Critic.SetTrainingMode(false); // Freeze critic
+
+        // Generate fake images
+        var generatedImages = Generator.Predict(noise);
+
+        // Get critic scores for generated images
+        var criticScores = Critic.Predict(generatedImages);
+
+        // Calculate average score (generator wants to maximize this)
+        int batchSize = noise.Shape[0];
+        T totalScore = NumOps.Zero;
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            totalScore = NumOps.Add(totalScore, criticScores[i, 0]);
+        }
+
+        T avgScore = NumOps.Divide(totalScore, NumOps.FromDouble(batchSize));
+
+        // Loss is negative of the score (we minimize loss, which maximizes score)
+        T loss = NumOps.Negate(avgScore);
+
+        // Create gradients (we want to maximize critic output)
+        var gradients = new Tensor<T>(criticScores.Shape);
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            gradients[i, 0] = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
+        }
+
+        // Backpropagate through critic to get gradients for generator output
+        var criticInputGradients = Critic.Backpropagate(gradients);
+
+        // Backpropagate through generator
+        Generator.Backpropagate(criticInputGradients);
+
+        // Update generator parameters
+        UpdateNetworkParameters(Generator);
+
+        Critic.SetTrainingMode(true);
+
+        return loss;
+    }
+
+    /// <summary>
+    /// Updates network parameters using RMSprop optimizer (recommended for WGAN).
+    /// </summary>
+    private void UpdateNetworkParameters(ConvolutionalNeuralNetwork<T> network)
+    {
+        var parameters = network.GetParameters();
+        var gradients = network.GetParameterGradients();
+
+        // Initialize optimizer state if needed
+        if (_momentum == null || _momentum.Length != parameters.Length)
+        {
+            _momentum = new Vector<T>(parameters.Length);
+            _momentum.Fill(NumOps.Zero);
+        }
+
+        if (_secondMoment == null || _secondMoment.Length != parameters.Length)
+        {
+            _secondMoment = new Vector<T>(parameters.Length);
+            _secondMoment.Fill(NumOps.Zero);
+        }
+
+        // Gradient clipping
+        var gradientNorm = gradients.L2Norm();
+        var clipThreshold = NumOps.FromDouble(5.0);
+
+        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
+        {
+            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
+            for (int i = 0; i < gradients.Length; i++)
+            {
+                gradients[i] = NumOps.Multiply(gradients[i], scaleFactor);
+            }
+        }
+
+        // RMSprop parameters (recommended for WGAN)
+        var learningRate = NumOps.FromDouble(_currentLearningRate);
+        var decay = NumOps.FromDouble(0.9);
+        var epsilon = NumOps.FromDouble(1e-8);
+
+        var updatedParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Update second moment (RMSprop)
+            _secondMoment[i] = NumOps.Add(
+                NumOps.Multiply(decay, _secondMoment[i]),
+                NumOps.Multiply(
+                    NumOps.Subtract(NumOps.One, decay),
+                    NumOps.Multiply(gradients[i], gradients[i])
+                )
+            );
+
+            // RMSprop update
+            var adaptiveLR = NumOps.Divide(
+                learningRate,
+                NumOps.Add(NumOps.Sqrt(_secondMoment[i]), epsilon)
+            );
+
+            updatedParameters[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(adaptiveLR, gradients[i])
+            );
+        }
+
+        // Apply learning rate decay
+        _currentLearningRate *= _learningRateDecay;
+
+        network.UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Generates synthetic images using the generator.
+    /// </summary>
+    public Tensor<T> GenerateImages(Tensor<T> noise)
+    {
+        Generator.SetTrainingMode(false);
+        return Generator.Predict(noise);
+    }
+
+    /// <summary>
+    /// Generates a tensor of random noise for the generator.
+    /// </summary>
+    public Tensor<T> GenerateRandomNoiseTensor(int batchSize, int noiseSize)
+    {
+        var random = new Random();
+        var shape = new int[] { batchSize, noiseSize };
+        var noise = new Tensor<T>(shape);
+
+        // Generate normally distributed random numbers
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < noiseSize; i += 2)
+            {
+                double u1 = random.NextDouble();
+                double u2 = random.NextDouble();
+
+                double radius = Math.Sqrt(-2.0 * Math.Log(u1));
+                double theta = 2.0 * Math.PI * u2;
+
+                double z1 = radius * Math.Cos(theta);
+                noise[b, i] = NumOps.FromDouble(z1);
+
+                if (i + 1 < noiseSize)
+                {
+                    double z2 = radius * Math.Sin(theta);
+                    noise[b, i + 1] = NumOps.FromDouble(z2);
+                }
+            }
+        }
+
+        return noise;
+    }
+
+    /// <summary>
+    /// Evaluates the WGAN by generating images and calculating metrics.
+    /// </summary>
+    public Dictionary<string, double> EvaluateModel(int sampleSize = 100)
+    {
+        var metrics = new Dictionary<string, double>();
+
+        var noise = GenerateRandomNoiseTensor(sampleSize, Generator.Architecture.InputSize);
+        var generatedImages = GenerateImages(noise);
+
+        // Get critic scores
+        Critic.SetTrainingMode(false);
+        var criticScores = Critic.Predict(generatedImages);
+
+        var scoresList = new List<double>(sampleSize);
+        for (int i = 0; i < sampleSize; i++)
+        {
+            scoresList.Add(Convert.ToDouble(criticScores[i, 0]));
+        }
+
+        metrics["AverageCriticScore"] = scoresList.Average();
+        metrics["MinCriticScore"] = scoresList.Min();
+        metrics["MaxCriticScore"] = scoresList.Max();
+        metrics["CriticScoreStdDev"] = StatisticsHelper<double>.CalculateStandardDeviation(scoresList);
+        metrics["CurrentLearningRate"] = _currentLearningRate;
+
+        if (_generatorLosses.Count > 0)
+        {
+            metrics["RecentGeneratorLoss"] = Convert.ToDouble(_generatorLosses[_generatorLosses.Count - 1]);
+        }
+
+        if (_criticLosses.Count > 0)
+        {
+            metrics["RecentCriticLoss"] = Convert.ToDouble(_criticLosses[_criticLosses.Count - 1]);
+        }
+
+        return metrics;
+    }
+
+    protected override void InitializeLayers()
+    {
+        // WGAN doesn't use layers directly
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        return Generator.Predict(input);
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        TrainStep(expectedOutput, input);
+    }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = ModelType.WassersteinGAN,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "GeneratorParameters", Generator.GetParameterCount() },
+                { "CriticParameters", Critic.GetParameterCount() },
+                { "WeightClipValue", _weightClipValue },
+                { "CriticIterations", _criticIterations }
+            },
+            ModelData = this.Serialize()
+        };
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_currentLearningRate);
+        writer.Write(_weightClipValue);
+        writer.Write(_criticIterations);
+
+        var generatorBytes = Generator.Serialize();
+        writer.Write(generatorBytes.Length);
+        writer.Write(generatorBytes);
+
+        var criticBytes = Critic.Serialize();
+        writer.Write(criticBytes.Length);
+        writer.Write(criticBytes);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _currentLearningRate = reader.ReadDouble();
+        _weightClipValue = reader.ReadDouble();
+        _criticIterations = reader.ReadInt32();
+
+        int generatorDataLength = reader.ReadInt32();
+        byte[] generatorData = reader.ReadBytes(generatorDataLength);
+        Generator.Deserialize(generatorData);
+
+        int criticDataLength = reader.ReadInt32();
+        byte[] criticData = reader.ReadBytes(criticDataLength);
+        Critic.Deserialize(criticData);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new WGAN<T>(
+            Generator.Architecture,
+            Critic.Architecture,
+            Architecture.InputType,
+            _lossFunction,
+            _initialLearningRate,
+            _weightClipValue,
+            _criticIterations);
+    }
+}
