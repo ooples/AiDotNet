@@ -376,33 +376,145 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     #region IGradientComputable<T, Tensor<T>, Tensor<T>> Implementation
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Computes gradients for diffusion model training using the denoising score matching objective.
+    /// This default implementation uses automatic differentiation via GradientTape when available,
+    /// with a fallback to numerical gradients. Derived classes can override for custom gradient computation.
+    /// </para>
+    /// <para>
+    /// <b>Algorithm:</b>
+    /// 1. Sample a random timestep t
+    /// 2. Add noise to the clean input at timestep t: x_t = sqrt(alpha_t) * x_0 + sqrt(1-alpha_t) * noise
+    /// 3. Predict the noise using the model: predicted_noise = model(x_t, t)
+    /// 4. Compute MSE loss between predicted and actual noise
+    /// 5. Backpropagate to compute gradients with respect to model parameters
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is how the diffusion model learns:
+    /// - Take a clean sample and add random noise
+    /// - Try to predict what noise was added
+    /// - Measure how wrong the prediction was (the loss)
+    /// - Figure out how to adjust parameters to be less wrong (the gradients)
+    /// </para>
+    /// </remarks>
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
-        // For diffusion models, gradients are computed based on noise prediction error
-        // This is a simplified implementation - real implementations would use autodiff
-        // Use provided loss function or fall back to default for future gradient computation
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+        if (target == null)
+            throw new ArgumentNullException(nameof(target));
+
         var effectiveLossFunction = lossFunction ?? LossFunction;
-        _ = effectiveLossFunction; // Reserved for future loss-aware gradient computation
 
         // Sample a random timestep
         var timestep = RandomGenerator.Next(_scheduler.Config.TrainTimesteps);
 
-        // Add noise to input
-        var noise = SampleNoise(input.ToVector().Length, RandomGenerator);
-        var noisyInput = _scheduler.AddNoise(input.ToVector(), noise, timestep);
+        // Sample noise
+        var inputVector = input.ToVector();
+        var noiseVector = SampleNoise(inputVector.Length, RandomGenerator);
 
-        // Predict noise
-        var noisySampleTensor = new Tensor<T>(input.Shape, noisyInput);
-        var predictedNoise = PredictNoise(noisySampleTensor, timestep);
+        // Add noise to the clean sample using the scheduler
+        var noisySample = _scheduler.AddNoise(inputVector, noiseVector, timestep);
+        var noisySampleTensor = new Tensor<T>(input.Shape, noisySample);
 
-        // Compute gradient (simplified: difference between predicted and actual noise)
-        var gradients = new Vector<T>(ParameterCount);
-        var diff = predictedNoise.ToVector();
+        // Get current parameters
+        var parameters = GetParameters();
+        var gradients = new Vector<T>(parameters.Length);
 
-        for (int i = 0; i < Math.Min(gradients.Length, diff.Length); i++)
+        // Try to use autodiff if computation graph is available
+        try
         {
-            gradients[i] = NumOps.Subtract(diff[i], noise[i]);
+            using var tape = new GradientTape<T>();
+
+            // Create computation nodes for parameters
+            var paramNodes = new List<ComputationNode<T>>();
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                var paramVector = new Vector<T>(1) { [0] = parameters[i] };
+                var paramTensor = new Tensor<T>(new[] { 1 }, paramVector);
+                var paramNode = TensorOperations<T>.Variable(paramTensor, $"param_{i}");
+                tape.Watch(paramNode);
+                paramNodes.Add(paramNode);
+            }
+
+            // Forward pass: predict noise
+            var predictedNoise = PredictNoise(noisySampleTensor, timestep);
+
+            // Compute loss using the effective loss function
+            var loss = effectiveLossFunction.CalculateLoss(predictedNoise.ToVector(), noiseVector);
+
+            // Create loss node for autodiff
+            var lossVector = new Vector<T>(1) { [0] = loss };
+            var lossTensor = new Tensor<T>(new[] { 1 }, lossVector);
+            var lossNode = TensorOperations<T>.Variable(lossTensor, "loss", requiresGradient: false);
+
+            // Compute gradients via autodiff
+            var gradientDict = tape.Gradient(lossNode, paramNodes);
+
+            // Extract gradients
+            foreach (var kvp in gradientDict)
+            {
+                var idx = paramNodes.IndexOf(kvp.Key);
+                if (idx >= 0 && idx < gradients.Length)
+                {
+                    gradients[idx] = kvp.Value[0];
+                }
+            }
+
+            // Check if autodiff produced valid gradients
+            bool hasValidGradients = false;
+            for (int i = 0; i < gradients.Length; i++)
+            {
+                if (!NumOps.Equals(gradients[i], NumOps.Zero))
+                {
+                    hasValidGradients = true;
+                    break;
+                }
+            }
+
+            if (hasValidGradients)
+            {
+                return gradients;
+            }
         }
+        catch
+        {
+            // Fall through to numerical gradients if autodiff fails
+        }
+
+        // Fallback: Numerical gradient computation using finite differences
+        var epsilon = NumOps.FromDouble(1e-5);
+        var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Compute f(x + epsilon)
+            var paramsPlus = new Vector<T>(parameters.Length);
+            for (int j = 0; j < parameters.Length; j++)
+            {
+                paramsPlus[j] = j == i ? NumOps.Add(parameters[j], epsilon) : parameters[j];
+            }
+            SetParameters(paramsPlus);
+            var predictedPlus = PredictNoise(noisySampleTensor, timestep);
+            var lossPlus = effectiveLossFunction.CalculateLoss(predictedPlus.ToVector(), noiseVector);
+
+            // Compute f(x - epsilon)
+            var paramsMinus = new Vector<T>(parameters.Length);
+            for (int j = 0; j < parameters.Length; j++)
+            {
+                paramsMinus[j] = j == i ? NumOps.Subtract(parameters[j], epsilon) : parameters[j];
+            }
+            SetParameters(paramsMinus);
+            var predictedMinus = PredictNoise(noisySampleTensor, timestep);
+            var lossMinus = effectiveLossFunction.CalculateLoss(predictedMinus.ToVector(), noiseVector);
+
+            // Gradient = (f(x+eps) - f(x-eps)) / (2*eps)
+            gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossMinus), twoEpsilon);
+        }
+
+        // Restore original parameters
+        SetParameters(parameters);
 
         return gradients;
     }
