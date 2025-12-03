@@ -725,10 +725,16 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var flattenedInput = _lastInput.Reshape(batchSize, _lastInput.Shape[1]);
 
-        _weightsGradient = activationGradient.Transpose([1, 0]).ToMatrix().Multiply(flattenedInput.ToMatrix());
-        _biasesGradient = activationGradient.Sum([0]).ToMatrix().ToColumnVector();
+        // Ensure activation gradient is 2D [batchSize, outputSize] for matrix operations
+        var flattenedGradient = activationGradient.Rank == 2
+            ? activationGradient
+            : activationGradient.Reshape(batchSize, OutputShape[0]);
 
-        var inputGradient = activationGradient.Multiply(_weights);
+        _weightsGradient = flattenedGradient.Transpose([1, 0]).ToMatrix().Multiply(flattenedInput.ToMatrix());
+        _biasesGradient = flattenedGradient.Sum([0]).ToVector();
+
+        // For 2D tensors, convert to matrix, multiply, then convert back to tensor
+        var inputGradient = Tensor<T>.FromMatrix(flattenedGradient.ToMatrix().Multiply(_weights));
 
         return inputGradient.Reshape(_lastInput.Shape);
     }

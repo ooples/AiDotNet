@@ -461,10 +461,12 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
                 bankSizeA: 10,
                 bankSizeB: 10);
 
-            // Get initial bank state
-            var initialBankA = VBLoRAAdapter<double>.GetBankA("default");
-            Assert.NotNull(initialBankA);
-            double initialValue = initialBankA[0, 0];
+            // Get initial bank state - use BankB because BankA won't change on first iteration
+            // This is because: A gradient = input^T * (outputGradient * B^T) * scaling
+            // BankB is initialized to zeros, so A gradient is zeros on first iteration
+            // But B gradient = (input * A)^T * outputGradient * scaling, which doesn't depend on B
+            var initialBankB = VBLoRAAdapter<double>.GetBankB("default");
+            Assert.NotNull(initialBankB);
 
             // Create input and perform forward/backward pass
             var input = new Tensor<double>(new[] { 1, 10 });
@@ -485,17 +487,17 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             // Act - Update parameters
             adapter.UpdateParameters(0.01);
 
-            // Assert - Bank should be modified
-            var updatedBankA = VBLoRAAdapter<double>.GetBankA("default");
-            Assert.NotNull(updatedBankA);
+            // Assert - BankB should be modified
+            var updatedBankB = VBLoRAAdapter<double>.GetBankB("default");
+            Assert.NotNull(updatedBankB);
 
-            // At least some values in the bank should have changed
+            // At least some values in BankB should have changed
             bool foundChange = false;
-            for (int i = 0; i < updatedBankA.Rows && !foundChange; i++)
+            for (int i = 0; i < updatedBankB.Rows && !foundChange; i++)
             {
-                for (int j = 0; j < updatedBankA.Columns && !foundChange; j++)
+                for (int j = 0; j < updatedBankB.Columns && !foundChange; j++)
                 {
-                    if (Math.Abs(initialBankA[i, j] - updatedBankA[i, j]) > 1e-10)
+                    if (Math.Abs(initialBankB[i, j] - updatedBankB[i, j]) > 1e-10)
                     {
                         foundChange = true;
                     }
