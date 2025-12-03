@@ -90,9 +90,6 @@ public readonly struct ProfilerScope : IDisposable
     {
         _stopwatch.Stop();
 
-        // Record timing
-        Profiler.RecordTiming(_name, _stopwatch.Elapsed, _parentName);
-
         // Record memory if tracking
         if (_trackMemory)
         {
@@ -104,12 +101,19 @@ public readonly struct ProfilerScope : IDisposable
             }
         }
 
-        // Pop from call stack
+        // Try to pop from call stack and let ProfilerTimer.Stop() record the timing.
+        // In async scenarios, the call stack may be empty (different thread), so we
+        // fall back to recording timing directly to avoid losing the measurement.
         var stack = Profiler.GetCallStack();
         if (stack.Count > 0)
         {
             var timer = stack.Pop();
             timer.Stop();
+        }
+        else
+        {
+            // Async fallback: call stack empty, record timing directly
+            Profiler.RecordTiming(_name, _stopwatch.Elapsed, _parentName);
         }
     }
 }

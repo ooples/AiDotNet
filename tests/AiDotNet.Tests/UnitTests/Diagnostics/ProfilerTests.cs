@@ -36,7 +36,7 @@ public class ProfilerTests : IDisposable
         Assert.False(Profiler.IsEnabled);
     }
 
-    [Fact(Skip = "Profiler implementation double-counts operations - needs fix in Profiler.cs")]
+    [Fact]
     public void ProfilerScope_RecordsTiming()
     {
         // Arrange
@@ -75,7 +75,7 @@ public class ProfilerTests : IDisposable
         Assert.True(stats.MeanMs >= 20, $"Expected >= 20ms but got {stats.MeanMs}ms");
     }
 
-    [Fact(Skip = "Profiler implementation double-counts operations - needs fix in Profiler.cs")]
+    [Fact]
     public void Profiler_MultipleSamples_CalculatesStatistics()
     {
         // Arrange
@@ -137,7 +137,7 @@ public class ProfilerTests : IDisposable
         Assert.Null(stats);
     }
 
-    [Fact(Skip = "Profiler implementation double-counts operations - needs fix in Profiler.cs")]
+    [Fact]
     public void ProfileReport_GeneratesCorrectly()
     {
         // Arrange
@@ -254,7 +254,7 @@ public class ProfilerTests : IDisposable
         Assert.True(stats.OpsPerSecond > 50 && stats.OpsPerSecond < 200);
     }
 
-    [Fact(Skip = "Profiler implementation double-counts operations - needs fix in Profiler.cs")]
+    [Fact]
     public void ProfileExtensions_ProfileAction_Works()
     {
         // Arrange
