@@ -1578,7 +1578,7 @@ public class GradientCorrectnessTests
         }
     }
 
-    [Fact(Skip = "GaussianNoiseLayer has state management issue: _lastInput not preserved through ResetState/UseAutodiff toggle")]
+    [Fact]
     public void GaussianNoiseLayer_AutodiffGradients_MatchManualGradients()
     {
         // Arrange
