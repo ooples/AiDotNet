@@ -1719,7 +1719,7 @@ public class GradientCorrectnessTests
         }
     }
 
-    [Fact(Skip = "SplitLayer has internal indices bug in BackwardManual")]
+    [Fact]
     public void SplitLayer_AutodiffGradients_MatchManualGradients()
     {
         // Arrange
@@ -1727,7 +1727,8 @@ public class GradientCorrectnessTests
         var layer = new SplitLayer<float>(inputShape, numSplits: 2);
 
         var input = CreateRandomTensor(inputShape);
-        var outputGradient = CreateRandomTensor(new[] { 2, 4 }); // First split output shape
+        // Output shape is [batchSize, numSplits, splitSize] = [2, 2, 4]
+        var outputGradient = CreateRandomTensor(new[] { 2, 2, 4 });
 
         // Act - Manual gradients
         layer.UseAutodiff = false;
