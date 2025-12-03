@@ -978,7 +978,8 @@ public abstract class LayerBase<T> : ILayer<T>
         Vector<T> inputVector = input.ToVector();
         Vector<T> outputVector = ApplyActivation(inputVector);
 
-        return Tensor<T>.FromVector(outputVector);
+        // Preserve the original tensor shape when creating the result
+        return new Tensor<T>(input.Shape, outputVector);
     }
 
     /// <summary>

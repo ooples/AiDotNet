@@ -226,7 +226,8 @@ public class ReptileTrainerTests
         var exception = Assert.Throws<ArgumentException>(() =>
             new ReptileTrainerDouble(model, lossFunction, dataLoader, invalidConfig));
 
-        Assert.Contains("meta-iterations", exception.Message.ToLower());
+        Assert.Contains("configuration validation failed", exception.Message.ToLower());
+        Assert.Equal("config", exception.ParamName);
     }
 
     [Fact]
