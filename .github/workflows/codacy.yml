@@ -57,7 +57,7 @@ jobs:
           # Enable parallel analysis for faster execution
           parallel: 4
           # Only analyze src directory (skip tests, benchmarks, examples)
-          directory: src
+          directory: ${{ github.workspace }}/src
         continue-on-error: true
 
       - name: Upload SARIF results file
