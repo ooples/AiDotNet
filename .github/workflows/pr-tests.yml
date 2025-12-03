@@ -92,16 +92,29 @@ jobs:
       - name: Build
         run: dotnet build -c Release --no-restore
 
+      # Install native dependencies for Tensors tests (ILGPU, System.Numerics.Tensors)
+      - name: Install native dependencies
+        if: contains(matrix.project, 'Tensors.Tests')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev liblapack-dev
+
       # Run tests excluding GPU tests (require physical GPU hardware)
       # and Integration tests (timing-dependent tests unreliable in CI)
       - name: Run tests for ${{ matrix.project }}
         run: |
           PROJECT_NAME=$(basename "${{ matrix.project }}" .csproj)
+          # Use diagnostic verbosity for Tensors.Tests to debug native dependency issues
+          if [[ "${{ matrix.project }}" == *"Tensors.Tests"* ]]; then
+            VERBOSITY="diag"
+          else
+            VERBOSITY="normal"
+          fi
           dotnet test "${{ matrix.project }}" \
             -c Release \
             --framework net8.0 \
             --no-build \
-            -v normal \
+            -v $VERBOSITY \
             --filter "Category!=GPU&Category!=Integration" \
             --logger "trx;LogFileName=${PROJECT_NAME}.trx" \
             --results-directory ./TestResults
