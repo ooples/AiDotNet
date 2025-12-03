@@ -13,9 +13,6 @@ on:
       - '**/*.sln'
       - '**/Directory.Build.props'
       - '.github/workflows/pr-tests.yml'
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

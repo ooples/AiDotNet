@@ -12,9 +12,6 @@ on:
       - '**/*.sln'
       - '**/Directory.Build.props'
       - '.github/workflows/build.yml'
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
   workflow_dispatch:
 
 concurrency:
