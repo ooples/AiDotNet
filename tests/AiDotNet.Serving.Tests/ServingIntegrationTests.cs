@@ -218,8 +218,9 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// Critical test: Verifies that batch processing works correctly.
     /// This test ensures that multiple concurrent requests are batched together
     /// and the model is called once with the full batch.
+    /// Note: This test has a 60-second timeout to prevent hanging indefinitely in CI.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task Predict_WithConcurrentRequests_ProcessesAsBatch()
     {
         // Arrange
@@ -237,9 +238,10 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
             RequestId = $"batch-request-{i}"
         }).ToArray();
 
-        // Act: Send all requests concurrently
+        // Act: Send all requests concurrently with a timeout to prevent hanging
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var tasks = requests.Select(req =>
-            _client.PostAsJsonAsync("/api/inference/predict/batch-test-model", req)
+            _client.PostAsJsonAsync("/api/inference/predict/batch-test-model", req, cts.Token)
         ).ToArray();
 
         var responses = await Task.WhenAll(tasks);
@@ -270,6 +272,8 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         Assert.True(batchCallCount.Value < requests.Length, "Batching did not occur - model was called for each request individually");
 
         // Get batcher statistics
+        // Note: Using test-level timeout instead of HTTP-level timeout here
+        // since the batch requests may have consumed most of the CTS timeout
         var statsResponse = await _client.GetAsync("/api/inference/stats");
         statsResponse.EnsureSuccessStatusCode();
         var stats = await statsResponse.Content.ReadFromJsonAsync<Dictionary<string, object>>();
