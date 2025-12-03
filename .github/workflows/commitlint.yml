@@ -14,7 +14,8 @@ jobs:
       - name: Check out the PR
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          # Use shallow clone since commitDepth: 1 limits validation to the latest commit only
+          fetch-depth: 2
 
       - name: Lint commits
         uses: wagoid/commitlint-github-action@v6
