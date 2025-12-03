@@ -1918,8 +1918,9 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
         if (!Shape.SequenceEqual(other.Shape))
             throw new ArgumentException("Tensors must have the same dimensions for element-wise multiplication.");
 
-        // TODO: Implement PointwiseMultiply extension method for Vector<T>
-        throw new NotImplementedException("ElementwiseMultiply requires Vector<T>.PointwiseMultiply() extension method");
+        // Use the Vector's ElementwiseMultiply method to perform the operation
+        var resultData = _data.ElementwiseMultiply(other._data);
+        return new Tensor<T>(Shape, resultData);
     }
 
     /// <summary>
