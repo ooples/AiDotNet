@@ -174,7 +174,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 ConnectNodeToNeighbors(id, neighbors, level, maxConn);
 
                 // Use the closest candidate as entry point for next level
-                currentNode = candidates.Count > 0 ? candidates[0].Id : currentNode;
+                currentNode = candidates.Count > 0 ? candidates[0].Id : entryNode;
             }
         }
 
@@ -321,7 +321,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             double r = _random.NextDouble();
             // Guard against r being too close to zero which would cause -Math.Log(0) = PositiveInfinity
             // Use comparison threshold to avoid floating point precision issues
-            double safeValue = r < double.Epsilon ? double.Epsilon : r;
+            double safeValue = r <= 1e-10 ? 1e-10 : r;
             return (int)Math.Floor(-Math.Log(safeValue) * _levelMultiplier);
         }
 
