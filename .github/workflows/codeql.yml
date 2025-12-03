@@ -4,17 +4,25 @@ on:
   push:
     branches: [ master, main ]
     paths:
-      - '**.cs'
-      - '**.csproj'
+      - 'src/**/*.cs'
+      - 'src/**/*.csproj'
       - '**/Directory.Build.props'
       - '.github/workflows/codeql.yml'
+      - '.github/codeql/**'
+    paths-ignore:
+      - 'tests/**'
+      - '**/*.md'
   pull_request:
     branches: [ master, main ]
     paths:
-      - '**.cs'
-      - '**.csproj'
+      - 'src/**/*.cs'
+      - 'src/**/*.csproj'
       - '**/Directory.Build.props'
       - '.github/workflows/codeql.yml'
+      - '.github/codeql/**'
+    paths-ignore:
+      - 'tests/**'
+      - '**/*.md'
   schedule:
     - cron: '0 8 * * 1'
 
@@ -62,8 +70,9 @@ jobs:
       uses: github/codeql-action/init@v3
       with:
         languages: csharp
+        # Use config file to exclude test code
+        config-file: ./.github/codeql/codeql-config.yml
         # Use default queries (faster than security-extended)
-        # security-extended adds ~30% more analysis time
         queries: security-and-quality
 
     - name: Dotnet Build
