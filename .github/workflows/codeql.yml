@@ -64,7 +64,7 @@ jobs:
           ${{ runner.os }}-nuget-
 
     - name: Restore NuGet Packages
-      run: dotnet restore --verbosity minimal
+      run: dotnet restore src/AiDotNet.csproj --verbosity minimal
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
@@ -72,11 +72,18 @@ jobs:
         languages: csharp
         # Use config file to exclude test code
         config-file: ./.github/codeql/codeql-config.yml
-        # Use default queries (faster than security-extended)
+        # Use security-and-quality (faster than security-extended)
         queries: security-and-quality
+        # Enable trap caching for faster subsequent runs
+        trap-caching: true
 
     - name: Dotnet Build
-      run: dotnet build -c Release --no-restore --verbosity minimal
+      run: |
+        # Build only net8.0 for faster CodeQL analysis (multi-targeting slows analysis)
+        dotnet build src/AiDotNet.csproj -c Release -f net8.0 --no-restore --verbosity minimal
+      env:
+        # Limit memory to prevent OOM issues
+        DOTNET_GCHeapHardLimit: 0x40000000
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
@@ -84,3 +91,7 @@ jobs:
         category: "/language:csharp"
         # Upload results even if analysis times out
         upload: always
+        # Use multiple threads for faster analysis
+        threads: 4
+        # Set RAM limit to prevent OOM (4GB)
+        ram: 4096
