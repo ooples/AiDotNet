@@ -41,9 +41,20 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
     /// <summary>
     /// Initializes the test (called before each test method).
+    /// Cleans up any models left over from previous tests to ensure proper test isolation.
     /// </summary>
     public Task InitializeAsync()
     {
+        // Clean up any models left over from previous tests (ensures isolation even if DisposeAsync failed)
+        using var scope = _factory.Services.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IModelRepository>();
+
+        var models = repository.GetAllModelInfo();
+        foreach (var model in models)
+        {
+            repository.UnloadModel(model.Name);
+        }
+
         return Task.CompletedTask;
     }
 
