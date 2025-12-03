@@ -229,13 +229,9 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// Critical test: Verifies that batch processing works correctly.
     /// This test ensures that multiple concurrent requests are batched together
     /// and the model is called once with the full batch.
-    /// Note: This test is marked as Integration because it relies on timing behavior
-    /// that is unreliable in slow CI environments. The batching service can deadlock
-    /// when concurrent requests are processed through the ASP.NET Core test server.
-    /// Run this test locally to verify batching functionality.
+    /// Note: This test now uses Channel-based batching which is reliable in CI environments.
     /// </summary>
     [Fact(Timeout = 120000)]
-    [Trait("Category", "Integration")]
     public async Task Predict_WithConcurrentRequests_ProcessesAsBatch()
     {
         // Arrange
