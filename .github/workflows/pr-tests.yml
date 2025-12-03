@@ -89,8 +89,10 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
+      # Build with --framework net8.0 to avoid issues with .NET Framework targets on Linux
+      # Some test projects target multiple frameworks (net8.0;net471;net462) but only net8.0 can build on Linux
       - name: Build
-        run: dotnet build -c Release --no-restore
+        run: dotnet build "${{ matrix.project }}" -c Release --framework net8.0 --no-restore
 
       # Install native dependencies for Tensors tests (ILGPU, System.Numerics.Tensors)
       - name: Install native dependencies
@@ -104,17 +106,11 @@ jobs:
       - name: Run tests for ${{ matrix.project }}
         run: |
           PROJECT_NAME=$(basename "${{ matrix.project }}" .csproj)
-          # Use diagnostic verbosity for Tensors.Tests to debug native dependency issues
-          if [[ "${{ matrix.project }}" == *"Tensors.Tests"* ]]; then
-            VERBOSITY="diag"
-          else
-            VERBOSITY="normal"
-          fi
           dotnet test "${{ matrix.project }}" \
             -c Release \
             --framework net8.0 \
             --no-build \
-            -v $VERBOSITY \
+            -v normal \
             --filter "Category!=GPU&Category!=Integration" \
             --logger "trx;LogFileName=${PROJECT_NAME}.trx" \
             --results-directory ./TestResults
