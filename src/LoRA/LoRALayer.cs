@@ -241,7 +241,7 @@ public class LoRALayer<T> : LayerBase<T>
         {
             for (int j = 0; j < inputSize; j++)
             {
-                inputMatrix[i, j] = input[i * inputSize + j];
+                inputMatrix[i, j] = input[i, j];
             }
         }
 
