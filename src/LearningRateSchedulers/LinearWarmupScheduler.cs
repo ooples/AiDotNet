@@ -74,14 +74,24 @@ public class LinearWarmupScheduler : LearningRateSchedulerBase
     {
         if (warmupSteps < 0)
             throw new ArgumentException("Warmup steps cannot be negative.", nameof(warmupSteps));
-        if (totalSteps < warmupSteps && decayMode != DecayMode.Constant)
-            throw new ArgumentException("Total steps must be >= warmup steps for decay modes.", nameof(totalSteps));
 
         _warmupSteps = warmupSteps;
         _totalSteps = totalSteps > 0 ? totalSteps : warmupSteps;
         _warmupInitLr = warmupInitLr;
-        _decayMode = decayMode;
         _endLr = endLr;
+
+        // Auto-detect decay mode if endLr is specified and differs from baseLearningRate
+        if (decayMode == DecayMode.Constant && Math.Abs(endLr - baseLearningRate) > 1e-10 && totalSteps > warmupSteps)
+        {
+            _decayMode = DecayMode.Linear;
+        }
+        else
+        {
+            _decayMode = decayMode;
+        }
+
+        if (totalSteps < warmupSteps && _decayMode != DecayMode.Constant)
+            throw new ArgumentException("Total steps must be >= warmup steps for decay modes.", nameof(totalSteps));
 
         // Start at warmup initial learning rate
         _currentLearningRate = warmupInitLr;
@@ -105,7 +115,7 @@ public class LinearWarmupScheduler : LearningRateSchedulerBase
     /// <inheritdoc/>
     protected override double ComputeLearningRate(int step)
     {
-        if (step < _warmupSteps)
+        if (step <= _warmupSteps)
         {
             // Warmup phase: linear increase
             if (_warmupSteps == 0) return _baseLearningRate;

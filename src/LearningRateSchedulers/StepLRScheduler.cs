@@ -75,7 +75,11 @@ public class StepLRScheduler : LearningRateSchedulerBase
     /// <inheritdoc/>
     protected override double ComputeLearningRate(int step)
     {
-        int decayCount = step / _stepSize;
+        // Decay happens every stepSize steps
+        // For stepSize=3: steps 1,2,3 should have no decay (decayCount=0)
+        // Step 4 should have first decay (decayCount=1)
+        // This matches PyTorch's behavior where decay happens after stepSize epochs
+        int decayCount = (step > 0) ? ((step - 1) / _stepSize) : 0;
         return _baseLearningRate * Math.Pow(_gamma, decayCount);
     }
 
