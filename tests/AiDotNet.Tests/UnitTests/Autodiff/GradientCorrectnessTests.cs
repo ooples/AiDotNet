@@ -29,8 +29,12 @@ public class GradientCorrectnessTests
 {
     private const double Tolerance = 1e-4; // Tolerance for gradient comparisons
     private const double NumericalTolerance = 4e-3; // Tolerance for numerical gradient comparisons (less precise due to finite differences)
-    private const double DenseLayerTolerance = 0.6; // Tolerance for DenseLayer autodiff comparisons (cross-platform floating point differences)
-    private const double ResidualLayerTolerance = 0.6; // Tolerance for ResidualLayer autodiff comparisons (cross-platform floating point differences)
+
+    // DenseLayer and ResidualLayer autodiff tolerances:
+    // Now using tight tolerance (1e-4) since both paths use cached pre-activation values from forward.
+    // The autodiff path was fixed to use _lastOutput instead of recomputing the forward pass.
+    private const double DenseLayerTolerance = 1e-4;
+    private const double ResidualLayerTolerance = 1e-4;
 
     [Fact]
     public void DenseLayer_AutodiffGradients_MatchManualGradients()

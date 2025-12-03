@@ -1263,6 +1263,88 @@ public static class TensorOperations<T>
             tape.RecordOperation(node);
         return node;
     }
+
+    /// <summary>
+    /// Broadcasts a 1D tensor to a 2D tensor by tiling along the batch dimension.
+    /// </summary>
+    /// <param name="a">The input 1D tensor node with shape [N].</param>
+    /// <param name="targetShape">The target 2D shape [batchSize, N].</param>
+    /// <returns>A new computation node with the broadcasted tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation broadcasts a 1D tensor (e.g., biases with shape [outputSize]) to a 2D tensor
+    /// (e.g., [batchSize, outputSize]) by replicating values along the batch dimension.
+    /// The backward pass correctly sums gradients along the broadcasted dimension.
+    /// </para>
+    /// <para><b>For Beginners:</b> Broadcasting is like copying a row multiple times to create a matrix.
+    ///
+    /// For example, if you have biases [b1, b2, b3] and need to add them to a batch of outputs:
+    /// - Input: [b1, b2, b3] (shape [3])
+    /// - Target shape: [batchSize=2, 3]
+    /// - Output: [[b1, b2, b3], [b1, b2, b3]] (each row is a copy)
+    ///
+    /// During backpropagation, gradients from all rows are summed back to the original biases,
+    /// because each bias contributed to all batch elements.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Broadcast(ComputationNode<T> a, int[] targetShape)
+    {
+        var engine = AiDotNetEngine.Current;
+        var originalShape = a.Value.Shape;
+
+        // Validate: we support broadcasting 1D [N] to 2D [M, N]
+        if (originalShape.Length != 1 || targetShape.Length != 2 || originalShape[0] != targetShape[1])
+        {
+            throw new ArgumentException(
+                $"Broadcast currently supports 1D [N] to 2D [M, N]. " +
+                $"Got input shape [{string.Join(", ", originalShape)}] and target shape [{string.Join(", ", targetShape)}].");
+        }
+
+        int batchSize = targetShape[0];
+        int outputSize = originalShape[0];
+
+        // Forward pass: tile the 1D tensor along the batch dimension
+        var result = new Tensor<T>(targetShape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < outputSize; i++)
+            {
+                result[b, i] = a.Value[i];
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // Sum gradients along the batch dimension (axis 0) to get back to original shape
+                // gradient has shape [batchSize, outputSize], we need shape [outputSize]
+                var gradA = gradient.Sum(new int[] { 0 });
+                var existingGrad = a.Gradient;
+                a.Gradient = existingGrad == null ? gradA : engine.TensorAdd(existingGrad, gradA);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Broadcast;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "TargetShape", targetShape }
+        };
+
+        var broadcastTape = GradientTape<T>.Current;
+        if (broadcastTape != null && broadcastTape.IsRecording)
+            broadcastTape.RecordOperation(node);
+        return node;
+    }
+
     /// <summary>
     /// Computes the softmax function for a computation node along a specified axis.
     /// </summary>

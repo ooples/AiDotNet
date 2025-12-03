@@ -2107,10 +2107,47 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     /// this method would convert it to a tensor with the same structure but with the ability to perform
     /// more advanced operations on the data.</para>
     /// 
-    /// <para>Internally, the matrix is first converted to a single column of values (column vector)
-    /// before being reshaped into the tensor, but this is handled automatically.</para>
+    /// <para>Internally, the matrix is converted to a row-major flattened vector before being stored
+    /// in the tensor's internal data array. This matches Tensor's row-major storage order.</para>
     /// </remarks>
     public static Tensor<T> FromMatrix(Matrix<T> matrix)
+    {
+        // Use ToRowVector() for row-major order, consistent with Tensor's internal storage
+        // and ToMatrix() method which also uses row-major element-wise copy.
+        // ToColumnVector() would produce column-major data causing transposition.
+        return FromRowMatrix(matrix);
+    }
+
+    /// <summary>
+    /// Creates a tensor from a matrix using row-major order (standard C# memory layout).
+    /// </summary>
+    /// <param name="matrix">The matrix to convert.</param>
+    /// <returns>A new tensor with the same values as the matrix in row-major order.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Row-major order means the matrix is stored row by row.
+    /// For a 2x3 matrix [[1,2,3],[4,5,6]], the internal storage is [1,2,3,4,5,6].</para>
+    /// <para>This is the standard layout for C# arrays and is consistent with Tensor's
+    /// internal storage and the ToMatrix() method.</para>
+    /// </remarks>
+    public static Tensor<T> FromRowMatrix(Matrix<T> matrix)
+    {
+        return new Tensor<T>([matrix.Rows, matrix.Columns], matrix.ToRowVector());
+    }
+
+    /// <summary>
+    /// Creates a tensor from a matrix using column-major order (Fortran/MATLAB layout).
+    /// </summary>
+    /// <param name="matrix">The matrix to convert.</param>
+    /// <returns>A new tensor with the same values as the matrix in column-major order.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Column-major order means the matrix is stored column by column.
+    /// For a 2x3 matrix [[1,2,3],[4,5,6]], the internal storage is [1,4,2,5,3,6].</para>
+    /// <para><b>Warning:</b> This layout is different from Tensor's native row-major order.
+    /// Using this method will result in a tensor where element access via indices will
+    /// return values as if the matrix was transposed. Only use this if you specifically
+    /// need column-major compatibility (e.g., interop with Fortran or MATLAB libraries).</para>
+    /// </remarks>
+    public static Tensor<T> FromColumnMatrix(Matrix<T> matrix)
     {
         return new Tensor<T>([matrix.Rows, matrix.Columns], matrix.ToColumnVector());
     }

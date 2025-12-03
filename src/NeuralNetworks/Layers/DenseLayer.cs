@@ -755,13 +755,14 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null)
+        if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = _lastInput.Shape[0];
         var flattenedInput = _lastInput.Reshape(batchSize, _lastInput.Shape[1]);
+        var flattenedOutputGradient = outputGradient.Reshape(batchSize, outputGradient.Shape[1]);
 
-        // Convert to computation nodes
+        // Convert parameters to computation nodes
         var weightsTensor = MatrixToTensor(_weights);
         var biasesTensor = VectorToTensor(_biases);
 
@@ -769,37 +770,54 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var weights = Autodiff.TensorOperations<T>.Variable(weightsTensor, "weights", requiresGradient: true);
         var biases = Autodiff.TensorOperations<T>.Variable(biasesTensor, "biases", requiresGradient: true);
 
-        // Forward computation using autodiff ops
-        // output = input @ weights.T + biases
-        var weightsTransposed = Autodiff.TensorOperations<T>.Transpose(weights);
-        var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weightsTransposed);
+        // Use cached pre-activation values from forward pass (_lastOutput) to ensure
+        // activation derivatives are computed on exactly the same values.
+        // This is critical for gradient correctness.
+        var cachedPreActivation = Autodiff.TensorOperations<T>.Variable(
+            _lastOutput.Reshape(batchSize, _lastOutput.Shape[1]),
+            "pre_activation",
+            requiresGradient: true);
 
-        // Manually broadcast biases to match batch dimension [batchSize, outputSize]
-        // matmul is [batchSize, outputSize], biases is [outputSize]
-        // We need to tile biases to have shape [batchSize, outputSize]
-        var biasesBroadcasted = new Tensor<T>(new int[] { batchSize, biasesTensor.Shape[0] });
-        for (int b = 0; b < batchSize; b++)
+        // Apply activation derivative using cached pre-activation values
+        // dL/dZ = dL/dY * f'(Z) where Z is pre-activation, Y is activated output
+        Tensor<T> activationDerivative;
+        if (ScalarActivation != null)
         {
-            for (int i = 0; i < biasesTensor.Length; i++)
+            activationDerivative = new Tensor<T>(cachedPreActivation.Value.Shape);
+            for (int i = 0; i < cachedPreActivation.Value.Length; i++)
             {
-                biasesBroadcasted[b, i] = biasesTensor[i];
+                activationDerivative[i] = ScalarActivation.Derivative(cachedPreActivation.Value[i]);
             }
         }
-        var biasesBroadcastedNode = Autodiff.TensorOperations<T>.Variable(biasesBroadcasted, "biases_broadcasted", requiresGradient: true);
+        else
+        {
+            // Identity activation - derivative is 1
+            activationDerivative = new Tensor<T>(cachedPreActivation.Value.Shape);
+            for (int i = 0; i < activationDerivative.Length; i++)
+            {
+                activationDerivative[i] = NumOps.One;
+            }
+        }
 
-        // Now add with matching shapes
-        var output = Autodiff.TensorOperations<T>.Add(matmul, biasesBroadcastedNode);
+        // Compute dL/dZ = dL/dY * f'(Z)
+        var preActivationGradient = new Tensor<T>(flattenedOutputGradient.Shape);
+        for (int i = 0; i < flattenedOutputGradient.Length; i++)
+        {
+            preActivationGradient[i] = NumOps.Multiply(flattenedOutputGradient[i], activationDerivative[i]);
+        }
 
-        // Apply activation using autodiff
-        var activated = ApplyActivationAutodiff(output);
+        // Now compute gradients using autodiff for the linear part: Z = X @ W.T + b
+        // Set up the computation graph for the linear transformation only
+        var weightsTransposed = Autodiff.TensorOperations<T>.Transpose(weights);
+        var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weightsTransposed);
+        var biasesBroadcastedNode = Autodiff.TensorOperations<T>.Broadcast(biases, new int[] { batchSize, biasesTensor.Shape[0] });
+        var linearOutput = Autodiff.TensorOperations<T>.Add(matmul, biasesBroadcastedNode);
 
-        // Manually propagate gradients using the output gradient we received
-        // Set the gradient at the output and call backward functions manually
-        var flattenedOutputGradient = outputGradient.Reshape(batchSize, outputGradient.Shape[1]);
-        activated.Gradient = flattenedOutputGradient;
+        // Set the gradient at the linear output (pre-activation gradient)
+        linearOutput.Gradient = preActivationGradient;
 
         // Perform topological sort and backward pass
-        var topoOrder = GetTopologicalOrder(activated);
+        var topoOrder = GetTopologicalOrder(linearOutput);
 
         // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)
@@ -814,18 +832,13 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Extract gradients
         if (weights.Gradient == null)
             throw new InvalidOperationException("Weights gradient is null after backward pass");
-        if (biasesBroadcastedNode.Gradient == null)
+        if (biases.Gradient == null)
             throw new InvalidOperationException("Biases gradient is null after backward pass");
         if (input.Gradient == null)
             throw new InvalidOperationException("Input gradient is null after backward pass");
 
         _weightsGradient = TensorToMatrix(weights.Gradient);
-
-        // Sum the broadcasted biases gradient across the batch dimension
-        // biasesBroadcastedNode.Gradient has shape [batchSize, outputSize]
-        // We need to sum across batch dimension to get [outputSize]
-        var biasesGradSum = biasesBroadcastedNode.Gradient.Sum(new int[] { 0 });
-        _biasesGradient = TensorToVector(biasesGradSum);
+        _biasesGradient = TensorToVector(biases.Gradient);
 
         return input.Gradient.Reshape(_lastInput.Shape);
     }
