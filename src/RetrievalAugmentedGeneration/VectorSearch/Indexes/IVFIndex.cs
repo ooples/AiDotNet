@@ -66,11 +66,22 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             if (vectors == null)
                 throw new ArgumentNullException(nameof(vectors));
 
-            // Reuse Add method to ensure consistent validation
+            // Validate all entries before adding any
+            var invalidEntries = vectors.Where(kvp => string.IsNullOrEmpty(kvp.Key) || kvp.Value == null).ToList();
+            if (invalidEntries.Any())
+            {
+                var firstInvalid = invalidEntries.First();
+                if (string.IsNullOrEmpty(firstInvalid.Key))
+                    throw new ArgumentException("ID cannot be null or empty", nameof(vectors));
+                throw new ArgumentNullException(nameof(vectors), "Vector cannot be null");
+            }
+
+            // Add all vectors using LINQ-based iteration
             foreach (var kvp in vectors)
             {
-                Add(kvp.Key, kvp.Value);
+                _vectors[kvp.Key] = kvp.Value;
             }
+            _centroids = null; // Invalidate centroids, will rebuild on next search
         }
 
         /// <inheritdoc/>
@@ -143,11 +154,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 _clusters[i] = new List<string>();
             }
 
-            // Assign vectors to nearest centroid
-            foreach (var kvp in _vectors)
+            // Assign vectors to nearest centroid using LINQ grouping
+            var vectorClusterAssignments = _vectors
+                .Select(kvp => new { VectorId = kvp.Key, ClusterId = FindNearestClusters(kvp.Value, 1)[0] })
+                .ToList();
+
+            foreach (var assignment in vectorClusterAssignments)
             {
-                var nearestCluster = FindNearestClusters(kvp.Value, 1)[0];
-                _clusters[nearestCluster].Add(kvp.Key);
+                _clusters[assignment.ClusterId].Add(assignment.VectorId);
             }
         }
 
