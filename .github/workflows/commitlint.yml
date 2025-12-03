@@ -17,6 +17,4 @@ jobs:
 
       - name: Lint commits
         uses: wagoid/commitlint-github-action@v6
-        with:
-          # Uses .commitlintrc.json from repository root
-          configFile: ''
+        # Uses .commitlintrc.json from repository root via auto-discovery

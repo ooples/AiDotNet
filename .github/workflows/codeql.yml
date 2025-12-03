@@ -3,28 +3,11 @@ name: CodeQL Analysis
 on:
   push:
     branches: [ master, main ]
-    paths:
-      - 'src/**/*.cs'
-      - 'src/**/*.csproj'
-      - '**/Directory.Build.props'
-      - '.github/workflows/codeql.yml'
-      - '.github/codeql/**'
-    paths-ignore:
-      - 'tests/**'
-      - '**/*.md'
   pull_request:
     branches: [ master, main ]
-    paths:
-      - 'src/**/*.cs'
-      - 'src/**/*.csproj'
-      - '**/Directory.Build.props'
-      - '.github/workflows/codeql.yml'
-      - '.github/codeql/**'
-    paths-ignore:
-      - 'tests/**'
-      - '**/*.md'
   schedule:
     - cron: '0 8 * * 1'
+  workflow_dispatch:
 
 # Cancel in-progress runs for the same branch
 concurrency:
