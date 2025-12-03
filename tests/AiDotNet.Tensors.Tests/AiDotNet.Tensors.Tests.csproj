@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
+  <!-- CI trigger: verify native dependencies fix for Linux -->
   <PropertyGroup>
     <TargetFrameworks>net8.0;net471;net462</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
