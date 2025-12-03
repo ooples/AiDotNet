@@ -620,9 +620,25 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        int batchSize = input.Shape[0];
 
-        var flattenedInput = input.Reshape(batchSize, input.Shape[1]);
+        // Handle both 1D and 2D inputs
+        Tensor<T> flattenedInput;
+        if (input.Rank == 1)
+        {
+            // 1D input: reshape to (1, features) for single sample
+            flattenedInput = input.Reshape(1, input.Shape[0]);
+        }
+        else if (input.Rank == 2)
+        {
+            // 2D input: already in (batch, features) format
+            int batchSize = input.Shape[0];
+            flattenedInput = input.Reshape(batchSize, input.Shape[1]);
+        }
+        else
+        {
+            throw new ArgumentException($"DenseLayer expects 1D or 2D input, but got {input.Rank}D input", nameof(input));
+        }
+
         // Convert transposed weights matrix to tensor for 2D tensor multiplication
         var weightsTransposed = Tensor<T>.FromMatrix(_weights.Transpose());
         var output = flattenedInput.Multiply(weightsTransposed).Add(_biases);

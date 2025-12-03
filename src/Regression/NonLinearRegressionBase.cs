@@ -321,6 +321,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
             .ToArray();
 
         int featureCount = SupportVectors.Columns;
+        var oldSupportVectors = SupportVectors;
         SupportVectors = new Matrix<T>(supportVectorIndices.Length, featureCount);
         var newAlphas = new Vector<T>(supportVectorIndices.Length);
 
@@ -329,7 +330,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
             int index = supportVectorIndices[i];
             for (int j = 0; j < featureCount; j++)
             {
-                SupportVectors[i, j] = SupportVectors[index, j];
+                SupportVectors[i, j] = oldSupportVectors[index, j];
             }
             newAlphas[i] = Alphas[index];
         }
