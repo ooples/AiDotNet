@@ -2,6 +2,7 @@ name: Commit Message Lint
 
 on:
   pull_request:
+    types: [opened, edited, synchronize, reopened]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -9,15 +10,41 @@ concurrency:
 
 jobs:
   commitlint:
+    name: Validate PR Title (Squash Merge)
     runs-on: ubuntu-latest
     steps:
       - name: Check out the PR
         uses: actions/checkout@v4
         with:
-          # Use shallow clone since commitDepth: 1 limits validation to the latest commit only
-          fetch-depth: 2
+          fetch-depth: 1
 
-      - name: Lint commits
-        uses: wagoid/commitlint-github-action@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          commitDepth: 1
+          node-version: '20'
+
+      - name: Install commitlint
+        run: npm install --save-dev @commitlint/cli @commitlint/config-conventional
+
+      - name: Validate PR title follows Conventional Commits
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # Validate PR title (which becomes the squash merge commit message)
+          echo "Validating PR title: $PR_TITLE"
+          echo "$PR_TITLE" | npx commitlint --config commitlint.config.js
+
+          if [ $? -eq 0 ]; then
+            echo "✅ PR title follows Conventional Commits format"
+          else
+            echo "❌ PR title does not follow Conventional Commits format"
+            echo ""
+            echo "Expected format: type(scope): description"
+            echo "Valid types: feat, fix, docs, refactor, perf, test, chore, ci, style"
+            echo ""
+            echo "Examples:"
+            echo "  feat: add new vector search functionality"
+            echo "  fix(tests): resolve flaky unit test"
+            echo "  docs: update readme with usage examples"
+            exit 1
+          fi
