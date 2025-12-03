@@ -314,8 +314,9 @@ public class ResidualLayer<T> : LayerBase<T>
             ? _lastInput
             : _lastInput.Add(_lastInnerOutput);
 
-        var activationGradient = ApplyActivationDerivative(combinedOutput, outputGradient);
-        var combinedGradient = outputGradient.ElementwiseMultiply(activationGradient);
+        // ApplyActivationDerivative already includes the outputGradient multiplication,
+        // so we use the result directly (no additional multiplication needed)
+        var combinedGradient = ApplyActivationDerivative(combinedOutput, outputGradient);
 
         if (_innerLayer == null)
         {
