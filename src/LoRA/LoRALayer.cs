@@ -265,7 +265,8 @@ public class LoRALayer<T> : LayerBase<T>
             }
         }
 
-        Tensor<T> result = new Tensor<T>(new[] { batchSize, _loraB.Columns }, outputData);
+        int[] outputShape = new int[] { batchSize, _loraB.Columns };
+        Tensor<T> result = new Tensor<T>(outputShape, outputData);
 
         // Store pre-activation for gradient computation
         _lastPreActivation = result.Clone();
