@@ -75,7 +75,10 @@ public class StepLRScheduler : LearningRateSchedulerBase
     /// <inheritdoc/>
     protected override double ComputeLearningRate(int step)
     {
-        int decayCount = step / _stepSize;
+        // Decay happens AFTER completing stepSize steps
+        // With stepSize=3: steps 1,2,3 have no decay; step 4+ has first decay
+        // Formula: floor((step - 1) / stepSize) for step > 0
+        int decayCount = step > 0 ? (step - 1) / _stepSize : 0;
         return _baseLearningRate * Math.Pow(_gamma, decayCount);
     }
 

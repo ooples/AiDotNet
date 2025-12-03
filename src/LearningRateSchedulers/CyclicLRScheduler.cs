@@ -126,22 +126,30 @@ public class CyclicLRScheduler : LearningRateSchedulerBase
 
         double amplitude = _maxLearningRate - _baseLearningRate;
 
+        double learningRate;
         switch (_mode)
         {
             case CyclicMode.Triangular:
-                return _baseLearningRate + amplitude * scale;
+                learningRate = _baseLearningRate + amplitude * scale;
+                break;
 
             case CyclicMode.Triangular2:
                 amplitude = amplitude / Math.Pow(2, cycle);
-                return _baseLearningRate + amplitude * scale;
+                learningRate = _baseLearningRate + amplitude * scale;
+                break;
 
             case CyclicMode.ExponentialRange:
                 amplitude = amplitude * Math.Pow(_gamma, step);
-                return _baseLearningRate + amplitude * scale;
+                learningRate = _baseLearningRate + amplitude * scale;
+                break;
 
             default:
-                return _baseLearningRate + amplitude * scale;
+                learningRate = _baseLearningRate + amplitude * scale;
+                break;
         }
+
+        // Clamp to bounds to handle floating point precision issues
+        return Math.Min(Math.Max(learningRate, _baseLearningRate), _maxLearningRate);
     }
 
     /// <inheritdoc/>

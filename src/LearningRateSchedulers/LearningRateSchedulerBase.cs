@@ -97,8 +97,8 @@ public abstract class LearningRateSchedulerBase : ILearningRateScheduler
     {
         return new Dictionary<string, object>
         {
-            ["base_learning_rate"] = _baseLearningRate,
-            ["current_learning_rate"] = _currentLearningRate,
+            ["base_lr"] = _baseLearningRate,
+            ["current_lr"] = _currentLearningRate,
             ["current_step"] = _currentStep,
             ["min_learning_rate"] = _minLearningRate
         };
@@ -107,9 +107,9 @@ public abstract class LearningRateSchedulerBase : ILearningRateScheduler
     /// <inheritdoc/>
     public virtual void LoadState(Dictionary<string, object> state)
     {
-        if (state.TryGetValue("base_learning_rate", out var baseLr))
+        if (state.TryGetValue("base_lr", out var baseLr))
             _baseLearningRate = Convert.ToDouble(baseLr);
-        if (state.TryGetValue("current_learning_rate", out var currentLr))
+        if (state.TryGetValue("current_lr", out var currentLr))
             _currentLearningRate = Convert.ToDouble(currentLr);
         if (state.TryGetValue("current_step", out var step))
             _currentStep = Convert.ToInt32(step);
