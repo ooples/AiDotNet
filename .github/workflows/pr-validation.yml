@@ -100,7 +100,7 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        dotnet dotcover test --dcReportType=HTML --dcOutput=dotCover.Output.html --dcFilters="-:module=AiDotNetTests;-:module=AiDotNetTestConsole;-:module=AiDotNetBenchmarkTests"
+        dotnet dotcover test --filter "Category!=GPU&Category!=Integration" --dcReportType=HTML --dcOutput=dotCover.Output.html --dcFilters="-:module=AiDotNetTests;-:module=AiDotNetTestConsole;-:module=AiDotNetBenchmarkTests"
       continue-on-error: true
 
     - name: End SonarCloud analysis
