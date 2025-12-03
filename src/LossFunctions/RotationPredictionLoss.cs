@@ -226,7 +226,7 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
         // Create augmented data with rotations
         int totalAugmented = numImages * 4;
         var augmentedX = new Matrix<T>(totalAugmented, flattenedSize);
-        var augmentedY = new Vector<T>(totalAugmented);
+        var augmentedY = new Matrix<T>(totalAugmented, 4);  // 4-class one-hot encoding (consistent with tensor path)
 
         int outputIdx = 0;
         for (int imgIdx = 0; imgIdx < numImages; imgIdx++)
@@ -269,12 +269,16 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
                     augmentedX[outputIdx, flatIdx] = input[imgIdx, srcFlatIdx];
                 }
 
-                // Assign rotation label
-                augmentedY[outputIdx] = NumOps.FromDouble(rotationClass);
+                // Assign rotation label (one-hot encoding, consistent with tensor path)
+                for (int classIdx = 0; classIdx < 4; classIdx++)
+                {
+                    augmentedY[outputIdx, classIdx] = (classIdx == rotationClass) ? NumOps.One : NumOps.Zero;
+                }
                 outputIdx++;
             }
         }
 
+        // Note: Boxing to object is implicit before casting to generic TInput/TOutput
         return ((TInput)(object)augmentedX, (TOutput)(object)augmentedY);
     }
 }

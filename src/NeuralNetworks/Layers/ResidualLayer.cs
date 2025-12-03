@@ -70,6 +70,17 @@ public class ResidualLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the output tensor from the inner layer during the forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field caches the inner layer's output during the forward pass, which is needed during the backward pass
+    /// to avoid recomputing and potentially corrupting the inner layer's state. It is cleared when ResetState() is called.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastInnerOutput;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
     /// </summary>
     /// <value>
@@ -248,7 +259,8 @@ public class ResidualLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        var result = _innerLayer == null ? input : input.Add(_innerLayer.Forward(input));
+        _lastInnerOutput = _innerLayer?.Forward(input);
+        var result = _lastInnerOutput == null ? input : input.Add(_lastInnerOutput);
 
         return ApplyActivation(result);
     }
@@ -295,8 +307,13 @@ public class ResidualLayer<T> : LayerBase<T>
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var innerOutput = _innerLayer?.Forward(_lastInput) ?? _lastInput;
-        var combinedOutput = _lastInput.Add(innerOutput);
+
+        // Use cached values from Forward() to avoid recomputing and corrupting inner layer state
+        // Forward does: result = _lastInnerOutput == null ? input : input.Add(_lastInnerOutput)
+        var combinedOutput = _lastInnerOutput == null
+            ? _lastInput
+            : _lastInput.Add(_lastInnerOutput);
+
         var activationGradient = ApplyActivationDerivative(combinedOutput, outputGradient);
         var combinedGradient = outputGradient.ElementwiseMultiply(activationGradient);
 
@@ -329,14 +346,13 @@ public class ResidualLayer<T> : LayerBase<T>
         // Convert to computation nodes
         var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
-        // Compute inner layer output if present
+        // Use cached inner layer output if present (avoids recomputing and corrupting inner layer state)
         Autodiff.ComputationNode<T> result;
         Autodiff.ComputationNode<T>? innerNode = null;
-        if (_innerLayer != null)
+        if (_innerLayer != null && _lastInnerOutput != null)
         {
-            var innerOutput = _innerLayer.Forward(_lastInput);
-            // Allow gradients to flow through inner layer output
-            innerNode = Autodiff.TensorOperations<T>.Variable(innerOutput, "inner_output", requiresGradient: true);
+            // Use cached inner output from Forward pass
+            innerNode = Autodiff.TensorOperations<T>.Variable(_lastInnerOutput, "inner_output", requiresGradient: true);
             // output = input + innerOutput
             result = Autodiff.TensorOperations<T>.Add(input, innerNode);
         }
@@ -532,6 +548,7 @@ public class ResidualLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
+        _lastInnerOutput = null;
         _innerLayer?.ResetState();
     }
 

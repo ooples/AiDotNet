@@ -76,10 +76,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 throw new ArgumentNullException(nameof(vectors), "Vector cannot be null");
             }
 
-            // Add all vectors using LINQ-based iteration
-            foreach (var kvp in vectors)
+            // Add all vectors by mapping keys to values
+            foreach (var key in vectors.Select(kvp => kvp.Key))
             {
-                _vectors[kvp.Key] = kvp.Value;
+                _vectors[key] = vectors[key];
             }
             _centroids = null; // Invalidate centroids, will rebuild on next search
         }
@@ -155,13 +155,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             }
 
             // Assign vectors to nearest centroid using LINQ grouping
-            var vectorClusterAssignments = _vectors
+            var vectorClusterGroups = _vectors
                 .Select(kvp => new { VectorId = kvp.Key, ClusterId = FindNearestClusters(kvp.Value, 1)[0] })
-                .ToList();
+                .GroupBy(x => x.ClusterId);
 
-            foreach (var assignment in vectorClusterAssignments)
+            foreach (var group in vectorClusterGroups)
             {
-                _clusters[assignment.ClusterId].Add(assignment.VectorId);
+                _clusters[group.Key].AddRange(group.Select(x => x.VectorId));
             }
         }
 

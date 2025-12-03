@@ -107,10 +107,18 @@ public abstract class LearningRateSchedulerBase : ILearningRateScheduler
     /// <inheritdoc/>
     public virtual void LoadState(Dictionary<string, object> state)
     {
+        // Support both new keys (base_lr, current_lr) and legacy keys (base_learning_rate, current_learning_rate)
+        // for backward compatibility with previously serialized checkpoints
         if (state.TryGetValue("base_lr", out var baseLr))
             _baseLearningRate = Convert.ToDouble(baseLr);
+        else if (state.TryGetValue("base_learning_rate", out var legacyBaseLr))
+            _baseLearningRate = Convert.ToDouble(legacyBaseLr);
+
         if (state.TryGetValue("current_lr", out var currentLr))
             _currentLearningRate = Convert.ToDouble(currentLr);
+        else if (state.TryGetValue("current_learning_rate", out var legacyCurrentLr))
+            _currentLearningRate = Convert.ToDouble(legacyCurrentLr);
+
         if (state.TryGetValue("current_step", out var step))
             _currentStep = Convert.ToInt32(step);
         if (state.TryGetValue("min_learning_rate", out var minLr))
