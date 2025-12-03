@@ -314,11 +314,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         private int GetRandomLevel()
         {
             double r = _random.NextDouble();
-            // Guard against r <= 0 which would cause -Math.Log(0) = PositiveInfinity
-            // Use <= to avoid floating point equality comparison issues
-            if (r <= double.Epsilon)
-                r = double.Epsilon;
-            return (int)Math.Floor(-Math.Log(r) * _levelMultiplier);
+            // Guard against r being too close to zero which would cause -Math.Log(0) = PositiveInfinity
+            // Use comparison threshold to avoid floating point precision issues
+            double safeValue = r < double.Epsilon ? double.Epsilon : r;
+            return (int)Math.Floor(-Math.Log(safeValue) * _levelMultiplier);
         }
 
         /// <summary>
