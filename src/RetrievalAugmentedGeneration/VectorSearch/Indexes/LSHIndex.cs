@@ -16,7 +16,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
     /// Best for high-dimensional sparse data and when approximate results are acceptable.
     /// This is a simplified implementation using random projection for testing.
     /// </remarks>
-    /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    /// <typeparam name="T">The numeric type for vector operations. Must be a numeric type
+    /// that implements IConvertible (e.g., float, double, decimal). Using non-numeric types
+    /// will result in InvalidCastException at runtime.</typeparam>
     public class LSHIndex<T> : IVectorIndex<T>
     {
         private readonly Dictionary<string, Vector<T>> _vectors;
