@@ -107,6 +107,32 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Gets or sets the value at the specified flat (linear) index.
+    /// </summary>
+    /// <param name="flatIndex">The flat index into the tensor's underlying storage (0 to Length-1).</param>
+    /// <returns>The value at the specified flat index.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This indexer allows you to access tensor elements using a single
+    /// index that treats the tensor as a 1D array. The flat index corresponds to row-major ordering
+    /// where the last dimension varies fastest.
+    ///
+    /// For example, for a 2x3 tensor:
+    /// - Index 0 corresponds to [0,0]
+    /// - Index 1 corresponds to [0,1]
+    /// - Index 2 corresponds to [0,2]
+    /// - Index 3 corresponds to [1,0]
+    /// - And so on...
+    ///
+    /// This is useful when you need to iterate through all elements without worrying about dimensions.
+    /// </para>
+    /// </remarks>
+    public T this[int flatIndex]
+    {
+        get => GetFlat(flatIndex);
+        set => SetFlat(flatIndex, value);
+    }
+
+    /// <summary>
     /// Returns an enumerator that iterates through all elements in the tensor.
     /// </summary>
     /// <returns>An enumerator for the tensor's elements.</returns>
@@ -114,7 +140,7 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     /// <para><b>For Beginners:</b> This method allows you to loop through all values in the tensor
     /// one by one, regardless of its shape. This is useful when you want to process each element
     /// without worrying about the tensor's dimensions.
-    /// 
+    ///
     /// For example, you can use it in a foreach loop:
     /// <code>
     /// foreach (var value in myTensor)
@@ -2226,37 +2252,78 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     /// </remarks>
         public Tensor<T> Multiply(Tensor<T> other)
     {
-        // For simplicity, we'll implement matrix multiplication for 2D tensors
-        if (Shape.Length != 2 || other.Shape.Length != 2)
+        // Support 2D matrix multiplication and 3D batch matrix multiplication
+        if (Shape.Length == 2 && other.Shape.Length == 2)
         {
-            throw new NotSupportedException("Multiplication is currently only supported for 2D tensors (matrices).");
-        }
-
-        if (Shape[1] != other.Shape[0])
-        {
-            throw new ArgumentException("The number of columns in the first tensor must equal the number of rows in the second tensor.");
-        }
-
-        int resultRows = Shape[0];
-        int resultCols = other.Shape[1];
-        int commonDim = Shape[1];
-
-        var result = new Tensor<T>(new[] { resultRows, resultCols });
-
-        for (int i = 0; i < resultRows; i++)
-        {
-            for (int j = 0; j < resultCols; j++)
+            // Standard 2D matrix multiplication
+            if (Shape[1] != other.Shape[0])
             {
-                T sum = _numOps.Zero;
-                for (int k = 0; k < commonDim; k++)
-                {
-                    sum = _numOps.Add(sum, _numOps.Multiply(this[i, k], other[k, j]));
-                }
-                result[i, j] = sum;
+                throw new ArgumentException("The number of columns in the first tensor must equal the number of rows in the second tensor.");
             }
-        }
 
-        return result;
+            int resultRows = Shape[0];
+            int resultCols = other.Shape[1];
+            int commonDim = Shape[1];
+
+            var result = new Tensor<T>(new[] { resultRows, resultCols });
+
+            for (int i = 0; i < resultRows; i++)
+            {
+                for (int j = 0; j < resultCols; j++)
+                {
+                    T sum = _numOps.Zero;
+                    for (int k = 0; k < commonDim; k++)
+                    {
+                        sum = _numOps.Add(sum, _numOps.Multiply(this[i, k], other[k, j]));
+                    }
+                    result[i, j] = sum;
+                }
+            }
+
+            return result;
+        }
+        else if (Shape.Length == 3 && other.Shape.Length == 3)
+        {
+            // 3D batch matrix multiplication: (batch, m, k) @ (batch, k, n) -> (batch, m, n)
+            if (Shape[0] != other.Shape[0])
+            {
+                throw new ArgumentException("Batch dimensions must match for batch matrix multiplication.");
+            }
+
+            if (Shape[2] != other.Shape[1])
+            {
+                throw new ArgumentException("The number of columns in the first tensor must equal the number of rows in the second tensor for each batch.");
+            }
+
+            int batchSize = Shape[0];
+            int resultRows = Shape[1];
+            int resultCols = other.Shape[2];
+            int commonDim = Shape[2];
+
+            var result = new Tensor<T>(new[] { batchSize, resultRows, resultCols });
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int i = 0; i < resultRows; i++)
+                {
+                    for (int j = 0; j < resultCols; j++)
+                    {
+                        T sum = _numOps.Zero;
+                        for (int k = 0; k < commonDim; k++)
+                        {
+                            sum = _numOps.Add(sum, _numOps.Multiply(this[b, i, k], other[b, k, j]));
+                        }
+                        result[b, i, j] = sum;
+                    }
+                }
+            }
+
+            return result;
+        }
+        else
+        {
+            throw new NotSupportedException("Multiplication is currently only supported for 2D tensors (matrices) and 3D tensors (batch matrix multiplication).");
+        }
     }
 
     /// <summary>
