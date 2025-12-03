@@ -333,7 +333,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         Input = input;
-        var linearOutput = Input.MatrixMultiply(Weights).Add(Biases);
+        var linearOutput = Input.MatrixMultiply(Weights).Add(Biases.ToVector());
         Output = ApplyActivation(linearOutput);
 
         return Output;
@@ -417,12 +417,25 @@ public class FeedForwardLayer<T> : LayerBase<T>
         // Convert to computation nodes
         var input = Autodiff.TensorOperations<T>.Variable(Input, "input", requiresGradient: true);
         var weights = Autodiff.TensorOperations<T>.Variable(Weights, "weights", requiresGradient: true);
-        var biases = Autodiff.TensorOperations<T>.Variable(Biases, "biases", requiresGradient: true);
 
         // Forward computation using autodiff ops
         // output = input @ weights + biases
         var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weights);
-        var linearOutput = Autodiff.TensorOperations<T>.Add(matmul, biases);
+
+        // Broadcast biases to match batch dimension: [1, outputSize] -> [batch, outputSize]
+        int batchSize = Input.Shape[0];
+        int outputSize = Biases.Shape[1];
+        var broadcastedBiasesData = new T[batchSize * outputSize];
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int o = 0; o < outputSize; o++)
+            {
+                broadcastedBiasesData[b * outputSize + o] = Biases[0, o];
+            }
+        }
+        var broadcastedBiases = new Tensor<T>([batchSize, outputSize], new Vector<T>(broadcastedBiasesData));
+        var biasesBroadcast = Autodiff.TensorOperations<T>.Variable(broadcastedBiases, "biases_broadcast", requiresGradient: true);
+        var linearOutput = Autodiff.TensorOperations<T>.Add(matmul, biasesBroadcast);
 
         // Apply activation using autodiff
         var activated = ApplyActivationAutodiff(linearOutput);
@@ -444,11 +457,24 @@ public class FeedForwardLayer<T> : LayerBase<T>
         }
 
         // Extract gradients
-        if (weights.Gradient == null || biases.Gradient == null || input.Gradient == null)
+        if (weights.Gradient == null || biasesBroadcast.Gradient == null || input.Gradient == null)
             throw new InvalidOperationException("Gradients not computed properly during autodiff backward pass.");
 
         WeightsGradient = weights.Gradient;
-        BiasesGradient = biases.Gradient;
+
+        // Sum the broadcasted bias gradient along the batch dimension to get actual bias gradient
+        // BiasesGradient should be [1, outputSize], summing biasesBroadcast.Gradient [batch, outputSize] along axis 0
+        var biasGradData = new T[outputSize];
+        for (int o = 0; o < outputSize; o++)
+        {
+            T sum = NumOps.Zero;
+            for (int b = 0; b < batchSize; b++)
+            {
+                sum = NumOps.Add(sum, biasesBroadcast.Gradient[b, o]);
+            }
+            biasGradData[o] = sum;
+        }
+        BiasesGradient = new Tensor<T>([1, outputSize], new Vector<T>(biasGradData));
 
         return input.Gradient;
     }

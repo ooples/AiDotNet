@@ -449,11 +449,11 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int batchSize = input.Shape[0];
         int inputDimension = input.Shape[1];
 
-        var transformOutput = input.Multiply(_transformWeights).Add(_transformBias);
+        var transformOutput = input.Multiply(Tensor<T>.FromMatrix(_transformWeights)).Add(_transformBias);
         transformOutput = ApplyActivation(transformOutput, _transformActivation, _vectorTransformActivation);
         _lastTransformOutput = transformOutput;
 
-        var gateOutput = input.Multiply(_gateWeights).Add(_gateBias);
+        var gateOutput = input.Multiply(Tensor<T>.FromMatrix(_gateWeights)).Add(_gateBias);
         gateOutput = ApplyActivation(gateOutput, _gateActivation, _vectorGateActivation);
         _lastGateOutput = gateOutput;
 
@@ -624,8 +624,8 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _transformWeightsGradient = _lastInput.Transpose([1, 0]).Multiply(transformGradient).ToMatrix();
         _transformBiasGradient = transformGradient.Sum([0]).ToVector();
 
-        var inputGradient = gateGradient.Multiply(_gateWeights.Transpose())
-            .Add(transformGradient.Multiply(_transformWeights.Transpose()))
+        var inputGradient = gateGradient.Multiply(Tensor<T>.FromMatrix(_gateWeights.Transpose()))
+            .Add(transformGradient.Multiply(Tensor<T>.FromMatrix(_transformWeights.Transpose())))
             .Add(outputGradient.ElementwiseMultiply(_lastGateOutput.ElementwiseSubtract(Tensor<T>.CreateDefault(_lastGateOutput.Shape, NumOps.One))));
 
         return inputGradient;

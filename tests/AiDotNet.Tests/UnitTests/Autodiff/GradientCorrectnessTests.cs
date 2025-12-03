@@ -1755,13 +1755,13 @@ public class GradientCorrectnessTests
         }
     }
 
-    [Fact(Skip = "PositionalEncodingLayer has index out of range in tensor Add operation")]
+    [Fact]
     public void PositionalEncodingLayer_AutodiffGradients_MatchManualGradients()
     {
-        // Arrange
+        // Arrange - PositionalEncodingLayer expects 2D input [sequenceLength, embeddingDim]
         const int sequenceLength = 4;
         const int embeddingDim = 8;
-        var inputShape = new[] { 2, sequenceLength, embeddingDim };
+        var inputShape = new[] { sequenceLength, embeddingDim }; // 2D: [seq, embed]
         var layer = new PositionalEncodingLayer<float>(sequenceLength, embeddingDim);
 
         var input = CreateRandomTensor(inputShape);
@@ -1790,7 +1790,7 @@ public class GradientCorrectnessTests
         }
     }
 
-    [Fact(Skip = "HighwayLayer has matrix/tensor dimension mismatch in Forward")]
+    [Fact]
     public void HighwayLayer_AutodiffGradients_MatchManualGradients()
     {
         // Arrange
@@ -1825,16 +1825,16 @@ public class GradientCorrectnessTests
         }
     }
 
-    [Fact(Skip = "FeedForwardLayer has index out of range in tensor Add operation")]
+    [Fact]
     public void FeedForwardLayer_AutodiffGradients_MatchManualGradients()
     {
-        // Arrange
+        // Arrange - FeedForwardLayer outputs [batch, hiddenSize]
         const int inputSize = 8;
         const int hiddenSize = 16;
         var layer = new FeedForwardLayer<float>(inputSize, hiddenSize, (IActivationFunction<float>?)null);
 
         var input = CreateRandomTensor(new[] { 2, inputSize });
-        var outputGradient = CreateRandomTensor(new[] { 2, inputSize });
+        var outputGradient = CreateRandomTensor(new[] { 2, hiddenSize }); // Output is [batch, hiddenSize]
 
         // Act - Manual gradients
         layer.UseAutodiff = false;
