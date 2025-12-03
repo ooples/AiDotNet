@@ -114,7 +114,7 @@ public abstract class StepSchedulerBase<T> : IStepScheduler<T>
     /// </para>
     /// </remarks>
     /// <exception cref="NotSupportedException">Thrown when an unsupported beta schedule type is specified.</exception>
-    protected virtual void InitializeBetaSchedule()
+    private void InitializeBetaSchedule()
     {
         int steps = Config.TrainTimesteps;
 
@@ -209,7 +209,7 @@ public abstract class StepSchedulerBase<T> : IStepScheduler<T>
     /// <summary>
     /// Computes alpha values and their cumulative products from betas.
     /// </summary>
-    protected virtual void ComputeAlphas()
+    private void ComputeAlphas()
     {
         int steps = Config.TrainTimesteps;
         var cumulativeProduct = NumOps.One;

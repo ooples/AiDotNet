@@ -320,10 +320,10 @@ public class PNDMSchedulerTests
         var state = scheduler.GetState();
 
         // Assert
-        Assert.True(state.ContainsKey("counter"));
-        Assert.True(state.ContainsKey("ets_count"));
-        Assert.Equal(0, (int)state["counter"]);
-        Assert.Equal(0, (int)state["ets_count"]);
+        Assert.True(state.TryGetValue("counter", out var counter));
+        Assert.True(state.TryGetValue("ets_count", out var etsCount));
+        Assert.Equal(0, (int)counter!);
+        Assert.Equal(0, (int)etsCount!);
     }
 
     [Fact]

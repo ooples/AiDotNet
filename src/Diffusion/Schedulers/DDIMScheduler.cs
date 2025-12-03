@@ -96,7 +96,9 @@ public sealed class DDIMScheduler<T> : StepSchedulerBase<T>
         ValidateStepParameters(modelOutput, sample, timestep);
 
         int t = timestep;
-        int prevT = Math.Max(t - 1, 0);
+        // Calculate step size for non-uniform inference schedules (e.g., 50 steps on 1000 training steps)
+        int stepSize = Timesteps.Length > 0 ? Config.TrainTimesteps / Timesteps.Length : 1;
+        int prevT = Math.Max(t - stepSize, 0);
 
         // Get alpha cumulative products for current and previous timesteps
         T alphaCumprod = AlphasCumulativeProduct[t];

@@ -380,7 +380,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     {
         // For diffusion models, gradients are computed based on noise prediction error
         // This is a simplified implementation - real implementations would use autodiff
-        var loss = lossFunction ?? LossFunction;
+        // Use provided loss function or fall back to default for future gradient computation
+        var effectiveLossFunction = lossFunction ?? LossFunction;
+        _ = effectiveLossFunction; // Reserved for future loss-aware gradient computation
 
         // Sample a random timestep
         var timestep = RandomGenerator.Next(_scheduler.Config.TrainTimesteps);

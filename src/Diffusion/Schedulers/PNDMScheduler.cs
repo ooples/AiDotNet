@@ -135,18 +135,10 @@ public sealed class PNDMScheduler<T> : StepSchedulerBase<T>
     {
         ValidateStepParameters(modelOutput, sample, timestep);
 
-        Vector<T> result;
-
-        if (_counter < PrkModeSteps)
-        {
-            // Pseudo Runge-Kutta mode for warmup
-            result = StepPrk(modelOutput, timestep, sample);
-        }
-        else
-        {
-            // Pseudo Linear Multi-Step mode
-            result = StepPlms(modelOutput, timestep, sample);
-        }
+        // Use PRK mode for warmup (first 4 steps), then switch to PLMS mode
+        var result = _counter < PrkModeSteps
+            ? StepPrk(modelOutput, timestep, sample)
+            : StepPlms(modelOutput, timestep, sample);
 
         _counter++;
         return result;
@@ -168,8 +160,7 @@ public sealed class PNDMScheduler<T> : StepSchedulerBase<T>
         int diffToPrev = (Config.TrainTimesteps / Timesteps.Length) / 2;
         int prevTimestep = Math.Max(timestep - diffToPrev, 0);
 
-        // Get alpha cumulative products
-        T alphaCumprodT = AlphasCumulativeProduct[timestep];
+        // Get alpha cumulative product for previous timestep
         T alphaCumprodPrev = AlphasCumulativeProduct[prevTimestep];
 
         // Compute prediction based on counter within prk phase
@@ -252,8 +243,6 @@ public sealed class PNDMScheduler<T> : StepSchedulerBase<T>
     /// </summary>
     private Vector<T> StepPlms(Vector<T> modelOutput, int timestep, Vector<T> sample)
     {
-        int n = sample.Length;
-
         // Store model output
         _ets.Add(CopyVector(modelOutput));
 
