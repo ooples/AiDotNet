@@ -95,7 +95,34 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 
             _vectors[id] = vector;
 
-            // Calculate random level for this node
+            // Initialize node in the graph
+            int nodeLevel = InitializeNode(id);
+
+            // If this is the first node, set it as entry point
+            if (_entryPoint == null)
+            {
+                _entryPoint = id;
+                _maxLevel = nodeLevel;
+                return;
+            }
+
+            // Find entry point for insertion and connect at each level
+            string currentNode = FindInsertionEntryPoint(vector, nodeLevel);
+            currentNode = ConnectNodeAtAllLevels(id, vector, nodeLevel, currentNode);
+
+            // Update entry point if new node has higher level
+            if (nodeLevel > _maxLevel)
+            {
+                _entryPoint = id;
+                _maxLevel = nodeLevel;
+            }
+        }
+
+        /// <summary>
+        /// Initializes a new node in the graph with random level assignment.
+        /// </summary>
+        private int InitializeNode(string id)
+        {
             int nodeLevel = GetRandomLevel();
             _nodeMaxLayer[id] = nodeLevel;
 
@@ -111,16 +138,17 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 _layers[level][id] = new List<string>();
             }
 
-            // If this is the first node, set it as entry point
-            if (_entryPoint == null)
-            {
-                _entryPoint = id;
-                _maxLevel = nodeLevel;
-                return;
-            }
+            return nodeLevel;
+        }
 
-            // Find entry point for insertion
-            string currentNode = _entryPoint;
+        /// <summary>
+        /// Finds the entry point for inserting a new node by traversing from top level.
+        /// </summary>
+        /// <remarks>This method should only be called when _entryPoint is not null.</remarks>
+        private string FindInsertionEntryPoint(Vector<T> vector, int nodeLevel)
+        {
+            // _entryPoint is guaranteed non-null when this method is called (checked in Add)
+            string currentNode = _entryPoint ?? throw new InvalidOperationException("Entry point is null");
 
             // Traverse from top to the node's level + 1, finding closest node at each level
             for (int level = _maxLevel; level > nodeLevel; level--)
@@ -128,35 +156,21 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 currentNode = GreedySearchClosest(vector, currentNode, level);
             }
 
-            // For levels from nodeLevel down to 0, find neighbors and connect
+            return currentNode;
+        }
+
+        /// <summary>
+        /// Connects a new node to neighbors at all applicable levels.
+        /// </summary>
+        private string ConnectNodeAtAllLevels(string id, Vector<T> vector, int nodeLevel, string currentNode)
+        {
             for (int level = Math.Min(nodeLevel, _maxLevel); level >= 0; level--)
             {
                 int maxConn = level == 0 ? _maxConnectionsLayer0 : _maxConnections;
-
-                // Search for candidates at this level
                 var candidates = SearchLayer(vector, currentNode, _efConstruction, level);
-
-                // Select best neighbors
                 var neighbors = SelectNeighbors(vector, candidates, maxConn);
 
-                // Connect the new node to its neighbors (bidirectional)
-                foreach (var neighbor in neighbors)
-                {
-                    // Add edge from new node to neighbor
-                    _layers[level][id].Add(neighbor.Id);
-
-                    // Add edge from neighbor to new node
-                    if (_layers[level].TryGetValue(neighbor.Id, out var neighborConnections))
-                    {
-                        neighborConnections.Add(id);
-
-                        // Prune neighbor's connections if exceeding max
-                        if (neighborConnections.Count > maxConn)
-                        {
-                            PruneConnections(neighbor.Id, level, maxConn);
-                        }
-                    }
-                }
+                ConnectNodeToNeighbors(id, neighbors, level, maxConn);
 
                 // Use the closest candidate as entry point for next level
                 if (candidates.Count > 0)
@@ -165,11 +179,30 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 }
             }
 
-            // Update entry point if new node has higher level
-            if (nodeLevel > _maxLevel)
+            return currentNode;
+        }
+
+        /// <summary>
+        /// Creates bidirectional connections between a node and its neighbors at a specific level.
+        /// </summary>
+        private void ConnectNodeToNeighbors(string id, List<(string Id, T Score)> neighbors, int level, int maxConn)
+        {
+            foreach (var neighbor in neighbors)
             {
-                _entryPoint = id;
-                _maxLevel = nodeLevel;
+                // Add edge from new node to neighbor
+                _layers[level][id].Add(neighbor.Id);
+
+                // Add edge from neighbor to new node
+                if (_layers[level].TryGetValue(neighbor.Id, out var neighborConnections))
+                {
+                    neighborConnections.Add(id);
+
+                    // Prune neighbor's connections if exceeding max
+                    if (neighborConnections.Count > maxConn)
+                    {
+                        PruneConnections(neighbor.Id, level, maxConn);
+                    }
+                }
             }
         }
 
@@ -230,29 +263,29 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 if (_layers[level].TryGetValue(id, out var connections))
                 {
                     // Remove this node from all its neighbors' connection lists
-                    foreach (var neighborId in connections)
+                    var layerAtLevel = _layers[level];
+                    foreach (var neighborConnections in connections
+                        .Where(neighborId => layerAtLevel.ContainsKey(neighborId))
+                        .Select(neighborId => layerAtLevel[neighborId]))
                     {
-                        if (_layers[level].TryGetValue(neighborId, out var neighborConnections))
-                        {
-                            neighborConnections.Remove(id);
-                        }
+                        neighborConnections.Remove(id);
                     }
                     _layers[level].Remove(id);
                 }
             }
 
-            // Update entry point if we removed it
+            // Update entry point if we removed it - must select node with highest level to maintain HNSW invariant
             if (_entryPoint == id)
             {
-                _entryPoint = _vectors.Keys.FirstOrDefault();
-                if (_entryPoint != null && _nodeMaxLayer.TryGetValue(_entryPoint, out int newMaxLevel))
-                {
-                    _maxLevel = newMaxLevel;
-                }
-                else
-                {
-                    _maxLevel = -1;
-                }
+                var highestLevelNode = _nodeMaxLayer
+                    .OrderByDescending(kvp => kvp.Value)
+                    .Select(kvp => kvp.Key)
+                    .FirstOrDefault();
+
+                _entryPoint = highestLevelNode;
+                _maxLevel = highestLevelNode != null && _nodeMaxLayer.TryGetValue(highestLevelNode, out int newMaxLevel)
+                    ? newMaxLevel
+                    : -1;
             }
 
             return true;
@@ -274,6 +307,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         private int GetRandomLevel()
         {
             double r = _random.NextDouble();
+            // Guard against r == 0 which would cause -Math.Log(0) = PositiveInfinity
+            if (r == 0.0)
+                r = double.Epsilon;
             return (int)Math.Floor(-Math.Log(r) * _levelMultiplier);
         }
 
@@ -293,11 +329,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 if (!_layers[level].TryGetValue(current, out var neighbors))
                     break;
 
-                foreach (var neighborId in neighbors)
+                foreach (var (neighborId, neighborVector) in neighbors
+                    .Where(nId => _vectors.ContainsKey(nId))
+                    .Select(nId => (nId, _vectors[nId])))
                 {
-                    if (!_vectors.TryGetValue(neighborId, out var neighborVector))
-                        continue;
-
                     T neighborDist = _metric.Calculate(query, neighborVector);
 
                     if (IsBetterScore(neighborDist, currentDist))
@@ -341,15 +376,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 if (!_layers[level].TryGetValue(nearest.Id, out var neighbors))
                     continue;
 
-                foreach (var neighborId in neighbors)
+                foreach (var (neighborId, neighborVector) in neighbors
+                    .Where(nId => !visited.Contains(nId) && _vectors.ContainsKey(nId))
+                    .Select(nId => (nId, _vectors[nId])))
                 {
-                    if (visited.Contains(neighborId))
-                        continue;
-
                     visited.Add(neighborId);
-
-                    if (!_vectors.TryGetValue(neighborId, out var neighborVector))
-                        continue;
 
                     T neighborDist = _metric.Calculate(query, neighborVector);
                     furthest = results[results.Count - 1];
@@ -406,22 +437,19 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 !_vectors.TryGetValue(nodeId, out var nodeVector))
                 return;
 
-            // Score all connections and keep the best
+            // Score all connections and keep the best, sorted by best score first
             var scored = connections
                 .Where(neighborId => _vectors.ContainsKey(neighborId))
                 .Select(neighborId => (
                     Id: neighborId,
                     Score: _metric.Calculate(nodeVector, _vectors[neighborId])
-                ))
-                .ToList();
+                ));
 
-            // Sort by best score first
-            if (_metric.HigherIsBetter)
-                scored = scored.OrderByDescending(x => x.Score).ToList();
-            else
-                scored = scored.OrderBy(x => x.Score).ToList();
+            var sortedScored = _metric.HigherIsBetter
+                ? scored.OrderByDescending(x => x.Score)
+                : scored.OrderBy(x => x.Score);
 
-            _layers[level][nodeId] = scored.Take(maxConnections).Select(x => x.Id).ToList();
+            _layers[level][nodeId] = sortedScored.Take(maxConnections).Select(x => x.Id).ToList();
         }
 
         /// <summary>
@@ -429,10 +457,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         /// </summary>
         private bool IsBetterScore(T a, T b)
         {
-            if (_metric.HigherIsBetter)
-                return _numOps.GreaterThan(a, b);
-            else
-                return _numOps.LessThan(a, b);
+            return _metric.HigherIsBetter ? _numOps.GreaterThan(a, b) : _numOps.LessThan(a, b);
         }
     }
 }
