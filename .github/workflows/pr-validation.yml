@@ -4,6 +4,16 @@ name: PR Validation
 on:
   pull_request:
     branches: ['**']
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - '**/*.csproj'
+      - '**/*.sln'
+      - '**/Directory.Build.props'
+      - '.github/workflows/pr-validation.yml'
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
   workflow_dispatch:
 
 concurrency:
@@ -19,6 +29,7 @@ jobs:
   build-and-test:
     name: Build, Test & Analyze
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       pull-requests: write
       contents: read
@@ -189,6 +200,7 @@ jobs:
   codeql:
     name: CodeQL Security Analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       security-events: write
       contents: read
