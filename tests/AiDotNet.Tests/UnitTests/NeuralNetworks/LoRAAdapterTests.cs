@@ -92,7 +92,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var input = new Tensor<double>(new[] { 1, 10 });
             for (int i = 0; i < 10; i++)
             {
-                input[i] = 1.0;
+                input[0, i] = 1.0;
             }
 
             // Act
@@ -118,7 +118,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var outputGradient = new Tensor<double>(new[] { 1, 5 });
             for (int i = 0; i < 5; i++)
             {
-                outputGradient[i] = 0.1;
+                outputGradient[0, i] = 0.1;
             }
 
             // Act
@@ -166,7 +166,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var outputGradient = new Tensor<double>(new[] { 1, 5 });
             for (int i = 0; i < 5; i++)
             {
-                outputGradient[i] = 0.1;
+                outputGradient[0, i] = 0.1;
             }
             adapter.Backward(outputGradient);
 
@@ -264,13 +264,13 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var input = new Tensor<double>(new[] { 1, 10 });
             for (int i = 0; i < 10; i++)
             {
-                input[i] = (i + 1) * 0.1;
+                input[0, i] = (i + 1) * 0.1;
             }
 
             var outputGradient = new Tensor<double>(new[] { 1, 5 });
             for (int i = 0; i < 5; i++)
             {
-                outputGradient[i] = 0.1;
+                outputGradient[0, i] = 0.1;
             }
 
             for (int iter = 0; iter < 10; iter++)
@@ -290,7 +290,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             // Assert - Outputs should be very close
             for (int i = 0; i < 5; i++)
             {
-                Assert.Equal(adapterOutput[i], mergedOutput[i], precision: 5);
+                Assert.Equal(adapterOutput[0, i], mergedOutput[0, i], precision: 5);
             }
         }
 

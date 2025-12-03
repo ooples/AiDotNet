@@ -352,7 +352,7 @@ public class FlashAttentionTests
 
         for (int i = 0; i < totalElements; i++)
         {
-            tensor[i] = (float)(random.NextDouble() * 2 - 1);
+            tensor.SetFlat(i, (float)(random.NextDouble() * 2 - 1));
         }
 
         return tensor;
@@ -372,8 +372,8 @@ public class FlashAttentionTests
         for (int i = 0; i < totalElements; i++)
         {
             Assert.True(
-                Math.Abs(expected[i] - actual[i]) < tolerance,
-                $"Tensors differ at index {i}: expected {expected[i]}, actual {actual[i]}");
+                Math.Abs(expected.GetFlat(i) - actual.GetFlat(i)) < tolerance,
+                $"Tensors differ at index {i}: expected {expected.GetFlat(i)}, actual {actual.GetFlat(i)}");
         }
     }
 

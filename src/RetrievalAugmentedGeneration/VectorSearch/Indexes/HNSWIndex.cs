@@ -162,8 +162,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         /// <summary>
         /// Connects a new node to neighbors at all applicable levels.
         /// </summary>
-        private void ConnectNodeAtAllLevels(string id, Vector<T> vector, int nodeLevel, string currentNode)
+        private void ConnectNodeAtAllLevels(string id, Vector<T> vector, int nodeLevel, string entryNode)
         {
+            string currentNode = entryNode;
             for (int level = Math.Min(nodeLevel, _maxLevel); level >= 0; level--)
             {
                 int maxConn = level == 0 ? _maxConnectionsLayer0 : _maxConnections;
@@ -173,10 +174,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 ConnectNodeToNeighbors(id, neighbors, level, maxConn);
 
                 // Use the closest candidate as entry point for next level
-                if (candidates.Count > 0)
-                {
-                    currentNode = candidates[0].Id;
-                }
+                currentNode = candidates.Count > 0 ? candidates[0].Id : currentNode;
             }
         }
 
@@ -271,11 +269,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 {
                     // Remove this node from all its neighbors' connection lists
                     var layerAtLevel = _layers[level];
-                    foreach (var neighborConnections in connections
+                    var neighborConnections = connections
                         .Where(neighborId => layerAtLevel.ContainsKey(neighborId))
-                        .Select(neighborId => layerAtLevel[neighborId]))
+                        .Select(neighborId => layerAtLevel[neighborId]);
+
+                    foreach (var connections_list in neighborConnections)
                     {
-                        neighborConnections.Remove(id);
+                        connections_list.Remove(id);
                     }
                     _layers[level].Remove(id);
                 }
@@ -337,9 +337,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 if (!_layers[level].TryGetValue(current, out var neighbors))
                     break;
 
-                foreach (var (neighborId, neighborVector) in neighbors
+                var validNeighbors = neighbors
                     .Where(nId => _vectors.ContainsKey(nId))
-                    .Select(nId => (nId, _vectors[nId])))
+                    .Select(nId => (nId, _vectors[nId]));
+
+                foreach (var (neighborId, neighborVector) in validNeighbors)
                 {
                     T neighborDist = _metric.Calculate(query, neighborVector);
 
@@ -384,9 +386,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 if (!_layers[level].TryGetValue(nearest.Id, out var neighbors))
                     continue;
 
-                foreach (var (neighborId, neighborVector) in neighbors
+                var unvisitedNeighbors = neighbors
                     .Where(nId => !visited.Contains(nId) && _vectors.ContainsKey(nId))
-                    .Select(nId => (nId, _vectors[nId])))
+                    .Select(nId => (nId, _vectors[nId]));
+
+                foreach (var (neighborId, neighborVector) in unvisitedNeighbors)
                 {
                     visited.Add(neighborId);
 
