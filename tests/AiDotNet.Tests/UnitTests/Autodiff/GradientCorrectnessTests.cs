@@ -1545,15 +1545,17 @@ public class GradientCorrectnessTests
         }
     }
 
-    [Fact(Skip = "GlobalPoolingLayer has element-wise multiplication dimension mismatch in autodiff")]
+    [Fact]
     public void GlobalPoolingLayer_AutodiffGradients_MatchManualGradients()
     {
         // Arrange - Global average pooling
-        var inputShape = new[] { 2, 3, 4, 4 };
+        // GlobalPoolingLayer uses channels-last format: [batch, height, width, channels]
+        var inputShape = new[] { 2, 4, 4, 3 };
         var layer = new GlobalPoolingLayer<float>(inputShape, PoolingType.Average, (IActivationFunction<float>?)null);
 
         var input = CreateRandomTensor(inputShape);
-        var outputGradient = CreateRandomTensor(new[] { 2, 3, 1, 1 }); // Global pooling output keeps rank: [batch, channels, 1, 1]
+        // Output shape is [batch, 1, 1, channels] = [2, 1, 1, 3]
+        var outputGradient = CreateRandomTensor(new[] { 2, 1, 1, 3 });
 
         // Act - Manual gradients
         layer.UseAutodiff = false;
