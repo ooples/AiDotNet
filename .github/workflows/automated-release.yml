@@ -13,6 +13,10 @@ on:
       - '.gitignore'
       - '.editorconfig'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false  # Don't cancel release in progress
+
 permissions:
   contents: write
   issues: write
