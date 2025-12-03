@@ -1614,7 +1614,7 @@ public class GradientCorrectnessTests
         }
     }
 
-    [Fact(Skip = "MeanLayer has internal bug: uses input indices for output tensor which has different rank")]
+    [Fact]
     public void MeanLayer_AutodiffGradients_MatchManualGradients()
     {
         // Arrange - MeanLayer computes mean along a specified axis
@@ -1923,7 +1923,7 @@ public class GradientCorrectnessTests
         }
     }
 
-    [Fact(Skip = "LogVarianceLayer has internal bug: uses input indices for output tensor which has different rank")]
+    [Fact]
     public void LogVarianceLayer_AutodiffGradients_MatchManualGradients()
     {
         // Arrange

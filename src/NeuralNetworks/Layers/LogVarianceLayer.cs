@@ -217,30 +217,52 @@ public class LogVarianceLayer<T> : LayerBase<T>
 
         // Compute mean
         var indices = new int[input.Shape.Length];
-        IterateOverDimensions(input, _meanValues, indices, 0, Axis, (input, mean, indices) =>
+        IterateOverDimensions(input, _meanValues, indices, 0, Axis, (inputTensor, meanTensor, inputIndices) =>
         {
             T sum = NumOps.Zero;
             for (int i = 0; i < axisSize; i++)
             {
-                indices[Axis] = i;
-                sum = NumOps.Add(sum, input[indices]);
+                inputIndices[Axis] = i;
+                sum = NumOps.Add(sum, inputTensor[inputIndices]);
             }
-            mean[indices] = NumOps.Multiply(sum, axisScale);
+
+            // Construct output indices by skipping the Axis dimension
+            var outputIndices = new int[meanTensor.Shape.Length];
+            int outputIdx = 0;
+            for (int j = 0; j < inputIndices.Length; j++)
+            {
+                if (j != Axis)
+                {
+                    outputIndices[outputIdx++] = inputIndices[j];
+                }
+            }
+            meanTensor[outputIndices] = NumOps.Multiply(sum, axisScale);
         });
 
         // Compute log variance
-        IterateOverDimensions(input, output, indices, 0, Axis, (input, output, indices) =>
+        IterateOverDimensions(input, output, indices, 0, Axis, (inputTensor, outputTensor, inputIndices) =>
         {
+            // Construct output indices by skipping the Axis dimension
+            var outputIndices = new int[outputTensor.Shape.Length];
+            int outputIdx = 0;
+            for (int j = 0; j < inputIndices.Length; j++)
+            {
+                if (j != Axis)
+                {
+                    outputIndices[outputIdx++] = inputIndices[j];
+                }
+            }
+
             T sumSquaredDiff = NumOps.Zero;
-            T mean = _meanValues[indices];
+            T mean = _meanValues[outputIndices];
             for (int i = 0; i < axisSize; i++)
             {
-                indices[Axis] = i;
-                T diff = NumOps.Subtract(input[indices], mean);
+                inputIndices[Axis] = i;
+                T diff = NumOps.Subtract(inputTensor[inputIndices], mean);
                 sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Square(diff));
             }
             T variance = NumOps.Multiply(sumSquaredDiff, axisScale);
-            output[indices] = NumOps.Log(NumOps.Add(variance, NumOps.FromDouble(1e-8))); // Add small epsilon for numerical stability
+            outputTensor[outputIndices] = NumOps.Log(NumOps.Add(variance, NumOps.FromDouble(1e-8))); // Add small epsilon for numerical stability
         });
 
         _lastOutput = output;
@@ -295,18 +317,29 @@ public class LogVarianceLayer<T> : LayerBase<T>
         T axisScale = NumOps.FromDouble(1.0 / axisSize);
 
         var indices = new int[_lastInput.Shape.Length];
-        IterateOverDimensions(_lastInput, outputGradient, indices, 0, Axis, (input, outputGrad, indices) =>
+        IterateOverDimensions(_lastInput, outputGradient, indices, 0, Axis, (input, outputGrad, inputIndices) =>
         {
-            T mean = _meanValues[indices];
-            T variance = NumOps.Exp(_lastOutput[indices]);
-            T gradScale = NumOps.Divide(outputGrad[indices], variance);
+            // Construct output indices by skipping the Axis dimension
+            var outputIndices = new int[outputGrad.Shape.Length];
+            int outputIdx = 0;
+            for (int j = 0; j < inputIndices.Length; j++)
+            {
+                if (j != Axis)
+                {
+                    outputIndices[outputIdx++] = inputIndices[j];
+                }
+            }
+
+            T mean = _meanValues[outputIndices];
+            T variance = NumOps.Exp(_lastOutput[outputIndices]);
+            T gradScale = NumOps.Divide(outputGrad[outputIndices], variance);
 
             for (int i = 0; i < axisSize; i++)
             {
-                indices[Axis] = i;
-                T diff = NumOps.Subtract(input[indices], mean);
+                inputIndices[Axis] = i;
+                T diff = NumOps.Subtract(input[inputIndices], mean);
                 T grad = NumOps.Multiply(NumOps.Multiply(diff, gradScale), NumOps.FromDouble(2.0 / axisSize));
-                inputGradient[indices] = grad;
+                inputGradient[inputIndices] = grad;
             }
         });
 

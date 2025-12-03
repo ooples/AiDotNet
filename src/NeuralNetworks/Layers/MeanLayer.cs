@@ -205,15 +205,26 @@ public class MeanLayer<T> : LayerBase<T>
         
         // Iterate over all dimensions except the mean axis
         var indices = new int[input.Shape.Length];
-        IterateOverDimensions(input, output, indices, 0, Axis, (input, output, indices) =>
+        IterateOverDimensions(input, output, indices, 0, Axis, (inputTensor, outputTensor, inputIndices) =>
         {
             T sum = NumOps.Zero;
             for (int i = 0; i < axisSize; i++)
             {
-                indices[Axis] = i;
-                sum = NumOps.Add(sum, input[indices]);
+                inputIndices[Axis] = i;
+                sum = NumOps.Add(sum, inputTensor[inputIndices]);
             }
-            output[indices] = NumOps.Multiply(sum, axisScale);
+
+            // Construct output indices by skipping the Axis dimension
+            var outputIndices = new int[outputTensor.Shape.Length];
+            int outputIdx = 0;
+            for (int j = 0; j < inputIndices.Length; j++)
+            {
+                if (j != Axis)
+                {
+                    outputIndices[outputIdx++] = inputIndices[j];
+                }
+            }
+            outputTensor[outputIndices] = NumOps.Multiply(sum, axisScale);
         });
         
         _lastOutput = output;
@@ -272,12 +283,23 @@ public class MeanLayer<T> : LayerBase<T>
 
         // Iterate over all dimensions except the mean axis
         var indices = new int[_lastInput.Shape.Length];
-        IterateOverDimensions(_lastInput, outputGradient, indices, 0, Axis, (_, outputGradient, indices) =>
+        IterateOverDimensions(_lastInput, outputGradient, indices, 0, Axis, (_, outputGradientTensor, inputIndices) =>
         {
+            // Construct output gradient indices by skipping the Axis dimension
+            var outputIndices = new int[outputGradientTensor.Shape.Length];
+            int outputIdx = 0;
+            for (int j = 0; j < inputIndices.Length; j++)
+            {
+                if (j != Axis)
+                {
+                    outputIndices[outputIdx++] = inputIndices[j];
+                }
+            }
+
             for (int i = 0; i < axisSize; i++)
             {
-                indices[Axis] = i;
-                inputGradient[indices] = NumOps.Multiply(outputGradient[indices], axisScale);
+                inputIndices[Axis] = i;
+                inputGradient[inputIndices] = NumOps.Multiply(outputGradientTensor[outputIndices], axisScale);
             }
         });
 
