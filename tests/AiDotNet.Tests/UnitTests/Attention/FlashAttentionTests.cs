@@ -352,7 +352,15 @@ public class FlashAttentionTests
 
         for (int i = 0; i < totalElements; i++)
         {
-            tensor[i] = (float)(random.NextDouble() * 2 - 1);
+            // Convert linear index to multi-dimensional indices
+            int[] indices = new int[shape.Length];
+            int remaining = i;
+            for (int d = shape.Length - 1; d >= 0; d--)
+            {
+                indices[d] = remaining % shape[d];
+                remaining /= shape[d];
+            }
+            tensor[indices] = (float)(random.NextDouble() * 2 - 1);
         }
 
         return tensor;
@@ -371,9 +379,17 @@ public class FlashAttentionTests
 
         for (int i = 0; i < totalElements; i++)
         {
+            // Convert linear index to multi-dimensional indices
+            int[] indices = new int[expected.Shape.Length];
+            int remaining = i;
+            for (int d = expected.Shape.Length - 1; d >= 0; d--)
+            {
+                indices[d] = remaining % expected.Shape[d];
+                remaining /= expected.Shape[d];
+            }
             Assert.True(
-                Math.Abs(expected[i] - actual[i]) < tolerance,
-                $"Tensors differ at index {i}: expected {expected[i]}, actual {actual[i]}");
+                Math.Abs(expected[indices] - actual[indices]) < tolerance,
+                $"Tensors differ at index {i}: expected {expected[indices]}, actual {actual[indices]}");
         }
     }
 
