@@ -133,7 +133,7 @@ namespace AiDotNet.Interpretability
             int positiveCount = 0;
             for (int i = 0; i < predictions.Length; i++)
             {
-                if (_numOps.GreaterThan(predictions[i], _numOps.Zero))
+                if (_numOps.GreaterThanOrEquals(predictions[i], _numOps.FromDouble(0.5)))
                 {
                     positiveCount++;
                 }
@@ -171,8 +171,8 @@ namespace AiDotNet.Interpretability
 
             for (int i = 0; i < predictions.Length; i++)
             {
-                bool isActualPositive = _numOps.GreaterThan(actualLabels[i], _numOps.Zero);
-                bool isPredictedPositive = _numOps.GreaterThan(predictions[i], _numOps.Zero);
+                bool isActualPositive = _numOps.GreaterThanOrEquals(actualLabels[i], _numOps.FromDouble(0.5));
+                bool isPredictedPositive = _numOps.GreaterThanOrEquals(predictions[i], _numOps.FromDouble(0.5));
 
                 if (isActualPositive)
                 {
@@ -219,8 +219,8 @@ namespace AiDotNet.Interpretability
 
             for (int i = 0; i < predictions.Length; i++)
             {
-                bool isActualNegative = _numOps.Equals(actualLabels[i], _numOps.Zero);
-                bool isPredictedPositive = _numOps.GreaterThan(predictions[i], _numOps.Zero);
+                bool isActualNegative = _numOps.LessThan(actualLabels[i], _numOps.FromDouble(0.5));
+                bool isPredictedPositive = _numOps.GreaterThanOrEquals(predictions[i], _numOps.FromDouble(0.5));
 
                 if (isActualNegative)
                 {
@@ -267,8 +267,8 @@ namespace AiDotNet.Interpretability
 
             for (int i = 0; i < predictions.Length; i++)
             {
-                bool isActualPositive = _numOps.GreaterThan(actualLabels[i], _numOps.Zero);
-                bool isPredictedPositive = _numOps.GreaterThan(predictions[i], _numOps.Zero);
+                bool isActualPositive = _numOps.GreaterThanOrEquals(actualLabels[i], _numOps.FromDouble(0.5));
+                bool isPredictedPositive = _numOps.GreaterThanOrEquals(predictions[i], _numOps.FromDouble(0.5));
 
                 if (isPredictedPositive)
                 {

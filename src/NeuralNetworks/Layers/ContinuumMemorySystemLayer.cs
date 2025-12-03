@@ -338,26 +338,15 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 
         T learningRate = _learningRates[level];
 
-        // Use Modified Gradient Descent if input data is available (Equations 27-29)
-        if (_storedInputs[level] != null)
-        {
-            var modifiedGD = new ModifiedGradientDescentOptimizer<T>(learningRate);
-            var inputVec = _storedInputs[level];
-            var outputGradVec = _accumulatedGradients[level];
+        // === Vectorized Standard Gradient Descent using IEngine (Phase B: US-GPU-015) ===
+        // θ^(fℓ)_{i+1} = θ^(fℓ)_i - η^(ℓ) * Σ gradients
+        // Note: ModifiedGradientDescentOptimizer is not used here because it requires
+        // input dimensions to match parameter dimensions, which doesn't apply to DenseLayer
+        // where parameters include weights (inputDim × outputDim) and biases (outputDim).
+        var scaledGrad = (Vector<T>)Engine.Multiply(_accumulatedGradients[level], learningRate);
+        var updated = (Vector<T>)Engine.Subtract(currentParams, scaledGrad);
 
-            // Apply modified GD: Wt+1 = Wt * (I - xt*xt^T) - η * ∇ytL(Wt; xt) ⊗ xt
-            var updated = modifiedGD.UpdateVector(currentParams, inputVec, outputGradVec);
-            _mlpBlocks[level].SetParameters(updated);
-        }
-        else
-        {
-            // === Vectorized Standard Gradient Descent using IEngine (Phase B: US-GPU-015) ===
-            // θ^(fℓ)_{i+1} = θ^(fℓ)_i - η^(ℓ) * Σ gradients
-            var scaledGrad = (Vector<T>)Engine.Multiply(_accumulatedGradients[level], learningRate);
-            var updated = (Vector<T>)Engine.Subtract(currentParams, scaledGrad);
-
-            _mlpBlocks[level].SetParameters(updated);
-        }
+        _mlpBlocks[level].SetParameters(updated);
     }
 
     /// <summary>
