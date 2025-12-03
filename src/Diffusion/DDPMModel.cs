@@ -108,6 +108,31 @@ public class DDPMModel<T> : DiffusionModelBase<T>
         _parameters = new Vector<T>(0); // Placeholder - real model would have neural network weights
     }
 
+    /// <summary>
+    /// Initializes a new instance of the DDPM model with a scheduler only.
+    /// </summary>
+    /// <param name="scheduler">The step scheduler to use for the diffusion process.</param>
+    /// <param name="noisePredictor">Optional custom noise prediction function.</param>
+    /// <remarks>
+    /// Convenience constructor for creating a model with a specific scheduler.
+    /// </remarks>
+    public DDPMModel(IStepScheduler<T> scheduler, Func<Tensor<T>, int, Tensor<T>>? noisePredictor = null)
+        : this(null, scheduler, noisePredictor)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the DDPM model with a seed for reproducibility.
+    /// </summary>
+    /// <param name="seed">The random seed for reproducible generation.</param>
+    /// <remarks>
+    /// Convenience constructor for creating a model with a specific seed.
+    /// </remarks>
+    public DDPMModel(int seed)
+        : this(new DiffusionModelOptions<T> { Seed = seed }, null, null)
+    {
+    }
+
 
     /// <inheritdoc />
     /// <remarks>

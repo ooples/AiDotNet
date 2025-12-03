@@ -124,6 +124,13 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
         if (numInferenceSteps <= 0)
             throw new ArgumentOutOfRangeException(nameof(numInferenceSteps), "Must be positive.");
 
+        // Validate all dimensions are positive
+        foreach (var dim in shape)
+        {
+            if (dim <= 0)
+                throw new ArgumentOutOfRangeException(nameof(shape), $"All dimensions must be positive, but found {dim}.");
+        }
+
         // Set up random generator
         var rng = seed.HasValue ? new Random(seed.Value) : RandomGenerator;
 

@@ -135,6 +135,10 @@ public sealed class PNDMScheduler<T> : StepSchedulerBase<T>
     {
         ValidateStepParameters(modelOutput, sample, timestep);
 
+        // Ensure SetTimesteps was called before Step
+        if (Timesteps.Length == 0)
+            throw new InvalidOperationException("Timesteps not initialized. Call SetTimesteps() before Step().");
+
         // Use PRK mode for warmup (first 4 steps), then switch to PLMS mode
         var result = _counter < PrkModeSteps
             ? StepPrk(modelOutput, timestep, sample)
@@ -385,14 +389,16 @@ public sealed class PNDMScheduler<T> : StepSchedulerBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Note: The counter is not restored because the model output history (_ets) cannot be
+    /// serialized without significant overhead. Restoring counter without history would cause
+    /// incorrect behavior in PLMS mode which relies on previous outputs.
+    /// After loading state, the scheduler will restart from the warmup (PRK) phase.
+    /// </remarks>
     public override void LoadState(Dictionary<string, object> state)
     {
         base.LoadState(state);
         ResetState();
-
-        if (state.TryGetValue("counter", out var counter))
-        {
-            _counter = Convert.ToInt32(counter);
-        }
+        // Counter is intentionally not restored - see remarks above
     }
 }

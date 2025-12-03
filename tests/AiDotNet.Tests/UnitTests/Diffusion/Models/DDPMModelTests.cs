@@ -43,7 +43,7 @@ public class DDPMModelTests
     {
         // Arrange & Act
         // Scheduler is nullable and defaults to DDIM scheduler if null
-        var model = new DDPMModel<double>(scheduler: null);
+        var model = new DDPMModel<double>(options: null, scheduler: null);
 
         // Assert - model should use a default scheduler
         Assert.NotNull(model.Scheduler);

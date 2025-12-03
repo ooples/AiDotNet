@@ -351,7 +351,7 @@ public class PNDMSchedulerTests
     }
 
     [Fact]
-    public void LoadState_RestoresCounter()
+    public void LoadState_ResetsCounterToZero()
     {
         // Arrange
         var scheduler1 = new PNDMScheduler<double>(SchedulerConfig<double>.CreateDefault());
@@ -373,9 +373,11 @@ public class PNDMSchedulerTests
         scheduler2.SetTimesteps(20);
         scheduler2.LoadState(state);
 
-        // Assert
+        // Assert - Counter is NOT restored because _ets history cannot be serialized.
+        // Restoring counter without history would cause PLMS to fail due to missing predictions.
         var restoredState = scheduler2.GetState();
-        Assert.Equal(state["counter"], restoredState["counter"]);
+        Assert.Equal(0, (int)restoredState["counter"]);
+        Assert.Equal(0, (int)restoredState["ets_count"]);
     }
 
     #endregion
