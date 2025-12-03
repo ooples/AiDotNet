@@ -9,9 +9,6 @@ on:
       - '**/Directory.Build.props'
       - '.github/workflows/codeql.yml'
       - '.github/codeql/**'
-    paths-ignore:
-      - 'tests/**'
-      - '**/*.md'
   pull_request:
     branches: [ master, main ]
     paths:
@@ -20,9 +17,6 @@ on:
       - '**/Directory.Build.props'
       - '.github/workflows/codeql.yml'
       - '.github/codeql/**'
-    paths-ignore:
-      - 'tests/**'
-      - '**/*.md'
   schedule:
     - cron: '0 8 * * 1'
 
