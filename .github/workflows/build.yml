@@ -5,16 +5,6 @@ name: Build
 on:
   pull_request:
     branches: ['**']
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - '**/*.csproj'
-      - '**/*.sln'
-      - '**/Directory.Build.props'
-      - '.github/workflows/build.yml'
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
   workflow_dispatch:
 
 concurrency:
