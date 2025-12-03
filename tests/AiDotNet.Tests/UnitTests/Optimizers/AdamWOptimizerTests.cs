@@ -277,7 +277,8 @@ namespace AiDotNetTests.UnitTests.Optimizers
             var serialized = optimizer1.Serialize();
 
             // Act - Deserialize
-            var optimizer2 = new AdamWOptimizer<double, Vector<double>, Vector<double>>(null);
+            var defaultOptions = new AdamWOptimizerOptions<double, Vector<double>, Vector<double>>();
+            var optimizer2 = new AdamWOptimizer<double, Vector<double>, Vector<double>>(null, defaultOptions);
             optimizer2.Deserialize(serialized);
 
             var deserializedOptions = optimizer2.GetOptions() as AdamWOptimizerOptions<double, Vector<double>, Vector<double>>;
