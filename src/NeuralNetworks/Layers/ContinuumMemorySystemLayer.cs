@@ -343,8 +343,8 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         // Note: ModifiedGradientDescentOptimizer is not used here because it requires
         // input dimensions to match parameter dimensions, which doesn't apply to DenseLayer
         // where parameters include weights (inputDim × outputDim) and biases (outputDim).
-        var scaledGrad = (Vector<T>)Engine.Multiply(_accumulatedGradients[level], learningRate);
-        var updated = (Vector<T>)Engine.Subtract(currentParams, scaledGrad);
+        var scaledGrad = Engine.Multiply(_accumulatedGradients[level], learningRate);
+        var updated = Engine.Subtract(currentParams, scaledGrad);
 
         _mlpBlocks[level].SetParameters(updated);
     }

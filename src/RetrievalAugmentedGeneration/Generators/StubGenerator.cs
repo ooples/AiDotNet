@@ -90,8 +90,11 @@ public class StubGenerator<T> : IGenerator<T>
             if (queryMatch.Success)
             {
                 var originalQuery = queryMatch.Groups[1].Value.Trim();
-                // Generate a relevant sub-query
-                return $"Search for more details about: {originalQuery}";
+                // Validate that the extracted query is not empty
+                if (!string.IsNullOrEmpty(originalQuery))
+                {
+                    return $"Search for more details about: {originalQuery}";
+                }
             }
             return "Search for relevant information";
         }
