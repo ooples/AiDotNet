@@ -50,22 +50,6 @@ jobs:
         # Shallow clone for faster checkout
         fetch-depth: 1
 
-    - name: Setup .NET 8.0.x
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '8.0.x'
-
-    - name: Cache NuGet Packages
-      uses: actions/cache@v4
-      with:
-        path: ~/.nuget/packages
-        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
-        restore-keys: |
-          ${{ runner.os }}-nuget-
-
-    - name: Restore NuGet Packages
-      run: dotnet restore src/AiDotNet.csproj --verbosity minimal
-
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
       with:
@@ -76,14 +60,9 @@ jobs:
         queries: security-and-quality
         # Enable trap caching for faster subsequent runs
         trap-caching: true
-
-    - name: Dotnet Build
-      run: |
-        # Build only net8.0 for faster CodeQL analysis (multi-targeting slows analysis)
-        dotnet build src/AiDotNet.csproj -c Release -f net8.0 --no-restore --verbosity minimal
-      env:
-        # Limit memory to prevent OOM issues
-        DOTNET_GCHeapHardLimit: 0x40000000
+        # Build mode: none skips build tracing for faster analysis
+        # CodeQL will analyze source directly without compilation tracing
+        build-mode: none
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
