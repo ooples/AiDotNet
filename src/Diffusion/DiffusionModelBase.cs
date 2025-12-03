@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Enums;
@@ -125,11 +126,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
             throw new ArgumentOutOfRangeException(nameof(numInferenceSteps), "Must be positive.");
 
         // Validate all dimensions are positive
-        foreach (var dim in shape)
-        {
-            if (dim <= 0)
-                throw new ArgumentOutOfRangeException(nameof(shape), $"All dimensions must be positive, but found {dim}.");
-        }
+        var invalidDims = shape.Where(d => d <= 0).ToArray();
+        if (invalidDims.Length > 0)
+            throw new ArgumentOutOfRangeException(nameof(shape), $"All dimensions must be positive, but found {invalidDims[0]}.");
 
         // Set up random generator
         var rng = seed.HasValue ? new Random(seed.Value) : RandomGenerator;
