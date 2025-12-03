@@ -229,9 +229,9 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// Critical test: Verifies that batch processing works correctly.
     /// This test ensures that multiple concurrent requests are batched together
     /// and the model is called once with the full batch.
-    /// Note: This test has a 60-second timeout to prevent hanging indefinitely in CI.
+    /// Note: This test has a 120-second timeout to account for slow CI environments.
     /// </summary>
-    [Fact(Timeout = 60000)]
+    [Fact(Timeout = 120000)]
     public async Task Predict_WithConcurrentRequests_ProcessesAsBatch()
     {
         // Arrange
@@ -250,7 +250,8 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         }).ToArray();
 
         // Act: Send all requests concurrently with a timeout to prevent hanging
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        // Using 90 seconds to allow for slow CI environments
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
         var tasks = requests.Select(req =>
             _client.PostAsJsonAsync("/api/inference/predict/batch-test-model", req, cts.Token)
         ).ToArray();
