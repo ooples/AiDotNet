@@ -127,12 +127,17 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
         // Set up random generator
         var rng = seed.HasValue ? new Random(seed.Value) : RandomGenerator;
 
-        // Initialize with random noise
-        int totalElements = 1;
+        // Initialize with random noise using checked arithmetic to detect overflow
+        long totalElements = 1;
         foreach (var dim in shape)
-            totalElements *= dim;
+        {
+            totalElements = checked(totalElements * dim);
+        }
 
-        var sample = SampleNoise(totalElements, rng);
+        if (totalElements > int.MaxValue)
+            throw new ArgumentException("Total tensor size exceeds maximum supported size.", nameof(shape));
+
+        var sample = SampleNoise((int)totalElements, rng);
 
         // Set up the scheduler for inference
         _scheduler.SetTimesteps(numInferenceSteps);
@@ -577,9 +582,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
                 return gradients;
             }
         }
-        catch
+        catch (InvalidOperationException)
         {
-            // Fall through to numerical gradients if autodiff fails
+            // GradientTape may throw if computation graph is not properly built
+            // Fall through to numerical gradients
+        }
+        catch (NotSupportedException)
+        {
+            // Some tensor operations may not support autodiff
+            // Fall through to numerical gradients
         }
 
         // Fallback: Numerical gradient computation using finite differences

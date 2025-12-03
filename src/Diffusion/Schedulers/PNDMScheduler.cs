@@ -149,13 +149,8 @@ public sealed class PNDMScheduler<T> : StepSchedulerBase<T>
     /// </summary>
     private Vector<T> StepPrk(Vector<T> modelOutput, int timestep, Vector<T> sample)
     {
-        int n = sample.Length;
-
         // Store current sample if this is a new timestep
-        if (_currentSample == null)
-        {
-            _currentSample = CopyVector(sample);
-        }
+        _currentSample ??= CopyVector(sample);
 
         int diffToPrev = (Config.TrainTimesteps / Timesteps.Length) / 2;
         int prevTimestep = Math.Max(timestep - diffToPrev, 0);
@@ -187,8 +182,8 @@ public sealed class PNDMScheduler<T> : StepSchedulerBase<T>
                 predOriginalSample = ClipSampleIfNeeded(predOriginalSample);
 
                 // Update ets with average
-                var avgEt = new Vector<T>(n);
-                for (int i = 0; i < n; i++)
+                var avgEt = new Vector<T>(sample.Length);
+                for (int i = 0; i < sample.Length; i++)
                 {
                     avgEt[i] = NumOps.Divide(NumOps.Add(_ets[^1][i], modelOutput[i]), NumOps.FromDouble(2.0));
                 }
@@ -209,11 +204,11 @@ public sealed class PNDMScheduler<T> : StepSchedulerBase<T>
             case 3:
             default:
                 // Fourth prk step: compute linear combination
-                var linearCombination = new Vector<T>(n);
+                var linearCombination = new Vector<T>(sample.Length);
                 var oneThird = NumOps.FromDouble(1.0 / 3.0);
                 var twoThirds = NumOps.FromDouble(2.0 / 3.0);
 
-                for (int i = 0; i < n; i++)
+                for (int i = 0; i < sample.Length; i++)
                 {
                     var term1 = NumOps.Multiply(oneThird, _ets[^2][i]);
                     var term2 = NumOps.Multiply(twoThirds, NumOps.Divide(NumOps.Add(_ets[^1][i], modelOutput[i]), NumOps.FromDouble(2.0)));

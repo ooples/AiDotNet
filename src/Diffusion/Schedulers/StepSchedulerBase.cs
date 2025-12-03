@@ -141,7 +141,7 @@ public abstract class StepSchedulerBase<T> : IStepScheduler<T>
     /// <remarks>
     /// Linear interpolation: beta[i] = betaStart + (betaEnd - betaStart) * i / (steps - 1)
     /// </remarks>
-    protected virtual void InitializeLinearBetaSchedule(int steps)
+    private void InitializeLinearBetaSchedule(int steps)
     {
         var delta = NumOps.Subtract(Config.BetaEnd, Config.BetaStart);
         var stepsMinusOne = NumOps.FromDouble(steps - 1);
@@ -160,7 +160,7 @@ public abstract class StepSchedulerBase<T> : IStepScheduler<T>
     /// <remarks>
     /// Scaled linear uses sqrt of linear interpolated values, common in image generation.
     /// </remarks>
-    protected virtual void InitializeScaledLinearBetaSchedule(int steps)
+    private void InitializeScaledLinearBetaSchedule(int steps)
     {
         var sqrtStart = NumOps.Sqrt(Config.BetaStart);
         var sqrtEnd = NumOps.Sqrt(Config.BetaEnd);
@@ -183,7 +183,7 @@ public abstract class StepSchedulerBase<T> : IStepScheduler<T>
     /// Squared cosine provides smoother noise progression and often better results.
     /// Based on "Improved Denoising Diffusion Probabilistic Models" paper.
     /// </remarks>
-    protected virtual void InitializeSquaredCosineBetaSchedule(int steps)
+    private void InitializeSquaredCosineBetaSchedule(int steps)
     {
         var s = NumOps.FromDouble(0.008); // Small offset to prevent beta from being exactly 0 or 1
 

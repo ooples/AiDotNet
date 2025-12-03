@@ -175,8 +175,14 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
-        // Create a new scheduler with the same config for deep copy
-        var newScheduler = new DDIMScheduler<T>(Scheduler.Config);
+        // Clone the scheduler preserving its actual type
+        IStepScheduler<T> newScheduler = Scheduler switch
+        {
+            PNDMScheduler<T> => new PNDMScheduler<T>(Scheduler.Config),
+            DDIMScheduler<T> => new DDIMScheduler<T>(Scheduler.Config),
+            _ => new DDIMScheduler<T>(Scheduler.Config) // Fallback for unknown types
+        };
+
         var copy = new DDPMModel<T>(null, newScheduler, _noisePredictor);
         copy.SetParameters(GetParameters());
         return copy;
