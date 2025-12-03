@@ -252,7 +252,8 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         // Wait for batch processing to complete with polling instead of fixed delay
         // This prevents flakiness from race conditions
-        var maxWaitMs = 1000;
+        // Increased timeout for CI environments which can be slower
+        var maxWaitMs = 5000;
         var pollIntervalMs = 10;
         var waited = 0;
         while (batchCallCount.Value == 0 && waited < maxWaitMs)
@@ -265,7 +266,8 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         // The model should have been called fewer times than the number of requests
         // In ideal conditions with the 10ms batching window, it should be called once or a few times
         Assert.True(batchCallCount.Value > 0, "Model was never called");
-        Assert.True(batchCallCount.Value <= 10, "Batching did not occur - model was called for each request individually");
+        // Ensure batching actually reduced the number of calls - must be less than total requests
+        Assert.True(batchCallCount.Value < requests.Length, "Batching did not occur - model was called for each request individually");
 
         // Get batcher statistics
         var statsResponse = await _client.GetAsync("/api/inference/stats");
