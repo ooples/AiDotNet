@@ -108,7 +108,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 
             // Find entry point for insertion and connect at each level
             string currentNode = FindInsertionEntryPoint(vector, nodeLevel);
-            currentNode = ConnectNodeAtAllLevels(id, vector, nodeLevel, currentNode);
+            ConnectNodeAtAllLevels(id, vector, nodeLevel, currentNode);
 
             // Update entry point if new node has higher level
             if (nodeLevel > _maxLevel)
@@ -162,7 +162,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         /// <summary>
         /// Connects a new node to neighbors at all applicable levels.
         /// </summary>
-        private string ConnectNodeAtAllLevels(string id, Vector<T> vector, int nodeLevel, string currentNode)
+        private void ConnectNodeAtAllLevels(string id, Vector<T> vector, int nodeLevel, string currentNode)
         {
             for (int level = Math.Min(nodeLevel, _maxLevel); level >= 0; level--)
             {
@@ -178,8 +178,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                     currentNode = candidates[0].Id;
                 }
             }
-
-            return currentNode;
         }
 
         /// <summary>
@@ -307,8 +305,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         private int GetRandomLevel()
         {
             double r = _random.NextDouble();
-            // Guard against r == 0 which would cause -Math.Log(0) = PositiveInfinity
-            if (r == 0.0)
+            // Guard against r <= 0 which would cause -Math.Log(0) = PositiveInfinity
+            // Use <= to avoid floating point equality comparison issues
+            if (r <= double.Epsilon)
                 r = double.Epsilon;
             return (int)Math.Floor(-Math.Log(r) * _levelMultiplier);
         }
