@@ -156,12 +156,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             if (_centroids == null || _centroids.Length == 0)
                 return new List<int>();
 
-            var clusterScores = new List<(int ClusterId, T Score)>();
-            for (int i = 0; i < _centroids.Length; i++)
-            {
-                var score = _metric.Calculate(query, _centroids[i]);
-                clusterScores.Add((i, score));
-            }
+            var clusterScores = _centroids
+                .Select((centroid, i) => (ClusterId: i, Score: _metric.Calculate(query, centroid)))
+                .ToList();
 
             var sorted = _metric.HigherIsBetter
                 ? clusterScores.OrderByDescending(x => x.Score)

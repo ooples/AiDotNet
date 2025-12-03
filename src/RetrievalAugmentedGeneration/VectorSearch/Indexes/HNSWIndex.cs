@@ -196,18 +196,21 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         /// </summary>
         private void AddBidirectionalEdge(string nodeId, string neighborId, int level, int maxConn)
         {
-            // Add edge from new node to neighbor
             _layers[level][nodeId].Add(neighborId);
+            AddReverseEdgeAndPrune(neighborId, nodeId, level, maxConn);
+        }
 
-            // Add edge from neighbor to new node and prune if needed
-            if (!_layers[level].TryGetValue(neighborId, out var neighborConnections))
+        /// <summary>
+        /// Adds reverse edge from neighbor to node and prunes if needed.
+        /// </summary>
+        private void AddReverseEdgeAndPrune(string neighborId, string nodeId, int level, int maxConn)
+        {
+            if (!_layers[level].TryGetValue(neighborId, out var connections))
                 return;
 
-            neighborConnections.Add(nodeId);
-            if (neighborConnections.Count > maxConn)
-            {
+            connections.Add(nodeId);
+            if (connections.Count > maxConn)
                 PruneConnections(neighborId, level, maxConn);
-            }
         }
 
         /// <inheritdoc/>
