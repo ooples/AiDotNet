@@ -774,10 +774,21 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var weightsTransposed = Autodiff.TensorOperations<T>.Transpose(weights);
         var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weightsTransposed);
 
-        // Add biases directly - autodiff Add operation handles broadcasting and gradient reduction
+        // Manually broadcast biases to match batch dimension [batchSize, outputSize]
         // matmul is [batchSize, outputSize], biases is [outputSize]
-        // Add broadcasts biases and reduces gradients automatically
-        var output = Autodiff.TensorOperations<T>.Add(matmul, biases);
+        // We need to tile biases to have shape [batchSize, outputSize]
+        var biasesBroadcasted = new Tensor<T>(new int[] { batchSize, biasesTensor.Shape[0] });
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < biasesTensor.Length; i++)
+            {
+                biasesBroadcasted[b, i] = biasesTensor[i];
+            }
+        }
+        var biasesBroadcastedNode = Autodiff.TensorOperations<T>.Variable(biasesBroadcasted, "biases_broadcasted", requiresGradient: true);
+
+        // Now add with matching shapes
+        var output = Autodiff.TensorOperations<T>.Add(matmul, biasesBroadcastedNode);
 
         // Apply activation using autodiff
         var activated = ApplyActivationAutodiff(output);
@@ -803,13 +814,18 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Extract gradients
         if (weights.Gradient == null)
             throw new InvalidOperationException("Weights gradient is null after backward pass");
-        if (biases.Gradient == null)
+        if (biasesBroadcastedNode.Gradient == null)
             throw new InvalidOperationException("Biases gradient is null after backward pass");
         if (input.Gradient == null)
             throw new InvalidOperationException("Input gradient is null after backward pass");
 
         _weightsGradient = TensorToMatrix(weights.Gradient);
-        _biasesGradient = TensorToVector(biases.Gradient);
+
+        // Sum the broadcasted biases gradient across the batch dimension
+        // biasesBroadcastedNode.Gradient has shape [batchSize, outputSize]
+        // We need to sum across batch dimension to get [outputSize]
+        var biasesGradSum = biasesBroadcastedNode.Gradient.Sum(new int[] { 0 });
+        _biasesGradient = TensorToVector(biasesGradSum);
 
         return input.Gradient.Reshape(_lastInput.Shape);
     }

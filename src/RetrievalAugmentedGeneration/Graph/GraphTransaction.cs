@@ -200,8 +200,13 @@ public class GraphTransaction<T> : IDisposable
 
         try
         {
-            // Log to WAL first (durability)
-            if (_wal != null)
+            // NOTE: We do NOT log operations here if the store is a FileGraphStore,
+            // because FileGraphStore already logs to WAL internally when operations are applied.
+            // Only MemoryGraphStore needs transaction-level WAL logging.
+            bool storeHasOwnWal = _store is FileGraphStore<T>;
+
+            // Log to WAL first (durability) - only for stores without their own WAL
+            if (_wal != null && !storeHasOwnWal)
             {
                 foreach (var op in _operations)
                 {
