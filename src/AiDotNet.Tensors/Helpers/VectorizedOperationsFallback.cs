@@ -260,4 +260,140 @@ internal static class VectorizedOperationsFallback
 
         return ops.Divide(dotProduct, denominator);
     }
+
+    /// <summary>
+    /// Fills the destination span with a constant value using sequential loops.
+    /// </summary>
+    public static void Fill<T>(INumericOperations<T> ops, Span<T> destination, T value)
+    {
+        for (int i = 0; i < destination.Length; i++)
+            destination[i] = value;
+    }
+
+    /// <summary>
+    /// Multiplies each element by a scalar using sequential loops.
+    /// </summary>
+    public static void MultiplyScalar<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, T scalar, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = ops.Multiply(x[i], scalar);
+    }
+
+    /// <summary>
+    /// Divides each element by a scalar using sequential loops.
+    /// </summary>
+    public static void DivideScalar<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, T scalar, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = ops.Divide(x[i], scalar);
+    }
+
+    /// <summary>
+    /// Adds a scalar to each element using sequential loops.
+    /// </summary>
+    public static void AddScalar<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, T scalar, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = ops.Add(x[i], scalar);
+    }
+
+    /// <summary>
+    /// Subtracts a scalar from each element using sequential loops.
+    /// </summary>
+    public static void SubtractScalar<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, T scalar, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = ops.Subtract(x[i], scalar);
+    }
+
+    /// <summary>
+    /// Computes the square root of each element using sequential loops.
+    /// </summary>
+    public static void Sqrt<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = ops.Sqrt(x[i]);
+    }
+
+    /// <summary>
+    /// Computes the absolute value of each element using sequential loops.
+    /// </summary>
+    public static void Abs<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = ops.Abs(x[i]);
+    }
+
+    /// <summary>
+    /// Negates each element using sequential loops.
+    /// </summary>
+    public static void Negate<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = ops.Negate(x[i]);
+    }
+
+    /// <summary>
+    /// Clips each element to a range using sequential loops.
+    /// </summary>
+    public static void Clip<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, T min, T max, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+        {
+            T val = x[i];
+            if (ops.LessThan(val, min))
+                destination[i] = min;
+            else if (ops.GreaterThan(val, max))
+                destination[i] = max;
+            else
+                destination[i] = val;
+        }
+    }
+
+    /// <summary>
+    /// Computes the power of each element using sequential loops.
+    /// </summary>
+    public static void Pow<T>(INumericOperations<T> ops, ReadOnlySpan<T> x, T power, Span<T> destination)
+    {
+        if (x.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        for (int i = 0; i < x.Length; i++)
+            destination[i] = ops.Power(x[i], power);
+    }
+
+    /// <summary>
+    /// Copies elements from source to destination using sequential loops.
+    /// </summary>
+    public static void Copy<T>(INumericOperations<T> ops, ReadOnlySpan<T> source, Span<T> destination)
+    {
+        if (source.Length != destination.Length)
+            throw new ArgumentException("Spans must have the same length");
+
+        source.CopyTo(destination);
+    }
 }

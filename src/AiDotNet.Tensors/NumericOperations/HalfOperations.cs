@@ -421,5 +421,72 @@ public class HalfOperations : INumericOperations<Half>
 #endif
     }
 
+    private static readonly HalfOperations _instance = new();
+
+    /// <summary>
+    /// Fills a span with a specified value.
+    /// </summary>
+    public void Fill(Span<Half> destination, Half value) => destination.Fill(value);
+
+    /// <summary>
+    /// Multiplies each element in a span by a scalar value.
+    /// </summary>
+    public void MultiplyScalar(ReadOnlySpan<Half> x, Half scalar, Span<Half> destination)
+        => VectorizedOperationsFallback.MultiplyScalar(_instance, x, scalar, destination);
+
+    /// <summary>
+    /// Divides each element in a span by a scalar value.
+    /// </summary>
+    public void DivideScalar(ReadOnlySpan<Half> x, Half scalar, Span<Half> destination)
+        => VectorizedOperationsFallback.DivideScalar(_instance, x, scalar, destination);
+
+    /// <summary>
+    /// Adds a scalar value to each element in a span.
+    /// </summary>
+    public void AddScalar(ReadOnlySpan<Half> x, Half scalar, Span<Half> destination)
+        => VectorizedOperationsFallback.AddScalar(_instance, x, scalar, destination);
+
+    /// <summary>
+    /// Subtracts a scalar value from each element in a span.
+    /// </summary>
+    public void SubtractScalar(ReadOnlySpan<Half> x, Half scalar, Span<Half> destination)
+        => VectorizedOperationsFallback.SubtractScalar(_instance, x, scalar, destination);
+
+    /// <summary>
+    /// Computes square root of each element. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
+    /// </summary>
+    public void Sqrt(ReadOnlySpan<Half> x, Span<Half> destination)
+        => VectorizedOperationsFallback.Sqrt(_instance, x, destination);
+
+    /// <summary>
+    /// Computes absolute value of each element. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
+    /// </summary>
+    public void Abs(ReadOnlySpan<Half> x, Span<Half> destination)
+        => VectorizedOperationsFallback.Abs(_instance, x, destination);
+
+    /// <summary>
+    /// Negates each element. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
+    /// </summary>
+    public void Negate(ReadOnlySpan<Half> x, Span<Half> destination)
+        => VectorizedOperationsFallback.Negate(_instance, x, destination);
+
+    /// <summary>
+    /// Clips each element to the specified range. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
+    /// </summary>
+    public void Clip(ReadOnlySpan<Half> x, Half min, Half max, Span<Half> destination)
+        => VectorizedOperationsFallback.Clip(_instance, x, min, max, destination);
+
+    /// <summary>
+    /// Raises each element to a specified power. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
+    /// </summary>
+    public void Pow(ReadOnlySpan<Half> x, Half power, Span<Half> destination)
+        => VectorizedOperationsFallback.Pow(_instance, x, power, destination);
+
+    /// <summary>
+    /// Copies elements from source to destination.
+    /// </summary>
+    public void Copy(ReadOnlySpan<Half> source, Span<Half> destination)
+        => source.CopyTo(destination);
+
     #endregion
 }

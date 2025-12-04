@@ -163,4 +163,88 @@ public interface IVectorizedOperations<T>
     /// <returns>The cosine similarity between the two vectors.</returns>
     /// <exception cref="ArgumentException">Thrown when spans have different lengths.</exception>
     T CosineSimilarity(ReadOnlySpan<T> x, ReadOnlySpan<T> y);
+
+    /// <summary>
+    /// Fills the destination span with a constant value.
+    /// </summary>
+    /// <param name="destination">The destination span to fill.</param>
+    /// <param name="value">The value to fill with.</param>
+    void Fill(Span<T> destination, T value);
+
+    /// <summary>
+    /// Multiplies each element by a scalar: destination[i] = x[i] * scalar.
+    /// </summary>
+    /// <param name="x">The source span.</param>
+    /// <param name="scalar">The scalar value to multiply by.</param>
+    /// <param name="destination">The destination span for results.</param>
+    void MultiplyScalar(ReadOnlySpan<T> x, T scalar, Span<T> destination);
+
+    /// <summary>
+    /// Divides each element by a scalar: destination[i] = x[i] / scalar.
+    /// </summary>
+    /// <param name="x">The source span.</param>
+    /// <param name="scalar">The scalar value to divide by.</param>
+    /// <param name="destination">The destination span for results.</param>
+    void DivideScalar(ReadOnlySpan<T> x, T scalar, Span<T> destination);
+
+    /// <summary>
+    /// Adds a scalar to each element: destination[i] = x[i] + scalar.
+    /// </summary>
+    /// <param name="x">The source span.</param>
+    /// <param name="scalar">The scalar value to add.</param>
+    /// <param name="destination">The destination span for results.</param>
+    void AddScalar(ReadOnlySpan<T> x, T scalar, Span<T> destination);
+
+    /// <summary>
+    /// Subtracts a scalar from each element: destination[i] = x[i] - scalar.
+    /// </summary>
+    /// <param name="x">The source span.</param>
+    /// <param name="scalar">The scalar value to subtract.</param>
+    /// <param name="destination">The destination span for results.</param>
+    void SubtractScalar(ReadOnlySpan<T> x, T scalar, Span<T> destination);
+
+    /// <summary>
+    /// Computes the square root of each element: destination[i] = sqrt(x[i]).
+    /// </summary>
+    /// <param name="x">The source span.</param>
+    /// <param name="destination">The destination span for results.</param>
+    void Sqrt(ReadOnlySpan<T> x, Span<T> destination);
+
+    /// <summary>
+    /// Computes the absolute value of each element: destination[i] = |x[i]|.
+    /// </summary>
+    /// <param name="x">The source span.</param>
+    /// <param name="destination">The destination span for results.</param>
+    void Abs(ReadOnlySpan<T> x, Span<T> destination);
+
+    /// <summary>
+    /// Negates each element: destination[i] = -x[i].
+    /// </summary>
+    /// <param name="x">The source span.</param>
+    /// <param name="destination">The destination span for results.</param>
+    void Negate(ReadOnlySpan<T> x, Span<T> destination);
+
+    /// <summary>
+    /// Clips (clamps) each element to a range: destination[i] = clamp(x[i], min, max).
+    /// </summary>
+    /// <param name="x">The source span.</param>
+    /// <param name="min">The minimum value.</param>
+    /// <param name="max">The maximum value.</param>
+    /// <param name="destination">The destination span for results.</param>
+    void Clip(ReadOnlySpan<T> x, T min, T max, Span<T> destination);
+
+    /// <summary>
+    /// Computes the power of each element: destination[i] = x[i]^power.
+    /// </summary>
+    /// <param name="x">The source span.</param>
+    /// <param name="power">The power to raise each element to.</param>
+    /// <param name="destination">The destination span for results.</param>
+    void Pow(ReadOnlySpan<T> x, T power, Span<T> destination);
+
+    /// <summary>
+    /// Copies elements from source to destination.
+    /// </summary>
+    /// <param name="source">The source span.</param>
+    /// <param name="destination">The destination span.</param>
+    void Copy(ReadOnlySpan<T> source, Span<T> destination);
 }
