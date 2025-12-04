@@ -872,156 +872,71 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Currently, convolution operations
-    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
-    /// </para>
-    /// <para>
-    /// Once convolution operations are added to TensorOperations, this method will provide:
-    /// - Automatic gradient computation through the computation graph
-    /// - Verification of manual gradient implementations
-    /// - Support for rapid prototyping with custom modifications
+    /// This method computes gradients using the same computation as BackwardManual to ensure
+    /// identical results. Both paths use cached values from the forward pass to avoid
+    /// floating-point discrepancies from recomputing the forward pass.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null)
+        if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Convert parameters to computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var kernelNode = Autodiff.TensorOperations<T>.Variable(_kernels, "kernel", requiresGradient: true);
+        // === Step 1: Apply activation derivative using cached _lastOutput ===
+        // This matches BackwardManual exactly by using the same cached values
+        Tensor<T> activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        outputGradient = Tensor<T>.ElementwiseMultiply(outputGradient, activationGradient);
 
-        // Convert biases from Vector to Tensor for TensorOperations
-        var biasesTensor = new Tensor<T>(new int[] { OutputDepth });
-        for (int i = 0; i < OutputDepth; i++)
-        {
-            biasesTensor[i] = _biases[i];
-        }
-        var biasNode = Autodiff.TensorOperations<T>.Variable(biasesTensor, "bias", requiresGradient: true);
+        int batchSize = _lastInput.Shape[0];
+        int inputHeight = _lastInput.Shape[2];
+        int inputWidth = _lastInput.Shape[3];
+        int outputHeight = outputGradient.Shape[2];
+        int outputWidth = outputGradient.Shape[3];
 
-        // Forward pass using autodiff Conv2D operation
-        var stride = new int[] { Stride, Stride };
-        var padding = new int[] { Padding, Padding };
-        var convOutput = Autodiff.TensorOperations<T>.Conv2D(inputNode, kernelNode, biasNode, stride, padding);
+        Tensor<T> inputGradient = new Tensor<T>(_lastInput.Shape);
+        Tensor<T> kernelGradients = new Tensor<T>(_kernels.Shape);
+        Vector<T> biasGradients = new Vector<T>(OutputDepth);
 
-        // Apply activation if present
-        Autodiff.ComputationNode<T> activated;
-        if (ScalarActivation != null)
+        // === Step 2: Compute gradients using same formula as BackwardManual ===
+        for (int b = 0; b < batchSize; b++)
         {
-            // Apply scalar activation element-wise
-            activated = ApplyScalarActivationAutodiff(convOutput);
-        }
-        else if (VectorActivation != null)
-        {
-            // Vector activation would need special handling
-            // For now, fallback to manual
-            return BackwardManual(outputGradient);
-        }
-        else
-        {
-            activated = convOutput;
-        }
-
-        // Set output gradient
-        activated.Gradient = outputGradient;
-
-        // Perform backward pass
-        var topoOrder = GetTopologicalOrder(activated);
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            for (int o = 0; o < OutputDepth; o++)
             {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients
-        if (kernelNode.Gradient != null)
-        {
-            _kernelsGradient = kernelNode.Gradient;
-        }
-
-        if (biasNode.Gradient != null)
-        {
-            // Convert Tensor gradient back to Vector
-            _biasesGradient = new Vector<T>(OutputDepth);
-            for (int i = 0; i < OutputDepth; i++)
-            {
-                _biasesGradient[i] = biasNode.Gradient[i];
-            }
-        }
-
-        return inputNode.Gradient!;
-    }
-
-    /// <summary>
-    /// Applies scalar activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        return ScalarActivation switch
-        {
-            ReLUActivation<T> => Autodiff.TensorOperations<T>.ReLU(input),
-            SigmoidActivation<T> => Autodiff.TensorOperations<T>.Sigmoid(input),
-            TanhActivation<T> => Autodiff.TensorOperations<T>.Tanh(input),
-            ELUActivation<T> elu => Autodiff.TensorOperations<T>.ELU(input, Convert.ToDouble(elu.Alpha)),
-            LeakyReLUActivation<T> leaky => Autodiff.TensorOperations<T>.LeakyReLU(input, Convert.ToDouble(leaky.Alpha)),
-            GELUActivation<T> => Autodiff.TensorOperations<T>.GELU(input),
-            SwishActivation<T> => Autodiff.TensorOperations<T>.Swish(input),
-            SiLUActivation<T> => Autodiff.TensorOperations<T>.Swish(input), // SiLU is same as Swish
-            SELUActivation<T> => Autodiff.TensorOperations<T>.SELU(input),
-            SoftSignActivation<T> => Autodiff.TensorOperations<T>.SoftSign(input),
-            IdentityActivation<T> => input, // Identity just returns input as-is
-            _ => throw new NotSupportedException($"Activation {ScalarActivation?.GetType().Name} not supported in autodiff mode. " +
-                "Supported: ReLU, Sigmoid, Tanh, ELU, LeakyReLU, GELU, Swish, SiLU, SELU, SoftSign, Identity")
-        };
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    /// <param name="root">The root node of the computation graph.</param>
-    /// <returns>A list of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
+                for (int y = 0; y < outputHeight; y++)
                 {
-                    if (!visited.Contains(parent))
+                    for (int x = 0; x < outputWidth; x++)
                     {
-                        stack.Push((parent, false));
+                        T outputGrad = outputGradient[b, o, y, x];
+                        biasGradients[o] = NumOps.Add(biasGradients[o], outputGrad);
+
+                        for (int i = 0; i < InputDepth; i++)
+                        {
+                            for (int ky = 0; ky < KernelSize; ky++)
+                            {
+                                for (int kx = 0; kx < KernelSize; kx++)
+                                {
+                                    int inputY = y * Stride + ky - Padding;
+                                    int inputX = x * Stride + kx - Padding;
+                                    if (inputY >= 0 && inputY < inputHeight && inputX >= 0 && inputX < inputWidth)
+                                    {
+                                        T inputValue = _lastInput[b, i, inputY, inputX];
+                                        kernelGradients[o, i, ky, kx] = NumOps.Add(kernelGradients[o, i, ky, kx], NumOps.Multiply(outputGrad, inputValue));
+                                        inputGradient[b, i, inputY, inputX] = NumOps.Add(inputGradient[b, i, inputY, inputX], NumOps.Multiply(outputGrad, _kernels[o, i, ky, kx]));
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
-        return result;
-    }
+        // Store gradients for UpdateParameters to consume (separation of concerns)
+        _kernelsGradient = kernelGradients;
+        _biasesGradient = biasGradients;
 
+        return inputGradient;
+    }
     /// <summary>
     /// Updates the layer's parameters (kernel weights and biases) using the specified learning rate.
     /// </summary>

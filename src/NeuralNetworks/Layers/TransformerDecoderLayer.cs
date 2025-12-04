@@ -1170,10 +1170,10 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("Attention weights not initialized.");
 
         // Create constant nodes for projection weights using Tensor.FromMatrix
-        var wqNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(queryWeights), "Wq");
-        var wkNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(keyWeights), "Wk");
-        var wvNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(valueWeights), "Wv");
-        var woNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(outputWeights), "Wo");
+        var wqNode = TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(queryWeights), "Wq");
+        var wkNode = TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(keyWeights), "Wk");
+        var wvNode = TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(valueWeights), "Wv");
+        var woNode = TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(outputWeights), "Wo");
 
         // Apply multi-head attention
         return TensorOperations<T>.MultiHeadAttention(
