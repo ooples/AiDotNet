@@ -24,14 +24,16 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> AddConstantColumn<T>(this Matrix<T> matrix, T value)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         var newMatrix = new Matrix<T>(matrix.Rows, matrix.Columns + 1);
+
+        // Vectorized: Copy each row using SIMD operations
         for (int i = 0; i < matrix.Rows; i++)
         {
             newMatrix[i, 0] = value;
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                newMatrix[i, j + 1] = matrix[i, j];
-            }
+            var sourceRow = matrix.GetRowReadOnlySpan(i);
+            var destRow = newMatrix.GetRowSpan(i);
+            numOps.Copy(sourceRow, destRow.Slice(1, matrix.Columns));
         }
 
         return newMatrix;
@@ -62,16 +64,11 @@ public static class MatrixExtensions
 
         int size = matrix.Rows * matrix.Columns;
         var result = new Vector<T>(size);
-            
-        int index = 0;
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[index++] = matrix[i, j];
-            }
-        }
-            
+
+        // Vectorized: Copy entire matrix data at once
+        var numOps = MathHelper.GetNumericOperations<T>();
+        numOps.Copy(matrix.AsSpan(), result.AsWritableSpan());
+
         return result;
     }
 
@@ -93,14 +90,15 @@ public static class MatrixExtensions
         if (matrix.Columns != vector.Length)
             throw new ArgumentException("Vector length must match matrix column count");
 
-        var ops = MathHelper.GetNumericOperations<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Matrix<T>(matrix.Rows, matrix.Columns);
+
+        // Vectorized: Add vector to each row using SIMD operations
         for (int i = 0; i < matrix.Rows; i++)
         {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[i, j] = ops.Add(matrix[i, j], vector[j]);
-            }
+            var sourceRow = matrix.GetRowReadOnlySpan(i);
+            var destRow = result.GetRowSpan(i);
+            numOps.Add(sourceRow, vector.AsSpan(), destRow);
         }
 
         return result;
@@ -2958,12 +2956,14 @@ public static class MatrixExtensions
     /// </remarks>
     public static void SetSubmatrix<T>(this Matrix<T> matrix, int startRow, int startCol, Matrix<T> submatrix)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Vectorized: Copy each row using SIMD operations
         for (int i = 0; i < submatrix.Rows; i++)
         {
-            for (int j = 0; j < submatrix.Columns; j++)
-            {
-                matrix[startRow + i, startCol + j] = submatrix[i, j];
-            }
+            var sourceRow = submatrix.GetRowReadOnlySpan(i);
+            var destRow = matrix.GetRowSpan(startRow + i);
+            numOps.Copy(sourceRow, destRow.Slice(startCol, submatrix.Columns));
         }
     }
 
@@ -3014,17 +3014,12 @@ public static class MatrixExtensions
     /// </remarks>
     public static T FrobeniusNorm<T>(this Matrix<T> matrix)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
-        T sum = ops.Zero;
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                sum = ops.Add(sum, ops.Multiply(matrix[i, j], matrix[i, j]));
-            }
-        }
+        var numOps = MathHelper.GetNumericOperations<T>();
 
-        return ops.Sqrt(sum);
+        // Vectorized: Compute sum of squares using SIMD dot product (x · x = sum of x² terms)
+        var span = matrix.AsSpan();
+        T sumOfSquares = numOps.Dot(span, span);
+        return numOps.Sqrt(sumOfSquares);
     }
 
     /// <summary>
@@ -3041,15 +3036,11 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> Negate<T>(this Matrix<T> matrix)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Matrix<T>(matrix.Rows, matrix.Columns);
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[i, j] = ops.Negate(matrix[i, j]);
-            }
-        }
+
+        // Vectorized: Negate all elements at once using SIMD operations
+        numOps.Negate(matrix.AsSpan(), result.AsWritableSpan());
 
         return result;
     }
@@ -3581,13 +3572,8 @@ public static class MatrixExtensions
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Matrix<T>(matrix.Rows, matrix.Columns);
 
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[i, j] = numOps.Multiply(matrix[i, j], other[i, j]);
-            }
-        }
+        // Vectorized: Multiply all elements at once using SIMD operations
+        numOps.Multiply(matrix.AsSpan(), other.AsSpan(), result.AsWritableSpan());
 
         return result;
     }
@@ -3617,12 +3603,12 @@ public static class MatrixExtensions
         var numOps = MathHelper.GetNumericOperations<T>();
         Matrix<T> result = new(matrix.Rows, matrix.Columns);
 
+        // Vectorized: Scale each row by corresponding vector element using SIMD operations
         for (int i = 0; i < matrix.Rows; i++)
         {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[i, j] = numOps.Multiply(matrix[i, j], vector[i]);
-            }
+            var sourceRow = matrix.GetRowReadOnlySpan(i);
+            var destRow = result.GetRowSpan(i);
+            numOps.MultiplyScalar(sourceRow, vector[i], destRow);
         }
 
         return result;
@@ -3654,14 +3640,15 @@ public static class MatrixExtensions
             throw new ArgumentException("Column length must match matrix row count.");
         }
 
+        var numOps = MathHelper.GetNumericOperations<T>();
         Matrix<T> newMatrix = new Matrix<T>(matrix.Rows, matrix.Columns + 1);
 
+        // Vectorized: Copy each row using SIMD operations, then set last column
         for (int i = 0; i < matrix.Rows; i++)
         {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                newMatrix[i, j] = matrix[i, j];
-            }
+            var sourceRow = matrix.GetRowReadOnlySpan(i);
+            var destRow = newMatrix.GetRowSpan(i);
+            numOps.Copy(sourceRow, destRow.Slice(0, matrix.Columns));
             newMatrix[i, matrix.Columns] = column[i];
         }
 
@@ -3699,14 +3686,15 @@ public static class MatrixExtensions
             throw new ArgumentOutOfRangeException("Invalid submatrix dimensions");
         }
 
+        var numOps = MathHelper.GetNumericOperations<T>();
         Matrix<T> submatrix = new Matrix<T>(numRows, numCols);
 
+        // Vectorized: Copy row segments using SIMD operations
         for (int i = 0; i < numRows; i++)
         {
-            for (int j = 0; j < numCols; j++)
-            {
-                submatrix[i, j] = matrix[startRow + i, startCol + j];
-            }
+            var sourceRow = matrix.GetRowReadOnlySpan(startRow + i);
+            var destRow = submatrix.GetRowSpan(i);
+            numOps.Copy(sourceRow.Slice(startCol, numCols), destRow);
         }
 
         return submatrix;

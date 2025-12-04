@@ -72,7 +72,7 @@ public static class DistillationStrategyFactory<T>
         // FeatureDistillationStrategy doesn't implement IDistillationStrategy
         // It's a separate utility class that computes feature loss
         throw new NotSupportedException(
-            "FeatureDistillationStrategy requires layer-specific feature extraction and cannot be used " +
+            "FeatureBased distillation strategy requires layer-specific feature extraction and cannot be used " +
             "through the factory. Create it directly: new FeatureDistillationStrategy<T>(layerPairs, featureWeight)");
     }
 

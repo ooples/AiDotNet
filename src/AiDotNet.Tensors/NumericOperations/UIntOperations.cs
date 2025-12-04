@@ -810,4 +810,18 @@ public class UIntOperations : INumericOperations<uint>
         => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
 
     #endregion
+
+    private static readonly UIntOperations _instance = new UIntOperations();
+
+    public void Fill(Span<uint> destination, uint value) => destination.Fill(value);
+    public void MultiplyScalar(ReadOnlySpan<uint> x, uint scalar, Span<uint> destination) => VectorizedOperationsFallback.MultiplyScalar(_instance, x, scalar, destination);
+    public void DivideScalar(ReadOnlySpan<uint> x, uint scalar, Span<uint> destination) => VectorizedOperationsFallback.DivideScalar(_instance, x, scalar, destination);
+    public void AddScalar(ReadOnlySpan<uint> x, uint scalar, Span<uint> destination) => VectorizedOperationsFallback.AddScalar(_instance, x, scalar, destination);
+    public void SubtractScalar(ReadOnlySpan<uint> x, uint scalar, Span<uint> destination) => VectorizedOperationsFallback.SubtractScalar(_instance, x, scalar, destination);
+    public void Sqrt(ReadOnlySpan<uint> x, Span<uint> destination) => VectorizedOperationsFallback.Sqrt(_instance, x, destination);
+    public void Abs(ReadOnlySpan<uint> x, Span<uint> destination) => VectorizedOperationsFallback.Abs(_instance, x, destination);
+    public void Negate(ReadOnlySpan<uint> x, Span<uint> destination) => VectorizedOperationsFallback.Negate(_instance, x, destination);
+    public void Clip(ReadOnlySpan<uint> x, uint min, uint max, Span<uint> destination) => VectorizedOperationsFallback.Clip(_instance, x, min, max, destination);
+    public void Pow(ReadOnlySpan<uint> x, uint power, Span<uint> destination) => VectorizedOperationsFallback.Pow(_instance, x, power, destination);
+    public void Copy(ReadOnlySpan<uint> source, Span<uint> destination) => source.CopyTo(destination);
 }

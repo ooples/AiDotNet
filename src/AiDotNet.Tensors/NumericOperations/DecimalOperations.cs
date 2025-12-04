@@ -779,5 +779,72 @@ public class DecimalOperations : INumericOperations<decimal>
     public decimal CosineSimilarity(ReadOnlySpan<decimal> x, ReadOnlySpan<decimal> y)
         => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
 
+    private static readonly DecimalOperations _instance = new();
+
+    /// <summary>
+    /// Fills a span with a specified value.
+    /// </summary>
+    public void Fill(Span<decimal> destination, decimal value) => destination.Fill(value);
+
+    /// <summary>
+    /// Multiplies each element in a span by a scalar value.
+    /// </summary>
+    public void MultiplyScalar(ReadOnlySpan<decimal> x, decimal scalar, Span<decimal> destination)
+        => VectorizedOperationsFallback.MultiplyScalar(_instance, x, scalar, destination);
+
+    /// <summary>
+    /// Divides each element in a span by a scalar value.
+    /// </summary>
+    public void DivideScalar(ReadOnlySpan<decimal> x, decimal scalar, Span<decimal> destination)
+        => VectorizedOperationsFallback.DivideScalar(_instance, x, scalar, destination);
+
+    /// <summary>
+    /// Adds a scalar value to each element in a span.
+    /// </summary>
+    public void AddScalar(ReadOnlySpan<decimal> x, decimal scalar, Span<decimal> destination)
+        => VectorizedOperationsFallback.AddScalar(_instance, x, scalar, destination);
+
+    /// <summary>
+    /// Subtracts a scalar value from each element in a span.
+    /// </summary>
+    public void SubtractScalar(ReadOnlySpan<decimal> x, decimal scalar, Span<decimal> destination)
+        => VectorizedOperationsFallback.SubtractScalar(_instance, x, scalar, destination);
+
+    /// <summary>
+    /// Computes square root of each element using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Sqrt(ReadOnlySpan<decimal> x, Span<decimal> destination)
+        => VectorizedOperationsFallback.Sqrt(_instance, x, destination);
+
+    /// <summary>
+    /// Computes absolute value of each element using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Abs(ReadOnlySpan<decimal> x, Span<decimal> destination)
+        => VectorizedOperationsFallback.Abs(_instance, x, destination);
+
+    /// <summary>
+    /// Negates each element using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Negate(ReadOnlySpan<decimal> x, Span<decimal> destination)
+        => VectorizedOperationsFallback.Negate(_instance, x, destination);
+
+    /// <summary>
+    /// Clips each element to the specified range using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Clip(ReadOnlySpan<decimal> x, decimal min, decimal max, Span<decimal> destination)
+        => VectorizedOperationsFallback.Clip(_instance, x, min, max, destination);
+
+    /// <summary>
+    /// Raises each element to a specified power using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Pow(ReadOnlySpan<decimal> x, decimal power, Span<decimal> destination)
+        => VectorizedOperationsFallback.Pow(_instance, x, power, destination);
+
+    /// <summary>
+    /// Copies elements from source to destination.
+    /// </summary>
+    public void Copy(ReadOnlySpan<decimal> source, Span<decimal> destination)
+        => source.CopyTo(destination);
+
     #endregion
 }

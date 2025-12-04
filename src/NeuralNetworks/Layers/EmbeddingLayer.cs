@@ -755,7 +755,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         inputNodes.Add(inputNode);
 
         // Create constant node for embedding matrix [vocab_size, embedding_dim]
-        var embeddingTensor = Tensor<T>.FromMatrix(_embeddingMatrix);
+        var embeddingTensor = Tensor<T>.FromRowMatrix(_embeddingMatrix);
         var embeddingNode = Autodiff.TensorOperations<T>.Constant(embeddingTensor, "embeddings");
 
         // Use EmbeddingLookup operation which supports gradients

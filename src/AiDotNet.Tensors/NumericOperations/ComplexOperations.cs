@@ -990,5 +990,70 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     public Complex<T> CosineSimilarity(ReadOnlySpan<Complex<T>> x, ReadOnlySpan<Complex<T>> y)
         => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
 
+    /// <summary>
+    /// Fills a span with a specified value.
+    /// </summary>
+    public void Fill(Span<Complex<T>> destination, Complex<T> value) => destination.Fill(value);
+
+    /// <summary>
+    /// Multiplies each element in a span by a scalar value.
+    /// </summary>
+    public void MultiplyScalar(ReadOnlySpan<Complex<T>> x, Complex<T> scalar, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.MultiplyScalar(this, x, scalar, destination);
+
+    /// <summary>
+    /// Divides each element in a span by a scalar value.
+    /// </summary>
+    public void DivideScalar(ReadOnlySpan<Complex<T>> x, Complex<T> scalar, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.DivideScalar(this, x, scalar, destination);
+
+    /// <summary>
+    /// Adds a scalar value to each element in a span.
+    /// </summary>
+    public void AddScalar(ReadOnlySpan<Complex<T>> x, Complex<T> scalar, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.AddScalar(this, x, scalar, destination);
+
+    /// <summary>
+    /// Subtracts a scalar value from each element in a span.
+    /// </summary>
+    public void SubtractScalar(ReadOnlySpan<Complex<T>> x, Complex<T> scalar, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.SubtractScalar(this, x, scalar, destination);
+
+    /// <summary>
+    /// Computes square root of each element using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Sqrt(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.Sqrt(this, x, destination);
+
+    /// <summary>
+    /// Computes absolute value of each element using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Abs(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.Abs(this, x, destination);
+
+    /// <summary>
+    /// Negates each element using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Negate(ReadOnlySpan<Complex<T>> x, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.Negate(this, x, destination);
+
+    /// <summary>
+    /// Clips each element to the specified range using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Clip(ReadOnlySpan<Complex<T>> x, Complex<T> min, Complex<T> max, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.Clip(this, x, min, max, destination);
+
+    /// <summary>
+    /// Raises each element to a specified power using sequential loops (fallback, no SIMD).
+    /// </summary>
+    public void Pow(ReadOnlySpan<Complex<T>> x, Complex<T> power, Span<Complex<T>> destination)
+        => VectorizedOperationsFallback.Pow(this, x, power, destination);
+
+    /// <summary>
+    /// Copies elements from source to destination.
+    /// </summary>
+    public void Copy(ReadOnlySpan<Complex<T>> source, Span<Complex<T>> destination)
+        => source.CopyTo(destination);
+
     #endregion
 }

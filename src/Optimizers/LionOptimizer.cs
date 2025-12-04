@@ -548,7 +548,24 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             // Deserialize base class data
             int baseDataLength = reader.ReadInt32();
             byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
+
+            // Read base class data manually to avoid type mismatch in UpdateOptions
+            using (MemoryStream baseMs = new MemoryStream(baseData))
+            using (BinaryReader baseReader = new BinaryReader(baseMs))
+            {
+                // Read and verify the type (same as base class)
+                string typeName = baseReader.ReadString();
+                if (typeName != this.GetType().AssemblyQualifiedName)
+                {
+                    throw new InvalidOperationException("Mismatched optimizer type during deserialization.");
+                }
+
+                // Skip the options JSON from base class - we'll read our own below
+                baseReader.ReadString();
+
+                // Read additional base class data if any
+                // (The base class DeserializeAdditionalData is empty, so nothing to do)
+            }
 
             // Deserialize LionOptimizerOptions
             string optionsJson = reader.ReadString();

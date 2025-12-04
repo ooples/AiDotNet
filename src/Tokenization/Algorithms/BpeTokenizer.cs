@@ -104,9 +104,6 @@ namespace AiDotNet.Tokenization.Algorithms
                 throw new ArgumentNullException(nameof(corpus));
 
             var corpusList = corpus.ToList();
-            if (corpusList.Count == 0)
-                throw new ArgumentException("Corpus cannot be empty.", nameof(corpus));
-
             specialTokens ??= SpecialTokens.Gpt();
 
             // Step 1: Build character vocabulary
@@ -116,6 +113,14 @@ namespace AiDotNet.Tokenization.Algorithms
             foreach (var token in specialTokens.GetAllSpecialTokens())
             {
                 vocabulary.AddToken(token);
+            }
+
+            // Handle empty corpus - return minimal tokenizer with only special tokens
+            if (corpusList.Count == 0)
+            {
+                var emptyMerges = new Dictionary<(string, string), int>();
+                pattern ??= @"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+";
+                return new BpeTokenizer(vocabulary, emptyMerges, specialTokens, pattern);
             }
 
             // Step 2: Pre-tokenize and get word frequencies

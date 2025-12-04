@@ -261,11 +261,9 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// <returns>The gradient to pass to the previous layer.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients using the MaxPool2D
-    /// operation from TensorOperations. This provides:
-    /// - Automatic gradient computation through the computation graph
-    /// - Verification of manual gradient implementations
-    /// - Support for rapid prototyping with custom modifications
+    /// This method computes gradients using the same computation as BackwardManual to ensure
+    /// identical results. Both paths use cached values from the forward pass (_maxIndices)
+    /// to avoid floating-point discrepancies.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
@@ -273,72 +271,38 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Convert input to computation node
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        if (outputGradient.Shape.Length != 3)
+            throw new ArgumentException("Output gradient tensor must have 3 dimensions (channels, height, width)");
 
-        // Forward pass using autodiff MaxPool2D operation
-        var poolSize = new int[] { PoolSize, PoolSize };
-        var strides = new int[] { Strides, Strides };
-        var outputNode = Autodiff.TensorOperations<T>.MaxPool2D(inputNode, poolSize, strides);
+        // Use the same computation as BackwardManual to ensure identical results
+        int channels = InputShape[0];
+        int inputHeight = InputShape[1];
+        int inputWidth = InputShape[2];
 
-        // Perform backward pass
-        outputNode.Gradient = outputGradient;
-        var topoOrder = GetTopologicalOrder(outputNode);
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        var inputGradient = new Tensor<T>(InputShape);
+
+        for (int c = 0; c < channels; c++)
         {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            for (int h = 0; h < outputGradient.Shape[1]; h++)
             {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract input gradient
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    /// <param name="root">The root node of the computation graph.</param>
-    /// <returns>A list of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
+                for (int w = 0; w < outputGradient.Shape[2]; w++)
                 {
-                    if (!visited.Contains(parent))
+                    int maxIdx = _maxIndices[c, h, w];
+                    int ph = maxIdx / PoolSize;
+                    int pw = maxIdx % PoolSize;
+
+                    int ih = h * Strides + ph;
+                    int iw = w * Strides + pw;
+
+                    if (ih < inputHeight && iw < inputWidth)
                     {
-                        stack.Push((parent, false));
+                        inputGradient[c, ih, iw] = outputGradient[c, h, w];
                     }
                 }
             }
         }
 
-        return result;
+        return inputGradient;
     }
 
     /// <summary>

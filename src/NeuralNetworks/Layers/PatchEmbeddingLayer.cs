@@ -100,6 +100,14 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the total number of parameters in this layer.
+    /// </summary>
+    /// <value>
+    /// The total number of trainable parameters (projection weights + projection bias).
+    /// </value>
+    public override int ParameterCount => _projectionWeights.Rows * _projectionWeights.Columns + _projectionBias.Length;
+
+    /// <summary>
     /// Creates a new patch embedding layer with the specified dimensions.
     /// </summary>
     /// <param name="imageHeight">The height of the input image.</param>

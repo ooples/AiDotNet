@@ -337,15 +337,18 @@ public class MultiplyLayer<T> : LayerBase<T>
             return BackwardManual(outputGradient);
         }
 
-        // Convert to computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInputs[0], "input_0", requiresGradient: true);
+        // Convert to computation nodes - all inputs need gradients
+        var inputNodes = new Autodiff.ComputationNode<T>[_lastInputs.Length];
+        for (int i = 0; i < _lastInputs.Length; i++)
+        {
+            inputNodes[i] = Autodiff.TensorOperations<T>.Variable(_lastInputs[i], $"input_{i}", requiresGradient: true);
+        }
 
         // Forward computation using autodiff ops: result = input[0] * input[1] * ...
-        var result = inputNode;
+        var result = inputNodes[0];
         for (int i = 1; i < _lastInputs.Length; i++)
         {
-            var nextInput = Autodiff.TensorOperations<T>.Variable(_lastInputs[i], $"input_{i}", requiresGradient: false);
-            result = Autodiff.TensorOperations<T>.ElementwiseMultiply(result, nextInput);
+            result = Autodiff.TensorOperations<T>.ElementwiseMultiply(result, inputNodes[i]);
         }
 
         // Apply activation using autodiff
@@ -367,7 +370,17 @@ public class MultiplyLayer<T> : LayerBase<T>
             }
         }
 
-        return inputNode.Gradient!;
+        // Stack all input gradients to match manual implementation
+        var inputGradients = new Tensor<T>[_lastInputs.Length];
+        for (int i = 0; i < _lastInputs.Length; i++)
+        {
+            var grad = inputNodes[i].Gradient;
+            if (grad == null)
+                throw new InvalidOperationException($"Input {i} gradient is null after backward pass");
+            inputGradients[i] = grad;
+        }
+
+        return Tensor<T>.Stack(inputGradients);
     }
 
     /// <summary>

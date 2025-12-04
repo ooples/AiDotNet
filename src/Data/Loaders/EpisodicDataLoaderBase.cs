@@ -330,7 +330,7 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> : IEpisodicData
         if (typeof(TInput) == typeof(Tensor<T>))
         {
             // Use Tensor.FromMatrix for efficient conversion
-            return (TInput)(object)Tensor<T>.FromMatrix(matrix);
+            return (TInput)(object)Tensor<T>.FromRowMatrix(matrix);
         }
 
         throw new NotSupportedException(

@@ -821,5 +821,117 @@ public class DoubleOperations : INumericOperations<double>
     public double CosineSimilarity(ReadOnlySpan<double> x, ReadOnlySpan<double> y)
         => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
 
+    /// <summary>
+    /// Fills the destination span with a constant value.
+    /// </summary>
+    public void Fill(Span<double> destination, double value)
+    {
+        destination.Fill(value);
+    }
+
+    /// <summary>
+    /// Multiplies each element by a scalar using SIMD-optimized TensorPrimitivesCore.
+    /// </summary>
+#if NET8_0_OR_GREATER
+    public void MultiplyScalar(ReadOnlySpan<double> x, double scalar, Span<double> destination)
+        => System.Numerics.Tensors.TensorPrimitives.Multiply(x, scalar, destination);
+#else
+    public void MultiplyScalar(ReadOnlySpan<double> x, double scalar, Span<double> destination)
+        => VectorizedOperationsFallback.MultiplyScalar(this, x, scalar, destination);
+#endif
+
+    /// <summary>
+    /// Divides each element by a scalar using SIMD-optimized TensorPrimitivesCore.
+    /// </summary>
+#if NET8_0_OR_GREATER
+    public void DivideScalar(ReadOnlySpan<double> x, double scalar, Span<double> destination)
+        => System.Numerics.Tensors.TensorPrimitives.Divide(x, scalar, destination);
+#else
+    public void DivideScalar(ReadOnlySpan<double> x, double scalar, Span<double> destination)
+        => VectorizedOperationsFallback.DivideScalar(this, x, scalar, destination);
+#endif
+
+    /// <summary>
+    /// Adds a scalar to each element using SIMD-optimized TensorPrimitivesCore.
+    /// </summary>
+#if NET8_0_OR_GREATER
+    public void AddScalar(ReadOnlySpan<double> x, double scalar, Span<double> destination)
+        => System.Numerics.Tensors.TensorPrimitives.Add(x, scalar, destination);
+#else
+    public void AddScalar(ReadOnlySpan<double> x, double scalar, Span<double> destination)
+        => VectorizedOperationsFallback.AddScalar(this, x, scalar, destination);
+#endif
+
+    /// <summary>
+    /// Subtracts a scalar from each element using SIMD-optimized TensorPrimitivesCore.
+    /// </summary>
+#if NET8_0_OR_GREATER
+    public void SubtractScalar(ReadOnlySpan<double> x, double scalar, Span<double> destination)
+        => System.Numerics.Tensors.TensorPrimitives.Subtract(x, scalar, destination);
+#else
+    public void SubtractScalar(ReadOnlySpan<double> x, double scalar, Span<double> destination)
+        => VectorizedOperationsFallback.SubtractScalar(this, x, scalar, destination);
+#endif
+
+    /// <summary>
+    /// Computes square root using SIMD-optimized TensorPrimitivesCore.
+    /// </summary>
+#if NET8_0_OR_GREATER
+    public void Sqrt(ReadOnlySpan<double> x, Span<double> destination)
+        => System.Numerics.Tensors.TensorPrimitives.Sqrt(x, destination);
+#else
+    public void Sqrt(ReadOnlySpan<double> x, Span<double> destination)
+        => VectorizedOperationsFallback.Sqrt(this, x, destination);
+#endif
+
+    /// <summary>
+    /// Computes absolute value using SIMD-optimized TensorPrimitivesCore.
+    /// </summary>
+#if NET8_0_OR_GREATER
+    public void Abs(ReadOnlySpan<double> x, Span<double> destination)
+        => System.Numerics.Tensors.TensorPrimitives.Abs(x, destination);
+#else
+    public void Abs(ReadOnlySpan<double> x, Span<double> destination)
+        => VectorizedOperationsFallback.Abs(this, x, destination);
+#endif
+
+    /// <summary>
+    /// Negates each element using SIMD-optimized TensorPrimitivesCore.
+    /// </summary>
+#if NET8_0_OR_GREATER
+    public void Negate(ReadOnlySpan<double> x, Span<double> destination)
+        => System.Numerics.Tensors.TensorPrimitives.Negate(x, destination);
+#else
+    public void Negate(ReadOnlySpan<double> x, Span<double> destination)
+        => VectorizedOperationsFallback.Negate(this, x, destination);
+#endif
+
+    /// <summary>
+    /// Clips each element to a range.
+    /// </summary>
+    public void Clip(ReadOnlySpan<double> x, double min, double max, Span<double> destination)
+    {
+        VectorizedOperationsFallback.Clip(this, x, min, max, destination);
+    }
+
+    /// <summary>
+    /// Computes the power of each element using SIMD-optimized TensorPrimitivesCore.
+    /// </summary>
+#if NET8_0_OR_GREATER
+    public void Pow(ReadOnlySpan<double> x, double power, Span<double> destination)
+        => System.Numerics.Tensors.TensorPrimitives.Pow(x, power, destination);
+#else
+    public void Pow(ReadOnlySpan<double> x, double power, Span<double> destination)
+        => VectorizedOperationsFallback.Pow(this, x, power, destination);
+#endif
+
+    /// <summary>
+    /// Copies elements from source to destination.
+    /// </summary>
+    public void Copy(ReadOnlySpan<double> source, Span<double> destination)
+    {
+        source.CopyTo(destination);
+    }
+
     #endregion
 }

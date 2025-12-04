@@ -415,13 +415,13 @@ namespace AiDotNetTests.UnitTests.Optimizers
             var options1 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.1,
-                Beta1 = 0.5,
+                Beta1 = 0.1,  // Low beta1 - more weight on current gradient
                 Beta2 = 0.99
             };
             var options2 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.1,
-                Beta1 = 0.95,
+                Beta1 = 0.9,  // High beta1 - more weight on momentum
                 Beta2 = 0.99
             };
 
@@ -429,18 +429,29 @@ namespace AiDotNetTests.UnitTests.Optimizers
             var optimizer2 = new LionOptimizer<double, Vector<double>, Vector<double>>(null, options2);
 
             var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
-            var gradient1 = new Vector<double>(new double[] { 0.5, 0.5, 0.5 });
-            var gradient2 = new Vector<double>(new double[] { 1.0, 1.0, 1.0 });
+            // Use gradients that will build strong positive momentum, then a small negative gradient
+            var gradient1 = new Vector<double>(new double[] { 10.0, 10.0, 10.0 });
+            var gradient2 = new Vector<double>(new double[] { -1.0, -1.0, -1.0 });
 
-            // Act - Build momentum then update with different gradient
+            // Act - Build momentum with large positive gradient, then update with small negative gradient
+            // After first update: m ≈ 0.1 (with beta2=0.99)
+            // Low beta1 (0.1): c = 0.1 * 0.1 + 0.9 * (-1.0) = 0.01 - 0.9 = -0.89 → sign = -1
+            // High beta1 (0.9): c = 0.9 * 0.1 + 0.1 * (-1.0) = 0.09 - 0.1 = -0.01 → sign = -1
+            // Still both negative! Need even more extreme difference or multiple iterations
+
+            // Let's do multiple updates to build stronger momentum
+            optimizer1.UpdateParameters(parameters, gradient1);
             optimizer1.UpdateParameters(parameters, gradient1);
             var updated1 = optimizer1.UpdateParameters(parameters, gradient2);
 
             optimizer2.UpdateParameters(parameters, gradient1);
+            optimizer2.UpdateParameters(parameters, gradient1);
             var updated2 = optimizer2.UpdateParameters(parameters, gradient2);
 
             // Assert - Different beta1 values should produce different interpolations
-            // and thus different results
+            // With low beta1, interpolation is closer to negative gradient (may be negative)
+            // With high beta1, interpolation is closer to positive momentum (likely positive)
+            // This can produce different signs and thus different results
             Assert.NotNull(updated1);
             Assert.NotNull(updated2);
 
@@ -464,37 +475,47 @@ namespace AiDotNetTests.UnitTests.Optimizers
             var options1 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.1,
-                Beta1 = 0.9,
-                Beta2 = 0.5
+                Beta1 = 0.5,  // Moderate beta1 so momentum differences show through interpolation
+                Beta2 = 0.1   // Low beta2 - momentum changes quickly
             };
             var options2 = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
             {
                 LearningRate = 0.1,
-                Beta1 = 0.9,
-                Beta2 = 0.999
+                Beta1 = 0.5,  // Same beta1
+                Beta2 = 0.9   // High beta2 - momentum changes slowly
             };
 
             var optimizer1 = new LionOptimizer<double, Vector<double>, Vector<double>>(null, options1);
             var optimizer2 = new LionOptimizer<double, Vector<double>, Vector<double>>(null, options2);
 
             var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
-            var gradient = new Vector<double>(new double[] { 1.0, 1.0, 1.0 });
+            // Use varying gradients to make momentum differences more visible
+            var gradient1 = new Vector<double>(new double[] { 1.0, 1.0, 1.0 });
+            var gradient2 = new Vector<double>(new double[] { -0.5, -0.5, -0.5 });
 
-            // Act - Multiple updates to see momentum effect
+            // Act - Multiple updates with alternating gradients to build different momentum profiles
             var params1 = new Vector<double>(parameters);
             var params2 = new Vector<double>(parameters);
 
-            for (int i = 0; i < 3; i++)
-            {
-                params1 = optimizer1.UpdateParameters(params1, gradient);
-                params2 = optimizer2.UpdateParameters(params2, gradient);
-            }
+            // First update with positive gradient
+            params1 = optimizer1.UpdateParameters(params1, gradient1);
+            params2 = optimizer2.UpdateParameters(params2, gradient1);
+
+            // Second update with negative gradient - low beta2 adapts faster
+            params1 = optimizer1.UpdateParameters(params1, gradient2);
+            params2 = optimizer2.UpdateParameters(params2, gradient2);
+
+            // Third update with positive gradient - momentum differences should be visible
+            params1 = optimizer1.UpdateParameters(params1, gradient1);
+            params2 = optimizer2.UpdateParameters(params2, gradient1);
 
             // Assert - Both should update, but momentum behavior differs
             Assert.NotEqual(parameters, params1);
             Assert.NotEqual(parameters, params2);
 
             // Verify that different Beta2 values produce different momentum behavior
+            // With beta1=0.5, the interpolation gives equal weight to momentum and gradient
+            // So different momentum (from different beta2) should produce different signs
             bool anyDifferent = false;
             for (int i = 0; i < params1.Length; i++)
             {

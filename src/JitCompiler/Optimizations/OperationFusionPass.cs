@@ -358,9 +358,13 @@ public class OperationFusionPass : IOptimizationPass
                     ActivationName = activationName
                 };
 
+                // Store reference to original ops before replacing
+                var originalElemwiseOp = operations[i];
+                var originalActivationOp = operations[j];
+
                 operations[i] = fusedOp;
-                fusedOps.Add(operations[i]);
-                fusedOps.Add(operations[j]);
+                fusedOps.Add(originalElemwiseOp);
+                fusedOps.Add(originalActivationOp);
                 tensorMapping[elemwiseOutput] = operations[j].OutputId;
                 count++;
                 break;

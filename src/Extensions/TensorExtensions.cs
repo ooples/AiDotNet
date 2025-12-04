@@ -12,27 +12,22 @@ public static class TensorExtensions
     /// </remarks>
     public static Matrix<T> ConvertToMatrix<T>(this Tensor<T> tensor)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
         // For 2D tensor, convert directly to matrix
         if (tensor.Rank == 2)
         {
             Matrix<T> matrix = new Matrix<T>(tensor.Shape[0], tensor.Shape[1]);
-            for (int i = 0; i < tensor.Shape[0]; i++)
-            {
-                for (int j = 0; j < tensor.Shape[1]; j++)
-                {
-                    matrix[i, j] = tensor[i, j];
-                }
-            }
+            // Copy entire tensor data at once using vectorized operation
+            numOps.Copy(tensor.AsSpan(), matrix.AsWritableSpan());
             return matrix;
         }
         // For vector, return as column matrix
         else if (tensor.Rank == 1)
         {
             Matrix<T> matrix = new Matrix<T>(tensor.Shape[0], 1);
-            for (int i = 0; i < tensor.Shape[0]; i++)
-            {
-                matrix[i, 0] = tensor[i];
-            }
+            // Copy entire tensor data at once using vectorized operation
+            numOps.Copy(tensor.AsSpan(), matrix.AsWritableSpan());
             return matrix;
         }
         // Handle other cases
@@ -150,9 +145,13 @@ public static class TensorExtensions
         if (!a.Shape.SequenceEqual(b.Shape))
             return false;
 
-        for (int i = 0; i < a.Length; i++)
+        // Use spans for vectorized comparison
+        ReadOnlySpan<T> spanA = a.AsSpan();
+        ReadOnlySpan<T> spanB = b.AsSpan();
+
+        for (int i = 0; i < spanA.Length; i++)
         {
-            if (!numOps.Equals(a[i], b[i]))
+            if (!numOps.Equals(spanA[i], spanB[i]))
                 return false;
         }
 
@@ -167,15 +166,17 @@ public static class TensorExtensions
     /// <returns>The concatenated tensor.</returns>
     public static Tensor<T> ConcatenateTensors<T>(this Tensor<T> tensorA, Tensor<T> tensorB)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
         // Get shapes and verify they can be concatenated
         int[] shapeA = tensorA.Shape;
         int[] shapeB = tensorB.Shape;
-    
+
         if (shapeA.Length != shapeB.Length)
         {
             throw new ArgumentException("Tensors must have the same number of dimensions to concatenate");
         }
-    
+
         for (int i = 0; i < shapeA.Length - 1; i++)
         {
             if (shapeA[i] != shapeB[i])
@@ -183,52 +184,65 @@ public static class TensorExtensions
                 throw new ArgumentException("All dimensions except the last must match for concatenation");
             }
         }
-    
+
         // Calculate shape of result tensor
         int[] resultShape = new int[shapeA.Length];
         Array.Copy(shapeA, resultShape, shapeA.Length);
         resultShape[resultShape.Length - 1] = shapeA[shapeA.Length - 1] + shapeB[shapeB.Length - 1];
-    
+
         // Create result tensor
         var result = new Tensor<T>(resultShape);
-    
+
         // Handle different dimensionality cases
         if (shapeA.Length == 2)
         {
             // 2D tensors (batch, features)
+            int featuresA = shapeA[1];
+            int featuresB = shapeB[1];
+            ReadOnlySpan<T> spanA = tensorA.AsSpan();
+            ReadOnlySpan<T> spanB = tensorB.AsSpan();
+            Span<T> spanResult = result.AsWritableSpan();
+
             for (int b = 0; b < shapeA[0]; b++)
             {
-                // Copy values from first tensor
-                for (int f = 0; f < shapeA[1]; f++)
-                {
-                    result[b, f] = tensorA[b, f];
-                }
-            
-                // Copy values from second tensor
-                for (int f = 0; f < shapeB[1]; f++)
-                {
-                    result[b, shapeA[1] + f] = tensorB[b, f];
-                }
+                int offsetA = b * featuresA;
+                int offsetB = b * featuresB;
+                int offsetResult = b * (featuresA + featuresB);
+
+                // Copy entire row from first tensor using vectorized operation
+                numOps.Copy(spanA.Slice(offsetA, featuresA), spanResult.Slice(offsetResult, featuresA));
+
+                // Copy entire row from second tensor using vectorized operation
+                numOps.Copy(spanB.Slice(offsetB, featuresB), spanResult.Slice(offsetResult + featuresA, featuresB));
             }
         }
         else if (shapeA.Length == 3)
         {
             // 3D tensors (batch, sequence, features)
+            int sequenceLen = shapeA[1];
+            int featuresA = shapeA[2];
+            int featuresB = shapeB[2];
+            int strideA = sequenceLen * featuresA;
+            int strideB = sequenceLen * featuresB;
+            int strideResult = sequenceLen * (featuresA + featuresB);
+
+            ReadOnlySpan<T> spanA = tensorA.AsSpan();
+            ReadOnlySpan<T> spanB = tensorB.AsSpan();
+            Span<T> spanResult = result.AsWritableSpan();
+
             for (int b = 0; b < shapeA[0]; b++)
             {
-                for (int s = 0; s < shapeA[1]; s++)
+                for (int s = 0; s < sequenceLen; s++)
                 {
-                    // Copy values from first tensor
-                    for (int f = 0; f < shapeA[2]; f++)
-                    {
-                        result[b, s, f] = tensorA[b, s, f];
-                    }
-                
-                    // Copy values from second tensor
-                    for (int f = 0; f < shapeB[2]; f++)
-                    {
-                        result[b, s, shapeA[2] + f] = tensorB[b, s, f];
-                    }
+                    int offsetA = b * strideA + s * featuresA;
+                    int offsetB = b * strideB + s * featuresB;
+                    int offsetResult = b * strideResult + s * (featuresA + featuresB);
+
+                    // Copy entire feature vector from first tensor using vectorized operation
+                    numOps.Copy(spanA.Slice(offsetA, featuresA), spanResult.Slice(offsetResult, featuresA));
+
+                    // Copy entire feature vector from second tensor using vectorized operation
+                    numOps.Copy(spanB.Slice(offsetB, featuresB), spanResult.Slice(offsetResult + featuresA, featuresB));
                 }
             }
         }
@@ -236,7 +250,7 @@ public static class TensorExtensions
         {
             throw new NotSupportedException("Concatenation currently supports only 2D and 3D tensors");
         }
-    
+
         return result;
     }
 }

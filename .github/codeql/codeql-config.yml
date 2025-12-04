@@ -13,11 +13,12 @@ paths-ignore:
   - 'docs/**'
   - '**/*.md'
   - '**/*.txt'
+  - '**/*.json'
+  - '**/*.xml'
 
 # Only analyze C# (explicitly, don't auto-detect)
 languages:
   - csharp
 
-# Use default queries plus security-extended
-queries:
-  - uses: security-extended
+# Query configuration is now in workflow file to avoid conflicts
+# Using security-and-quality (faster than security-extended)

@@ -11,9 +11,6 @@ on:
       - '**/*.sln'
       - '**/Directory.Build.props'
       - '.github/workflows/pr-validation.yml'
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
   workflow_dispatch:
 
 concurrency:

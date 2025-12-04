@@ -92,7 +92,7 @@ public static class OutlierRemovalHelper<T, TInput, TOutput>
         else if (inputType == typeof(Tensor<T>) && outputType == typeof(Tensor<T>))
         {
             // Convert Matrix to Tensor
-            var inputTensor = Tensor<T>.FromMatrix(cleanedInputMatrix);
+            var inputTensor = Tensor<T>.FromRowMatrix(cleanedInputMatrix);
             
             // Convert Vector to Tensor
             var outputTensor = Tensor<T>.FromVector(cleanedOutputVector);

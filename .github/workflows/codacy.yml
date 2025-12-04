@@ -56,6 +56,8 @@ jobs:
           skip-uncommitted-files-check: true
           # Enable parallel analysis for faster execution
           parallel: 4
+          # Only analyze src directory (skip tests, benchmarks, examples)
+          directory: ${{ github.workspace }}/src
         continue-on-error: true
 
       - name: Upload SARIF results file
@@ -63,3 +65,4 @@ jobs:
         if: always()
         with:
           sarif_file: results.sarif
+          category: codacy-security-scan

@@ -996,5 +996,125 @@ public class FloatOperations : INumericOperations<float>
 #endif
     }
 
+    /// <summary>
+    /// Fills the destination span with a constant value.
+    /// </summary>
+    public void Fill(Span<float> destination, float value)
+    {
+        destination.Fill(value);
+    }
+
+    /// <summary>
+    /// Multiplies each element by a scalar using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void MultiplyScalar(ReadOnlySpan<float> x, float scalar, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Multiply(x, scalar, destination);
+#else
+        VectorizedOperationsFallback.MultiplyScalar(_instance, x, scalar, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Divides each element by a scalar using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void DivideScalar(ReadOnlySpan<float> x, float scalar, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Divide(x, scalar, destination);
+#else
+        VectorizedOperationsFallback.DivideScalar(_instance, x, scalar, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Adds a scalar to each element using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void AddScalar(ReadOnlySpan<float> x, float scalar, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Add(x, scalar, destination);
+#else
+        VectorizedOperationsFallback.AddScalar(_instance, x, scalar, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Subtracts a scalar from each element using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void SubtractScalar(ReadOnlySpan<float> x, float scalar, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Subtract(x, scalar, destination);
+#else
+        VectorizedOperationsFallback.SubtractScalar(_instance, x, scalar, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Computes square root using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Sqrt(ReadOnlySpan<float> x, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Sqrt(x, destination);
+#else
+        VectorizedOperationsFallback.Sqrt(_instance, x, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Computes absolute value using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Abs(ReadOnlySpan<float> x, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Abs(x, destination);
+#else
+        VectorizedOperationsFallback.Abs(_instance, x, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Negates each element using SIMD-optimized TensorPrimitives.
+    /// </summary>
+    public void Negate(ReadOnlySpan<float> x, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Negate(x, destination);
+#else
+        VectorizedOperationsFallback.Negate(_instance, x, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Clips each element to a range.
+    /// </summary>
+    public void Clip(ReadOnlySpan<float> x, float min, float max, Span<float> destination)
+    {
+        VectorizedOperationsFallback.Clip(_instance, x, min, max, destination);
+    }
+
+    /// <summary>
+    /// Computes the power of each element.
+    /// </summary>
+    public void Pow(ReadOnlySpan<float> x, float power, Span<float> destination)
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Pow(x, power, destination);
+#else
+        VectorizedOperationsFallback.Pow(_instance, x, power, destination);
+#endif
+    }
+
+    /// <summary>
+    /// Copies elements from source to destination.
+    /// </summary>
+    public void Copy(ReadOnlySpan<float> source, Span<float> destination)
+    {
+        source.CopyTo(destination);
+    }
+
     #endregion
 }
