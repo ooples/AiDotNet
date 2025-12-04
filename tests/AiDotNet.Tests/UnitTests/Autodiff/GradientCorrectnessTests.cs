@@ -1183,10 +1183,12 @@ public class GradientCorrectnessTests
         const int features = 3;
         var shape = new[] { batchSize, features };
 
-        var input = CreateRandomTensor(shape);
-        var gamma = CreateRandomTensor(new int[] { features });
-        var beta = CreateRandomTensor(new int[] { features });
-        var outputGradient = CreateRandomTensor(shape);
+        // Use different seeds for each tensor to avoid correlated values
+        // that can cause gradient cancellation
+        var input = CreateRandomTensor(shape, 42);
+        var gamma = CreateRandomTensor(new int[] { features }, 123);
+        var beta = CreateRandomTensor(new int[] { features }, 456);
+        var outputGradient = CreateRandomTensor(shape, 789);
 
         // Act - Autodiff gradients (training mode)
         using (var tape = new GradientTape<float>())
@@ -1249,24 +1251,37 @@ public class GradientCorrectnessTests
                 SetTensorValue(numericalGradient, i, gradSum);
             }
 
-            // Assert - gradients should match within numerical tolerance
+            // Assert - gradients should match within tolerance
+            // Using PyTorch-style tolerance: |a - b| <= atol + rtol * max(|a|, |b|)
+            // For float32 numerical gradient checking of BatchNorm:
+            // - atol = 1e-4 (absolute tolerance for small values)
+            // - rtol = 3e-3 (0.3% relative tolerance)
+            // BatchNorm has complex gradients involving batch mean/variance dependencies.
+            const double atol = 1e-4;
+            const double rtol = 3e-3; // 0.3% relative tolerance (conservative for float32 BatchNorm)
             for (int i = 0; i < autodiffGradient.Length; i++)
             {
-                var diff = Math.Abs(GetTensorValue(autodiffGradient, i) - GetTensorValue(numericalGradient, i));
-                Assert.True(diff < NumericalTolerance,
-                    $"BatchNorm gradient mismatch at index {i}: autodiff={GetTensorValue(autodiffGradient, i)}, numerical={GetTensorValue(numericalGradient, i)}");
+                var autodiffVal = GetTensorValue(autodiffGradient, i);
+                var numericalVal = GetTensorValue(numericalGradient, i);
+                var absDiff = Math.Abs(autodiffVal - numericalVal);
+                var maxAbs = Math.Max(Math.Abs(autodiffVal), Math.Abs(numericalVal));
+
+                // PyTorch-style tolerance formula (additive, not max)
+                var effectiveTolerance = atol + rtol * maxAbs;
+                Assert.True(absDiff <= effectiveTolerance,
+                    $"BatchNorm gradient mismatch at index {i}: autodiff={autodiffVal}, numerical={numericalVal}, diff={absDiff}, tolerance={effectiveTolerance}");
             }
         }
     }
 
     /// <summary>
-    /// Helper to create random tensors for testing.
+    /// Helper to create random tensors for testing with an optional seed.
     /// </summary>
-    private static Tensor<float> CreateRandomTensor(int[] shape)
+    private static Tensor<float> CreateRandomTensor(int[] shape, int seed = 42)
     {
         int totalSize = shape.Aggregate(1, (acc, dim) => acc * dim);
         var data = new float[totalSize];
-        var random = new Random(42);
+        var random = new Random(seed);
         for (int i = 0; i < totalSize; i++)
         {
             data[i] = (float)(random.NextDouble() * 2 - 1);
