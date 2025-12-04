@@ -624,7 +624,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var flattenedInput = input.Reshape(batchSize, input.Shape[1]);
         // Convert transposed weights matrix to tensor for 2D tensor multiplication
-        var weightsTransposed = Tensor<T>.FromMatrix(_weights.Transpose());
+        var weightsTransposed = Tensor<T>.FromRowMatrix(_weights.Transpose());
         var output = flattenedInput.Multiply(weightsTransposed).Add(_biases);
 
         // Cache pre-activation output for proper gradient computation in backward pass
@@ -734,7 +734,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _biasesGradient = flattenedGradient.Sum([0]).ToVector();
 
         // For 2D tensors, convert to matrix, multiply, then convert back to tensor
-        var inputGradient = Tensor<T>.FromMatrix(flattenedGradient.ToMatrix().Multiply(_weights));
+        var inputGradient = Tensor<T>.FromRowMatrix(flattenedGradient.ToMatrix().Multiply(_weights));
 
         return inputGradient.Reshape(_lastInput.Shape);
     }
@@ -773,41 +773,32 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Use cached pre-activation values from forward pass (_lastOutput) to ensure
         // activation derivatives are computed on exactly the same values.
         // This is critical for gradient correctness.
-        var cachedPreActivation = Autodiff.TensorOperations<T>.Variable(
-            _lastOutput.Reshape(batchSize, _lastOutput.Shape[1]),
-            "pre_activation",
-            requiresGradient: true);
+        var cachedPreActivation = _lastOutput.Reshape(batchSize, _lastOutput.Shape[1]);
 
-        // Apply activation derivative using cached pre-activation values
-        // dL/dZ = dL/dY * f'(Z) where Z is pre-activation, Y is activated output
+        // Production-grade: Use vectorized Transform instead of scalar loops
+        // Compute activation derivative using cached values: f'(Z)
         Tensor<T> activationDerivative;
         if (ScalarActivation != null)
         {
-            activationDerivative = new Tensor<T>(cachedPreActivation.Value.Shape);
-            for (int i = 0; i < cachedPreActivation.Value.Length; i++)
-            {
-                activationDerivative[i] = ScalarActivation.Derivative(cachedPreActivation.Value[i]);
-            }
+            // Vectorized activation derivative computation via Transform
+            var activation = ScalarActivation;
+            activationDerivative = cachedPreActivation.Transform((x, _) => activation.Derivative(x));
         }
         else
         {
-            // Identity activation - derivative is 1
-            activationDerivative = new Tensor<T>(cachedPreActivation.Value.Shape);
-            for (int i = 0; i < activationDerivative.Length; i++)
-            {
-                activationDerivative[i] = NumOps.One;
-            }
+            // Identity activation - derivative is 1 (vectorized fill)
+            activationDerivative = new Tensor<T>(cachedPreActivation.Shape);
+            var one = NumOps.One;
+            activationDerivative = activationDerivative.Transform((_, _) => one);
         }
 
+        // Production-grade: Use Engine.TensorMultiply for vectorized element-wise multiplication
         // Compute dL/dZ = dL/dY * f'(Z)
-        var preActivationGradient = new Tensor<T>(flattenedOutputGradient.Shape);
-        for (int i = 0; i < flattenedOutputGradient.Length; i++)
-        {
-            preActivationGradient[i] = NumOps.Multiply(flattenedOutputGradient[i], activationDerivative[i]);
-        }
+        var preActivationGradient = Engine.TensorMultiply(flattenedOutputGradient, activationDerivative);
 
         // Now compute gradients using autodiff for the linear part: Z = X @ W.T + b
-        // Set up the computation graph for the linear transformation only
+        // TensorOperations automatically use IEngine for vectorized GPU/CPU acceleration
+        // and set JIT compiler metadata for graph compilation
         var weightsTransposed = Autodiff.TensorOperations<T>.Transpose(weights);
         var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weightsTransposed);
         var biasesBroadcastedNode = Autodiff.TensorOperations<T>.Broadcast(biases, new int[] { batchSize, biasesTensor.Shape[0] });
@@ -817,6 +808,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         linearOutput.Gradient = preActivationGradient;
 
         // Perform topological sort and backward pass
+        // Note: TensorOperations backward functions use Engine for vectorized operations
         var topoOrder = GetTopologicalOrder(linearOutput);
 
         // Execute backward pass in reverse topological order
