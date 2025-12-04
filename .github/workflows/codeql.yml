@@ -3,22 +3,11 @@ name: CodeQL Analysis
 on:
   push:
     branches: [ master, main ]
-    paths:
-      - 'src/**/*.cs'
-      - 'src/**/*.csproj'
-      - '**/Directory.Build.props'
-      - '.github/workflows/codeql.yml'
-      - '.github/codeql/**'
   pull_request:
     branches: [ master, main ]
-    paths:
-      - 'src/**/*.cs'
-      - 'src/**/*.csproj'
-      - '**/Directory.Build.props'
-      - '.github/workflows/codeql.yml'
-      - '.github/codeql/**'
   schedule:
     - cron: '0 8 * * 1'
+  workflow_dispatch:
 
 # Cancel in-progress runs for the same branch
 concurrency:
@@ -44,19 +33,33 @@ jobs:
         # Shallow clone for faster checkout
         fetch-depth: 1
 
+    - name: Setup .NET 8.0.x
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Cache NuGet Packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    - name: Restore NuGet Packages
+      run: dotnet restore --verbosity minimal
+
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
       with:
         languages: csharp
         # Use config file to exclude test code
         config-file: ./.github/codeql/codeql-config.yml
-        # Use security-and-quality (faster than security-extended)
+        # Use default queries (faster than security-extended)
         queries: security-and-quality
-        # Enable trap caching for faster subsequent runs
-        trap-caching: true
-        # Build mode: none skips build tracing for faster analysis
-        # CodeQL will analyze source directly without compilation tracing
-        build-mode: none
+
+    - name: Dotnet Build
+      run: dotnet build -c Release --no-restore --verbosity minimal
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
@@ -64,7 +67,3 @@ jobs:
         category: "/language:csharp"
         # Upload results even if analysis times out
         upload: always
-        # Use multiple threads for faster analysis
-        threads: 4
-        # Set RAM limit to prevent OOM (4GB)
-        ram: 4096
