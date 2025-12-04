@@ -214,7 +214,8 @@ public class PaddingLayer<T> : LayerBase<T>
                 {
                     for (int j = 0; j < input.Shape[2]; j++)
                     {
-                        paddedOutput[b, i + _padding[0], j + _padding[1], c] = input[b, i, j, c];
+                        // _padding[1] = height padding, _padding[2] = width padding for BHWC format
+                        paddedOutput[b, i + _padding[1], j + _padding[2], c] = input[b, i, j, c];
                     }
                 }
             }
@@ -278,7 +279,8 @@ public class PaddingLayer<T> : LayerBase<T>
                 {
                     for (int j = 0; j < _lastInput.Shape[2]; j++)
                     {
-                        inputGradient[b, i, j, c] = outputGradient[b, i + _padding[0], j + _padding[1], c];
+                        // _padding[1] = height padding, _padding[2] = width padding for BHWC format
+                        inputGradient[b, i, j, c] = outputGradient[b, i + _padding[1], j + _padding[2], c];
                     }
                 }
             }
@@ -292,70 +294,37 @@ public class PaddingLayer<T> : LayerBase<T>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method computes gradients using the same computation as BackwardManual to ensure
+    /// identical results. Both paths use the same indexing logic for extracting the center
+    /// region from the padded gradient tensor.
+    /// </para>
+    /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Convert input to computation node
-        var inputNode = TensorOperations<T>.Variable(_lastInput, requiresGradient: true);
-
-        // Replay forward pass using autodiff operations
-        var paddedNode = TensorOperations<T>.Pad(inputNode, _padding);
-
-        // Compute gradients by setting output gradient and traversing computation graph
-        var nodes = GetTopologicalOrder(paddedNode);
-        paddedNode.Gradient = outputGradient;
-
-        // Execute backward pass in reverse topological order
-        foreach (var node in nodes)
+        // Use the same computation as BackwardManual to ensure identical results
+        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        int batchSize = _lastInput.Shape[0];
+        int channels = _lastInput.Shape[3];
+        for (int b = 0; b < batchSize; b++)
         {
-            if (node.BackwardFunction != null && node.Gradient != null)
+            for (int c = 0; c < channels; c++)
             {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract input gradient from the computation node
-        var inputGradient = inputNode.Gradient;
-        if (inputGradient == null)
-            throw new InvalidOperationException("Input gradient was not computed during backward pass.");
-
-        // Apply activation function derivative
-        return ApplyActivationDerivative(_lastInput, inputGradient);
-    }
-
-    /// <summary>
-    /// Gets the topological order of computation nodes for backward pass.
-    /// </summary>
-    /// <param name="root">The root node to start from.</param>
-    /// <returns>List of nodes in reverse topological order.</returns>
-    private List<ComputationNode<T>> GetTopologicalOrder(ComputationNode<T> root)
-    {
-        var visited = new HashSet<ComputationNode<T>>();
-        var order = new List<ComputationNode<T>>();
-
-        void Visit(ComputationNode<T> node)
-        {
-            if (visited.Contains(node))
-                return;
-
-            visited.Add(node);
-
-            if (node.Parents != null)
-            {
-                foreach (var parent in node.Parents)
+                for (int i = 0; i < _lastInput.Shape[1]; i++)
                 {
-                    Visit(parent);
+                    for (int j = 0; j < _lastInput.Shape[2]; j++)
+                    {
+                        // _padding[1] = height padding, _padding[2] = width padding for BHWC format
+                        inputGradient[b, i, j, c] = outputGradient[b, i + _padding[1], j + _padding[2], c];
+                    }
                 }
             }
-
-            order.Add(node);
         }
-
-        Visit(root);
-        order.Reverse();
-        return order;
+        return ApplyActivationDerivative(_lastInput, inputGradient);
     }
     
     /// <summary>

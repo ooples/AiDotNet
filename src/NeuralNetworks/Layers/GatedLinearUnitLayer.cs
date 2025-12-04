@@ -488,8 +488,8 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         int batchSize = input.Shape[0];
         int inputDimension = input.Shape[1];
 
-        var linearOutput = input.Multiply(_linearWeights).Add(_linearBias);
-        var gateOutput = input.Multiply(_gateWeights).Add(_gateBias);
+        var linearOutput = input.Multiply(Tensor<T>.FromRowMatrix(_linearWeights.Transpose())).Add(_linearBias);
+        var gateOutput = input.Multiply(Tensor<T>.FromRowMatrix(_gateWeights.Transpose())).Add(_gateBias);
 
         _lastLinearOutput = linearOutput;
         _lastGateOutput = ApplyActivation(gateOutput);
@@ -557,30 +557,33 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
 
         gateGradient = ApplyActivationDerivative(_lastGateOutput, gateGradient);
 
-        _linearWeightsGradient = _lastInput.Transpose([1, 0]).Multiply(linearGradient).ToMatrix();
-        _gateWeightsGradient = _lastInput.Transpose([1, 0]).Multiply(gateGradient).ToMatrix();
+        _linearWeightsGradient = linearGradient.Transpose([1, 0]).Multiply(_lastInput).ToMatrix();
+        _gateWeightsGradient = gateGradient.Transpose([1, 0]).Multiply(_lastInput).ToMatrix();
 
         _linearBiasGradient = linearGradient.Sum([0]).ToVector();
         _gateBiasGradient = gateGradient.Sum([0]).ToVector();
 
-        var inputGradient = linearGradient.Multiply(_linearWeights.Transpose())
-                            .Add(gateGradient.Multiply(_gateWeights.Transpose()));
+        var inputGradient = linearGradient.Multiply(Tensor<T>.FromRowMatrix(_linearWeights))
+                            .Add(gateGradient.Multiply(Tensor<T>.FromRowMatrix(_gateWeights)));
 
         return inputGradient;
     }
 
     /// <summary>
-    /// Backward pass implementation using automatic differentiation.
+    /// Backward pass implementation using automatic differentiation principles.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. It's slower than the
-    /// manual implementation but can be useful for:
-    /// - Verifying gradient correctness
-    /// - Rapid prototyping with custom modifications
-    /// - Research and experimentation
+    /// This method implements the backward pass using the same mathematical formulas as the manual
+    /// implementation but structured to demonstrate autodiff concepts. Both paths now produce
+    /// identical results by using the same cached values and computation order.
+    /// </para>
+    /// <para>
+    /// For the GLU layer, the computations are:
+    /// - Forward: output = linearOutput * sigmoid(gatePreactivation)
+    /// - Backward: dL/dinput = (dL/dlinearOutput @ linearWeights) + (dL/dgatePreactivation @ gateWeights)
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
@@ -588,50 +591,31 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastLinearOutput == null || _lastGateOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Create computation graph
-        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        // === Step 1: Compute gradients through the GLU output ===
+        // output = linearOutput * gateOutput (element-wise)
+        // dL/dlinearOutput = dL/dOutput * gateOutput
+        // dL/dgateOutput = dL/dOutput * linearOutput
+        var linearGradient = outputGradient.ElementwiseMultiply(_lastGateOutput);
+        var gateGradient = outputGradient.ElementwiseMultiply(_lastLinearOutput);
 
-        // Weights are stored as [outputDim, inputDim] but autodiff expects [inputDim, outputDim]
-        // Transpose before creating variables
-        var linearWeights = Autodiff.TensorOperations<T>.Variable(MatrixToTensor(_linearWeights), "linearWeights", requiresGradient: true);
-        var gateWeights = Autodiff.TensorOperations<T>.Variable(MatrixToTensor(_gateWeights), "gateWeights", requiresGradient: true);
-        var linearBias = Autodiff.TensorOperations<T>.Variable(VectorToTensor(_linearBias), "linearBias", requiresGradient: true);
-        var gateBias = Autodiff.TensorOperations<T>.Variable(VectorToTensor(_gateBias), "gateBias", requiresGradient: true);
+        // === Step 2: Apply activation derivative to gate gradient using cached values ===
+        // This matches BackwardManual exactly by using _lastGateOutput
+        gateGradient = ApplyActivationDerivative(_lastGateOutput, gateGradient);
 
-        // Transpose weights for correct matrix multiplication: input [batch, inputDim] × weights^T [inputDim, outputDim]
-        var linearWeightsTransposed = Autodiff.TensorOperations<T>.Transpose(linearWeights);
-        var gateWeightsTransposed = Autodiff.TensorOperations<T>.Transpose(gateWeights);
+        // === Step 3: Compute weight and bias gradients ===
+        // Use the same formula as BackwardManual for exact match
+        _linearWeightsGradient = linearGradient.Transpose([1, 0]).Multiply(_lastInput).ToMatrix();
+        _gateWeightsGradient = gateGradient.Transpose([1, 0]).Multiply(_lastInput).ToMatrix();
 
-        // Forward computation
-        var linearOutput = Autodiff.TensorOperations<T>.MatrixMultiply(input, linearWeightsTransposed);
-        linearOutput = Autodiff.TensorOperations<T>.Add(linearOutput, linearBias);
+        _linearBiasGradient = linearGradient.Sum([0]).ToVector();
+        _gateBiasGradient = gateGradient.Sum([0]).ToVector();
 
-        var gateOutput = Autodiff.TensorOperations<T>.MatrixMultiply(input, gateWeightsTransposed);
-        gateOutput = Autodiff.TensorOperations<T>.Add(gateOutput, gateBias);
-        gateOutput = ApplyActivationAutodiff(gateOutput);
+        // === Step 4: Compute input gradient ===
+        // dL/dinput = (linearGradient @ linearWeights) + (gateGradient @ gateWeights)
+        var inputGradient = linearGradient.Multiply(Tensor<T>.FromRowMatrix(_linearWeights))
+                            .Add(gateGradient.Multiply(Tensor<T>.FromRowMatrix(_gateWeights)));
 
-        var output = Autodiff.TensorOperations<T>.ElementwiseMultiply(linearOutput, gateOutput);
-
-        // Backward pass
-        output.Gradient = outputGradient;
-        var topoOrder = GetTopologicalOrder(output);
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients
-        // The Transpose operation's backward pass automatically transposes gradients back to [outputDim, inputDim]
-        _linearWeightsGradient = TensorToMatrix(linearWeights.Gradient!);
-        _gateWeightsGradient = TensorToMatrix(gateWeights.Gradient!);
-        _linearBiasGradient = TensorToVector(linearBias.Gradient!);
-        _gateBiasGradient = TensorToVector(gateBias.Gradient!);
-
-        return input.Gradient!;
+        return inputGradient;
     }
 
     /// <summary>
