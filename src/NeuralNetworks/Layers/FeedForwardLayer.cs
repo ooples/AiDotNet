@@ -383,7 +383,9 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        var activationGradient = ApplyActivationDerivative(outputGradient, Output);
+        // ApplyActivationDerivative(input, outputGradient) computes: activation_derivative(input) * outputGradient
+        // We need: activation_derivative(Output) * outputGradient
+        var activationGradient = ApplyActivationDerivative(Output, outputGradient);
 
         var inputGradient = activationGradient.MatrixMultiply(Weights.Transpose(new[] { 1, 0 }));
         var weightsGradient = Input.Transpose(new[] { 1, 0 }).MatrixMultiply(activationGradient);
