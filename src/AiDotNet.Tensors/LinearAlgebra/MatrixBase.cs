@@ -138,14 +138,16 @@ public abstract class MatrixBase<T>
 
         this._data = new T[_rows * _cols];
 
-        // Copy row by row using vectorized operations
+        // Copy row by row using vectorized Copy operations
         for (int i = 0; i < _rows; i++)
         {
-            var destRow = new Span<T>(_data, i * _cols, _cols);
+            var sourceRow = new T[_cols];
             for (int j = 0; j < _cols; j++)
             {
-                destRow[j] = data[i, j];
+                sourceRow[j] = data[i, j];
             }
+            var destRow = new Span<T>(_data, i * _cols, _cols);
+            _numOps.Copy(new ReadOnlySpan<T>(sourceRow), destRow);
         }
     }
 
