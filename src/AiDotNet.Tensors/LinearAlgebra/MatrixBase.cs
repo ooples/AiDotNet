@@ -138,10 +138,12 @@ public abstract class MatrixBase<T>
 
         this._data = new T[_rows * _cols];
 
+        // Reuse a single buffer to avoid allocating a new array per row
+        var sourceRow = new T[_cols];
+
         // Copy row by row using vectorized Copy operations
         for (int i = 0; i < _rows; i++)
         {
-            var sourceRow = new T[_cols];
             for (int j = 0; j < _cols; j++)
             {
                 sourceRow[j] = data[i, j];
