@@ -122,11 +122,12 @@ namespace AiDotNetTests.UnitTests.Interpretability
 
             // Assert
             Assert.NotNull(result);
-            // EqualOpportunity = |1.0 - 0.5| = 0.5 (different TPRs)
+            // EqualOpportunity = |TPR0 - TPR1| = |1.0 - 0.5| = 0.5 (different TPRs)
             Assert.NotEqual(0.0, result.EqualOpportunity);
-            // EqualizedOdds = max(|TPR diff|, |FPR diff|) = max(0.5, |0.25-0|) = 0.5
+            // EqualizedOdds = max(|TPR diff|, |FPR diff|) = max(0.5, |1.0-0|) = 1.0
+            // FPR0 = 1/1 = 1.0 (1 FP out of 1 actual negative), FPR1 = 0/2 = 0 (0 FP out of 2 actual negatives)
             Assert.NotEqual(0.0, result.EqualizedOdds);
-            // PredictiveParity = |0.75 - 1.0| = 0.25 (different precisions)
+            // PredictiveParity = |Precision0 - Precision1| = |0.75 - 1.0| = 0.25 (different precisions)
             Assert.NotEqual(0.0, result.PredictiveParity);
         }
 
