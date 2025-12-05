@@ -299,7 +299,36 @@ public class AvgPoolingLayer<T> : LayerBase<T>
 
         // Perform backward pass with 4D gradient
         outputNode.Gradient = gradient4D;
-        var topoOrder = GetTopologicalOrder(outputNode);
+
+        // Production-grade: Inline topological sort for backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+                continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                        stack.Push((parent, false));
+                }
+            }
+        }
+
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -312,50 +341,6 @@ public class AvgPoolingLayer<T> : LayerBase<T>
         // Extract input gradient and reshape back to 3D
         var inputGrad4D = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
         return inputGrad4D.Reshape(_lastInput.Shape);
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    /// <param name="root">The root node of the computation graph.</param>
-    /// <returns>A list of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
     }
 
     /// <summary>
