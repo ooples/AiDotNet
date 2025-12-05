@@ -167,10 +167,10 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets the biases vector of the convolutional layer.
+    /// Gets the biases tensor of the convolutional layer.
     /// </summary>
     /// <returns>The bias values added to each output channel.</returns>
-    public override Vector<T> GetBiases()
+    public override Tensor<T> GetBiases()
     {
         return _biases;
     }
@@ -204,21 +204,21 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the bias values for each output channel. _biases are constants that are
+    /// This tensor stores the bias values for each output channel. _biases are constants that are
     /// added to the convolution results before applying the activation function.
     /// </para>
     /// <para><b>For Beginners:</b> _biases are like "adjustment factors" for each pattern detector.
-    /// 
+    ///
     /// Think of biases as:
     /// - A starting point or baseline value
     /// - Added to the result after applying the pattern detector
     /// - Helping the network be more flexible in what it can learn
-    /// 
+    ///
     /// For example, biases help the network detect patterns even when the input doesn't
     /// perfectly match what the kernel is looking for.
     /// </para>
     /// </remarks>
-    private Vector<T> _biases;
+    private Tensor<T> _biases;
 
     /// <summary>
     /// The execution engine for GPU-accelerated convolution operations.
@@ -241,7 +241,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// <summary>
     /// Gradient of the biases computed during backpropagation via autodiff.
     /// </summary>
-    private Vector<T>? _biasesGradient;
+    private Tensor<T>? _biasesGradient;
 
     /// <summary>
     /// Stored input data from the most recent forward pass, used for backpropagation.
@@ -350,7 +350,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         Padding = padding;
 
         _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _biases = new Vector<T>(OutputDepth);
+        _biases = new Tensor<T>([OutputDepth]);
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _random = RandomHelper.CreateSecureRandom();
@@ -378,12 +378,12 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This setup method is similar to the previous one, but uses a different type of
     /// activation function.
-    /// 
+    ///
     /// A vector activation function:
     /// - Works on entire groups of numbers at once
     /// - Can be more efficient for certain types of calculations
     /// - Otherwise works the same as the regular activation function
-    /// 
+    ///
     /// You would choose this option if you have a specific mathematical operation that
     /// needs to be applied to groups of outputs rather than individual values.
     /// </para>
@@ -401,7 +401,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         Padding = padding;
 
         _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _biases = new Vector<T>(OutputDepth);
+        _biases = new Tensor<T>([OutputDepth]);
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _random = RandomHelper.CreateSecureRandom();
@@ -566,7 +566,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
 
         // Serialize _biases
-        for (int i = 0; i < _biases.Length; i++)
+        for (int i = 0; i < _biases.Shape[0]; i++)
         {
             writer.Write(Convert.ToDouble(_biases[i]));
         }
@@ -624,8 +624,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
 
         // Deserialize _biases
-        _biases = new Vector<T>(OutputDepth);
-        for (int i = 0; i < _biases.Length; i++)
+        _biases = new Tensor<T>([OutputDepth]);
+        for (int i = 0; i < _biases.Shape[0]; i++)
         {
             double value = reader.ReadDouble();
             _biases[i] = NumOps.FromDouble(value);
@@ -823,7 +823,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         Tensor<T> inputGradient = new Tensor<T>(_lastInput.Shape);
         Tensor<T> kernelGradients = new Tensor<T>(_kernels.Shape);
-        Vector<T> biasGradients = new Vector<T>(OutputDepth);
+        Tensor<T> biasGradients = new Tensor<T>([OutputDepth]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -890,14 +890,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         // Convert parameters to computation nodes
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
         var kernelNode = Autodiff.TensorOperations<T>.Variable(_kernels, "kernel", requiresGradient: true);
-
-        // Convert biases from Vector to Tensor for TensorOperations
-        var biasesTensor = new Tensor<T>(new int[] { OutputDepth });
-        for (int i = 0; i < OutputDepth; i++)
-        {
-            biasesTensor[i] = _biases[i];
-        }
-        var biasNode = Autodiff.TensorOperations<T>.Variable(biasesTensor, "bias", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(_biases, "bias", requiresGradient: true);
 
         // Forward pass using autodiff Conv2D operation
         var stride = new int[] { Stride, Stride };
@@ -925,8 +918,37 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         // Set output gradient
         activated.Gradient = outputGradient;
 
-        // Perform backward pass
-        var topoOrder = GetTopologicalOrder(activated);
+        // Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((activated, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -944,12 +966,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         if (biasNode.Gradient != null)
         {
-            // Convert Tensor gradient back to Vector
-            _biasesGradient = new Vector<T>(OutputDepth);
-            for (int i = 0; i < OutputDepth; i++)
-            {
-                _biasesGradient[i] = biasNode.Gradient[i];
-            }
+            _biasesGradient = biasNode.Gradient;
         }
 
         return inputNode.Gradient!;
@@ -976,50 +993,6 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             _ => throw new NotSupportedException($"Activation {ScalarActivation?.GetType().Name} not supported in autodiff mode. " +
                 "Supported: ReLU, Sigmoid, Tanh, ELU, LeakyReLU, GELU, Swish, SiLU, SELU, SoftSign, Identity")
         };
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    /// <param name="root">The root node of the computation graph.</param>
-    /// <returns>A list of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
     }
 
     /// <summary>
@@ -1064,11 +1037,12 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             }
         }
 
-        // Update biases - vectorized
-        var lrVec = new Vector<T>(OutputDepth);
-        lrVec.Fill(learningRate);
-        var biasUpdates = (Vector<T>)Engine.Multiply(_biases, lrVec);
-        _biases = (Vector<T>)Engine.Subtract(_biases, biasUpdates);
+        // Update biases
+        for (int o = 0; o < OutputDepth; o++)
+        {
+            T update = NumOps.Multiply(learningRate, _biases[o]);
+            _biases[o] = NumOps.Subtract(_biases[o], update);
+        }
     }
 
     /// <summary>
@@ -1098,7 +1072,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Calculate total number of parameters
-        int totalParams = _kernels.Length + _biases.Length;
+        int totalParams = _kernels.Length + _biases.Shape[0];
         var parameters = new Vector<T>(totalParams);
     
         int index = 0;
@@ -1153,9 +1127,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != _kernels.Length + _biases.Length)
+        if (parameters.Length != _kernels.Length + _biases.Shape[0])
         {
-            throw new ArgumentException($"Expected {_kernels.Length + _biases.Length} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {_kernels.Length + _biases.Shape[0]} parameters, but got {parameters.Length}");
         }
     
         int index = 0;
@@ -1257,7 +1231,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         // Create constant nodes for kernels and biases
         var kernelNode = TensorOperations<T>.Constant(_kernels, "kernel");
-        var biasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { OutputDepth }, _biases), "bias");
+        var biasNode = TensorOperations<T>.Constant(_biases, "bias");
 
         // Apply Conv2D operation
         var conv2dNode = TensorOperations<T>.Conv2D(
