@@ -416,17 +416,37 @@ public class FeedForwardLayer<T> : LayerBase<T>
         if (Input == null || Input.Shape == null || Input.Shape.Length == 0)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Convert to computation nodes
-        var input = Autodiff.TensorOperations<T>.Variable(Input, "input", requiresGradient: true);
-        var weights = Autodiff.TensorOperations<T>.Variable(Weights, "weights", requiresGradient: true);
-
-        // Forward computation using autodiff ops
-        // output = input @ weights + biases
-        var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weights);
-
-        // Broadcast biases to match batch dimension: [1, outputSize] -> [batch, outputSize]
         int batchSize = Input.Shape[0];
         int outputSize = Biases.Shape[1];
+
+        // Production-grade: Compute activation derivative using cached Output
+        // For most activations, derivative can be computed from the activated output:
+        // - ReLU: derivative is 1 where Output > 0, else 0
+        // - Sigmoid: derivative = Output * (1 - Output)
+        // - Tanh: derivative = 1 - Output²
+        Tensor<T> preActivationGradient;
+        if (UsingVectorActivation && VectorActivation != null)
+        {
+            var actDeriv = VectorActivation.Derivative(Output);
+            preActivationGradient = Engine.TensorMultiply(outputGradient, actDeriv);
+        }
+        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            var activation = ScalarActivation;
+            var activationDerivative = Output.Transform((x, _) => activation.Derivative(x));
+            preActivationGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
+        }
+        else
+        {
+            preActivationGradient = outputGradient;
+        }
+
+        // Build minimal autodiff graph for linear part: Z = X @ W + b
+        var input = Autodiff.TensorOperations<T>.Variable(Input, "input", requiresGradient: true);
+        var weights = Autodiff.TensorOperations<T>.Variable(Weights, "weights", requiresGradient: true);
+        var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weights);
+
+        // Broadcast biases to match batch dimension
         var broadcastedBiasesData = new T[batchSize * outputSize];
         for (int b = 0; b < batchSize; b++)
         {
@@ -439,14 +459,36 @@ public class FeedForwardLayer<T> : LayerBase<T>
         var biasesBroadcast = Autodiff.TensorOperations<T>.Variable(broadcastedBiases, "biases_broadcast", requiresGradient: true);
         var linearOutput = Autodiff.TensorOperations<T>.Add(matmul, biasesBroadcast);
 
-        // Apply activation using autodiff
-        var activated = ApplyActivationAutodiff(linearOutput);
+        // Set the pre-activation gradient at linearOutput (after manually handling activation)
+        linearOutput.Gradient = preActivationGradient;
 
-        // Set the gradient at the output and propagate backward
-        activated.Gradient = outputGradient;
-
-        // Perform topological sort and backward pass
-        var topoOrder = GetTopologicalOrder(activated);
+        // Topological sort and backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((linearOutput, false));
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
 
         // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)
@@ -464,8 +506,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
 
         WeightsGradient = weights.Gradient;
 
-        // Sum the broadcasted bias gradient along the batch dimension to get actual bias gradient
-        // BiasesGradient should be [1, outputSize], summing biasesBroadcast.Gradient [batch, outputSize] along axis 0
+        // Sum the broadcasted bias gradient along the batch dimension
         var biasGradData = new T[outputSize];
         for (int o = 0; o < outputSize; o++)
         {
@@ -479,103 +520,6 @@ public class FeedForwardLayer<T> : LayerBase<T>
         BiasesGradient = new Tensor<T>([1, outputSize], new Vector<T>(biasGradData));
 
         return input.Gradient;
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                        {
-                            stack.Push((parent, false));
-                        }
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Applies the activation function using automatic differentiation operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        // Check if using scalar activation
-        if (!UsingVectorActivation && ScalarActivation != null)
-        {
-            return ScalarActivation switch
-            {
-                ReLUActivation<T> => Autodiff.TensorOperations<T>.ReLU(input),
-                SigmoidActivation<T> => Autodiff.TensorOperations<T>.Sigmoid(input),
-                TanhActivation<T> => Autodiff.TensorOperations<T>.Tanh(input),
-                ELUActivation<T> elu => Autodiff.TensorOperations<T>.ELU(input, Convert.ToDouble(elu.Alpha)),
-                LeakyReLUActivation<T> leaky => Autodiff.TensorOperations<T>.LeakyReLU(input, Convert.ToDouble(leaky.Alpha)),
-                GELUActivation<T> => Autodiff.TensorOperations<T>.GELU(input),
-                SwishActivation<T> => Autodiff.TensorOperations<T>.Swish(input),
-                SiLUActivation<T> => Autodiff.TensorOperations<T>.Swish(input), // SiLU is same as Swish
-                SELUActivation<T> => Autodiff.TensorOperations<T>.SELU(input),
-                SoftSignActivation<T> => Autodiff.TensorOperations<T>.SoftSign(input),
-                IdentityActivation<T> => input,
-                _ => throw new NotSupportedException($"Scalar activation {ScalarActivation.GetType().Name} not supported with autodiff. " +
-                    "Supported: ReLU, Sigmoid, Tanh, ELU, LeakyReLU, GELU, Swish, SiLU, SELU, SoftSign, Identity")
-            };
-        }
-
-        // Check if using vector activation
-        if (UsingVectorActivation && VectorActivation != null)
-        {
-            return VectorActivation switch
-            {
-                SoftmaxActivation<T> => Autodiff.TensorOperations<T>.Softmax(input),
-                ReLUActivation<T> => Autodiff.TensorOperations<T>.ReLU(input),
-                SigmoidActivation<T> => Autodiff.TensorOperations<T>.Sigmoid(input),
-                TanhActivation<T> => Autodiff.TensorOperations<T>.Tanh(input),
-                ELUActivation<T> elu => Autodiff.TensorOperations<T>.ELU(input, Convert.ToDouble(elu.Alpha)),
-                LeakyReLUActivation<T> leaky => Autodiff.TensorOperations<T>.LeakyReLU(input, Convert.ToDouble(leaky.Alpha)),
-                GELUActivation<T> => Autodiff.TensorOperations<T>.GELU(input),
-                SwishActivation<T> => Autodiff.TensorOperations<T>.Swish(input),
-                SiLUActivation<T> => Autodiff.TensorOperations<T>.Swish(input),
-                SELUActivation<T> => Autodiff.TensorOperations<T>.SELU(input),
-                SoftSignActivation<T> => Autodiff.TensorOperations<T>.SoftSign(input),
-                IdentityActivation<T> => input,
-                _ => throw new NotSupportedException($"Vector activation {VectorActivation.GetType().Name} not supported with autodiff. " +
-                    "Supported: Softmax, ReLU, Sigmoid, Tanh, ELU, LeakyReLU, GELU, Swish, SiLU, SELU, SoftSign, Identity")
-            };
-        }
-
-        // No activation function, return input as-is
-        return input;
     }
 
     /// <summary>
