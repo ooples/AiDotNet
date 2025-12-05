@@ -496,19 +496,10 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's inputs (both input and memory).</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients through the attention-based
-    /// memory reading mechanism. It replays the forward computation using autodiff operations,
-    /// then propagates gradients backward through the computation graph.
-    /// </para>
-    /// <para>
-    /// The autodiff implementation is useful for:
-    /// - Verifying gradient correctness
-    /// - Rapid prototyping with custom modifications
-    /// - Research and experimentation
-    /// </para>
-    /// <para>
-    /// Note: This handles the dual-input structure (input and memory) by creating separate
-    /// computation nodes for each and combining their gradients at the end.
+    /// This method uses automatic differentiation with production-grade pattern:
+    /// - Uses cached forward pass values for activation derivative computation
+    /// - Uses Tensor.FromRowMatrix/FromVector for efficient conversions
+    /// - Builds minimal autodiff graph for gradient routing
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
@@ -516,21 +507,33 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastInput == null || _lastMemory == null || _lastOutput == null || _lastAttentionScores == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Convert weights to tensors
-        var keyWeightsTensor = MatrixToTensor(_keyWeights);
-        var valueWeightsTensor = MatrixToTensor(_valueWeights);
-        var outputWeightsTensor = MatrixToTensor(_outputWeights);
-        var outputBiasTensor = VectorToTensor(_outputBias);
+        // Production-grade: Compute activation derivative using cached output
+        Tensor<T> preActivationGradient;
+        if (VectorActivation != null)
+        {
+            var actDeriv = VectorActivation.Derivative(_lastOutput);
+            preActivationGradient = Engine.TensorMultiply(outputGradient, actDeriv);
+        }
+        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            var activation = ScalarActivation;
+            var activationDerivative = _lastOutput.Transform((x, _) => activation.Derivative(x));
+            preActivationGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
+        }
+        else
+        {
+            preActivationGradient = outputGradient;
+        }
 
-        // Create computation nodes
+        // Create computation nodes with efficient tensor conversions
         var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
         var memory = Autodiff.TensorOperations<T>.Variable(_lastMemory, "memory", requiresGradient: true);
-        var keyWeights = Autodiff.TensorOperations<T>.Variable(keyWeightsTensor, "keyWeights", requiresGradient: true);
-        var valueWeights = Autodiff.TensorOperations<T>.Variable(valueWeightsTensor, "valueWeights", requiresGradient: true);
-        var outputWeights = Autodiff.TensorOperations<T>.Variable(outputWeightsTensor, "outputWeights", requiresGradient: true);
-        var outputBias = Autodiff.TensorOperations<T>.Variable(outputBiasTensor, "outputBias", requiresGradient: true);
+        var keyWeights = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromRowMatrix(_keyWeights), "keyWeights", requiresGradient: true);
+        var valueWeights = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromRowMatrix(_valueWeights), "valueWeights", requiresGradient: true);
+        var outputWeights = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromRowMatrix(_outputWeights), "outputWeights", requiresGradient: true);
+        var outputBias = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromVector(_outputBias), "outputBias", requiresGradient: true);
 
-        // Forward computation using autodiff ops
+        // Forward computation using autodiff ops (minimal graph for linear part)
         // Step 1: keys = input @ keyWeights
         var keys = Autodiff.TensorOperations<T>.MatrixMultiply(input, keyWeights);
 
@@ -551,15 +554,38 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var projected = Autodiff.TensorOperations<T>.MatrixMultiply(transformed, outputWeights);
 
         // Step 7: output = projected + outputBias
-        var output = Autodiff.TensorOperations<T>.Add(projected, outputBias);
+        var preActivation = Autodiff.TensorOperations<T>.Add(projected, outputBias);
 
-        // Step 8: Apply activation if needed (simplified - assumes identity or compatible activation)
-        var activated = ApplyActivationAutodiff(output);
+        // Set pre-activation gradient (activation derivative already applied)
+        preActivation.Gradient = preActivationGradient;
 
-        // Set gradient and perform backward pass
-        activated.Gradient = outputGradient;
+        // Inline topological sort and backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((preActivation, false));
 
-        var topoOrder = GetTopologicalOrder(activated);
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                        stack.Push((parent, false));
+                }
+            }
+        }
+
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -569,14 +595,16 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
         }
 
-        // Extract gradients
-        _keyWeightsGradient = TensorToMatrix(keyWeights.Gradient!);
-        _valueWeightsGradient = TensorToMatrix(valueWeights.Gradient!);
-        _outputWeightsGradient = TensorToMatrix(outputWeights.Gradient!);
-        _outputBiasGradient = TensorToVector(outputBias.Gradient!);
+        // Extract gradients using efficient methods
+        if (keyWeights.Gradient != null) _keyWeightsGradient = keyWeights.Gradient.ToMatrix();
+        if (valueWeights.Gradient != null) _valueWeightsGradient = valueWeights.Gradient.ToMatrix();
+        if (outputWeights.Gradient != null) _outputWeightsGradient = outputWeights.Gradient.ToMatrix();
+        if (outputBias.Gradient != null) _outputBiasGradient = outputBias.Gradient.ToVector();
 
         // Combine input and memory gradients
-        return CombineGradients(input.Gradient!, memory.Gradient!);
+        var inputGrad = input.Gradient ?? new Tensor<T>(_lastInput.Shape);
+        var memoryGrad = memory.Gradient ?? new Tensor<T>(_lastMemory.Shape);
+        return CombineGradients(inputGrad, memoryGrad);
     }
 
     /// <summary>
@@ -608,138 +636,6 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // Assuming we want to concatenate the gradients along the first dimension
         return Tensor<T>.Concatenate([inputGradient, memoryGradient], 0);
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T>, bool)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var current = stack.Pop();
-            var node = current.Item1;
-            var processed = current.Item2;
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Applies activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (ScalarActivation is ReLUActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.ReLU(input);
-        }
-        else if (ScalarActivation is SigmoidActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Sigmoid(input);
-        }
-        else if (ScalarActivation is TanhActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Tanh(input);
-        }
-        else
-        {
-            // For unsupported activations (including Identity), return input unchanged
-            return input;
-        }
-    }
-
-    /// <summary>
-    /// Converts a Matrix to a 2D Tensor.
-    /// </summary>
-    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
-    {
-        var tensor = new Tensor<T>(new int[] { matrix.Rows, matrix.Columns });
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                tensor[i, j] = matrix[i, j];
-            }
-        }
-        return tensor;
-    }
-
-    /// <summary>
-    /// Converts a Vector to a 1D Tensor.
-    /// </summary>
-    private Tensor<T> VectorToTensor(Vector<T> vector)
-    {
-        var tensor = new Tensor<T>(new int[] { vector.Length });
-        for (int i = 0; i < vector.Length; i++)
-        {
-            tensor[i] = vector[i];
-        }
-        return tensor;
-    }
-
-    /// <summary>
-    /// Converts a 2D Tensor to a Matrix.
-    /// </summary>
-    private Matrix<T> TensorToMatrix(Tensor<T> tensor)
-    {
-        if (tensor.Rank != 2)
-            throw new ArgumentException("Tensor must be 2D to convert to Matrix");
-
-        var matrix = new Matrix<T>(tensor.Shape[0], tensor.Shape[1]);
-        for (int i = 0; i < tensor.Shape[0]; i++)
-        {
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                matrix[i, j] = tensor[i, j];
-            }
-        }
-        return matrix;
-    }
-
-    /// <summary>
-    /// Converts a 1D Tensor to a Vector.
-    /// </summary>
-    private Vector<T> TensorToVector(Tensor<T> tensor)
-    {
-        // Handle both 1D and 2D tensors (for column vectors)
-        int length = tensor.Length;
-        var vector = new Vector<T>(length);
-
-        for (int i = 0; i < length; i++)
-        {
-            vector[i] = tensor[i];
-        }
-
-        return vector;
     }
 
     /// <summary>
@@ -1146,29 +1042,11 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var memoryNode = Autodiff.TensorOperations<T>.Variable(memoryTensor, "memory");
         inputNodes.Add(memoryNode);
 
-        // Convert weights to tensors
-        var keyWeightsTensor = new Tensor<T>(new int[] { _keyWeights.Rows, _keyWeights.Columns });
-        for (int i = 0; i < _keyWeights.Rows; i++)
-            for (int j = 0; j < _keyWeights.Columns; j++)
-                keyWeightsTensor[i, j] = _keyWeights[i, j];
-        var keyWeightsNode = Autodiff.TensorOperations<T>.Constant(keyWeightsTensor, "keyWeights");
-
-        var valueWeightsTensor = new Tensor<T>(new int[] { _valueWeights.Rows, _valueWeights.Columns });
-        for (int i = 0; i < _valueWeights.Rows; i++)
-            for (int j = 0; j < _valueWeights.Columns; j++)
-                valueWeightsTensor[i, j] = _valueWeights[i, j];
-        var valueWeightsNode = Autodiff.TensorOperations<T>.Constant(valueWeightsTensor, "valueWeights");
-
-        var outputWeightsTensor = new Tensor<T>(new int[] { _outputWeights.Rows, _outputWeights.Columns });
-        for (int i = 0; i < _outputWeights.Rows; i++)
-            for (int j = 0; j < _outputWeights.Columns; j++)
-                outputWeightsTensor[i, j] = _outputWeights[i, j];
-        var outputWeightsNode = Autodiff.TensorOperations<T>.Constant(outputWeightsTensor, "outputWeights");
-
-        var biasTensor = new Tensor<T>(new int[] { _outputBias.Length });
-        for (int i = 0; i < _outputBias.Length; i++)
-            biasTensor[i] = _outputBias[i];
-        var biasNode = Autodiff.TensorOperations<T>.Constant(biasTensor, "outputBias");
+        // Convert weights to tensors using efficient methods
+        var keyWeightsNode = Autodiff.TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(_keyWeights), "keyWeights");
+        var valueWeightsNode = Autodiff.TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(_valueWeights), "valueWeights");
+        var outputWeightsNode = Autodiff.TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(_outputWeights), "outputWeights");
+        var biasNode = Autodiff.TensorOperations<T>.Constant(Tensor<T>.FromVector(_outputBias), "outputBias");
 
         // Build attention computation graph
         // Step 1: keys = input @ keyWeights
