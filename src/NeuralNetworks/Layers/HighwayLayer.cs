@@ -553,52 +553,110 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // For complex/composite layers, delegate to manual implementation
-        // Full autodiff requires implementing all sub-operations
-        return BackwardManual(outputGradient);
-    }
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
+        // Create input variable node
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Create constant nodes for weights and biases
+        var transformWeightsNode = Autodiff.TensorOperations<T>.Constant(
+            Tensor<T>.FromRowMatrix(_transformWeights), "transform_weights");
+        var transformBiasNode = Autodiff.TensorOperations<T>.Constant(
+            Tensor<T>.FromVector(_transformBias), "transform_bias");
+        var gateWeightsNode = Autodiff.TensorOperations<T>.Constant(
+            Tensor<T>.FromRowMatrix(_gateWeights), "gate_weights");
+        var gateBiasNode = Autodiff.TensorOperations<T>.Constant(
+            Tensor<T>.FromVector(_gateBias), "gate_bias");
+
+        // Step 1: Compute transform path: transform = activation(input @ weights + bias)
+        var transformLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, transformWeightsNode);
+        var transformWithBias = Autodiff.TensorOperations<T>.Add(transformLinear, transformBiasNode);
+
+        // Apply transform activation (typically Tanh)
+        Autodiff.ComputationNode<T> transformOutput;
+        if (_transformActivation != null && _transformActivation.SupportsJitCompilation)
+        {
+            transformOutput = _transformActivation.ApplyToGraph(transformWithBias);
+        }
+        else
+        {
+            // Default to Tanh if no activation specified
+            transformOutput = Autodiff.TensorOperations<T>.Tanh(transformWithBias);
+        }
+
+        // Step 2: Compute gate path: gate = sigmoid(input @ weights + bias)
+        var gateLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, gateWeightsNode);
+        var gateWithBias = Autodiff.TensorOperations<T>.Add(gateLinear, gateBiasNode);
+
+        // Apply gate activation (typically Sigmoid)
+        Autodiff.ComputationNode<T> gateOutput;
+        if (_gateActivation != null && _gateActivation.SupportsJitCompilation)
+        {
+            gateOutput = _gateActivation.ApplyToGraph(gateWithBias);
+        }
+        else
+        {
+            // Default to Sigmoid if no activation specified
+            gateOutput = Autodiff.TensorOperations<T>.Sigmoid(gateWithBias);
+        }
+
+        // Step 3: Compute highway output: output = gate * transform + (1 - gate) * input
+        // Rewritten as: output = gate * (transform - input) + input
+        var transformMinusInput = Autodiff.TensorOperations<T>.Subtract(transformOutput, inputNode);
+        var gatedDiff = Autodiff.TensorOperations<T>.ElementwiseMultiply(gateOutput, transformMinusInput);
+        var outputNode = Autodiff.TensorOperations<T>.Add(gatedDiff, inputNode);
+
+        // Set the output gradient
+        outputNode.Gradient = outputGradient;
+
+        // Production-grade: Inline topological sort for backward pass
         var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
         var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
+        stack.Push((outputNode, false));
 
         while (stack.Count > 0)
         {
             var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
+            if (visited.Contains(node)) continue;
 
             if (processed)
             {
                 visited.Add(node);
-                result.Add(node);
+                topoOrder.Add(node);
             }
             else
             {
                 stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
+                if (node.Parents != null)
                 {
-                    if (!visited.Contains(parent))
+                    foreach (var parent in node.Parents)
                     {
-                        stack.Push((parent, false));
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
                     }
                 }
             }
         }
 
-        return result;
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract and return the input gradient
+        if (inputNode.Gradient == null)
+            throw new InvalidOperationException("Gradient computation failed in automatic differentiation.");
+
+        return inputNode.Gradient;
     }
+
     /// <summary>
     /// Manual backward pass implementation using optimized gradient calculations.
     /// </summary>
