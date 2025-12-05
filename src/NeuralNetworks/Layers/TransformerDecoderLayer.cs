@@ -79,6 +79,47 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private T _lastAuxiliaryLoss;
 
     /// <summary>
+    /// Backing field for UseAutodiff property to enable propagation to sublayers.
+    /// </summary>
+    private bool _useAutodiff = false;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to use automatic differentiation for gradient computation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For composite layers like TransformerDecoderLayer, setting this property propagates the value
+    /// to all sublayers. This ensures that when the composite layer uses autodiff, each sublayer
+    /// also uses autodiff for its backward pass.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls whether the layer uses automatic gradient computation.
+    ///
+    /// When UseAutodiff is enabled:
+    /// - The layer and ALL its sublayers will compute gradients using automatic differentiation
+    /// - This is useful for verifying gradient correctness or when manual gradients are complex
+    ///
+    /// When UseAutodiff is disabled:
+    /// - The layer uses optimized manual gradient implementations
+    /// - This is typically faster for production use
+    /// </para>
+    /// </remarks>
+    public new bool UseAutodiff
+    {
+        get => _useAutodiff;
+        set
+        {
+            _useAutodiff = value;
+            // Propagate to all sublayers so their Backward() calls use autodiff
+            if (_selfAttention != null) _selfAttention.UseAutodiff = value;
+            if (_norm1 != null) _norm1.UseAutodiff = value;
+            if (_crossAttention != null) _crossAttention.UseAutodiff = value;
+            if (_norm2 != null) _norm2.UseAutodiff = value;
+            if (_feedForward != null) _feedForward.UseAutodiff = value;
+            if (_norm3 != null) _norm3.UseAutodiff = value;
+        }
+    }
+
+    /// <summary>
     /// The size of the embeddings for queries, keys, values, and outputs.
     /// </summary>
     /// <remarks>
@@ -709,17 +750,22 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. It's slower than the
-    /// manual implementation but can be useful for:
-    /// - Verifying gradient correctness
-    /// - Rapid prototyping with custom modifications
-    /// - Research and experimentation
+    /// For composite layers like TransformerDecoderLayer, autodiff is achieved by propagating
+    /// the UseAutodiff flag to all sublayers. When UseAutodiff is true on this layer, each
+    /// sublayer also has UseAutodiff=true, so when BackwardManual calls sublayer.Backward(),
+    /// each sublayer uses its own autodiff implementation.
+    /// </para>
+    /// <para>
+    /// This approach is correct because:
+    /// - The UseAutodiff property setter propagates to all sublayers
+    /// - BackwardManual correctly chains sublayer Backward() calls
+    /// - Each sublayer's Backward() checks its own UseAutodiff flag
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // For complex/composite layers, delegate to manual implementation
-        // Full autodiff requires implementing all sub-operations
+        // For composite layers, delegate to BackwardManual which calls sublayer.Backward()
+        // Each sublayer will use autodiff because UseAutodiff propagates to all sublayers
         return BackwardManual(outputGradient);
     }
 
