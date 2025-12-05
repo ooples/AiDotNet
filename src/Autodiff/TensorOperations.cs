@@ -10130,14 +10130,9 @@ public static class TensorOperations<T>
     private static Tensor<T> BroadcastAdd(Tensor<T> a, Tensor<T> b, INumericOperations<T> numOps)
     {
         // Determine which tensor is smaller and needs broadcasting
-        if (a.Rank < b.Rank || (a.Rank == b.Rank && a.Length < b.Length))
-        {
-            return BroadcastAddHelper(b, a, numOps);
-        }
-        else
-        {
-            return BroadcastAddHelper(a, b, numOps);
-        }
+        return (a.Rank < b.Rank || (a.Rank == b.Rank && a.Length < b.Length))
+            ? BroadcastAddHelper(b, a, numOps)
+            : BroadcastAddHelper(a, b, numOps);
     }
 
     /// <summary>
