@@ -762,9 +762,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var flattenedInput = _lastInput.Reshape(batchSize, _lastInput.Shape[1]);
         var flattenedOutputGradient = outputGradient.Reshape(batchSize, outputGradient.Shape[1]);
 
-        // Convert parameters to computation nodes
-        var weightsTensor = MatrixToTensor(_weights);
-        var biasesTensor = VectorToTensor(_biases);
+        // Production-grade: Use built-in Tensor.FromMatrix/FromVector instead of custom helpers
+        var weightsTensor = Tensor<T>.FromMatrix(_weights);
+        var biasesTensor = Tensor<T>.FromVector(_biases);
 
         var input = Autodiff.TensorOperations<T>.Variable(flattenedInput, "input", requiresGradient: true);
         var weights = Autodiff.TensorOperations<T>.Variable(weightsTensor, "weights", requiresGradient: true);
@@ -807,9 +807,32 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Set the gradient at the linear output (pre-activation gradient)
         linearOutput.Gradient = preActivationGradient;
 
-        // Perform topological sort and backward pass
-        // Note: TensorOperations backward functions use Engine for vectorized operations
-        var topoOrder = GetTopologicalOrder(linearOutput);
+        // Production-grade: Inline topological sort for backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((linearOutput, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                        stack.Push((parent, false));
+                }
+            }
+        }
 
         // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)
@@ -821,7 +844,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
         }
 
-        // Extract gradients
+        // Extract gradients using built-in ToMatrix/ToVector
         if (weights.Gradient == null)
             throw new InvalidOperationException("Weights gradient is null after backward pass");
         if (biases.Gradient == null)
@@ -829,132 +852,10 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (input.Gradient == null)
             throw new InvalidOperationException("Input gradient is null after backward pass");
 
-        _weightsGradient = TensorToMatrix(weights.Gradient);
-        _biasesGradient = TensorToVector(biases.Gradient);
+        _weightsGradient = weights.Gradient.ToMatrix();
+        _biasesGradient = biases.Gradient.ToVector();
 
         return input.Gradient.Reshape(_lastInput.Shape);
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Broadcasts biases across the batch dimension.
-    /// </summary>
-    private Tensor<T> BroadcastBiases(Tensor<T> biases, int batchSize)
-    {
-        var biasLength = biases.Length;
-        var broadcasted = new Tensor<T>(new int[] { batchSize, biasLength });
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < biasLength; j++)
-            {
-                broadcasted[i, j] = biases[j];
-            }
-        }
-
-        return broadcasted;
-    }
-
-    /// <summary>
-    /// Converts a Matrix to a 2D Tensor.
-    /// </summary>
-    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
-    {
-        var tensor = new Tensor<T>(new int[] { matrix.Rows, matrix.Columns });
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                tensor[i, j] = matrix[i, j];
-            }
-        }
-        return tensor;
-    }
-
-    /// <summary>
-    /// Converts a Vector to a 1D Tensor.
-    /// </summary>
-    private Tensor<T> VectorToTensor(Vector<T> vector)
-    {
-        // Use Tensor.FromVector for efficient conversion
-        return Tensor<T>.FromVector(vector);
-    }
-
-    /// <summary>
-    /// Converts a 2D Tensor to a Matrix.
-    /// </summary>
-    private Matrix<T> TensorToMatrix(Tensor<T> tensor)
-    {
-        if (tensor.Rank != 2)
-            throw new ArgumentException("Tensor must be 2D to convert to Matrix");
-
-        var matrix = new Matrix<T>(tensor.Shape[0], tensor.Shape[1]);
-        for (int i = 0; i < tensor.Shape[0]; i++)
-        {
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                matrix[i, j] = tensor[i, j];
-            }
-        }
-        return matrix;
-    }
-
-    /// <summary>
-    /// Converts a 1D Tensor to a Vector.
-    /// </summary>
-    private Vector<T> TensorToVector(Tensor<T> tensor)
-    {
-        // Handle both 1D and 2D tensors (for column vectors)
-        int length = tensor.Length;
-        var vector = new Vector<T>(length);
-
-        for (int i = 0; i < length; i++)
-        {
-            vector[i] = tensor[i];
-        }
-
-        return vector;
     }
 
     /// <summary>
