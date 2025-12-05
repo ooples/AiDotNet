@@ -521,9 +521,9 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         var flattenedInput = _lastInput.Reshape(batchSize, _lastInput.Shape[1]);
         var flattenedOutputGradient = outputGradient.Reshape(batchSize, outputGradient.Shape[1]);
 
-        // Convert parameters to computation nodes
-        var weightsTensor = MatrixToTensor(_weights);
-        var biasesTensor = VectorToTensor(_biases);
+        // Production-grade: Use built-in Tensor.FromMatrix/FromVector instead of custom helpers
+        var weightsTensor = Tensor<T>.FromMatrix(_weights);
+        var biasesTensor = Tensor<T>.FromVector(_biases);
 
         var input = Autodiff.TensorOperations<T>.Variable(flattenedInput, "input", requiresGradient: true);
         var weights = Autodiff.TensorOperations<T>.Variable(weightsTensor, "weights", requiresGradient: true);
@@ -567,9 +567,35 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         // Set the gradient at the linear output (pre-activation gradient)
         linearOutput.Gradient = preActivationGradient;
 
-        // Perform topological sort and backward pass
-        // Note: TensorOperations backward functions use Engine for vectorized operations
-        var topoOrder = GetTopologicalOrder(linearOutput);
+        // Production-grade: Inline topological sort for backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((linearOutput, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
 
         // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)
@@ -581,7 +607,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             }
         }
 
-        // Extract gradients
+        // Extract gradients using built-in ToMatrix/ToVector
         if (weights.Gradient == null)
             throw new InvalidOperationException("Weights gradient is null after backward pass");
         if (biases.Gradient == null)
@@ -589,192 +615,10 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         if (input.Gradient == null)
             throw new InvalidOperationException("Input gradient is null after backward pass");
 
-        _weightsGradient = TensorToMatrix(weights.Gradient);
-        _biasesGradient = TensorToVector(biases.Gradient);
+        _weightsGradient = weights.Gradient.ToMatrix();
+        _biasesGradient = biases.Gradient.ToVector();
 
         return input.Gradient.Reshape(_lastInput.Shape);
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                        {
-                            stack.Push((parent, false));
-                        }
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Applies activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (ScalarActivation is ReLUActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.ReLU(input);
-        }
-        else if (ScalarActivation is SigmoidActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Sigmoid(input);
-        }
-        else if (ScalarActivation is TanhActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Tanh(input);
-        }
-        else
-        {
-            // For unsupported activations, return input unchanged
-            // This is a limitation of autodiff - not all activations are implemented yet
-            return input;
-        }
-    }
-
-    /// <summary>
-    /// Broadcasts biases across the batch dimension.
-    /// </summary>
-    private Tensor<T> BroadcastBiases(Tensor<T> biases, int batchSize)
-    {
-        // === Vectorized Bias Broadcasting (Phase B: US-GPU-015) ===
-        var biasLength = biases.Length;
-        var broadcasted = new Tensor<T>(new int[] { batchSize, biasLength });
-
-        // Create a bias vector once, then copy it to each batch element
-        var biasVector = new Vector<T>(biasLength);
-        for (int j = 0; j < biasLength; j++)
-        {
-            biasVector[j] = biases[j];
-        }
-
-        // Vectorized broadcasting: copy the same bias vector to each batch
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < biasLength; j++)
-            {
-                broadcasted[i, j] = biasVector[j];
-            }
-        }
-
-        return broadcasted;
-    }
-
-    /// <summary>
-    /// Converts a Matrix to a 2D Tensor.
-    /// </summary>
-    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
-    {
-        // === Vectorized Matrix-to-Tensor Conversion (Phase B: US-GPU-015) ===
-        var tensor = new Tensor<T>(new int[] { matrix.Rows, matrix.Columns });
-
-        // Convert each row using vectorized operations
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            var rowVector = matrix.GetRow(i);
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                tensor[i, j] = rowVector[j];
-            }
-        }
-        return tensor;
-    }
-
-    /// <summary>
-    /// Converts a Vector to a 1D Tensor.
-    /// </summary>
-    private Tensor<T> VectorToTensor(Vector<T> vector)
-    {
-        // === Vectorized Vector-to-Tensor Conversion (Phase B: US-GPU-015) ===
-        var tensor = new Tensor<T>(new int[] { vector.Length });
-
-        // Copy vector data directly using array access
-        var vectorData = vector.ToArray();
-        for (int i = 0; i < vector.Length; i++)
-        {
-            tensor[i] = vectorData[i];
-        }
-        return tensor;
-    }
-
-    /// <summary>
-    /// Converts a 2D Tensor to a Matrix.
-    /// </summary>
-    private Matrix<T> TensorToMatrix(Tensor<T> tensor)
-    {
-        // === Vectorized Tensor-to-Matrix Conversion (Phase B: US-GPU-015) ===
-        if (tensor.Rank != 2)
-            throw new ArgumentException("Tensor must be 2D to convert to Matrix");
-
-        var matrix = new Matrix<T>(tensor.Shape[0], tensor.Shape[1]);
-
-        // Convert row by row using vectorized operations
-        for (int i = 0; i < tensor.Shape[0]; i++)
-        {
-            var rowData = new T[tensor.Shape[1]];
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                rowData[j] = tensor[i, j];
-            }
-            var rowVector = new Vector<T>(rowData);
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                matrix[i, j] = rowVector[j];
-            }
-        }
-        return matrix;
-    }
-
-    /// <summary>
-    /// Converts a 1D Tensor to a Vector.
-    /// </summary>
-    private Vector<T> TensorToVector(Tensor<T> tensor)
-    {
-        // === Vectorized Tensor-to-Vector Conversion (Phase B: US-GPU-015) ===
-        // Handle both 1D and 2D tensors (for column vectors)
-        int length = tensor.Length;
-
-        // Create array and copy in one pass
-        var vectorData = new T[length];
-        for (int i = 0; i < length; i++)
-        {
-            vectorData[i] = tensor[i];
-        }
-
-        return new Vector<T>(vectorData);
     }
 
     /// <summary>
