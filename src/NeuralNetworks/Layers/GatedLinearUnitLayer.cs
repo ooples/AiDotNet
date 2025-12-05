@@ -595,8 +595,9 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         // output = linearOutput * gateOutput (element-wise)
         // dL/dlinearOutput = dL/dOutput * gateOutput
         // dL/dgateOutput = dL/dOutput * linearOutput
-        var linearGradient = outputGradient.ElementwiseMultiply(_lastGateOutput);
-        var gateGradient = outputGradient.ElementwiseMultiply(_lastLinearOutput);
+        // Production-grade: Use Engine.TensorMultiply for GPU/CPU accelerated element-wise ops
+        var linearGradient = Engine.TensorMultiply(outputGradient, _lastGateOutput);
+        var gateGradient = Engine.TensorMultiply(outputGradient, _lastLinearOutput);
 
         // === Step 2: Apply activation derivative to gate gradient using cached values ===
         // This matches BackwardManual exactly by using _lastGateOutput
@@ -616,71 +617,6 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
                             .Add(gateGradient.Multiply(Tensor<T>.FromRowMatrix(_gateWeights)));
 
         return inputGradient;
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Applies activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (ScalarActivation is ReLUActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.ReLU(input);
-        }
-        else if (ScalarActivation is SigmoidActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Sigmoid(input);
-        }
-        else if (ScalarActivation is TanhActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Tanh(input);
-        }
-        else
-        {
-            return input;
-        }
     }
 
     /// <summary>
