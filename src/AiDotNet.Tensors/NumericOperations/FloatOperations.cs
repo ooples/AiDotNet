@@ -1093,7 +1093,11 @@ public class FloatOperations : INumericOperations<float>
     /// </summary>
     public void Clip(ReadOnlySpan<float> x, float min, float max, Span<float> destination)
     {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Clamp(x, min, max, destination);
+#else
         VectorizedOperationsFallback.Clip(_instance, x, min, max, destination);
+#endif
     }
 
     /// <summary>
