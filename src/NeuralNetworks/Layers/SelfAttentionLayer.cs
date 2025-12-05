@@ -538,11 +538,15 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. It's slower than the
-    /// manual implementation but can be useful for:
-    /// - Verifying gradient correctness
-    /// - Rapid prototyping with custom modifications
-    /// - Research and experimentation
+    /// For SelfAttentionLayer, true autodiff is not currently implemented due to the complexity
+    /// of multi-head self-attention operations (reshape, transpose, scaled dot-product attention,
+    /// softmax across heads). The manual implementation is well-optimized and thoroughly tested.
+    /// </para>
+    /// <para>
+    /// A complete autodiff version would require:
+    /// - TensorOperations support for Reshape/Transpose with proper backward functions
+    /// - Scaled dot-product attention backward for Q, K, V projections
+    /// - Softmax backward that handles attention score dimensions correctly
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
@@ -550,55 +554,9 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastInput == null || _lastOutput == null || _lastAttentionScores == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Note: This is a simplified autodiff implementation for SelfAttentionLayer
-        // Full multi-head attention with all transformations is complex, so we approximate
-        // the core attention mechanism using available ops
-
-        // For now, fall back to manual implementation
-        // A complete autodiff version would require implementing multi-head attention ops
+        // Self-attention involves complex reshaping and multi-dimensional operations.
+        // The manual implementation handles these correctly with optimized gradient calculations.
         return BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
     }
 
     /// <summary>
