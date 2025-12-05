@@ -81,14 +81,9 @@ public class LinearWarmupScheduler : LearningRateSchedulerBase
         _endLr = endLr;
 
         // Auto-detect decay mode if endLr is specified and differs from baseLearningRate
-        if (decayMode == DecayMode.Constant && Math.Abs(endLr - baseLearningRate) > 1e-10 && totalSteps > warmupSteps)
-        {
-            _decayMode = DecayMode.Linear;
-        }
-        else
-        {
-            _decayMode = decayMode;
-        }
+        _decayMode = (decayMode == DecayMode.Constant && Math.Abs(endLr - baseLearningRate) > 1e-10 && totalSteps > warmupSteps)
+            ? DecayMode.Linear
+            : decayMode;
 
         if (totalSteps < warmupSteps && _decayMode != DecayMode.Constant)
             throw new ArgumentException("Total steps must be >= warmup steps for decay modes.", nameof(totalSteps));
@@ -115,7 +110,7 @@ public class LinearWarmupScheduler : LearningRateSchedulerBase
     /// <inheritdoc/>
     protected override double ComputeLearningRate(int step)
     {
-        if (step <= _warmupSteps)
+        if (step < _warmupSteps)
         {
             // Warmup phase: linear increase
             if (_warmupSteps == 0) return _baseLearningRate;
