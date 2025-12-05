@@ -86,6 +86,16 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stores the pre-activation output from the last forward pass for use in the backward pass.
+    /// </summary>
+    private Tensor<T>? _lastPreActivation;
+
+    /// <summary>
+    /// Stores the output tensor from the last forward pass for use in the backward pass.
+    /// </summary>
+    private Tensor<T>? _lastOutput;
+
+    /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
     /// </summary>
     private Tensor<T>? _weightGradients;
@@ -472,7 +482,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         int batchSize = input.Shape[0];
-        var output = new Tensor<T>([batchSize, _outputHeight, _outputWidth, _outputChannels]);
+        var preActivation = new Tensor<T>([batchSize, _outputHeight, _outputWidth, _outputChannels]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -496,14 +506,16 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
                             }
                         }
                         sum = NumOps.Add(sum, _biases[oc]);
-                        output[b, h, w, oc] = sum;
+                        preActivation[b, h, w, oc] = sum;
                     }
                 }
             }
         }
 
-        // Apply activation function
-        return ApplyActivation(output);
+        // Cache pre-activation and apply activation function
+        _lastPreActivation = preActivation;
+        _lastOutput = ApplyActivation(preActivation);
+        return _lastOutput;
     }
 
     /// <summary>
@@ -601,46 +613,84 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Currently, locally connected operations
-    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
-    /// </para>
-    /// <para>
-    /// Once locally connected operations are added to TensorOperations, this method will provide:
-    /// - Automatic gradient computation through the computation graph
-    /// - Verification of manual gradient implementations
-    /// - Support for rapid prototyping with custom modifications
+    /// This method uses automatic differentiation with production-grade pattern:
+    /// - Uses cached forward pass values for activation derivative computation
+    /// - Uses Tensor.FromVector for efficient conversions
+    /// - Builds minimal autodiff graph for gradient routing
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null)
+        if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Production-grade: Compute activation derivative using cached output
+        Tensor<T> preActivationGradient;
+        if (VectorActivation != null)
+        {
+            var actDeriv = VectorActivation.Derivative(_lastOutput);
+            preActivationGradient = Engine.TensorMultiply(outputGradient, actDeriv);
+        }
+        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            var activation = ScalarActivation;
+            var activationDerivative = _lastOutput.Transform((x, _) => activation.Derivative(x));
+            preActivationGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
+        }
+        else
+        {
+            preActivationGradient = outputGradient;
+        }
 
         // Convert from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
         var inputNCHW = ConvertNHWCtoNCHW(_lastInput);
         var weightsNCHW = ConvertWeightsToNCHW(_weights);
 
-        // Create computation nodes
+        // Create computation nodes with efficient conversions
         var inputNode = Autodiff.TensorOperations<T>.Variable(inputNCHW, "input", requiresGradient: true);
         var weightsNode = Autodiff.TensorOperations<T>.Variable(weightsNCHW, "weights", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(ConvertVectorToTensor(_biases), "bias", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromVector(_biases), "bias", requiresGradient: true);
 
-        // Forward pass using autodiff LocallyConnectedConv2D operation
-        var outputNode = Autodiff.TensorOperations<T>.LocallyConnectedConv2D(
+        // Build minimal autodiff graph for linear operations (activation derivative already applied)
+        var preActivationNode = Autodiff.TensorOperations<T>.LocallyConnectedConv2D(
             inputNode,
             weightsNode,
             biasNode,
             stride: new int[] { _stride, _stride });
 
-        // Apply activation function
-        outputNode = ApplyActivationAutodiff(outputNode);
+        // Convert pre-activation gradient from NHWC to NCHW
+        var preActivationGradientNCHW = ConvertNHWCtoNCHW(preActivationGradient);
 
-        // Convert output gradient from NHWC to NCHW
-        var outputGradientNCHW = ConvertNHWCtoNCHW(outputGradient);
+        // Set gradient on pre-activation node (activation derivative already applied)
+        preActivationNode.Gradient = preActivationGradientNCHW;
 
-        // Perform backward pass
-        outputNode.Gradient = outputGradientNCHW;
-        var topoOrder = GetTopologicalOrder(outputNode);
+        // Inline topological sort and backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((preActivationNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                        stack.Push((parent, false));
+                }
+            }
+        }
+
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -650,12 +700,12 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             }
         }
 
-        // Update parameter gradients
+        // Update parameter gradients using efficient conversion
         if (weightsNode.Gradient != null)
             _weightGradients = ConvertWeightsFromNCHW(weightsNode.Gradient);
 
         if (biasNode.Gradient != null)
-            _biasGradients = ConvertTensorToVector(biasNode.Gradient);
+            _biasGradients = biasNode.Gradient.ToVector();
 
         // Convert input gradient from NCHW back to NHWC
         var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
@@ -750,108 +800,6 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
                                 nhwc[oh, ow, oc, kh, kw, ic] = weights[oh, ow, oc, ic, kh, kw];
 
         return nhwc;
-    }
-
-    /// <summary>
-    /// Converts vector to 1D tensor.
-    /// </summary>
-    private Tensor<T> ConvertVectorToTensor(Vector<T> vector)
-    {
-        var tensor = new Tensor<T>([vector.Length]);
-        for (int i = 0; i < vector.Length; i++)
-            tensor[i] = vector[i];
-        return tensor;
-    }
-
-    /// <summary>
-    /// Converts 1D tensor to vector.
-    /// </summary>
-    private Vector<T> ConvertTensorToVector(Tensor<T> tensor)
-    {
-        var vector = new Vector<T>(tensor.Shape[0]);
-        for (int i = 0; i < tensor.Shape[0]; i++)
-            vector[i] = tensor[i];
-        return vector;
-    }
-
-    /// <summary>
-    /// Applies activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        // Apply the appropriate activation function
-        if (UsingVectorActivation)
-        {
-            if (VectorActivation is ReLUActivation<T>)
-                return Autodiff.TensorOperations<T>.ReLU(input);
-            else if (VectorActivation is SigmoidActivation<T>)
-                return Autodiff.TensorOperations<T>.Sigmoid(input);
-            else if (VectorActivation is TanhActivation<T>)
-                return Autodiff.TensorOperations<T>.Tanh(input);
-            else
-            {
-                var activationType = VectorActivation?.GetType().Name ?? "Unknown";
-                throw new NotSupportedException($"Activation {activationType} not yet supported in autodiff");
-            }
-        }
-        else
-        {
-            if (ScalarActivation is ReLUActivation<T>)
-                return Autodiff.TensorOperations<T>.ReLU(input);
-            else if (ScalarActivation is SigmoidActivation<T>)
-                return Autodiff.TensorOperations<T>.Sigmoid(input);
-            else if (ScalarActivation is TanhActivation<T>)
-                return Autodiff.TensorOperations<T>.Tanh(input);
-            else
-            {
-                var activationType = ScalarActivation?.GetType().Name ?? "Unknown";
-                throw new NotSupportedException($"Activation {activationType} not yet supported in autodiff");
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    /// <param name="root">The root node of the computation graph.</param>
-    /// <returns>A list of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
     }
 
     /// <summary>
@@ -1068,6 +1016,8 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward and backward passes
         _lastInput = null;
+        _lastPreActivation = null;
+        _lastOutput = null;
         _weightGradients = null;
         _biasGradients = null;
     }
@@ -1131,8 +1081,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         var weightsNode = Autodiff.TensorOperations<T>.Constant(weightsNCHW, "locally_connected_weights");
 
         // Convert bias to tensor
-        var biasTensor = ConvertVectorToTensor(_biases);
-        var biasNode = Autodiff.TensorOperations<T>.Constant(biasTensor, "locally_connected_bias");
+        var biasNode = Autodiff.TensorOperations<T>.Constant(Tensor<T>.FromVector(_biases), "locally_connected_bias");
 
         // Apply LocallyConnectedConv2D operation
         var convOutput = Autodiff.TensorOperations<T>.LocallyConnectedConv2D(
