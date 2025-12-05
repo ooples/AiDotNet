@@ -252,61 +252,77 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. It's slower than the
-    /// manual implementation but can be useful for:
-    /// - Verifying gradient correctness
-    /// - Rapid prototyping with custom modifications
-    /// - Research and experimentation
+    /// This method uses automatic differentiation to compute gradients. For positional encoding,
+    /// the operation is: output = input + positionalEncodings (constant).
+    /// The gradient flows through unchanged since d(x + c)/dx = 1.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // For complex/composite layers, delegate to manual implementation
-        // Full autodiff requires implementing all sub-operations
-        return BackwardManual(outputGradient);
-    }
+        // Create a placeholder input tensor matching the output gradient shape
+        var inputTensor = new Tensor<T>(outputGradient.Shape);
 
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
+        // Create computation nodes
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputTensor, "input", requiresGradient: true);
+
+        // Slice encodings to match input sequence length
+        var sequenceLength = outputGradient.Shape[0];
+        var slicedEncodings = encodings.Slice(0, 0, sequenceLength, embeddingSize);
+        var encodingsNode = Autodiff.TensorOperations<T>.Constant(slicedEncodings, "positional_encodings");
+
+        // Forward: output = input + positional_encodings
+        var outputNode = Autodiff.TensorOperations<T>.Add(inputNode, encodingsNode);
+
+        // Set the output gradient
+        outputNode.Gradient = outputGradient;
+
+        // Production-grade: Inline topological sort for backward pass
         var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
         var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
+        stack.Push((outputNode, false));
 
         while (stack.Count > 0)
         {
             var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
+            if (visited.Contains(node)) continue;
 
             if (processed)
             {
                 visited.Add(node);
-                result.Add(node);
+                topoOrder.Add(node);
             }
             else
             {
                 stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
+                if (node.Parents != null)
                 {
-                    if (!visited.Contains(parent))
+                    foreach (var parent in node.Parents)
                     {
-                        stack.Push((parent, false));
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
                     }
                 }
             }
         }
 
-        return result;
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract and return the input gradient
+        if (inputNode.Gradient == null)
+            throw new InvalidOperationException("Gradient computation failed in automatic differentiation.");
+
+        return inputNode.Gradient;
     }
+
     /// <summary>
     /// Manual backward pass implementation using optimized gradient calculations.
     /// </summary>
