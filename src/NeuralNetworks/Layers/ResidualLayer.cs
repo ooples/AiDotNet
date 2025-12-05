@@ -313,16 +313,20 @@ public class ResidualLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // When there's no inner layer, forward pass just applies activation to input
+        // So backward pass just applies activation derivative
+        if (_innerLayer == null)
+        {
+            var identityActivationGradient = ApplyActivationDerivative(_lastInput, outputGradient);
+            return outputGradient.ElementwiseMultiply(identityActivationGradient);
+        }
+
+        // With inner layer: forward was activation(input + innerOutput)
         // Use cached inner output from forward pass
         var innerOutput = _lastInnerOutput ?? _lastInput;
         var combinedOutput = _lastInput.Add(innerOutput);
-        var activationGradient = ApplyActivationDerivative(combinedOutput, outputGradient);
-        var combinedGradient = outputGradient.ElementwiseMultiply(activationGradient);
-
-        if (_innerLayer == null)
-        {
-            return combinedGradient;
-        }
+        var residualActivationGradient = ApplyActivationDerivative(combinedOutput, outputGradient);
+        var combinedGradient = outputGradient.ElementwiseMultiply(residualActivationGradient);
 
         var innerGradient = _innerLayer.Backward(combinedGradient);
         return combinedGradient.Add(innerGradient);
