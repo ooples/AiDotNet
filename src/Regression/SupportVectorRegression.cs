@@ -311,8 +311,8 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
                 break;
         }
 
-        // Store support vectors
-        SupportVectors = x.GetRows(Enumerable.Range(0, m).Where(i => NumOps.GreaterThan(Alphas[i], NumOps.Zero)).ToArray());
+        // Store all training data as support vectors (base class will filter to non-zero alphas)
+        SupportVectors = x;
     }
 
     /// <summary>

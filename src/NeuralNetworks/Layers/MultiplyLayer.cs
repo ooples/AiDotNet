@@ -322,6 +322,7 @@ public class MultiplyLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This method uses automatic differentiation to compute gradients for multiplication operation.
+    /// It computes gradients for all inputs and returns them as a stacked tensor to match the manual implementation.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
@@ -337,37 +338,51 @@ public class MultiplyLayer<T> : LayerBase<T>
             return BackwardManual(outputGradient);
         }
 
-        // Convert to computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInputs[0], "input_0", requiresGradient: true);
+        // Compute gradients for each input separately
+        var inputGradients = new Tensor<T>[_lastInputs.Length];
 
-        // Forward computation using autodiff ops: result = input[0] * input[1] * ...
-        var result = inputNode;
-        for (int i = 1; i < _lastInputs.Length; i++)
+        for (int targetInputIndex = 0; targetInputIndex < _lastInputs.Length; targetInputIndex++)
         {
-            var nextInput = Autodiff.TensorOperations<T>.Variable(_lastInputs[i], $"input_{i}", requiresGradient: false);
-            result = Autodiff.TensorOperations<T>.ElementwiseMultiply(result, nextInput);
-        }
-
-        // Apply activation using autodiff
-        var activated = ApplyActivationAutodiff(result);
-
-        // Set the gradient at the output
-        activated.Gradient = outputGradient;
-
-        // Perform topological sort and backward pass
-        var topoOrder = GetTopologicalOrder(activated);
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            // Create computation nodes with gradient tracking only for the target input
+            var inputNodes = new Autodiff.ComputationNode<T>[_lastInputs.Length];
+            for (int i = 0; i < _lastInputs.Length; i++)
             {
-                node.BackwardFunction(node.Gradient);
+                bool requiresGrad = (i == targetInputIndex);
+                inputNodes[i] = Autodiff.TensorOperations<T>.Variable(_lastInputs[i], $"input_{i}", requiresGradient: requiresGrad);
             }
+
+            // Forward computation using autodiff ops: result = input[0] * input[1] * ...
+            var result = inputNodes[0];
+            for (int i = 1; i < inputNodes.Length; i++)
+            {
+                result = Autodiff.TensorOperations<T>.ElementwiseMultiply(result, inputNodes[i]);
+            }
+
+            // Apply activation using autodiff
+            var activated = ApplyActivationAutodiff(result);
+
+            // Set the gradient at the output
+            activated.Gradient = outputGradient;
+
+            // Perform topological sort and backward pass
+            var topoOrder = GetTopologicalOrder(activated);
+
+            // Execute backward pass in reverse topological order
+            for (int i = topoOrder.Count - 1; i >= 0; i--)
+            {
+                var node = topoOrder[i];
+                if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+                {
+                    node.BackwardFunction(node.Gradient);
+                }
+            }
+
+            // Extract gradient for the target input
+            inputGradients[targetInputIndex] = inputNodes[targetInputIndex].Gradient!;
         }
 
-        return inputNode.Gradient!;
+        // Stack all input gradients to match manual implementation
+        return Tensor<T>.Stack(inputGradients);
     }
 
     /// <summary>

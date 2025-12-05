@@ -60,7 +60,8 @@ public class LinearWarmupScheduler : LearningRateSchedulerBase
     /// <param name="warmupSteps">Number of warmup steps.</param>
     /// <param name="totalSteps">Total number of training steps (required for decay modes).</param>
     /// <param name="warmupInitLr">Initial learning rate at start of warmup. Default: 0</param>
-    /// <param name="decayMode">Decay mode after warmup. Default: Constant</param>
+    /// <param name="decayMode">Decay mode after warmup. When null, automatically selects Linear decay
+    /// if endLr differs from baseLearningRate, otherwise uses Constant. Default: null (auto-detect)</param>
     /// <param name="endLr">Final learning rate after decay. Default: 0</param>
     /// <exception cref="ArgumentException">Thrown when parameters are invalid.</exception>
     public LinearWarmupScheduler(
@@ -68,20 +69,26 @@ public class LinearWarmupScheduler : LearningRateSchedulerBase
         int warmupSteps,
         int totalSteps = 0,
         double warmupInitLr = 0.0,
-        DecayMode decayMode = DecayMode.Constant,
+        DecayMode? decayMode = null,
         double endLr = 0.0)
         : base(baseLearningRate, endLr)
     {
         if (warmupSteps < 0)
             throw new ArgumentException("Warmup steps cannot be negative.", nameof(warmupSteps));
-        if (totalSteps < warmupSteps && decayMode != DecayMode.Constant)
-            throw new ArgumentException("Total steps must be >= warmup steps for decay modes.", nameof(totalSteps));
 
         _warmupSteps = warmupSteps;
         _totalSteps = totalSteps > 0 ? totalSteps : warmupSteps;
         _warmupInitLr = warmupInitLr;
-        _decayMode = decayMode;
         _endLr = endLr;
+
+        // Facade pattern: auto-detect decay mode when not specified
+        // If endLr differs from baseLearningRate, user likely wants decay - default to Linear
+        // If user explicitly sets decayMode, respect their choice
+        bool needsDecay = Math.Abs(endLr - baseLearningRate) > 1e-10 && totalSteps > warmupSteps;
+        _decayMode = decayMode ?? (needsDecay ? DecayMode.Linear : DecayMode.Constant);
+
+        if (totalSteps < warmupSteps && _decayMode != DecayMode.Constant)
+            throw new ArgumentException("Total steps must be >= warmup steps for decay modes.", nameof(totalSteps));
 
         // Start at warmup initial learning rate
         _currentLearningRate = warmupInitLr;

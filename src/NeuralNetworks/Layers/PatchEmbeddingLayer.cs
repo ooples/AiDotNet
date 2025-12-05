@@ -100,6 +100,22 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the total number of trainable parameters in the layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This property tells you how many learnable values the layer has.
+    /// For a patch embedding layer, this includes:
+    /// - Projection weights: (patch_dim × embedding_dim) values
+    /// - Projection biases: embedding_dim values
+    ///
+    /// For example, with 16x16 patches in RGB images (patch_dim = 768) and embedding_dim = 512,
+    /// this would be (768 × 512) + 512 = 393,728 parameters.
+    /// </para>
+    /// </remarks>
+    public override int ParameterCount => (_projectionWeights.Rows * _projectionWeights.Columns) + _projectionBias.Length;
+
+    /// <summary>
     /// Creates a new patch embedding layer with the specified dimensions.
     /// </summary>
     /// <param name="imageHeight">The height of the input image.</param>

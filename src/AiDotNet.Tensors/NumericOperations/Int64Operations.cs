@@ -30,6 +30,8 @@ namespace AiDotNet.Tensors.NumericOperations;
 /// </remarks>
 public class Int64Operations : INumericOperations<long>
 {
+    private static readonly Int64Operations _instance = new Int64Operations();
+
     /// <summary>
     /// Adds two long integer numbers.
     /// </summary>
@@ -869,6 +871,70 @@ public class Int64Operations : INumericOperations<long>
     /// </summary>
     public long CosineSimilarity(ReadOnlySpan<long> x, ReadOnlySpan<long> y)
         => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
+
+    /// <summary>
+    /// Fills the destination span with the specified value.
+    /// </summary>
+    public void Fill(Span<long> destination, long value) => destination.Fill(value);
+
+    /// <summary>
+    /// Multiplies each element in the span by a scalar value.
+    /// </summary>
+    public void MultiplyScalar(ReadOnlySpan<long> x, long scalar, Span<long> destination)
+        => VectorizedOperationsFallback.MultiplyScalar(_instance, x, scalar, destination);
+
+    /// <summary>
+    /// Divides each element in the span by a scalar value.
+    /// </summary>
+    public void DivideScalar(ReadOnlySpan<long> x, long scalar, Span<long> destination)
+        => VectorizedOperationsFallback.DivideScalar(_instance, x, scalar, destination);
+
+    /// <summary>
+    /// Adds a scalar value to each element in the span.
+    /// </summary>
+    public void AddScalar(ReadOnlySpan<long> x, long scalar, Span<long> destination)
+        => VectorizedOperationsFallback.AddScalar(_instance, x, scalar, destination);
+
+    /// <summary>
+    /// Subtracts a scalar value from each element in the span.
+    /// </summary>
+    public void SubtractScalar(ReadOnlySpan<long> x, long scalar, Span<long> destination)
+        => VectorizedOperationsFallback.SubtractScalar(_instance, x, scalar, destination);
+
+    /// <summary>
+    /// Computes the square root of each element in the span.
+    /// </summary>
+    public void Sqrt(ReadOnlySpan<long> x, Span<long> destination)
+        => VectorizedOperationsFallback.Sqrt(_instance, x, destination);
+
+    /// <summary>
+    /// Computes the absolute value of each element in the span.
+    /// </summary>
+    public void Abs(ReadOnlySpan<long> x, Span<long> destination)
+        => VectorizedOperationsFallback.Abs(_instance, x, destination);
+
+    /// <summary>
+    /// Negates each element in the span.
+    /// </summary>
+    public void Negate(ReadOnlySpan<long> x, Span<long> destination)
+        => VectorizedOperationsFallback.Negate(_instance, x, destination);
+
+    /// <summary>
+    /// Clips each element in the span to the specified range.
+    /// </summary>
+    public void Clip(ReadOnlySpan<long> x, long min, long max, Span<long> destination)
+        => VectorizedOperationsFallback.Clip(_instance, x, min, max, destination);
+
+    /// <summary>
+    /// Raises each element in the span to the specified power.
+    /// </summary>
+    public void Pow(ReadOnlySpan<long> x, long power, Span<long> destination)
+        => VectorizedOperationsFallback.Pow(_instance, x, power, destination);
+
+    /// <summary>
+    /// Copies elements from the source span to the destination span.
+    /// </summary>
+    public void Copy(ReadOnlySpan<long> source, Span<long> destination) => source.CopyTo(destination);
 
     #endregion
 }

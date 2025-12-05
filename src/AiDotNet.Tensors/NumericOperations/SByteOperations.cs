@@ -825,5 +825,19 @@ public class SByteOperations : INumericOperations<sbyte>
     public sbyte CosineSimilarity(ReadOnlySpan<sbyte> x, ReadOnlySpan<sbyte> y)
         => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
 
+    private static readonly SByteOperations _instance = new();
+
+    public void Fill(Span<sbyte> destination, sbyte value) => destination.Fill(value);
+    public void MultiplyScalar(ReadOnlySpan<sbyte> x, sbyte scalar, Span<sbyte> destination) => VectorizedOperationsFallback.MultiplyScalar(_instance, x, scalar, destination);
+    public void DivideScalar(ReadOnlySpan<sbyte> x, sbyte scalar, Span<sbyte> destination) => VectorizedOperationsFallback.DivideScalar(_instance, x, scalar, destination);
+    public void AddScalar(ReadOnlySpan<sbyte> x, sbyte scalar, Span<sbyte> destination) => VectorizedOperationsFallback.AddScalar(_instance, x, scalar, destination);
+    public void SubtractScalar(ReadOnlySpan<sbyte> x, sbyte scalar, Span<sbyte> destination) => VectorizedOperationsFallback.SubtractScalar(_instance, x, scalar, destination);
+    public void Sqrt(ReadOnlySpan<sbyte> x, Span<sbyte> destination) => VectorizedOperationsFallback.Sqrt(_instance, x, destination);
+    public void Abs(ReadOnlySpan<sbyte> x, Span<sbyte> destination) => VectorizedOperationsFallback.Abs(_instance, x, destination);
+    public void Negate(ReadOnlySpan<sbyte> x, Span<sbyte> destination) => VectorizedOperationsFallback.Negate(_instance, x, destination);
+    public void Clip(ReadOnlySpan<sbyte> x, sbyte min, sbyte max, Span<sbyte> destination) => VectorizedOperationsFallback.Clip(_instance, x, min, max, destination);
+    public void Pow(ReadOnlySpan<sbyte> x, sbyte power, Span<sbyte> destination) => VectorizedOperationsFallback.Pow(_instance, x, power, destination);
+    public void Copy(ReadOnlySpan<sbyte> source, Span<sbyte> destination) => source.CopyTo(destination);
+
     #endregion
 }

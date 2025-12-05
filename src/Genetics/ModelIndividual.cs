@@ -49,7 +49,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         ICollection<TGene> genes,
         Func<ICollection<TGene>, IFullModel<T, TInput, TOutput>> modelFactory)
     {
-        _genes = [];
+        _genes = [.. genes];
         _modelFactory = modelFactory;
         _innerModel = _modelFactory(_genes);
         _fitness = _numOps.Zero;

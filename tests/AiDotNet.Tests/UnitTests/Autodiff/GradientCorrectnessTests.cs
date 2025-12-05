@@ -287,11 +287,12 @@ public class GradientCorrectnessTests
         layer.Forward(input);
         var manualGradient = layer.Backward(outputGradient);
 
-        layer.ResetState();
+        // Note: Do NOT reset state here - we need to preserve the dropout mask
+        // so that the autodiff backward pass uses the same mask as the manual pass
 
         // Act - Autodiff gradients (using same dropout mask)
         layer.UseAutodiff = true;
-        layer.Forward(input);
+        // Re-use the same input and forward output, just change the backward method
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
@@ -411,13 +412,13 @@ public class GradientCorrectnessTests
         layer.Forward(input);
         var manualGradient = layer.Backward(outputGradient);
 
-        layer.ResetState();
-        innerLayer.ResetState();
+        // Note: Do NOT reset state - we need to keep cached forward pass values
+        // so that both backward passes use the same forward outputs
 
-        // Act - Autodiff gradients
+        // Act - Autodiff gradients (reusing cached forward pass state)
         layer.UseAutodiff = true;
         innerLayer.UseAutodiff = true;
-        layer.Forward(input);
+        // Just change the backward implementation, don't rerun forward
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
@@ -491,15 +492,14 @@ public class GradientCorrectnessTests
         var grad2 = dense2.Backward(outputGradient);
         var manualGradient = dense1.Backward(grad2);
 
-        dense1.ResetState();
-        dense2.ResetState();
+        // Note: Do NOT reset state - we need to keep the cached forward pass values
+        // so that both backward passes use the same forward outputs
 
-        // Act - Autodiff gradients
+        // Act - Autodiff gradients (reusing cached forward pass state)
         dense1.UseAutodiff = true;
         dense2.UseAutodiff = true;
 
-        hidden = dense1.Forward(input);
-        output = dense2.Forward(hidden);
+        // Just change the backward implementation, don't rerun forward
         grad2 = dense2.Backward(outputGradient);
         var autodiffGradient = dense1.Backward(grad2);
 

@@ -786,5 +786,19 @@ public class ShortOperations : INumericOperations<short>
     public short CosineSimilarity(ReadOnlySpan<short> x, ReadOnlySpan<short> y)
         => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
 
+    private static readonly ShortOperations _instance = new();
+
+    public void Fill(Span<short> destination, short value) => destination.Fill(value);
+    public void MultiplyScalar(ReadOnlySpan<short> x, short scalar, Span<short> destination) => VectorizedOperationsFallback.MultiplyScalar(_instance, x, scalar, destination);
+    public void DivideScalar(ReadOnlySpan<short> x, short scalar, Span<short> destination) => VectorizedOperationsFallback.DivideScalar(_instance, x, scalar, destination);
+    public void AddScalar(ReadOnlySpan<short> x, short scalar, Span<short> destination) => VectorizedOperationsFallback.AddScalar(_instance, x, scalar, destination);
+    public void SubtractScalar(ReadOnlySpan<short> x, short scalar, Span<short> destination) => VectorizedOperationsFallback.SubtractScalar(_instance, x, scalar, destination);
+    public void Sqrt(ReadOnlySpan<short> x, Span<short> destination) => VectorizedOperationsFallback.Sqrt(_instance, x, destination);
+    public void Abs(ReadOnlySpan<short> x, Span<short> destination) => VectorizedOperationsFallback.Abs(_instance, x, destination);
+    public void Negate(ReadOnlySpan<short> x, Span<short> destination) => VectorizedOperationsFallback.Negate(_instance, x, destination);
+    public void Clip(ReadOnlySpan<short> x, short min, short max, Span<short> destination) => VectorizedOperationsFallback.Clip(_instance, x, min, max, destination);
+    public void Pow(ReadOnlySpan<short> x, short power, Span<short> destination) => VectorizedOperationsFallback.Pow(_instance, x, power, destination);
+    public void Copy(ReadOnlySpan<short> source, Span<short> destination) => source.CopyTo(destination);
+
     #endregion
 }
