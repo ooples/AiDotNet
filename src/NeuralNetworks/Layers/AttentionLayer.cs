@@ -581,8 +581,35 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Also set gradient for V node
         VNode.Gradient = dV;
 
-        // Perform topological sort and backward pass for the Q/K computation
-        var topoOrderQK = GetTopologicalOrder(attentionScores);
+        // Production-grade: Inline topological sort for Q/K backward pass
+        var visitedQK = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrderQK = new List<Autodiff.ComputationNode<T>>();
+        var stackQK = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stackQK.Push((attentionScores, false));
+
+        while (stackQK.Count > 0)
+        {
+            var (node, processed) = stackQK.Pop();
+
+            if (visitedQK.Contains(node))
+                continue;
+
+            if (processed)
+            {
+                visitedQK.Add(node);
+                topoOrderQK.Add(node);
+            }
+            else
+            {
+                stackQK.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visitedQK.Contains(parent))
+                        stackQK.Push((parent, false));
+                }
+            }
+        }
+
         for (int i = topoOrderQK.Count - 1; i >= 0; i--)
         {
             var node = topoOrderQK[i];
@@ -592,8 +619,35 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
         }
 
-        // Perform backward pass for V computation
-        var topoOrderV = GetTopologicalOrder(VNode);
+        // Production-grade: Inline topological sort for V backward pass
+        var visitedV = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrderV = new List<Autodiff.ComputationNode<T>>();
+        var stackV = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stackV.Push((VNode, false));
+
+        while (stackV.Count > 0)
+        {
+            var (node, processed) = stackV.Pop();
+
+            if (visitedV.Contains(node))
+                continue;
+
+            if (processed)
+            {
+                visitedV.Add(node);
+                topoOrderV.Add(node);
+            }
+            else
+            {
+                stackV.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visitedV.Contains(parent))
+                        stackV.Push((parent, false));
+                }
+            }
+        }
+
         for (int i = topoOrderV.Count - 1; i >= 0; i--)
         {
             var node = topoOrderV[i];
@@ -618,77 +672,6 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _dWv = Wv.Gradient;
 
         return input.Gradient;
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Applies activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (ScalarActivation is ReLUActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.ReLU(input);
-        }
-        else if (ScalarActivation is SigmoidActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Sigmoid(input);
-        }
-        else if (ScalarActivation is TanhActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Tanh(input);
-        }
-        else if (ScalarActivation is SoftmaxActivation<T>)
-        {
-            // Use Softmax operation for attention weights normalization
-            return Autodiff.TensorOperations<T>.Softmax(input, axis: -1);
-        }
-        else
-        {
-            // For unsupported activations, fallback to manual implementation
-            throw new NotSupportedException($"Activation {ScalarActivation?.GetType().Name} not supported in autodiff mode");
-        }
     }
 
     /// <summary>
