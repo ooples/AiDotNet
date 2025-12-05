@@ -81,6 +81,16 @@ public class ReadoutLayer<T> : LayerBase<T>
     private Vector<T>? _lastInput;
 
     /// <summary>
+    /// Stores the output vector (post-activation) from the most recent forward pass for use in backpropagation.
+    /// </summary>
+    private Vector<T>? _lastOutput;
+
+    /// <summary>
+    /// Stores the pre-activation output from the most recent forward pass.
+    /// </summary>
+    private Vector<T>? _lastPreActivation;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -215,15 +225,17 @@ public class ReadoutLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input.ToVector();
-        var output = _weights * _lastInput + _bias;
+        _lastPreActivation = _weights * _lastInput + _bias;
 
         if (UsingVectorActivation)
         {
-            return Tensor<T>.FromVector(VectorActivation!.Activate(output));
+            _lastOutput = VectorActivation!.Activate(_lastPreActivation);
+            return Tensor<T>.FromVector(_lastOutput);
         }
         else
         {
-            return Tensor<T>.FromVector(output.Transform(x => ScalarActivation!.Activate(x)));
+            _lastOutput = _lastPreActivation.Transform(x => ScalarActivation!.Activate(x));
+            return Tensor<T>.FromVector(_lastOutput);
         }
     }
 
@@ -271,7 +283,7 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null)
+        if (_lastInput == null || _lastPreActivation == null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
@@ -280,13 +292,15 @@ public class ReadoutLayer<T> : LayerBase<T>
 
         if (UsingVectorActivation)
         {
-            var activationDerivative = VectorActivation!.Derivative(_weights * _lastInput + _bias);
+            // Use cached pre-activation for derivative computation
+            var activationDerivative = VectorActivation!.Derivative(_lastPreActivation);
             var diagonalDerivative = activationDerivative.Diagonal();
             gradient = gradient.PointwiseMultiply(diagonalDerivative);
         }
         else
         {
-            gradient = gradient.PointwiseMultiply((_weights * _lastInput + _bias).Transform(x => ScalarActivation!.Derivative(x)));
+            // Use cached pre-activation for derivative computation
+            gradient = gradient.PointwiseMultiply(_lastPreActivation.Transform(x => ScalarActivation!.Derivative(x)));
         }
 
         _weightGradients = Matrix<T>.OuterProduct(gradient, _lastInput);
@@ -302,67 +316,91 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation via MatMul and Add operations.
-    /// The computation graph is: output = activation(weights * input + bias).
+    /// This method uses automatic differentiation with production-grade pattern:
+    /// - Uses cached forward pass values for activation derivative computation
+    /// - Uses Tensor.FromRowMatrix/FromVector for efficient conversions
+    /// - Builds minimal autodiff graph for gradient routing
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null)
+        if (_lastInput == null || _lastPreActivation == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Convert input to 2D tensor [1, inputSize]
+        // Production-grade: Compute activation derivative using cached pre-activation
+        var gradient = outputGradient.ToVector();
+        Vector<T> preActivationGradient;
+
+        if (UsingVectorActivation)
+        {
+            var activationDerivative = VectorActivation!.Derivative(_lastPreActivation);
+            var diagonalDerivative = activationDerivative.Diagonal();
+            preActivationGradient = gradient.PointwiseMultiply(diagonalDerivative);
+        }
+        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            var activation = ScalarActivation;
+            preActivationGradient = gradient.PointwiseMultiply(_lastPreActivation.Transform(x => activation.Derivative(x)));
+        }
+        else
+        {
+            preActivationGradient = gradient;
+        }
+
+        // Convert to tensors using efficient methods
         var inputTensor = new Tensor<T>([1, _lastInput.Length]);
         for (int i = 0; i < _lastInput.Length; i++)
             inputTensor[0, i] = _lastInput[i];
 
-        // Convert weights to tensor [outputSize, inputSize]
-        var weightsTensor = new Tensor<T>([_weights.Rows, _weights.Columns]);
-        for (int i = 0; i < _weights.Rows; i++)
-            for (int j = 0; j < _weights.Columns; j++)
-                weightsTensor[i, j] = _weights[i, j];
+        var preActGradTensor = Tensor<T>.FromVector(preActivationGradient);
 
-        // Convert bias to tensor [outputSize]
-        var biasTensor = new Tensor<T>([_bias.Length]);
-        for (int i = 0; i < _bias.Length; i++)
-            biasTensor[i] = _bias[i];
-
-        // Create computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(
-            inputTensor,
-            "input",
-            requiresGradient: true);
-
+        // Build minimal autodiff graph for linear part only (gradient routing)
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputTensor, "input", requiresGradient: true);
         var weightsNode = Autodiff.TensorOperations<T>.Variable(
-            weightsTensor,
-            "weights",
-            requiresGradient: true);
-
+            Tensor<T>.FromRowMatrix(_weights), "weights", requiresGradient: true);
         var biasNode = Autodiff.TensorOperations<T>.Variable(
-            biasTensor,
-            "bias",
-            requiresGradient: true);
+            Tensor<T>.FromVector(_bias), "bias", requiresGradient: true);
 
-        // Forward pass: output = weights * input + bias
+        // Forward pass for linear part: output = weights * input.T + bias
         var matmulNode = Autodiff.TensorOperations<T>.MatrixMultiply(weightsNode, Autodiff.TensorOperations<T>.Transpose(inputNode));
 
-        // Reshape matmul result from [outputSize, 1] to [outputSize]
+        // Reshape matmul result from [outputSize, 1] to [outputSize] and add bias
         var matmulFlat = new Tensor<T>([_weights.Rows]);
         for (int i = 0; i < _weights.Rows; i++)
             matmulFlat[i] = matmulNode.Value[i, 0];
-        var flatNode = Autodiff.TensorOperations<T>.Constant(matmulFlat);
-
-        // Add bias
+        var flatNode = Autodiff.TensorOperations<T>.Variable(matmulFlat, "matmul_flat", requiresGradient: false);
         var preActivationNode = Autodiff.TensorOperations<T>.Add(flatNode, biasNode);
 
-        // Apply activation
-        var outputNode = ApplyActivationAutodiff(preActivationNode);
+        // Set pre-activation gradient (activation derivative already applied)
+        preActivationNode.Gradient = preActGradTensor;
 
-        // Set the output gradient
-        outputNode.Gradient = outputGradient;
+        // Inline topological sort and backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((preActivationNode, false));
 
-        // Perform backward pass
-        var topoOrder = GetTopologicalOrder(outputNode);
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                        stack.Push((parent, false));
+                }
+            }
+        }
+
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -375,15 +413,12 @@ public class ReadoutLayer<T> : LayerBase<T>
         // Update parameter gradients
         if (weightsNode.Gradient != null)
         {
-            for (int i = 0; i < _weights.Rows; i++)
-                for (int j = 0; j < _weights.Columns; j++)
-                    _weightGradients[i, j] = weightsNode.Gradient[i, j];
+            _weightGradients = weightsNode.Gradient.ToMatrix();
         }
 
         if (biasNode.Gradient != null)
         {
-            for (int i = 0; i < _bias.Length; i++)
-                _biasGradients[i] = biasNode.Gradient[i];
+            _biasGradients = biasNode.Gradient.ToVector();
         }
 
         // Convert input gradient back to tensor
@@ -395,70 +430,6 @@ public class ReadoutLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
-    }
-
-    /// <summary>
-    /// Applies the activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (UsingVectorActivation)
-        {
-            // For vector activations like Softmax, use the specialized operation
-            if (VectorActivation is SoftmaxActivation<T>)
-            {
-                return Autodiff.TensorOperations<T>.Softmax(input, axis: 0);
-            }
-            // For other vector activations, fall back to element-wise if they're actually element-wise
-            return ApplyScalarActivationAutodiff(input);
-        }
-        else
-        {
-            return ApplyScalarActivationAutodiff(input);
-        }
-    }
-
-    /// <summary>
-    /// Applies scalar activation functions element-wise.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        var activation = UsingVectorActivation ? (object)VectorActivation! : ScalarActivation!;
-
-        return activation switch
-        {
-            ReLUActivation<T> => Autodiff.TensorOperations<T>.ReLU(input),
-            SigmoidActivation<T> => Autodiff.TensorOperations<T>.Sigmoid(input),
-            TanhActivation<T> => Autodiff.TensorOperations<T>.Tanh(input),
-            _ => input  // Identity for unknown activations
-        };
-    }
-
-    /// <summary>
-    /// Gets the computation nodes in topological order for backward pass.
-    /// </summary>
-    /// <param name="outputNode">The output node to start from.</param>
-    /// <returns>List of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> outputNode)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var order = new List<Autodiff.ComputationNode<T>>();
-
-        void Visit(Autodiff.ComputationNode<T> node)
-        {
-            if (visited.Contains(node)) return;
-            visited.Add(node);
-
-            foreach (var parent in node.Parents)
-            {
-                Visit(parent);
-            }
-
-            order.Add(node);
-        }
-
-        Visit(outputNode);
-        return order;
     }
 
 
@@ -634,7 +605,9 @@ public class ReadoutLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward pass
         _lastInput = null;
-    
+        _lastOutput = null;
+        _lastPreActivation = null;
+
         // Reset gradients
         _weightGradients = new Matrix<T>(_weights.Rows, _weights.Columns);
         _biasGradients = new Vector<T>(_bias.Length);
@@ -679,18 +652,9 @@ public class ReadoutLayer<T> : LayerBase<T>
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        // Convert weights and bias to tensors
-        var weightsTensor = new Tensor<T>(new[] { _weights.Rows, _weights.Columns });
-        for (int i = 0; i < _weights.Rows; i++)
-            for (int j = 0; j < _weights.Columns; j++)
-                weightsTensor[i, j] = _weights[i, j];
-
-        var biasTensor = new Tensor<T>(new[] { _bias.Length });
-        for (int i = 0; i < _bias.Length; i++)
-            biasTensor[i] = _bias[i];
-
-        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "readout_weights");
-        var biasNode = TensorOperations<T>.Constant(biasTensor, "readout_bias");
+        // Convert weights and bias to tensors using efficient methods
+        var weightsNode = TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(_weights), "readout_weights");
+        var biasNode = TensorOperations<T>.Constant(Tensor<T>.FromVector(_bias), "readout_bias");
 
         // Compute output = weights * input + bias
         var matmulNode = TensorOperations<T>.MatrixMultiply(weightsNode, inputNode);
