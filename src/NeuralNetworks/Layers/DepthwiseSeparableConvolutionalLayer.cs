@@ -975,34 +975,46 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This method uses automatic differentiation to compute gradients using DepthwiseConv2D and Conv2D operations.
-    /// The layer performs two sequential operations:
-    /// 1. Depthwise convolution (each channel filtered separately)
-    /// 2. Pointwise convolution (1x1 conv to mix channels)
-    /// </para>
-    /// <para>
-    /// This provides:
-    /// - Automatic gradient computation through the computation graph
-    /// - Verification of manual gradient implementations
-    /// - Support for rapid prototyping with custom modifications
+    /// Production-grade pattern: Uses cached _lastOutput for activation derivative computation,
+    /// Engine.TensorMultiply for GPU/CPU acceleration, and minimal autodiff graph.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null)
+        if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Production-grade: Compute activation derivative using cached output
+        Tensor<T> preActivationGradient;
+        if (VectorActivation != null)
+        {
+            var actDeriv = VectorActivation.Derivative(_lastOutput);
+            preActivationGradient = Engine.TensorMultiply(outputGradient, actDeriv);
+        }
+        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            var activation = ScalarActivation;
+            var activationDerivative = _lastOutput.Transform((x, _) => activation.Derivative(x));
+            preActivationGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
+        }
+        else
+        {
+            preActivationGradient = outputGradient;
+        }
 
         // Convert from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
         var inputNCHW = ConvertNHWCtoNCHW(_lastInput);
         var depthwiseKernelsNCHW = ConvertDepthwiseKernelsToNCHW(_depthwiseKernels);
         var pointwiseKernelsNCHW = ConvertPointwiseKernelsToNCHW(_pointwiseKernels);
+        var preActivationGradientNCHW = ConvertNHWCtoNCHW(preActivationGradient);
 
-        // Create computation nodes
+        // Create computation nodes with efficient conversions
         var inputNode = Autodiff.TensorOperations<T>.Variable(inputNCHW, "input", requiresGradient: true);
         var depthwiseKernelNode = Autodiff.TensorOperations<T>.Variable(depthwiseKernelsNCHW, "depthwise_kernel", requiresGradient: true);
         var pointwiseKernelNode = Autodiff.TensorOperations<T>.Variable(pointwiseKernelsNCHW, "pointwise_kernel", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(ConvertVectorToTensor(_biases), "bias", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromVector(_biases), "bias", requiresGradient: true);
 
-        // Forward pass using autodiff operations
+        // Build minimal autodiff graph for linear operations (activation derivative already applied)
         // Step 1: Depthwise convolution
         var depthwiseOutput = Autodiff.TensorOperations<T>.DepthwiseConv2D(
             inputNode,
@@ -1012,32 +1024,43 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
             padding: new int[] { _padding, _padding });
 
         // Step 2: Pointwise convolution (1x1 conv)
-        var pointwiseOutput = Autodiff.TensorOperations<T>.Conv2D(
+        var preActivationNode = Autodiff.TensorOperations<T>.Conv2D(
             depthwiseOutput,
             pointwiseKernelNode,
             biasNode,
             stride: new int[] { 1, 1 },
             padding: new int[] { 0, 0 });
 
-        // Apply activation function
-        Autodiff.ComputationNode<T> activatedOutput;
-        if (UsingVectorActivation)
+        // Set gradient on pre-activation node (activation derivative already applied)
+        preActivationNode.Gradient = preActivationGradientNCHW;
+
+        // Inline topological sort and backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((preActivationNode, false));
+
+        while (stack.Count > 0)
         {
-            // For vector activations, we need to handle them differently
-            // For now, approximate with element-wise operations
-            activatedOutput = ApplyActivationAutodiff(pointwiseOutput);
-        }
-        else
-        {
-            activatedOutput = ApplyActivationAutodiff(pointwiseOutput);
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                        stack.Push((parent, false));
+                }
+            }
         }
 
-        // Convert output gradient from NHWC to NCHW
-        var outputGradientNCHW = ConvertNHWCtoNCHW(outputGradient);
-
-        // Perform backward pass
-        activatedOutput.Gradient = outputGradientNCHW;
-        var topoOrder = GetTopologicalOrder(activatedOutput);
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -1047,15 +1070,15 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
             }
         }
 
-        // Update parameter gradients
+        // Extract gradients - kernels are already in correct format
         if (depthwiseKernelNode.Gradient != null)
-            _depthwiseKernelsGradient = ConvertDepthwiseKernelsFromNCHW(depthwiseKernelNode.Gradient);
+            _depthwiseKernelsGradient = depthwiseKernelNode.Gradient;
 
         if (pointwiseKernelNode.Gradient != null)
-            _pointwiseKernelsGradient = ConvertPointwiseKernelsFromNCHW(pointwiseKernelNode.Gradient);
+            _pointwiseKernelsGradient = pointwiseKernelNode.Gradient;
 
         if (biasNode.Gradient != null)
-            _biasesGradient = ConvertTensorToVector(biasNode.Gradient);
+            _biasesGradient = biasNode.Gradient.ToVector();
 
         // Convert input gradient from NCHW back to NHWC
         var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
@@ -1136,110 +1159,6 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     {
         // Already in the correct format
         return kernels;
-    }
-
-    /// <summary>
-    /// Converts vector to 1D tensor.
-    /// </summary>
-    private Tensor<T> ConvertVectorToTensor(Vector<T> vector)
-    {
-        var tensor = new Tensor<T>([vector.Length]);
-        for (int i = 0; i < vector.Length; i++)
-            tensor[i] = vector[i];
-        return tensor;
-    }
-
-    /// <summary>
-    /// Converts 1D tensor to vector.
-    /// </summary>
-    private Vector<T> ConvertTensorToVector(Tensor<T> tensor)
-    {
-        var vector = new Vector<T>(tensor.Shape[0]);
-        for (int i = 0; i < tensor.Shape[0]; i++)
-            vector[i] = tensor[i];
-        return vector;
-    }
-
-    /// <summary>
-    /// Applies activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        // Apply the appropriate activation function
-        if (UsingVectorActivation)
-        {
-            // For vector activation, use element-wise operations for now
-            // Common activations like ReLU work element-wise anyway
-            if (VectorActivation is ReLUActivation<T>)
-                return Autodiff.TensorOperations<T>.ReLU(input);
-            else if (VectorActivation is SigmoidActivation<T>)
-                return Autodiff.TensorOperations<T>.Sigmoid(input);
-            else if (VectorActivation is TanhActivation<T>)
-                return Autodiff.TensorOperations<T>.Tanh(input);
-            else
-            {
-                var activationType = VectorActivation?.GetType().Name ?? "Unknown";
-                throw new NotSupportedException($"Activation {activationType} not yet supported in autodiff");
-            }
-        }
-        else
-        {
-            if (ScalarActivation is ReLUActivation<T>)
-                return Autodiff.TensorOperations<T>.ReLU(input);
-            else if (ScalarActivation is SigmoidActivation<T>)
-                return Autodiff.TensorOperations<T>.Sigmoid(input);
-            else if (ScalarActivation is TanhActivation<T>)
-                return Autodiff.TensorOperations<T>.Tanh(input);
-            else
-            {
-                var activationType = ScalarActivation?.GetType().Name ?? "Unknown";
-                throw new NotSupportedException($"Activation {activationType} not yet supported in autodiff");
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    /// <param name="root">The root node of the computation graph.</param>
-    /// <returns>A list of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
     }
 
     /// <summary>
@@ -1604,9 +1523,8 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         // Pointwise kernels are already in [outputDepth, inputDepth, 1, 1] format
         var pointwiseKernelNode = Autodiff.TensorOperations<T>.Constant(_pointwiseKernels, "pointwise_kernel");
 
-        // Convert bias to tensor
-        var biasTensor = ConvertVectorToTensor(_biases);
-        var biasNode = Autodiff.TensorOperations<T>.Constant(biasTensor, "bias");
+        // Convert bias to tensor using efficient method
+        var biasNode = Autodiff.TensorOperations<T>.Constant(Tensor<T>.FromVector(_biases), "bias");
 
         // Step 1: Depthwise convolution (no bias)
         var depthwiseOutput = Autodiff.TensorOperations<T>.DepthwiseConv2D(
