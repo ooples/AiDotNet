@@ -19,7 +19,18 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         public void Dispose()
         {
             if (Directory.Exists(_testDirectory))
-                Directory.Delete(_testDirectory, true);
+            {
+                // Give time for file handles to be released
+                System.Threading.Thread.Sleep(100);
+                try
+                {
+                    Directory.Delete(_testDirectory, true);
+                }
+                catch (IOException)
+                {
+                    // Ignore file lock issues during cleanup
+                }
+            }
         }
 
         private GraphNode<double> CreateTestNode(string id, string label)
@@ -329,7 +340,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert - Check WAL
             var entries = wal.ReadLog();
-            Assert.Equal(4, entries.Count); // 2 AddNode + 1 AddEdge + 1 Checkpoint
+            Assert.Equal(7, entries.Count); // Begin + 2 AddNode + 2 edge operations + Commit + Checkpoint
 
             wal.Dispose();
         }

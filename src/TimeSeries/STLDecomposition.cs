@@ -316,9 +316,10 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
                 int start = Math.Max(0, i - effectiveWindow / 2);
                 int end = Math.Min(n, i + effectiveWindow / 2 + 1);
                 // VECTORIZED: Use Vector slice and sum
-                Vector<T> windowSlice = data.Slice(start, end);
+                int length = end - start;
+                Vector<T> windowSlice = data.Slice(start, length);
                 T sum = Engine.Sum(windowSlice);
-                result[i] = NumOps.Divide(sum, NumOps.FromDouble(end - start));
+                result[i] = NumOps.Divide(sum, NumOps.FromDouble(length));
             }
             else
             {
@@ -672,7 +673,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
                 weightedPoints.Add((distance, NumOps.Zero, data[j].y));
             }
 
-            weightedPoints.Sort((a, b) => 
+            weightedPoints.Sort((a, b) =>
             {
                 if (NumOps.LessThan(a.distance, b.distance))
                     return -1;
@@ -682,6 +683,8 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
                     return 0;
             });
             int q = (int)(n * span);
+            // Ensure q is within valid bounds: at least 1 and at most n
+            q = Math.Max(1, Math.Min(q, n));
             T maxDistance = weightedPoints[q - 1].distance;
 
             for (int j = 0; j < q; j++)

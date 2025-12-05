@@ -238,16 +238,22 @@ public class SummaryWriterTests : IDisposable
     [Fact]
     public void SummaryWriter_DefaultLogDir_CreatesRunsDirectory()
     {
+        // Arrange
+        string logDir = string.Empty;
+
         // Act
-        using var writer = new SummaryWriter();
-
-        // Assert
-        Assert.StartsWith("runs", writer.LogDir);
-
-        // Cleanup
-        if (Directory.Exists(writer.LogDir))
+        using (var writer = new SummaryWriter())
         {
-            Directory.Delete(writer.LogDir, true);
+            logDir = writer.LogDir;
+
+            // Assert
+            Assert.StartsWith("runs", writer.LogDir);
+        }
+
+        // Cleanup - only after writer is disposed
+        if (Directory.Exists(logDir))
+        {
+            Directory.Delete(logDir, true);
         }
     }
 

@@ -93,13 +93,18 @@ public class StubGenerator<T> : IGenerator<T>
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or empty", nameof(query));
 
+        // Trim and validate the extracted query to ensure it has meaningful content
+        string originalQuery = query.Trim();
+        if (string.IsNullOrEmpty(originalQuery))
+            throw new ArgumentException("Query cannot be empty after trimming whitespace", nameof(query));
+
         var contextList = context?.ToList() ?? new List<Document<T>>();
         
         if (contextList.Count == 0)
         {
             return new GroundedAnswer<T>
             {
-                Query = query,
+                Query = originalQuery,
                 Answer = "I don't have enough information to answer this question.",
                 SourceDocuments = new List<Document<T>>(),
                 Citations = new List<string>(),
@@ -109,7 +114,7 @@ public class StubGenerator<T> : IGenerator<T>
 
         // Build answer with citations
         var answerBuilder = new System.Text.StringBuilder();
-        answerBuilder.AppendLine($"Based on the provided context regarding '{query}':");
+        answerBuilder.AppendLine($"Based on the provided context regarding '{originalQuery}':");
         answerBuilder.AppendLine();
 
         var citations = new List<string>();
@@ -142,7 +147,7 @@ public class StubGenerator<T> : IGenerator<T>
 
         return new GroundedAnswer<T>
         {
-            Query = query,
+            Query = originalQuery,
             Answer = answerBuilder.ToString().Trim(),
             SourceDocuments = contextList,
             Citations = citations,

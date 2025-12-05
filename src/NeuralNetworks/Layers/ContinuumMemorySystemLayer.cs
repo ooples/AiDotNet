@@ -353,8 +353,8 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         {
             // === Vectorized Standard Gradient Descent using IEngine (Phase B: US-GPU-015) ===
             // θ^(fℓ)_{i+1} = θ^(fℓ)_i - η^(ℓ) * Σ gradients
-            var scaledGrad = (Vector<T>)Engine.Multiply(_accumulatedGradients[level], learningRate);
-            var updated = (Vector<T>)Engine.Subtract(currentParams, scaledGrad);
+            Vector<T> scaledGrad = Engine.Multiply(_accumulatedGradients[level], learningRate);
+            Vector<T> updated = Engine.Subtract(currentParams, scaledGrad);
 
             _mlpBlocks[level].SetParameters(updated);
         }

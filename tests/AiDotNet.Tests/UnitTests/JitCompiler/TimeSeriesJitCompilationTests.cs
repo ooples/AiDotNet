@@ -35,8 +35,8 @@ public class TimeSeriesJitCompilationTests
         };
         var model = new NBEATSModel<double>(options);
 
-        // Train with simple data
-        var (X, y) = GenerateTrainingData(50);
+        // Train with windowed data
+        var (X, y) = GenerateTrainingData(50, options.LookbackWindow);
         model.Train(X, y);
 
         // Assert
@@ -55,7 +55,7 @@ public class TimeSeriesJitCompilationTests
             HiddenLayerSize = 16
         };
         var model = new NBEATSModel<double>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateTrainingData(50, options.LookbackWindow);
         model.Train(X, y);
 
         // Act
@@ -80,7 +80,7 @@ public class TimeSeriesJitCompilationTests
             HiddenLayerSize = 16
         };
         var model = new NBEATSModel<double>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateTrainingData(50, options.LookbackWindow);
         model.Train(X, y);
 
         var inputNodes = new List<ComputationNode<double>>();
@@ -108,7 +108,7 @@ public class TimeSeriesJitCompilationTests
             TrendDampingFactor = 1
         };
         var model = new TBATSModel<double>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateSimpleTimeSeriesData(50);
         model.Train(X, y);
 
         // Assert
@@ -126,7 +126,7 @@ public class TimeSeriesJitCompilationTests
             TrendDampingFactor = 1
         };
         var model = new TBATSModel<double>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateSimpleTimeSeriesData(50);
         model.Train(X, y);
 
         // Act
@@ -151,7 +151,7 @@ public class TimeSeriesJitCompilationTests
             DailySeasonality = false
         };
         var model = new ProphetModel<double, Matrix<double>, Vector<double>>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateSimpleTimeSeriesData(50);
         model.Train(X, y);
 
         // Assert
@@ -169,7 +169,7 @@ public class TimeSeriesJitCompilationTests
             DailySeasonality = false
         };
         var model = new ProphetModel<double, Matrix<double>, Vector<double>>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateSimpleTimeSeriesData(50);
         model.Train(X, y);
 
         // Act
@@ -191,7 +191,7 @@ public class TimeSeriesJitCompilationTests
         {
         };
         var model = new BayesianStructuralTimeSeriesModel<double>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateSimpleTimeSeriesData(50);
         model.Train(X, y);
 
         // Assert
@@ -206,7 +206,7 @@ public class TimeSeriesJitCompilationTests
         {
         };
         var model = new BayesianStructuralTimeSeriesModel<double>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateSimpleTimeSeriesData(50);
         model.Train(X, y);
 
         // Act
@@ -229,7 +229,7 @@ public class TimeSeriesJitCompilationTests
             SeasonalPeriod = 7
         };
         var model = new STLDecomposition<double>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateSimpleTimeSeriesData(50);
         model.Train(X, y);
 
         // Assert
@@ -245,7 +245,7 @@ public class TimeSeriesJitCompilationTests
             SeasonalPeriod = 7
         };
         var model = new STLDecomposition<double>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateSimpleTimeSeriesData(50);
         model.Train(X, y);
 
         // Act
@@ -267,7 +267,7 @@ public class TimeSeriesJitCompilationTests
         {
         };
         var model = new StateSpaceModel<double>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateSimpleTimeSeriesData(50);
         model.Train(X, y);
 
         // Assert
@@ -282,7 +282,7 @@ public class TimeSeriesJitCompilationTests
         {
         };
         var model = new StateSpaceModel<double>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateSimpleTimeSeriesData(50);
         model.Train(X, y);
 
         // Act
@@ -306,7 +306,7 @@ public class TimeSeriesJitCompilationTests
             UseWindowFunction = true
         };
         var model = new SpectralAnalysisModel<double>(options);
-        var (X, y) = GenerateTrainingData(64); // Power of 2 for FFT
+        var (X, y) = GenerateSimpleTimeSeriesData(64); // Power of 2 for FFT
         model.Train(X, y);
 
         // Assert
@@ -323,7 +323,7 @@ public class TimeSeriesJitCompilationTests
             UseWindowFunction = true
         };
         var model = new SpectralAnalysisModel<double>(options);
-        var (X, y) = GenerateTrainingData(64);
+        var (X, y) = GenerateSimpleTimeSeriesData(64);
         model.Train(X, y);
 
         // Act
@@ -346,7 +346,7 @@ public class TimeSeriesJitCompilationTests
             SeasonalPeriod = 0
         };
         var model = new UnobservedComponentsModel<double, Matrix<double>, Vector<double>>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateSimpleTimeSeriesData(50);
         model.Train(X, y);
 
         // Assert
@@ -362,7 +362,7 @@ public class TimeSeriesJitCompilationTests
             SeasonalPeriod = 0
         };
         var model = new UnobservedComponentsModel<double, Matrix<double>, Vector<double>>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateSimpleTimeSeriesData(50);
         model.Train(X, y);
 
         // Act
@@ -386,7 +386,7 @@ public class TimeSeriesJitCompilationTests
             MAOrder = 0
         };
         var model = new NeuralNetworkARIMAModel<double>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateSimpleTimeSeriesData(50);
         model.Train(X, y);
 
         // Assert
@@ -403,7 +403,7 @@ public class TimeSeriesJitCompilationTests
             MAOrder = 0
         };
         var model = new NeuralNetworkARIMAModel<double>(options);
-        var (X, y) = GenerateTrainingData(50);
+        var (X, y) = GenerateSimpleTimeSeriesData(50);
         model.Train(X, y);
 
         // Act
@@ -445,16 +445,30 @@ public class TimeSeriesJitCompilationTests
 
     // ========== Helper Methods ==========
 
-    private static (Matrix<double> X, Vector<double> y) GenerateTrainingData(int samples)
+    private static (Matrix<double> X, Vector<double> y) GenerateTrainingData(int samples, int lookbackWindow = 10)
     {
         var random = new Random(42);
-        var x = new Matrix<double>(samples, 1);
+
+        // Generate a time series with enough points
+        var timeSeries = new double[samples + lookbackWindow];
+        for (int i = 0; i < timeSeries.Length; i++)
+        {
+            timeSeries[i] = Math.Sin(i * 0.1) + random.NextDouble() * 0.1;
+        }
+
+        // Create windowed data: each row contains lookbackWindow historical values
+        var x = new Matrix<double>(samples, lookbackWindow);
         var y = new Vector<double>(samples);
 
         for (int i = 0; i < samples; i++)
         {
-            x[i, 0] = i;
-            y[i] = Math.Sin(i * 0.1) + random.NextDouble() * 0.1;
+            // Fill in the lookback window for this sample
+            for (int j = 0; j < lookbackWindow; j++)
+            {
+                x[i, j] = timeSeries[i + j];
+            }
+            // Target is the next value after the window
+            y[i] = timeSeries[i + lookbackWindow];
         }
 
         return (x, y);
@@ -462,22 +476,23 @@ public class TimeSeriesJitCompilationTests
 
     private static dynamic? CreateAndTrainModel(Type modelType)
     {
-        var (X, y) = GenerateTrainingData(50);
-
         if (modelType == typeof(NBEATSModel<double>))
         {
-            var model = new NBEATSModel<double>(new NBEATSModelOptions<double>
+            var options = new NBEATSModelOptions<double>
             {
                 LookbackWindow = 10,
                 ForecastHorizon = 3,
                 NumBlocksPerStack = 2,
                 HiddenLayerSize = 16
-            });
+            };
+            var (X, y) = GenerateTrainingData(50, options.LookbackWindow);
+            var model = new NBEATSModel<double>(options);
             model.Train(X, y);
             return model;
         }
         else if (modelType == typeof(TBATSModel<double>))
         {
+            var (X, y) = GenerateSimpleTimeSeriesData(50);
             var model = new TBATSModel<double>(new TBATSModelOptions<double>
             {
                 SeasonalPeriods = new int[] { 7 },
@@ -489,6 +504,7 @@ public class TimeSeriesJitCompilationTests
         }
         else if (modelType == typeof(ProphetModel<double, Matrix<double>, Vector<double>>))
         {
+            var (X, y) = GenerateSimpleTimeSeriesData(50);
             var model = new ProphetModel<double, Matrix<double>, Vector<double>>(new ProphetOptions<double, Matrix<double>, Vector<double>>
             {
                 YearlySeasonality = false,
@@ -500,6 +516,7 @@ public class TimeSeriesJitCompilationTests
         }
         else if (modelType == typeof(StateSpaceModel<double>))
         {
+            var (X, y) = GenerateSimpleTimeSeriesData(50);
             var model = new StateSpaceModel<double>(new StateSpaceModelOptions<double>
             {
             });
@@ -508,6 +525,21 @@ public class TimeSeriesJitCompilationTests
         }
 
         return null;
+    }
+
+    private static (Matrix<double> X, Vector<double> y) GenerateSimpleTimeSeriesData(int samples)
+    {
+        var random = new Random(42);
+        var x = new Matrix<double>(samples, 1);
+        var y = new Vector<double>(samples);
+
+        for (int i = 0; i < samples; i++)
+        {
+            x[i, 0] = i; // Time index
+            y[i] = Math.Sin(i * 0.1) + random.NextDouble() * 0.1;
+        }
+
+        return (x, y);
     }
 }
 

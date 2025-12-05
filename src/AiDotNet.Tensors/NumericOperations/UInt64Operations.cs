@@ -849,4 +849,18 @@ public class UInt64Operations : INumericOperations<ulong>
         => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
 
     #endregion
+
+    private static readonly UInt64Operations _instance = new UInt64Operations();
+
+    public void Fill(Span<ulong> destination, ulong value) => destination.Fill(value);
+    public void MultiplyScalar(ReadOnlySpan<ulong> x, ulong scalar, Span<ulong> destination) => VectorizedOperationsFallback.MultiplyScalar(_instance, x, scalar, destination);
+    public void DivideScalar(ReadOnlySpan<ulong> x, ulong scalar, Span<ulong> destination) => VectorizedOperationsFallback.DivideScalar(_instance, x, scalar, destination);
+    public void AddScalar(ReadOnlySpan<ulong> x, ulong scalar, Span<ulong> destination) => VectorizedOperationsFallback.AddScalar(_instance, x, scalar, destination);
+    public void SubtractScalar(ReadOnlySpan<ulong> x, ulong scalar, Span<ulong> destination) => VectorizedOperationsFallback.SubtractScalar(_instance, x, scalar, destination);
+    public void Sqrt(ReadOnlySpan<ulong> x, Span<ulong> destination) => VectorizedOperationsFallback.Sqrt(_instance, x, destination);
+    public void Abs(ReadOnlySpan<ulong> x, Span<ulong> destination) => VectorizedOperationsFallback.Abs(_instance, x, destination);
+    public void Negate(ReadOnlySpan<ulong> x, Span<ulong> destination) => VectorizedOperationsFallback.Negate(_instance, x, destination);
+    public void Clip(ReadOnlySpan<ulong> x, ulong min, ulong max, Span<ulong> destination) => VectorizedOperationsFallback.Clip(_instance, x, min, max, destination);
+    public void Pow(ReadOnlySpan<ulong> x, ulong power, Span<ulong> destination) => VectorizedOperationsFallback.Pow(_instance, x, power, destination);
+    public void Copy(ReadOnlySpan<ulong> source, Span<ulong> destination) => source.CopyTo(destination);
 }
