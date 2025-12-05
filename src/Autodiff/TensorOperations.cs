@@ -145,18 +145,10 @@ public static class TensorOperations<T>
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        // Handle broadcasting: if shapes differ, broadcast the smaller one
-        Tensor<T> result;
-        if (a.Value.Shape.SequenceEqual(b.Value.Shape))
-        {
-            // Same shape - use direct addition
-            result = engine.TensorAdd(a.Value, b.Value);
-        }
-        else
-        {
-            // Different shapes - manual broadcasting
-            result = BroadcastAdd(a.Value, b.Value, numOps);
-        }
+        // Use direct addition if shapes are equal, otherwise broadcast
+        Tensor<T> result = a.Value.Shape.SequenceEqual(b.Value.Shape)
+            ? engine.TensorAdd(a.Value, b.Value)
+            : BroadcastAdd(a.Value, b.Value, numOps);
 
         // Store original shapes for gradient reduction
         var aShape = a.Value.Shape;
