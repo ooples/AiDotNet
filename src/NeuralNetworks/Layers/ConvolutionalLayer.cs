@@ -167,10 +167,10 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets the biases vector of the convolutional layer.
+    /// Gets the biases tensor of the convolutional layer.
     /// </summary>
     /// <returns>The bias values added to each output channel.</returns>
-    public override Vector<T> GetBiases()
+    public override Tensor<T> GetBiases()
     {
         return _biases;
     }
@@ -204,21 +204,21 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the bias values for each output channel. _biases are constants that are
+    /// This tensor stores the bias values for each output channel. _biases are constants that are
     /// added to the convolution results before applying the activation function.
     /// </para>
     /// <para><b>For Beginners:</b> _biases are like "adjustment factors" for each pattern detector.
-    /// 
+    ///
     /// Think of biases as:
     /// - A starting point or baseline value
     /// - Added to the result after applying the pattern detector
     /// - Helping the network be more flexible in what it can learn
-    /// 
+    ///
     /// For example, biases help the network detect patterns even when the input doesn't
     /// perfectly match what the kernel is looking for.
     /// </para>
     /// </remarks>
-    private Vector<T> _biases;
+    private Tensor<T> _biases;
 
     /// <summary>
     /// The execution engine for GPU-accelerated convolution operations.
@@ -241,7 +241,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// <summary>
     /// Gradient of the biases computed during backpropagation via autodiff.
     /// </summary>
-    private Vector<T>? _biasesGradient;
+    private Tensor<T>? _biasesGradient;
 
     /// <summary>
     /// Stored input data from the most recent forward pass, used for backpropagation.
@@ -350,7 +350,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         Padding = padding;
 
         _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _biases = new Vector<T>(OutputDepth);
+        _biases = new Tensor<T>([OutputDepth]);
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _random = RandomHelper.CreateSecureRandom();
@@ -378,12 +378,12 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This setup method is similar to the previous one, but uses a different type of
     /// activation function.
-    /// 
+    ///
     /// A vector activation function:
     /// - Works on entire groups of numbers at once
     /// - Can be more efficient for certain types of calculations
     /// - Otherwise works the same as the regular activation function
-    /// 
+    ///
     /// You would choose this option if you have a specific mathematical operation that
     /// needs to be applied to groups of outputs rather than individual values.
     /// </para>
@@ -401,7 +401,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         Padding = padding;
 
         _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _biases = new Vector<T>(OutputDepth);
+        _biases = new Tensor<T>([OutputDepth]);
         _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         _random = RandomHelper.CreateSecureRandom();
@@ -566,7 +566,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
 
         // Serialize _biases
-        for (int i = 0; i < _biases.Length; i++)
+        for (int i = 0; i < _biases.Shape[0]; i++)
         {
             writer.Write(Convert.ToDouble(_biases[i]));
         }
@@ -624,8 +624,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
 
         // Deserialize _biases
-        _biases = new Vector<T>(OutputDepth);
-        for (int i = 0; i < _biases.Length; i++)
+        _biases = new Tensor<T>([OutputDepth]);
+        for (int i = 0; i < _biases.Shape[0]; i++)
         {
             double value = reader.ReadDouble();
             _biases[i] = NumOps.FromDouble(value);
@@ -823,7 +823,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         Tensor<T> inputGradient = new Tensor<T>(_lastInput.Shape);
         Tensor<T> kernelGradients = new Tensor<T>(_kernels.Shape);
-        Vector<T> biasGradients = new Vector<T>(OutputDepth);
+        Tensor<T> biasGradients = new Tensor<T>([OutputDepth]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -879,64 +879,117 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null)
+        if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // === Step 1: Apply activation derivative using cached _lastOutput ===
-        // This matches BackwardManual exactly by using the same cached values
-        Tensor<T> activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
-        outputGradient = Tensor<T>.ElementwiseMultiply(outputGradient, activationGradient);
+        // Convert parameters to computation nodes
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var kernelNode = Autodiff.TensorOperations<T>.Variable(_kernels, "kernel", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(_biases, "bias", requiresGradient: true);
 
-        int batchSize = _lastInput.Shape[0];
-        int inputHeight = _lastInput.Shape[2];
-        int inputWidth = _lastInput.Shape[3];
-        int outputHeight = outputGradient.Shape[2];
-        int outputWidth = outputGradient.Shape[3];
+        // Forward pass using autodiff Conv2D operation
+        var stride = new int[] { Stride, Stride };
+        var padding = new int[] { Padding, Padding };
+        var convOutput = Autodiff.TensorOperations<T>.Conv2D(inputNode, kernelNode, biasNode, stride, padding);
 
-        Tensor<T> inputGradient = new Tensor<T>(_lastInput.Shape);
-        Tensor<T> kernelGradients = new Tensor<T>(_kernels.Shape);
-        Vector<T> biasGradients = new Vector<T>(OutputDepth);
-
-        // === Step 2: Compute gradients using same formula as BackwardManual ===
-        for (int b = 0; b < batchSize; b++)
+        // Apply activation if present
+        Autodiff.ComputationNode<T> activated;
+        if (ScalarActivation != null)
         {
-            for (int o = 0; o < OutputDepth; o++)
-            {
-                for (int y = 0; y < outputHeight; y++)
-                {
-                    for (int x = 0; x < outputWidth; x++)
-                    {
-                        T outputGrad = outputGradient[b, o, y, x];
-                        biasGradients[o] = NumOps.Add(biasGradients[o], outputGrad);
+            // Apply scalar activation element-wise
+            activated = ApplyScalarActivationAutodiff(convOutput);
+        }
+        else if (VectorActivation != null)
+        {
+            // Vector activation would need special handling
+            // For now, fallback to manual
+            return BackwardManual(outputGradient);
+        }
+        else
+        {
+            activated = convOutput;
+        }
 
-                        for (int i = 0; i < InputDepth; i++)
-                        {
-                            for (int ky = 0; ky < KernelSize; ky++)
-                            {
-                                for (int kx = 0; kx < KernelSize; kx++)
-                                {
-                                    int inputY = y * Stride + ky - Padding;
-                                    int inputX = x * Stride + kx - Padding;
-                                    if (inputY >= 0 && inputY < inputHeight && inputX >= 0 && inputX < inputWidth)
-                                    {
-                                        T inputValue = _lastInput[b, i, inputY, inputX];
-                                        kernelGradients[o, i, ky, kx] = NumOps.Add(kernelGradients[o, i, ky, kx], NumOps.Multiply(outputGrad, inputValue));
-                                        inputGradient[b, i, inputY, inputX] = NumOps.Add(inputGradient[b, i, inputY, inputX], NumOps.Multiply(outputGrad, _kernels[o, i, ky, kx]));
-                                    }
-                                }
-                            }
-                        }
+        // Set output gradient
+        activated.Gradient = outputGradient;
+
+        // Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((activated, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
                     }
                 }
             }
         }
 
-        // Store gradients for UpdateParameters to consume (separation of concerns)
-        _kernelsGradient = kernelGradients;
-        _biasesGradient = biasGradients;
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
 
-        return inputGradient;
+        // Extract gradients
+        if (kernelNode.Gradient != null)
+        {
+            _kernelsGradient = kernelNode.Gradient;
+        }
+
+        if (biasNode.Gradient != null)
+        {
+            _biasesGradient = biasNode.Gradient;
+        }
+
+        return inputNode.Gradient!;
     }
+
+    /// <summary>
+    /// Applies scalar activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        return ScalarActivation switch
+        {
+            ReLUActivation<T> => Autodiff.TensorOperations<T>.ReLU(input),
+            SigmoidActivation<T> => Autodiff.TensorOperations<T>.Sigmoid(input),
+            TanhActivation<T> => Autodiff.TensorOperations<T>.Tanh(input),
+            ELUActivation<T> elu => Autodiff.TensorOperations<T>.ELU(input, Convert.ToDouble(elu.Alpha)),
+            LeakyReLUActivation<T> leaky => Autodiff.TensorOperations<T>.LeakyReLU(input, Convert.ToDouble(leaky.Alpha)),
+            GELUActivation<T> => Autodiff.TensorOperations<T>.GELU(input),
+            SwishActivation<T> => Autodiff.TensorOperations<T>.Swish(input),
+            SiLUActivation<T> => Autodiff.TensorOperations<T>.Swish(input), // SiLU is same as Swish
+            SELUActivation<T> => Autodiff.TensorOperations<T>.SELU(input),
+            SoftSignActivation<T> => Autodiff.TensorOperations<T>.SoftSign(input),
+            IdentityActivation<T> => input, // Identity just returns input as-is
+            _ => throw new NotSupportedException($"Activation {ScalarActivation?.GetType().Name} not supported in autodiff mode. " +
+                "Supported: ReLU, Sigmoid, Tanh, ELU, LeakyReLU, GELU, Swish, SiLU, SELU, SoftSign, Identity")
+        };
+    }
+
     /// <summary>
     /// Updates the layer's parameters (kernel weights and biases) using the specified learning rate.
     /// </summary>
@@ -979,11 +1032,12 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             }
         }
 
-        // Update biases - vectorized
-        var lrVec = new Vector<T>(OutputDepth);
-        lrVec.Fill(learningRate);
-        var biasUpdates = (Vector<T>)Engine.Multiply(_biases, lrVec);
-        _biases = (Vector<T>)Engine.Subtract(_biases, biasUpdates);
+        // Update biases
+        for (int o = 0; o < OutputDepth; o++)
+        {
+            T update = NumOps.Multiply(learningRate, _biases[o]);
+            _biases[o] = NumOps.Subtract(_biases[o], update);
+        }
     }
 
     /// <summary>
@@ -1013,7 +1067,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Calculate total number of parameters
-        int totalParams = _kernels.Length + _biases.Length;
+        int totalParams = _kernels.Length + _biases.Shape[0];
         var parameters = new Vector<T>(totalParams);
     
         int index = 0;
@@ -1068,9 +1122,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != _kernels.Length + _biases.Length)
+        if (parameters.Length != _kernels.Length + _biases.Shape[0])
         {
-            throw new ArgumentException($"Expected {_kernels.Length + _biases.Length} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {_kernels.Length + _biases.Shape[0]} parameters, but got {parameters.Length}");
         }
     
         int index = 0;
@@ -1172,7 +1226,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         // Create constant nodes for kernels and biases
         var kernelNode = TensorOperations<T>.Constant(_kernels, "kernel");
-        var biasNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { OutputDepth }, _biases), "bias");
+        var biasNode = TensorOperations<T>.Constant(_biases, "bias");
 
         // Apply Conv2D operation
         var conv2dNode = TensorOperations<T>.Conv2D(
