@@ -621,9 +621,10 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation via the GraphConv operation to compute gradients.
-    /// The operation handles the full graph convolution with proper gradient flow through
-    /// the adjacency matrix, weights, and bias.
+    /// This method uses automatic differentiation with production-grade pattern:
+    /// - Uses cached forward pass values for activation derivative computation
+    /// - Uses Tensor.FromRowMatrix/FromVector for efficient conversions
+    /// - Builds minimal autodiff graph for gradient routing
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
@@ -631,53 +632,63 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Convert weights matrix to tensor
-        var weightsTensor = new Tensor<T>([_weights.Rows, _weights.Columns]);
-        for (int i = 0; i < _weights.Rows; i++)
-            for (int j = 0; j < _weights.Columns; j++)
-                weightsTensor[i, j] = _weights[i, j];
+        // Production-grade: Compute activation derivative using cached output
+        Tensor<T> preActivationGradient;
+        if (VectorActivation != null)
+        {
+            var actDeriv = VectorActivation.Derivative(_lastOutput);
+            preActivationGradient = Engine.TensorMultiply(outputGradient, actDeriv);
+        }
+        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            var activation = ScalarActivation;
+            var activationDerivative = _lastOutput.Transform((x, _) => activation.Derivative(x));
+            preActivationGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
+        }
+        else
+        {
+            preActivationGradient = outputGradient;
+        }
 
-        // Convert bias vector to tensor
-        var biasTensor = new Tensor<T>([_bias.Length]);
-        for (int i = 0; i < _bias.Length; i++)
-            biasTensor[i] = _bias[i];
+        // Create computation nodes with efficient conversions
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var adjNode = Autodiff.TensorOperations<T>.Variable(_adjacencyMatrix, "adjacency", requiresGradient: false);
+        var weightsNode = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromRowMatrix(_weights), "weights", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromVector(_bias), "bias", requiresGradient: true);
 
-        // Create computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(
-            _lastInput,
-            "input",
-            requiresGradient: true);
+        // Build minimal autodiff graph for linear operations (activation derivative already applied)
+        var preActivationNode = Autodiff.TensorOperations<T>.GraphConv(inputNode, adjNode, weightsNode, biasNode);
 
-        var adjNode = Autodiff.TensorOperations<T>.Variable(
-            _adjacencyMatrix,
-            "adjacency",
-            requiresGradient: false);  // Adjacency is typically fixed
+        // Set gradient on pre-activation node (activation derivative already applied)
+        preActivationNode.Gradient = preActivationGradient;
 
-        var weightsNode = Autodiff.TensorOperations<T>.Variable(
-            weightsTensor,
-            "weights",
-            requiresGradient: true);
+        // Inline topological sort and backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((preActivationNode, false));
 
-        var biasNode = Autodiff.TensorOperations<T>.Variable(
-            biasTensor,
-            "bias",
-            requiresGradient: true);
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
 
-        // Apply graph convolution
-        var preActivationNode = Autodiff.TensorOperations<T>.GraphConv(
-            inputNode,
-            adjNode,
-            weightsNode,
-            biasNode);
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                        stack.Push((parent, false));
+                }
+            }
+        }
 
-        // Apply activation
-        var outputNode = ApplyActivationAutodiff(preActivationNode);
-
-        // Set the output gradient
-        outputNode.Gradient = outputGradient;
-
-        // Perform backward pass
-        var topoOrder = GetTopologicalOrder(outputNode);
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -687,90 +698,16 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
         }
 
-        // Update parameter gradients
+        // Extract gradients using efficient methods
         if (weightsNode.Gradient != null)
-        {
-            _weightsGradient = new Matrix<T>(_weights.Rows, _weights.Columns);
-            for (int i = 0; i < _weights.Rows; i++)
-                for (int j = 0; j < _weights.Columns; j++)
-                    _weightsGradient[i, j] = weightsNode.Gradient[i, j];
-        }
+            _weightsGradient = weightsNode.Gradient.ToMatrix();
 
         if (biasNode.Gradient != null)
-        {
-            _biasGradient = new Vector<T>(_bias.Length);
-            for (int i = 0; i < _bias.Length; i++)
-                _biasGradient[i] = biasNode.Gradient[i];
-        }
+            _biasGradient = biasNode.Gradient.ToVector();
 
         // Return input gradient
         return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
-
-    /// <summary>
-    /// Applies the activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (UsingVectorActivation)
-        {
-            // For vector activations like Softmax
-            if (VectorActivation is SoftmaxActivation<T>)
-            {
-                // Apply softmax along the feature dimension (last dimension)
-                return Autodiff.TensorOperations<T>.Softmax(input, axis: input.Value.Shape.Length - 1);
-            }
-            return ApplyScalarActivationAutodiff(input);
-        }
-        else
-        {
-            return ApplyScalarActivationAutodiff(input);
-        }
-    }
-
-    /// <summary>
-    /// Applies scalar activation functions element-wise.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        var activation = UsingVectorActivation ? (object)VectorActivation! : ScalarActivation!;
-
-        return activation switch
-        {
-            ReLUActivation<T> => Autodiff.TensorOperations<T>.ReLU(input),
-            SigmoidActivation<T> => Autodiff.TensorOperations<T>.Sigmoid(input),
-            TanhActivation<T> => Autodiff.TensorOperations<T>.Tanh(input),
-            _ => input  // Identity for unknown activations
-        };
-    }
-
-    /// <summary>
-    /// Gets the computation nodes in topological order for backward pass.
-    /// </summary>
-    /// <param name="outputNode">The output node to start from.</param>
-    /// <returns>List of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> outputNode)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var order = new List<Autodiff.ComputationNode<T>>();
-
-        void Visit(Autodiff.ComputationNode<T> node)
-        {
-            if (visited.Contains(node)) return;
-            visited.Add(node);
-
-            foreach (var parent in node.Parents)
-            {
-                Visit(parent);
-            }
-
-            order.Add(node);
-        }
-
-        Visit(outputNode);
-        return order;
-    }
-
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.
