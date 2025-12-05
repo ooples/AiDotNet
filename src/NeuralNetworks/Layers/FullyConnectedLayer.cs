@@ -57,7 +57,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// so every input-output pair has exactly one weight value.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weights;
+    private Tensor<T> _weights;
 
     /// <summary>
     /// The bias values for each output neuron.
@@ -82,7 +82,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// Each output neuron has its own bias value that can be learned independently.
     /// </para>
     /// </remarks>
-    private Vector<T> _biases;
+    private Tensor<T> _biases;
 
     /// <summary>
     /// The input tensor from the last forward pass, saved for backpropagation.
@@ -148,7 +148,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// modify the weights.
     /// </para>
     /// </remarks>
-    private Matrix<T>? _weightsGradient;
+    private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// The gradients for the biases, computed during backpropagation.
@@ -174,7 +174,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// Each output neuron has its own bias gradient that guides its adjustment.
     /// </para>
     /// </remarks>
-    private Vector<T>? _biasesGradient;
+    private Tensor<T>? _biasesGradient;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -238,8 +238,8 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     public FullyConnectedLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
-        _weights = new Matrix<T>(outputSize, inputSize);
-        _biases = new Vector<T>(outputSize);
+        _weights = new Tensor<T>([outputSize, inputSize]);
+        _biases = new Tensor<T>([outputSize]);
 
         InitializeParameters();
     }
@@ -281,8 +281,8 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     public FullyConnectedLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([inputSize], [outputSize], vectorActivationFunction ?? new ReLUActivation<T>())
     {
-        _weights = new Matrix<T>(outputSize, inputSize);
-        _biases = new Vector<T>(outputSize);
+        _weights = new Tensor<T>([outputSize, inputSize]);
+        _biases = new Tensor<T>([outputSize]);
 
         InitializeParameters();
     }
@@ -317,26 +317,23 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     {
         // === Vectorized Weight/Bias Initialization (Phase B: US-GPU-015) ===
         // Initialize weights and biases (e.g., Xavier/Glorot initialization)
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_weights.Rows + _weights.Columns)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_weights.Shape[0] + _weights.Shape[1])));
 
         // Vectorized weight initialization using Engine operations
-        for (int i = 0; i < _weights.Rows; i++)
+        for (int i = 0; i < _weights.Shape[0]; i++)
         {
-            var rowData = new T[_weights.Columns];
-            for (int j = 0; j < _weights.Columns; j++)
+            for (int j = 0; j < _weights.Shape[1]; j++)
             {
                 // Xavier/Glorot uniform: sample in [-scale, scale]
-                rowData[j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() * 2.0 - 1.0), scale);
-            }
-            var rowVector = new Vector<T>(rowData);
-            for (int j = 0; j < _weights.Columns; j++)
-            {
-                _weights[i, j] = rowVector[j];
+                _weights[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() * 2.0 - 1.0), scale);
             }
         }
 
-        // Vectorized bias initialization to zero
-        _biases = Vector<T>.CreateDefault(_biases.Length, NumOps.Zero);
+        // Initialize biases to zero
+        for (int i = 0; i < _biases.Shape[0]; i++)
+        {
+            _biases[i] = NumOps.Zero;
+        }
     }
 
     /// <summary>
@@ -373,9 +370,8 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         _lastInput = input;
         int batchSize = input.Shape[0];
         int inputSize = input.Shape[1];
-        int outputSize = _weights.Rows;
+        int outputSize = _weights.Shape[0];
 
-        var preActivation = new Tensor<T>([batchSize, outputSize]);
         var output = new Tensor<T>([batchSize, outputSize]);
 
         for (int i = 0; i < batchSize; i++)
@@ -386,14 +382,18 @@ public class FullyConnectedLayer<T> : LayerBase<T>
                 inputVector[j] = input[i, j];
             }
 
-            var outputVector = _weights.Multiply(inputVector).Add(_biases);
-            
-            // Store pre-activation values
-            for (int j = 0; j < outputSize; j++)
+            // Compute output = weights * input + biases using tensor operations
+            var outputVector = new Vector<T>(outputSize);
+            for (int row = 0; row < outputSize; row++)
             {
-                preActivation[i, j] = outputVector[j];
+                T sum = _biases[row];
+                for (int col = 0; col < inputSize; col++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_weights[row, col], inputVector[col]));
+                }
+                outputVector[row] = sum;
             }
-            
+
             outputVector = ApplyActivation(outputVector);
 
             for (int j = 0; j < outputSize; j++)
@@ -458,12 +458,12 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         var inputGradient = new Tensor<T>(_lastInput.Shape);
-        var weightsGradient = new Matrix<T>(_weights.Rows, _weights.Columns);
-        var biasesGradient = new Vector<T>(_biases.Length);
+        var weightsGradient = new Tensor<T>(_weights.Shape);
+        var biasesGradient = new Tensor<T>(_biases.Shape);
 
         int batchSize = _lastInput.Shape[0];
         int inputSize = _lastInput.Shape[1];
-        int outputSize = _weights.Rows;
+        int outputSize = _weights.Shape[0];
 
         for (int i = 0; i < batchSize; i++)
         {
@@ -483,14 +483,31 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             }
 
             var delta = ApplyActivationDerivative(lastOutputVector, outputGradientVector);
-            weightsGradient = weightsGradient.Add(Matrix<T>.OuterProduct(delta, inputVector));
-            // === Vectorized Bias Gradient Accumulation using IEngine (Phase B: US-GPU-015) ===
-            biasesGradient = (Vector<T>)Engine.Add(biasesGradient, delta);
 
-            var inputGradientVector = _weights.Transpose().Multiply(delta);
+            // Accumulate weight gradients: outer product of delta and input
+            for (int row = 0; row < outputSize; row++)
+            {
+                for (int col = 0; col < inputSize; col++)
+                {
+                    weightsGradient[row, col] = NumOps.Add(weightsGradient[row, col], NumOps.Multiply(delta[row], inputVector[col]));
+                }
+            }
+
+            // Accumulate bias gradients
+            for (int j = 0; j < outputSize; j++)
+            {
+                biasesGradient[j] = NumOps.Add(biasesGradient[j], delta[j]);
+            }
+
+            // Compute input gradient: weights.T @ delta
             for (int j = 0; j < inputSize; j++)
             {
-                inputGradient[i, j] = inputGradientVector[j];
+                T sum = NumOps.Zero;
+                for (int k = 0; k < outputSize; k++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_weights[k, j], delta[k]));
+                }
+                inputGradient[i, j] = sum;
             }
         }
 
@@ -523,69 +540,74 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null)
+        if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = _lastInput.Shape[0];
-        var flattenedInput = _lastInput.Reshape(batchSize, _lastInput.Shape[1]);
-        var flattenedOutputGradient = outputGradient.Reshape(batchSize, outputGradient.Shape[1]);
+        int outputSize = _weights.Shape[0];
 
-        // Production-grade: Use built-in Tensor.FromMatrix/FromVector instead of custom helpers
-        var weightsTensor = Tensor<T>.FromMatrix(_weights);
-        var biasesTensor = Tensor<T>.FromVector(_biases);
+        // Create computation nodes - _weights and _biases are already Tensor<T>
+        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var weights = Autodiff.TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
+        var biases = Autodiff.TensorOperations<T>.Variable(_biases, "biases", requiresGradient: true);
 
-        var input = Autodiff.TensorOperations<T>.Variable(flattenedInput, "input", requiresGradient: true);
-        var weights = Autodiff.TensorOperations<T>.Variable(weightsTensor, "weights", requiresGradient: true);
-        var biases = Autodiff.TensorOperations<T>.Variable(biasesTensor, "biases", requiresGradient: true);
+        // Forward computation using autodiff ops
+        // For each example: output = weights @ input + biases
+        // In batch form: output = input @ weights.T + biases
+        var weightsTransposed = Autodiff.TensorOperations<T>.Transpose(weights);
+        var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weightsTransposed);
 
-        // Use cached pre-activation values from forward pass (_lastOutput) to compute activation derivatives.
-        // This is critical for gradient correctness - activation derivatives must be computed from
-        // pre-activation values, not post-activation values.
-        var preActivation = _lastOutput.Reshape(batchSize, _lastOutput.Shape[1]);
-
-        // Production-grade: Use vectorized Transform instead of scalar loops
-        // Compute activation derivative using cached pre-activation values: f'(pre_activation)
-        Tensor<T> activationDerivative;
-        if (ScalarActivation != null)
+        // Broadcast biases across batch dimension
+        var biasesBroadcast = new Tensor<T>([batchSize, outputSize]);
+        for (int i = 0; i < batchSize; i++)
         {
-            // Vectorized activation derivative computation via Transform
-            var activation = ScalarActivation;
-            activationDerivative = preActivation.Transform((x, _) => activation.Derivative(x));
+            for (int j = 0; j < outputSize; j++)
+            {
+                biasesBroadcast[i, j] = _biases[j];
+            }
+        }
+        var biasNode = Autodiff.TensorOperations<T>.Variable(biasesBroadcast, "biases_broadcast", requiresGradient: false);
+        var output = Autodiff.TensorOperations<T>.Add(matmul, biasNode);
+
+        // Apply activation using autodiff
+        Autodiff.ComputationNode<T> activated;
+        if (ScalarActivation is ReLUActivation<T>)
+        {
+            activated = Autodiff.TensorOperations<T>.ReLU(output);
+        }
+        else if (ScalarActivation is SigmoidActivation<T>)
+        {
+            activated = Autodiff.TensorOperations<T>.Sigmoid(output);
+        }
+        else if (ScalarActivation is TanhActivation<T>)
+        {
+            activated = Autodiff.TensorOperations<T>.Tanh(output);
         }
         else
         {
-            // Identity activation - derivative is 1 (vectorized fill)
-            activationDerivative = new Tensor<T>(preActivation.Shape);
-            var one = NumOps.One;
-            activationDerivative = activationDerivative.Transform((_, _) => one);
+            activated = output;
         }
-
-        // Production-grade: Use Engine.TensorMultiply for vectorized element-wise multiplication
-        // Compute dL/dZ = dL/dY * f'(cached_values)
-        var preActivationGradient = Engine.TensorMultiply(flattenedOutputGradient, activationDerivative);
-
-        // Now compute gradients using autodiff for the linear part: Z = X @ W.T + b
-        // TensorOperations automatically use IEngine for vectorized GPU/CPU acceleration
-        // and set JIT compiler metadata for graph compilation
-        var weightsTransposed = Autodiff.TensorOperations<T>.Transpose(weights);
-        var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weightsTransposed);
-        var biasesBroadcastedNode = Autodiff.TensorOperations<T>.Broadcast(biases, new int[] { batchSize, biasesTensor.Shape[0] });
-        var linearOutput = Autodiff.TensorOperations<T>.Add(matmul, biasesBroadcastedNode);
-
-        // Set the gradient at the linear output (pre-activation gradient)
-        linearOutput.Gradient = preActivationGradient;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((linearOutput, false));
+>>>>>>> 23aceae1 (refactor: upgrade fullyconnectedlayer to tensor-based production-ready pattern)
 
         while (stack.Count > 0)
         {
             var (node, processed) = stack.Pop();
             if (visited.Contains(node)) continue;
 
+<<<<<<< HEAD
+=======
+        // Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((activated, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+>>>>>>> 23aceae1 (refactor: upgrade fullyconnectedlayer to tensor-based production-ready pattern)
             if (processed)
             {
                 visited.Add(node);
@@ -615,18 +637,61 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             }
         }
 
-        // Extract gradients using built-in ToMatrix/ToVector
+        // Manually propagate gradients using the output gradient we received
+        activated.Gradient = outputGradient;
+
+        // Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((activated, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // Backward pass
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients - already Tensor<T>
         if (weights.Gradient == null)
-            throw new InvalidOperationException("Weights gradient is null after backward pass");
+            throw new InvalidOperationException("Gradient computation failed for weights.");
         if (biases.Gradient == null)
-            throw new InvalidOperationException("Biases gradient is null after backward pass");
+            throw new InvalidOperationException("Gradient computation failed for biases.");
         if (input.Gradient == null)
-            throw new InvalidOperationException("Input gradient is null after backward pass");
+            throw new InvalidOperationException("Gradient computation failed for input.");
 
-        _weightsGradient = weights.Gradient.ToMatrix();
-        _biasesGradient = biases.Gradient.ToVector();
+        _weightsGradient = weights.Gradient;
+        _biasesGradient = biases.Gradient;
 
-        return input.Gradient.Reshape(_lastInput.Shape);
+        return input.Gradient;
     }
 
     /// <summary>
@@ -696,10 +761,25 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // === Vectorized Parameter Serialization (Phase B: US-GPU-015) ===
-        // Flatten weight matrix to a row vector and concatenate with biases
-        var weightsFlattened = _weights.ToRowVector();
-        return Vector<T>.Concatenate(weightsFlattened, _biases);
+        // Flatten weight tensor and concatenate with biases
+        int weightCount = _weights.Shape[0] * _weights.Shape[1];
+        int biasCount = _biases.Shape[0];
+        var parameters = new Vector<T>(weightCount + biasCount);
+
+        int index = 0;
+        for (int i = 0; i < _weights.Shape[0]; i++)
+        {
+            for (int j = 0; j < _weights.Shape[1]; j++)
+            {
+                parameters[index++] = _weights[i, j];
+            }
+        }
+        for (int i = 0; i < biasCount; i++)
+        {
+            parameters[index++] = _biases[i];
+        }
+
+        return parameters;
     }
 
     /// <summary>
@@ -730,28 +810,29 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        // === Vectorized Parameter Deserialization (Phase B: US-GPU-015) ===
-        int weightCount = _weights.Rows * _weights.Columns;
+        int weightCount = _weights.Shape[0] * _weights.Shape[1];
+        int biasCount = _biases.Shape[0];
 
-        if (parameters.Length != weightCount + _biases.Length)
+        if (parameters.Length != weightCount + biasCount)
         {
-            throw new ArgumentException($"Expected {weightCount + _biases.Length} parameters, but got {parameters.Length}", nameof(parameters));
+            throw new ArgumentException($"Expected {weightCount + biasCount} parameters, but got {parameters.Length}", nameof(parameters));
         }
 
-        // Extract weights and reshape from flat vector
-        var weightsFlattened = parameters.Slice(0, weightCount);
-        // Reshape flattened vector back to matrix
-        _weights = new Matrix<T>(_weights.Rows, _weights.Columns);
-        for (int i = 0; i < _weights.Rows; i++)
+        // Extract weights from flat vector
+        int index = 0;
+        for (int i = 0; i < _weights.Shape[0]; i++)
         {
-            for (int j = 0; j < _weights.Columns; j++)
+            for (int j = 0; j < _weights.Shape[1]; j++)
             {
-                _weights[i, j] = weightsFlattened[i * _weights.Columns + j];
+                _weights[i, j] = parameters[index++];
             }
         }
 
         // Extract biases
-        _biases = parameters.Slice(weightCount, _biases.Length);
+        for (int i = 0; i < biasCount; i++)
+        {
+            _biases[i] = parameters[index++];
+        }
     }
 
     /// <summary>
@@ -796,15 +877,13 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         if (InputShape == null || InputShape.Length == 0)
             throw new InvalidOperationException("Layer input shape not configured.");
 
-        if (_weights == null || _biases == null)
-            throw new InvalidOperationException("Layer weights not initialized.");
-
         var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        var weightsNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _weights.Rows, _weights.Columns }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_weights.ToArray())), "weights");
-        var biasesNode = TensorOperations<T>.Constant(new Tensor<T>(new[] { _biases.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_biases.ToArray())), "biases");
+        // Use _weights and _biases directly - they are already Tensor<T>
+        var weightsNode = TensorOperations<T>.Constant(_weights, "weights");
+        var biasesNode = TensorOperations<T>.Constant(_biases, "biases");
 
         var matmulNode = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
         var addNode = TensorOperations<T>.Add(matmulNode, biasesNode);
