@@ -79,47 +79,6 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private T _lastAuxiliaryLoss;
 
     /// <summary>
-    /// Backing field for UseAutodiff property to enable propagation to sublayers.
-    /// </summary>
-    private bool _useAutodiff = false;
-
-    /// <summary>
-    /// Gets or sets a value indicating whether to use automatic differentiation for gradient computation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// For composite layers like TransformerDecoderLayer, setting this property propagates the value
-    /// to all sublayers. This ensures that when the composite layer uses autodiff, each sublayer
-    /// also uses autodiff for its backward pass.
-    /// </para>
-    /// <para><b>For Beginners:</b> This controls whether the layer uses automatic gradient computation.
-    ///
-    /// When UseAutodiff is enabled:
-    /// - The layer and ALL its sublayers will compute gradients using automatic differentiation
-    /// - This is useful for verifying gradient correctness or when manual gradients are complex
-    ///
-    /// When UseAutodiff is disabled:
-    /// - The layer uses optimized manual gradient implementations
-    /// - This is typically faster for production use
-    /// </para>
-    /// </remarks>
-    public new bool UseAutodiff
-    {
-        get => _useAutodiff;
-        set
-        {
-            _useAutodiff = value;
-            // Propagate to all sublayers so their Backward() calls use autodiff
-            if (_selfAttention != null) _selfAttention.UseAutodiff = value;
-            if (_norm1 != null) _norm1.UseAutodiff = value;
-            if (_crossAttention != null) _crossAttention.UseAutodiff = value;
-            if (_norm2 != null) _norm2.UseAutodiff = value;
-            if (_feedForward != null) _feedForward.UseAutodiff = value;
-            if (_norm3 != null) _norm3.UseAutodiff = value;
-        }
-    }
-
-    /// <summary>
     /// The size of the embeddings for queries, keys, values, and outputs.
     /// </summary>
     /// <remarks>
@@ -750,25 +709,61 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// For composite layers like TransformerDecoderLayer, autodiff is achieved by propagating
-    /// the UseAutodiff flag to all sublayers. When UseAutodiff is true on this layer, each
-    /// sublayer also has UseAutodiff=true, so when BackwardManual calls sublayer.Backward(),
-    /// each sublayer uses its own autodiff implementation.
-    /// </para>
-    /// <para>
-    /// This approach is correct because:
-    /// - The UseAutodiff property setter propagates to all sublayers
-    /// - BackwardManual correctly chains sublayer Backward() calls
-    /// - Each sublayer's Backward() checks its own UseAutodiff flag
+    /// This method uses automatic differentiation to compute gradients. It's slower than the
+    /// manual implementation but can be useful for:
+    /// - Verifying gradient correctness
+    /// - Rapid prototyping with custom modifications
+    /// - Research and experimentation
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // For composite layers, delegate to BackwardManual which calls sublayer.Backward()
-        // Each sublayer will use autodiff because UseAutodiff propagates to all sublayers
+        // For complex/composite layers, delegate to manual implementation
+        // Full autodiff requires implementing all sub-operations
         return BackwardManual(outputGradient);
     }
 
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
     /// <summary>
     /// Manual backward pass implementation using optimized gradient calculations.
     /// </summary>
@@ -1174,11 +1169,11 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (queryWeights == null || keyWeights == null || valueWeights == null || outputWeights == null)
             throw new InvalidOperationException("Attention weights not initialized.");
 
-        // Create constant nodes for projection weights using Tensor.FromMatrix
-        var wqNode = TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(queryWeights), "Wq");
-        var wkNode = TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(keyWeights), "Wk");
-        var wvNode = TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(valueWeights), "Wv");
-        var woNode = TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(outputWeights), "Wo");
+        // Create constant nodes for projection weights (already Tensor<T>)
+        var wqNode = TensorOperations<T>.Constant(queryWeights, "Wq");
+        var wkNode = TensorOperations<T>.Constant(keyWeights, "Wk");
+        var wvNode = TensorOperations<T>.Constant(valueWeights, "Wv");
+        var woNode = TensorOperations<T>.Constant(outputWeights, "Wo");
 
         // Apply multi-head attention
         return TensorOperations<T>.MultiHeadAttention(

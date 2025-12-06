@@ -656,15 +656,15 @@ public abstract class LayerBase<T> : ILayer<T>
     /// This method lets you inspect or modify the weights after training.
     /// </para>
     /// </remarks>
-    public virtual Matrix<T>? GetWeights() => null;
+    public virtual Tensor<T>? GetWeights() => null;
 
     /// <summary>
-    /// Gets the bias vector for layers that have trainable biases.
+    /// Gets the bias tensor for layers that have trainable biases.
     /// </summary>
-    /// <returns>The bias vector, or null if the layer has no biases.</returns>
+    /// <returns>The bias tensor, or null if the layer has no biases.</returns>
     /// <remarks>
     /// <para>
-    /// This method provides access to the layer's bias vector for layers that use biases
+    /// This method provides access to the layer's bias tensor for layers that use biases
     /// during computation. Layers without biases return null.
     /// </para>
     /// <para><b>For Beginners:</b> Biases are learnable offsets added to the layer's output.
@@ -676,7 +676,7 @@ public abstract class LayerBase<T> : ILayer<T>
     /// Biases help the network learn more flexible patterns by shifting the activation function.
     /// </para>
     /// </remarks>
-    public virtual Vector<T>? GetBiases() => null;
+    public virtual Tensor<T>? GetBiases() => null;
 
     /// <summary>
     /// Exports the layer's computation graph for JIT compilation.
