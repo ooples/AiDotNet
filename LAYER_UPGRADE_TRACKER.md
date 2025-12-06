@@ -303,10 +303,20 @@ These may already be clean or have minimal issues:
 - **Layers needing verification only**: ~29
 
 ### Completed
-- [ ] FullyConnectedLayer.cs - REFERENCE IMPLEMENTATION
+- [x] FullyConnectedLayer.cs - REFERENCE IMPLEMENTATION
+- [x] ConvolutionalLayer.cs - Full Tensor<T> storage, Engine ops
+- [x] AttentionLayer.cs - Engine.TensorMaxValue for diagnostics, Engine tensor ops
+- [x] MultiHeadAttentionLayer.cs - Engine tensor ops for cosine similarity
+- [x] FeedForwardLayer.cs - Engine.TensorAdd for bias broadcasting
+- [x] RecurrentLayer.cs - Full Tensor<T> storage, Engine ops in forward/backward
+- [x] HighwayLayer.cs - Full Tensor<T> storage, Engine ops in forward/backward
+- [x] GatedLinearUnitLayer.cs - Full Tensor<T> storage, Engine ops, removed conversion helpers
+- [x] SpatialTransformerLayer.cs - Inline topological sort
+- [x] GRULayer.cs - Inline topological sort
+- [x] LSTMLayer.cs - Inline topological sort
 
 ### In Progress
-- [ ] (none currently)
+- [ ] Continue Phase 6-12 layer upgrades
 
 ---
 
