@@ -402,8 +402,6 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             }
         }
 
-        // Cache pre-activation output for proper gradient computation in backward pass
-        _lastOutput = preActivation;
         return output;
     }
 
@@ -587,55 +585,6 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         {
             activated = output;
         }
->>>>>>> 23aceae1 (refactor: upgrade fullyconnectedlayer to tensor-based production-ready pattern)
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-<<<<<<< HEAD
-=======
-        // Inline topological sort
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((activated, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
->>>>>>> 23aceae1 (refactor: upgrade fullyconnectedlayer to tensor-based production-ready pattern)
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
 
         // Manually propagate gradients using the output gradient we received
         activated.Gradient = outputGradient;
@@ -670,7 +619,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             }
         }
 
-        // Backward pass
+        // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];

@@ -105,7 +105,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// <value>
     /// The total number of trainable parameters (projection weights + projection bias).
     /// </value>
-    public override int ParameterCount => _projectionWeights.Rows * _projectionWeights.Columns + _projectionBias.Length;
+    public override int ParameterCount => _projectionWeights.Shape[0] * _projectionWeights.Shape[1] + _projectionBias.Length;
 
     /// <summary>
     /// Creates a new patch embedding layer with the specified dimensions.
