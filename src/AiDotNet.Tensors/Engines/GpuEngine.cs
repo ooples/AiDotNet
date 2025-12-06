@@ -572,6 +572,20 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int>? _sphericalSoftmaxBackwardKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int>? _sphericalSoftmaxBackwardKernelDouble;
 
+    // TensorSumOfSquares kernels - partial sum of squared values for L2 regularization
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int>? _partialSumOfSquaresKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int>? _partialSumOfSquaresKernelDouble;
+
+    // TensorEmbeddingLookup kernels - gather rows from embedding table (embeddings, indices, output, embeddingDim)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>, int>? _embeddingLookupKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<int>, ArrayView<double>, int>? _embeddingLookupKernelDouble;
+
+    // TensorEmbeddingLookupBackward kernels - scatter-add gradients to embedding table
+    // Uses atomics for thread-safe accumulation when same index appears multiple times
+    // (gradOutput, indices, gradEmbeddings, embeddingDim, numIndices)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>, int, int>? _embeddingLookupBackwardKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<int>, ArrayView<double>, int, int>? _embeddingLookupBackwardKernelDouble;
+
     /// <inheritdoc/>
     public string Name => _accelerator != null
         ? $"GPU Engine ({_accelerator.Name})"
@@ -2474,6 +2488,80 @@ public class GpuEngine : IEngine, IDisposable
                         }
                     });
                 Console.WriteLine("[GpuEngine] SphericalSoftmax backward kernels pre-compiled");
+
+                // TensorSumOfSquares kernels - partial sum of squared values
+                // Each block computes sum of squares for ReductionBlockSize elements
+                _partialSumOfSquaresKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, int>(
+                    (blockIdx, input, partialSums, length) => {
+                        int startIdx = (int)blockIdx * ReductionBlockSize;
+                        float sum = 0.0f;
+                        for (int i = 0; i < ReductionBlockSize && startIdx + i < length; i++)
+                        {
+                            float val = input[startIdx + i];
+                            sum += val * val;
+                        }
+                        partialSums[blockIdx] = sum;
+                    });
+                _partialSumOfSquaresKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, int>(
+                    (blockIdx, input, partialSums, length) => {
+                        int startIdx = (int)blockIdx * ReductionBlockSize;
+                        double sum = 0.0;
+                        for (int i = 0; i < ReductionBlockSize && startIdx + i < length; i++)
+                        {
+                            double val = input[startIdx + i];
+                            sum += val * val;
+                        }
+                        partialSums[blockIdx] = sum;
+                    });
+                Console.WriteLine("[GpuEngine] TensorSumOfSquares kernels pre-compiled");
+
+                // TensorEmbeddingLookup kernels - gather rows from embedding table
+                // Each thread copies one element: output[i * embDim + d] = embeddings[indices[i] * embDim + d]
+                // flatIdx iterates over (numIndices * embeddingDim)
+                _embeddingLookupKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>, int>(
+                    (flatIdx, embeddings, indices, output, embeddingDim) => {
+                        int idx = (int)flatIdx / embeddingDim;
+                        int d = (int)flatIdx % embeddingDim;
+                        int tokenIdx = indices[idx];
+                        output[flatIdx] = embeddings[tokenIdx * embeddingDim + d];
+                    });
+                _embeddingLookupKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<int>, ArrayView<double>, int>(
+                    (flatIdx, embeddings, indices, output, embeddingDim) => {
+                        int idx = (int)flatIdx / embeddingDim;
+                        int d = (int)flatIdx % embeddingDim;
+                        int tokenIdx = indices[idx];
+                        output[flatIdx] = embeddings[tokenIdx * embeddingDim + d];
+                    });
+                Console.WriteLine("[GpuEngine] TensorEmbeddingLookup kernels pre-compiled");
+
+                // TensorEmbeddingLookupBackward kernels - scatter-add gradients
+                // Uses atomic add for thread-safe accumulation when same index appears multiple times
+                // Each thread adds one gradient element: gradEmbeddings[indices[i] * embDim + d] += gradOutput[i * embDim + d]
+                _embeddingLookupBackwardKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>, int, int>(
+                    (flatIdx, gradOutput, indices, gradEmbeddings, embeddingDim, numIndices) => {
+                        int idx = (int)flatIdx / embeddingDim;
+                        int d = (int)flatIdx % embeddingDim;
+                        if (idx >= numIndices) return;
+                        int tokenIdx = indices[idx];
+                        // Atomic add for thread-safe accumulation
+                        Atomic.Add(ref gradEmbeddings[tokenIdx * embeddingDim + d], gradOutput[flatIdx]);
+                    });
+                _embeddingLookupBackwardKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<int>, ArrayView<double>, int, int>(
+                    (flatIdx, gradOutput, indices, gradEmbeddings, embeddingDim, numIndices) => {
+                        int idx = (int)flatIdx / embeddingDim;
+                        int d = (int)flatIdx % embeddingDim;
+                        if (idx >= numIndices) return;
+                        int tokenIdx = indices[idx];
+                        // Atomic add for thread-safe accumulation
+                        Atomic.Add(ref gradEmbeddings[tokenIdx * embeddingDim + d], gradOutput[flatIdx]);
+                    });
+                Console.WriteLine("[GpuEngine] TensorEmbeddingLookupBackward kernels pre-compiled");
 
                 // BatchNorm forward - normalizes across batch dimension
                 // Parameters: input, output, gamma, beta, mean, variance, epsilon, batch, features
@@ -19323,6 +19411,389 @@ public class GpuEngine : IEngine, IDisposable
         // Concat is primarily a memory copy operation where GPU would add overhead
         // without providing compute benefits. CPU implementation is optimal here.
         return _cpuFallback.Concat(tensors, axis);
+    }
+
+    /// <inheritdoc/>
+    public T TensorSumOfSquares<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        // Use adaptive threshold - GPU reduction benefits from large tensors
+        if (tensor.Length < _thresholds.VectorAdd * 4)
+        {
+            return _cpuFallback.TensorSumOfSquares(tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (T)(object)TensorSumOfSquaresGpu((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (T)(object)TensorSumOfSquaresGpuDouble((Tensor<double>)(object)tensor);
+        }
+
+        return _cpuFallback.TensorSumOfSquares(tensor);
+    }
+
+    private float TensorSumOfSquaresGpu(Tensor<float> tensor)
+    {
+        try
+        {
+            int length = tensor.Length;
+            int numBlocks = (length + ReductionBlockSize - 1) / ReductionBlockSize;
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(length);
+            var gpuPartialSums = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(numBlocks);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_partialSumOfSquaresKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numBlocks, gpuInput.View, gpuPartialSums.View, length);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                // Copy partial sums back and finish reduction on CPU
+                var partialSums = new float[numBlocks];
+                gpuPartialSums.View.BaseView.CopyToCPU(partialSums);
+
+                float total = 0;
+                for (int i = 0; i < numBlocks; i++)
+                    total += partialSums[i];
+
+                return total;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuPartialSums);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorSumOfSquares(tensor);
+        }
+    }
+
+    private double TensorSumOfSquaresGpuDouble(Tensor<double> tensor)
+    {
+        try
+        {
+            int length = tensor.Length;
+            int numBlocks = (length + ReductionBlockSize - 1) / ReductionBlockSize;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(length);
+            var gpuPartialSums = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(numBlocks);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_partialSumOfSquaresKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numBlocks, gpuInput.View, gpuPartialSums.View, length);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                // Copy partial sums back and finish reduction on CPU
+                var partialSums = new double[numBlocks];
+                gpuPartialSums.View.BaseView.CopyToCPU(partialSums);
+
+                double total = 0;
+                for (int i = 0; i < numBlocks; i++)
+                    total += partialSums[i];
+
+                return total;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuPartialSums);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorSumOfSquares(tensor);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorEmbeddingLookup<T>(Tensor<T> embeddings, Tensor<T> indices)
+    {
+        if (embeddings == null) throw new ArgumentNullException(nameof(embeddings));
+        if (indices == null) throw new ArgumentNullException(nameof(indices));
+
+        int numIndices = indices.Length;
+        int embeddingDim = embeddings.Shape[1];
+        int totalElements = numIndices * embeddingDim;
+
+        // Use adaptive threshold
+        if (totalElements < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorEmbeddingLookup(embeddings, indices);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorEmbeddingLookupGpu(
+                    (Tensor<float>)(object)embeddings, (Tensor<float>)(object)indices);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorEmbeddingLookupGpuDouble(
+                    (Tensor<double>)(object)embeddings, (Tensor<double>)(object)indices);
+        }
+
+        return _cpuFallback.TensorEmbeddingLookup(embeddings, indices);
+    }
+
+    private Tensor<float> TensorEmbeddingLookupGpu(Tensor<float> embeddings, Tensor<float> indices)
+    {
+        try
+        {
+            int vocabSize = embeddings.Shape[0];
+            int embeddingDim = embeddings.Shape[1];
+            int numIndices = indices.Length;
+            int totalOutputElements = numIndices * embeddingDim;
+
+            // Convert float indices to int
+            var intIndices = new int[numIndices];
+            var indicesData = indices.AsSpan();
+            for (int i = 0; i < numIndices; i++)
+                intIndices[i] = (int)indicesData[i];
+
+            var gpuEmbeddings = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(embeddings.Length);
+            var gpuIndices = (_memoryPoolInt ?? throw new InvalidOperationException("GPU not initialized")).Rent(numIndices);
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalOutputElements);
+
+            try
+            {
+                gpuEmbeddings.View.BaseView.CopyFromCPU(embeddings.AsSpan());
+                gpuIndices.View.BaseView.CopyFromCPU(intIndices);
+
+                lock (_gpuLock)
+                {
+                    (_embeddingLookupKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        totalOutputElements, gpuEmbeddings.View, gpuIndices.View, gpuOutput.View, embeddingDim);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var outputData = new float[totalOutputElements];
+                gpuOutput.View.BaseView.CopyToCPU(outputData);
+
+                // Create output tensor with proper shape [numIndices, embeddingDim]
+                var outputShape = new int[indices.Rank + 1];
+                for (int i = 0; i < indices.Rank; i++)
+                    outputShape[i] = indices.Shape[i];
+                outputShape[indices.Rank] = embeddingDim;
+
+                return new Tensor<float>(outputShape, new Vector<float>(outputData));
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuEmbeddings);
+                _memoryPoolInt.Return(gpuIndices);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorEmbeddingLookup(embeddings, indices);
+        }
+    }
+
+    private Tensor<double> TensorEmbeddingLookupGpuDouble(Tensor<double> embeddings, Tensor<double> indices)
+    {
+        try
+        {
+            int vocabSize = embeddings.Shape[0];
+            int embeddingDim = embeddings.Shape[1];
+            int numIndices = indices.Length;
+            int totalOutputElements = numIndices * embeddingDim;
+
+            // Convert double indices to int
+            var intIndices = new int[numIndices];
+            var indicesData = indices.AsSpan();
+            for (int i = 0; i < numIndices; i++)
+                intIndices[i] = (int)indicesData[i];
+
+            var gpuEmbeddings = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(embeddings.Length);
+            var gpuIndices = (_memoryPoolInt ?? throw new InvalidOperationException("GPU not initialized")).Rent(numIndices);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalOutputElements);
+
+            try
+            {
+                gpuEmbeddings.View.BaseView.CopyFromCPU(embeddings.AsSpan());
+                gpuIndices.View.BaseView.CopyFromCPU(intIndices);
+
+                lock (_gpuLock)
+                {
+                    (_embeddingLookupKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        totalOutputElements, gpuEmbeddings.View, gpuIndices.View, gpuOutput.View, embeddingDim);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var outputData = new double[totalOutputElements];
+                gpuOutput.View.BaseView.CopyToCPU(outputData);
+
+                // Create output tensor with proper shape [numIndices, embeddingDim]
+                var outputShape = new int[indices.Rank + 1];
+                for (int i = 0; i < indices.Rank; i++)
+                    outputShape[i] = indices.Shape[i];
+                outputShape[indices.Rank] = embeddingDim;
+
+                return new Tensor<double>(outputShape, new Vector<double>(outputData));
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuEmbeddings);
+                _memoryPoolInt.Return(gpuIndices);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorEmbeddingLookup(embeddings, indices);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorEmbeddingLookupBackward<T>(Tensor<T> gradOutput, Tensor<T> indices, int vocabSize, int embeddingDim)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (indices == null) throw new ArgumentNullException(nameof(indices));
+
+        int numIndices = indices.Length;
+        int totalGradElements = numIndices * embeddingDim;
+
+        // Use adaptive threshold
+        if (totalGradElements < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.TensorEmbeddingLookupBackward(gradOutput, indices, vocabSize, embeddingDim);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorEmbeddingLookupBackwardGpu(
+                    (Tensor<float>)(object)gradOutput, (Tensor<float>)(object)indices, vocabSize, embeddingDim);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorEmbeddingLookupBackwardGpuDouble(
+                    (Tensor<double>)(object)gradOutput, (Tensor<double>)(object)indices, vocabSize, embeddingDim);
+        }
+
+        return _cpuFallback.TensorEmbeddingLookupBackward(gradOutput, indices, vocabSize, embeddingDim);
+    }
+
+    private Tensor<float> TensorEmbeddingLookupBackwardGpu(Tensor<float> gradOutput, Tensor<float> indices, int vocabSize, int embeddingDim)
+    {
+        try
+        {
+            int numIndices = indices.Length;
+            int totalGradElements = numIndices * embeddingDim;
+            int totalEmbeddingElements = vocabSize * embeddingDim;
+
+            // Convert float indices to int
+            var intIndices = new int[numIndices];
+            var indicesData = indices.AsSpan();
+            for (int i = 0; i < numIndices; i++)
+                intIndices[i] = (int)indicesData[i];
+
+            var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalGradElements);
+            var gpuIndices = (_memoryPoolInt ?? throw new InvalidOperationException("GPU not initialized")).Rent(numIndices);
+            var gpuGradEmbeddings = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalEmbeddingElements);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuIndices.View.BaseView.CopyFromCPU(intIndices);
+
+                // Initialize gradEmbeddings to zero
+                gpuGradEmbeddings.View.BaseView.MemSetToZero();
+
+                lock (_gpuLock)
+                {
+                    (_embeddingLookupBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        totalGradElements, gpuGradOutput.View, gpuIndices.View, gpuGradEmbeddings.View, embeddingDim, numIndices);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var gradEmbeddingsData = new float[totalEmbeddingElements];
+                gpuGradEmbeddings.View.BaseView.CopyToCPU(gradEmbeddingsData);
+
+                return new Tensor<float>(new[] { vocabSize, embeddingDim }, new Vector<float>(gradEmbeddingsData));
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGradOutput);
+                _memoryPoolInt.Return(gpuIndices);
+                _memoryPoolFloat.Return(gpuGradEmbeddings);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorEmbeddingLookupBackward(gradOutput, indices, vocabSize, embeddingDim);
+        }
+    }
+
+    private Tensor<double> TensorEmbeddingLookupBackwardGpuDouble(Tensor<double> gradOutput, Tensor<double> indices, int vocabSize, int embeddingDim)
+    {
+        try
+        {
+            int numIndices = indices.Length;
+            int totalGradElements = numIndices * embeddingDim;
+            int totalEmbeddingElements = vocabSize * embeddingDim;
+
+            // Convert double indices to int
+            var intIndices = new int[numIndices];
+            var indicesData = indices.AsSpan();
+            for (int i = 0; i < numIndices; i++)
+                intIndices[i] = (int)indicesData[i];
+
+            var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalGradElements);
+            var gpuIndices = (_memoryPoolInt ?? throw new InvalidOperationException("GPU not initialized")).Rent(numIndices);
+            var gpuGradEmbeddings = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalEmbeddingElements);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuIndices.View.BaseView.CopyFromCPU(intIndices);
+
+                // Initialize gradEmbeddings to zero
+                gpuGradEmbeddings.View.BaseView.MemSetToZero();
+
+                lock (_gpuLock)
+                {
+                    (_embeddingLookupBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        totalGradElements, gpuGradOutput.View, gpuIndices.View, gpuGradEmbeddings.View, embeddingDim, numIndices);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var gradEmbeddingsData = new double[totalEmbeddingElements];
+                gpuGradEmbeddings.View.BaseView.CopyToCPU(gradEmbeddingsData);
+
+                return new Tensor<double>(new[] { vocabSize, embeddingDim }, new Vector<double>(gradEmbeddingsData));
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGradOutput);
+                _memoryPoolInt.Return(gpuIndices);
+                _memoryPoolDouble.Return(gpuGradEmbeddings);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorEmbeddingLookupBackward(gradOutput, indices, vocabSize, embeddingDim);
+        }
     }
 
     #endregion

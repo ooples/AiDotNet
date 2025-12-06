@@ -2698,5 +2698,67 @@ public interface IEngine
     /// <returns>The concatenated tensor.</returns>
     Tensor<T> Concat<T>(IReadOnlyList<Tensor<T>> tensors, int axis);
 
+    /// <summary>
+    /// Computes the sum of squares of all elements in a tensor (L2 norm squared).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>The scalar sum of squared elements.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Computes Σ(x_i²) for all elements in the tensor. Used in:
+    /// - L2 regularization loss computation
+    /// - Frobenius norm calculation (sqrt of sum of squares)
+    /// - Gradient magnitude computation
+    /// - Weight decay penalties
+    /// </para>
+    /// <para>
+    /// GPU acceleration provides significant speedup for large tensors.
+    /// </para>
+    /// </remarks>
+    T TensorSumOfSquares<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Performs embedding lookup - gathers rows from an embedding table based on indices.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="embeddings">The embedding table tensor [vocab_size, embedding_dim].</param>
+    /// <param name="indices">The indices tensor containing token IDs.</param>
+    /// <returns>The gathered embeddings with shape [*indices.shape, embedding_dim].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-017: Embedding Operations</b></para>
+    /// <para>
+    /// Embedding lookup is a fundamental operation for NLP and sequence models:
+    /// - Word/token embeddings in language models
+    /// - Item embeddings in recommendation systems
+    /// - Categorical feature embeddings
+    /// </para>
+    /// <para>
+    /// For each index i in indices, retrieves embeddings[i, :] and places it in the output.
+    /// GPU acceleration provides significant speedup for large vocabularies and batch sizes.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorEmbeddingLookup<T>(Tensor<T> embeddings, Tensor<T> indices);
+
+    /// <summary>
+    /// Performs embedding lookup backward pass - scatters gradients back to embedding table.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer [*indices.shape, embedding_dim].</param>
+    /// <param name="indices">The indices tensor containing token IDs.</param>
+    /// <param name="vocabSize">The vocabulary size (number of rows in embedding table).</param>
+    /// <param name="embeddingDim">The embedding dimension.</param>
+    /// <returns>The gradient for the embedding table [vocab_size, embedding_dim].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-017: Embedding Operations</b></para>
+    /// <para>
+    /// Computes the gradient for embedding parameters by accumulating gradients for each index.
+    /// For each index i, adds gradOutput[position] to embeddingGrad[i, :].
+    /// Handles duplicate indices by accumulating their gradients.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorEmbeddingLookupBackward<T>(Tensor<T> gradOutput, Tensor<T> indices, int vocabSize, int embeddingDim);
+
     #endregion
 }

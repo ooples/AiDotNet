@@ -37,21 +37,21 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
-    /// The embedding matrix that stores vector representations for each token in the vocabulary.
+    /// The embedding tensor that stores vector representations for each token in the vocabulary.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This matrix stores the learnable embedding vectors for each token in the vocabulary. The rows
+    /// This tensor stores the learnable embedding vectors for each token in the vocabulary. The rows
     /// correspond to token indices, and the columns represent the dimensions of the embedding space.
-    /// Each row in the matrix is the embedding vector for the corresponding token.
+    /// Each row in the tensor is the embedding vector for the corresponding token.
     /// </para>
     /// <para><b>For Beginners:</b> This is the "dictionary" that maps each token ID to its vector representation.
-    /// 
-    /// The embedding matrix works like this:
+    ///
+    /// The embedding tensor works like this:
     /// - Each row corresponds to one token (word, character, etc.)
     /// - Each column is one dimension of the embedding space
-    /// - If you have 10,000 words and 300 dimensions, the matrix will be 10,000 × 300
-    /// 
+    /// - If you have 10,000 words and 300 dimensions, the tensor will be 10,000 × 300
+    ///
     /// For example, with a vocabulary of 5 words and 4 dimensions:
     /// ```
     /// Word ID | Embedding Vector
@@ -62,36 +62,36 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// 3       | [0.2, 0.5, 0.6, -0.4]
     /// 4       | [-0.3, -0.2, 0.4, 0.8]
     /// ```
-    /// 
+    ///
     /// During training, these values are adjusted to make similar tokens have similar vectors.
     /// </para>
     /// </remarks>
-    private Matrix<T> _embeddingMatrix;
+    private Tensor<T> _embeddingTensor;
 
     /// <summary>
-    /// The gradients for the embedding matrix, computed during backpropagation.
+    /// The gradients for the embedding tensor, computed during backpropagation.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This matrix stores the gradients of the loss with respect to each element in the embedding matrix.
+    /// This tensor stores the gradients of the loss with respect to each element in the embedding tensor.
     /// These gradients are used to update the embeddings during training.
     /// </para>
     /// <para><b>For Beginners:</b> This stores information about how to adjust each embedding value.
-    /// 
+    ///
     /// During training:
     /// - The network calculates how each embedding vector contributed to errors
     /// - These gradients show how to change each value to improve performance
     /// - Larger gradients mean bigger adjustments are needed
-    /// 
+    ///
     /// For example, if the network predicts incorrectly using the embedding for "cat",
     /// the gradients will indicate how to adjust that specific embedding vector to
     /// improve future predictions.
-    /// 
+    ///
     /// Only the embeddings for tokens that were actually used in the current batch
     /// will receive gradient updates.
     /// </para>
     /// </remarks>
-    private Matrix<T>? _embeddingGradient;
+    private Tensor<T>? _embeddingGradient;
 
     /// <summary>
     /// The input tensor from the last forward pass, saved for backpropagation.
@@ -170,25 +170,25 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// set to [embeddingDimension] as each token is mapped to a vector of that dimension.
     /// </para>
     /// <para><b>For Beginners:</b> This sets up the embedding layer with the vocabulary size and embedding dimensions you need.
-    /// 
+    ///
     /// When creating an embedding layer, you need to specify:
     /// - Vocabulary size: How many different tokens (words, characters, etc.) your model will handle
     /// - Embedding dimension: How many numbers to use for each token's representation
-    /// 
+    ///
     /// For example:
     /// ```csharp
     /// // Create an embedding layer for 10,000 words with 300-dimensional embeddings
     /// var wordEmbedding = new EmbeddingLayer<float>(10000, 300);
-    /// 
+    ///
     /// // Create an embedding layer for 128 characters with 50-dimensional embeddings
     /// var charEmbedding = new EmbeddingLayer<float>(128, 50);
     /// ```
-    /// 
+    ///
     /// Typical embedding dimensions:
     /// - For words: 100-300 dimensions
     /// - For characters: 25-100 dimensions
     /// - For special tokens: 50-200 dimensions
-    /// 
+    ///
     /// Larger dimensions can capture more information but require more computation and memory.
     /// </para>
     /// </remarks>
@@ -198,58 +198,49 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         AuxiliaryLossWeight = NumOps.FromDouble(0.0001);
         _lastEmbeddingRegularizationLoss = NumOps.Zero;
 
-        _embeddingMatrix = new Matrix<T>(vocabularySize, embeddingDimension);
+        _embeddingTensor = new Tensor<T>([vocabularySize, embeddingDimension]);
         InitializeParameters();
     }
 
     /// <summary>
-    /// Initializes the embedding matrix with small random values.
+    /// Initializes the embedding tensor with small random values.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method initializes the embedding matrix with small random values scaled by a factor
+    /// This method initializes the embedding tensor with small random values scaled by a factor
     /// that depends on the embedding dimension. This scaling helps in achieving good convergence
     /// during training by preventing the initial values from being too large or too small.
     /// </para>
     /// <para><b>For Beginners:</b> This sets up the initial random values for all embeddings.
-    /// 
+    ///
     /// Before training begins:
     /// - Each embedding needs some starting value
     /// - We use small random values, centered around zero
     /// - The values are scaled based on the embedding dimension
-    /// 
+    ///
     /// This initialization is important because:
     /// - Too large values could cause training instability
     /// - Too small values could slow down learning
     /// - The scaling factor helps find a good middle ground
-    /// 
+    ///
     /// As training progresses, these random initial values will gradually be replaced
     /// with meaningful representations learned from data.
     /// </para>
     /// </remarks>
     private void InitializeParameters()
     {
-        // === Vectorized Weight Initialization (Phase B: US-GPU-015) ===
-        // Initialize embedding matrix with small random values
-        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(1.0), NumOps.FromDouble(_embeddingMatrix.Columns)));
+        int vocabSize = _embeddingTensor.Shape[0];
+        int embeddingDim = _embeddingTensor.Shape[1];
 
-        for (int i = 0; i < _embeddingMatrix.Rows; i++)
+        // Initialize embedding tensor with small random values
+        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(1.0), NumOps.FromDouble(embeddingDim)));
+
+        for (int i = 0; i < vocabSize; i++)
         {
-            // Generate random values for entire row
-            T[] randomValues = new T[_embeddingMatrix.Columns];
-            for (int j = 0; j < _embeddingMatrix.Columns; j++)
+            for (int j = 0; j < embeddingDim; j++)
             {
-                randomValues[j] = NumOps.FromDouble(Random.NextDouble() - 0.5);
-            }
-
-            // === Vectorized Scaling (Phase B: US-GPU-015) ===
-            var sourceVector = new Vector<T>(randomValues);
-            var scaledVector = (Vector<T>)Engine.Multiply(sourceVector, scale);
-
-            // Copy scaled values to embedding matrix row
-            for (int j = 0; j < _embeddingMatrix.Columns; j++)
-            {
-                _embeddingMatrix[i, j] = scaledVector[j];
+                T randomValue = NumOps.FromDouble(Random.NextDouble() - 0.5);
+                _embeddingTensor[i, j] = NumOps.Multiply(randomValue, scale);
             }
         }
     }
@@ -286,31 +277,29 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // === Vectorized Embedding Lookup (Phase B: US-GPU-015) ===
         _lastInput = input;
+
+        // Flatten input for embedding lookup: [seq, batch, 1] -> [seq * batch]
         int sequenceLength = input.Shape[0];
         int batchSize = input.Shape[1];
+        int embeddingDim = _embeddingTensor.Shape[1];
 
-        var output = new Tensor<T>([sequenceLength, batchSize, _embeddingMatrix.Columns]);
-
+        // Create flattened indices tensor for embedding lookup
+        var flatIndices = new Tensor<T>([sequenceLength * batchSize]);
+        int flatIdx = 0;
         for (int t = 0; t < sequenceLength; t++)
         {
             for (int b = 0; b < batchSize; b++)
             {
-                int index = Convert.ToInt32(input[t, b, 0]);
-
-                // Use vectorized row extraction from matrix for better performance
-                var embeddingVector = _embeddingMatrix.GetRow(index);
-
-                // Copy entire row at once using vectorized operations
-                for (int d = 0; d < _embeddingMatrix.Columns; d++)
-                {
-                    output[t, b, d] = embeddingVector[d];
-                }
+                flatIndices[flatIdx++] = input[t, b, 0];
             }
         }
 
-        return output;
+        // Use Engine embedding lookup operation
+        var flatOutput = Engine.TensorEmbeddingLookup(_embeddingTensor, flatIndices);
+
+        // Reshape output: [seq * batch, embedding_dim] -> [seq, batch, embedding_dim]
+        return flatOutput.Reshape([sequenceLength, batchSize, embeddingDim]);
     }
 
     /// <summary>
@@ -363,36 +352,27 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int sequenceLength = _lastInput.Shape[0];
         int batchSize = _lastInput.Shape[1];
+        int vocabSize = _embeddingTensor.Shape[0];
+        int embeddingDim = _embeddingTensor.Shape[1];
 
-        _embeddingGradient = new Matrix<T>(_embeddingMatrix.Rows, _embeddingMatrix.Columns);
-
+        // Flatten input indices: [seq, batch, 1] -> [seq * batch]
+        var flatIndices = new Tensor<T>([sequenceLength * batchSize]);
+        int flatIdx = 0;
         for (int t = 0; t < sequenceLength; t++)
         {
             for (int b = 0; b < batchSize; b++)
             {
-                int index = Convert.ToInt32(_lastInput[t, b, 0]);
-
-                // Extract gradient vector for this position
-                var gradSlice = new T[_embeddingMatrix.Columns];
-                for (int d = 0; d < _embeddingMatrix.Columns; d++)
-                {
-                    gradSlice[d] = outputGradient[t, b, d];
-                }
-
-                // Accumulate gradients using vectorized addition
-                var currentGrad = _embeddingGradient.GetRow(index);
-                var gradVector = new Vector<T>(gradSlice);
-                var updatedGrad = (Vector<T>)Engine.Add(currentGrad, gradVector);
-
-                // Write back to gradient matrix
-                for (int d = 0; d < _embeddingMatrix.Columns; d++)
-                {
-                    _embeddingGradient[index, d] = updatedGrad[d];
-                }
+                flatIndices[flatIdx++] = _lastInput[t, b, 0];
             }
         }
 
-        // We don't compute input gradients for embedding layer
+        // Flatten outputGradient: [seq, batch, embeddingDim] -> [seq * batch, embeddingDim]
+        var flatGradOutput = outputGradient.Reshape([sequenceLength * batchSize, embeddingDim]);
+
+        // Use Engine scatter-add operation for gradient accumulation
+        _embeddingGradient = Engine.TensorEmbeddingLookupBackward(flatGradOutput, flatIndices, vocabSize, embeddingDim);
+
+        // We don't compute input gradients for embedding layer (indices are not differentiable)
         return new Tensor<T>(_lastInput.Shape);
     }
 
@@ -450,7 +430,9 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_embeddingGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _embeddingMatrix = _embeddingMatrix.Subtract(_embeddingGradient.Multiply(learningRate));
+        // Scale gradients by learning rate and subtract from embedding tensor
+        var scaledGradient = Engine.TensorMultiplyScalar(_embeddingGradient, learningRate);
+        _embeddingTensor = Engine.TensorSubtract(_embeddingTensor, scaledGradient);
     }
 
     /// <summary>
@@ -480,18 +462,19 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _embeddingMatrix.Rows * _embeddingMatrix.Columns;
+        int vocabSize = _embeddingTensor.Shape[0];
+        int embeddingDim = _embeddingTensor.Shape[1];
+        int totalParams = vocabSize * embeddingDim;
         var parameters = new Vector<T>(totalParams);
 
         int index = 0;
 
-        // Copy embedding matrix parameters
-        for (int i = 0; i < _embeddingMatrix.Rows; i++)
+        // Copy embedding tensor parameters
+        for (int i = 0; i < vocabSize; i++)
         {
-            for (int j = 0; j < _embeddingMatrix.Columns; j++)
+            for (int j = 0; j < embeddingDim; j++)
             {
-                parameters[index++] = _embeddingMatrix[i, j];
+                parameters[index++] = _embeddingTensor[i, j];
             }
         }
 
@@ -526,19 +509,23 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != _embeddingMatrix.Rows * _embeddingMatrix.Columns)
+        int vocabSize = _embeddingTensor.Shape[0];
+        int embeddingDim = _embeddingTensor.Shape[1];
+        int expectedParams = vocabSize * embeddingDim;
+
+        if (parameters.Length != expectedParams)
         {
-            throw new ArgumentException($"Expected {_embeddingMatrix.Rows * _embeddingMatrix.Columns} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {expectedParams} parameters, but got {parameters.Length}");
         }
 
         int index = 0;
 
-        // Set embedding matrix parameters
-        for (int i = 0; i < _embeddingMatrix.Rows; i++)
+        // Set embedding tensor parameters
+        for (int i = 0; i < vocabSize; i++)
         {
-            for (int j = 0; j < _embeddingMatrix.Columns; j++)
+            for (int j = 0; j < embeddingDim; j++)
             {
-                _embeddingMatrix[i, j] = parameters[index++];
+                _embeddingTensor[i, j] = parameters[index++];
             }
         }
     }
@@ -586,11 +573,14 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             return NumOps.Zero;
         }
 
-        // Compute L2 regularization on embedding weights: (1/2) * Σ||embedding||²
-        T sumSquaredNorms = Engine.MatrixSumOfSquares(_embeddingMatrix);
+        int vocabSize = _embeddingTensor.Shape[0];
+        int embeddingDim = _embeddingTensor.Shape[1];
+
+        // Compute L2 regularization on embedding weights using Engine operation: (1/2) * Σ||embedding||²
+        T sumSquaredNorms = Engine.TensorSumOfSquares(_embeddingTensor);
 
         // Average over all embedding values and scale by 0.5 (standard L2 regularization)
-        int totalElements = _embeddingMatrix.Rows * _embeddingMatrix.Columns;
+        int totalElements = vocabSize * embeddingDim;
         T regularizationLoss = NumericalStabilityHelper.SafeDiv(sumSquaredNorms, NumOps.FromDouble(totalElements * 2));
 
         // Store unweighted loss for diagnostics
@@ -628,30 +618,32 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
     {
+        string regLossStr = Convert.ToString(_lastEmbeddingRegularizationLoss) ?? "0";
+        string weightStr = Convert.ToString(AuxiliaryLossWeight) ?? "0.0001";
+
         var diagnostics = new Dictionary<string, string>
         {
-            { "EmbeddingRegularizationLoss", _lastEmbeddingRegularizationLoss?.ToString() ?? "0" },
-            { "RegularizationWeight", AuxiliaryLossWeight?.ToString() ?? "0.0001" },
+            { "EmbeddingRegularizationLoss", regLossStr },
+            { "RegularizationWeight", weightStr },
             { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
         };
 
-        // Calculate average embedding magnitude
-        T sumMagnitudes = NumOps.Zero;
-        int count = 0;
+        int vocabSize = _embeddingTensor.Shape[0];
+        int embeddingDim = _embeddingTensor.Shape[1];
 
-        for (int i = 0; i < _embeddingMatrix.Rows; i++)
-        {
-            var row = _embeddingMatrix.GetRow(i);
-            T rowSumSquared = Engine.DotProduct(row, row);
-            T magnitude = NumOps.Sqrt(rowSumSquared);
-            sumMagnitudes = NumOps.Add(sumMagnitudes, magnitude);
-            count++;
-        }
+        // Calculate average embedding magnitude using Engine operations
+        // Sum of squares gives us Σ||embedding_i||² across all embeddings
+        T totalSumOfSquares = Engine.TensorSumOfSquares(_embeddingTensor);
 
-        if (count > 0)
+        // For average magnitude: sqrt(sum_of_squares / num_elements) * num_rows / num_rows
+        // Simplified: average magnitude ≈ sqrt(total_sum_of_squares / total_elements) * sqrt(embedding_dim)
+        // This is an approximation, but avoids per-row loops
+        if (vocabSize > 0)
         {
-            T avgMagnitude = NumericalStabilityHelper.SafeDiv(sumMagnitudes, NumOps.FromDouble(count));
-            diagnostics["AverageEmbeddingMagnitude"] = avgMagnitude?.ToString() ?? "0";
+            T avgSquaredMagnitude = NumericalStabilityHelper.SafeDiv(totalSumOfSquares, NumOps.FromDouble(vocabSize));
+            T avgMagnitude = NumOps.Sqrt(avgSquaredMagnitude);
+            string avgMagStr = Convert.ToString(avgMagnitude) ?? "0";
+            diagnostics["AverageEmbeddingMagnitude"] = avgMagStr;
         }
 
         return diagnostics;
@@ -745,18 +737,14 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
 
-        if (_embeddingMatrix == null)
-            throw new InvalidOperationException("Embedding matrix not initialized.");
-
         // Create placeholder for input indices
         // Input shape for embeddings: [batchSize, sequenceLength] or [batchSize, 1]
         var inputPlaceholder = new Tensor<T>(new int[] { 1, 1 });
         var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input_indices");
         inputNodes.Add(inputNode);
 
-        // Create constant node for embedding matrix [vocab_size, embedding_dim]
-        var embeddingTensor = Tensor<T>.FromRowMatrix(_embeddingMatrix);
-        var embeddingNode = Autodiff.TensorOperations<T>.Constant(embeddingTensor, "embeddings");
+        // Create constant node for embedding tensor [vocab_size, embedding_dim]
+        var embeddingNode = Autodiff.TensorOperations<T>.Constant(_embeddingTensor, "embeddings");
 
         // Use EmbeddingLookup operation which supports gradients
         return Autodiff.TensorOperations<T>.EmbeddingLookup(embeddingNode, inputNode);

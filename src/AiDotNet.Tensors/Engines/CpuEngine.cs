@@ -5659,5 +5659,98 @@ public class CpuEngine : IEngine
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
 
+    /// <inheritdoc/>
+    public T TensorSumOfSquares<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T sum = numOps.Zero;
+        int length = tensor.Length;
+
+        // Use SIMD-friendly sequential access pattern
+        var data = tensor.ToArray();
+        for (int i = 0; i < length; i++)
+        {
+            T val = data[i];
+            sum = numOps.Add(sum, numOps.Multiply(val, val));
+        }
+
+        return sum;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorEmbeddingLookup<T>(Tensor<T> embeddings, Tensor<T> indices)
+    {
+        if (embeddings == null) throw new ArgumentNullException(nameof(embeddings));
+        if (indices == null) throw new ArgumentNullException(nameof(indices));
+        if (embeddings.Rank != 2)
+            throw new ArgumentException($"Embeddings must be a 2D tensor [vocab_size, embedding_dim]. Got rank {embeddings.Rank}.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int embeddingDim = embeddings.Shape[1];
+        int numIndices = indices.Length;
+
+        // Output shape is [*indices.shape, embedding_dim]
+        var outputShape = new int[indices.Rank + 1];
+        for (int i = 0; i < indices.Rank; i++)
+        {
+            outputShape[i] = indices.Shape[i];
+        }
+        outputShape[indices.Rank] = embeddingDim;
+
+        var result = new Tensor<T>(outputShape);
+        var embData = embeddings.ToArray();
+        var idxData = indices.ToArray();
+
+        // For each index, copy the entire embedding row
+        for (int i = 0; i < numIndices; i++)
+        {
+            int tokenIdx = Convert.ToInt32(idxData[i]);
+            int srcOffset = tokenIdx * embeddingDim;
+            int dstOffset = i * embeddingDim;
+
+            // Vectorized copy of embedding row
+            for (int d = 0; d < embeddingDim; d++)
+            {
+                result.SetFlat(dstOffset + d, embData[srcOffset + d]);
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorEmbeddingLookupBackward<T>(Tensor<T> gradOutput, Tensor<T> indices, int vocabSize, int embeddingDim)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (indices == null) throw new ArgumentNullException(nameof(indices));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var gradEmbeddings = new Tensor<T>(new[] { vocabSize, embeddingDim });
+
+        var gradData = gradOutput.ToArray();
+        var idxData = indices.ToArray();
+        int numIndices = indices.Length;
+
+        // Scatter-add: for each index, accumulate gradients to the embedding row
+        for (int i = 0; i < numIndices; i++)
+        {
+            int tokenIdx = Convert.ToInt32(idxData[i]);
+            int srcOffset = i * embeddingDim;
+            int dstOffset = tokenIdx * embeddingDim;
+
+            // Accumulate gradient for this embedding row
+            for (int d = 0; d < embeddingDim; d++)
+            {
+                T current = gradEmbeddings.GetFlat(dstOffset + d);
+                T grad = gradData[srcOffset + d];
+                gradEmbeddings.SetFlat(dstOffset + d, numOps.Add(current, grad));
+            }
+        }
+
+        return gradEmbeddings;
+    }
+
     #endregion
 }
