@@ -333,7 +333,9 @@ public class FeedForwardLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         Input = input;
-        var linearOutput = Input.MatrixMultiply(Weights).Add(Biases.ToVector());
+        // Biases shape is [1, outputSize], result of MatrixMultiply is [batchSize, outputSize]
+        // Broadcasting: Add broadcasts [1, outputSize] to [batchSize, outputSize]
+        var linearOutput = Engine.TensorAdd(Input.MatrixMultiply(Weights), Biases);
         Output = ApplyActivation(linearOutput);
 
         return Output;

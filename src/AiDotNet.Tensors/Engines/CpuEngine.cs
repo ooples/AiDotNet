@@ -2608,6 +2608,121 @@ public class CpuEngine : IEngine
         return summed;
     }
 
+    /// <inheritdoc/>
+    public T TensorMaxValue<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (tensor.Length == 0) throw new ArgumentException("Cannot compute max of empty tensor.", nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T maxVal = tensor.GetFlat(0);
+
+        // Parallel reduction for large tensors
+        if (tensor.Length > 10000)
+        {
+            var localMaxes = new T[Environment.ProcessorCount];
+            int chunkSize = (tensor.Length + Environment.ProcessorCount - 1) / Environment.ProcessorCount;
+
+            Parallel.For(0, Environment.ProcessorCount, threadIdx =>
+            {
+                int start = threadIdx * chunkSize;
+                int end = Math.Min(start + chunkSize, tensor.Length);
+                if (start >= tensor.Length) return;
+
+                T localMax = tensor.GetFlat(start);
+                for (int i = start + 1; i < end; i++)
+                {
+                    var val = tensor.GetFlat(i);
+                    if (numOps.GreaterThan(val, localMax))
+                        localMax = val;
+                }
+                localMaxes[threadIdx] = localMax;
+            });
+
+            // Combine local maxes
+            maxVal = localMaxes[0];
+            for (int i = 1; i < Environment.ProcessorCount; i++)
+            {
+                if (numOps.GreaterThan(localMaxes[i], maxVal))
+                    maxVal = localMaxes[i];
+            }
+        }
+        else
+        {
+            for (int i = 1; i < tensor.Length; i++)
+            {
+                var val = tensor.GetFlat(i);
+                if (numOps.GreaterThan(val, maxVal))
+                    maxVal = val;
+            }
+        }
+
+        return maxVal;
+    }
+
+    /// <inheritdoc/>
+    public T TensorMinValue<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (tensor.Length == 0) throw new ArgumentException("Cannot compute min of empty tensor.", nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T minVal = tensor.GetFlat(0);
+
+        // Parallel reduction for large tensors
+        if (tensor.Length > 10000)
+        {
+            var localMins = new T[Environment.ProcessorCount];
+            int chunkSize = (tensor.Length + Environment.ProcessorCount - 1) / Environment.ProcessorCount;
+
+            Parallel.For(0, Environment.ProcessorCount, threadIdx =>
+            {
+                int start = threadIdx * chunkSize;
+                int end = Math.Min(start + chunkSize, tensor.Length);
+                if (start >= tensor.Length) return;
+
+                T localMin = tensor.GetFlat(start);
+                for (int i = start + 1; i < end; i++)
+                {
+                    var val = tensor.GetFlat(i);
+                    if (numOps.LessThan(val, localMin))
+                        localMin = val;
+                }
+                localMins[threadIdx] = localMin;
+            });
+
+            // Combine local mins
+            minVal = localMins[0];
+            for (int i = 1; i < Environment.ProcessorCount; i++)
+            {
+                if (numOps.LessThan(localMins[i], minVal))
+                    minVal = localMins[i];
+            }
+        }
+        else
+        {
+            for (int i = 1; i < tensor.Length; i++)
+            {
+                var val = tensor.GetFlat(i);
+                if (numOps.LessThan(val, minVal))
+                    minVal = val;
+            }
+        }
+
+        return minVal;
+    }
+
+    /// <inheritdoc/>
+    public T TensorMean<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (tensor.Length == 0) throw new ArgumentException("Cannot compute mean of empty tensor.", nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T sum = TensorSum(tensor);
+        return numOps.Divide(sum, numOps.FromDouble(tensor.Length));
+    }
+
     #endregion
 
     /// <summary>

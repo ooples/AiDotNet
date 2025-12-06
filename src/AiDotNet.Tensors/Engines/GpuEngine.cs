@@ -395,6 +395,12 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int, int, int>? _reduceSumAxisKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int>? _reduceSumAxisKernelDouble;
 
+    // Partial max/min reduction kernels for TensorMaxValue/TensorMinValue
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int>? _partialMaxKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int>? _partialMaxKernelDouble;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, int>? _partialMinKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int>? _partialMinKernelDouble;
+
     // Production GPU kernels - Vector softmax (Phase C: Production Ready)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, float, float>? _softmaxKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, double, double>? _softmaxKernelDouble;
@@ -1557,6 +1563,62 @@ public class GpuEngine : IEngine, IDisposable
                         for (int r = 0; r < reduceSize; r++)
                             sum += input[baseIdx + r * innerSize];
                         output[outputIdx] = sum;
+                    });
+
+                // Partial max reduction kernels - each block computes max of ReductionBlockSize elements
+                _partialMaxKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, int>(
+                    (blockIdx, input, partialMaxes, length) => {
+                        int startIdx = (int)blockIdx * ReductionBlockSize;
+                        if (startIdx >= length) return;
+                        float maxVal = input[startIdx];
+                        for (int i = 1; i < ReductionBlockSize && startIdx + i < length; i++)
+                        {
+                            float val = input[startIdx + i];
+                            if (val > maxVal) maxVal = val;
+                        }
+                        partialMaxes[blockIdx] = maxVal;
+                    });
+                _partialMaxKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, int>(
+                    (blockIdx, input, partialMaxes, length) => {
+                        int startIdx = (int)blockIdx * ReductionBlockSize;
+                        if (startIdx >= length) return;
+                        double maxVal = input[startIdx];
+                        for (int i = 1; i < ReductionBlockSize && startIdx + i < length; i++)
+                        {
+                            double val = input[startIdx + i];
+                            if (val > maxVal) maxVal = val;
+                        }
+                        partialMaxes[blockIdx] = maxVal;
+                    });
+
+                // Partial min reduction kernels
+                _partialMinKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, int>(
+                    (blockIdx, input, partialMins, length) => {
+                        int startIdx = (int)blockIdx * ReductionBlockSize;
+                        if (startIdx >= length) return;
+                        float minVal = input[startIdx];
+                        for (int i = 1; i < ReductionBlockSize && startIdx + i < length; i++)
+                        {
+                            float val = input[startIdx + i];
+                            if (val < minVal) minVal = val;
+                        }
+                        partialMins[blockIdx] = minVal;
+                    });
+                _partialMinKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, int>(
+                    (blockIdx, input, partialMins, length) => {
+                        int startIdx = (int)blockIdx * ReductionBlockSize;
+                        if (startIdx >= length) return;
+                        double minVal = input[startIdx];
+                        for (int i = 1; i < ReductionBlockSize && startIdx + i < length; i++)
+                        {
+                            double val = input[startIdx + i];
+                            if (val < minVal) minVal = val;
+                        }
+                        partialMins[blockIdx] = minVal;
                     });
                 Console.WriteLine("[GpuEngine] Reduction kernels pre-compiled");
 
@@ -12117,9 +12179,17 @@ public class GpuEngine : IEngine, IDisposable
         if (SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
-                return (Tensor<T>)(object)TensorPowGpu((Tensor<float>)(object)tensor, (float)(object)exponent);
+            {
+                var floatTensor = (Tensor<float>)(object)tensor;
+                var floatExponent = Convert.ToSingle(exponent);
+                return (Tensor<T>)(object)TensorPowGpu(floatTensor, floatExponent);
+            }
             if (typeof(T) == typeof(double))
-                return (Tensor<T>)(object)TensorPowGpuDouble((Tensor<double>)(object)tensor, (double)(object)exponent);
+            {
+                var doubleTensor = (Tensor<double>)(object)tensor;
+                var doubleExponent = Convert.ToDouble(exponent);
+                return (Tensor<T>)(object)TensorPowGpuDouble(doubleTensor, doubleExponent);
+            }
         }
 
         return _cpuFallback.TensorPow(tensor, exponent);
@@ -12313,9 +12383,17 @@ public class GpuEngine : IEngine, IDisposable
         if (SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
-                return (Tensor<T>)(object)TensorMaxScalarGpu((Tensor<float>)(object)tensor, (float)(object)value);
+            {
+                var floatTensor = (Tensor<float>)(object)tensor;
+                var floatValue = Convert.ToSingle(value);
+                return (Tensor<T>)(object)TensorMaxScalarGpu(floatTensor, floatValue);
+            }
             if (typeof(T) == typeof(double))
-                return (Tensor<T>)(object)TensorMaxScalarGpuDouble((Tensor<double>)(object)tensor, (double)(object)value);
+            {
+                var doubleTensor = (Tensor<double>)(object)tensor;
+                var doubleValue = Convert.ToDouble(value);
+                return (Tensor<T>)(object)TensorMaxScalarGpuDouble(doubleTensor, doubleValue);
+            }
         }
 
         return _cpuFallback.TensorMax(tensor, value);
@@ -12455,9 +12533,17 @@ public class GpuEngine : IEngine, IDisposable
         if (SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
-                return (Tensor<T>)(object)TensorMinScalarGpu((Tensor<float>)(object)tensor, (float)(object)value);
+            {
+                var floatTensor = (Tensor<float>)(object)tensor;
+                var floatValue = Convert.ToSingle(value);
+                return (Tensor<T>)(object)TensorMinScalarGpu(floatTensor, floatValue);
+            }
             if (typeof(T) == typeof(double))
-                return (Tensor<T>)(object)TensorMinScalarGpuDouble((Tensor<double>)(object)tensor, (double)(object)value);
+            {
+                var doubleTensor = (Tensor<double>)(object)tensor;
+                var doubleValue = Convert.ToDouble(value);
+                return (Tensor<T>)(object)TensorMinScalarGpuDouble(doubleTensor, doubleValue);
+            }
         }
 
         return _cpuFallback.TensorMin(tensor, value);
@@ -12494,9 +12580,19 @@ public class GpuEngine : IEngine, IDisposable
         if (SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
-                return (Tensor<T>)(object)TensorClampGpu((Tensor<float>)(object)tensor, (float)(object)min, (float)(object)max);
+            {
+                var floatTensor = (Tensor<float>)(object)tensor;
+                var floatMin = Convert.ToSingle(min);
+                var floatMax = Convert.ToSingle(max);
+                return (Tensor<T>)(object)TensorClampGpu(floatTensor, floatMin, floatMax);
+            }
             if (typeof(T) == typeof(double))
-                return (Tensor<T>)(object)TensorClampGpuDouble((Tensor<double>)(object)tensor, (double)(object)min, (double)(object)max);
+            {
+                var doubleTensor = (Tensor<double>)(object)tensor;
+                var doubleMin = Convert.ToDouble(min);
+                var doubleMax = Convert.ToDouble(max);
+                return (Tensor<T>)(object)TensorClampGpuDouble(doubleTensor, doubleMin, doubleMax);
+            }
         }
 
         return _cpuFallback.TensorClamp(tensor, min, max);
@@ -12902,6 +12998,247 @@ public class GpuEngine : IEngine, IDisposable
         {
             return _cpuFallback.ReduceSum(tensor, axes, keepDims);
         }
+    }
+
+    /// <inheritdoc/>
+    public T TensorMaxValue<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (tensor.Length == 0) throw new ArgumentException("Cannot compute max of empty tensor.", nameof(tensor));
+
+        // Use adaptive threshold - GPU reduction benefits from large tensors
+        if (tensor.Length < _thresholds.VectorAdd * 4)
+        {
+            return _cpuFallback.TensorMaxValue(tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (T)(object)TensorMaxValueGpu((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (T)(object)TensorMaxValueGpuDouble((Tensor<double>)(object)tensor);
+        }
+
+        return _cpuFallback.TensorMaxValue(tensor);
+    }
+
+    private float TensorMaxValueGpu(Tensor<float> tensor)
+    {
+        try
+        {
+            int length = tensor.Length;
+            int numBlocks = (length + ReductionBlockSize - 1) / ReductionBlockSize;
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(length);
+            var gpuPartialMaxes = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(numBlocks);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_partialMaxKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numBlocks, gpuInput.View, gpuPartialMaxes.View, length);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var partialMaxes = new float[numBlocks];
+                gpuPartialMaxes.View.BaseView.CopyToCPU(partialMaxes);
+
+                float maxVal = partialMaxes[0];
+                for (int i = 1; i < numBlocks; i++)
+                {
+                    if (partialMaxes[i] > maxVal)
+                        maxVal = partialMaxes[i];
+                }
+
+                return maxVal;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuPartialMaxes);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorMaxValue(tensor);
+        }
+    }
+
+    private double TensorMaxValueGpuDouble(Tensor<double> tensor)
+    {
+        try
+        {
+            int length = tensor.Length;
+            int numBlocks = (length + ReductionBlockSize - 1) / ReductionBlockSize;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(length);
+            var gpuPartialMaxes = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(numBlocks);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_partialMaxKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numBlocks, gpuInput.View, gpuPartialMaxes.View, length);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var partialMaxes = new double[numBlocks];
+                gpuPartialMaxes.View.BaseView.CopyToCPU(partialMaxes);
+
+                double maxVal = partialMaxes[0];
+                for (int i = 1; i < numBlocks; i++)
+                {
+                    if (partialMaxes[i] > maxVal)
+                        maxVal = partialMaxes[i];
+                }
+
+                return maxVal;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuPartialMaxes);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorMaxValue(tensor);
+        }
+    }
+
+    /// <inheritdoc/>
+    public T TensorMinValue<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (tensor.Length == 0) throw new ArgumentException("Cannot compute min of empty tensor.", nameof(tensor));
+
+        if (tensor.Length < _thresholds.VectorAdd * 4)
+        {
+            return _cpuFallback.TensorMinValue(tensor);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (T)(object)TensorMinValueGpu((Tensor<float>)(object)tensor);
+            if (typeof(T) == typeof(double))
+                return (T)(object)TensorMinValueGpuDouble((Tensor<double>)(object)tensor);
+        }
+
+        return _cpuFallback.TensorMinValue(tensor);
+    }
+
+    private float TensorMinValueGpu(Tensor<float> tensor)
+    {
+        try
+        {
+            int length = tensor.Length;
+            int numBlocks = (length + ReductionBlockSize - 1) / ReductionBlockSize;
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(length);
+            var gpuPartialMins = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(numBlocks);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_partialMinKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numBlocks, gpuInput.View, gpuPartialMins.View, length);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var partialMins = new float[numBlocks];
+                gpuPartialMins.View.BaseView.CopyToCPU(partialMins);
+
+                float minVal = partialMins[0];
+                for (int i = 1; i < numBlocks; i++)
+                {
+                    if (partialMins[i] < minVal)
+                        minVal = partialMins[i];
+                }
+
+                return minVal;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuPartialMins);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorMinValue(tensor);
+        }
+    }
+
+    private double TensorMinValueGpuDouble(Tensor<double> tensor)
+    {
+        try
+        {
+            int length = tensor.Length;
+            int numBlocks = (length + ReductionBlockSize - 1) / ReductionBlockSize;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(length);
+            var gpuPartialMins = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(numBlocks);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(tensor.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_partialMinKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numBlocks, gpuInput.View, gpuPartialMins.View, length);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var partialMins = new double[numBlocks];
+                gpuPartialMins.View.BaseView.CopyToCPU(partialMins);
+
+                double minVal = partialMins[0];
+                for (int i = 1; i < numBlocks; i++)
+                {
+                    if (partialMins[i] < minVal)
+                        minVal = partialMins[i];
+                }
+
+                return minVal;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuPartialMins);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorMinValue(tensor);
+        }
+    }
+
+    /// <inheritdoc/>
+    public T TensorMean<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (tensor.Length == 0) throw new ArgumentException("Cannot compute mean of empty tensor.", nameof(tensor));
+
+        // Mean is sum / count - use TensorSum which has GPU acceleration
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T sum = TensorSum(tensor);
+        return numOps.Divide(sum, numOps.FromDouble(tensor.Length));
     }
 
     #endregion

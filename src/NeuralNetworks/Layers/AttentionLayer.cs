@@ -679,9 +679,14 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private Tensor<T> CreateScalarTensor(T value, int[] shape)
     {
-        // === Vectorized Tensor Fill (Phase B: US-GPU-015) ===
-        var filledVector = Vector<T>.CreateDefault(shape.Aggregate(1, (a, b) => a * b), value);
-        return Tensor<T>.FromVector(filledVector).Reshape(shape);
+        // Create a tensor filled with the scalar value - use direct Tensor constructor
+        var totalSize = shape.Aggregate(1, (a, b) => a * b);
+        var data = new T[totalSize];
+        for (int i = 0; i < totalSize; i++)
+        {
+            data[i] = value;
+        }
+        return new Tensor<T>(shape, new Vector<T>(data));
     }
 
     /// <summary>
@@ -811,21 +816,18 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Compute entropy of attention weights: H = -Σ(p * log(p))
-        // Use vectorized operations for better performance
+        // Use GPU-accelerated tensor operations for better performance
         T epsilon = NumOps.FromDouble(1e-10); // Small value to prevent log(0)
 
-        var weightsVec = _lastAttentionWeights.ToVector();
+        // Clamp weights to prevent log(0) - use TensorMax with scalar
+        var clampedWeights = Engine.TensorMax(_lastAttentionWeights, epsilon);
 
-        // Clamp weights to prevent log(0) - add epsilon
-        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, weightsVec.Length).ToArray());
-        var clampedWeights = (Vector<T>)Engine.Max(weightsVec, epsilonVec);
+        // Compute p * log(p) using GPU-accelerated tensor operations
+        var logWeights = Engine.TensorLog(clampedWeights);
+        var pLogP = Engine.TensorMultiply(clampedWeights, logWeights);
 
-        // Compute p * log(p) using vectorized operations
-        var logWeights = Engine.Log(clampedWeights);
-        var pLogP = (Vector<T>)Engine.Multiply(clampedWeights, logWeights);
-
-        // Sum all terms: Σ(p * log(p)) (vectorized)
-        T sumPLogP = Engine.Sum(pLogP);
+        // Sum all terms: Σ(p * log(p)) using GPU-accelerated reduction
+        T sumPLogP = Engine.TensorSum(pLogP);
         T entropy = NumOps.Negate(sumPLogP);
 
         // Average entropy over all attention weights
@@ -877,16 +879,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastAttentionWeights != null)
         {
             // Calculate max attention weight (indicates peakiness)
-            // Use vectorized max reduction for better performance
-            var weightsVec = _lastAttentionWeights.ToVector();
-            T maxWeight = NumOps.Zero;
-            for (int i = 0; i < weightsVec.Length; i++)
-            {
-                if (NumOps.GreaterThan(weightsVec[i], maxWeight))
-                {
-                    maxWeight = weightsVec[i];
-                }
-            }
+            // Use GPU-accelerated TensorMaxValue for efficient reduction
+            T maxWeight = Engine.TensorMaxValue(_lastAttentionWeights);
             diagnostics["MaxAttentionWeight"] = maxWeight?.ToString() ?? "0";
         }
 

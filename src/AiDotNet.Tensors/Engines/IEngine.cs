@@ -2077,6 +2077,58 @@ public interface IEngine
     /// </remarks>
     Tensor<T> ReduceSum<T>(Tensor<T> tensor, int[]? axes = null, bool keepDims = false);
 
+    /// <summary>
+    /// Computes the maximum value of all elements in a tensor (full reduction).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>The scalar maximum of all elements.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Performs full reduction to find the maximum value. Used in:
+    /// - Attention weight analysis (max weight indicates peakiness)
+    /// - Gradient clipping (finding max gradient magnitude)
+    /// - Numerical stability (finding scale factors)
+    /// - Normalization (max-normalization)
+    /// </para>
+    /// </remarks>
+    T TensorMaxValue<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the minimum value of all elements in a tensor (full reduction).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>The scalar minimum of all elements.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Performs full reduction to find the minimum value. Used in:
+    /// - Range normalization (min-max scaling)
+    /// - Gradient analysis
+    /// - Numerical stability checks
+    /// </para>
+    /// </remarks>
+    T TensorMinValue<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the mean (average) of all elements in a tensor (full reduction).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>The scalar mean of all elements.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Performs full reduction to compute mean. Used in:
+    /// - Layer normalization (computing mean for centering)
+    /// - Batch statistics
+    /// - Loss averaging
+    /// </para>
+    /// </remarks>
+    T TensorMean<T>(Tensor<T> tensor);
+
     #endregion
 
     /// <summary>

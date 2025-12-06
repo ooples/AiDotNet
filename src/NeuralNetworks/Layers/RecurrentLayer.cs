@@ -38,34 +38,34 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class RecurrentLayer<T> : LayerBase<T>
 {
     /// <summary>
-    /// Matrix storing the weight parameters for connections between inputs and hidden neurons.
+    /// Tensor storing the weight parameters for connections between inputs and hidden neurons.
     /// </summary>
     /// <remarks>
-    /// This matrix has dimensions [hiddenSize, inputSize], where each row represents the weights
+    /// This tensor has dimensions [hiddenSize, inputSize], where each row represents the weights
     /// for one hidden neuron. These weights determine how each input feature influences each
     /// hidden neuron and are trainable parameters of the layer.
     /// </remarks>
-    private Matrix<T> _inputWeights;
-    
+    private Tensor<T> _inputWeights;
+
     /// <summary>
-    /// Matrix storing the weight parameters for connections between previous hidden state and current hidden state.
+    /// Tensor storing the weight parameters for connections between previous hidden state and current hidden state.
     /// </summary>
     /// <remarks>
-    /// This matrix has dimensions [hiddenSize, hiddenSize], where each row represents the weights
+    /// This tensor has dimensions [hiddenSize, hiddenSize], where each row represents the weights
     /// for one hidden neuron. These weights determine how the previous hidden state influences the
     /// current hidden state and are what gives the recurrent layer its "memory" capability.
     /// </remarks>
-    private Matrix<T> _hiddenWeights;
-    
+    private Tensor<T> _hiddenWeights;
+
     /// <summary>
-    /// Vector storing the bias parameters for each hidden neuron.
+    /// Tensor storing the bias parameters for each hidden neuron.
     /// </summary>
     /// <remarks>
-    /// This vector has length hiddenSize, where each element is a constant value added to the
+    /// This tensor has length hiddenSize, where each element is a constant value added to the
     /// weighted sum for the corresponding hidden neuron. Biases allow the network to shift the
     /// activation function, giving it more flexibility to fit the data.
     /// </remarks>
-    private Vector<T> _biases;
+    private Tensor<T> _biases;
     
     /// <summary>
     /// Stores the input tensor from the most recent forward pass for use in backpropagation.
@@ -101,31 +101,31 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// Stores the gradients of the loss with respect to the input weight parameters.
     /// </summary>
     /// <remarks>
-    /// This matrix holds the accumulated gradients for all input weight parameters during the backward pass.
-    /// It has the same dimensions as the _inputWeights matrix and is used to update the input weights during
-    /// the parameter update step. The matrix is null before the first backward pass or after a reset.
+    /// This tensor holds the accumulated gradients for all input weight parameters during the backward pass.
+    /// It has the same dimensions as the _inputWeights tensor and is used to update the input weights during
+    /// the parameter update step. The tensor is null before the first backward pass or after a reset.
     /// </remarks>
-    private Matrix<T>? _inputWeightsGradient;
-    
+    private Tensor<T>? _inputWeightsGradient;
+
     /// <summary>
     /// Stores the gradients of the loss with respect to the hidden weight parameters.
     /// </summary>
     /// <remarks>
-    /// This matrix holds the accumulated gradients for all hidden weight parameters during the backward pass.
-    /// It has the same dimensions as the _hiddenWeights matrix and is used to update the hidden weights during
-    /// the parameter update step. The matrix is null before the first backward pass or after a reset.
+    /// This tensor holds the accumulated gradients for all hidden weight parameters during the backward pass.
+    /// It has the same dimensions as the _hiddenWeights tensor and is used to update the hidden weights during
+    /// the parameter update step. The tensor is null before the first backward pass or after a reset.
     /// </remarks>
-    private Matrix<T>? _hiddenWeightsGradient;
-    
+    private Tensor<T>? _hiddenWeightsGradient;
+
     /// <summary>
     /// Stores the gradients of the loss with respect to the bias parameters.
     /// </summary>
     /// <remarks>
-    /// This vector holds the accumulated gradients for all bias parameters during the backward pass.
-    /// It has the same length as the _biases vector and is used to update the biases during
-    /// the parameter update step. The vector is null before the first backward pass or after a reset.
+    /// This tensor holds the accumulated gradients for all bias parameters during the backward pass.
+    /// It has the same length as the _biases tensor and is used to update the biases during
+    /// the parameter update step. The tensor is null before the first backward pass or after a reset.
     /// </remarks>
-    private Vector<T>? _biasesGradient;
+    private Tensor<T>? _biasesGradient;
 
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
@@ -190,9 +190,9 @@ public class RecurrentLayer<T> : LayerBase<T>
     public RecurrentLayer(int inputSize, int hiddenSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [hiddenSize], activationFunction ?? new TanhActivation<T>())
     {
-        _inputWeights = new Matrix<T>(hiddenSize, inputSize);
-        _hiddenWeights = new Matrix<T>(hiddenSize, hiddenSize);
-        _biases = new Vector<T>(hiddenSize);
+        _inputWeights = new Tensor<T>([hiddenSize, inputSize]);
+        _hiddenWeights = new Tensor<T>([hiddenSize, hiddenSize]);
+        _biases = new Tensor<T>([hiddenSize]);
 
         InitializeParameters();
     }
@@ -227,9 +227,9 @@ public class RecurrentLayer<T> : LayerBase<T>
     public RecurrentLayer(int inputSize, int hiddenSize, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([inputSize], [hiddenSize], vectorActivationFunction ?? new TanhActivation<T>())
     {
-        _inputWeights = new Matrix<T>(hiddenSize, inputSize);
-        _hiddenWeights = new Matrix<T>(hiddenSize, hiddenSize);
-        _biases = new Vector<T>(hiddenSize);
+        _inputWeights = new Tensor<T>([hiddenSize, inputSize]);
+        _hiddenWeights = new Tensor<T>([hiddenSize, hiddenSize]);
+        _biases = new Tensor<T>([hiddenSize]);
 
         InitializeParameters();
     }
@@ -269,7 +269,7 @@ public class RecurrentLayer<T> : LayerBase<T>
         int sequenceLength = input.Shape[0];
         int batchSize = input.Shape[1];
         int inputSize = input.Shape[2];
-        int hiddenSize = _inputWeights.Rows;
+        int hiddenSize = _inputWeights.Shape[0];
 
         var output = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);
         var hiddenState = new Tensor<T>([sequenceLength + 1, batchSize, hiddenSize]);
@@ -283,32 +283,53 @@ public class RecurrentLayer<T> : LayerBase<T>
             }
         }
 
+        // Process sequence using tensor operations
+        // _inputWeights shape: [hiddenSize, inputSize]
+        // _hiddenWeights shape: [hiddenSize, hiddenSize]
+        // _biases shape: [hiddenSize]
+        var inputWeightsT = _inputWeights.Transpose([1, 0]); // [inputSize, hiddenSize]
+        var hiddenWeightsT = _hiddenWeights.Transpose([1, 0]); // [hiddenSize, hiddenSize]
+
         for (int t = 0; t < sequenceLength; t++)
         {
+            // Extract input slice for time step t: [batchSize, inputSize]
+            var inputAtT = new Tensor<T>([batchSize, inputSize]);
             for (int b = 0; b < batchSize; b++)
             {
-                var inputVector = new Vector<T>(inputSize);
-                var prevHiddenVector = new Vector<T>(hiddenSize);
-
                 for (int i = 0; i < inputSize; i++)
                 {
-                    inputVector[i] = input[t, b, i];
+                    inputAtT[b, i] = input[t, b, i];
                 }
+            }
+
+            // Extract previous hidden state: [batchSize, hiddenSize]
+            var prevHidden = new Tensor<T>([batchSize, hiddenSize]);
+            for (int b = 0; b < batchSize; b++)
+            {
                 for (int h = 0; h < hiddenSize; h++)
                 {
-                    prevHiddenVector[h] = hiddenState[t, b, h];
+                    prevHidden[b, h] = hiddenState[t, b, h];
                 }
+            }
 
-                var newHiddenVector = _inputWeights.Multiply(inputVector)
-                    .Add(_hiddenWeights.Multiply(prevHiddenVector))
-                    .Add(_biases);
+            // Compute: h_t = activation(input @ W_input^T + h_{t-1} @ W_hidden^T + biases)
+            var inputContribution = inputAtT.MatrixMultiply(inputWeightsT); // [batchSize, hiddenSize]
+            var hiddenContribution = prevHidden.MatrixMultiply(hiddenWeightsT); // [batchSize, hiddenSize]
 
-                newHiddenVector = ApplyActivation(newHiddenVector);
+            // Sum contributions and add biases using Engine operations
+            var preActivation = Engine.TensorAdd(inputContribution, hiddenContribution);
+            preActivation = Engine.TensorAdd(preActivation, _biases); // Broadcasting biases across batch
 
+            // Apply activation
+            var newHidden = ApplyActivation(preActivation);
+
+            // Store results
+            for (int b = 0; b < batchSize; b++)
+            {
                 for (int h = 0; h < hiddenSize; h++)
                 {
-                    output[t, b, h] = newHiddenVector[h];
-                    hiddenState[t + 1, b, h] = newHiddenVector[h];
+                    output[t, b, h] = newHidden[b, h];
+                    hiddenState[t + 1, b, h] = newHidden[b, h];
                 }
             }
         }
@@ -379,63 +400,100 @@ public class RecurrentLayer<T> : LayerBase<T>
         int sequenceLength = _lastInput.Shape[0];
         int batchSize = _lastInput.Shape[1];
         int inputSize = _lastInput.Shape[2];
-        int hiddenSize = _inputWeights.Rows;
+        int hiddenSize = _inputWeights.Shape[0];
 
         var inputGradient = new Tensor<T>(_lastInput.Shape);
-        var inputWeightsGradient = new Matrix<T>(_inputWeights.Rows, _inputWeights.Columns);
-        var hiddenWeightsGradient = new Matrix<T>(_hiddenWeights.Rows, _hiddenWeights.Columns);
-        var biasesGradient = new Vector<T>(_biases.Length);
+        var inputWeightsGrad = new Tensor<T>([hiddenSize, inputSize]);
+        var hiddenWeightsGrad = new Tensor<T>([hiddenSize, hiddenSize]);
+        var biasesGrad = new Tensor<T>([hiddenSize]);
 
         var nextHiddenGradient = new Tensor<T>([batchSize, hiddenSize]);
 
+        // Transpose weights for gradient computation
+        var inputWeightsT = _inputWeights.Transpose([1, 0]); // [inputSize, hiddenSize]
+        var hiddenWeightsT = _hiddenWeights.Transpose([1, 0]); // [hiddenSize, hiddenSize]
+
         for (int t = sequenceLength - 1; t >= 0; t--)
         {
+            // Combine output gradient with hidden gradient from next timestep
             var currentGradient = new Tensor<T>([batchSize, hiddenSize]);
-
             for (int b = 0; b < batchSize; b++)
             {
                 for (int h = 0; h < hiddenSize; h++)
                 {
                     currentGradient[b, h] = NumOps.Add(outputGradient[t, b, h], nextHiddenGradient[b, h]);
                 }
+            }
 
-                var inputVector = new Vector<T>(inputSize);
-                var prevHiddenVector = new Vector<T>(hiddenSize);
-                var gradientVector = new Vector<T>(hiddenSize);
+            // Extract data for this timestep
+            var inputAtT = new Tensor<T>([batchSize, inputSize]);
+            var prevHiddenAtT = new Tensor<T>([batchSize, hiddenSize]);
+            var outputAtT = new Tensor<T>([batchSize, hiddenSize]);
 
+            for (int b = 0; b < batchSize; b++)
+            {
                 for (int i = 0; i < inputSize; i++)
                 {
-                    inputVector[i] = _lastInput[t, b, i];
+                    inputAtT[b, i] = _lastInput[t, b, i];
                 }
                 for (int h = 0; h < hiddenSize; h++)
                 {
-                    prevHiddenVector[h] = _lastHiddenState[t, b, h];
-                    gradientVector[h] = currentGradient[b, h];
-                }
-
-                var activationDerivative = ApplyActivationDerivative(prevHiddenVector, gradientVector);
-
-                inputWeightsGradient = inputWeightsGradient.Add(Matrix<T>.OuterProduct(activationDerivative, inputVector));
-                hiddenWeightsGradient = hiddenWeightsGradient.Add(Matrix<T>.OuterProduct(activationDerivative, prevHiddenVector));
-                biasesGradient = biasesGradient.Add(activationDerivative);
-
-                var inputGradientVector = _inputWeights.Transpose().Multiply(activationDerivative);
-                var hiddenGradientVector = _hiddenWeights.Transpose().Multiply(activationDerivative);
-
-                for (int i = 0; i < inputSize; i++)
-                {
-                    inputGradient[t, b, i] = inputGradientVector[i];
-                }
-                for (int h = 0; h < hiddenSize; h++)
-                {
-                    nextHiddenGradient[b, h] = hiddenGradientVector[h];
+                    prevHiddenAtT[b, h] = _lastHiddenState[t, b, h];
+                    outputAtT[b, h] = _lastOutput[t, b, h];
                 }
             }
+
+            // Compute activation derivative: dL/dz = dL/dh * f'(z)
+            Tensor<T> preActivationGrad;
+            if (VectorActivation != null)
+            {
+                var actDeriv = VectorActivation.Derivative(outputAtT);
+                preActivationGrad = Engine.TensorMultiply(currentGradient, actDeriv);
+            }
+            else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+            {
+                var activation = ScalarActivation;
+                var activationDerivative = outputAtT.Transform((x, _) => activation.Derivative(x));
+                preActivationGrad = Engine.TensorMultiply(currentGradient, activationDerivative);
+            }
+            else
+            {
+                preActivationGrad = currentGradient;
+            }
+
+            // Accumulate weight gradients: dW_input = sum over batch of outer(grad, input)
+            // dW_input += grad^T @ input => [hiddenSize, batchSize] @ [batchSize, inputSize] = [hiddenSize, inputSize]
+            var gradT = preActivationGrad.Transpose([1, 0]); // [hiddenSize, batchSize]
+            var stepInputWeightsGrad = gradT.MatrixMultiply(inputAtT);
+            inputWeightsGrad = Engine.TensorAdd(inputWeightsGrad, stepInputWeightsGrad);
+
+            // dW_hidden += grad^T @ prevHidden => [hiddenSize, batchSize] @ [batchSize, hiddenSize] = [hiddenSize, hiddenSize]
+            var stepHiddenWeightsGrad = gradT.MatrixMultiply(prevHiddenAtT);
+            hiddenWeightsGrad = Engine.TensorAdd(hiddenWeightsGrad, stepHiddenWeightsGrad);
+
+            // dBias += sum over batch of grad => sum along axis 0
+            var stepBiasGrad = preActivationGrad.Sum([0]);
+            biasesGrad = Engine.TensorAdd(biasesGrad, stepBiasGrad);
+
+            // Compute input gradient: dL/dx = dL/dz @ W_input^T
+            // [batchSize, hiddenSize] @ [hiddenSize, inputSize] = [batchSize, inputSize]
+            var stepInputGrad = preActivationGrad.MatrixMultiply(inputWeightsT.Transpose([1, 0]));
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int i = 0; i < inputSize; i++)
+                {
+                    inputGradient[t, b, i] = stepInputGrad[b, i];
+                }
+            }
+
+            // Compute hidden gradient for previous timestep: dL/dh_{t-1} = dL/dz @ W_hidden^T
+            // [batchSize, hiddenSize] @ [hiddenSize, hiddenSize] = [batchSize, hiddenSize]
+            nextHiddenGradient = preActivationGrad.MatrixMultiply(hiddenWeightsT.Transpose([1, 0]));
         }
 
-        _inputWeightsGradient = inputWeightsGradient;
-        _hiddenWeightsGradient = hiddenWeightsGradient;
-        _biasesGradient = biasesGradient;
+        _inputWeightsGradient = inputWeightsGrad;
+        _hiddenWeightsGradient = hiddenWeightsGrad;
+        _biasesGradient = biasesGrad;
 
         return inputGradient;
     }
@@ -464,12 +522,12 @@ public class RecurrentLayer<T> : LayerBase<T>
         int sequenceLength = _lastInput.Shape[0];
         int batchSize = _lastInput.Shape[1];
         int inputSize = _lastInput.Shape[2];
-        int hiddenSize = _inputWeights.Rows;
+        int hiddenSize = _inputWeights.Shape[0];
 
         var inputGradient = new Tensor<T>(_lastInput.Shape);
-        var inputWeightsGradient = new Matrix<T>(_inputWeights.Rows, _inputWeights.Columns);
-        var hiddenWeightsGradient = new Matrix<T>(_hiddenWeights.Rows, _hiddenWeights.Columns);
-        var biasesGradient = new Vector<T>(_biases.Length);
+        var inputWeightsGrad = new Tensor<T>([hiddenSize, inputSize]);
+        var hiddenWeightsGrad = new Tensor<T>([hiddenSize, hiddenSize]);
+        var biasesGrad = new Tensor<T>([hiddenSize]);
 
         var nextHiddenGradient = new Tensor<T>([batchSize, hiddenSize]);
 
@@ -517,14 +575,11 @@ public class RecurrentLayer<T> : LayerBase<T>
             // Build minimal autodiff graph for linear part only (gradient routing)
             var inputNode = Autodiff.TensorOperations<T>.Variable(inputAtT, "input", requiresGradient: true);
             var hiddenNode = Autodiff.TensorOperations<T>.Variable(hiddenAtT, "hidden", requiresGradient: true);
-            var inputWeightsNode = Autodiff.TensorOperations<T>.Variable(
-                Tensor<T>.FromRowMatrix(_inputWeights), "input_weights", requiresGradient: true);
-            var hiddenWeightsNode = Autodiff.TensorOperations<T>.Variable(
-                Tensor<T>.FromRowMatrix(_hiddenWeights), "hidden_weights", requiresGradient: true);
-            var biasesNode = Autodiff.TensorOperations<T>.Variable(
-                Tensor<T>.FromVector(_biases), "biases", requiresGradient: true);
+            var inputWeightsNode = Autodiff.TensorOperations<T>.Variable(_inputWeights, "input_weights", requiresGradient: true);
+            var hiddenWeightsNode = Autodiff.TensorOperations<T>.Variable(_hiddenWeights, "hidden_weights", requiresGradient: true);
+            var biasesNode = Autodiff.TensorOperations<T>.Variable(_biases, "biases", requiresGradient: true);
 
-            // Forward pass for linear part only: preAct = W_input @ input + W_hidden @ hidden + bias
+            // Forward pass for linear part only: preAct = input @ W_input^T + hidden @ W_hidden^T + bias
             var inputWeightsTransposed = Autodiff.TensorOperations<T>.Transpose(inputWeightsNode);
             var hiddenWeightsTransposed = Autodiff.TensorOperations<T>.Transpose(hiddenWeightsNode);
 
@@ -532,7 +587,7 @@ public class RecurrentLayer<T> : LayerBase<T>
             var hiddenContribution = Autodiff.TensorOperations<T>.MatrixMultiply(hiddenNode, hiddenWeightsTransposed);
 
             // Broadcast biases across batch dimension
-            var biasesBroadcast = BroadcastBiases(Tensor<T>.FromVector(_biases), batchSize);
+            var biasesBroadcast = BroadcastBiases(_biases, batchSize);
             var biasNodeBroadcast = Autodiff.TensorOperations<T>.Variable(biasesBroadcast, "biases_broadcast", requiresGradient: false);
 
             var preActivation = Autodiff.TensorOperations<T>.Add(inputContribution, hiddenContribution);
@@ -577,23 +632,20 @@ public class RecurrentLayer<T> : LayerBase<T>
                 }
             }
 
-            // Accumulate gradients
+            // Accumulate gradients using Engine tensor operations
             if (inputWeightsNode.Gradient != null)
             {
-                var stepInputWeightsGrad = inputWeightsNode.Gradient.ToMatrix();
-                inputWeightsGradient = inputWeightsGradient.Add(stepInputWeightsGrad);
+                inputWeightsGrad = Engine.TensorAdd(inputWeightsGrad, inputWeightsNode.Gradient);
             }
 
             if (hiddenWeightsNode.Gradient != null)
             {
-                var stepHiddenWeightsGrad = hiddenWeightsNode.Gradient.ToMatrix();
-                hiddenWeightsGradient = hiddenWeightsGradient.Add(stepHiddenWeightsGrad);
+                hiddenWeightsGrad = Engine.TensorAdd(hiddenWeightsGrad, hiddenWeightsNode.Gradient);
             }
 
             if (biasesNode.Gradient != null)
             {
-                var stepBiasesGrad = biasesNode.Gradient.ToVector();
-                biasesGradient = biasesGradient.Add(stepBiasesGrad);
+                biasesGrad = Engine.TensorAdd(biasesGrad, biasesNode.Gradient);
             }
 
             // Store input gradient and next hidden gradient for next iteration
@@ -614,9 +666,9 @@ public class RecurrentLayer<T> : LayerBase<T>
             }
         }
 
-        _inputWeightsGradient = inputWeightsGradient;
-        _hiddenWeightsGradient = hiddenWeightsGradient;
-        _biasesGradient = biasesGradient;
+        _inputWeightsGradient = inputWeightsGrad;
+        _hiddenWeightsGradient = hiddenWeightsGrad;
+        _biasesGradient = biasesGrad;
 
         return inputGradient;
     }
@@ -674,9 +726,14 @@ public class RecurrentLayer<T> : LayerBase<T>
         if (_inputWeightsGradient == null || _hiddenWeightsGradient == null || _biasesGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _inputWeights = _inputWeights.Subtract(_inputWeightsGradient.Multiply(learningRate));
-        _hiddenWeights = _hiddenWeights.Subtract(_hiddenWeightsGradient.Multiply(learningRate));
-        _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+        // Use Engine operations for parameter updates
+        var scaledInputGrad = Engine.TensorMultiplyScalar(_inputWeightsGradient, learningRate);
+        var scaledHiddenGrad = Engine.TensorMultiplyScalar(_hiddenWeightsGradient, learningRate);
+        var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
+
+        _inputWeights = Engine.TensorSubtract(_inputWeights, scaledInputGrad);
+        _hiddenWeights = Engine.TensorSubtract(_hiddenWeights, scaledHiddenGrad);
+        _biases = Engine.TensorSubtract(_biases, scaledBiasGrad);
     }
 
     /// <summary>
@@ -708,37 +765,37 @@ public class RecurrentLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Calculate total number of parameters
-        int totalParams = _inputWeights.Rows * _inputWeights.Columns + 
-                          _hiddenWeights.Rows * _hiddenWeights.Columns + 
-                          _biases.Length;
-    
+        int inputWeightsSize = _inputWeights.Shape[0] * _inputWeights.Shape[1];
+        int hiddenWeightsSize = _hiddenWeights.Shape[0] * _hiddenWeights.Shape[1];
+        int totalParams = inputWeightsSize + hiddenWeightsSize + _biases.Length;
+
         var parameters = new Vector<T>(totalParams);
         int index = 0;
-    
+
         // Copy input weights
-        for (int i = 0; i < _inputWeights.Rows; i++)
+        for (int i = 0; i < _inputWeights.Shape[0]; i++)
         {
-            for (int j = 0; j < _inputWeights.Columns; j++)
+            for (int j = 0; j < _inputWeights.Shape[1]; j++)
             {
                 parameters[index++] = _inputWeights[i, j];
             }
         }
-    
+
         // Copy hidden weights
-        for (int i = 0; i < _hiddenWeights.Rows; i++)
+        for (int i = 0; i < _hiddenWeights.Shape[0]; i++)
         {
-            for (int j = 0; j < _hiddenWeights.Columns; j++)
+            for (int j = 0; j < _hiddenWeights.Shape[1]; j++)
             {
                 parameters[index++] = _hiddenWeights[i, j];
             }
         }
-    
+
         // Copy biases
         for (int i = 0; i < _biases.Length; i++)
         {
             parameters[index++] = _biases[i];
         }
-    
+
         return parameters;
     }
 
@@ -772,35 +829,35 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int totalParams = _inputWeights.Rows * _inputWeights.Columns + 
-                          _hiddenWeights.Rows * _hiddenWeights.Columns + 
-                          _biases.Length;
-    
+        int inputWeightsSize = _inputWeights.Shape[0] * _inputWeights.Shape[1];
+        int hiddenWeightsSize = _hiddenWeights.Shape[0] * _hiddenWeights.Shape[1];
+        int totalParams = inputWeightsSize + hiddenWeightsSize + _biases.Length;
+
         if (parameters.Length != totalParams)
         {
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
-    
+
         int index = 0;
-    
+
         // Set input weights
-        for (int i = 0; i < _inputWeights.Rows; i++)
+        for (int i = 0; i < _inputWeights.Shape[0]; i++)
         {
-            for (int j = 0; j < _inputWeights.Columns; j++)
+            for (int j = 0; j < _inputWeights.Shape[1]; j++)
             {
                 _inputWeights[i, j] = parameters[index++];
             }
         }
-    
+
         // Set hidden weights
-        for (int i = 0; i < _hiddenWeights.Rows; i++)
+        for (int i = 0; i < _hiddenWeights.Shape[0]; i++)
         {
-            for (int j = 0; j < _hiddenWeights.Columns; j++)
+            for (int j = 0; j < _hiddenWeights.Shape[1]; j++)
             {
                 _hiddenWeights[i, j] = parameters[index++];
             }
         }
-    
+
         // Set biases
         for (int i = 0; i < _biases.Length; i++)
         {
@@ -861,8 +918,8 @@ public class RecurrentLayer<T> : LayerBase<T>
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
 
-        int inputSize = _inputWeights.Columns;
-        int hiddenSize = _inputWeights.Rows;
+        int inputSize = _inputWeights.Shape[1];
+        int hiddenSize = _inputWeights.Shape[0];
 
         // Create placeholders for single time-step inputs
         // x_t shape: [batchSize, inputSize]
@@ -873,10 +930,10 @@ public class RecurrentLayer<T> : LayerBase<T>
         var prevHiddenPlaceholder = new Tensor<T>(new int[] { 1, hiddenSize });
         var prevHiddenNode = TensorOperations<T>.Variable(prevHiddenPlaceholder, "h_prev");
 
-        // Create weight and bias nodes
-        var inputWeightsNode = TensorOperations<T>.Variable(Tensor<T>.FromRowMatrix(_inputWeights), "W_input");
-        var hiddenWeightsNode = TensorOperations<T>.Variable(Tensor<T>.FromRowMatrix(_hiddenWeights), "W_hidden");
-        var biasesNode = TensorOperations<T>.Variable(Tensor<T>.FromVector(_biases), "biases");
+        // Create weight and bias nodes (already Tensor<T>)
+        var inputWeightsNode = TensorOperations<T>.Variable(_inputWeights, "W_input");
+        var hiddenWeightsNode = TensorOperations<T>.Variable(_hiddenWeights, "W_hidden");
+        var biasesNode = TensorOperations<T>.Variable(_biases, "biases");
 
         // Add inputs to the list
         inputNodes.Add(inputNode);
@@ -886,13 +943,13 @@ public class RecurrentLayer<T> : LayerBase<T>
         inputNodes.Add(biasesNode);
 
         // Build RNN computation graph (single time step)
-        // h_t = activation(W_input @ x_t + W_hidden @ h_{t-1} + b)
+        // h_t = activation(x_t @ W_input^T + h_{t-1} @ W_hidden^T + b)
 
-        // Step 1: W_input @ x_t
+        // Step 1: x_t @ W_input^T
         var inputWeightsT = TensorOperations<T>.Transpose(inputWeightsNode);
         var inputContribution = TensorOperations<T>.MatrixMultiply(inputNode, inputWeightsT);
 
-        // Step 2: W_hidden @ h_{t-1}
+        // Step 2: h_{t-1} @ W_hidden^T
         var hiddenWeightsT = TensorOperations<T>.Transpose(hiddenWeightsNode);
         var hiddenContribution = TensorOperations<T>.MatrixMultiply(prevHiddenNode, hiddenWeightsT);
 
@@ -938,17 +995,20 @@ public class RecurrentLayer<T> : LayerBase<T>
     private void InitializeParameters()
     {
         // Initialize weights and biases (e.g., Xavier/Glorot initialization)
-        T inputScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (_inputWeights.Rows + _inputWeights.Columns))));
-        T hiddenScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (_hiddenWeights.Rows + _hiddenWeights.Columns))));
+        int hiddenSize = _inputWeights.Shape[0];
+        int inputSize = _inputWeights.Shape[1];
 
-        for (int i = 0; i < _inputWeights.Rows; i++)
+        T inputScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (hiddenSize + inputSize))));
+        T hiddenScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (hiddenSize + hiddenSize))));
+
+        for (int i = 0; i < hiddenSize; i++)
         {
-            for (int j = 0; j < _inputWeights.Columns; j++)
+            for (int j = 0; j < inputSize; j++)
             {
                 _inputWeights[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), inputScale);
             }
 
-            for (int j = 0; j < _hiddenWeights.Columns; j++)
+            for (int j = 0; j < hiddenSize; j++)
             {
                 _hiddenWeights[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), hiddenScale);
             }
