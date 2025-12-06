@@ -375,6 +375,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         int inputSize = input.Shape[1];
         int outputSize = _weights.Rows;
 
+        var preActivation = new Tensor<T>([batchSize, outputSize]);
         var output = new Tensor<T>([batchSize, outputSize]);
 
         for (int i = 0; i < batchSize; i++)
@@ -386,6 +387,13 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             }
 
             var outputVector = _weights.Multiply(inputVector).Add(_biases);
+            
+            // Store pre-activation values
+            for (int j = 0; j < outputSize; j++)
+            {
+                preActivation[i, j] = outputVector[j];
+            }
+            
             outputVector = ApplyActivation(outputVector);
 
             for (int j = 0; j < outputSize; j++)
@@ -394,7 +402,8 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             }
         }
 
-        _lastOutput = output;
+        // Cache pre-activation output for proper gradient computation in backward pass
+        _lastOutput = preActivation;
         return output;
     }
 
@@ -529,25 +538,24 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         var weights = Autodiff.TensorOperations<T>.Variable(weightsTensor, "weights", requiresGradient: true);
         var biases = Autodiff.TensorOperations<T>.Variable(biasesTensor, "biases", requiresGradient: true);
 
-        // Use cached values from forward pass (_lastOutput) to compute activation derivatives.
-        // Note: FullyConnectedLayer stores POST-activation values in _lastOutput (unlike DenseLayer
-        // which stores pre-activation). For ReLU, this works because Derivative(ReLU(x)) gives the
-        // same result as Derivative(x) for the gradient computation.
-        var cachedOutput = _lastOutput.Reshape(batchSize, _lastOutput.Shape[1]);
+        // Use cached pre-activation values from forward pass (_lastOutput) to compute activation derivatives.
+        // This is critical for gradient correctness - activation derivatives must be computed from
+        // pre-activation values, not post-activation values.
+        var preActivation = _lastOutput.Reshape(batchSize, _lastOutput.Shape[1]);
 
         // Production-grade: Use vectorized Transform instead of scalar loops
-        // Compute activation derivative using cached values: f'(cached_values)
+        // Compute activation derivative using cached pre-activation values: f'(pre_activation)
         Tensor<T> activationDerivative;
         if (ScalarActivation != null)
         {
             // Vectorized activation derivative computation via Transform
             var activation = ScalarActivation;
-            activationDerivative = cachedOutput.Transform((x, _) => activation.Derivative(x));
+            activationDerivative = preActivation.Transform((x, _) => activation.Derivative(x));
         }
         else
         {
             // Identity activation - derivative is 1 (vectorized fill)
-            activationDerivative = new Tensor<T>(cachedOutput.Shape);
+            activationDerivative = new Tensor<T>(preActivation.Shape);
             var one = NumOps.One;
             activationDerivative = activationDerivative.Transform((_, _) => one);
         }

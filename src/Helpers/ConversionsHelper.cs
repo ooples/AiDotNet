@@ -193,7 +193,8 @@ public static class ConversionsHelper
             else if (typeof(TInput) == typeof(Tensor<T>))
             {
                 // Use Tensor.FromMatrix instead of manual conversion
-                convertedInput = (TInput)(object)Tensor<T>.FromRowMatrix(matrix);
+                var tensor = Tensor<T>.FromRowMatrix(matrix);
+                convertedInput = (TInput)(object)tensor;
             }
             else
             {
