@@ -1674,6 +1674,27 @@ public interface IEngine
     Tensor<T> TensorAdd<T>(Tensor<T> a, Tensor<T> b);
 
     /// <summary>
+    /// Adds multiple tensors element-wise in a single optimized operation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensors">The tensors to add together.</param>
+    /// <returns>A new tensor containing the element-wise sum of all inputs.</returns>
+    /// <exception cref="ArgumentException">Thrown when fewer than 2 tensors provided or shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Element-Wise Operations</b></para>
+    /// <para>
+    /// Like PyTorch's torch.stack + torch.sum pattern, this avoids intermediate allocations
+    /// by computing all additions in a single pass. Essential for residual networks and
+    /// skip connections that combine multiple feature maps.
+    /// </para>
+    /// <para>
+    /// Performance: O(n*elements) where n is number of tensors, but with single output allocation
+    /// instead of n-1 intermediate allocations from chained binary additions.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorAddMany<T>(params Tensor<T>[] tensors);
+
+    /// <summary>
     /// Subtracts tensor b from tensor a element-wise.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
@@ -1700,6 +1721,27 @@ public interface IEngine
     Tensor<T> TensorMultiply<T>(Tensor<T> a, Tensor<T> b);
 
     /// <summary>
+    /// Multiplies multiple tensors element-wise in a single optimized operation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensors">The tensors to multiply together.</param>
+    /// <returns>A new tensor containing the element-wise product of all inputs.</returns>
+    /// <exception cref="ArgumentException">Thrown when fewer than 2 tensors provided or shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Element-Wise Operations</b></para>
+    /// <para>
+    /// Like PyTorch's torch.stack + torch.prod pattern, this avoids intermediate allocations
+    /// by computing all multiplications in a single pass. Useful for gating mechanisms
+    /// and attention computations that combine multiple masks or weights.
+    /// </para>
+    /// <para>
+    /// Performance: O(n*elements) where n is number of tensors, but with single output allocation
+    /// instead of n-1 intermediate allocations from chained binary multiplications.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorMultiplyMany<T>(params Tensor<T>[] tensors);
+
+    /// <summary>
     /// Multiplies a tensor by a scalar.
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
@@ -1724,6 +1766,318 @@ public interface IEngine
     /// <para><b>US-GPU-014: Tensor Element-Wise Operations</b></para>
     /// </remarks>
     Tensor<T> TensorDivide<T>(Tensor<T> a, Tensor<T> b);
+
+    #region Tensor Comparison Operations
+
+    /// <summary>
+    /// Compares each element of a tensor to a scalar value for equality.
+    /// Returns a tensor where each element is 1 if equal, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="value">The scalar value to compare against.</param>
+    /// <returns>A tensor of the same shape with 1 where equal, 0 where not equal.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// <para>
+    /// Like PyTorch's torch.eq(), this enables vectorized comparison operations.
+    /// Essential for masking operations in neural networks.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorEquals<T>(Tensor<T> tensor, T value);
+
+    /// <summary>
+    /// Compares two tensors element-wise for equality.
+    /// Returns a tensor where each element is 1 if equal, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A tensor of the same shape with 1 where equal, 0 where not equal.</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorEquals<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Compares each element of a tensor to a scalar value for inequality.
+    /// Returns a tensor where each element is 1 if not equal, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="value">The scalar value to compare against.</param>
+    /// <returns>A tensor of the same shape with 1 where not equal, 0 where equal.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// <para>
+    /// Like PyTorch's torch.ne(), this enables vectorized inequality comparison.
+    /// Essential for masking layers where we need to identify non-padding values.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorNotEquals<T>(Tensor<T> tensor, T value);
+
+    /// <summary>
+    /// Compares two tensors element-wise for inequality.
+    /// Returns a tensor where each element is 1 if not equal, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A tensor of the same shape with 1 where not equal, 0 where equal.</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorNotEquals<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Compares each element of tensor a to corresponding element of tensor b for greater than.
+    /// Returns a tensor where each element is 1 if a > b, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A tensor of the same shape with 1 where a > b, 0 otherwise.</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorGreaterThan<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Compares each element of a tensor to a scalar value for greater than.
+    /// Returns a tensor where each element is 1 if element > value, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="value">The scalar value to compare against.</param>
+    /// <returns>A tensor of the same shape with 1 where greater, 0 otherwise.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorGreaterThan<T>(Tensor<T> tensor, T value);
+
+    /// <summary>
+    /// Compares each element of tensor a to corresponding element of tensor b for less than.
+    /// Returns a tensor where each element is 1 if a &lt; b, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A tensor of the same shape with 1 where a &lt; b, 0 otherwise.</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorLessThan<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Compares each element of a tensor to a scalar value for less than.
+    /// Returns a tensor where each element is 1 if element &lt; value, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="value">The scalar value to compare against.</param>
+    /// <returns>A tensor of the same shape with 1 where less, 0 otherwise.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorLessThan<T>(Tensor<T> tensor, T value);
+
+    #endregion
+
+    #region Tensor Element-wise Math Operations
+
+    /// <summary>
+    /// Computes the element-wise natural logarithm of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with the natural logarithm of each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Computes log(x) for each element. Used in:
+    /// - Cross-entropy loss calculation
+    /// - Log-probability computations
+    /// - Attention entropy regularization
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorLog<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise exponential of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with exp(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in softmax computation, probability distributions, and exponential scaling.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorExp<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise square root of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with sqrt(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in normalization layers, RMSProp/Adam optimizers, and standard deviation calculations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorSqrt<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise absolute value of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with abs(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in L1 regularization, MAE loss, and gradient clipping.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorAbs<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise negation of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with -x for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorNegate<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise power of a tensor raised to a scalar exponent.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor (base).</param>
+    /// <param name="exponent">The scalar exponent.</param>
+    /// <returns>A tensor with pow(x, exponent) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in polynomial features, learning rate scheduling, and custom activations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorPow<T>(Tensor<T> tensor, T exponent);
+
+    /// <summary>
+    /// Computes the element-wise maximum of two tensors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A tensor with max(a[i], b[i]) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in ReLU activation, gradient clipping, and element-wise maximum operations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorMax<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Computes the element-wise maximum of a tensor and a scalar.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="value">The scalar value to compare against.</param>
+    /// <returns>A tensor with max(x, value) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in ReLU activation (max(0, x)), clamping lower bounds, and preventing log(0).
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorMax<T>(Tensor<T> tensor, T value);
+
+    /// <summary>
+    /// Computes the element-wise minimum of two tensors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A tensor with min(a[i], b[i]) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorMin<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Computes the element-wise minimum of a tensor and a scalar.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="value">The scalar value to compare against.</param>
+    /// <returns>A tensor with min(x, value) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in clamping upper bounds and gradient clipping.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorMin<T>(Tensor<T> tensor, T value);
+
+    /// <summary>
+    /// Clamps tensor values to a specified range.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="min">The minimum value (lower bound).</param>
+    /// <param name="max">The maximum value (upper bound).</param>
+    /// <returns>A tensor with values clamped to [min, max].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Equivalent to min(max(x, min), max). Used for gradient clipping and value normalization.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorClamp<T>(Tensor<T> tensor, T min, T max);
+
+    /// <summary>
+    /// Computes the sum of all elements in a tensor (full reduction).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>The scalar sum of all elements.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Performs full reduction to a scalar. For axis-wise reduction, use ReduceSum.
+    /// </para>
+    /// </remarks>
+    T TensorSum<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the sum along specified axes (axis reduction).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="axes">The axes along which to sum. Null or empty for full reduction.</param>
+    /// <param name="keepDims">Whether to keep reduced dimensions with size 1.</param>
+    /// <returns>The reduced tensor.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in batch/layer normalization, attention weight computation, and loss calculation.
+    /// </para>
+    /// </remarks>
+    Tensor<T> ReduceSum<T>(Tensor<T> tensor, int[]? axes = null, bool keepDims = false);
+
+    #endregion
 
     /// <summary>
     /// Performs 2D max pooling on a 4D tensor (batch, channels, height, width).

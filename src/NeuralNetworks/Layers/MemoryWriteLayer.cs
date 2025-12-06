@@ -546,8 +546,34 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Manually propagate gradients
         output.Gradient = outputGradient;
 
-        // Perform topological sort and backward pass
-        var topoOrder = GetTopologicalOrder(output);
+        // Production-grade: Inline topological sort for backward pass
+        var visited = new HashSet<ComputationNode<T>>();
+        var topoOrder = new List<ComputationNode<T>>();
+        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
+        stack.Push((output, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+                continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                        stack.Push((parent, false));
+                }
+            }
+        }
 
         // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)
@@ -560,11 +586,11 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Extract gradients for parameters
-        _queryWeightsGradient = TensorToMatrix(queryWeightsNode.Gradient!);
-        _keyWeightsGradient = TensorToMatrix(keyWeightsNode.Gradient!);
-        _valueWeightsGradient = TensorToMatrix(valueWeightsNode.Gradient!);
-        _outputWeightsGradient = TensorToMatrix(outputWeightsNode.Gradient!);
-        _outputBiasGradient = TensorToVector(outputBiasNode.Gradient!);
+        _queryWeightsGradient = TensorToMatrix(queryWeightsNode.Gradient ?? throw new InvalidOperationException("Query weights gradient was not computed."));
+        _keyWeightsGradient = TensorToMatrix(keyWeightsNode.Gradient ?? throw new InvalidOperationException("Key weights gradient was not computed."));
+        _valueWeightsGradient = TensorToMatrix(valueWeightsNode.Gradient ?? throw new InvalidOperationException("Value weights gradient was not computed."));
+        _outputWeightsGradient = TensorToMatrix(outputWeightsNode.Gradient ?? throw new InvalidOperationException("Output weights gradient was not computed."));
+        _outputBiasGradient = TensorToVector(outputBiasNode.Gradient ?? throw new InvalidOperationException("Output bias gradient was not computed."));
 
         // Return input gradient
         if (inputNode.Gradient == null)
@@ -654,51 +680,6 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return broadcast;
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                        {
-                            stack.Push((parent, false));
-                        }
-                    }
-                }
-            }
-        }
-
-        return result;
     }
 
     /// <summary>

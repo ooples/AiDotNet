@@ -300,28 +300,14 @@ public class UpsamplingLayer<T> : LayerBase<T>
         // Apply upsampling operation
         var outputNode = Autodiff.TensorOperations<T>.Upsample(inputNode, _scaleFactor);
 
-        // Perform backward pass
+        // Perform backward pass with inline topological sort
         outputNode.Gradient = outputGradient;
-        var topoOrder = GetTopologicalOrder(outputNode);
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-    }
-
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
+        // Production-grade: Inline topological sort for backward pass
         var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
         var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
+        stack.Push((outputNode, false));
 
         while (stack.Count > 0)
         {
@@ -333,7 +319,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
             if (processed)
             {
                 visited.Add(node);
-                result.Add(node);
+                topoOrder.Add(node);
             }
             else
             {
@@ -346,9 +332,18 @@ public class UpsamplingLayer<T> : LayerBase<T>
             }
         }
 
-        return result;
-    }
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
 
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.

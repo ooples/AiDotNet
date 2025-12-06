@@ -307,11 +307,14 @@ public class ConcatenateLayer<T> : LayerBase<T>
 
         if (ScalarActivation != null)
         {
-            outputGradient = outputGradient.ElementwiseMultiply(_lastOutput.Transform((x, _) => ScalarActivation.Derivative(x)));
+            // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
+            var activationDerivative = _lastOutput.Transform((x, _) => ScalarActivation.Derivative(x));
+            outputGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
         }
         else if (VectorActivation != null)
         {
-            outputGradient = outputGradient.ElementwiseMultiply(VectorActivation.Derivative(_lastOutput));
+            // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
+            outputGradient = Engine.TensorMultiply(outputGradient, VectorActivation.Derivative(_lastOutput));
         }
 
         var inputGradients = new Tensor<T>[_lastInputs.Length];
@@ -350,11 +353,14 @@ public class ConcatenateLayer<T> : LayerBase<T>
         // Use the same computation as BackwardManual to ensure identical results
         if (ScalarActivation != null)
         {
-            outputGradient = outputGradient.ElementwiseMultiply(_lastOutput.Transform((x, _) => ScalarActivation.Derivative(x)));
+            // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
+            var activationDerivative = _lastOutput.Transform((x, _) => ScalarActivation.Derivative(x));
+            outputGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
         }
         else if (VectorActivation != null)
         {
-            outputGradient = outputGradient.ElementwiseMultiply(VectorActivation.Derivative(_lastOutput));
+            // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
+            outputGradient = Engine.TensorMultiply(outputGradient, VectorActivation.Derivative(_lastOutput));
         }
 
         var inputGradients = new Tensor<T>[_lastInputs.Length];

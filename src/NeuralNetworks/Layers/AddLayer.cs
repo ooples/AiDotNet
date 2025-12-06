@@ -245,11 +245,9 @@ public class AddLayer<T> : LayerBase<T>
 
         _lastInputs = inputs;
 
-        var result = inputs[0].Clone();
-        for (int i = 1; i < inputs.Length; i++)
-        {
-            result = result.Add(inputs[i]);
-        }
+        // Use Engine.TensorAddMany for GPU/CPU accelerated element-wise addition of all tensors
+        // This is production-grade: no loops, single optimized call that batches all additions
+        var result = Engine.TensorAddMany(inputs);
 
         _lastOutput = ApplyActivation(result);
         return _lastOutput;

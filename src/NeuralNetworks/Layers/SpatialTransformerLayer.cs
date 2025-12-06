@@ -929,8 +929,35 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Set the output gradient
         outputNode.Gradient = outputGradient;
 
-        // Perform backward pass
-        var topoOrder = GetTopologicalOrder(outputNode);
+        // Perform backward pass with inlined topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (currentNode, processed) = stack.Pop();
+            if (visited.Contains(currentNode)) continue;
+
+            if (processed)
+            {
+                visited.Add(currentNode);
+                topoOrder.Add(currentNode);
+            }
+            else
+            {
+                stack.Push((currentNode, true));
+                foreach (var parent in currentNode.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -994,34 +1021,6 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Return input gradient
         return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
-
-    /// <summary>
-    /// Gets the computation nodes in topological order for backward pass.
-    /// </summary>
-    /// <param name="outputNode">The output node to start from.</param>
-    /// <returns>List of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> outputNode)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var order = new List<Autodiff.ComputationNode<T>>();
-
-        void Visit(Autodiff.ComputationNode<T> node)
-        {
-            if (visited.Contains(node)) return;
-            visited.Add(node);
-
-            foreach (var parent in node.Parents)
-            {
-                Visit(parent);
-            }
-
-            order.Add(node);
-        }
-
-        Visit(outputNode);
-        return order;
-    }
-
 
     /// <summary>
     /// Computes the gradient of the loss with respect to the sampler operations.

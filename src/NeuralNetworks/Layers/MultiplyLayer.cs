@@ -240,11 +240,10 @@ public class MultiplyLayer<T> : LayerBase<T>
         }
 
         _lastInputs = inputs;
-        var result = inputs[0].Clone();
-        for (int i = 1; i < inputs.Length; i++)
-        {
-            result = result.ElementwiseMultiply(inputs[i]);
-        }
+
+        // Use Engine.TensorMultiplyMany for GPU/CPU accelerated element-wise multiplication of all tensors
+        // This is production-grade: no loops, single optimized call that batches all multiplications
+        var result = Engine.TensorMultiplyMany(inputs);
 
         _lastOutput = ApplyActivation(result);
         return _lastOutput;
@@ -307,7 +306,8 @@ public class MultiplyLayer<T> : LayerBase<T>
             {
                 if (i != j)
                 {
-                    inputGradients[i] = inputGradients[i].ElementwiseMultiply(_lastInputs[j]);
+                    // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
+                    inputGradients[i] = Engine.TensorMultiply(inputGradients[i], _lastInputs[j]);
                 }
             }
         }

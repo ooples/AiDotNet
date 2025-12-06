@@ -244,22 +244,16 @@ public class DropoutLayer<T> : LayerBase<T>
         if (!IsTrainingMode)
             return input;
 
-        // Generate dropout mask vectorized
-        var maskData = new T[input.Length];
+        // Generate dropout mask (random generation must be element-wise)
+        _dropoutMask = new Tensor<T>(input.Shape);
         for (int i = 0; i < input.Length; i++)
         {
-            maskData[i] = Random.NextDouble() > Convert.ToDouble(_dropoutRate) ? _scale : NumOps.Zero;
+            var keepNeuron = Random.NextDouble() > Convert.ToDouble(_dropoutRate);
+            _dropoutMask[i] = keepNeuron ? _scale : NumOps.Zero;
         }
 
-        // Convert to tensors and apply mask using vectorized Engine operations
-        _dropoutMask = new Tensor<T>(input.Shape, new Vector<T>(maskData));
-
-        // Use Engine.Multiply for vectorized element-wise multiplication
-        var inputVec = input.ToVector();
-        var maskVec = _dropoutMask.ToVector();
-        var outputVec = (Vector<T>)Engine.Multiply(inputVec, maskVec);
-
-        return new Tensor<T>(input.Shape, outputVec);
+        // Apply mask using Engine for GPU/CPU accelerated element-wise multiplication
+        return Engine.TensorMultiply(input, _dropoutMask);
     }
 
     /// <summary>
@@ -314,13 +308,8 @@ public class DropoutLayer<T> : LayerBase<T>
         if (!IsTrainingMode)
             return outputGradient;
 
-        // === Vectorized Element-wise Multiplication (Phase B: US-GPU-015) ===
-        var outGradVec = outputGradient.ToVector();
-        var maskVec = _dropoutMask.ToVector();
-        var resultVec = (Vector<T>)Engine.Multiply(outGradVec, maskVec);
-        var inputGradient = Tensor<T>.FromVector(resultVec).Reshape(_lastInput.Shape);
-
-        return inputGradient;
+        // Use Engine for GPU/CPU accelerated element-wise multiplication
+        return Engine.TensorMultiply(outputGradient, _dropoutMask);
     }
 
     /// <summary>

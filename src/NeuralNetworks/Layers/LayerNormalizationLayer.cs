@@ -454,8 +454,8 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
         var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
         // Convert gamma and beta vectors to tensors
-        var gammaTensor = VectorToTensor(_gamma);
-        var betaTensor = VectorToTensor(_beta);
+        var gammaTensor = Tensor<T>.FromVector(_gamma);
+        var betaTensor = Tensor<T>.FromVector(_beta);
         var gammaNode = Autodiff.TensorOperations<T>.Variable(gammaTensor, "gamma", requiresGradient: true);
         var betaNode = Autodiff.TensorOperations<T>.Variable(betaTensor, "beta", requiresGradient: true);
 
@@ -508,35 +508,15 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
         // Extract gradients from the computation graph
         if (gammaNode.Gradient != null)
         {
-            _gammaGradient = TensorToVector(gammaNode.Gradient);
+            _gammaGradient = gammaNode.Gradient.ToVector();
         }
 
         if (betaNode.Gradient != null)
         {
-            _betaGradient = TensorToVector(betaNode.Gradient);
+            _betaGradient = betaNode.Gradient.ToVector();
         }
 
-        return input.Gradient!;
-    }
-
-    /// <summary>
-    /// Converts a Vector to a 1D Tensor.
-    /// </summary>
-    private Tensor<T> VectorToTensor(Vector<T> vector)
-    {
-        // === Vectorized Vector to Tensor Conversion (Phase B: US-GPU-015) ===
-        // Use Tensor.FromVector for efficient conversion
-        return Tensor<T>.FromVector(vector);
-    }
-
-    /// <summary>
-    /// Converts a 1D Tensor to a Vector.
-    /// </summary>
-    private Vector<T> TensorToVector(Tensor<T> tensor)
-    {
-        // === Vectorized Tensor to Vector Conversion (Phase B: US-GPU-015) ===
-        // Use Tensor.ToVector for efficient conversion
-        return tensor.ToVector();
+        return input.Gradient ?? throw new InvalidOperationException("Input gradient was not computed during backward pass.");
     }
 
     /// <summary>
