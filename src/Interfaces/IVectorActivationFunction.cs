@@ -146,4 +146,12 @@ public interface IVectorActivationFunction<T>
     /// </para>
     /// </remarks>
     ComputationNode<T> ApplyToGraph(ComputationNode<T> input);
+
+    /// <summary>
+    /// Calculates the backward pass gradient for this activation function.
+    /// </summary>
+    /// <param name="input">The input tensor that was used in the forward pass.</param>
+    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient);
 }

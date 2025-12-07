@@ -147,6 +147,349 @@ internal static class Conv2DKernels
 }
 
 /// <summary>
+/// Parameter struct for LocallyConnectedConv2D kernel.
+/// LocallyConnected layers have position-specific weights (6D tensor).
+/// </summary>
+internal readonly struct LocallyConnectedConv2DParams
+{
+    public readonly int Batch;
+    public readonly int InChannels;
+    public readonly int InputHeight;
+    public readonly int InputWidth;
+    public readonly int OutChannels;
+    public readonly int OutputHeight;
+    public readonly int OutputWidth;
+    public readonly int KernelHeight;
+    public readonly int KernelWidth;
+    public readonly int StrideH;
+    public readonly int StrideW;
+
+    public LocallyConnectedConv2DParams(int batch, int inChannels, int inputHeight, int inputWidth,
+        int outChannels, int outputHeight, int outputWidth, int kernelHeight, int kernelWidth,
+        int strideH, int strideW)
+    {
+        Batch = batch;
+        InChannels = inChannels;
+        InputHeight = inputHeight;
+        InputWidth = inputWidth;
+        OutChannels = outChannels;
+        OutputHeight = outputHeight;
+        OutputWidth = outputWidth;
+        KernelHeight = kernelHeight;
+        KernelWidth = kernelWidth;
+        StrideH = strideH;
+        StrideW = strideW;
+    }
+}
+
+/// <summary>
+/// Static helper class for LocallyConnectedConv2D kernel methods.
+/// </summary>
+internal static class LocallyConnectedConv2DKernels
+{
+    /// <summary>
+    /// LocallyConnectedConv2D forward kernel for float precision.
+    /// Each output position has its own unique weights (position-specific).
+    /// weights shape: [outputHeight, outputWidth, outChannels, inChannels, kernelHeight, kernelWidth]
+    /// </summary>
+    public static void ForwardKernelFloatImpl(Index1D index, ArrayView<float> input, ArrayView<float> weights,
+        ArrayView<float> bias, ArrayView<float> output, LocallyConnectedConv2DParams p, int hasBias)
+    {
+        // Convert flat index to 4D output coordinates: [b, oc, oh, ow]
+        int ow = (int)index % p.OutputWidth;
+        int temp = (int)index / p.OutputWidth;
+        int oh = temp % p.OutputHeight;
+        temp /= p.OutputHeight;
+        int oc = temp % p.OutChannels;
+        int b = temp / p.OutChannels;
+
+        float sum = 0;
+
+        // Sum over input channels and kernel window
+        for (int ic = 0; ic < p.InChannels; ic++)
+        {
+            for (int kh = 0; kh < p.KernelHeight; kh++)
+            {
+                for (int kw = 0; kw < p.KernelWidth; kw++)
+                {
+                    int ih = oh * p.StrideH + kh;
+                    int iw = ow * p.StrideW + kw;
+
+                    if (ih >= 0 && ih < p.InputHeight && iw >= 0 && iw < p.InputWidth)
+                    {
+                        // input index: [b, ic, ih, iw]
+                        int inputIdx = ((b * p.InChannels + ic) * p.InputHeight + ih) * p.InputWidth + iw;
+
+                        // weights index: [oh, ow, oc, ic, kh, kw]
+                        int weightIdx = ((((oh * p.OutputWidth + ow) * p.OutChannels + oc) * p.InChannels + ic) * p.KernelHeight + kh) * p.KernelWidth + kw;
+
+                        sum += input[inputIdx] * weights[weightIdx];
+                    }
+                }
+            }
+        }
+
+        // Add bias if provided - bias is per-position: [oh, ow, oc]
+        if (hasBias != 0)
+        {
+            int biasIdx = (oh * p.OutputWidth + ow) * p.OutChannels + oc;
+            sum += bias[biasIdx];
+        }
+
+        output[index] = sum;
+    }
+
+    /// <summary>
+    /// LocallyConnectedConv2D forward kernel for double precision.
+    /// </summary>
+    public static void ForwardKernelDoubleImpl(Index1D index, ArrayView<double> input, ArrayView<double> weights,
+        ArrayView<double> bias, ArrayView<double> output, LocallyConnectedConv2DParams p, int hasBias)
+    {
+        int ow = (int)index % p.OutputWidth;
+        int temp = (int)index / p.OutputWidth;
+        int oh = temp % p.OutputHeight;
+        temp /= p.OutputHeight;
+        int oc = temp % p.OutChannels;
+        int b = temp / p.OutChannels;
+
+        double sum = 0;
+
+        for (int ic = 0; ic < p.InChannels; ic++)
+        {
+            for (int kh = 0; kh < p.KernelHeight; kh++)
+            {
+                for (int kw = 0; kw < p.KernelWidth; kw++)
+                {
+                    int ih = oh * p.StrideH + kh;
+                    int iw = ow * p.StrideW + kw;
+
+                    if (ih >= 0 && ih < p.InputHeight && iw >= 0 && iw < p.InputWidth)
+                    {
+                        int inputIdx = ((b * p.InChannels + ic) * p.InputHeight + ih) * p.InputWidth + iw;
+                        int weightIdx = ((((oh * p.OutputWidth + ow) * p.OutChannels + oc) * p.InChannels + ic) * p.KernelHeight + kh) * p.KernelWidth + kw;
+                        sum += input[inputIdx] * weights[weightIdx];
+                    }
+                }
+            }
+        }
+
+        // Add bias if provided - bias is per-position: [oh, ow, oc]
+        if (hasBias != 0)
+        {
+            int biasIdx = (oh * p.OutputWidth + ow) * p.OutChannels + oc;
+            sum += bias[biasIdx];
+        }
+
+        output[index] = sum;
+    }
+
+    /// <summary>
+    /// LocallyConnectedConv2D backward input kernel for float precision.
+    /// Computes gradient with respect to input tensor.
+    /// </summary>
+    public static void BackwardInputKernelFloatImpl(Index1D index, ArrayView<float> gradOutput, ArrayView<float> weights,
+        ArrayView<float> gradInput, LocallyConnectedConv2DParams p)
+    {
+        // Convert flat index to 4D input coordinates: [b, ic, ih, iw]
+        int iw = (int)index % p.InputWidth;
+        int temp = (int)index / p.InputWidth;
+        int ih = temp % p.InputHeight;
+        temp /= p.InputHeight;
+        int ic = temp % p.InChannels;
+        int b = temp / p.InChannels;
+
+        float sum = 0;
+
+        // For each output position that this input contributes to
+        for (int oc = 0; oc < p.OutChannels; oc++)
+        {
+            for (int oh = 0; oh < p.OutputHeight; oh++)
+            {
+                for (int ow = 0; ow < p.OutputWidth; ow++)
+                {
+                    // Check if this input position contributes to this output position
+                    int kh = ih - oh * p.StrideH;
+                    int kw = iw - ow * p.StrideW;
+
+                    if (kh >= 0 && kh < p.KernelHeight && kw >= 0 && kw < p.KernelWidth)
+                    {
+                        // gradOutput index: [b, oc, oh, ow]
+                        int gradOutIdx = ((b * p.OutChannels + oc) * p.OutputHeight + oh) * p.OutputWidth + ow;
+
+                        // weights index: [oh, ow, oc, ic, kh, kw]
+                        int weightIdx = ((((oh * p.OutputWidth + ow) * p.OutChannels + oc) * p.InChannels + ic) * p.KernelHeight + kh) * p.KernelWidth + kw;
+
+                        sum += gradOutput[gradOutIdx] * weights[weightIdx];
+                    }
+                }
+            }
+        }
+
+        gradInput[index] = sum;
+    }
+
+    /// <summary>
+    /// LocallyConnectedConv2D backward input kernel for double precision.
+    /// </summary>
+    public static void BackwardInputKernelDoubleImpl(Index1D index, ArrayView<double> gradOutput, ArrayView<double> weights,
+        ArrayView<double> gradInput, LocallyConnectedConv2DParams p)
+    {
+        int iw = (int)index % p.InputWidth;
+        int temp = (int)index / p.InputWidth;
+        int ih = temp % p.InputHeight;
+        temp /= p.InputHeight;
+        int ic = temp % p.InChannels;
+        int b = temp / p.InChannels;
+
+        double sum = 0;
+
+        for (int oc = 0; oc < p.OutChannels; oc++)
+        {
+            for (int oh = 0; oh < p.OutputHeight; oh++)
+            {
+                for (int ow = 0; ow < p.OutputWidth; ow++)
+                {
+                    int kh = ih - oh * p.StrideH;
+                    int kw = iw - ow * p.StrideW;
+
+                    if (kh >= 0 && kh < p.KernelHeight && kw >= 0 && kw < p.KernelWidth)
+                    {
+                        int gradOutIdx = ((b * p.OutChannels + oc) * p.OutputHeight + oh) * p.OutputWidth + ow;
+                        int weightIdx = ((((oh * p.OutputWidth + ow) * p.OutChannels + oc) * p.InChannels + ic) * p.KernelHeight + kh) * p.KernelWidth + kw;
+                        sum += gradOutput[gradOutIdx] * weights[weightIdx];
+                    }
+                }
+            }
+        }
+
+        gradInput[index] = sum;
+    }
+
+    /// <summary>
+    /// LocallyConnectedConv2D backward weights kernel for float precision.
+    /// Uses atomic add for thread-safe accumulation across batch dimension.
+    /// </summary>
+    public static void BackwardWeightsKernelFloatImpl(Index1D index, ArrayView<float> gradOutput, ArrayView<float> input,
+        ArrayView<float> gradWeights, LocallyConnectedConv2DParams p)
+    {
+        // Compute weight gradient for one position: [oh, ow, oc, ic, kh, kw]
+        int kw = (int)index % p.KernelWidth;
+        int temp = (int)index / p.KernelWidth;
+        int kh = temp % p.KernelHeight;
+        temp /= p.KernelHeight;
+        int ic = temp % p.InChannels;
+        temp /= p.InChannels;
+        int oc = temp % p.OutChannels;
+        temp /= p.OutChannels;
+        int ow = temp % p.OutputWidth;
+        int oh = temp / p.OutputWidth;
+
+        float sum = 0;
+
+        // Sum over batch dimension
+        for (int b = 0; b < p.Batch; b++)
+        {
+            int ih = oh * p.StrideH + kh;
+            int iw = ow * p.StrideW + kw;
+
+            if (ih >= 0 && ih < p.InputHeight && iw >= 0 && iw < p.InputWidth)
+            {
+                int gradOutIdx = ((b * p.OutChannels + oc) * p.OutputHeight + oh) * p.OutputWidth + ow;
+                int inputIdx = ((b * p.InChannels + ic) * p.InputHeight + ih) * p.InputWidth + iw;
+                sum += gradOutput[gradOutIdx] * input[inputIdx];
+            }
+        }
+
+        gradWeights[index] = sum;
+    }
+
+    /// <summary>
+    /// LocallyConnectedConv2D backward weights kernel for double precision.
+    /// </summary>
+    public static void BackwardWeightsKernelDoubleImpl(Index1D index, ArrayView<double> gradOutput, ArrayView<double> input,
+        ArrayView<double> gradWeights, LocallyConnectedConv2DParams p)
+    {
+        int kw = (int)index % p.KernelWidth;
+        int temp = (int)index / p.KernelWidth;
+        int kh = temp % p.KernelHeight;
+        temp /= p.KernelHeight;
+        int ic = temp % p.InChannels;
+        temp /= p.InChannels;
+        int oc = temp % p.OutChannels;
+        temp /= p.OutChannels;
+        int ow = temp % p.OutputWidth;
+        int oh = temp / p.OutputWidth;
+
+        double sum = 0;
+
+        for (int b = 0; b < p.Batch; b++)
+        {
+            int ih = oh * p.StrideH + kh;
+            int iw = ow * p.StrideW + kw;
+
+            if (ih >= 0 && ih < p.InputHeight && iw >= 0 && iw < p.InputWidth)
+            {
+                int gradOutIdx = ((b * p.OutChannels + oc) * p.OutputHeight + oh) * p.OutputWidth + ow;
+                int inputIdx = ((b * p.InChannels + ic) * p.InputHeight + ih) * p.InputWidth + iw;
+                sum += gradOutput[gradOutIdx] * input[inputIdx];
+            }
+        }
+
+        gradWeights[index] = sum;
+    }
+
+    /// <summary>
+    /// LocallyConnectedConv2D backward bias kernel for float precision.
+    /// Sums gradOutput over batch dimension for each position [oh, ow, oc].
+    /// </summary>
+    public static void BackwardBiasKernelFloatImpl(Index1D index, ArrayView<float> gradOutput, ArrayView<float> gradBias,
+        LocallyConnectedConv2DParams p)
+    {
+        // index maps to [oh, ow, oc] flat index
+        int oc = (int)index % p.OutChannels;
+        int temp = (int)index / p.OutChannels;
+        int ow = temp % p.OutputWidth;
+        int oh = temp / p.OutputWidth;
+
+        float sum = 0;
+
+        // Sum over batch dimension
+        for (int b = 0; b < p.Batch; b++)
+        {
+            // gradOutput layout: [batch, outChannels, outputHeight, outputWidth]
+            int gradOutIdx = ((b * p.OutChannels + oc) * p.OutputHeight + oh) * p.OutputWidth + ow;
+            sum += gradOutput[gradOutIdx];
+        }
+
+        gradBias[index] = sum;
+    }
+
+    /// <summary>
+    /// LocallyConnectedConv2D backward bias kernel for double precision.
+    /// </summary>
+    public static void BackwardBiasKernelDoubleImpl(Index1D index, ArrayView<double> gradOutput, ArrayView<double> gradBias,
+        LocallyConnectedConv2DParams p)
+    {
+        // index maps to [oh, ow, oc] flat index
+        int oc = (int)index % p.OutChannels;
+        int temp = (int)index / p.OutChannels;
+        int ow = temp % p.OutputWidth;
+        int oh = temp / p.OutputWidth;
+
+        double sum = 0;
+
+        // Sum over batch dimension
+        for (int b = 0; b < p.Batch; b++)
+        {
+            int gradOutIdx = ((b * p.OutChannels + oc) * p.OutputHeight + oh) * p.OutputWidth + ow;
+            sum += gradOutput[gradOutIdx];
+        }
+
+        gradBias[index] = sum;
+    }
+}
+
+/// <summary>
 /// GPU-based execution engine using ILGPU for hardware acceleration.
 /// </summary>
 /// <remarks>
@@ -339,6 +682,11 @@ public class GpuEngine : IEngine, IDisposable
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int>? _maxPool2DKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, int, int, int, int, int, int, int, int, int>? _avgPool2DKernelDouble;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, Conv2DParams>? _conv2DKernelDouble;
+
+    // Broadcast add kernels for Conv2D bias addition (shape [B,C,H,W] + [C])
+    // Parameters: result, input, bias, batchSize, channels, height, width
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>? _conv2DBiasAddKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>? _conv2DBiasAddKernelDouble;
 
     // Production GPU kernels - Mathematical functions (Phase C: Production Ready)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>>? _log2KernelFloat;
@@ -585,6 +933,26 @@ public class GpuEngine : IEngine, IDisposable
     // (gradOutput, indices, gradEmbeddings, embeddingDim, numIndices)
     private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<int>, ArrayView<float>, int, int>? _embeddingLookupBackwardKernelFloat;
     private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<int>, ArrayView<double>, int, int>? _embeddingLookupBackwardKernelDouble;
+
+    // LocallyConnectedConv2D kernels - forward pass with position-specific weights
+    // (input, weights, bias, output, params, hasBias)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, LocallyConnectedConv2DParams, int>? _locallyConnectedConv2DKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>, LocallyConnectedConv2DParams, int>? _locallyConnectedConv2DKernelDouble;
+
+    // LocallyConnectedConv2D backward input kernels - gradient w.r.t input
+    // (gradOutput, weights, gradInput, params)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LocallyConnectedConv2DParams>? _locallyConnectedConv2DBackwardInputKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, LocallyConnectedConv2DParams>? _locallyConnectedConv2DBackwardInputKernelDouble;
+
+    // LocallyConnectedConv2D backward weights kernels - gradient w.r.t weights
+    // (gradOutput, input, gradWeights, params)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, LocallyConnectedConv2DParams>? _locallyConnectedConv2DBackwardWeightsKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, LocallyConnectedConv2DParams>? _locallyConnectedConv2DBackwardWeightsKernelDouble;
+
+    // LocallyConnectedConv2D backward bias kernels - gradient w.r.t bias
+    // (gradOutput, gradBias, params)
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<float>, ArrayView<float>, LocallyConnectedConv2DParams>? _locallyConnectedConv2DBackwardBiasKernelFloat;
+    private readonly Action<AcceleratorStream, Index1D, ArrayView<double>, ArrayView<double>, LocallyConnectedConv2DParams>? _locallyConnectedConv2DBackwardBiasKernelDouble;
 
     /// <inheritdoc/>
     public string Name => _accelerator != null
@@ -1232,6 +1600,40 @@ public class GpuEngine : IEngine, IDisposable
                 _tensorDivideKernelDouble = _accelerator.LoadAutoGroupedKernel<
                     Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>>(
                     (index, a, b, result) => result[index] = a[index] / b[index]);
+
+                // Pre-compile Conv2D bias add kernels for broadcast add (shape [B,C,H,W] + [C])
+                // This is a specialized broadcast add for adding per-channel bias to Conv2D output
+                _conv2DBiasAddKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, int>(
+                    (index, input, bias, result, batchSize, channels, height, width) =>
+                    {
+                        // Convert flat index to 4D coordinates: [b, c, h, w]
+                        int w = (int)index % width;
+                        int temp = (int)index / width;
+                        int h = temp % height;
+                        temp /= height;
+                        int c = temp % channels;
+                        // b = temp / channels (not needed for computation)
+
+                        // Add bias[c] to input[index]
+                        result[index] = input[index] + bias[c];
+                    });
+
+                _conv2DBiasAddKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, int, int, int, int>(
+                    (index, input, bias, result, batchSize, channels, height, width) =>
+                    {
+                        // Convert flat index to 4D coordinates: [b, c, h, w]
+                        int w = (int)index % width;
+                        int temp = (int)index / width;
+                        int h = temp % height;
+                        temp /= height;
+                        int c = temp % channels;
+                        // b = temp / channels (not needed for computation)
+
+                        // Add bias[c] to input[index]
+                        result[index] = input[index] + bias[c];
+                    });
 
                 // Pre-compile pooling kernels - float (Phase B: Epic 3, US-GPU-012)
                 _maxPool2DKernelFloat = _accelerator.LoadAutoGroupedKernel<
@@ -3865,6 +4267,40 @@ public class GpuEngine : IEngine, IDisposable
                         output[index] = 0.5 * XMath.Log((1.0 + x) / (1.0 - x));
                     });
                 Console.WriteLine("[GpuEngine] Trigonometric kernels pre-compiled");
+
+                // LocallyConnectedConv2D kernels - position-specific weights (6D weight tensor)
+                // Forward: output[b,oc,oh,ow] = sum over ic,kh,kw of input * weights[oh,ow,oc,ic,kh,kw] + bias
+                _locallyConnectedConv2DKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>,
+                    LocallyConnectedConv2DParams, int>(LocallyConnectedConv2DKernels.ForwardKernelFloatImpl);
+                _locallyConnectedConv2DKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>, ArrayView<double>,
+                    LocallyConnectedConv2DParams, int>(LocallyConnectedConv2DKernels.ForwardKernelDoubleImpl);
+
+                // BackwardInput: gradInput[b,ic,ih,iw] = sum of gradOutput * weights
+                _locallyConnectedConv2DBackwardInputKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>,
+                    LocallyConnectedConv2DParams>(LocallyConnectedConv2DKernels.BackwardInputKernelFloatImpl);
+                _locallyConnectedConv2DBackwardInputKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>,
+                    LocallyConnectedConv2DParams>(LocallyConnectedConv2DKernels.BackwardInputKernelDoubleImpl);
+
+                // BackwardWeights: gradWeights[oh,ow,oc,ic,kh,kw] += sum over b of gradOutput * input
+                _locallyConnectedConv2DBackwardWeightsKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>,
+                    LocallyConnectedConv2DParams>(LocallyConnectedConv2DKernels.BackwardWeightsKernelFloatImpl);
+                _locallyConnectedConv2DBackwardWeightsKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>, ArrayView<double>,
+                    LocallyConnectedConv2DParams>(LocallyConnectedConv2DKernels.BackwardWeightsKernelDoubleImpl);
+
+                // BackwardBias: gradBias[oh,ow,oc] = sum over b of gradOutput[b,oc,oh,ow]
+                _locallyConnectedConv2DBackwardBiasKernelFloat = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<float>, ArrayView<float>,
+                    LocallyConnectedConv2DParams>(LocallyConnectedConv2DKernels.BackwardBiasKernelFloatImpl);
+                _locallyConnectedConv2DBackwardBiasKernelDouble = _accelerator.LoadAutoGroupedKernel<
+                    Index1D, ArrayView<double>, ArrayView<double>,
+                    LocallyConnectedConv2DParams>(LocallyConnectedConv2DKernels.BackwardBiasKernelDoubleImpl);
+                Console.WriteLine("[GpuEngine] LocallyConnectedConv2D kernels pre-compiled");
 
                 Console.WriteLine("[GpuEngine] All kernel pre-compilation complete");
 
@@ -10938,6 +11374,139 @@ public class GpuEngine : IEngine, IDisposable
         {
             Console.WriteLine($"[GpuEngine] GPU tensor add (double) failed: {ex.Message}. Falling back to CPU.");
             return _cpuFallback.TensorAdd(a, b);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorBroadcastAdd<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+
+        // Fast path: same shapes - use regular TensorAdd
+        if (a.Shape.SequenceEqual(b.Shape))
+        {
+            return TensorAdd(a, b);
+        }
+
+        // Check for common Conv2D bias pattern: [B,C,H,W] + [C] or [1,C,1,1]
+        // This is by far the most common broadcast add case in neural networks
+        if (a.Rank == 4 && (b.Rank == 1 || (b.Rank == 4 && b.Shape[0] == 1 && b.Shape[2] == 1 && b.Shape[3] == 1)))
+        {
+            int channels = a.Shape[1];
+            int biasChannels = b.Rank == 1 ? b.Shape[0] : b.Shape[1];
+
+            if (channels == biasChannels && a.Length >= _thresholds.VectorAdd)
+            {
+                if (SupportsGpu && _gpuHealthy)
+                {
+                    if (typeof(T) == typeof(float))
+                        return (Tensor<T>)(object)Conv2DBiasAddGpu((Tensor<float>)(object)a, (Tensor<float>)(object)b);
+                    if (typeof(T) == typeof(double))
+                        return (Tensor<T>)(object)Conv2DBiasAddGpuDouble((Tensor<double>)(object)a, (Tensor<double>)(object)b);
+                }
+            }
+        }
+
+        // General case: fallback to CPU which uses Tensor.BroadcastAdd
+        return _cpuFallback.TensorBroadcastAdd(a, b);
+    }
+
+    private Tensor<float> Conv2DBiasAddGpu(Tensor<float> input, Tensor<float> bias)
+    {
+        try
+        {
+            int batchSize = input.Shape[0];
+            int channels = input.Shape[1];
+            int height = input.Shape[2];
+            int width = input.Shape[3];
+
+            // Flatten bias if it's 4D [1,C,1,1]
+            int biasLength = bias.Rank == 1 ? bias.Length : channels;
+            var flatBias = bias.Rank == 1 ? bias : bias.Reshape([channels]);
+
+            var result = new Tensor<float>(input.Shape);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuBias = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(biasLength);
+            var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuBias.View.BaseView.CopyFromCPU(flatBias.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_conv2DBiasAddKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        input.Length, gpuInput.View, gpuBias.View, gpuResult.View,
+                        batchSize, channels, height, width);
+                    _accelerator.Synchronize();
+                }
+
+                gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuBias);
+                _memoryPoolFloat.Return(gpuResult);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU Conv2D bias add (float) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorBroadcastAdd(input, bias);
+        }
+    }
+
+    private Tensor<double> Conv2DBiasAddGpuDouble(Tensor<double> input, Tensor<double> bias)
+    {
+        try
+        {
+            int batchSize = input.Shape[0];
+            int channels = input.Shape[1];
+            int height = input.Shape[2];
+            int width = input.Shape[3];
+
+            // Flatten bias if it's 4D [1,C,1,1]
+            int biasLength = bias.Rank == 1 ? bias.Length : channels;
+            var flatBias = bias.Rank == 1 ? bias : bias.Reshape([channels]);
+
+            var result = new Tensor<double>(input.Shape);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuBias = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(biasLength);
+            var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuBias.View.BaseView.CopyFromCPU(flatBias.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_conv2DBiasAddKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        input.Length, gpuInput.View, gpuBias.View, gpuResult.View,
+                        batchSize, channels, height, width);
+                    _accelerator.Synchronize();
+                }
+
+                gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuBias);
+                _memoryPoolDouble.Return(gpuResult);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU Conv2D bias add (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorBroadcastAdd(input, bias);
         }
     }
 
@@ -19815,6 +20384,626 @@ public class GpuEngine : IEngine, IDisposable
 
         _disposed = true;
         GC.SuppressFinalize(this);
+    }
+
+    #endregion
+
+    #region LocallyConnected Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> LocallyConnectedConv2D<T>(Tensor<T> input, Tensor<T> weights, Tensor<T>? bias, int[] stride)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+        if (stride == null || stride.Length != 2) throw new ArgumentException("stride must be a 2-element array", nameof(stride));
+
+        // Input: [batch, inChannels, height, width]
+        // Weights: [outputHeight, outputWidth, outChannels, inChannels, kernelHeight, kernelWidth]
+        int batch = input.Shape[0];
+        int outChannels = weights.Shape[2];
+        int outputHeight = weights.Shape[0];
+        int outputWidth = weights.Shape[1];
+        int totalOutputElements = batch * outChannels * outputHeight * outputWidth;
+
+        // Use adaptive threshold - GPU is beneficial for larger operations
+        if (totalOutputElements < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.LocallyConnectedConv2D(input, weights, bias, stride);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)LocallyConnectedConv2DGpu(
+                    (Tensor<float>)(object)input,
+                    (Tensor<float>)(object)weights,
+                    bias != null ? (Tensor<float>)(object)bias : null,
+                    stride);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)LocallyConnectedConv2DGpuDouble(
+                    (Tensor<double>)(object)input,
+                    (Tensor<double>)(object)weights,
+                    bias != null ? (Tensor<double>)(object)bias : null,
+                    stride);
+        }
+
+        return _cpuFallback.LocallyConnectedConv2D(input, weights, bias, stride);
+    }
+
+    private Tensor<float> LocallyConnectedConv2DGpu(Tensor<float> input, Tensor<float> weights, Tensor<float>? bias, int[] stride)
+    {
+        try
+        {
+            // Input: [batch, inChannels, height, width]
+            // Weights: [outputHeight, outputWidth, outChannels, inChannels, kernelHeight, kernelWidth]
+            // Bias: [outputHeight, outputWidth, outChannels] or null
+            int batch = input.Shape[0];
+            int inChannels = input.Shape[1];
+            int inputHeight = input.Shape[2];
+            int inputWidth = input.Shape[3];
+            int outputHeight = weights.Shape[0];
+            int outputWidth = weights.Shape[1];
+            int outChannels = weights.Shape[2];
+            int kernelHeight = weights.Shape[4];
+            int kernelWidth = weights.Shape[5];
+
+            int totalOutputElements = batch * outChannels * outputHeight * outputWidth;
+            int hasBias = bias != null ? 1 : 0;
+
+            var p = new LocallyConnectedConv2DParams(
+                batch, inChannels, inputHeight, inputWidth,
+                outChannels, outputHeight, outputWidth,
+                kernelHeight, kernelWidth, stride[0], stride[1]);
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuWeights = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(weights.Length);
+            var gpuBias = hasBias == 1
+                ? (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(bias!.Length)
+                : (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(1); // Dummy allocation
+            var gpuOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalOutputElements);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuWeights.View.BaseView.CopyFromCPU(weights.AsSpan());
+                if (hasBias == 1)
+                    gpuBias.View.BaseView.CopyFromCPU(bias!.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_locallyConnectedConv2DKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        totalOutputElements, gpuInput.View, gpuWeights.View, gpuBias.View, gpuOutput.View, p, hasBias);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var outputData = new float[totalOutputElements];
+                gpuOutput.View.BaseView.CopyToCPU(outputData);
+
+                return new Tensor<float>(new[] { batch, outChannels, outputHeight, outputWidth }, new Vector<float>(outputData));
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuWeights);
+                _memoryPoolFloat.Return(gpuBias);
+                _memoryPoolFloat.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.LocallyConnectedConv2D(input, weights, bias, stride);
+        }
+    }
+
+    private Tensor<double> LocallyConnectedConv2DGpuDouble(Tensor<double> input, Tensor<double> weights, Tensor<double>? bias, int[] stride)
+    {
+        try
+        {
+            int batch = input.Shape[0];
+            int inChannels = input.Shape[1];
+            int inputHeight = input.Shape[2];
+            int inputWidth = input.Shape[3];
+            int outputHeight = weights.Shape[0];
+            int outputWidth = weights.Shape[1];
+            int outChannels = weights.Shape[2];
+            int kernelHeight = weights.Shape[4];
+            int kernelWidth = weights.Shape[5];
+
+            int totalOutputElements = batch * outChannels * outputHeight * outputWidth;
+            int hasBias = bias != null ? 1 : 0;
+
+            var p = new LocallyConnectedConv2DParams(
+                batch, inChannels, inputHeight, inputWidth,
+                outChannels, outputHeight, outputWidth,
+                kernelHeight, kernelWidth, stride[0], stride[1]);
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuWeights = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(weights.Length);
+            var gpuBias = hasBias == 1
+                ? (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(bias!.Length)
+                : (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(1);
+            var gpuOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalOutputElements);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+                gpuWeights.View.BaseView.CopyFromCPU(weights.AsSpan());
+                if (hasBias == 1)
+                    gpuBias.View.BaseView.CopyFromCPU(bias!.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_locallyConnectedConv2DKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        totalOutputElements, gpuInput.View, gpuWeights.View, gpuBias.View, gpuOutput.View, p, hasBias);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var outputData = new double[totalOutputElements];
+                gpuOutput.View.BaseView.CopyToCPU(outputData);
+
+                return new Tensor<double>(new[] { batch, outChannels, outputHeight, outputWidth }, new Vector<double>(outputData));
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuWeights);
+                _memoryPoolDouble.Return(gpuBias);
+                _memoryPoolDouble.Return(gpuOutput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.LocallyConnectedConv2D(input, weights, bias, stride);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> LocallyConnectedConv2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> weights, int[] inputShape, int[] stride)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+        if (inputShape == null || inputShape.Length != 4) throw new ArgumentException("inputShape must be a 4-element array", nameof(inputShape));
+        if (stride == null || stride.Length != 2) throw new ArgumentException("stride must be a 2-element array", nameof(stride));
+
+        int totalInputElements = inputShape[0] * inputShape[1] * inputShape[2] * inputShape[3];
+
+        if (totalInputElements < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.LocallyConnectedConv2DBackwardInput(gradOutput, weights, inputShape, stride);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)LocallyConnectedConv2DBackwardInputGpu(
+                    (Tensor<float>)(object)gradOutput, (Tensor<float>)(object)weights, inputShape, stride);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)LocallyConnectedConv2DBackwardInputGpuDouble(
+                    (Tensor<double>)(object)gradOutput, (Tensor<double>)(object)weights, inputShape, stride);
+        }
+
+        return _cpuFallback.LocallyConnectedConv2DBackwardInput(gradOutput, weights, inputShape, stride);
+    }
+
+    private Tensor<float> LocallyConnectedConv2DBackwardInputGpu(Tensor<float> gradOutput, Tensor<float> weights, int[] inputShape, int[] stride)
+    {
+        try
+        {
+            // GradOutput: [batch, outChannels, outputHeight, outputWidth]
+            // Weights: [outputHeight, outputWidth, outChannels, inChannels, kernelHeight, kernelWidth]
+            // Output (gradInput): [batch, inChannels, inputHeight, inputWidth]
+            int batch = gradOutput.Shape[0];
+            int outChannels = gradOutput.Shape[1];
+            int outputHeight = gradOutput.Shape[2];
+            int outputWidth = gradOutput.Shape[3];
+            int inChannels = inputShape[1];
+            int inputHeight = inputShape[2];
+            int inputWidth = inputShape[3];
+            int kernelHeight = weights.Shape[4];
+            int kernelWidth = weights.Shape[5];
+
+            int totalInputElements = batch * inChannels * inputHeight * inputWidth;
+
+            var p = new LocallyConnectedConv2DParams(
+                batch, inChannels, inputHeight, inputWidth,
+                outChannels, outputHeight, outputWidth,
+                kernelHeight, kernelWidth, stride[0], stride[1]);
+
+            var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuWeights = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(weights.Length);
+            var gpuGradInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalInputElements);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuWeights.View.BaseView.CopyFromCPU(weights.AsSpan());
+
+                // Initialize gradInput to zero
+                var zeroData = new float[totalInputElements];
+                gpuGradInput.View.BaseView.CopyFromCPU(zeroData);
+
+                lock (_gpuLock)
+                {
+                    (_locallyConnectedConv2DBackwardInputKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        totalInputElements, gpuGradOutput.View, gpuWeights.View, gpuGradInput.View, p);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var outputData = new float[totalInputElements];
+                gpuGradInput.View.BaseView.CopyToCPU(outputData);
+
+                return new Tensor<float>(inputShape, new Vector<float>(outputData));
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGradOutput);
+                _memoryPoolFloat.Return(gpuWeights);
+                _memoryPoolFloat.Return(gpuGradInput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.LocallyConnectedConv2DBackwardInput(gradOutput, weights, inputShape, stride);
+        }
+    }
+
+    private Tensor<double> LocallyConnectedConv2DBackwardInputGpuDouble(Tensor<double> gradOutput, Tensor<double> weights, int[] inputShape, int[] stride)
+    {
+        try
+        {
+            int batch = gradOutput.Shape[0];
+            int outChannels = gradOutput.Shape[1];
+            int outputHeight = gradOutput.Shape[2];
+            int outputWidth = gradOutput.Shape[3];
+            int inChannels = inputShape[1];
+            int inputHeight = inputShape[2];
+            int inputWidth = inputShape[3];
+            int kernelHeight = weights.Shape[4];
+            int kernelWidth = weights.Shape[5];
+
+            int totalInputElements = batch * inChannels * inputHeight * inputWidth;
+
+            var p = new LocallyConnectedConv2DParams(
+                batch, inChannels, inputHeight, inputWidth,
+                outChannels, outputHeight, outputWidth,
+                kernelHeight, kernelWidth, stride[0], stride[1]);
+
+            var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuWeights = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(weights.Length);
+            var gpuGradInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalInputElements);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuWeights.View.BaseView.CopyFromCPU(weights.AsSpan());
+
+                var zeroData = new double[totalInputElements];
+                gpuGradInput.View.BaseView.CopyFromCPU(zeroData);
+
+                lock (_gpuLock)
+                {
+                    (_locallyConnectedConv2DBackwardInputKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        totalInputElements, gpuGradOutput.View, gpuWeights.View, gpuGradInput.View, p);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var outputData = new double[totalInputElements];
+                gpuGradInput.View.BaseView.CopyToCPU(outputData);
+
+                return new Tensor<double>(inputShape, new Vector<double>(outputData));
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGradOutput);
+                _memoryPoolDouble.Return(gpuWeights);
+                _memoryPoolDouble.Return(gpuGradInput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.LocallyConnectedConv2DBackwardInput(gradOutput, weights, inputShape, stride);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> LocallyConnectedConv2DBackwardWeights<T>(Tensor<T> gradOutput, Tensor<T> input, int[] weightsShape, int[] stride)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (weightsShape == null || weightsShape.Length != 6) throw new ArgumentException("weightsShape must be a 6-element array", nameof(weightsShape));
+        if (stride == null || stride.Length != 2) throw new ArgumentException("stride must be a 2-element array", nameof(stride));
+
+        int totalWeightElements = weightsShape[0] * weightsShape[1] * weightsShape[2] * weightsShape[3] * weightsShape[4] * weightsShape[5];
+
+        if (totalWeightElements < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.LocallyConnectedConv2DBackwardWeights(gradOutput, input, weightsShape, stride);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)LocallyConnectedConv2DBackwardWeightsGpu(
+                    (Tensor<float>)(object)gradOutput, (Tensor<float>)(object)input, weightsShape, stride);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)LocallyConnectedConv2DBackwardWeightsGpuDouble(
+                    (Tensor<double>)(object)gradOutput, (Tensor<double>)(object)input, weightsShape, stride);
+        }
+
+        return _cpuFallback.LocallyConnectedConv2DBackwardWeights(gradOutput, input, weightsShape, stride);
+    }
+
+    private Tensor<float> LocallyConnectedConv2DBackwardWeightsGpu(Tensor<float> gradOutput, Tensor<float> input, int[] weightsShape, int[] stride)
+    {
+        try
+        {
+            // GradOutput: [batch, outChannels, outputHeight, outputWidth]
+            // Input: [batch, inChannels, inputHeight, inputWidth]
+            // Output (gradWeights): [outputHeight, outputWidth, outChannels, inChannels, kernelHeight, kernelWidth]
+            int batch = input.Shape[0];
+            int inChannels = input.Shape[1];
+            int inputHeight = input.Shape[2];
+            int inputWidth = input.Shape[3];
+            int outputHeight = weightsShape[0];
+            int outputWidth = weightsShape[1];
+            int outChannels = weightsShape[2];
+            int kernelHeight = weightsShape[4];
+            int kernelWidth = weightsShape[5];
+
+            int totalWeightElements = outputHeight * outputWidth * outChannels * inChannels * kernelHeight * kernelWidth;
+
+            var p = new LocallyConnectedConv2DParams(
+                batch, inChannels, inputHeight, inputWidth,
+                outChannels, outputHeight, outputWidth,
+                kernelHeight, kernelWidth, stride[0], stride[1]);
+
+            var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuGradWeights = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalWeightElements);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                // Initialize gradWeights to zero
+                var zeroData = new float[totalWeightElements];
+                gpuGradWeights.View.BaseView.CopyFromCPU(zeroData);
+
+                lock (_gpuLock)
+                {
+                    (_locallyConnectedConv2DBackwardWeightsKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        totalWeightElements, gpuGradOutput.View, gpuInput.View, gpuGradWeights.View, p);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var outputData = new float[totalWeightElements];
+                gpuGradWeights.View.BaseView.CopyToCPU(outputData);
+
+                return new Tensor<float>(weightsShape, new Vector<float>(outputData));
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGradOutput);
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuGradWeights);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.LocallyConnectedConv2DBackwardWeights(gradOutput, input, weightsShape, stride);
+        }
+    }
+
+    private Tensor<double> LocallyConnectedConv2DBackwardWeightsGpuDouble(Tensor<double> gradOutput, Tensor<double> input, int[] weightsShape, int[] stride)
+    {
+        try
+        {
+            int batch = input.Shape[0];
+            int inChannels = input.Shape[1];
+            int inputHeight = input.Shape[2];
+            int inputWidth = input.Shape[3];
+            int outputHeight = weightsShape[0];
+            int outputWidth = weightsShape[1];
+            int outChannels = weightsShape[2];
+            int kernelHeight = weightsShape[4];
+            int kernelWidth = weightsShape[5];
+
+            int totalWeightElements = outputHeight * outputWidth * outChannels * inChannels * kernelHeight * kernelWidth;
+
+            var p = new LocallyConnectedConv2DParams(
+                batch, inChannels, inputHeight, inputWidth,
+                outChannels, outputHeight, outputWidth,
+                kernelHeight, kernelWidth, stride[0], stride[1]);
+
+            var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(input.Length);
+            var gpuGradWeights = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalWeightElements);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+                gpuInput.View.BaseView.CopyFromCPU(input.AsSpan());
+
+                var zeroData = new double[totalWeightElements];
+                gpuGradWeights.View.BaseView.CopyFromCPU(zeroData);
+
+                lock (_gpuLock)
+                {
+                    (_locallyConnectedConv2DBackwardWeightsKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        totalWeightElements, gpuGradOutput.View, gpuInput.View, gpuGradWeights.View, p);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var outputData = new double[totalWeightElements];
+                gpuGradWeights.View.BaseView.CopyToCPU(outputData);
+
+                return new Tensor<double>(weightsShape, new Vector<double>(outputData));
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGradOutput);
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuGradWeights);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.LocallyConnectedConv2DBackwardWeights(gradOutput, input, weightsShape, stride);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> LocallyConnectedConv2DBackwardBias<T>(Tensor<T> gradOutput)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+
+        // GradOutput: [batch, outChannels, outputHeight, outputWidth]
+        // Output (gradBias): [outputHeight, outputWidth, outChannels]
+        int outChannels = gradOutput.Shape[1];
+        int outputHeight = gradOutput.Shape[2];
+        int outputWidth = gradOutput.Shape[3];
+        int totalBiasElements = outputHeight * outputWidth * outChannels;
+
+        if (totalBiasElements < _thresholds.VectorAdd)
+        {
+            return _cpuFallback.LocallyConnectedConv2DBackwardBias(gradOutput);
+        }
+
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)LocallyConnectedConv2DBackwardBiasGpu((Tensor<float>)(object)gradOutput);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)LocallyConnectedConv2DBackwardBiasGpuDouble((Tensor<double>)(object)gradOutput);
+        }
+
+        return _cpuFallback.LocallyConnectedConv2DBackwardBias(gradOutput);
+    }
+
+    private Tensor<float> LocallyConnectedConv2DBackwardBiasGpu(Tensor<float> gradOutput)
+    {
+        try
+        {
+            // GradOutput: [batch, outChannels, outputHeight, outputWidth]
+            // Output (gradBias): [outputHeight, outputWidth, outChannels]
+            int batch = gradOutput.Shape[0];
+            int outChannels = gradOutput.Shape[1];
+            int outputHeight = gradOutput.Shape[2];
+            int outputWidth = gradOutput.Shape[3];
+
+            int totalBiasElements = outputHeight * outputWidth * outChannels;
+
+            // Note: Using dummy values for input dimensions since bias backward doesn't need them
+            var p = new LocallyConnectedConv2DParams(
+                batch, 1, 1, 1,
+                outChannels, outputHeight, outputWidth,
+                1, 1, 1, 1);
+
+            var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuGradBias = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalBiasElements);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+
+                // Initialize gradBias to zero
+                var zeroData = new float[totalBiasElements];
+                gpuGradBias.View.BaseView.CopyFromCPU(zeroData);
+
+                lock (_gpuLock)
+                {
+                    (_locallyConnectedConv2DBackwardBiasKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        totalBiasElements, gpuGradOutput.View, gpuGradBias.View, p);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var outputData = new float[totalBiasElements];
+                gpuGradBias.View.BaseView.CopyToCPU(outputData);
+
+                return new Tensor<float>(new[] { outputHeight, outputWidth, outChannels }, new Vector<float>(outputData));
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGradOutput);
+                _memoryPoolFloat.Return(gpuGradBias);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.LocallyConnectedConv2DBackwardBias(gradOutput);
+        }
+    }
+
+    private Tensor<double> LocallyConnectedConv2DBackwardBiasGpuDouble(Tensor<double> gradOutput)
+    {
+        try
+        {
+            int batch = gradOutput.Shape[0];
+            int outChannels = gradOutput.Shape[1];
+            int outputHeight = gradOutput.Shape[2];
+            int outputWidth = gradOutput.Shape[3];
+
+            int totalBiasElements = outputHeight * outputWidth * outChannels;
+
+            var p = new LocallyConnectedConv2DParams(
+                batch, 1, 1, 1,
+                outChannels, outputHeight, outputWidth,
+                1, 1, 1, 1);
+
+            var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuGradBias = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalBiasElements);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+
+                var zeroData = new double[totalBiasElements];
+                gpuGradBias.View.BaseView.CopyFromCPU(zeroData);
+
+                lock (_gpuLock)
+                {
+                    (_locallyConnectedConv2DBackwardBiasKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        totalBiasElements, gpuGradOutput.View, gpuGradBias.View, p);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var outputData = new double[totalBiasElements];
+                gpuGradBias.View.BaseView.CopyToCPU(outputData);
+
+                return new Tensor<double>(new[] { outputHeight, outputWidth, outChannels }, new Vector<double>(outputData));
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGradOutput);
+                _memoryPoolDouble.Return(gpuGradBias);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        {
+            return _cpuFallback.LocallyConnectedConv2DBackwardBias(gradOutput);
+        }
+    }
+
+    #endregion
+
+    #region Reshape
+
+    /// <inheritdoc/>
+    public Tensor<T> Reshape<T>(Tensor<T> tensor, int[] newShape)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (newShape == null) throw new ArgumentNullException(nameof(newShape));
+
+        return tensor.Reshape(newShape);
     }
 
     #endregion

@@ -440,77 +440,23 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// <param name="input">Input tensor with shape [batchSize, height, width, channels].</param>
     /// <param name="kernel">Kernel tensor with shape [kernelHeight, kernelWidth, inputChannels, outputChannels].</param>
     /// <returns>Output tensor with shape [batchSize, outputHeight, outputWidth, outputChannels].</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements a basic 2D convolution operation:
-    /// 1. Calculates output dimensions based on input size, kernel size, padding, and stride
-    /// 2. For each position in the output, computes the dot product between the kernel and the corresponding input region
-    /// 3. Handles padding by skipping positions outside the input boundaries
-    /// </para>
-    /// <para><b>For Beginners:</b> This method slides a "filter" across your data to detect patterns.
-    /// 
-    /// Convolution is like moving a spotlight across an image:
-    /// - The kernel (or filter) is the spotlight
-    /// - We move it across the input data in steps defined by the stride
-    /// - At each position, we multiply the overlapping values and sum them up
-    /// - This creates a new output value that captures local patterns
-    /// 
-    /// For example, if the kernel is designed to detect edges, the output will highlight
-    /// where edges appear in the input data. The ConvLSTM uses convolution to detect
-    /// spatial patterns while also tracking how these patterns change over time.
-    /// </para>
-    /// </remarks>
     private Tensor<T> Convolve(Tensor<T> input, Tensor<T> kernel)
     {
-        int batchSize = input.Shape[0];
-        int inputHeight = input.Shape[1];
-        int inputWidth = input.Shape[2];
-        int inputChannels = input.Shape[3];
-        int kernelHeight = kernel.Shape[0];
-        int kernelWidth = kernel.Shape[1];
-        int outputChannels = kernel.Shape[3];
+        // Transpose input from [B, H, W, C] to [B, C, H, W] for Engine
+        var inputNCHW = input.Transpose(new[] { 0, 3, 1, 2 });
 
-        int outputHeight = (inputHeight - kernelHeight + 2 * _padding) / _strides + 1;
-        int outputWidth = (inputWidth - kernelWidth + 2 * _padding) / _strides + 1;
+        // Transpose kernel from [kH, kW, inC, outC] to [outC, inC, kH, kW] for Engine
+        var kernelNCHW = kernel.Transpose(new[] { 3, 2, 0, 1 });
 
-        var output = new Tensor<T>([batchSize, outputHeight, outputWidth, outputChannels]);
+        var stride = new int[] { _strides, _strides };
+        var padding = new int[] { _padding, _padding };
+        var dilation = new int[] { 1, 1 };
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int oh = 0; oh < outputHeight; oh++)
-            {
-                for (int ow = 0; ow < outputWidth; ow++)
-                {
-                    for (int oc = 0; oc < outputChannels; oc++)
-                    {
-                        T sum = NumOps.Zero;
+        // Use GPU-accelerated Conv2D
+        var outputNCHW = Engine.Conv2D(inputNCHW, kernelNCHW, stride, padding, dilation);
 
-                        for (int kh = 0; kh < kernelHeight; kh++)
-                        {
-                            for (int kw = 0; kw < kernelWidth; kw++)
-                            {
-                                for (int ic = 0; ic < inputChannels; ic++)
-                                {
-                                    int ih = oh * _strides + kh - _padding;
-                                    int iw = ow * _strides + kw - _padding;
-
-                                    if (ih >= 0 && ih < inputHeight && iw >= 0 && iw < inputWidth)
-                                    {
-                                        T inputVal = input[b, ih, iw, ic];
-                                        T kernelVal = kernel[kh, kw, ic, oc];
-                                        sum = NumOps.Add(sum, NumOps.Multiply(inputVal, kernelVal));
-                                    }
-                                }
-                            }
-                        }
-
-                        output[b, oh, ow, oc] = sum;
-                    }
-                }
-            }
-        }
-
-        return output;
+        // Transpose output back to [B, H, W, outC]
+        return outputNCHW.Transpose(new[] { 0, 2, 3, 1 });
     }
 
     /// <summary>
@@ -958,19 +904,19 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             throw new InvalidOperationException("No gradients available. Ensure backward pass is called before updating parameters.");
         }
 
-        UpdateParameterWithMomentum(_weightsFi, "weightsFi", learningRate);
-        UpdateParameterWithMomentum(_weightsIi, "weightsIi", learningRate);
-        UpdateParameterWithMomentum(_weightsCi, "weightsCi", learningRate);
-        UpdateParameterWithMomentum(_weightsOi, "weightsOi", learningRate);
-        UpdateParameterWithMomentum(_weightsFh, "weightsFh", learningRate);
-        UpdateParameterWithMomentum(_weightsIh, "weightsIh", learningRate);
-        UpdateParameterWithMomentum(_weightsCh, "weightsCh", learningRate);
-        UpdateParameterWithMomentum(_weightsOh, "weightsOh", learningRate);
+        _weightsFi = UpdateParameterWithMomentum(_weightsFi, "weightsFi", learningRate);
+        _weightsIi = UpdateParameterWithMomentum(_weightsIi, "weightsIi", learningRate);
+        _weightsCi = UpdateParameterWithMomentum(_weightsCi, "weightsCi", learningRate);
+        _weightsOi = UpdateParameterWithMomentum(_weightsOi, "weightsOi", learningRate);
+        _weightsFh = UpdateParameterWithMomentum(_weightsFh, "weightsFh", learningRate);
+        _weightsIh = UpdateParameterWithMomentum(_weightsIh, "weightsIh", learningRate);
+        _weightsCh = UpdateParameterWithMomentum(_weightsCh, "weightsCh", learningRate);
+        _weightsOh = UpdateParameterWithMomentum(_weightsOh, "weightsOh", learningRate);
 
-        UpdateParameterWithMomentum(_biasF, "biasF", learningRate);
-        UpdateParameterWithMomentum(_biasI, "biasI", learningRate);
-        UpdateParameterWithMomentum(_biasC, "biasC", learningRate);
-        UpdateParameterWithMomentum(_biasO, "biasO", learningRate);
+        _biasF = UpdateParameterWithMomentum(_biasF, "biasF", learningRate);
+        _biasI = UpdateParameterWithMomentum(_biasI, "biasI", learningRate);
+        _biasC = UpdateParameterWithMomentum(_biasC, "biasC", learningRate);
+        _biasO = UpdateParameterWithMomentum(_biasO, "biasO", learningRate);
 
         // Clear gradients after update
         _gradients.Clear();
@@ -1008,7 +954,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// - Small bumps in the terrain (noisy gradients) don't easily knock the ball off course
     /// </para>
     /// </remarks>
-    private void UpdateParameterWithMomentum(Tensor<T> parameter, string paramName, T learningRate)
+    private Tensor<T> UpdateParameterWithMomentum(Tensor<T> parameter, string paramName, T learningRate)
     {
         if (!_gradients.TryGetValue(paramName, out var gradientObj) || gradientObj is not Tensor<T> gradient)
         {
@@ -1018,20 +964,19 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         if (!_momentums.TryGetValue(paramName, out var momentum))
         {
             momentum = new Tensor<T>(parameter.Shape);
-            _momentums[paramName] = momentum;
+            // Initialize to zero (new Tensor does this)
         }
 
-        for (int i = 0; i < parameter.Length; i++)
-        {
-            // Update momentum
-            momentum[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(MomentumFactor), momentum[i]),
-                NumOps.Multiply(learningRate, gradient[i])
-            );
+        // momentum = momentumFactor * momentum + learningRate * gradient
+        var momFactor = NumOps.FromDouble(MomentumFactor);
+        var term1 = Engine.TensorMultiplyScalar(momentum, momFactor);
+        var term2 = Engine.TensorMultiplyScalar(gradient, learningRate);
+        var newMomentum = Engine.TensorAdd(term1, term2);
 
-            // Update parameter
-            parameter[i] = NumOps.Subtract(parameter[i], momentum[i]);
-        }
+        _momentums[paramName] = newMomentum;
+
+        // parameter = parameter - momentum
+        return Engine.TensorSubtract(parameter, newMomentum);
     }
 
     /// <summary>

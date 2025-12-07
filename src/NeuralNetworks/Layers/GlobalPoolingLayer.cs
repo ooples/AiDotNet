@@ -113,6 +113,11 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     private Tensor<T>? _lastOutput;
 
     /// <summary>
+    /// Stores the indices of the maximum values found during global max pooling.
+    /// </summary>
+    private int[]? _maxIndices;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -280,42 +285,21 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[3];
-        int height = input.Shape[1];
-        int width = input.Shape[2];
+        
+        // Global pooling reduces spatial dimensions (height=1, width=2)
+        var axes = new int[] { 1, 2 };
 
-        var output = new Tensor<T>([batchSize, 1, 1, channels]);
-
-        for (int b = 0; b < batchSize; b++)
+        Tensor<T> output;
+        if (_poolingType == PoolingType.Average)
         {
-            for (int c = 0; c < channels; c++)
-            {
-                T pooledValue = _poolingType == PoolingType.Average ? NumOps.Zero : NumOps.MinValue;
-
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        T value = input[b, h, w, c];
-                        if (_poolingType == PoolingType.Average)
-                        {
-                            pooledValue = NumOps.Add(pooledValue, value);
-                        }
-                        else // Max pooling
-                        {
-                            pooledValue = MathHelper.Max(pooledValue, value);
-                        }
-                    }
-                }
-
-                if (_poolingType == PoolingType.Average)
-                {
-                    pooledValue = NumericalStabilityHelper.SafeDiv(pooledValue, NumOps.FromDouble(height * width));
-                }
-
-                output[b, 0, 0, c] = pooledValue;
-            }
+            // Use GPU-accelerated ReduceMean
+            output = Engine.ReduceMean(input, axes, keepDims: true);
+            _maxIndices = null;
+        }
+        else // Max pooling
+        {
+            // Use GPU-accelerated ReduceMax
+            output = Engine.ReduceMax(input, axes, keepDims: true, out _maxIndices);
         }
 
         _lastOutput = ApplyActivation(output);
@@ -374,60 +358,24 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        int batchSize = _lastInput.Shape[0];
-        int height = _lastInput.Shape[1];
-        int width = _lastInput.Shape[2];
-        int channels = _lastInput.Shape[3];
-
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-
         // Apply activation derivative
         outputGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
 
-        for (int b = 0; b < batchSize; b++)
+        var axes = new int[] { 1, 2 };
+
+        if (_poolingType == PoolingType.Average)
         {
-            for (int c = 0; c < channels; c++)
-            {
-                T gradientValue = outputGradient[b, 0, 0, c];
-
-                if (_poolingType == PoolingType.Average)
-                {
-                    T averageGradient = NumericalStabilityHelper.SafeDiv(gradientValue, NumOps.FromDouble(height * width));
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            inputGradient[b, h, w, c] = averageGradient;
-                        }
-                    }
-                }
-                else // Max pooling
-                {
-                    T maxValue = NumOps.MinValue;
-                    int maxH = 0, maxW = 0;
-
-                    // Find the position of the maximum value
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            T value = _lastInput[b, h, w, c];
-                            if (NumOps.GreaterThan(value, maxValue))
-                            {
-                                maxValue = value;
-                                maxH = h;
-                                maxW = w;
-                            }
-                        }
-                    }
-
-                    // Set the gradient only for the maximum value position
-                    inputGradient[b, maxH, maxW, c] = gradientValue;
-                }
-            }
+            // Use GPU-accelerated ReduceMeanBackward
+            return Engine.ReduceMeanBackward(outputGradient, _lastInput.Shape, axes);
         }
+        else // Max pooling
+        {
+            if (_maxIndices == null)
+                throw new InvalidOperationException("Max indices not available for backward pass.");
 
-        return inputGradient;
+            // Use GPU-accelerated ReduceMaxBackward
+            return Engine.ReduceMaxBackward(outputGradient, _maxIndices, _lastInput.Shape);
+        }
     }
 
     /// <summary>
@@ -623,6 +571,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
+        _maxIndices = null;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

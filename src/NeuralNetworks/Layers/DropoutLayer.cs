@@ -244,13 +244,9 @@ public class DropoutLayer<T> : LayerBase<T>
         if (!IsTrainingMode)
             return input;
 
-        // Generate dropout mask (random generation must be element-wise)
-        _dropoutMask = new Tensor<T>(input.Shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            var keepNeuron = Random.NextDouble() > Convert.ToDouble(_dropoutRate);
-            _dropoutMask[i] = keepNeuron ? _scale : NumOps.Zero;
-        }
+        // Generate dropout mask using Engine (allows for potential acceleration)
+        var maskVector = Engine.GenerateDropoutMask(input.Length, _dropoutRate, _scale);
+        _dropoutMask = Tensor<T>.FromVector(maskVector, input.Shape);
 
         // Apply mask using Engine for GPU/CPU accelerated element-wise multiplication
         return Engine.TensorMultiply(input, _dropoutMask);
@@ -381,7 +377,10 @@ public class DropoutLayer<T> : LayerBase<T>
             }
         }
 
-        return input.Gradient!;
+        if (input.Gradient == null)
+            throw new InvalidOperationException("Input gradient was not computed during backward pass.");
+
+        return input.Gradient;
     }
 
     /// <summary>

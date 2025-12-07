@@ -205,60 +205,7 @@ public class FlattenLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         int batchSize = input.Shape[0];
-        var output = new Tensor<T>([batchSize, _outputSize]);
-        for (int i = 0; i < batchSize; i++)
-        {
-            int flatIndex = 0;
-            FlattenRecursive(input, i, new int[_inputShape.Length], 0, ref flatIndex, output);
-        }
-        return output;
-    }
-
-    /// <summary>
-    /// Recursively flattens a multi-dimensional tensor into a 1D vector.
-    /// </summary>
-    /// <param name="input">The input tensor to flatten.</param>
-    /// <param name="batchIndex">The index of the current batch example.</param>
-    /// <param name="indices">The current indices in the multi-dimensional tensor.</param>
-    /// <param name="currentDimension">The current dimension being processed (0-based).</param>
-    /// <param name="flatIndex">Reference to the current index in the flattened output.</param>
-    /// <param name="output">The output tensor to store the flattened values.</param>
-    /// <remarks>
-    /// <para>
-    /// This helper method recursively traverses the multi-dimensional input tensor and copies each value
-    /// to the corresponding position in the flattened output tensor. It uses a depth-first traversal
-    /// strategy to maintain a consistent ordering of the elements.
-    /// </para>
-    /// <para><b>For Beginners:</b> This helper method walks through all positions in the multi-dimensional input.
-    ///
-    /// The method works like this:
-    /// - It visits every position in the multi-dimensional input one by one
-    /// - For each position, it copies the value to the flattened output
-    /// - It uses recursion (a function calling itself) to handle any number of dimensions
-    ///
-    /// Think of it like reading a book:
-    /// - You read page by page, line by line, word by word
-    /// - The method does the same with multi-dimensional data
-    /// - It follows a specific order (like left-to-right, top-to-bottom) to ensure consistency
-    ///
-    /// This organized traversal ensures that when we need to "unflatten" during
-    /// backpropagation, we know exactly where each value should go.
-    /// </para>
-    /// </remarks>
-    private void FlattenRecursive(Tensor<T> input, int batchIndex, int[] indices, int currentDimension, ref int flatIndex, Tensor<T> output)
-    {
-        if (currentDimension == _inputShape.Length)
-        {
-            // Base case: all dimensions processed, copy the value
-            output[batchIndex, flatIndex++] = input[new int[] { batchIndex }.Concat(indices).ToArray()];
-            return;
-        }
-        // Recurse through the current dimension
-        for (int i = 0; i < _inputShape[currentDimension]; i++)
-        {
-            indices[currentDimension] = i;
-            FlattenRecursive(input, batchIndex, indices, currentDimension + 1, ref flatIndex, output);
-        }
+        return Engine.Reshape(input, [batchSize, _outputSize]);
     }
 
     /// <summary>
@@ -267,30 +214,6 @@ public class FlattenLayer<T> : LayerBase<T>
     /// <param name="outputGradient">The gradient tensor from the next layer. Shape: [batchSize, outputSize].</param>
     /// <returns>The gradient tensor reshaped to the original input shape. Shape: [batchSize, ...inputShape].</returns>
     /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass (backpropagation) of the flatten layer. It takes the gradient
-    /// tensor from the next layer, which is a 2D tensor with flattened gradients, and reshapes it back to
-    /// the original input shape. This allows the gradients to flow back to previous layers with the correct shape.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method converts the flat gradients back to the original multi-dimensional shape.
-    ///
-    /// During the backward pass:
-    /// 1. Take the gradient vector from the next layer
-    /// 2. For each example in the batch:
-    ///    - Go through all positions in the flat gradient vector
-    ///    - Place each value back into the corresponding position in a multi-dimensional tensor
-    /// 3. Return a gradient tensor with the same shape as the original input
-    ///
-    /// This "unflattening" is essential because:
-    /// - Previous layers (like convolutional layers) expect gradients in multi-dimensional form
-    /// - Each gradient value needs to go back to its original position
-    /// - The layer must maintain the exact inverse mapping of the forward pass
-    ///
-    /// It's like taking a long string of text and reformatting it back into pages,
-    /// paragraphs, and lines of a book.
-    /// </para>
-    /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         return UseAutodiff
@@ -308,14 +231,8 @@ public class FlattenLayer<T> : LayerBase<T>
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        int batchSize = outputGradient.Shape[0];
-        for (int i = 0; i < batchSize; i++)
-        {
-            int flatIndex = 0;
-            UnflattenRecursive(outputGradient, i, new int[_inputShape.Length], 0, ref flatIndex, inputGradient);
-        }
-        return inputGradient;
+        
+        return Engine.Reshape(outputGradient, _lastInput.Shape);
     }
 
     /// <summary>
@@ -385,52 +302,6 @@ public class FlattenLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Gradient computation failed in automatic differentiation.");
 
         return inputNode.Gradient;
-    }
-
-    /// <summary>
-    /// Recursively unflattens a 1D vector into a multi-dimensional tensor.
-    /// </summary>
-    /// <param name="outputGradient">The output gradient tensor to unflatten.</param>
-    /// <param name="batchIndex">The index of the current batch example.</param>
-    /// <param name="indices">The current indices in the multi-dimensional tensor.</param>
-    /// <param name="currentDimension">The current dimension being processed (0-based).</param>
-    /// <param name="flatIndex">Reference to the current index in the flattened gradient.</param>
-    /// <param name="inputGradient">The input gradient tensor to store the unflattened values.</param>
-    /// <remarks>
-    /// <para>
-    /// This helper method recursively traverses the flattened gradient tensor and copies each value
-    /// back to the corresponding position in the multi-dimensional input gradient tensor. It uses
-    /// the same traversal strategy as the flattening process to ensure consistency.
-    /// </para>
-    /// <para><b>For Beginners:</b> This helper method reverses the flattening process for gradients.
-    ///
-    /// The method works like this:
-    /// - It visits every position in the flattened gradient one by one
-    /// - For each position, it copies the gradient value back to the multi-dimensional form
-    /// - It follows the exact same path as the flattening process, but in reverse
-    ///
-    /// Think of it like reassembling a puzzle:
-    /// - Each piece (gradient value) has a specific place it needs to go
-    /// - The method knows the exact location for each value based on the original flattening
-    /// - It carefully places each value back where it belongs
-    ///
-    /// This precise reconstruction ensures that gradient information flows correctly to earlier layers.
-    /// </para>
-    /// </remarks>
-    private void UnflattenRecursive(Tensor<T> outputGradient, int batchIndex, int[] indices, int currentDimension, ref int flatIndex, Tensor<T> inputGradient)
-    {
-        if (currentDimension == _inputShape.Length)
-        {
-            // Base case: all dimensions processed, copy the gradient value
-            inputGradient[new int[] { batchIndex }.Concat(indices).ToArray()] = outputGradient[batchIndex, flatIndex++];
-            return;
-        }
-        // Recurse through the current dimension
-        for (int i = 0; i < _inputShape[currentDimension]; i++)
-        {
-            indices[currentDimension] = i;
-            UnflattenRecursive(outputGradient, batchIndex, indices, currentDimension + 1, ref flatIndex, inputGradient);
-        }
     }
 
     /// <summary>

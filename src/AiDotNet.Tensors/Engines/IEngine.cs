@@ -1629,6 +1629,16 @@ public interface IEngine
     #region Tensor Operations (Phase B: Epic 3)
 
     /// <summary>
+    /// Reshapes a tensor to a new shape with the same total number of elements.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor to reshape.</param>
+    /// <param name="newShape">The new shape dimensions.</param>
+    /// <returns>A new tensor with the specified shape and the same data.</returns>
+    /// <exception cref="ArgumentException">Thrown when the total number of elements doesn't match.</exception>
+    Tensor<T> Reshape<T>(Tensor<T> tensor, int[] newShape);
+
+    /// <summary>
     /// Performs batched matrix multiplication on 3D tensors.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
@@ -1672,6 +1682,28 @@ public interface IEngine
     /// </para>
     /// </remarks>
     Tensor<T> TensorAdd<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Adds two tensors with broadcasting support, following NumPy/PyTorch broadcasting rules.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor. Can have different shape if broadcastable.</param>
+    /// <returns>A new tensor containing the element-wise sum with broadcasting.</returns>
+    /// <exception cref="ArgumentException">Thrown when shapes are not broadcastable.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Element-Wise Operations with Broadcasting</b></para>
+    /// <para>
+    /// Broadcasting allows tensors of different shapes to be added together by automatically
+    /// expanding dimensions of size 1 to match the other tensor. This is essential for operations
+    /// like adding per-channel bias in convolutional layers.
+    /// </para>
+    /// <para>
+    /// For example, adding shapes [batch, channels, H, W] + [1, channels, 1, 1] broadcasts
+    /// the bias across batch and spatial dimensions.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorBroadcastAdd<T>(Tensor<T> a, Tensor<T> b);
 
     /// <summary>
     /// Adds multiple tensors element-wise in a single optimized operation.
@@ -2248,22 +2280,37 @@ public interface IEngine
     /// <summary>
     /// Computes the gradient of Conv2D with respect to the kernel (weights).
     /// </summary>
-    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="gradOutput">The gradient flowing back from the output.</param>
-    /// <param name="input">The original input tensor.</param>
-    /// <param name="kernelShape">The shape of the kernel [out_channels, in_channels, kernelH, kernelW].</param>
-    /// <param name="stride">The stride [strideH, strideW] used in forward pass.</param>
-    /// <param name="padding">The padding [padH, padW] used in forward pass.</param>
-    /// <param name="dilation">The dilation [dilationH, dilationW] used in forward pass.</param>
-    /// <returns>The gradient with respect to the kernel.</returns>
     Tensor<T> Conv2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding, int[] dilation);
+
+    /// <summary>
+    /// Performs a Locally Connected 2D convolution.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, in_channels, height, width].</param>
+    /// <param name="weights">The weights tensor [out_h, out_w, out_channels, in_channels, kernel_h, kernel_w].</param>
+    /// <param name="bias">Optional bias tensor [out_channels].</param>
+    /// <param name="stride">The stride [strideH, strideW].</param>
+    /// <returns>The convolved tensor [batch, out_channels, output_height, output_width].</returns>
+    Tensor<T> LocallyConnectedConv2D<T>(Tensor<T> input, Tensor<T> weights, Tensor<T>? bias, int[] stride);
+
+    /// <summary>
+    /// Computes the gradient of LocallyConnectedConv2D with respect to the input tensor.
+    /// </summary>
+    Tensor<T> LocallyConnectedConv2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> weights, int[] inputShape, int[] stride);
+
+    /// <summary>
+    /// Computes the gradient of LocallyConnectedConv2D with respect to the weights.
+    /// </summary>
+    Tensor<T> LocallyConnectedConv2DBackwardWeights<T>(Tensor<T> gradOutput, Tensor<T> input, int[] weightsShape, int[] stride);
+
+    /// <summary>
+    /// Computes the gradient of LocallyConnectedConv2D with respect to the bias.
+    /// </summary>
+    Tensor<T> LocallyConnectedConv2DBackwardBias<T>(Tensor<T> gradOutput);
 
     /// <summary>
     /// Transposes a 2D tensor (matrix represented as tensor).
     /// </summary>
-    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="tensor">The input 2D tensor to transpose.</param>
-    /// <returns>The transposed tensor where rows become columns.</returns>
     Tensor<T> TensorTranspose<T>(Tensor<T> tensor);
 
     /// <summary>

@@ -411,29 +411,66 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int sequenceLength = input.Shape[1];
         int embeddingDimension = input.Shape[2];
 
-        var queries = input.Multiply(_queryWeights);
-        var keys = input.Multiply(_keyWeights);
-        var values = input.Multiply(_valueWeights);
+        // 1. Project Input to Q, K, V
+        // Reshape input to 2D [Batch*Seq, EmbedDim] for efficient MatrixMultiply
+        var input2D = input.Reshape(batchSize * sequenceLength, _embeddingDimension);
 
-        queries = queries.Reshape(batchSize, sequenceLength, _headCount, _headDimension);
-        keys = keys.Reshape(batchSize, sequenceLength, _headCount, _headDimension);
-        values = values.Reshape(batchSize, sequenceLength, _headCount, _headDimension);
+        // Compute Projections: [B*S, E] @ [E, E] -> [B*S, E]
+        // Using Engine.TensorMatMul for GPU acceleration
+        var Q_flat = Engine.TensorMatMul(input2D, _queryWeights);
+        var K_flat = Engine.TensorMatMul(input2D, _keyWeights);
+        var V_flat = Engine.TensorMatMul(input2D, _valueWeights);
 
-        var attentionScores = queries.Multiply(keys.Reshape(batchSize, sequenceLength, _headDimension, _headCount));
+        // Reshape to [Batch, Seq, HeadCount, HeadDim]
+        var queries = Q_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension);
+        var keys = K_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension);
+        var values = V_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension);
+
+        // Transpose for multi-head attention: [Batch, HeadCount, Seq, HeadDim]
+        // This aligns dimensions for batched matrix multiplication
+        var Q = queries.Transpose(new[] { 0, 2, 1, 3 });
+        var K = keys.Transpose(new[] { 0, 2, 1, 3 });
+        var V = values.Transpose(new[] { 0, 2, 1, 3 });
+
+        // 2. Compute Attention Scores: Q @ K.T
+        // K is [B, H, S, D]. We need K.T as [B, H, D, S]
+        var KT = K.Transpose(new[] { 0, 1, 3, 2 });
+
+        // Flatten batch and heads for 3D BatchMatMul: [B*H, S, D] @ [B*H, D, S] -> [B*H, S, S]
+        var Q_3D = Q.Reshape(batchSize * _headCount, sequenceLength, _headDimension);
+        var KT_3D = KT.Reshape(batchSize * _headCount, _headDimension, sequenceLength);
+        
+        var attentionScores = Engine.BatchMatMul(Q_3D, KT_3D);
+
+        // 3. Scale
         T scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_headDimension));
         T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
-        attentionScores = attentionScores.Multiply(scaleValue);
+        attentionScores = Engine.TensorMultiplyScalar(attentionScores, scaleValue);
 
+        // 4. Softmax (applied to last dimension S)
+        // Note: SoftmaxActivation should use Engine.Softmax which handles 3D tensors
         var softmaxActivation = new SoftmaxActivation<T>();
         var attentionWeights = softmaxActivation.Activate(attentionScores);
-        _lastAttentionScores = attentionWeights;
+        
+        // Reshape for caching [B, H, S, S]
+        _lastAttentionScores = attentionWeights.Reshape(batchSize, _headCount, sequenceLength, sequenceLength);
 
-        var attentionOutput = attentionWeights.Multiply(values);
-        attentionOutput = attentionOutput.Reshape(batchSize, sequenceLength, embeddingDimension);
+        // 5. Output: Weights @ V
+        // [B*H, S, S] @ [B*H, S, D] -> [B*H, S, D]
+        var V_3D = V.Reshape(batchSize * _headCount, sequenceLength, _headDimension);
+        var attentionOutput = Engine.BatchMatMul(attentionWeights, V_3D);
 
-        var output = attentionOutput.Add(_outputBias);
-        _lastOutput = ApplyActivation(output);
+        // 6. Reshape and Project Output
+        // [B*H, S, D] -> [B, H, S, D] -> Transpose -> [B, S, H, D] -> [B, S, E]
+        var output4D = attentionOutput.Reshape(batchSize, _headCount, sequenceLength, _headDimension);
+        var outputTransposed = output4D.Transpose(new[] { 0, 2, 1, 3 });
+        var outputFlat = outputTransposed.Reshape(batchSize, sequenceLength, embeddingDimension);
 
+        // 7. Add Bias
+        // Use Tensor.Add(Vector) which broadcasts bias [E] to [B, S, E]
+        var outputBiased = outputFlat.Add(_outputBias.ToVector());
+
+        _lastOutput = ApplyActivation(outputBiased);
         return _lastOutput;
     }
 

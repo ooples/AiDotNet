@@ -649,25 +649,21 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentException($"DenseLayer expects 1D or 2D input, but got {input.Rank}D input", nameof(input));
         }
 
-        // Transpose weights tensor for 2D tensor multiplication
-        var weightsTransposed = _weights.Transpose([1, 0]);
-        var output = flattenedInput.Multiply(weightsTransposed).Add(_biases);
+        // Forward: output = input @ weights.T + biases
+        // input: [batch, inputSize]
+        // weights: [outputSize, inputSize]
+        // weights.T: [inputSize, outputSize]
+        // result: [batch, outputSize]
+        var weightsTransposed = Engine.TensorTranspose(_weights);
+        var matmul = Engine.TensorMatMul(flattenedInput, weightsTransposed);
+
+        // Add biases (broadcasted automatically by Engine or Tensor ops)
+        var output = Engine.TensorAdd(matmul, _biases);
 
         // Cache pre-activation output for proper gradient computation in backward pass
         _lastOutput = output;
 
-        Tensor<T> result;
-        if (UsingVectorActivation)
-        {
-            // Use centralized ActivationHelper for optimized activation dispatch
-            if (VectorActivation == null)
-                throw new InvalidOperationException("VectorActivation is null when UsingVectorActivation is true");
-            result = ActivationHelper.ApplyActivation(VectorActivation, output, Engine);
-        }
-        else
-        {
-            result = ApplyActivation(output);
-        }
+        Tensor<T> result = ApplyActivation(output);
 
         // If input was 1D, squeeze output back to 1D
         if (inputWas1D && result.Rank == 2 && result.Shape[0] == 1)
@@ -717,43 +713,24 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null)
+        if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        if (_lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Apply chain rule: dL/dz = dL/dy ⊙ f'(z)
-        // where f'(z) is the activation derivative evaluated at pre-activation values
+        // 1. Calculate activation gradient: dL/dz = dL/dy * f'(z)
+        // Unified Backward method handles both Scalar and Vector activations efficiently
         Tensor<T> activationGradient;
-        if (UsingVectorActivation)
+
+        if (UsingVectorActivation && VectorActivation != null)
         {
-            if (VectorActivation == null)
-                throw new InvalidOperationException("VectorActivation is null when UsingVectorActivation is true");
-
-            // Compute activation derivative at pre-activation values
-            var actDeriv = VectorActivation.Derivative(_lastOutput);
-
-            // Element-wise multiply with upstream gradient to apply chain rule
-            activationGradient = new Tensor<T>(outputGradient.Shape);
-            for (int i = 0; i < outputGradient.Length; i++)
-            {
-                activationGradient[i] = NumOps.Multiply(outputGradient[i], actDeriv[i]);
-            }
+             activationGradient = VectorActivation.Backward(_lastInput, outputGradient);
+        }
+        else if (ScalarActivation != null)
+        {
+             activationGradient = ScalarActivation.Backward(_lastInput, outputGradient);
         }
         else
         {
-            if (ScalarActivation == null)
-                throw new InvalidOperationException("ScalarActivation is null when UsingVectorActivation is false");
-
-            // Apply scalar activation derivative element-wise with chain rule
-            activationGradient = new Tensor<T>(outputGradient.Shape);
-            for (int i = 0; i < outputGradient.Length; i++)
-            {
-                // Compute derivative at pre-activation value and multiply with upstream gradient
-                var deriv = ScalarActivation.Derivative(_lastOutput[i]);
-                activationGradient[i] = NumOps.Multiply(outputGradient[i], deriv);
-            }
+             activationGradient = outputGradient; // Identity
         }
 
         // Handle both 1D and 2D inputs for gradient computation
@@ -777,12 +754,20 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             ? activationGradient
             : activationGradient.Reshape(batchSize, OutputShape[0]);
 
-        // Compute gradients using tensor operations directly
-        _weightsGradient = flattenedGradient.Transpose([1, 0]).Multiply(flattenedInput);
+        // 2. Compute Weight Gradients: dW = (dL/dz)^T @ input
+        // [batch, output]^T @ [batch, input] -> [output, batch] @ [batch, input] -> [output, input]
+        var gradientTransposed = Engine.TensorTranspose(flattenedGradient);
+        _weightsGradient = Engine.TensorMatMul(gradientTransposed, flattenedInput);
+
+        // 3. Compute Bias Gradients: dB = sum(dL/dz, axis=0)
+        // Sum gradients across the batch dimension
+        // Using Engine.Sum if available, otherwise Tensor.Sum
         _biasesGradient = flattenedGradient.Sum([0]);
 
-        // Compute input gradient: [batchSize, outputSize] @ [outputSize, inputSize] = [batchSize, inputSize]
-        var inputGradient = flattenedGradient.Multiply(_weights);
+        // 4. Compute Input Gradient: dX = dL/dz @ W
+        // [batch, output] @ [output, input] -> [batch, input]
+        // W is [output, input]. 
+        var inputGradient = Engine.TensorMatMul(flattenedGradient, _weights);
 
         return inputGradient.Reshape(_lastInput.Shape);
     }
@@ -909,86 +894,6 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // This is a limitation of autodiff - not all activations are implemented yet
             return input;
         }
-    }
-
-    /// <summary>
-    /// Broadcasts biases across the batch dimension.
-    /// </summary>
-    private Tensor<T> BroadcastBiases(Tensor<T> biases, int batchSize)
-    {
-        var biasLength = biases.Length;
-        var broadcasted = new Tensor<T>(new int[] { batchSize, biasLength });
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < biasLength; j++)
-            {
-                broadcasted[i, j] = biases[j];
-            }
-        }
-
-        return broadcasted;
-    }
-
-    /// <summary>
-    /// Converts a Matrix to a 2D Tensor.
-    /// </summary>
-    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
-    {
-        var tensor = new Tensor<T>(new int[] { matrix.Rows, matrix.Columns });
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                tensor[i, j] = matrix[i, j];
-            }
-        }
-        return tensor;
-    }
-
-    /// <summary>
-    /// Converts a Vector to a 1D Tensor.
-    /// </summary>
-    private Tensor<T> VectorToTensor(Vector<T> vector)
-    {
-        // Use Tensor.FromVector for efficient conversion
-        return Tensor<T>.FromVector(vector);
-    }
-
-    /// <summary>
-    /// Converts a 2D Tensor to a Matrix.
-    /// </summary>
-    private Matrix<T> TensorToMatrix(Tensor<T> tensor)
-    {
-        if (tensor.Rank != 2)
-            throw new ArgumentException("Tensor must be 2D to convert to Matrix");
-
-        var matrix = new Matrix<T>(tensor.Shape[0], tensor.Shape[1]);
-        for (int i = 0; i < tensor.Shape[0]; i++)
-        {
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                matrix[i, j] = tensor[i, j];
-            }
-        }
-        return matrix;
-    }
-
-    /// <summary>
-    /// Converts a 1D Tensor to a Vector.
-    /// </summary>
-    private Vector<T> TensorToVector(Tensor<T> tensor)
-    {
-        // Handle both 1D and 2D tensors (for column vectors)
-        int length = tensor.Length;
-        var vector = new Vector<T>(length);
-
-        for (int i = 0; i < length; i++)
-        {
-            vector[i] = tensor[i];
-        }
-
-        return vector;
     }
 
     /// <summary>

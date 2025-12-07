@@ -349,40 +349,38 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // 1. Compute entropy regularization per head
         // H = -Σ(p * log(p)) for attention weights
-        // We want to maximize entropy (minimize -H), so we negate
-        T totalEntropy = NumOps.Zero;
-        int batchSize = _lastAttentionScores.Shape[0];
-        int sequenceLength = _lastAttentionScores.Shape[2];
+        // We want to maximize entropy (minimize -H), so we minimize Σ(p * log(p))
+        // Use GPU-accelerated tensor operations
+        T epsilon = NumOps.FromDouble(1e-10);
+        
+        // Clamp values to avoid log(0)
+        var clamped = Engine.TensorMax(_lastAttentionScores, epsilon);
+        var logP = Engine.TensorLog(clamped);
+        var pLogP = Engine.TensorMultiply(clamped, logP);
+        
+        // Sum over all elements (Batch, Head, Seq, Seq)
+        T sumPLogP = Engine.TensorSum(pLogP);
+        
+        // Entropy = -sumPLogP. We want to maximize Entropy, so minimize -Entropy = sumPLogP.
+        // Wait, original code minimized -H.
+        // H = -sum(p log p). -H = sum(p log p).
+        // So we minimize sum(p log p).
+        
+        // Actually, higher entropy = more uniform.
+        // If we want to prevent collapse (too peaked), we want high entropy.
+        // Loss = -Entropy = sum(p log p).
+        // p log p is negative (since p < 1). Sum is negative.
+        // Entropy is positive.
+        // -Entropy is negative.
+        // Minimizing a negative number -> making it more negative -> increasing magnitude of entropy -> increasing entropy.
+        
+        // Original code calculated totalNegativeEntropy = -H. And returned weighted loss.
+        // So returning sumPLogP is correct.
+        
+        T totalNegativeEntropy = sumPLogP; // This is -Entropy
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < _headCount; h++)
-            {
-                T headEntropy = NumOps.Zero;
-                for (int i = 0; i < sequenceLength; i++)
-                {
-                    for (int j = 0; j < sequenceLength; j++)
-                    {
-                        // Get attention weight for this head using correct indexing
-                        T attnWeight = _lastAttentionScores[new int[] { b, h, i, j }];
-
-                        // Skip zero or very small values to avoid log(0)
-                        if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
-                            continue;
-
-                        // H = -Σ(p * log(p))
-                        T logWeight = NumOps.Log(attnWeight);
-                        T term = NumOps.Multiply(attnWeight, logWeight);
-                        headEntropy = NumOps.Subtract(headEntropy, term);
-                    }
-                }
-                // We want to maximize entropy, so minimize -entropy
-                totalEntropy = NumOps.Subtract(totalEntropy, headEntropy);
-            }
-        }
-
-        _lastEntropyLoss = totalEntropy;
-        totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(AuxiliaryLossWeight, totalEntropy));
+        _lastEntropyLoss = totalNegativeEntropy;
+        totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(AuxiliaryLossWeight, totalNegativeEntropy));
 
         // 2. Compute head diversity penalty
         // Penalize high cosine similarity between head outputs
@@ -524,39 +522,60 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int sequenceLength = input.Shape[1];
         int embeddingDimension = input.Shape[2];
 
-        var queries = input.Multiply(_queryWeights);
-        var keys = input.Multiply(_keyWeights);
-        var values = input.Multiply(_valueWeights);
+        // 1. Project Input to Q, K, V
+        var input2D = input.Reshape(batchSize * sequenceLength, embeddingDimension);
+        
+        var Q_flat = Engine.TensorMatMul(input2D, _queryWeights);
+        var K_flat = Engine.TensorMatMul(input2D, _keyWeights);
+        var V_flat = Engine.TensorMatMul(input2D, _valueWeights);
 
-        queries = queries.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
-        keys = keys.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
-        values = values.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
+        // Reshape and Transpose to [Batch, HeadCount, Seq, HeadDim]
+        var queries = Q_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
+        var keys = K_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
+        var values = V_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
 
-        var attentionScores = queries.Multiply(keys.Transpose([0, 1, 3, 2]));
+        // 2. Compute Attention Scores: Q @ K.T
+        // [B, H, S, D] @ [B, H, D, S] -> [B, H, S, S]
+        // Flatten batch and heads for 3D BatchMatMul
+        var Q_3D = queries.Reshape(batchSize * _headCount, sequenceLength, _headDimension);
+        var K_3D = keys.Reshape(batchSize * _headCount, sequenceLength, _headDimension);
+        var KT_3D = K_3D.Transpose(new[] { 0, 2, 1 });
+        
+        var attentionScores = Engine.BatchMatMul(Q_3D, KT_3D);
+
+        // Scale
         T scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_headDimension));
         T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
-        attentionScores = attentionScores.Multiply(scaleValue);
+        attentionScores = Engine.TensorMultiplyScalar(attentionScores, scaleValue);
 
+        // Softmax
         var softmaxActivation = new SoftmaxActivation<T>();
         var attentionWeights = softmaxActivation.Activate(attentionScores);
-        _lastAttentionScores = attentionWeights;
+        _lastAttentionScores = attentionWeights.Reshape(batchSize, _headCount, sequenceLength, sequenceLength);
 
-        var attentionOutput = attentionWeights.Multiply(values);
+        // 3. Output: Weights @ V
+        // [B*H, S, S] @ [B*H, S, D] -> [B*H, S, D]
+        var V_3D = values.Reshape(batchSize * _headCount, sequenceLength, _headDimension);
+        var attentionOutput = Engine.BatchMatMul(attentionWeights, V_3D);
 
-        // Cache per-head outputs for head diversity loss computation
-        // Shape before transpose: [batchSize, headCount, sequenceLength, headDimension]
+        // 4. Cache Head Outputs
+        var context_4D = attentionOutput.Reshape(batchSize, _headCount, sequenceLength, _headDimension);
         _lastHeadOutputs = new List<Tensor<T>>(_headCount);
+        var permutedForCache = context_4D.Transpose(new[] { 1, 0, 2, 3 }); // [H, B, S, D]
         for (int h = 0; h < _headCount; h++)
         {
-            // Extract output for head h: [batchSize, sequenceLength, headDimension]
-            var headOutput = attentionOutput.Slice(1, h, h + 1);  // Slice along head dimension
-            headOutput = headOutput.Reshape(batchSize, sequenceLength, _headDimension);
-            _lastHeadOutputs.Add(headOutput);
+            _lastHeadOutputs.Add(permutedForCache.Slice(h));
         }
 
-        attentionOutput = attentionOutput.Transpose([0, 2, 1, 3]).Reshape(batchSize, sequenceLength, embeddingDimension);
-
-        var output = attentionOutput.Multiply(_outputWeights).Add(_outputBias);
+        // 5. Concatenate and Project Output
+        // [B, H, S, D] -> [B, S, H, D] -> [B, S, E]
+        var context_transposed = context_4D.Transpose(new[] { 0, 2, 1, 3 });
+        var context_flat = context_transposed.Reshape(batchSize * sequenceLength, embeddingDimension);
+        
+        var output_flat = Engine.TensorMatMul(context_flat, _outputWeights);
+        var output_reshaped = output_flat.Reshape(batchSize, sequenceLength, embeddingDimension);
+        
+        var output = output_reshaped.Add(_outputBias.ToVector());
         _lastOutput = ApplyActivation(output);
 
         return _lastOutput;

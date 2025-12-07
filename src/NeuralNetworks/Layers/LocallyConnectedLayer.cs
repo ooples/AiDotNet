@@ -482,35 +482,37 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         int batchSize = input.Shape[0];
-        var preActivation = new Tensor<T>([batchSize, _outputHeight, _outputWidth, _outputChannels]);
 
-        for (int b = 0; b < batchSize; b++)
+        // === GPU-Accelerated LocallyConnectedConv2D ===
+        // The layer uses NHWC format but Engine expects NCHW, so we transpose
+        // Input NHWC [batch, height, width, channels] -> NCHW [batch, channels, height, width]
+        var inputNCHW = input.Transpose([0, 3, 1, 2]);
+
+        // Weights need to be permuted from [oh, ow, oc, kh, kw, ic] to [oh, ow, oc, ic, kh, kw]
+        var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
+
+        // Convert bias to Tensor and reshape for per-position bias (broadcast across spatial)
+        // Engine expects per-position bias [oh, ow, oc], but we have per-channel [oc]
+        // Create per-position bias by broadcasting
+        var biasTensor = Tensor<T>.FromVector(_biases);
+        var biasReshaped = new Tensor<T>([_outputHeight, _outputWidth, _outputChannels]);
+        for (int h = 0; h < _outputHeight; h++)
         {
-            for (int h = 0; h < _outputHeight; h++)
+            for (int w = 0; w < _outputWidth; w++)
             {
-                for (int w = 0; w < _outputWidth; w++)
+                for (int oc = 0; oc < _outputChannels; oc++)
                 {
-                    for (int oc = 0; oc < _outputChannels; oc++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int kh = 0; kh < _kernelSize; kh++)
-                        {
-                            for (int kw = 0; kw < _kernelSize; kw++)
-                            {
-                                for (int ic = 0; ic < _inputChannels; ic++)
-                                {
-                                    int ih = h * _stride + kh;
-                                    int iw = w * _stride + kw;
-                                    sum = NumOps.Add(sum, NumOps.Multiply(input[b, ih, iw, ic], _weights[h, w, oc, kh, kw, ic]));
-                                }
-                            }
-                        }
-                        sum = NumOps.Add(sum, _biases[oc]);
-                        preActivation[b, h, w, oc] = sum;
-                    }
+                    biasReshaped[h, w, oc] = biasTensor[oc];
                 }
             }
         }
+
+        // Call GPU-accelerated LocallyConnectedConv2D
+        int[] strideArr = [_stride, _stride];
+        var outputNCHW = Engine.LocallyConnectedConv2D(inputNCHW, weightsPermuted, biasReshaped, strideArr);
+
+        // Transpose output back from NCHW [batch, channels, height, width] to NHWC [batch, height, width, channels]
+        var preActivation = outputNCHW.Transpose([0, 2, 3, 1]);
 
         // Cache pre-activation and apply activation function
         _lastPreActivation = preActivation;
@@ -565,43 +567,55 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int batchSize = _lastInput.Shape[0];
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        _weightGradients = new Tensor<T>(_weights.Shape);
-        _biasGradients = new Vector<T>(_biases.Length);
-
+        // === GPU-Accelerated LocallyConnectedConv2D Backward ===
         // Apply activation derivative
-        outputGradient = ApplyActivationDerivative(_lastInput, outputGradient);
+        var activationGradient = ApplyActivationDerivative(_lastOutput!, outputGradient);
 
-        for (int b = 0; b < batchSize; b++)
+        // Transpose output gradient from NHWC to NCHW for Engine operations
+        // NHWC [batch, height, width, channels] -> NCHW [batch, channels, height, width]
+        var gradNCHW = activationGradient.Transpose([0, 3, 1, 2]);
+
+        // Transpose input from NHWC to NCHW
+        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
+
+        // Permute weights from [oh, ow, oc, kh, kw, ic] to [oh, ow, oc, ic, kh, kw] for Engine
+        var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
+
+        int[] strideArr = [_stride, _stride];
+
+        // Compute input gradient using Engine operation
+        var inputGradNCHW = Engine.LocallyConnectedConv2DBackwardInput(
+            gradNCHW, weightsPermuted, inputNCHW.Shape, strideArr);
+
+        // Compute weight gradients using Engine operation
+        // Result is [oh, ow, oc, ic, kh, kw]
+        var weightGradsPermuted = Engine.LocallyConnectedConv2DBackwardWeights(
+            gradNCHW, inputNCHW, weightsPermuted.Shape, strideArr);
+
+        // Permute weight gradients back from [oh, ow, oc, ic, kh, kw] to [oh, ow, oc, kh, kw, ic]
+        _weightGradients = weightGradsPermuted.Transpose([0, 1, 2, 4, 5, 3]);
+
+        // Compute bias gradients - sum over batch and spatial dimensions
+        // gradNCHW shape is [batch, channels, height, width]
+        // We need bias gradient of shape [channels] - sum over dims [0, 2, 3]
+        var biasGradTensor = Engine.LocallyConnectedConv2DBackwardBias(gradNCHW);
+        // biasGradTensor is [oh, ow, oc], sum to get per-channel [oc]
+        _biasGradients = new Vector<T>(_biases.Length);
+        for (int oc = 0; oc < _outputChannels; oc++)
         {
+            T sum = NumOps.Zero;
             for (int h = 0; h < _outputHeight; h++)
             {
                 for (int w = 0; w < _outputWidth; w++)
                 {
-                    for (int oc = 0; oc < _outputChannels; oc++)
-                    {
-                        T gradOutput = outputGradient[b, h, w, oc];
-                        _biasGradients[oc] = NumOps.Add(_biasGradients[oc], gradOutput);
-
-                        for (int kh = 0; kh < _kernelSize; kh++)
-                        {
-                            for (int kw = 0; kw < _kernelSize; kw++)
-                            {
-                                for (int ic = 0; ic < _inputChannels; ic++)
-                                {
-                                    int ih = h * _stride + kh;
-                                    int iw = w * _stride + kw;
-                                    T inputValue = _lastInput[b, ih, iw, ic];
-                                    _weightGradients[h, w, oc, kh, kw, ic] = NumOps.Add(_weightGradients[h, w, oc, kh, kw, ic], NumOps.Multiply(gradOutput, inputValue));
-                                    inputGradient[b, ih, iw, ic] = NumOps.Add(inputGradient[b, ih, iw, ic], NumOps.Multiply(gradOutput, _weights[h, w, oc, kh, kw, ic]));
-                                }
-                            }
-                        }
-                    }
+                    sum = NumOps.Add(sum, biasGradTensor[h, w, oc]);
                 }
             }
+            _biasGradients[oc] = sum;
         }
+
+        // Transpose input gradient back from NCHW to NHWC
+        var inputGradient = inputGradNCHW.Transpose([0, 2, 3, 1]);
 
         return inputGradient;
     }

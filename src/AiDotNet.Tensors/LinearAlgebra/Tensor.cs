@@ -2255,6 +2255,81 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Adds two tensors with broadcasting support, following NumPy/PyTorch broadcasting rules.
+    /// </summary>
+    /// <param name="other">The tensor to add. Can have different shape if broadcastable.</param>
+    /// <returns>A new tensor containing the element-wise sum with broadcasting.</returns>
+    /// <exception cref="ArgumentException">Thrown when shapes are not broadcastable.</exception>
+    /// <remarks>
+    /// <para>
+    /// Broadcasting allows tensors of different shapes to be added together by automatically expanding
+    /// dimensions of size 1 to match the other tensor. This follows NumPy/PyTorch broadcasting semantics.
+    /// </para>
+    /// <para><b>For Beginners:</b> Broadcasting lets you add tensors of different shapes.
+    ///
+    /// For example:
+    /// - [4, 3, 2] + [2] broadcasts the [2] across all positions
+    /// - [4, 3, 2] + [1, 3, 1] broadcasts along dimensions 0 and 2
+    /// - [batch, channels, H, W] + [1, channels, 1, 1] adds per-channel bias
+    ///
+    /// The rule is: dimensions are compatible if they're equal or one of them is 1.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> BroadcastAdd(Tensor<T> other)
+    {
+        // Check if shapes are already identical - use fast path
+        if (Shape.SequenceEqual(other.Shape))
+        {
+            return Add(other);
+        }
+
+        // Get broadcast shape
+        int[] broadcastShape = GetBroadcastShape(this.Shape, other.Shape);
+        var result = new Tensor<T>(broadcastShape);
+
+        // Pad shapes to same rank for easier indexing
+        int maxRank = broadcastShape.Length;
+        int[] thisShape = new int[maxRank];
+        int[] otherShape = new int[maxRank];
+
+        // Right-align shapes (prepend 1s)
+        int thisOffset = maxRank - this.Rank;
+        int otherOffset = maxRank - other.Rank;
+
+        for (int i = 0; i < maxRank; i++)
+        {
+            thisShape[i] = i < thisOffset ? 1 : this.Shape[i - thisOffset];
+            otherShape[i] = i < otherOffset ? 1 : other.Shape[i - otherOffset];
+        }
+
+        // Iterate over the result tensor
+        int[] thisIndices = new int[this.Rank];
+        int[] otherIndices = new int[other.Rank];
+
+        foreach (var index in result.GetIndices())
+        {
+            // Map result index to this tensor's index (accounting for broadcasting)
+            for (int i = 0; i < this.Rank; i++)
+            {
+                int broadcastIdx = i + thisOffset;
+                thisIndices[i] = thisShape[broadcastIdx] == 1 ? 0 : index[broadcastIdx];
+            }
+
+            // Map result index to other tensor's index (accounting for broadcasting)
+            for (int i = 0; i < other.Rank; i++)
+            {
+                int broadcastIdx = i + otherOffset;
+                otherIndices[i] = otherShape[broadcastIdx] == 1 ? 0 : index[broadcastIdx];
+            }
+
+            // Perform addition
+            result[index] = _numOps.Add(this[thisIndices], other[otherIndices]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Multiplies this tensor by another tensor.
     /// </summary>
     /// <param name="other">The tensor to multiply by.</param>

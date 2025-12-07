@@ -64,6 +64,20 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies the Softmax activation function to each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor to activate.</param>
+    /// <returns>A new tensor with the Softmax function applied to each element.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> A tensor is like a multi-dimensional array or a container for data.
+    /// This method applies the Softmax function to the tensor, normalizing values along the last dimension.
+    /// </remarks>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        return Engine.Softmax(input);
+    }
+
+    /// <summary>
     /// Calculates the Jacobian matrix of the Softmax function for a vector input.
     /// </summary>
     /// <param name="input">The vector of input values.</param>
@@ -160,5 +174,23 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
             throw new ArgumentNullException(nameof(input));
 
         return TensorOperations<T>.Softmax(input);
+    }
+
+    /// <summary>
+    /// Calculates the backward pass gradient for Softmax.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="outputGradient">The output gradient.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
+    {
+        // For Softmax, we need the output (probabilities) to calculate the gradient efficiently.
+        // If we don't have it cached, we must recompute it.
+        // Ideally, Backward should accept 'output' as an optional argument, but for now we recompute.
+        // NOTE: In ActivationLayer, we could optimize this by passing cached output if available,
+        // but standard Interface only takes input.
+        
+        var output = Activate(input);
+        return Engine.SoftmaxBackward(outputGradient, output);
     }
 }

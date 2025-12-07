@@ -164,16 +164,11 @@ public class ReshapeLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         int batchSize = input.Shape[0];
+        int[] targetShape = new int[_outputShape.Length + 1];
+        targetShape[0] = batchSize;
+        Array.Copy(_outputShape, 0, targetShape, 1, _outputShape.Length);
 
-        var output = new Tensor<T>([batchSize, .. _outputShape]);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            int flatIndex = 0;
-            ReshapeForward(input, i, new int[_inputShape.Length], 0, output, i, new int[_outputShape.Length], ref flatIndex);
-        }
-
-        return output;
+        return Engine.Reshape(input, targetShape);
     }
 
     /// <summary>
@@ -288,16 +283,9 @@ public class ReshapeLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        int batchSize = outputGradient.Shape[0];
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            int flatIndex = 0;
-            ReshapeBackward(outputGradient, i, new int[_outputShape.Length], 0, inputGradient, i, new int[_inputShape.Length], ref flatIndex);
-        }
-
-        return inputGradient;
+        // Reshape gradient back to input shape
+        // Input shape is [batchSize, ..._inputShape]
+        return Engine.Reshape(outputGradient, _lastInput.Shape);
     }
 
     /// <summary>
@@ -378,116 +366,6 @@ public class ReshapeLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward pass
         _lastInput = null;
-    }
-
-    /// <summary>
-    /// Recursively copies elements from the input tensor to the output tensor during the forward pass.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="inputBatchIndex">The batch index in the input tensor.</param>
-    /// <param name="inputIndices">The current position in the input tensor.</param>
-    /// <param name="currentInputDim">The current dimension being processed in the input.</param>
-    /// <param name="output">The output tensor.</param>
-    /// <param name="outputBatchIndex">The batch index in the output tensor.</param>
-    /// <param name="outputIndices">The current position in the output tensor.</param>
-    /// <param name="flatIndex">Reference to current flat index for mapping between shapes.</param>
-    /// <remarks>
-    /// This private method implements the recursive algorithm for reshaping during the forward pass.
-    /// It traverses the input tensor element by element and places each element in the corresponding
-    /// position in the output tensor. The algorithm handles tensors of arbitrary dimensions and ensures
-    /// that elements maintain their order in the flattened representation.
-    /// </remarks>
-    private void ReshapeForward(Tensor<T> input, int inputBatchIndex, int[] inputIndices, int currentInputDim,
-                                Tensor<T> output, int outputBatchIndex, int[] outputIndices, ref int flatIndex)
-    {
-        if (currentInputDim == _inputShape.Length)
-        {
-            // Base case: compute output indices from flat index
-            int tempFlatIdx = flatIndex;
-            for (int d = _outputShape.Length - 1; d >= 0; d--)
-            {
-                outputIndices[d] = tempFlatIdx % _outputShape[d];
-                tempFlatIdx /= _outputShape[d];
-            }
-
-            output[[outputBatchIndex, .. outputIndices]] =
-                input[[inputBatchIndex, .. inputIndices]];
-            flatIndex++;
-            return;
-        }
-
-        for (int i = 0; i < _inputShape[currentInputDim]; i++)
-        {
-            inputIndices[currentInputDim] = i;
-            ReshapeForward(input, inputBatchIndex, inputIndices, currentInputDim + 1, output, outputBatchIndex, outputIndices, ref flatIndex);
-        }
-    }
-
-    /// <summary>
-    /// Recursively copies elements from the output gradient tensor to the input gradient tensor during the backward pass.
-    /// </summary>
-    /// <param name="outputGradient">The output gradient tensor.</param>
-    /// <param name="outputBatchIndex">The batch index in the output gradient tensor.</param>
-    /// <param name="outputIndices">The current position in the output gradient tensor.</param>
-    /// <param name="currentOutputDim">The current dimension being processed in the output.</param>
-    /// <param name="inputGradient">The input gradient tensor.</param>
-    /// <param name="inputBatchIndex">The batch index in the input gradient tensor.</param>
-    /// <param name="inputIndices">The current position in the input gradient tensor.</param>
-    /// <param name="flatIndex">Reference to current flat index for mapping between shapes.</param>
-    /// <remarks>
-    /// This private method implements the recursive algorithm for reshaping during the backward pass.
-    /// It performs the inverse operation of ReshapeForward, traversing the output gradient tensor
-    /// element by element and placing each element in the corresponding position in the input gradient tensor.
-    /// This ensures that gradients are correctly propagated through the reshape operation.
-    /// </remarks>
-    private void ReshapeBackward(Tensor<T> outputGradient, int outputBatchIndex, int[] outputIndices, int currentOutputDim,
-                                 Tensor<T> inputGradient, int inputBatchIndex, int[] inputIndices, ref int flatIndex)
-    {
-        if (currentOutputDim == _outputShape.Length)
-        {
-            // Base case: compute input indices from flat index
-            int tempFlatIdx = flatIndex;
-            for (int d = _inputShape.Length - 1; d >= 0; d--)
-            {
-                inputIndices[d] = tempFlatIdx % _inputShape[d];
-                tempFlatIdx /= _inputShape[d];
-            }
-
-            inputGradient[[inputBatchIndex, .. inputIndices]] =
-                outputGradient[[outputBatchIndex, .. outputIndices]];
-            flatIndex++;
-            return;
-        }
-
-        for (int i = 0; i < _outputShape[currentOutputDim]; i++)
-        {
-            outputIndices[currentOutputDim] = i;
-            ReshapeBackward(outputGradient, outputBatchIndex, outputIndices, currentOutputDim + 1, inputGradient, inputBatchIndex, inputIndices, ref flatIndex);
-        }
-    }
-
-    /// <summary>
-    /// Increments the indices for multi-dimensional array access, handling overflow to higher dimensions.
-    /// </summary>
-    /// <param name="indices">The array of indices to increment.</param>
-    /// <remarks>
-    /// This private helper method increments indices for accessing multi-dimensional arrays,
-    /// similar to carrying over digits in arithmetic. When an index reaches its maximum value,
-    /// it resets to zero and increments the next higher dimension index. This is used during
-    /// the reshaping process to traverse all elements while maintaining the correct ordering.
-    /// </remarks>
-    private void IncrementIndices(int[] indices)
-    {
-        for (int i = indices.Length - 2; i >= 0; i--)
-        {
-            indices[i]++;
-            if (indices[i] < _outputShape[i])
-            {
-                break;
-            }
-
-            indices[i] = 0;
-        }
     }
 
     /// <summary>

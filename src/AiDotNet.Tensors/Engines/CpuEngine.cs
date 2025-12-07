@@ -1709,6 +1709,15 @@ public class CpuEngine : IEngine
     #region Tensor Operations (Phase B: Epic 3)
 
     /// <inheritdoc/>
+    public Tensor<T> Reshape<T>(Tensor<T> tensor, int[] newShape)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (newShape == null) throw new ArgumentNullException(nameof(newShape));
+
+        return tensor.Reshape(newShape);
+    }
+
+    /// <inheritdoc/>
     public Tensor<T> BatchMatMul<T>(Tensor<T> a, Tensor<T> b)
     {
         if (a == null) throw new ArgumentNullException(nameof(a));
@@ -1785,6 +1794,16 @@ public class CpuEngine : IEngine
         }
 
         return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorBroadcastAdd<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+
+        // Use optimized Tensor.BroadcastAdd which handles broadcasting logic
+        return a.BroadcastAdd(b);
     }
 
     /// <inheritdoc/>
@@ -4069,6 +4088,268 @@ public class CpuEngine : IEngine
         }
 
         return new Tensor<T>(kernelShape, new Vector<T>(gradKernel));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> LocallyConnectedConv2D<T>(Tensor<T> input, Tensor<T> weights, Tensor<T>? bias, int[] stride)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+        if (input.Rank != 4) throw new ArgumentException($"LocallyConnectedConv2D input requires a 4D tensor [batch, in_channels, height, width]. Got rank {input.Rank}.");
+        // weights shape: [output_height, output_width, out_channels, in_channels, kernel_height, kernel_width]
+        if (weights.Rank != 6) throw new ArgumentException($"LocallyConnectedConv2D weights require a 6D tensor. Got rank {weights.Rank}.");
+        if (stride == null || stride.Length != 2) throw new ArgumentException("Stride must be an array of 2 elements", nameof(stride));
+        if (stride[0] <= 0 || stride[1] <= 0) throw new ArgumentException("Stride elements must be positive", nameof(stride));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int inputHeight = input.Shape[2];
+        int inputWidth = input.Shape[3];
+
+        int outputHeight = weights.Shape[0];
+        int outputWidth = weights.Shape[1];
+        int outChannels = weights.Shape[2];
+        int kernelInChannels = weights.Shape[3]; // in_channels in the weights tensor definition
+        int kernelHeight = weights.Shape[4];
+        int kernelWidth = weights.Shape[5];
+
+        int strideH = stride[0], strideW = stride[1];
+
+        // Validate kernel in_channels matches input in_channels
+        if (kernelInChannels != inChannels)
+            throw new ArgumentException($"Weight's input channels ({kernelInChannels}) must match input tensor's in_channels ({inChannels}).");
+        
+        // Ensure output shape derived from input/kernel/stride matches weights
+        int expectedOutputH = (inputHeight - kernelHeight) / strideH + 1;
+        int expectedOutputW = (inputWidth - kernelWidth) / strideW + 1;
+
+        if (outputHeight != expectedOutputH || outputWidth != expectedOutputW)
+            throw new ArgumentException($"Calculated output dimensions ({expectedOutputH}x{expectedOutputW}) do not match weights dimensions ({outputHeight}x{outputWidth}). Check input, kernel, and stride parameters.");
+
+        var result = new Tensor<T>(new[] { batch, outChannels, outputHeight, outputWidth });
+        var inputData = input.ToArray();
+        var weightsData = weights.ToArray();
+        var biasData = bias?.ToArray();
+
+        Parallel.For(0, batch, b => // Process each batch independently
+        {
+            for (int oc = 0; oc < outChannels; oc++)
+            {
+                for (int oh = 0; oh < outputHeight; oh++)
+                {
+                    for (int ow = 0; ow < outputWidth; ow++)
+                    {
+                        T sum = numOps.Zero;
+
+                        for (int ic = 0; ic < inChannels; ic++)
+                        {
+                            for (int kh = 0; kh < kernelHeight; kh++)
+                            {
+                                for (int kw = 0; kw < kernelWidth; kw++)
+                                {
+                                    int ih = oh * strideH + kh;
+                                    int iw = ow * strideW + kw;
+
+                                    // Check bounds (LocallyConnected typically doesn't use padding in direct impl, but can be added)
+                                    if (ih >= 0 && ih < inputHeight && iw >= 0 && iw < inputWidth)
+                                    {
+                                        T inputVal = inputData[((b * inChannels + ic) * inputHeight + ih) * inputWidth + iw];
+                                        // weightsData index: [oh, ow, oc, ic, kh, kw]
+                                        T weightVal = weightsData[((((oh * outputWidth + ow) * outChannels + oc) * kernelInChannels + ic) * kernelHeight + kh) * kernelWidth + kw];
+                                        sum = numOps.Add(sum, numOps.Multiply(inputVal, weightVal));
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Add bias if provided
+                        if (biasData != null)
+                        {
+                            sum = numOps.Add(sum, biasData[oc]);
+                        }
+
+                        result[b, oc, oh, ow] = sum;
+                    }
+                }
+            }
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> LocallyConnectedConv2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> weights, int[] inputShape, int[] stride)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+        if (inputShape == null || inputShape.Length != 4) throw new ArgumentException("inputShape must be array of 4 elements [batch, inChannels, height, width]", nameof(inputShape));
+        if (gradOutput.Rank != 4) throw new ArgumentException($"LocallyConnectedConv2DBackwardInput gradOutput requires 4D tensor. Got rank {gradOutput.Rank}.");
+        if (weights.Rank != 6) throw new ArgumentException($"LocallyConnectedConv2DBackwardInput weights require a 6D tensor. Got rank {weights.Rank}.");
+        if (stride == null || stride.Length != 2) throw new ArgumentException("Stride must be an array of 2 elements", nameof(stride));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = inputShape[0];
+        int inChannels = inputShape[1];
+        int inputHeight = inputShape[2];
+        int inputWidth = inputShape[3];
+
+        int outputHeight = weights.Shape[0];
+        int outputWidth = weights.Shape[1];
+        int outChannels = weights.Shape[2];
+        int kernelInChannels = weights.Shape[3];
+        int kernelHeight = weights.Shape[4];
+        int kernelWidth = weights.Shape[5];
+
+        int strideH = stride[0], strideW = stride[1];
+
+        var finalGradInput = new T[batch * inChannels * inputHeight * inputWidth];
+        var gradOutputData = gradOutput.ToArray();
+        var weightsData = weights.ToArray();
+
+        Parallel.For(0, batch * inChannels * inputHeight * inputWidth, idx =>
+        {
+            int b = idx / (inChannels * inputHeight * inputWidth);
+            int ic = (idx / (inputHeight * inputWidth)) % inChannels;
+            int ih = (idx / inputWidth) % inputHeight;
+            int iw = idx % inputWidth;
+
+            T sumGrad = numOps.Zero;
+            // Iterate over all possible output positions this input pixel contributes to
+            for (int oh_candidate = 0; oh_candidate < outputHeight; oh_candidate++)
+            {
+                for (int ow_candidate = 0; ow_candidate < outputWidth; ow_candidate++)
+                {
+                    // Check if input pixel (ih, iw) is covered by kernel at (oh_candidate, ow_candidate)
+                    // (ih, iw) should be in the kernel window
+                    int kh_relative = ih - oh_candidate * strideH;
+                    int kw_relative = iw - ow_candidate * strideW;
+
+                    if (kh_relative >= 0 && kh_relative < kernelHeight && kw_relative >= 0 && kw_relative < kernelWidth)
+                    {
+                        for (int oc = 0; oc < outChannels; oc++)
+                        {
+                            T gradOutVal = gradOutputData[((b * outChannels + oc) * outputHeight + oh_candidate) * outputWidth + ow_candidate];
+                            T weightVal = weightsData[((((oh_candidate * outputWidth + ow_candidate) * outChannels + oc) * kernelInChannels + ic) * kernelHeight + kh_relative) * kernelWidth + kw_relative];
+                            sumGrad = numOps.Add(sumGrad, numOps.Multiply(gradOutVal, weightVal));
+                        }
+                    }
+                }
+            }
+            finalGradInput[idx] = sumGrad;
+        });
+
+        return new Tensor<T>(inputShape, new Vector<T>(finalGradInput));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> LocallyConnectedConv2DBackwardWeights<T>(Tensor<T> gradOutput, Tensor<T> input, int[] weightsShape, int[] stride)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (weightsShape == null || weightsShape.Length != 6) throw new ArgumentException("weightsShape must be array of 6 elements", nameof(weightsShape));
+        if (gradOutput.Rank != 4) throw new ArgumentException($"LocallyConnectedConv2DBackwardWeights gradOutput requires 4D tensor. Got rank {gradOutput.Rank}.");
+        if (input.Rank != 4) throw new ArgumentException($"LocallyConnectedConv2DBackwardWeights input requires 4D tensor. Got rank {input.Rank}.");
+        if (stride == null || stride.Length != 2) throw new ArgumentException("Stride must be array of 2 elements", nameof(stride));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int inputHeight = input.Shape[2];
+        int inputWidth = input.Shape[3];
+
+        int outputHeight = weightsShape[0];
+        int outputWidth = weightsShape[1];
+        int outChannels = weightsShape[2];
+        int kernelInChannels = weightsShape[3];
+        int kernelHeight = weightsShape[4];
+        int kernelWidth = weightsShape[5];
+
+        int strideH = stride[0], strideW = stride[1];
+
+        var gradWeights = new T[weightsShape.Aggregate(1, (acc, val) => acc * val)];
+        var gradOutputData = gradOutput.ToArray();
+        var inputData = input.ToArray();
+
+        for (int i = 0; i < gradWeights.Length; i++)
+            gradWeights[i] = numOps.Zero;
+
+        Parallel.For(0, weightsShape.Aggregate(1, (acc, val) => acc * val), idx => // Iterate over all weight elements
+        {
+            // Deconstruct idx to weights indices (oh, ow, oc, ic, kh, kw)
+            int flatIdx = idx;
+            int kw_w = kernelWidth;
+            int kh_w = kernelHeight;
+            int ic_w = kernelInChannels; // This is the 3rd dim in weights (index 3)
+            int oc_w = outChannels;
+            int ow_w = outputWidth;
+
+            int kw = flatIdx % kw_w; flatIdx /= kw_w;
+            int kh = flatIdx % kh_w; flatIdx /= kh_w;
+            int ic = flatIdx % ic_w; flatIdx /= ic_w;
+            int oc = flatIdx % oc_w; flatIdx /= oc_w;
+            int ow = flatIdx % ow_w; flatIdx /= ow_w;
+            int oh = flatIdx;
+
+            T sum = numOps.Zero;
+            for (int b = 0; b < batch; b++)
+            {
+                int ih = oh * strideH + kh;
+                int iw = ow * strideW + kw;
+
+                // Check bounds for input
+                if (ih >= 0 && ih < inputHeight && iw >= 0 && iw < inputWidth)
+                {
+                    T gradOutVal = gradOutputData[((b * outChannels + oc) * outputHeight + oh) * outputWidth + ow];
+                    T inputVal = inputData[((b * inChannels + ic) * inputHeight + ih) * inputWidth + iw];
+                    sum = numOps.Add(sum, numOps.Multiply(gradOutVal, inputVal));
+                }
+            }
+            gradWeights[idx] = sum;
+        });
+
+        return new Tensor<T>(weightsShape, new Vector<T>(gradWeights));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> LocallyConnectedConv2DBackwardBias<T>(Tensor<T> gradOutput)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (gradOutput.Rank != 4) throw new ArgumentException($"LocallyConnectedConv2DBackwardBias gradOutput requires 4D tensor. Got rank {gradOutput.Rank}.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = gradOutput.Shape[0];
+        int outChannels = gradOutput.Shape[1];
+        int outputHeight = gradOutput.Shape[2];
+        int outputWidth = gradOutput.Shape[3];
+
+        var gradBias = new T[outChannels]; // Bias gradient is 1D [outChannels]
+        var gradOutputData = gradOutput.ToArray();
+
+        for (int i = 0; i < gradBias.Length; i++)
+            gradBias[i] = numOps.Zero;
+
+        Parallel.For(0, outChannels, oc => // Iterate over output channels
+        {
+            T sum = numOps.Zero;
+            for (int b = 0; b < batch; b++)
+            {
+                for (int oh = 0; oh < outputHeight; oh++)
+                {
+                    for (int ow = 0; ow < outputWidth; ow++)
+                    {
+                        sum = numOps.Add(sum, gradOutputData[((b * outChannels + oc) * outputHeight + oh) * outputWidth + ow]);
+                    }
+                }
+            }
+            gradBias[oc] = sum;
+        });
+
+        return new Tensor<T>(new[] { outChannels }, new Vector<T>(gradBias));
     }
 
     #endregion

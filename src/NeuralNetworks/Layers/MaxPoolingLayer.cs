@@ -75,7 +75,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// <b>For Beginners:</b> This keeps track of which input value was the maximum in each pooling window.
     /// We need this information during the backward pass to know where to send the gradients.
     /// </remarks>
-    private Tensor<int> _maxIndices;
+    private int[,,,,]? _maxIndices;
 
     /// <summary>
     /// Stores the last input tensor from the forward pass for use in autodiff backward pass.
@@ -97,7 +97,6 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     {
         PoolSize = poolSize;
         Strides = strides;
-        _maxIndices = new Tensor<int>(OutputShape);
     }
 
     /// <summary>
@@ -141,53 +140,18 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         if (input.Shape.Length != 3)
             throw new ArgumentException("Input tensor must have 3 dimensions (channels, height, width)");
 
-        // Store input for autodiff backward pass
         _lastInput = input;
 
-        int channels = input.Shape[0];
-        int inputHeight = input.Shape[1];
-        int inputWidth = input.Shape[2];
-        int outputHeight = OutputShape[1];
-        int outputWidth = OutputShape[2];
+        // Reshape to 4D [1, C, H, W]
+        var input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+        var poolSizeArr = new[] { PoolSize, PoolSize };
+        var strideArr = new[] { Strides, Strides };
 
-        var output = new Tensor<T>(OutputShape);
-        _maxIndices = new Tensor<int>(OutputShape);
+        // Use Engine operation
+        var output4D = Engine.MaxPool2DWithIndices(input4D, poolSizeArr, strideArr, out _maxIndices);
 
-        for (int c = 0; c < channels; c++)
-        {
-            for (int h = 0; h < outputHeight; h++)
-            {
-                for (int w = 0; w < outputWidth; w++)
-                {
-                    T maxVal = NumOps.Zero;
-                    int maxIdx = -1;
-
-                    for (int ph = 0; ph < PoolSize; ph++)
-                    {
-                        for (int pw = 0; pw < PoolSize; pw++)
-                        {
-                            int ih = h * Strides + ph;
-                            int iw = w * Strides + pw;
-
-                            if (ih < inputHeight && iw < inputWidth)
-                            {
-                                T val = input[c, ih, iw];
-                                if (maxIdx == -1 || NumOps.GreaterThan(maxVal, NumOps.Zero))
-                                {
-                                    maxVal = val;
-                                    maxIdx = ph * PoolSize + pw;
-                                }
-                            }
-                        }
-                    }
-
-                    output[c, h, w] = maxVal;
-                    _maxIndices[c, h, w] = maxIdx;
-                }
-            }
-        }
-
-        return output;
+        // Reshape output to 3D
+        return output4D.Reshape(OutputShape);
     }
 
     /// <summary>
@@ -221,37 +185,26 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// <exception cref="ArgumentException">Thrown when the output gradient tensor doesn't have 3 dimensions.</exception>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
         if (outputGradient.Shape.Length != 3)
             throw new ArgumentException("Output gradient tensor must have 3 dimensions (channels, height, width)");
 
-        int channels = InputShape[0];
-        int inputHeight = InputShape[1];
-        int inputWidth = InputShape[2];
+        if (_maxIndices == null)
+            throw new InvalidOperationException("Max indices not available for backward pass.");
 
-        var inputGradient = new Tensor<T>(InputShape);
+        // Reshape to 4D
+        var gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
+        
+        var inputShape4D = new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] };
+        var poolSizeArr = new int[] { PoolSize, PoolSize };
+        var strideArr = new int[] { Strides, Strides };
 
-        for (int c = 0; c < channels; c++)
-        {
-            for (int h = 0; h < outputGradient.Shape[1]; h++)
-            {
-                for (int w = 0; w < outputGradient.Shape[2]; w++)
-                {
-                    int maxIdx = _maxIndices[c, h, w];
-                    int ph = maxIdx / PoolSize;
-                    int pw = maxIdx % PoolSize;
+        // Use Engine operation
+        var inputGradient4D = Engine.MaxPool2DBackward(gradient4D, _maxIndices, inputShape4D, poolSizeArr, strideArr);
 
-                    int ih = h * Strides + ph;
-                    int iw = w * Strides + pw;
-
-                    if (ih < inputHeight && iw < inputWidth)
-                    {
-                        inputGradient[c, ih, iw] = outputGradient[c, h, w];
-                    }
-                }
-            }
-        }
-
-        return inputGradient;
+        return inputGradient4D.Reshape(_lastInput.Shape);
     }
 
     /// <summary>
@@ -271,38 +224,62 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        if (outputGradient.Shape.Length != 3)
-            throw new ArgumentException("Output gradient tensor must have 3 dimensions (channels, height, width)");
+        // Reshape to 4D [1, C, H, W]
+        var input4D = _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2]);
+        var gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
 
-        // Use the same computation as BackwardManual to ensure identical results
-        int channels = InputShape[0];
-        int inputHeight = InputShape[1];
-        int inputWidth = InputShape[2];
+        // Convert input to computation node
+        var inputNode = Autodiff.TensorOperations<T>.Variable(input4D, "input", requiresGradient: true);
 
-        var inputGradient = new Tensor<T>(InputShape);
+        // Forward pass using autodiff MaxPool2D operation
+        var poolSize = new int[] { PoolSize, PoolSize };
+        var strides = new int[] { Strides, Strides };
+        var outputNode = Autodiff.TensorOperations<T>.MaxPool2D(inputNode, poolSize, strides);
 
-        for (int c = 0; c < channels; c++)
+        // Set output gradient
+        outputNode.Gradient = gradient4D;
+
+        // Production-grade: Inline topological sort for backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
         {
-            for (int h = 0; h < outputGradient.Shape[1]; h++)
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+                continue;
+
+            if (processed)
             {
-                for (int w = 0; w < outputGradient.Shape[2]; w++)
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                foreach (var parent in node.Parents)
                 {
-                    int maxIdx = _maxIndices[c, h, w];
-                    int ph = maxIdx / PoolSize;
-                    int pw = maxIdx % PoolSize;
-
-                    int ih = h * Strides + ph;
-                    int iw = w * Strides + pw;
-
-                    if (ih < inputHeight && iw < inputWidth)
-                    {
-                        inputGradient[c, ih, iw] = outputGradient[c, h, w];
-                    }
+                    if (!visited.Contains(parent))
+                        stack.Push((parent, false));
                 }
             }
         }
 
-        return inputGradient;
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract input gradient and reshape back to 3D
+        var inputGrad4D = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        return inputGrad4D.Reshape(_lastInput.Shape);
     }
 
     /// <summary>
@@ -413,7 +390,8 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         // Clear cached values from forward pass
-        _maxIndices = new Tensor<int>(OutputShape);
+        _lastInput = null;
+        _maxIndices = null;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

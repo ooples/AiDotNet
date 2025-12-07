@@ -280,18 +280,46 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastWasCrossAttention = false;
         _lastUsedMask = false;
 
-        var Q = input.Multiply(_Wq);
-        var K = input.Multiply(_Wk);
-        var V = input.Multiply(_Wv);
+        int batchSize = input.Shape[0];
+        int seqLen = input.Shape[1];
 
-        var attentionScores = Q.Multiply(K.Transpose([1, 0]));
-        var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(K.Shape[K.Shape.Length - 1]));
-        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
-        attentionScores = attentionScores.Scale(scaleValue);
+        // 1. Project Input to Q, K, V
+        // Reshape input to 2D [Batch*Seq, InputSize] for efficient MatrixMultiply
+        var input2D = input.Reshape(batchSize * seqLen, _inputSize);
 
+        // Transpose weights to [InputSize, AttSize] using Engine 2D transpose
+        var WqT = Engine.TensorTranspose(_Wq);
+        var WkT = Engine.TensorTranspose(_Wk);
+        var WvT = Engine.TensorTranspose(_Wv);
+
+        // Compute Projections: [B*S, In] @ [In, Att] -> [B*S, Att]
+        var Q_flat = Engine.TensorMatMul(input2D, WqT);
+        var K_flat = Engine.TensorMatMul(input2D, WkT);
+        var V_flat = Engine.TensorMatMul(input2D, WvT);
+
+        // Reshape back to [Batch, Seq, AttSize]
+        var Q = Q_flat.Reshape(batchSize, seqLen, _attentionSize);
+        var K = K_flat.Reshape(batchSize, seqLen, _attentionSize);
+        var V = V_flat.Reshape(batchSize, seqLen, _attentionSize);
+
+        // 2. Compute Attention Scores: Q @ K.T
+        // K is [B, S, A]. We need K.T as [B, A, S].
+        var KT = K.Transpose(new[] { 0, 2, 1 });
+        
+        // [B, S, A] @ [B, A, S] -> [B, S, S]
+        var attentionScores = Engine.BatchMatMul(Q, KT);
+
+        // 3. Scale
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(_attentionSize)));
+        attentionScores = Engine.TensorMultiplyScalar(attentionScores, scaleValue);
+
+        // 4. Softmax
         _lastAttentionWeights = ApplyActivation(attentionScores);
 
-        var output = _lastAttentionWeights.Multiply(V);
+        // 5. Output: Weights @ V
+        // [B, S, S] @ [B, S, A] -> [B, S, A]
+        var output = Engine.BatchMatMul(_lastAttentionWeights, V);
+
         return output;
     }
 
@@ -380,23 +408,39 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         _lastInput = input;
 
-        var Q = input.Multiply(_Wq);
-        var K = input.Multiply(_Wk);
-        var V = input.Multiply(_Wv);
+        int batchSize = input.Shape[0];
+        int seqLen = input.Shape[1];
 
-        var attentionScores = Q.Multiply(K.Transpose([1, 0]));
+        // 1. Project Input to Q, K, V
+        var input2D = input.Reshape(batchSize * seqLen, _inputSize);
+        var WqT = Engine.TensorTranspose(_Wq);
+        var WkT = Engine.TensorTranspose(_Wk);
+        var WvT = Engine.TensorTranspose(_Wv);
 
-        // Apply scaling factor
-        var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(K.Shape[K.Shape.Length - 1]));
-        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
-        attentionScores = attentionScores.Scale(scaleValue);
+        var Q_flat = Engine.TensorMatMul(input2D, WqT);
+        var K_flat = Engine.TensorMatMul(input2D, WkT);
+        var V_flat = Engine.TensorMatMul(input2D, WvT);
 
-        // Apply mask - typically mask values are 0 for positions to attend to and very negative (e.g., -10000) for positions to ignore
-        attentionScores = attentionScores.Add(mask);
+        var Q = Q_flat.Reshape(batchSize, seqLen, _attentionSize);
+        var K = K_flat.Reshape(batchSize, seqLen, _attentionSize);
+        var V = V_flat.Reshape(batchSize, seqLen, _attentionSize);
 
+        // 2. Compute Attention Scores: Q @ K.T
+        var KT = K.Transpose(new[] { 0, 2, 1 });
+        var attentionScores = Engine.BatchMatMul(Q, KT);
+
+        // 3. Scale
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(_attentionSize)));
+        attentionScores = Engine.TensorMultiplyScalar(attentionScores, scaleValue);
+
+        // 4. Mask
+        attentionScores = Engine.TensorAdd(attentionScores, mask);
+
+        // 5. Softmax
         _lastAttentionWeights = ApplyActivation(attentionScores);
 
-        var output = _lastAttentionWeights.Multiply(V);
+        // 6. Output: Weights @ V
+        var output = Engine.BatchMatMul(_lastAttentionWeights, V);
         return output;
     }
 
@@ -412,28 +456,45 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         _lastWasCrossAttention = true;
         _lastUsedMask = mask != null;
-        _lastInput = queryInput;  // Store the query input for backward pass
+        _lastInput = queryInput;
 
-        var Q = queryInput.Multiply(_Wq);
-        var K = keyValueInput.Multiply(_Wk);
-        var V = keyValueInput.Multiply(_Wv);
+        int batchSize = queryInput.Shape[0];
+        int seqLenQ = queryInput.Shape[1];
+        int seqLenKV = keyValueInput.Shape[1];
 
-        var attentionScores = Q.Multiply(K.Transpose([1, 0]));
+        // Project Q
+        var query2D = queryInput.Reshape(batchSize * seqLenQ, _inputSize);
+        var WqT = Engine.TensorTranspose(_Wq);
+        var Q_flat = Engine.TensorMatMul(query2D, WqT);
+        var Q = Q_flat.Reshape(batchSize, seqLenQ, _attentionSize);
 
-        // Apply scaling factor
-        var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(K.Shape[K.Shape.Length - 1]));
-        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
-        attentionScores = attentionScores.Scale(scaleValue);
+        // Project K, V
+        var kv2D = keyValueInput.Reshape(batchSize * seqLenKV, _inputSize);
+        var WkT = Engine.TensorTranspose(_Wk);
+        var WvT = Engine.TensorTranspose(_Wv);
+        var K_flat = Engine.TensorMatMul(kv2D, WkT);
+        var V_flat = Engine.TensorMatMul(kv2D, WvT);
+        var K = K_flat.Reshape(batchSize, seqLenKV, _attentionSize);
+        var V = V_flat.Reshape(batchSize, seqLenKV, _attentionSize);
 
-        // Apply mask if provided
+        // Compute Scores: Q @ K.T
+        var KT = K.Transpose(new[] { 0, 2, 1 });
+        var attentionScores = Engine.BatchMatMul(Q, KT);
+
+        // Scale
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(_attentionSize)));
+        attentionScores = Engine.TensorMultiplyScalar(attentionScores, scaleValue);
+
+        // Mask
         if (mask != null)
         {
-            attentionScores = attentionScores.Add(mask);
+            attentionScores = Engine.TensorAdd(attentionScores, mask);
         }
 
         _lastAttentionWeights = ApplyActivation(attentionScores);
 
-        var output = _lastAttentionWeights.Multiply(V);
+        // Output
+        var output = Engine.BatchMatMul(_lastAttentionWeights, V);
         return output;
     }
 

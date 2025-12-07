@@ -368,41 +368,22 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        int batchSize = input.Shape[0];
-        int inputSize = input.Shape[1];
-        int outputSize = _weights.Shape[0];
 
-        var output = new Tensor<T>([batchSize, outputSize]);
+        // Compute output = input * weights^T + biases using Engine operations
+        // input: [batchSize, inputSize]
+        // weights: [outputSize, inputSize]
+        
+        // Transpose weights to [inputSize, outputSize]
+        var weightsT = Engine.TensorTranspose(_weights);
+        
+        // Matrix multiply: [batch, input] * [input, output] -> [batch, output]
+        var linearOutput = Engine.TensorMatMul(input, weightsT);
+        
+        // Add biases (broadcast)
+        var biasedOutput = linearOutput.Add(_biases.ToVector());
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            var inputVector = new Vector<T>(inputSize);
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputVector[j] = input[i, j];
-            }
-
-            // Compute output = weights * input + biases using tensor operations
-            var outputVector = new Vector<T>(outputSize);
-            for (int row = 0; row < outputSize; row++)
-            {
-                T sum = _biases[row];
-                for (int col = 0; col < inputSize; col++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_weights[row, col], inputVector[col]));
-                }
-                outputVector[row] = sum;
-            }
-
-            outputVector = ApplyActivation(outputVector);
-
-            for (int j = 0; j < outputSize; j++)
-            {
-                output[i, j] = outputVector[j];
-            }
-        }
-
-        return output;
+        _lastOutput = ApplyActivation(biasedOutput);
+        return _lastOutput;
     }
 
     /// <summary>
@@ -455,62 +436,25 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        var weightsGradient = new Tensor<T>(_weights.Shape);
-        var biasesGradient = new Tensor<T>(_biases.Shape);
+        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
 
-        int batchSize = _lastInput.Shape[0];
-        int inputSize = _lastInput.Shape[1];
-        int outputSize = _weights.Shape[0];
+        // Calculate gradients using Engine operations
+        // weightsGradient = delta^T * input
+        // biasesGradient = sum(delta, axis=0)
+        // inputGradient = delta * weights
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            var outputGradientVector = new Vector<T>(outputSize);
-            var lastOutputVector = new Vector<T>(outputSize);
-            var inputVector = new Vector<T>(inputSize);
+        // Transpose delta: [batch, output] -> [output, batch]
+        var deltaT = Engine.TensorTranspose(delta);
 
-            for (int j = 0; j < outputSize; j++)
-            {
-                outputGradientVector[j] = outputGradient[i, j];
-                lastOutputVector[j] = _lastOutput[i, j];
-            }
+        // Weights gradient: [output, batch] * [batch, input] -> [output, input]
+        _weightsGradient = Engine.TensorMatMul(deltaT, _lastInput);
 
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputVector[j] = _lastInput[i, j];
-            }
+        // Biases gradient: sum over batch dimension
+        _biasesGradient = Engine.ReduceSum(delta, new[] { 0 }, keepDims: false);
 
-            var delta = ApplyActivationDerivative(lastOutputVector, outputGradientVector);
-
-            // Accumulate weight gradients: outer product of delta and input
-            for (int row = 0; row < outputSize; row++)
-            {
-                for (int col = 0; col < inputSize; col++)
-                {
-                    weightsGradient[row, col] = NumOps.Add(weightsGradient[row, col], NumOps.Multiply(delta[row], inputVector[col]));
-                }
-            }
-
-            // Accumulate bias gradients
-            for (int j = 0; j < outputSize; j++)
-            {
-                biasesGradient[j] = NumOps.Add(biasesGradient[j], delta[j]);
-            }
-
-            // Compute input gradient: weights.T @ delta
-            for (int j = 0; j < inputSize; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < outputSize; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_weights[k, j], delta[k]));
-                }
-                inputGradient[i, j] = sum;
-            }
-        }
-
-        _weightsGradient = weightsGradient;
-        _biasesGradient = biasesGradient;
+        // Input gradient: [batch, output] * [output, input] -> [batch, input]
+        // weights is [output, input]
+        var inputGradient = Engine.TensorMatMul(delta, _weights);
 
         return inputGradient;
     }

@@ -207,8 +207,11 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         {
             throw new ArgumentException($"Input sequence length {input.Shape[0]} exceeds maximum sequence length {maxSequenceLength}");
         }
+        
         var slicedEncodings = encodings.Slice(0, 0, input.Shape[0], embeddingSize);
-        return input + slicedEncodings;
+        
+        // Use GPU-accelerated addition
+        return Engine.TensorAdd(input, slicedEncodings);
     }
     
     /// <summary>

@@ -299,24 +299,12 @@ public class ActivationLayer<T> : LayerBase<T>
 
         TensorValidator.ValidateShapesMatch(_lastInput, outputGradient, "Activation Layer", "Backward Pass");
 
-        // Production-grade: Use cached _lastInput for activation derivative (locality caching)
-        var cachedInput = _lastInput;
-
-        if (ScalarActivation == null)
-        {
-            // No activation - gradient passes through unchanged
+        var activation = ScalarActivation ?? (IActivationFunction<T>?)VectorActivation;
+        
+        if (activation == null)
             return outputGradient;
-        }
 
-        var activation = ScalarActivation;
-
-        // Vectorized activation derivative via Tensor.Transform
-        var activationDerivative = cachedInput.Transform((x, _) => activation.Derivative(x));
-
-        // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
-        var inputGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
-
-        return inputGradient;
+        return activation.Backward(_lastInput, outputGradient);
     }
 
     /// <summary>
@@ -325,12 +313,13 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <param name="input">The input tensor to transform</param>
     /// <returns>A new tensor with the activation function applied to each element</returns>
     /// <remarks>
-    /// This private helper method applies the scalar activation function to each element of the input tensor
-    /// independently. It uses the Transform method of the Tensor class to apply the function element-wise.
+    /// This private helper method applies the scalar activation function to the input tensor.
+    /// It delegates to the activation function's Activate(Tensor) method, allowing for potential
+    /// optimizations (like GPU acceleration) implemented within the activation function class.
     /// </remarks>
     private Tensor<T> ApplyScalarActivation(Tensor<T> input)
     {
-        return input.Transform((x, _) => ScalarActivation!.Activate(x));
+        return ScalarActivation!.Activate(input);
     }
 
     /// <summary>
@@ -355,14 +344,12 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <returns>The gradient with respect to this layer's input</returns>
     /// <remarks>
     /// This private helper method calculates the gradient for the backward pass when using a scalar activation function.
-    /// It applies the derivative of the activation function to each element of the last input, then multiplies
-    /// the result by the corresponding element of the output gradient.
+    /// It uses the activation function's vectorized Derivative method and Engine.TensorMultiply for efficient
+    /// element-wise computation.
     /// </remarks>
     private Tensor<T> BackwardScalarActivation(Tensor<T> outputGradient)
     {
-        // Use flat indexing since Transform provides a flat index, not an array of indices
-        return _lastInput!.Transform((x, flatIndex) =>
-            NumOps.Multiply(ScalarActivation!.Derivative(x), outputGradient.GetFlat(flatIndex)));
+        return ScalarActivation!.Backward(_lastInput!, outputGradient);
     }
 
 
@@ -396,7 +383,8 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardVectorActivation(Tensor<T> outputGradient)
     {
-        return VectorActivation!.Derivative(_lastInput!) * outputGradient;
+        // Now unified via IVectorActivationFunction.Backward
+        return VectorActivation!.Backward(_lastInput!, outputGradient);
     }
 
     /// <summary>

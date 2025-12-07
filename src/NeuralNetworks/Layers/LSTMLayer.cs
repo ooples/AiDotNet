@@ -373,24 +373,17 @@ public class LSTMLayer<T> : LayerBase<T>
     /// <summary>
     /// The cell state from the last forward pass.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the cell state from the most recent forward pass. The cell state is the main memory
-    /// component of the LSTM, capable of retaining information over long sequences. This field is reset when
-    /// ResetState is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the long-term memory of the LSTM at each time step.
-    /// 
-    /// The cell state:
-    /// - Is the LSTM's main memory component
-    /// - Can hold information for long sequences
-    /// - Is carefully controlled by the gates
-    /// 
-    /// Think of it as the LSTM's long-term memory that can preserve important
-    /// information even as new inputs are processed.
-    /// </para>
-    /// </remarks>
     private Tensor<T>? _lastCellState;
+
+    /// <summary>
+    /// Cached hidden states for all time steps (Batch, Time, Hidden).
+    /// </summary>
+    private Tensor<T>? _cachedHiddenStates;
+
+    /// <summary>
+    /// Cached cell states for all time steps (Batch, Time, Hidden).
+    /// </summary>
+    private Tensor<T>? _cachedCellStates;
 
     /// <summary>
     /// The sigmoid activation function for element-wise operations.
@@ -832,88 +825,75 @@ public class LSTMLayer<T> : LayerBase<T>
         int timeSteps = input.Shape[1];
 
         var output = new Tensor<T>([batchSize, timeSteps, _hiddenSize]);
-        _lastHiddenState = new Tensor<T>([batchSize, _hiddenSize]);
-        _lastCellState = new Tensor<T>([batchSize, _hiddenSize]);
+        
+        _cachedHiddenStates = new Tensor<T>([batchSize, timeSteps, _hiddenSize]);
+        _cachedCellStates = new Tensor<T>([batchSize, timeSteps, _hiddenSize]);
+        
+        var currentH = new Tensor<T>([batchSize, _hiddenSize]);
+        var currentC = new Tensor<T>([batchSize, _hiddenSize]);
+
+        // Pre-transpose weights for efficiency
+        var WfiT = Engine.TensorTranspose(_weightsFi);
+        var WiiT = Engine.TensorTranspose(_weightsIi);
+        var WciT = Engine.TensorTranspose(_weightsCi);
+        var WoiT = Engine.TensorTranspose(_weightsOi);
+        var WfhT = Engine.TensorTranspose(_weightsFh);
+        var WihT = Engine.TensorTranspose(_weightsIh);
+        var WchT = Engine.TensorTranspose(_weightsCh);
+        var WohT = Engine.TensorTranspose(_weightsOh);
+
+        var bfVec = _biasF.ToVector();
+        var biVec = _biasI.ToVector();
+        var bcVec = _biasC.ToVector();
+        var boVec = _biasO.ToVector();
 
         for (int t = 0; t < timeSteps; t++)
         {
             var xt = input.GetSlice(t);
-            (_lastHiddenState, _lastCellState) = LSTMCell(xt, _lastHiddenState, _lastCellState);
-            output.SetSlice(t, _lastHiddenState);
+            
+            // Forget Gate
+            var f = Engine.TensorMatMul(xt, WfiT);
+            f = Engine.TensorAdd(f, Engine.TensorMatMul(currentH, WfhT));
+            f = f.Add(bfVec);
+            f = Engine.Sigmoid(f);
+
+            // Input Gate
+            var i = Engine.TensorMatMul(xt, WiiT);
+            i = Engine.TensorAdd(i, Engine.TensorMatMul(currentH, WihT));
+            i = i.Add(biVec);
+            i = Engine.Sigmoid(i);
+
+            // Cell Candidate
+            var c_tilde = Engine.TensorMatMul(xt, WciT);
+            c_tilde = Engine.TensorAdd(c_tilde, Engine.TensorMatMul(currentH, WchT));
+            c_tilde = c_tilde.Add(bcVec);
+            c_tilde = Engine.Tanh(c_tilde);
+
+            // Output Gate
+            var o = Engine.TensorMatMul(xt, WoiT);
+            o = Engine.TensorAdd(o, Engine.TensorMatMul(currentH, WohT));
+            o = o.Add(boVec);
+            o = Engine.Sigmoid(o);
+
+            // Update Cell State
+            var f_prevC = Engine.TensorMultiply(f, currentC);
+            var i_cTilde = Engine.TensorMultiply(i, c_tilde);
+            currentC = Engine.TensorAdd(f_prevC, i_cTilde);
+
+            // Update Hidden State
+            var tanhC = Engine.Tanh(currentC);
+            currentH = Engine.TensorMultiply(o, tanhC);
+
+            // Store results
+            output.SetSlice(t, currentH);
+            _cachedHiddenStates.SetSlice(t, currentH);
+            _cachedCellStates.SetSlice(t, currentC);
         }
+        
+        _lastHiddenState = currentH;
+        _lastCellState = currentC;
 
         return output;
-    }
-
-    /// <summary>
-    /// Implements a single LSTM cell computation for one time step.
-    /// </summary>
-    /// <param name="xt">The input at the current time step.</param>
-    /// <param name="prevH">The hidden state from the previous time step.</param>
-    /// <param name="prevC">The cell state from the previous time step.</param>
-    /// <returns>A tuple containing the new hidden state and cell state.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the core LSTM cell computation for a single time step. It calculates the
-    /// forget gate, input gate, cell state candidate, and output gate, then uses these to update the cell state
-    /// and hidden state. The computations can use either element-wise activation functions or vector activation
-    /// functions, depending on how the layer was configured.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method processes a single time step through the LSTM cell.
-    /// 
-    /// An LSTM cell works through these steps:
-    /// 1. Forget gate (f): Decides what information to throw away from the cell state
-    /// 2. Input gate (i): Decides what new information to store in the cell state
-    /// 3. Cell candidate (c): Creates new values that could be added to the state
-    /// 4. Cell state update: Updates the old cell state into the new cell state
-    /// 5. Output gate (o): Decides what parts of the cell state to output
-    /// 6. Hidden state update: Creates the new hidden state based on the cell state
-    /// 
-    /// For example, when processing a word in a sentence, the LSTM might:
-    /// - Forget information that's no longer relevant
-    /// - Add important details about the new word
-    /// - Update its internal understanding
-    /// - Output information needed for the next steps
-    /// </para>
-    /// </remarks>
-    private (Tensor<T> hiddenState, Tensor<T> cellState) LSTMCell(Tensor<T> xt, Tensor<T> prevH, Tensor<T> prevC)
-    {
-        var f = xt.MatrixMultiply(_weightsFi).Add(prevH.MatrixMultiply(_weightsFh)).Add(_biasF);
-        var i = xt.MatrixMultiply(_weightsIi).Add(prevH.MatrixMultiply(_weightsIh)).Add(_biasI);
-        var c = xt.MatrixMultiply(_weightsCi).Add(prevH.MatrixMultiply(_weightsCh)).Add(_biasC);
-        var o = xt.MatrixMultiply(_weightsOi).Add(prevH.MatrixMultiply(_weightsOh)).Add(_biasO);
-
-        if (_useVectorActivation)
-        {
-            // Use Engine methods for optimized activations (CPU SIMD / GPU kernels)
-            f = Engine.Sigmoid(f);
-            i = Engine.Sigmoid(i);
-            c = Engine.Tanh(c);
-            o = Engine.Sigmoid(o);
-        }
-        else
-        {
-            if (_sigmoidActivation == null)
-                throw new InvalidOperationException("Sigmoid activation is null when not using vector activation");
-            if (_tanhActivation == null)
-                throw new InvalidOperationException("Tanh activation is null when not using vector activation");
-
-            f = f.Transform((x, _) => _sigmoidActivation.Activate(x));
-            i = i.Transform((x, _) => _sigmoidActivation.Activate(x));
-            c = c.Transform((x, _) => _tanhActivation.Activate(x));
-            o = o.Transform((x, _) => _sigmoidActivation.Activate(x));
-        }
-
-        var newC = f.ElementwiseMultiply(prevC).Add(i.ElementwiseMultiply(c));
-        var newH = o.ElementwiseMultiply(_useVectorActivation
-            ? Engine.Tanh(newC)
-            : newC.Transform((x, _) => {
-                if (_tanhActivation == null)
-                    throw new InvalidOperationException("Tanh activation is null");
-                return _tanhActivation.Activate(x);
-            }));
-
-        return (newH, newC);
     }
 
    /// <summary>
@@ -969,7 +949,7 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastHiddenState == null || _lastCellState == null)
+        if (_lastInput == null || _cachedHiddenStates == null || _cachedCellStates == null)
         {
             throw new InvalidOperationException("Backward pass called before forward pass.");
         }
@@ -997,8 +977,9 @@ public class LSTMLayer<T> : LayerBase<T>
         {
             var dh = outputGradient.GetSlice(t).Add(dNextH);
             var xt = _lastInput.GetSlice(t);
-            var prevH = t > 0 ? _lastHiddenState.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
-            var prevC = t > 0 ? _lastCellState.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
+            // Use cached states
+            var prevH = t > 0 ? _cachedHiddenStates.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
+            var prevC = t > 0 ? _cachedCellStates.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
 
             var (dxt, dprevH, dprevC, dWfi, dWii, dWci, dWoi, dWfh, dWih, dWch, dWoh, dbf, dbi, dbc, dbo) =
                 BackwardStep(dh, dNextC, xt, prevH, prevC);

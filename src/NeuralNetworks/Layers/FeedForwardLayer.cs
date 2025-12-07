@@ -333,9 +333,14 @@ public class FeedForwardLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         Input = input;
-        // Biases shape is [1, outputSize], result of MatrixMultiply is [batchSize, outputSize]
-        // Broadcasting: Add broadcasts [1, outputSize] to [batchSize, outputSize]
-        var linearOutput = Engine.TensorAdd(Input.MatrixMultiply(Weights), Biases);
+        
+        // Use Engine.TensorMatMul for GPU acceleration
+        var matmul = Engine.TensorMatMul(Input, Weights);
+        
+        // Add biases (broadcast [1, outputSize] to [batchSize, outputSize])
+        // Using Tensor.Add(Vector) for reliable broadcasting
+        var linearOutput = matmul.Add(Biases.ToVector());
+        
         Output = ApplyActivation(linearOutput);
 
         return Output;
@@ -385,16 +390,30 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        // ApplyActivationDerivative(input, outputGradient) computes: activation_derivative(input) * outputGradient
-        // We need: activation_derivative(Output) * outputGradient
-        var activationGradient = ApplyActivationDerivative(Output, outputGradient);
+        // Apply activation derivative
+        Tensor<T> activationGradient;
+        if (ScalarActivation != null)
+        {
+             // Use optimized Engine operation
+             var derivatives = ScalarActivation.Derivative(Output);
+             activationGradient = Engine.TensorMultiply(derivatives, outputGradient);
+        }
+        else
+        {
+             // Fallback or Vector activation
+             activationGradient = ApplyActivationDerivative(Output, outputGradient);
+        }
 
-        var inputGradient = activationGradient.MatrixMultiply(Weights.Transpose(new[] { 1, 0 }));
-        var weightsGradient = Input.Transpose(new[] { 1, 0 }).MatrixMultiply(activationGradient);
-        var biasesGradient = activationGradient.Sum(new[] { 0 });
-
-        WeightsGradient = weightsGradient;
-        BiasesGradient = biasesGradient;
+        // Input Gradient: grad @ Weights^T
+        var weightsT = Engine.TensorTranspose(Weights);
+        var inputGradient = Engine.TensorMatMul(activationGradient, weightsT);
+        
+        // Weights Gradient: Input^T @ grad
+        var inputT = Engine.TensorTranspose(Input);
+        WeightsGradient = Engine.TensorMatMul(inputT, activationGradient);
+        
+        // Biases Gradient: sum(grad, axis=0)
+        BiasesGradient = Engine.ReduceSum(activationGradient, new[] { 0 }, keepDims: true);
 
         return inputGradient;
     }

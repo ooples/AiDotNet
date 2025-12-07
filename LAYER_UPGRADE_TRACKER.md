@@ -304,7 +304,7 @@ These may already be clean or have minimal issues:
 
 ### Completed
 - [x] FullyConnectedLayer.cs - REFERENCE IMPLEMENTATION
-- [x] ConvolutionalLayer.cs - Full Tensor<T> storage, Engine ops
+- [x] ConvolutionalLayer.cs - Full Tensor<T> storage, Engine.Conv2D, Engine.Conv2DBackwardInput/Kernel, Engine.TensorBroadcastAdd for bias
 - [x] AttentionLayer.cs - Engine.TensorMaxValue for diagnostics, Engine tensor ops
 - [x] MultiHeadAttentionLayer.cs - Engine tensor ops for cosine similarity
 - [x] FeedForwardLayer.cs - Engine.TensorAdd for bias broadcasting
@@ -314,9 +314,25 @@ These may already be clean or have minimal issues:
 - [x] SpatialTransformerLayer.cs - Inline topological sort
 - [x] GRULayer.cs - Inline topological sort
 - [x] LSTMLayer.cs - Inline topological sort
+- [x] LocallyConnectedLayer.cs - Engine.LocallyConnectedConv2D, Engine.LocallyConnectedConv2DBackwardInput/Weights/Bias with proper NHWC↔NCHW transposes
+- [x] DenseLayer.cs - Merge conflict fixed, uses Engine.TensorTranspose, Engine.TensorMatMul, Engine.TensorAdd
+- [x] ReshapeLayer.cs - Already production-grade: Engine.Reshape, inline topo sort, JIT support
+- [x] FlattenLayer.cs - Already production-grade: Engine.Reshape, inline topo sort, JIT support
+- [x] DropoutLayer.cs - Fixed null-forgiving operator; uses Engine.GenerateDropoutMask, Engine.TensorMultiply, inline topo sort, JIT support
+- [x] MaskingLayer.cs - Already production-grade: Engine.TensorNotEquals, Engine.TensorMultiply, inline topo sort, JIT support
+- [x] ActivationLayer.cs - Already production-grade: delegates to activation functions which use Engine ops, JIT support
+- [x] AddLayer.cs - Already production-grade: Engine.TensorAddMany, Engine.TensorMultiply, JIT support
+- [x] MultiplyLayer.cs - Already production-grade: Engine.TensorMultiplyMany, Engine.TensorMultiply, JIT support
+- [x] ConcatenateLayer.cs - Already production-grade: Engine.Concat, Engine.TensorMultiply, JIT support
+- [x] LayerNormalizationLayer.cs - Already production-grade: Engine.LayerNorm, Engine.LayerNormBackward, inline topo sort, JIT support
+- [x] BatchNormalizationLayer.cs - Fixed GetParameters/SetParameters/UpdateParameters to use Engine ops and Vector.Concatenate; uses Engine.BatchNorm, Engine.BatchNormBackward, inline topo sort, JIT support
+- [x] PoolingLayer.cs - Already production-grade: Engine.MaxPool2DWithIndices, Engine.AvgPool2D, Engine.MaxPool2DBackward, Engine.AvgPool2DBackward, inline topo sort, JIT support
+- [x] AvgPoolingLayer.cs - Already production-grade: Engine.AvgPool2D, Engine.AvgPool2DBackward, inline topo sort, JIT support
+- [x] MaxPoolingLayer.cs - Already production-grade: Engine.MaxPool2DWithIndices, Engine.MaxPool2DBackward, inline topo sort, JIT support
+- [x] GlobalPoolingLayer.cs - Already production-grade: Engine.ReduceMean/Max, Engine.ReduceMeanBackward/MaxBackward, inline topo sort, JIT support
 
 ### In Progress
-- [ ] Continue Phase 6-12 layer upgrades
+- [ ] Continue Phase 1-12 layer upgrades (starting with simple layers)
 
 ---
 

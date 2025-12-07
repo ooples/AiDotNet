@@ -239,15 +239,15 @@ public class ConcatenateLayer<T> : LayerBase<T>
     {
         if (inputs.Length < 2)
         {
-            throw new ArgumentException("At least two input tensors are required for concatenation.");
+            throw new ArgumentException("ConcatenateLayer requires at least two inputs.");
         }
 
         _lastInputs = inputs;
-        _lastOutput = Tensor<T>.Concatenate(inputs, _axis);
+        _lastOutput = Engine.Concat(inputs, _axis);
 
         if (ScalarActivation != null)
         {
-            _lastOutput = _lastOutput.Transform((x, _) => ScalarActivation.Activate(x));
+            _lastOutput = ScalarActivation.Activate(_lastOutput);
         }
         else if (VectorActivation != null)
         {
@@ -308,7 +308,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
         if (ScalarActivation != null)
         {
             // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
-            var activationDerivative = _lastOutput.Transform((x, _) => ScalarActivation.Derivative(x));
+            var activationDerivative = ScalarActivation.Derivative(_lastOutput);
             outputGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
         }
         else if (VectorActivation != null)
@@ -354,7 +354,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
         if (ScalarActivation != null)
         {
             // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
-            var activationDerivative = _lastOutput.Transform((x, _) => ScalarActivation.Derivative(x));
+            var activationDerivative = ScalarActivation.Derivative(_lastOutput);
             outputGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
         }
         else if (VectorActivation != null)

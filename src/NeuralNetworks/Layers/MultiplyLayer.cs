@@ -297,7 +297,24 @@ public class MultiplyLayer<T> : LayerBase<T>
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+
+        Tensor<T> activationGradient;
+        if (UsingVectorActivation && VectorActivation != null)
+        {
+            // Use element-wise multiplication for gradient computation
+            activationGradient = Tensor<T>.ElementwiseMultiply(VectorActivation.Derivative(_lastOutput), outputGradient);
+        }
+        else if (ScalarActivation != null)
+        {
+            // Vectorized: compute activation derivatives and multiply element-wise using Engine
+            var derivatives = ScalarActivation.Derivative(_lastOutput);
+            activationGradient = Engine.TensorMultiply(derivatives, outputGradient);
+        }
+        else
+        {
+            activationGradient = outputGradient;
+        }
+
         var inputGradients = new Tensor<T>[_lastInputs.Length];
         for (int i = 0; i < _lastInputs.Length; i++)
         {
@@ -354,8 +371,8 @@ public class MultiplyLayer<T> : LayerBase<T>
             var cachedOutput = _lastOutput;
             var activation = ScalarActivation;
 
-            // Vectorized activation derivative via Tensor.Transform
-            var activationDerivative = cachedOutput.Transform((x, _) => activation.Derivative(x));
+            // Vectorized activation derivative via Engine (delegated to activation function)
+            var activationDerivative = activation.Derivative(cachedOutput);
 
             // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
             gradientWithActivation = Engine.TensorMultiply(outputGradient, activationDerivative);

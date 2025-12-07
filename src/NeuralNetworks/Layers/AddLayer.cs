@@ -312,9 +312,9 @@ public class AddLayer<T> : LayerBase<T>
         }
         else if (ScalarActivation != null)
         {
-            // Vectorized: compute activation derivatives and multiply element-wise
-            var derivatives = _lastOutput.Transform((x, i) => ScalarActivation.Derivative(x));
-            gradientWithActivation = Tensor<T>.ElementwiseMultiply(derivatives, outputGradient);
+            // Vectorized: compute activation derivatives and multiply element-wise using Engine
+            var derivatives = ScalarActivation.Derivative(_lastOutput);
+            gradientWithActivation = Engine.TensorMultiply(derivatives, outputGradient);
         }
         else
         {
@@ -364,8 +364,8 @@ public class AddLayer<T> : LayerBase<T>
             var cachedOutput = _lastOutput;
             var activation = ScalarActivation;
 
-            // Vectorized activation derivative via Tensor.Transform
-            var activationDerivative = cachedOutput.Transform((x, _) => activation.Derivative(x));
+            // Vectorized activation derivative via Engine (delegated to activation function)
+            var activationDerivative = activation.Derivative(cachedOutput);
 
             // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
             gradientWithActivation = Engine.TensorMultiply(outputGradient, activationDerivative);

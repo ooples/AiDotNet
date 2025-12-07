@@ -946,40 +946,23 @@ public abstract class LayerBase<T> : ILayer<T>
     }
 
     /// <summary>
-    /// Applies the activation function to a rank-1 tensor (vector).
+    /// Applies the activation function to a tensor.
     /// </summary>
     /// <param name="input">The input tensor to activate.</param>
     /// <returns>The activated tensor.</returns>
-    /// <exception cref="ArgumentException">Thrown when the input tensor is not rank-1.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method applies the layer's activation function to a rank-1 tensor (a vector). It first converts
-    /// the tensor to a vector, applies the activation, and then converts it back to a tensor.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method applies the activation function to a 1D array of values.
-    /// 
-    /// When processing a single "row" of data:
-    /// - This method converts it to a format the activation function can process
-    /// - Applies either the scalar or vector activation function
-    /// - Converts the result back to a tensor
-    /// 
-    /// This is a utility method used internally by various layer types.
-    /// </para>
-    /// </remarks>
     protected Tensor<T> ApplyActivation(Tensor<T> input)
     {
-        // Use centralized ActivationHelper for optimized activation dispatch
         if (VectorActivation != null)
         {
-            return ActivationHelper.ApplyActivation(VectorActivation, input, Engine);
+            return VectorActivation.Activate(input);
+        }
+        
+        if (ScalarActivation != null)
+        {
+            return ScalarActivation.Activate(input);
         }
 
-        // Fall back to vector-based activation for scalar activations
-        Vector<T> inputVector = input.ToVector();
-        Vector<T> outputVector = ApplyActivation(inputVector);
-
-        // Preserve the original tensor shape when creating the result
-        return new Tensor<T>(input.Shape, outputVector);
+        return input;
     }
 
     /// <summary>
@@ -1213,7 +1196,7 @@ public abstract class LayerBase<T> : ILayer<T>
             return Tensor<T>.CreateDefault(input.Shape, NumOps.One);
         }
 
-        return input.Transform((x, _) => activation.Derivative(x));
+        return activation.Derivative(input);
     }
 
     /// <summary>
@@ -1288,7 +1271,8 @@ public abstract class LayerBase<T> : ILayer<T>
         else if (ScalarActivation != null)
         {
             // Element-wise application of scalar activation derivative
-            return input.Transform((x, _) => ScalarActivation.Derivative(x)).ElementwiseMultiply(outputGradient);
+            // Optimized to use Tensor operations
+            return ScalarActivation.Derivative(input).ElementwiseMultiply(outputGradient);
         }
         else
         {

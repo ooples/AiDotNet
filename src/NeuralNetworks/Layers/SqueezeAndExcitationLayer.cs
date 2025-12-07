@@ -651,74 +651,37 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         _lastInput = input;
         int batchSize = input.Shape[0];
-        int height = input.Shape[1];
-        int width = input.Shape[2];
+        // height/width not needed for Engine operations
 
-        // Squeeze: Global Average Pooling - output shape [batchSize, channels]
-        var squeezed = new Tensor<T>([batchSize, _channels]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _channels; c++)
-            {
-                T sum = NumOps.Zero;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        sum = NumOps.Add(sum, input[b, h, w, c]);
-                    }
-                }
+        // 1. Squeeze: Global Average Pooling [B, H, W, C] -> [B, C]
+        // Use Engine.ReduceMean over spatial dims (1, 2)
+        var squeezed = Engine.ReduceMean(input, new[] { 1, 2 }, keepDims: false);
 
-                squeezed[b, c] = NumOps.Divide(sum, NumOps.FromDouble(height * width));
-            }
-        }
-
-        // Excitation: FC1 = squeezed @ weights1 + bias1
+        // 2. Excitation: FC1 + Activation
         // squeezed: [batchSize, channels], weights1: [channels, reducedChannels]
-        var fc1Output = squeezed.Multiply(_weights1);
-        // Add bias (broadcast across batch dimension)
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int r = 0; r < _reducedChannels; r++)
-            {
-                fc1Output[b, r] = NumOps.Add(fc1Output[b, r], _bias1[r]);
-            }
-        }
-        // Apply first activation
-        fc1Output = ApplyTensorActivation(fc1Output, isFirstActivation: true);
+        var fc1Output = Engine.TensorMatMul(squeezed, _weights1);
+        // Add bias broadcasting [B, R] + [R]
+        var fc1Biased = fc1Output.Add(_bias1.ToVector());
+        
+        var activated1 = ApplyTensorActivation(fc1Biased, isFirstActivation: true);
 
-        // Excitation: FC2 = fc1Output @ weights2 + bias2
-        // fc1Output: [batchSize, reducedChannels], weights2: [reducedChannels, channels]
-        var fc2Output = fc1Output.Multiply(_weights2);
-        // Add bias (broadcast across batch dimension)
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _channels; c++)
-            {
-                fc2Output[b, c] = NumOps.Add(fc2Output[b, c], _bias2[c]);
-            }
-        }
-        // Apply second activation (Sigmoid for attention weights)
-        var excitation = ApplyTensorActivation(fc2Output, isFirstActivation: false);
+        // Excitation: FC2 + Activation
+        // activated1: [batchSize, reducedChannels], weights2: [reducedChannels, channels]
+        var fc2Output = Engine.TensorMatMul(activated1, _weights2);
+        var fc2Biased = fc2Output.Add(_bias2.ToVector());
+        
+        var excitation = ApplyTensorActivation(fc2Biased, isFirstActivation: false);
 
         // Cache excitation weights for auxiliary loss computation
         _lastExcitationWeights = excitation;
 
-        // Scale the input
-        var output = new Tensor<T>(input.Shape);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    for (int c = 0; c < _channels; c++)
-                    {
-                        output[b, h, w, c] = NumOps.Multiply(input[b, h, w, c], excitation[b, c]);
-                    }
-                }
-            }
-        }
+        // 3. Scale: input * excitation
+        // input: [B, H, W, C], excitation: [B, C]
+        // Reshape excitation to [B, 1, 1, C] for broadcasting
+        var excitationReshaped = excitation.Reshape(batchSize, 1, 1, _channels);
+        
+        // Use Tensor.PointwiseMultiply which handles broadcasting
+        var output = input.PointwiseMultiply(excitationReshaped);
 
         _lastOutput = output;
         return output;
@@ -732,65 +695,15 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The tensor after applying the activation function.</returns>
     private Tensor<T> ApplyTensorActivation(Tensor<T> input, bool isFirstActivation)
     {
-        int rows = input.Shape[0];
-        int cols = input.Shape[1];
-        var result = new Tensor<T>(input.Shape);
-
         if (isFirstActivation)
         {
-            if (_firstVectorActivation != null)
-            {
-                // Apply vector activation to each row
-                for (int i = 0; i < rows; i++)
-                {
-                    var row = new Vector<T>(cols);
-                    for (int j = 0; j < cols; j++)
-                        row[j] = input[i, j];
-                    var activatedRow = _firstVectorActivation.Activate(row);
-                    for (int j = 0; j < cols; j++)
-                        result[i, j] = activatedRow[j];
-                }
-                return result;
-            }
-            else if (_firstActivation != null)
-            {
-                for (int i = 0; i < rows; i++)
-                {
-                    for (int j = 0; j < cols; j++)
-                    {
-                        result[i, j] = _firstActivation.Activate(input[i, j]);
-                    }
-                }
-                return result;
-            }
+            if (_firstVectorActivation != null) return _firstVectorActivation.Activate(input);
+            if (_firstActivation != null) return _firstActivation.Activate(input);
         }
         else
         {
-            if (_secondVectorActivation != null)
-            {
-                // Apply vector activation to each row
-                for (int i = 0; i < rows; i++)
-                {
-                    var row = new Vector<T>(cols);
-                    for (int j = 0; j < cols; j++)
-                        row[j] = input[i, j];
-                    var activatedRow = _secondVectorActivation.Activate(row);
-                    for (int j = 0; j < cols; j++)
-                        result[i, j] = activatedRow[j];
-                }
-                return result;
-            }
-            else if (_secondActivation != null)
-            {
-                for (int i = 0; i < rows; i++)
-                {
-                    for (int j = 0; j < cols; j++)
-                    {
-                        result[i, j] = _secondActivation.Activate(input[i, j]);
-                    }
-                }
-                return result;
-            }
+            if (_secondVectorActivation != null) return _secondVectorActivation.Activate(input);
+            if (_secondActivation != null) return _secondActivation.Activate(input);
         }
 
         // If no activation function is set, return the input as is
@@ -915,9 +828,111 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // For SE blocks, delegate to manual implementation
-        // Full autodiff would require tracking all sub-operations
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        int batchSize = _lastInput.Shape[0];
+
+        // Build computation graph mirroring Forward
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        
+        // 1. Squeeze: Global Average Pooling
+        // Input [B, H, W, C] -> [B, C]
+        var axes = new int[] { 1, 2 };
+        var squeezed = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: false);
+
+        // 2. Excitation FC1
+        var w1Node = Autodiff.TensorOperations<T>.Variable(_weights1, "w1", requiresGradient: true);
+        var b1Node = Autodiff.TensorOperations<T>.Variable(_bias1, "b1", requiresGradient: true);
+        var fc1 = Autodiff.TensorOperations<T>.MatrixMultiply(squeezed, w1Node);
+        
+        // Broadcast bias (assumed supported by Add)
+        var fc1Biased = Autodiff.TensorOperations<T>.Add(fc1, b1Node);
+        
+        // Activation 1
+        var act1 = ApplyActivationToGraphNode(fc1Biased, true);
+
+        // Excitation FC2
+        var w2Node = Autodiff.TensorOperations<T>.Variable(_weights2, "w2", requiresGradient: true);
+        var b2Node = Autodiff.TensorOperations<T>.Variable(_bias2, "b2", requiresGradient: true);
+        var fc2 = Autodiff.TensorOperations<T>.MatrixMultiply(act1, w2Node);
+        var fc2Biased = Autodiff.TensorOperations<T>.Add(fc2, b2Node);
+        
+        // Activation 2
+        var excitation = ApplyActivationToGraphNode(fc2Biased, false);
+
+        // 3. Scale
+        // excitation [B, C] -> [B, 1, 1, C]
+        var reshapeShape = new int[] { batchSize, 1, 1, _channels };
+        var excitationReshaped = Autodiff.TensorOperations<T>.Reshape(excitation, reshapeShape);
+        
+        var outputNode = Autodiff.TensorOperations<T>.ElementwiseMultiply(inputNode, excitationReshaped);
+
+        // Backward
+        outputNode.Gradient = outputGradient;
+        
+        // Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                        stack.Push((parent, false));
+                }
+            }
+        }
+
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients
+        if (w1Node.Gradient != null) _weights1Gradient = w1Node.Gradient;
+        if (b1Node.Gradient != null) _bias1Gradient = b1Node.Gradient;
+        if (w2Node.Gradient != null) _weights2Gradient = w2Node.Gradient;
+        if (b2Node.Gradient != null) _bias2Gradient = b2Node.Gradient;
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
+
+    private Autodiff.ComputationNode<T> ApplyActivationToGraphNode(Autodiff.ComputationNode<T> input, bool isFirst)
+    {
+        if (isFirst)
+        {
+            if (_firstVectorActivation != null && _firstVectorActivation.SupportsJitCompilation)
+                return _firstVectorActivation.ApplyToGraph(input);
+            if (_firstActivation != null && _firstActivation.SupportsJitCompilation)
+                return _firstActivation.ApplyToGraph(input);
+        }
+        else
+        {
+            if (_secondVectorActivation != null && _secondVectorActivation.SupportsJitCompilation)
+                return _secondVectorActivation.ApplyToGraph(input);
+            if (_secondActivation != null && _secondActivation.SupportsJitCompilation)
+                return _secondActivation.ApplyToGraph(input);
+        }
+        return input;
     }
 
     /// <summary>
