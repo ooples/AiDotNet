@@ -100,11 +100,13 @@ namespace AiDotNetTests.UnitTests.Interpretability
             var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
 
             Matrix<double> inputs = new Matrix<double>(8, 2);
-            // Set up predictions
+            // Set up predictions to create different TPR/precision between groups
+            // Group 0: 3 predicted positive out of 3 actual positive (TPR=1.0, Precision=0.75)
             inputs[0, 0] = 0.6; inputs[0, 1] = 0; // predict 1
             inputs[1, 0] = 0.6; inputs[1, 1] = 0; // predict 1
-            inputs[2, 0] = 0.4; inputs[2, 1] = 0; // predict 0
-            inputs[3, 0] = 0.4; inputs[3, 1] = 0; // predict 0
+            inputs[2, 0] = 0.6; inputs[2, 1] = 0; // predict 1
+            inputs[3, 0] = 0.6; inputs[3, 1] = 0; // predict 1
+            // Group 1: 1 predicted positive out of 2 actual positive (TPR=0.5, Precision=1.0)
             inputs[4, 0] = 0.6; inputs[4, 1] = 1; // predict 1
             inputs[5, 0] = 0.6; inputs[5, 1] = 1; // predict 1
             inputs[6, 0] = 0.4; inputs[6, 1] = 1; // predict 0
@@ -119,9 +121,13 @@ namespace AiDotNetTests.UnitTests.Interpretability
 
             // Assert
             Assert.NotNull(result);
-            Assert.NotEqual(0.0, result.EqualOpportunity); // Should have some value
-            Assert.NotEqual(0.0, result.EqualizedOdds); // Should have some value
-            Assert.NotEqual(0.0, result.PredictiveParity); // Should have some value
+            // EqualOpportunity = |TPR0 - TPR1| = |1.0 - 0.5| = 0.5 (different TPRs)
+            Assert.NotEqual(0.0, result.EqualOpportunity);
+            // EqualizedOdds = max(|TPR diff|, |FPR diff|) = max(0.5, |1.0-0|) = 1.0
+            // FPR0 = 1/1 = 1.0 (1 FP out of 1 actual negative), FPR1 = 0/2 = 0 (0 FP out of 2 actual negatives)
+            Assert.NotEqual(0.0, result.EqualizedOdds);
+            // PredictiveParity = |Precision0 - Precision1| = |0.75 - 1.0| = 0.25 (different precisions)
+            Assert.NotEqual(0.0, result.PredictiveParity);
         }
 
         [Fact]

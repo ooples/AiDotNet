@@ -61,7 +61,7 @@ public class ResidualLayer<T> : LayerBase<T>
     /// to compute gradients. It is cleared when ResetState() is called.
     /// </para>
     /// <para><b>For Beginners:</b> This is like the layer's short-term memory of what input it received.
-    /// 
+    ///
     /// During training, the layer needs to remember what input it processed so that it can
     /// properly calculate how to improve. This temporary storage is cleared between batches
     /// or when you explicitly reset the layer.
@@ -318,6 +318,8 @@ public class ResidualLayer<T> : LayerBase<T>
         // so we use the result directly (no additional multiplication needed)
         var combinedGradient = ApplyActivationDerivative(combinedOutput, outputGradient);
 
+        // When there's no inner layer, forward pass just applies activation to input
+        // So backward pass just applies activation derivative
         if (_innerLayer == null)
         {
             return combinedGradient;

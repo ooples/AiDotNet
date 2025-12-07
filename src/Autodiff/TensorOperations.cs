@@ -141,37 +141,45 @@ public static class TensorOperations<T>
     /// </remarks>
     public static ComputationNode<T> Add(ComputationNode<T> a, ComputationNode<T> b)
     {
-        // Forward pass: compute the sum using IEngine for GPU acceleration
+        // Forward pass: compute the sum with broadcasting support
         var engine = AiDotNetEngine.Current;
-        var result = engine.TensorAdd(a.Value, b.Value);
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Use direct addition if shapes are equal, otherwise broadcast
+        Tensor<T> result = a.Value.Shape.SequenceEqual(b.Value.Shape)
+            ? engine.TensorAdd(a.Value, b.Value)
+            : BroadcastAdd(a.Value, b.Value, numOps);
+
+        // Store original shapes for gradient reduction
+        var aShape = a.Value.Shape;
+        var bShape = b.Value.Shape;
+
         // Create backward function
         void BackwardFunction(Tensor<T> gradient)
         {
-            // Distribute gradient to both parents
-            // d(a+b)/da = 1, so gradient flows unchanged to 'a'
-            // d(a+b)/db = 1, so gradient flows unchanged to 'b'
+            // Distribute gradient to both parents with reduction for broadcasted dimensions
             if (a.RequiresGradient)
             {
+                var aGrad = ReduceGradient(gradient, aShape);
                 if (a.Gradient == null)
                 {
-                    a.Gradient = gradient;
+                    a.Gradient = aGrad;
                 }
                 else
                 {
-                    // Accumulate gradients (for nodes used multiple times)
-                    a.Gradient = engine.TensorAdd(a.Gradient, gradient);
+                    a.Gradient = engine.TensorAdd(a.Gradient, aGrad);
                 }
             }
             if (b.RequiresGradient)
             {
+                var bGrad = ReduceGradient(gradient, bShape);
                 if (b.Gradient == null)
                 {
-                    b.Gradient = gradient;
+                    b.Gradient = bGrad;
                 }
                 else
                 {
-                    // Accumulate gradients (for nodes used multiple times)
-                    b.Gradient = engine.TensorAdd(b.Gradient, gradient);
+                    b.Gradient = engine.TensorAdd(b.Gradient, bGrad);
                 }
             }
         }
@@ -10188,6 +10196,87 @@ public static class TensorOperations<T>
         if (tape != null && tape.IsRecording)
             tape.RecordOperation(node);
         return node;
+    }
+
+    /// <summary>
+    /// Performs broadcasting addition of two tensors with different shapes.
+    /// </summary>
+    private static Tensor<T> BroadcastAdd(Tensor<T> a, Tensor<T> b, INumericOperations<T> numOps)
+    {
+        // Determine which tensor is smaller and needs broadcasting
+        return (a.Rank < b.Rank || (a.Rank == b.Rank && a.Length < b.Length))
+            ? BroadcastAddHelper(b, a, numOps)
+            : BroadcastAddHelper(a, b, numOps);
+    }
+
+    /// <summary>
+    /// Helper method that broadcasts the smaller tensor to match the larger one.
+    /// </summary>
+    private static Tensor<T> BroadcastAddHelper(Tensor<T> larger, Tensor<T> smaller, INumericOperations<T> numOps)
+    {
+        var result = larger.Clone();
+
+        // Handle simple case: adding a 1D tensor to a 2D tensor along the last dimension
+        // E.g., [batchSize, features] + [features]
+        if (larger.Rank == 2 && smaller.Rank == 1 && larger.Shape[1] == smaller.Shape[0])
+        {
+            int batchSize = larger.Shape[0];
+            int features = larger.Shape[1];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int f = 0; f < features; f++)
+                {
+                    result[b, f] = numOps.Add(larger[b, f], smaller[f]);
+                }
+            }
+        }
+        else
+        {
+            // General broadcasting: add element-wise where shapes match
+            throw new NotSupportedException($"Broadcasting from shape [{string.Join(", ", smaller.Shape)}] to [{string.Join(", ", larger.Shape)}] is not yet implemented for this shape combination.");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Reduces gradient to match the original shape by summing across broadcasted dimensions.
+    /// </summary>
+    private static Tensor<T> ReduceGradient(Tensor<T> gradient, int[] originalShape)
+    {
+        // If shapes already match, no reduction needed
+        if (gradient.Shape.SequenceEqual(originalShape))
+        {
+            return gradient;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Handle simple case: reducing [batchSize, features] to [features]
+        if (gradient.Rank == 2 && originalShape.Length == 1 && gradient.Shape[1] == originalShape[0])
+        {
+            int batchSize = gradient.Shape[0];
+            int features = gradient.Shape[1];
+            var result = new Tensor<T>(originalShape);
+
+            for (int f = 0; f < features; f++)
+            {
+                T sum = numOps.Zero;
+                for (int b = 0; b < batchSize; b++)
+                {
+                    sum = numOps.Add(sum, gradient[b, f]);
+                }
+                result[f] = sum;
+            }
+
+            return result;
+        }
+        else
+        {
+            // General reduction: sum across dimensions that were broadcasted
+            throw new NotSupportedException($"Gradient reduction from shape [{string.Join(", ", gradient.Shape)}] to [{string.Join(", ", originalShape)}] is not yet implemented for this shape combination.");
+        }
     }
 }
 

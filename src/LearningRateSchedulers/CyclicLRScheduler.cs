@@ -124,6 +124,9 @@ public class CyclicLRScheduler : LearningRateSchedulerBase
             scale = 1.0 - (double)(cyclePosition - _stepSizeUp) / _stepSizeDown;
         }
 
+        // Clamp scale to [0, 1] to prevent floating-point precision issues
+        scale = Math.Max(0.0, Math.Min(1.0, scale));
+
         double amplitude = _maxLearningRate - _baseLearningRate;
 
         double learningRate;
@@ -149,7 +152,7 @@ public class CyclicLRScheduler : LearningRateSchedulerBase
         }
 
         // Clamp to bounds to handle floating point precision issues
-        return Math.Min(Math.Max(learningRate, _baseLearningRate), _maxLearningRate);
+        return Math.Max(_baseLearningRate, Math.Min(_maxLearningRate, learningRate));
     }
 
     /// <inheritdoc/>

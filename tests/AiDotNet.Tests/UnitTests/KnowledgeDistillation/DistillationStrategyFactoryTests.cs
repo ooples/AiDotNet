@@ -58,7 +58,7 @@ public class DistillationStrategyFactoryTests
                 DistillationStrategyType.FeatureBased,
                 featureWeight: 0.7));
 
-        Assert.Contains("FeatureBased", exception.Message);
+        Assert.Contains("FeatureDistillationStrategy", exception.Message);
     }
 
     [Fact]
@@ -168,7 +168,7 @@ public class DistillationStrategyFactoryTests
                 .WithFeatureWeight(0.8)
                 .Build());
 
-        Assert.Contains("FeatureBased", exception.Message);
+        Assert.Contains("FeatureDistillationStrategy", exception.Message);
     }
 
     [Fact]

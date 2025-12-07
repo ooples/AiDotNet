@@ -100,7 +100,7 @@ public abstract class LearningRateSchedulerBase : ILearningRateScheduler
             ["base_lr"] = _baseLearningRate,
             ["current_lr"] = _currentLearningRate,
             ["current_step"] = _currentStep,
-            ["min_learning_rate"] = _minLearningRate
+            ["min_lr"] = _minLearningRate
         };
     }
 
@@ -113,7 +113,7 @@ public abstract class LearningRateSchedulerBase : ILearningRateScheduler
             _currentLearningRate = Convert.ToDouble(currentLr);
         if (state.TryGetValue("current_step", out var step))
             _currentStep = Convert.ToInt32(step);
-        if (state.TryGetValue("min_learning_rate", out var minLr))
+        if (state.TryGetValue("min_lr", out var minLr))
             _minLearningRate = Convert.ToDouble(minLr);
     }
 }
