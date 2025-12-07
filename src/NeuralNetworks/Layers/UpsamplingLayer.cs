@@ -182,29 +182,9 @@ public class UpsamplingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[1];
-        int inputHeight = input.Shape[2];
-        int inputWidth = input.Shape[3];
-        int outputHeight = inputHeight * _scaleFactor;
-        int outputWidth = inputWidth * _scaleFactor;
-        var output = new Tensor<T>([batchSize, channels, outputHeight, outputWidth]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < outputHeight; h++)
-                {
-                    for (int w = 0; w < outputWidth; w++)
-                    {
-                        int sourceH = h / _scaleFactor;
-                        int sourceW = w / _scaleFactor;
-                        output[b, c, h, w] = input[b, c, sourceH, sourceW];
-                    }
-                }
-            }
-        }
-        return output;
+
+        // Use Engine operation for GPU/CPU acceleration
+        return Engine.Upsample(input, _scaleFactor, _scaleFactor);
     }
 
     /// <summary>

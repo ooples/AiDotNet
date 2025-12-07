@@ -19291,6 +19291,34 @@ public class GpuEngine : IEngine, IDisposable
         return _cpuFallback.ReduceMeanBackward(gradOutput, inputShape, axes);
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> ReduceVariance<T>(Tensor<T> input, int[] axes, bool keepDims)
+    {
+        // ReduceVariance is complex due to arbitrary axes - use CPU for now
+        return _cpuFallback.ReduceVariance(input, axes, keepDims);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReduceVarianceBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> mean, int[] axes)
+    {
+        // Use CPU fallback
+        return _cpuFallback.ReduceVarianceBackward(gradOutput, input, mean, axes);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReduceLogVariance<T>(Tensor<T> input, int[] axes, bool keepDims, double epsilon = 1e-8)
+    {
+        // Use CPU fallback
+        return _cpuFallback.ReduceLogVariance(input, axes, keepDims, epsilon);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReduceLogVarianceBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> mean, Tensor<T> variance, int[] axes)
+    {
+        // Use CPU fallback
+        return _cpuFallback.ReduceLogVarianceBackward(gradOutput, input, mean, variance, axes);
+    }
+
     #endregion
 
     #region Spatial Operations

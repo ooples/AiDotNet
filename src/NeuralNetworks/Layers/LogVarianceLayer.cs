@@ -209,64 +209,12 @@ public class LogVarianceLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        var output = new Tensor<T>(OutputShape);
-        _meanValues = new Tensor<T>(OutputShape);
 
-        int axisSize = input.Shape[Axis];
-        T axisScale = NumOps.FromDouble(1.0 / axisSize);
+        // Use Engine operations for GPU/CPU acceleration
+        _meanValues = Engine.ReduceMean(input, [Axis], keepDims: true);
+        _lastOutput = Engine.ReduceLogVariance(input, [Axis], keepDims: false, epsilon: 1e-8);
 
-        // Compute mean
-        var indices = new int[input.Shape.Length];
-        IterateOverDimensions(input, _meanValues, indices, 0, Axis, (inputTensor, meanTensor, inputIndices) =>
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < axisSize; i++)
-            {
-                inputIndices[Axis] = i;
-                sum = NumOps.Add(sum, inputTensor[inputIndices]);
-            }
-
-            // Construct output indices by skipping the Axis dimension
-            var outputIndices = new int[meanTensor.Shape.Length];
-            int outputIdx = 0;
-            for (int j = 0; j < inputIndices.Length; j++)
-            {
-                if (j != Axis)
-                {
-                    outputIndices[outputIdx++] = inputIndices[j];
-                }
-            }
-            meanTensor[outputIndices] = NumOps.Multiply(sum, axisScale);
-        });
-
-        // Compute log variance
-        IterateOverDimensions(input, output, indices, 0, Axis, (inputTensor, outputTensor, inputIndices) =>
-        {
-            // Construct output indices by skipping the Axis dimension
-            var outputIndices = new int[outputTensor.Shape.Length];
-            int outputIdx = 0;
-            for (int j = 0; j < inputIndices.Length; j++)
-            {
-                if (j != Axis)
-                {
-                    outputIndices[outputIdx++] = inputIndices[j];
-                }
-            }
-
-            T sumSquaredDiff = NumOps.Zero;
-            T mean = _meanValues[outputIndices];
-            for (int i = 0; i < axisSize; i++)
-            {
-                inputIndices[Axis] = i;
-                T diff = NumOps.Subtract(inputTensor[inputIndices], mean);
-                sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Square(diff));
-            }
-            T variance = NumOps.Multiply(sumSquaredDiff, axisScale);
-            outputTensor[outputIndices] = NumOps.Log(NumOps.Add(variance, NumOps.FromDouble(1e-8))); // Add small epsilon for numerical stability
-        });
-
-        _lastOutput = output;
-        return output;
+        return _lastOutput;
     }
 
     /// <summary>
@@ -312,38 +260,16 @@ public class LogVarianceLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null || _meanValues == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        int axisSize = _lastInput.Shape[Axis];
-        T axisScale = NumOps.FromDouble(1.0 / axisSize);
-
-        var indices = new int[_lastInput.Shape.Length];
-        IterateOverDimensions(_lastInput, outputGradient, indices, 0, Axis, (input, outputGrad, inputIndices) =>
+        // Compute variance from log variance: variance = exp(log_variance)
+        var varianceData = _lastOutput.ToArray();
+        for (int i = 0; i < varianceData.Length; i++)
         {
-            // Construct output indices by skipping the Axis dimension
-            var outputIndices = new int[outputGrad.Shape.Length];
-            int outputIdx = 0;
-            for (int j = 0; j < inputIndices.Length; j++)
-            {
-                if (j != Axis)
-                {
-                    outputIndices[outputIdx++] = inputIndices[j];
-                }
-            }
+            varianceData[i] = NumOps.Exp(varianceData[i]);
+        }
+        var variance = new Tensor<T>(_lastOutput.Shape, new Vector<T>(varianceData));
 
-            T mean = _meanValues[outputIndices];
-            T variance = NumOps.Exp(_lastOutput[outputIndices]);
-            T gradScale = NumOps.Divide(outputGrad[outputIndices], variance);
-
-            for (int i = 0; i < axisSize; i++)
-            {
-                inputIndices[Axis] = i;
-                T diff = NumOps.Subtract(input[inputIndices], mean);
-                T grad = NumOps.Multiply(NumOps.Multiply(diff, gradScale), NumOps.FromDouble(2.0 / axisSize));
-                inputGradient[inputIndices] = grad;
-            }
-        });
-
-        return inputGradient;
+        // Use Engine operation for backward pass
+        return Engine.ReduceLogVarianceBackward(outputGradient, _lastInput, _meanValues, variance, [Axis]);
     }
 
     /// <summary>
@@ -440,54 +366,6 @@ public class LogVarianceLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // LogVarianceLayer has no learnable parameters, so this method is empty
-    }
-
-    /// <summary>
-    /// Recursively iterates over all dimensions of a tensor except for the specified dimension to apply an action.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="output">The output tensor.</param>
-    /// <param name="indices">The current indices being processed.</param>
-    /// <param name="currentDim">The current dimension being processed.</param>
-    /// <param name="skipDim">The dimension to skip (the axis along which variance is calculated).</param>
-    /// <param name="action">The action to apply at each position.</param>
-    /// <remarks>
-    /// <para>
-    /// This utility method enables efficient processing of multi-dimensional tensors by recursively iterating through
-    /// all dimensions except the one specified by skipDim. At each valid position, it applies the provided action
-    /// delegate, which performs the actual computation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is a helper that visits every relevant position in your data.
-    /// 
-    /// Imagine your data as a multi-dimensional grid (like a spreadsheet with extra dimensions):
-    /// - This method navigates through all the positions in that grid
-    /// - It skips the dimension you're calculating variance along
-    /// - At each position, it applies the calculation you specified
-    /// 
-    /// This is a recursive function, meaning it calls itself repeatedly to handle each dimension.
-    /// This approach helps process complex multi-dimensional data efficiently.
-    /// </para>
-    /// </remarks>
-    private void IterateOverDimensions(Tensor<T> input, Tensor<T> output, int[] indices, int currentDim, int skipDim, Action<Tensor<T>, Tensor<T>, int[]> action)
-    {
-        if (currentDim == input.Shape.Length)
-        {
-            action(input, output, indices);
-            return;
-        }
-
-        if (currentDim == skipDim)
-        {
-            IterateOverDimensions(input, output, indices, currentDim + 1, skipDim, action);
-        }
-        else
-        {
-            for (int i = 0; i < input.Shape[currentDim]; i++)
-            {
-                indices[currentDim] = i;
-                IterateOverDimensions(input, output, indices, currentDim + 1, skipDim, action);
-            }
-        }
     }
 
     /// <summary>

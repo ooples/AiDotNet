@@ -490,8 +490,9 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
 
         var output = Engine.ConvTranspose2D(input, _kernels, stride, padding, outputPadding);
 
-        // Add bias (broadcast)
-        var biasedOutput = output.Add(_biases.ToVector());
+        // Add bias using broadcast: reshape [OutputDepth] to [1, OutputDepth, 1, 1] for NCHW format
+        var biasReshaped = _biases.Reshape([1, OutputDepth, 1, 1]);
+        var biasedOutput = Engine.TensorBroadcastAdd(output, biasReshaped);
 
         _lastOutput = ApplyActivation(biasedOutput);
         return _lastOutput;
@@ -731,34 +732,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _kernels.Length + _biases.Length;
-        var parameters = new Vector<T>(totalParams);
-    
-        int index = 0;
-    
-        // Copy kernel parameters
-        for (int id = 0; id < InputDepth; id++)
-        {
-            for (int od = 0; od < OutputDepth; od++)
-            {
-                for (int kh = 0; kh < KernelSize; kh++)
-                {
-                    for (int kw = 0; kw < KernelSize; kw++)
-                    {
-                        parameters[index++] = _kernels[id, od, kh, kw];
-                    }
-                }
-            }
-        }
-    
-        // Copy bias parameters
-        for (int od = 0; od < OutputDepth; od++)
-        {
-            parameters[index++] = _biases[od];
-        }
-    
-        return parameters;
+        return Vector<T>.Concatenate(_kernels.ToVector(), _biases.ToVector());
     }
 
     /// <summary>
@@ -787,33 +761,17 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != _kernels.Length + _biases.Length)
+        int expectedLength = _kernels.Length + _biases.Length;
+        if (parameters.Length != expectedLength)
         {
-            throw new ArgumentException($"Expected {_kernels.Length + _biases.Length} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}");
         }
-    
-        int index = 0;
-    
-        // Set kernel parameters
-        for (int id = 0; id < InputDepth; id++)
-        {
-            for (int od = 0; od < OutputDepth; od++)
-            {
-                for (int kh = 0; kh < KernelSize; kh++)
-                {
-                    for (int kw = 0; kw < KernelSize; kw++)
-                    {
-                        _kernels[id, od, kh, kw] = parameters[index++];
-                    }
-                }
-            }
-        }
-    
-        // Set bias parameters
-        for (int od = 0; od < OutputDepth; od++)
-        {
-            _biases[od] = parameters[index++];
-        }
+
+        var kernelVec = parameters.Slice(0, _kernels.Length);
+        var biasVec = parameters.Slice(_kernels.Length, _biases.Length);
+
+        _kernels = Tensor<T>.FromVector(kernelVec, [InputDepth, OutputDepth, KernelSize, KernelSize]);
+        _biases = Tensor<T>.FromVector(biasVec, [OutputDepth]);
     }
 
     /// <summary>

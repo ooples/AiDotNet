@@ -330,6 +330,15 @@ These may already be clean or have minimal issues:
 - [x] AvgPoolingLayer.cs - Already production-grade: Engine.AvgPool2D, Engine.AvgPool2DBackward, inline topo sort, JIT support
 - [x] MaxPoolingLayer.cs - Already production-grade: Engine.MaxPool2DWithIndices, Engine.MaxPool2DBackward, inline topo sort, JIT support
 - [x] GlobalPoolingLayer.cs - Already production-grade: Engine.ReduceMean/Max, Engine.ReduceMeanBackward/MaxBackward, inline topo sort, JIT support
+- [x] DeconvolutionalLayer.cs - Fixed bias add to use Engine.TensorBroadcastAdd, simplified GetParameters/SetParameters to use Vector.Concatenate/Tensor.FromVector
+- [x] DilatedConvolutionalLayer.cs - Full production-grade upgrade: Tensor<T> for biases, Engine.Conv2D with dilation, Engine.Conv2DBackwardInput/Kernel, TensorBroadcastAdd for bias, inline topo sort, Transpose for NHWC↔NCHW
+- [x] DepthwiseSeparableConvolutionalLayer.cs - Full production-grade upgrade: Tensor<T> for biases, Engine.DepthwiseConv2D + Engine.Conv2D for pointwise, TensorBroadcastAdd for bias, Engine backward ops, inline topo sort, Transpose for NHWC↔NCHW
+- [x] SeparableConvolutionalLayer.cs - Full production-grade upgrade: Tensor<T> for biases/velocity, Engine.DepthwiseConv2D + Engine.Conv2D, TensorBroadcastAdd for bias, Engine backward ops with kernel format conversion, inline topo sort, Transpose for NHWC↔NCHW
+- [x] SubpixelConvolutionalLayer.cs - Full production-grade upgrade: Tensor<T> for biases/momentum, Engine.Conv2D + Engine.PixelShuffle, Engine.PixelShuffleBackward, TensorBroadcastAdd for bias, inline topo sort, Transpose for NHWC↔NCHW
+- [x] TransformerDecoderLayer.cs - Already production-grade: Composite layer delegates to sublayers, Engine.TensorAdd for residuals, Vector.Concatenate for GetParameters, JIT support
+- [x] TransformerEncoderLayer.cs - Already production-grade: Composite layer delegates to sublayers, Engine.TensorAdd for residuals, Vector.Concatenate for GetParameters, JIT support
+- [x] LogVarianceLayer.cs - Full production-grade upgrade: Added Engine.ReduceVariance/ReduceLogVariance/Backward ops to IEngine, CpuEngine, GpuEngine; Forward/Backward now use Engine ops
+- [x] MeanLayer.cs - Full production-grade upgrade: Forward uses Engine.ReduceMean, Backward uses Engine.ReduceMeanBackward
 
 ### In Progress
 - [ ] Continue Phase 1-12 layer upgrades (starting with simple layers)

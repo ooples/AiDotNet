@@ -2645,6 +2645,50 @@ public interface IEngine
     /// <returns>The gradient with respect to the input.</returns>
     Tensor<T> ReduceMeanBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] axes);
 
+    /// <summary>
+    /// Computes the variance of tensor elements along specified axes.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="axes">The axes along which to compute the variance.</param>
+    /// <param name="keepDims">Whether to keep reduced dimensions with size 1.</param>
+    /// <returns>The tensor containing variance values.</returns>
+    Tensor<T> ReduceVariance<T>(Tensor<T> input, int[] axes, bool keepDims);
+
+    /// <summary>
+    /// Computes the backward pass for reduce variance.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <param name="mean">The mean values computed during forward pass.</param>
+    /// <param name="axes">The axes that were reduced.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> ReduceVarianceBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> mean, int[] axes);
+
+    /// <summary>
+    /// Computes the natural logarithm of variance of tensor elements along specified axes.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="axes">The axes along which to compute the log variance.</param>
+    /// <param name="keepDims">Whether to keep reduced dimensions with size 1.</param>
+    /// <param name="epsilon">Small value for numerical stability (prevents log(0)).</param>
+    /// <returns>The tensor containing log variance values.</returns>
+    Tensor<T> ReduceLogVariance<T>(Tensor<T> input, int[] axes, bool keepDims, double epsilon = 1e-8);
+
+    /// <summary>
+    /// Computes the backward pass for reduce log variance.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <param name="mean">The mean values computed during forward pass.</param>
+    /// <param name="variance">The variance values computed during forward pass.</param>
+    /// <param name="axes">The axes that were reduced.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> ReduceLogVarianceBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> mean, Tensor<T> variance, int[] axes);
+
     #endregion
 
     #region Spatial Operations

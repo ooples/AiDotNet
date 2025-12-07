@@ -5514,6 +5514,306 @@ public class CpuEngine : IEngine
         return new Tensor<T>(inputShape, new Vector<T>(gradInputData));
     }
 
+    /// <inheritdoc/>
+    public Tensor<T> ReduceVariance<T>(Tensor<T> input, int[] axes, bool keepDims)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputData = input.ToArray();
+        var inputShape = input.Shape;
+
+        // First compute the mean
+        var mean = ReduceMean(input, axes, keepDims: true);
+        var meanData = mean.ToArray();
+        var meanShape = mean.Shape;
+
+        // Normalize axes
+        var normalizedAxes = ValidateAndNormalizeAxes(axes, inputShape.Length);
+
+        // Compute output shape
+        var outputShapeList = new List<int>();
+        for (int d = 0; d < inputShape.Length; d++)
+        {
+            if (normalizedAxes.Contains(d))
+            {
+                if (keepDims) outputShapeList.Add(1);
+            }
+            else
+            {
+                outputShapeList.Add(inputShape[d]);
+            }
+        }
+        if (outputShapeList.Count == 0) outputShapeList.Add(1);
+        var outputShape = outputShapeList.ToArray();
+
+        int outputSize = outputShape.Aggregate(1, (a, b) => a * b);
+        var outputData = new T[outputSize];
+
+        // Compute reduction count (number of elements being reduced)
+        int reduceCount = 1;
+        foreach (var ax in normalizedAxes)
+        {
+            reduceCount *= inputShape[ax];
+        }
+        T scale = numOps.Divide(numOps.One, numOps.FromDouble(reduceCount));
+
+        var inputStrides = ComputeStrides(inputShape);
+        var outputStrides = ComputeStrides(outputShape);
+        var meanStrides = ComputeStrides(meanShape);
+
+        // Accumulate squared differences from mean
+        int inputSize = inputData.Length;
+        for (int i = 0; i < inputSize; i++)
+        {
+            var multiIndex = FlatToMultiIndex(i, inputShape, inputStrides);
+
+            var outputMultiIndex = new List<int>();
+            for (int d = 0; d < inputShape.Length; d++)
+            {
+                if (normalizedAxes.Contains(d))
+                {
+                    if (keepDims) outputMultiIndex.Add(0);
+                }
+                else
+                {
+                    outputMultiIndex.Add(multiIndex[d]);
+                }
+            }
+            if (outputMultiIndex.Count == 0) outputMultiIndex.Add(0);
+
+            int outputIdx = MultiToFlatIndex([.. outputMultiIndex], outputShape, outputStrides);
+
+            // Get mean value (mean tensor has keepDims=true shape)
+            var meanMultiIndex = new List<int>();
+            for (int d = 0; d < inputShape.Length; d++)
+            {
+                if (normalizedAxes.Contains(d))
+                    meanMultiIndex.Add(0);
+                else
+                    meanMultiIndex.Add(multiIndex[d]);
+            }
+            int meanIdx = MultiToFlatIndex([.. meanMultiIndex], meanShape, meanStrides);
+
+            T diff = numOps.Subtract(inputData[i], meanData[meanIdx]);
+            T squaredDiff = numOps.Multiply(diff, diff);
+            outputData[outputIdx] = numOps.Add(outputData[outputIdx], squaredDiff);
+        }
+
+        // Divide by count to get variance
+        for (int i = 0; i < outputSize; i++)
+        {
+            outputData[i] = numOps.Multiply(outputData[i], scale);
+        }
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReduceVarianceBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> mean, int[] axes)
+    {
+        if (gradOutput == null)
+            throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+        if (mean == null)
+            throw new ArgumentNullException(nameof(mean));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputData = input.ToArray();
+        var inputShape = input.Shape;
+        var meanData = mean.ToArray();
+        var meanShape = mean.Shape;
+        var gradOutputData = gradOutput.ToArray();
+        var gradOutputShape = gradOutput.Shape;
+
+        int inputSize = inputData.Length;
+        var gradInputData = new T[inputSize];
+
+        var normalizedAxes = ValidateAndNormalizeAxes(axes, inputShape.Length);
+
+        int reduceCount = 1;
+        foreach (var ax in normalizedAxes)
+        {
+            reduceCount *= inputShape[ax];
+        }
+        T scale = numOps.Divide(numOps.FromDouble(2.0), numOps.FromDouble(reduceCount));
+
+        var inputStrides = ComputeStrides(inputShape);
+        var outputStrides = ComputeStrides(gradOutputShape);
+        var meanStrides = ComputeStrides(meanShape);
+
+        for (int i = 0; i < inputSize; i++)
+        {
+            var multiIndex = FlatToMultiIndex(i, inputShape, inputStrides);
+
+            // Map to output index
+            var outputMultiIndex = new List<int>();
+            int d2 = 0;
+            for (int d = 0; d < inputShape.Length; d++)
+            {
+                if (normalizedAxes.Contains(d))
+                {
+                    if (d2 < gradOutputShape.Length && gradOutputShape[d2] == 1)
+                    {
+                        outputMultiIndex.Add(0);
+                        d2++;
+                    }
+                }
+                else
+                {
+                    if (d2 < gradOutputShape.Length)
+                    {
+                        outputMultiIndex.Add(multiIndex[d]);
+                        d2++;
+                    }
+                }
+            }
+            if (outputMultiIndex.Count == 0) outputMultiIndex.Add(0);
+            while (outputMultiIndex.Count < gradOutputShape.Length) outputMultiIndex.Add(0);
+            while (outputMultiIndex.Count > gradOutputShape.Length) outputMultiIndex.RemoveAt(outputMultiIndex.Count - 1);
+
+            int outputIdx = MultiToFlatIndex([.. outputMultiIndex], gradOutputShape, outputStrides);
+
+            // Map to mean index
+            var meanMultiIndex = new List<int>();
+            for (int d = 0; d < inputShape.Length; d++)
+            {
+                if (normalizedAxes.Contains(d))
+                    meanMultiIndex.Add(0);
+                else
+                    meanMultiIndex.Add(multiIndex[d]);
+            }
+            int meanIdx = MultiToFlatIndex([.. meanMultiIndex], meanShape, meanStrides);
+
+            // gradient = 2 * (x - mean) * gradOutput / N
+            T diff = numOps.Subtract(inputData[i], meanData[meanIdx]);
+            gradInputData[i] = numOps.Multiply(numOps.Multiply(diff, scale), gradOutputData[outputIdx]);
+        }
+
+        return new Tensor<T>(inputShape, new Vector<T>(gradInputData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReduceLogVariance<T>(Tensor<T> input, int[] axes, bool keepDims, double epsilon = 1e-8)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Compute variance first
+        var variance = ReduceVariance(input, axes, keepDims);
+        var varianceData = variance.ToArray();
+
+        // Apply log(variance + epsilon)
+        T eps = numOps.FromDouble(epsilon);
+        for (int i = 0; i < varianceData.Length; i++)
+        {
+            varianceData[i] = numOps.Log(numOps.Add(varianceData[i], eps));
+        }
+
+        return new Tensor<T>(variance.Shape, new Vector<T>(varianceData));
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReduceLogVarianceBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> mean, Tensor<T> variance, int[] axes)
+    {
+        if (gradOutput == null)
+            throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+        if (mean == null)
+            throw new ArgumentNullException(nameof(mean));
+        if (variance == null)
+            throw new ArgumentNullException(nameof(variance));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputData = input.ToArray();
+        var inputShape = input.Shape;
+        var meanData = mean.ToArray();
+        var meanShape = mean.Shape;
+        var varianceData = variance.ToArray();
+        var varianceShape = variance.Shape;
+        var gradOutputData = gradOutput.ToArray();
+        var gradOutputShape = gradOutput.Shape;
+
+        int inputSize = inputData.Length;
+        var gradInputData = new T[inputSize];
+
+        var normalizedAxes = ValidateAndNormalizeAxes(axes, inputShape.Length);
+
+        int reduceCount = 1;
+        foreach (var ax in normalizedAxes)
+        {
+            reduceCount *= inputShape[ax];
+        }
+        T scale = numOps.Divide(numOps.FromDouble(2.0), numOps.FromDouble(reduceCount));
+
+        var inputStrides = ComputeStrides(inputShape);
+        var outputStrides = ComputeStrides(gradOutputShape);
+        var meanStrides = ComputeStrides(meanShape);
+        var varianceStrides = ComputeStrides(varianceShape);
+
+        for (int i = 0; i < inputSize; i++)
+        {
+            var multiIndex = FlatToMultiIndex(i, inputShape, inputStrides);
+
+            // Map to output/variance index
+            var outputMultiIndex = new List<int>();
+            int d2 = 0;
+            for (int d = 0; d < inputShape.Length; d++)
+            {
+                if (normalizedAxes.Contains(d))
+                {
+                    if (d2 < gradOutputShape.Length && gradOutputShape[d2] == 1)
+                    {
+                        outputMultiIndex.Add(0);
+                        d2++;
+                    }
+                }
+                else
+                {
+                    if (d2 < gradOutputShape.Length)
+                    {
+                        outputMultiIndex.Add(multiIndex[d]);
+                        d2++;
+                    }
+                }
+            }
+            if (outputMultiIndex.Count == 0) outputMultiIndex.Add(0);
+            while (outputMultiIndex.Count < gradOutputShape.Length) outputMultiIndex.Add(0);
+            while (outputMultiIndex.Count > gradOutputShape.Length) outputMultiIndex.RemoveAt(outputMultiIndex.Count - 1);
+
+            int outputIdx = MultiToFlatIndex([.. outputMultiIndex], gradOutputShape, outputStrides);
+
+            // Map to mean index
+            var meanMultiIndex = new List<int>();
+            for (int d = 0; d < inputShape.Length; d++)
+            {
+                if (normalizedAxes.Contains(d))
+                    meanMultiIndex.Add(0);
+                else
+                    meanMultiIndex.Add(multiIndex[d]);
+            }
+            int meanIdx = MultiToFlatIndex([.. meanMultiIndex], meanShape, meanStrides);
+            int varianceIdx = MultiToFlatIndex([.. outputMultiIndex], varianceShape, varianceStrides);
+
+            // gradient = 2 * (x - mean) / (N * variance) * gradOutput
+            // = (x - mean) * scale / variance * gradOutput
+            T diff = numOps.Subtract(inputData[i], meanData[meanIdx]);
+            T varianceVal = varianceData[varianceIdx];
+            // Avoid division by zero
+            if (numOps.LessThanOrEquals(varianceVal, numOps.Zero))
+                varianceVal = numOps.FromDouble(1e-8);
+            T gradScale = numOps.Divide(scale, varianceVal);
+            gradInputData[i] = numOps.Multiply(numOps.Multiply(diff, gradScale), gradOutputData[outputIdx]);
+        }
+
+        return new Tensor<T>(inputShape, new Vector<T>(gradInputData));
+    }
+
     // Helper methods for reduction operations
     private static int[] ComputeStrides(int[] shape)
     {
