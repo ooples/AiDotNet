@@ -79,36 +79,40 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private T _lastAttentionSparsityLoss;
 
     /// <summary>
-    /// The weight matrix used to transform the input into query keys.
+    /// The weight tensor used to transform the input into query keys.
     /// </summary>
     /// <remarks>
-    /// This matrix transforms the input vector into a key vector that is used to query the memory.
+    /// This tensor transforms the input vector into a key vector that is used to query the memory.
+    /// Shape: [inputDimension, memoryDimension]
     /// </remarks>
-    private Matrix<T> _keyWeights;
-    
+    private Tensor<T> _keyWeights;
+
     /// <summary>
-    /// The weight matrix used to transform the memory values after attention.
+    /// The weight tensor used to transform the memory values after attention.
     /// </summary>
     /// <remarks>
-    /// This matrix transforms the retrieved memory values into the output space.
+    /// This tensor transforms the retrieved memory values into the output space.
+    /// Shape: [memoryDimension, outputDimension]
     /// </remarks>
-    private Matrix<T> _valueWeights;
-    
+    private Tensor<T> _valueWeights;
+
     /// <summary>
-    /// The weight matrix applied to the output after value transformation.
+    /// The weight tensor applied to the output after value transformation.
     /// </summary>
     /// <remarks>
-    /// This matrix applies a final transformation to the output before adding the bias.
+    /// This tensor applies a final transformation to the output before adding the bias.
+    /// Shape: [outputDimension, outputDimension]
     /// </remarks>
-    private Matrix<T> _outputWeights;
-    
+    private Tensor<T> _outputWeights;
+
     /// <summary>
-    /// The bias vector added to the output.
+    /// The bias tensor added to the output.
     /// </summary>
     /// <remarks>
-    /// This vector is added to the output after all weight transformations.
+    /// This tensor is added to the output after all weight transformations.
+    /// Shape: [outputDimension]
     /// </remarks>
-    private Vector<T> _outputBias;
+    private Tensor<T> _outputBias;
 
     /// <summary>
     /// The input tensor from the most recent forward pass.
@@ -153,8 +157,8 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This field stores the gradient of the key weights, which is used to update the weights
     /// during the parameter update step.
     /// </remarks>
-    private Matrix<T>? _keyWeightsGradient;
-    
+    private Tensor<T>? _keyWeightsGradient;
+
     /// <summary>
     /// The gradient of the loss with respect to the value weights.
     /// </summary>
@@ -162,8 +166,8 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This field stores the gradient of the value weights, which is used to update the weights
     /// during the parameter update step.
     /// </remarks>
-    private Matrix<T>? _valueWeightsGradient;
-    
+    private Tensor<T>? _valueWeightsGradient;
+
     /// <summary>
     /// The gradient of the loss with respect to the output weights.
     /// </summary>
@@ -171,8 +175,8 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This field stores the gradient of the output weights, which is used to update the weights
     /// during the parameter update step.
     /// </remarks>
-    private Matrix<T>? _outputWeightsGradient;
-    
+    private Tensor<T>? _outputWeightsGradient;
+
     /// <summary>
     /// The gradient of the loss with respect to the output bias.
     /// </summary>
@@ -180,7 +184,7 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This field stores the gradient of the output bias, which is used to update the bias
     /// during the parameter update step.
     /// </remarks>
-    private Vector<T>? _outputBiasGradient;
+    private Tensor<T>? _outputBiasGradient;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -242,10 +246,10 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAttentionSparsityLoss = NumOps.Zero;
 
-        _keyWeights = new Matrix<T>(inputDimension, memoryDimension);
-        _valueWeights = new Matrix<T>(memoryDimension, outputDimension);
-        _outputWeights = new Matrix<T>(outputDimension, outputDimension);
-        _outputBias = new Vector<T>(outputDimension);
+        _keyWeights = new Tensor<T>([inputDimension, memoryDimension]);
+        _valueWeights = new Tensor<T>([memoryDimension, outputDimension]);
+        _outputWeights = new Tensor<T>([outputDimension, outputDimension]);
+        _outputBias = new Tensor<T>([outputDimension]);
 
         InitializeParameters();
     }
@@ -282,10 +286,10 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAttentionSparsityLoss = NumOps.Zero;
 
-        _keyWeights = new Matrix<T>(inputDimension, memoryDimension);
-        _valueWeights = new Matrix<T>(memoryDimension, outputDimension);
-        _outputWeights = new Matrix<T>(outputDimension, outputDimension);
-        _outputBias = new Vector<T>(outputDimension);
+        _keyWeights = new Tensor<T>([inputDimension, memoryDimension]);
+        _valueWeights = new Tensor<T>([memoryDimension, outputDimension]);
+        _outputWeights = new Tensor<T>([outputDimension, outputDimension]);
+        _outputBias = new Tensor<T>([outputDimension]);
 
         InitializeParameters();
     }
@@ -316,48 +320,54 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_keyWeights.Rows + _keyWeights.Columns)));
-        InitializeMatrix(_keyWeights, scale);
-        InitializeMatrix(_valueWeights, scale);
-        InitializeMatrix(_outputWeights, scale);
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_keyWeights.Shape[0] + _keyWeights.Shape[1])));
+        InitializeTensor(_keyWeights, scale);
+        InitializeTensor(_valueWeights, scale);
+        InitializeTensor(_outputWeights, scale);
 
-        for (int i = 0; i < _outputBias.Length; i++)
-        {
-            _outputBias[i] = NumOps.Zero;
-        }
+        _outputBias.Fill(NumOps.Zero);
     }
 
     /// <summary>
-    /// Initializes a matrix with random values scaled by the given factor.
+    /// Initializes a tensor with random values scaled by the given factor.
     /// </summary>
-    /// <param name="matrix">The matrix to initialize.</param>
+    /// <param name="tensor">The tensor to initialize.</param>
     /// <param name="scale">The scaling factor for the random values.</param>
     /// <remarks>
     /// <para>
-    /// This method fills the matrix with random values between -0.5 and 0.5, scaled by the provided factor.
+    /// This method fills the tensor with random values between -0.5 and 0.5, scaled by the provided factor.
     /// This approach helps to establish good initial conditions for training, especially for deeper networks
     /// where proper weight initialization is crucial for convergence.
     /// </para>
-    /// <para><b>For Beginners:</b> This method fills a matrix with small random numbers.
-    /// 
+    /// <para><b>For Beginners:</b> This method fills a tensor with small random numbers.
+    ///
     /// When initializing a neural network:
     /// - We need to start with random values to break symmetry
     /// - Values that are too large or too small can cause problems
     /// - The scale parameter helps control how large the initial values are
-    /// 
-    /// This method goes through each position in the matrix and assigns it a random
+    ///
+    /// This method goes through each position in the tensor and assigns it a random
     /// value between -0.5 and 0.5, multiplied by the scale factor. This gives a
     /// controlled amount of randomness that helps the network start learning effectively.
     /// </para>
     /// </remarks>
-    private void InitializeMatrix(Matrix<T> matrix, T scale)
+    private void InitializeTensor(Tensor<T> tensor, T scale)
     {
-        for (int i = 0; i < matrix.Rows; i++)
+        // Create random tensor using Engine operations
+        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape);
+
+        // Shift to [-0.5, 0.5] range: randomTensor - 0.5
+        var halfTensor = new Tensor<T>(tensor.Shape);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
+
+        // Scale by the scale factor
+        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
+
+        // Copy to tensor
+        for (int i = 0; i < tensor.Length; i++)
         {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            }
+            tensor[i] = scaled.GetFlat(i);
         }
     }
 
@@ -394,18 +404,50 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastInput = input;
         _lastMemory = memory;
 
-        var keys = input.Multiply(_keyWeights);
-        var attentionScores = keys.Multiply(memory.Transpose([1, 0]));
-        
+        // Use Engine operations for matrix multiplications
+        var keys = Engine.TensorMatMul(input, _keyWeights);
+
+        // Compute attention scores: keys × memory^T
+        var memoryTransposed = Engine.TensorTranspose(memory);
+        var attentionScores = Engine.TensorMatMul(keys, memoryTransposed);
+
+        // Apply softmax to get attention weights
         var softmaxActivation = new SoftmaxActivation<T>();
         var attentionWeights = softmaxActivation.Activate(attentionScores);
         _lastAttentionScores = attentionWeights;
 
-        var readValues = attentionWeights.Multiply(memory);
-        var output = readValues.Multiply(_valueWeights).Multiply(_outputWeights).Add(_outputBias);
+        // Read from memory: attentionWeights × memory
+        var readValues = Engine.TensorMatMul(attentionWeights, memory);
+
+        // Apply value and output transformations
+        var transformed = Engine.TensorMatMul(readValues, _valueWeights);
+        var projected = Engine.TensorMatMul(transformed, _outputWeights);
+
+        // Broadcast bias and add
+        var batchSize = input.Shape[0];
+        var biasBroadcast = BroadcastBiases(_outputBias, batchSize);
+        var output = Engine.TensorAdd(projected, biasBroadcast);
+
         _lastOutput = ApplyActivation(output);
 
         return _lastOutput;
+    }
+
+    /// <summary>
+    /// Broadcasts a bias tensor across the batch dimension.
+    /// </summary>
+    /// <param name="biases">The bias tensor of shape [outputDimension].</param>
+    /// <param name="batchSize">The batch size for broadcasting.</param>
+    /// <returns>A tensor of shape [batchSize, outputDimension] with biases broadcast.</returns>
+    private Tensor<T> BroadcastBiases(Tensor<T> biases, int batchSize)
+    {
+        int outputDim = biases.Length;
+
+        // Reshape bias from [outputDim] to [1, outputDim] and tile across batch
+        var biasReshaped = biases.Reshape([1, outputDim]);
+        var broadcast = Engine.TensorTile(biasReshaped, [batchSize, 1]);
+
+        return broadcast;
     }
 
     /// <summary>
@@ -470,20 +512,46 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
 
-        _outputWeightsGradient = activationGradient.Transpose([1, 0]).Multiply(_lastOutput).ToMatrix();
-        _outputBiasGradient = activationGradient.Sum([0]).ToVector();
+        // Output weights gradient: activationGradient^T × lastOutput
+        var activationGradientT = Engine.TensorTranspose(activationGradient);
+        _outputWeightsGradient = Engine.TensorMatMul(activationGradientT, _lastOutput);
 
-        var valueGradient = activationGradient.Multiply(_outputWeights.Transpose()).Multiply(_valueWeights.Transpose());
+        // Output bias gradient: sum across batch dimension
+        _outputBiasGradient = activationGradient.Sum([0]);
 
+        // Value gradient: activationGradient × outputWeights^T × valueWeights^T
+        var outputWeightsT = Engine.TensorTranspose(_outputWeights);
+        var valueWeightsT = Engine.TensorTranspose(_valueWeights);
+        var afterOutputGrad = Engine.TensorMatMul(activationGradient, outputWeightsT);
+        var valueGradient = Engine.TensorMatMul(afterOutputGrad, valueWeightsT);
+
+        // Softmax derivative for attention
         var softmaxActivation = new SoftmaxActivation<T>();
         var softmaxDerivative = softmaxActivation.Derivative(_lastAttentionScores);
-        var attentionWeightsGradient = softmaxDerivative.ElementwiseMultiply(valueGradient.Multiply(_lastMemory.Transpose([1, 0])));
 
-        _keyWeightsGradient = _lastInput.Transpose([1, 0]).Multiply(attentionWeightsGradient.Multiply(_lastMemory)).ToMatrix();
-        _valueWeightsGradient = _lastMemory.Transpose([1, 0]).Multiply(_lastAttentionScores.Transpose([1, 0]).Multiply(activationGradient)).ToMatrix();
+        // Attention weights gradient through softmax
+        var memoryT = Engine.TensorTranspose(_lastMemory);
+        var valueGradTimesMemoryT = Engine.TensorMatMul(valueGradient, memoryT);
+        var attentionWeightsGradient = Engine.TensorMultiply(softmaxDerivative, valueGradTimesMemoryT);
 
-        var inputGradient = attentionWeightsGradient.Multiply(_keyWeights.Transpose());
-        var memoryGradient = attentionWeightsGradient.Transpose([1, 0]).Multiply(_lastInput.Multiply(_keyWeights));
+        // Key weights gradient: input^T × (attentionWeightsGradient × memory)
+        var lastInputT = Engine.TensorTranspose(_lastInput);
+        var attGradTimesMemory = Engine.TensorMatMul(attentionWeightsGradient, _lastMemory);
+        _keyWeightsGradient = Engine.TensorMatMul(lastInputT, attGradTimesMemory);
+
+        // Value weights gradient: memory^T × (attentionScores^T × activationGradient)
+        var attentionScoresT = Engine.TensorTranspose(_lastAttentionScores);
+        var attScoresTGrad = Engine.TensorMatMul(attentionScoresT, activationGradient);
+        _valueWeightsGradient = Engine.TensorMatMul(memoryT, attScoresTGrad);
+
+        // Input gradient: attentionWeightsGradient × keyWeights^T
+        var keyWeightsT = Engine.TensorTranspose(_keyWeights);
+        var inputGradient = Engine.TensorMatMul(attentionWeightsGradient, keyWeightsT);
+
+        // Memory gradient: attentionWeightsGradient^T × (input × keyWeights)
+        var attGradT = Engine.TensorTranspose(attentionWeightsGradient);
+        var inputTimesKeyWeights = Engine.TensorMatMul(_lastInput, _keyWeights);
+        var memoryGradient = Engine.TensorMatMul(attGradT, inputTimesKeyWeights);
 
         // Combine inputGradient and memoryGradient into a single Tensor
         return CombineGradients(inputGradient, memoryGradient);
@@ -525,13 +593,13 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             preActivationGradient = outputGradient;
         }
 
-        // Create computation nodes with efficient tensor conversions
+        // Create computation nodes (weights are already Tensor<T>)
         var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
         var memory = Autodiff.TensorOperations<T>.Variable(_lastMemory, "memory", requiresGradient: true);
-        var keyWeights = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromRowMatrix(_keyWeights), "keyWeights", requiresGradient: true);
-        var valueWeights = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromRowMatrix(_valueWeights), "valueWeights", requiresGradient: true);
-        var outputWeights = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromRowMatrix(_outputWeights), "outputWeights", requiresGradient: true);
-        var outputBias = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromVector(_outputBias), "outputBias", requiresGradient: true);
+        var keyWeights = Autodiff.TensorOperations<T>.Variable(_keyWeights, "keyWeights", requiresGradient: true);
+        var valueWeights = Autodiff.TensorOperations<T>.Variable(_valueWeights, "valueWeights", requiresGradient: true);
+        var outputWeights = Autodiff.TensorOperations<T>.Variable(_outputWeights, "outputWeights", requiresGradient: true);
+        var outputBias = Autodiff.TensorOperations<T>.Variable(_outputBias, "outputBias", requiresGradient: true);
 
         // Forward computation using autodiff ops (minimal graph for linear part)
         // Step 1: keys = input @ keyWeights
@@ -595,11 +663,11 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
         }
 
-        // Extract gradients using efficient methods
-        if (keyWeights.Gradient != null) _keyWeightsGradient = keyWeights.Gradient.ToMatrix();
-        if (valueWeights.Gradient != null) _valueWeightsGradient = valueWeights.Gradient.ToMatrix();
-        if (outputWeights.Gradient != null) _outputWeightsGradient = outputWeights.Gradient.ToMatrix();
-        if (outputBias.Gradient != null) _outputBiasGradient = outputBias.Gradient.ToVector();
+        // Extract gradients (already Tensor<T>)
+        _keyWeightsGradient = keyWeights.Gradient;
+        _valueWeightsGradient = valueWeights.Gradient;
+        _outputWeightsGradient = outputWeights.Gradient;
+        _outputBiasGradient = outputBias.Gradient;
 
         // Combine input and memory gradients
         var inputGrad = input.Gradient ?? new Tensor<T>(_lastInput.Shape);
@@ -669,10 +737,18 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_keyWeightsGradient == null || _valueWeightsGradient == null || _outputWeightsGradient == null || _outputBiasGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _keyWeights = _keyWeights.Subtract(_keyWeightsGradient.Multiply(learningRate));
-        _valueWeights = _valueWeights.Subtract(_valueWeightsGradient.Multiply(learningRate));
-        _outputWeights = _outputWeights.Subtract(_outputWeightsGradient.Multiply(learningRate));
-        _outputBias = _outputBias.Subtract(_outputBiasGradient.Multiply(learningRate));
+        // Use Engine operations for parameter updates
+        var scaledKeyGrad = Engine.TensorMultiplyScalar(_keyWeightsGradient, learningRate);
+        _keyWeights = Engine.TensorSubtract(_keyWeights, scaledKeyGrad);
+
+        var scaledValueGrad = Engine.TensorMultiplyScalar(_valueWeightsGradient, learningRate);
+        _valueWeights = Engine.TensorSubtract(_valueWeights, scaledValueGrad);
+
+        var scaledOutputGrad = Engine.TensorMultiplyScalar(_outputWeightsGradient, learningRate);
+        _outputWeights = Engine.TensorSubtract(_outputWeights, scaledOutputGrad);
+
+        var scaledBiasGrad = Engine.TensorMultiplyScalar(_outputBiasGradient, learningRate);
+        _outputBias = Engine.TensorSubtract(_outputBias, scaledBiasGrad);
     }
 
     /// <summary>
@@ -731,49 +807,13 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _keyWeights.Rows * _keyWeights.Columns +
-                          _valueWeights.Rows * _valueWeights.Columns +
-                          _outputWeights.Rows * _outputWeights.Columns +
-                          _outputBias.Length;
-    
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-    
-        // Copy key weights
-        for (int i = 0; i < _keyWeights.Rows; i++)
-        {
-            for (int j = 0; j < _keyWeights.Columns; j++)
-            {
-                parameters[index++] = _keyWeights[i, j];
-            }
-        }
-    
-        // Copy value weights
-        for (int i = 0; i < _valueWeights.Rows; i++)
-        {
-            for (int j = 0; j < _valueWeights.Columns; j++)
-            {
-                parameters[index++] = _valueWeights[i, j];
-            }
-        }
-    
-        // Copy output weights
-        for (int i = 0; i < _outputWeights.Rows; i++)
-        {
-            for (int j = 0; j < _outputWeights.Columns; j++)
-            {
-                parameters[index++] = _outputWeights[i, j];
-            }
-        }
-    
-        // Copy output bias
-        for (int i = 0; i < _outputBias.Length; i++)
-        {
-            parameters[index++] = _outputBias[i];
-        }
-    
-        return parameters;
+        // Use Vector.Concatenate to efficiently combine all parameters
+        return Vector<T>.Concatenate(
+            new Vector<T>(_keyWeights.ToArray()),
+            new Vector<T>(_valueWeights.ToArray()),
+            new Vector<T>(_outputWeights.ToArray()),
+            new Vector<T>(_outputBias.ToArray())
+        );
     }
 
     /// <summary>
@@ -806,50 +846,37 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int totalParams = _keyWeights.Rows * _keyWeights.Columns +
-                          _valueWeights.Rows * _valueWeights.Columns +
-                          _outputWeights.Rows * _outputWeights.Columns +
-                          _outputBias.Length;
-    
+        int keySize = _keyWeights.Shape[0] * _keyWeights.Shape[1];
+        int valueSize = _valueWeights.Shape[0] * _valueWeights.Shape[1];
+        int outputSize = _outputWeights.Shape[0] * _outputWeights.Shape[1];
+        int biasSize = _outputBias.Length;
+        int totalParams = keySize + valueSize + outputSize + biasSize;
+
         if (parameters.Length != totalParams)
         {
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
-    
+
         int index = 0;
-    
-        // Set key weights
-        for (int i = 0; i < _keyWeights.Rows; i++)
-        {
-            for (int j = 0; j < _keyWeights.Columns; j++)
-            {
-                _keyWeights[i, j] = parameters[index++];
-            }
-        }
-    
+
+        // Set key weights using Tensor.FromVector
+        var keyParams = parameters.SubVector(index, keySize);
+        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights.Shape);
+        index += keySize;
+
         // Set value weights
-        for (int i = 0; i < _valueWeights.Rows; i++)
-        {
-            for (int j = 0; j < _valueWeights.Columns; j++)
-            {
-                _valueWeights[i, j] = parameters[index++];
-            }
-        }
-    
+        var valueParams = parameters.SubVector(index, valueSize);
+        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights.Shape);
+        index += valueSize;
+
         // Set output weights
-        for (int i = 0; i < _outputWeights.Rows; i++)
-        {
-            for (int j = 0; j < _outputWeights.Columns; j++)
-            {
-                _outputWeights[i, j] = parameters[index++];
-            }
-        }
-    
+        var outputParams = parameters.SubVector(index, outputSize);
+        _outputWeights = Tensor<T>.FromVector(outputParams).Reshape(_outputWeights.Shape);
+        index += outputSize;
+
         // Set output bias
-        for (int i = 0; i < _outputBias.Length; i++)
-        {
-            _outputBias[i] = parameters[index++];
-        }
+        var biasParams = parameters.SubVector(index, biasSize);
+        _outputBias = Tensor<T>.FromVector(biasParams);
     }
 
     /// <summary>
@@ -1033,20 +1060,20 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // MemoryReadLayer requires TWO inputs: input and memory
         // Input 0: Query input [batch, inputDim]
-        var inputTensor = new Tensor<T>(new int[] { 1, _keyWeights.Rows });
+        var inputTensor = new Tensor<T>([1, _keyWeights.Shape[0]]);
         var inputNode = Autodiff.TensorOperations<T>.Variable(inputTensor, "input");
         inputNodes.Add(inputNode);
 
         // Input 1: Memory [memorySize, memoryDim]
-        var memoryTensor = new Tensor<T>(new int[] { 10, _keyWeights.Columns }); // Placeholder size
+        var memoryTensor = new Tensor<T>([10, _keyWeights.Shape[1]]); // Placeholder size
         var memoryNode = Autodiff.TensorOperations<T>.Variable(memoryTensor, "memory");
         inputNodes.Add(memoryNode);
 
-        // Convert weights to tensors using efficient methods
-        var keyWeightsNode = Autodiff.TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(_keyWeights), "keyWeights");
-        var valueWeightsNode = Autodiff.TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(_valueWeights), "valueWeights");
-        var outputWeightsNode = Autodiff.TensorOperations<T>.Constant(Tensor<T>.FromRowMatrix(_outputWeights), "outputWeights");
-        var biasNode = Autodiff.TensorOperations<T>.Constant(Tensor<T>.FromVector(_outputBias), "outputBias");
+        // Weights are already Tensor<T>, use them directly
+        var keyWeightsNode = Autodiff.TensorOperations<T>.Constant(_keyWeights, "keyWeights");
+        var valueWeightsNode = Autodiff.TensorOperations<T>.Constant(_valueWeights, "valueWeights");
+        var outputWeightsNode = Autodiff.TensorOperations<T>.Constant(_outputWeights, "outputWeights");
+        var biasNode = Autodiff.TensorOperations<T>.Constant(_outputBias, "outputBias");
 
         // Build attention computation graph
         // Step 1: keys = input @ keyWeights

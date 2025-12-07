@@ -292,19 +292,19 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     private void InitializeParameters()
     {
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputCapsules * _inputCapsuleDimension)));
-        for (int i = 0; i < _inputCapsules; i++)
-        {
-            for (int j = 0; j < _numClasses; j++)
-            {
-                for (int k = 0; k < _inputCapsuleDimension; k++)
-                {
-                    for (int l = 0; l < _outputCapsuleDimension; l++)
-                    {
-                        _weights[i, j, k, l] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-                    }
-                }
-            }
-        }
+
+        // Calculate total elements for flat tensor initialization
+        int totalElements = _inputCapsules * _numClasses * _inputCapsuleDimension * _outputCapsuleDimension;
+
+        // Create flat random tensor [0, 1], shift to [-0.5, 0.5], scale
+        var randomTensor = Tensor<T>.CreateRandom(totalElements, 1).Reshape([totalElements]);
+        var halfTensor = new Tensor<T>([totalElements]);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
+        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
+
+        // Copy to weights tensor - reshape maintains the same underlying data
+        _weights = scaled.Reshape(_weights.Shape);
     }
 
     /// <summary>
@@ -571,28 +571,8 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _weights.Length;
-        var parameters = new Vector<T>(totalParams);
-
-        int index = 0;
-
-        // Copy weight parameters
-        for (int i = 0; i < _inputCapsules; i++)
-        {
-            for (int j = 0; j < _numClasses; j++)
-            {
-                for (int k = 0; k < _inputCapsuleDimension; k++)
-                {
-                    for (int l = 0; l < _outputCapsuleDimension; l++)
-                    {
-                        parameters[index++] = _weights[i, j, k, l];
-                    }
-                }
-            }
-        }
-
-        return parameters;
+        // Use ToArray() for production-grade parameter extraction
+        return new Vector<T>(_weights.ToArray());
     }
 
     /// <summary>
@@ -628,22 +608,8 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {_weights.Length} parameters, but got {parameters.Length}");
         }
 
-        int index = 0;
-
-        // Set weight parameters
-        for (int i = 0; i < _inputCapsules; i++)
-        {
-            for (int j = 0; j < _numClasses; j++)
-            {
-                for (int k = 0; k < _inputCapsuleDimension; k++)
-                {
-                    for (int l = 0; l < _outputCapsuleDimension; l++)
-                    {
-                        _weights[i, j, k, l] = parameters[index++];
-                    }
-                }
-            }
-        }
+        // Use Tensor.FromVector for production-grade parameter setting
+        _weights = Tensor<T>.FromVector(parameters, _weights.Shape);
     }
 
     /// <summary>
@@ -699,9 +665,9 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         // For each input capsule i and class j: predictions[i,j] = input[i] @ weights[i,j]
         var predictions = TensorOperations<T>.MatrixMultiply(input, weightsNode);
 
-        // Initialize coupling coefficients to zero
-        var couplingsData = new T[_inputCapsules * _numClasses];
-        var couplingsTensor = new Tensor<T>(new[] { _inputCapsules, _numClasses }, new Vector<T>(couplingsData));
+        // Initialize coupling coefficients to zero using Fill
+        var couplingsTensor = new Tensor<T>(new[] { _inputCapsules, _numClasses });
+        couplingsTensor.Fill(NumOps.Zero);
         var couplings = TensorOperations<T>.Constant(couplingsTensor, "InitialCouplings");
 
         ComputationNode<T> output = predictions;

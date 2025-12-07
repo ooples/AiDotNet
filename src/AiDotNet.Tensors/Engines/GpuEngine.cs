@@ -21035,5 +21035,63 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     #endregion
+
+    #region RBF Kernel
+
+    /// <inheritdoc/>
+    public Tensor<T> RBFKernel<T>(Tensor<T> input, Tensor<T> centers, Tensor<T> epsilons)
+    {
+        // GPU kernel not yet implemented - use CPU fallback
+        return _cpuFallback.RBFKernel(input, centers, epsilons);
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> gradInput, Tensor<T> gradCenters, Tensor<T> gradEpsilons) RBFKernelBackward<T>(
+        Tensor<T> gradOutput, Tensor<T> input, Tensor<T> centers, Tensor<T> epsilons, Tensor<T> output)
+    {
+        // GPU kernel not yet implemented - use CPU fallback
+        return _cpuFallback.RBFKernelBackward(gradOutput, input, centers, epsilons, output);
+    }
+
+    #endregion
+
+    #region Tensor Shape Operations
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorRepeatElements<T>(Tensor<T> tensor, int repeats, int axis = 0)
+    {
+        // GPU kernel not yet implemented - use CPU fallback
+        return _cpuFallback.TensorRepeatElements(tensor, repeats, axis);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorTile<T>(Tensor<T> tensor, int[] multiples)
+    {
+        // GPU kernel not yet implemented - use CPU fallback
+        return _cpuFallback.TensorTile(tensor, multiples);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSlice<T>(Tensor<T> tensor, int[] start, int[] length)
+    {
+        // GPU kernel not yet implemented - use CPU fallback
+        return _cpuFallback.TensorSlice(tensor, start, length);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSetSlice<T>(Tensor<T> destination, Tensor<T> source, int[] start)
+    {
+        // GPU kernel not yet implemented - use CPU fallback
+        return _cpuFallback.TensorSetSlice(destination, source, start);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorWhere<T>(Tensor<T> condition, Tensor<T> x, Tensor<T> y)
+    {
+        // GPU kernel not yet implemented - use CPU fallback
+        return _cpuFallback.TensorWhere(condition, x, y);
+    }
+
+    #endregion
 }
 #endif

@@ -183,7 +183,6 @@ public class UpsamplingLayer<T> : LayerBase<T>
     {
         _lastInput = input;
 
-        // Use Engine operation for GPU/CPU acceleration
         return Engine.Upsample(input, _scaleFactor, _scaleFactor);
     }
 
@@ -228,35 +227,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        int batchSize = _lastInput.Shape[0];
-        int channels = _lastInput.Shape[1];
-        int inputHeight = _lastInput.Shape[2];
-        int inputWidth = _lastInput.Shape[3];
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < inputHeight; h++)
-                {
-                    for (int w = 0; w < inputWidth; w++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int i = 0; i < _scaleFactor; i++)
-                        {
-                            for (int j = 0; j < _scaleFactor; j++)
-                            {
-                                int outputH = h * _scaleFactor + i;
-                                int outputW = w * _scaleFactor + j;
-                                sum = NumOps.Add(sum, outputGradient[b, c, outputH, outputW]);
-                            }
-                        }
-                        inputGradient[b, c, h, w] = sum;
-                    }
-                }
-            }
-        }
-        return inputGradient;
+        return Engine.UpsampleBackward(outputGradient, _lastInput.Shape, _scaleFactor, _scaleFactor);
     }
 
     /// <summary>

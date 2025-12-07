@@ -74,44 +74,45 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private T _lastGraphSmoothnessLoss;
 
     /// <summary>
-    /// The weight matrix that transforms input features to output features.
+    /// The weight tensor that transforms input features to output features.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This matrix contains the learnable parameters that transform the input features into the output features.
-    /// The dimensions are [inputFeatures, outputFeatures].
+    /// This tensor contains the learnable parameters that transform the input features into the output features.
+    /// Shape: [inputFeatures, outputFeatures].
     /// </para>
     /// <para><b>For Beginners:</b> Think of weights as the "importance factors" for each feature.
-    /// 
+    ///
     /// These weights determine:
     /// - How much attention to pay to each input feature
     /// - How to combine features to create new, meaningful outputs
     /// - The patterns the layer is looking for in the data
-    /// 
+    ///
     /// During training, these weights are adjusted to help the network make better predictions.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weights;
+    private Tensor<T> _weights;
 
     /// <summary>
-    /// The bias vector that is added to the output of the transformation.
+    /// The bias tensor that is added to the output of the transformation.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector contains the learnable bias parameters that are added to the output of the transformation.
+    /// This tensor contains the learnable bias parameters that are added to the output of the transformation.
+    /// Shape: [outputFeatures].
     /// Adding a bias allows the layer to shift the activation function's output.
     /// </para>
     /// <para><b>For Beginners:</b> The bias is like a "default value" or "starting point" for each output.
-    /// 
+    ///
     /// It helps the layer by:
     /// - Allowing outputs to be non-zero even when inputs are zero
     /// - Giving the model flexibility to fit data better
     /// - Providing an adjustable "baseline" for predictions
-    /// 
+    ///
     /// Think of it as setting the initial position before fine-tuning.
     /// </para>
     /// </remarks>
-    private Vector<T> _bias;
+    private Tensor<T> _bias;
 
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.
@@ -146,12 +147,12 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
     /// </summary>
-    private Matrix<T>? _weightsGradient;
+    private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// Stores the gradients for the bias calculated during the backward pass.
     /// </summary>
-    private Vector<T>? _biasGradient;
+    private Tensor<T>? _biasGradient;
 
     /// <summary>
     /// Stores the node features from the last forward pass for auxiliary loss computation.
@@ -277,8 +278,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastGraphSmoothnessLoss = NumOps.Zero;
 
-        _weights = new Matrix<T>(inputFeatures, outputFeatures);
-        _bias = new Vector<T>(outputFeatures);
+        _weights = new Tensor<T>([inputFeatures, outputFeatures]);
+        _bias = new Tensor<T>([outputFeatures]);
 
         SmoothnessWeight = NumOps.FromDouble(0.001);
 
@@ -313,8 +314,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastGraphSmoothnessLoss = NumOps.Zero;
 
-        _weights = new Matrix<T>(inputFeatures, outputFeatures);
-        _bias = new Vector<T>(outputFeatures);
+        _weights = new Tensor<T>([inputFeatures, outputFeatures]);
+        _bias = new Tensor<T>([outputFeatures]);
 
         SmoothnessWeight = NumOps.FromDouble(0.001);
 
@@ -343,43 +344,49 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_weights.Rows + _weights.Columns)));
-        InitializeMatrix(_weights, scale);
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_weights.Shape[0] + _weights.Shape[1])));
+        InitializeTensor(_weights, scale);
 
-        for (int i = 0; i < _bias.Length; i++)
-        {
-            _bias[i] = NumOps.Zero;
-        }
+        _bias.Fill(NumOps.Zero);
     }
 
     /// <summary>
-    /// Initializes a matrix with scaled random values.
+    /// Initializes a tensor with scaled random values.
     /// </summary>
-    /// <param name="matrix">The matrix to initialize.</param>
+    /// <param name="tensor">The tensor to initialize.</param>
     /// <param name="scale">The scale factor for the random values.</param>
     /// <remarks>
     /// <para>
-    /// This method fills the provided matrix with random values between -0.5 and 0.5, scaled by the provided scale factor.
+    /// This method fills the provided tensor with random values between -0.5 and 0.5, scaled by the provided scale factor.
     /// This type of initialization helps with training stability.
     /// </para>
-    /// <para><b>For Beginners:</b> This method fills a matrix with random values for starting weights.
-    /// 
+    /// <para><b>For Beginners:</b> This method fills a tensor with random values for starting weights.
+    ///
     /// The method:
     /// - Generates random numbers between -0.5 and 0.5
     /// - Multiplies them by a scale factor to control their size
-    /// - Fills each position in the matrix with these scaled random values
-    /// 
+    /// - Fills each position in the tensor with these scaled random values
+    ///
     /// Good initialization is important because it affects how quickly and how well the network learns.
     /// </para>
     /// </remarks>
-    private void InitializeMatrix(Matrix<T> matrix, T scale)
+    private void InitializeTensor(Tensor<T> tensor, T scale)
     {
-        for (int i = 0; i < matrix.Rows; i++)
+        // Create random tensor using Engine operations
+        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape);
+
+        // Shift to [-0.5, 0.5] range: randomTensor - 0.5
+        var halfTensor = new Tensor<T>(tensor.Shape);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
+
+        // Scale by the scale factor
+        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
+
+        // Copy to tensor
+        for (int i = 0; i < tensor.Length; i++)
         {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            }
+            tensor[i] = scaled.GetFlat(i);
         }
     }
 
@@ -480,24 +487,18 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int batchSize = input.Shape[0];
         int numNodes = input.Shape[1];
-        int inputFeatures = input.Shape[2];
-        int outputFeatures = _weights.Columns;
+        int outputFeatures = _weights.Shape[1];
 
         // Perform graph convolution: A * X * W
-        var xw = input.Multiply(_weights);
-        var output = _adjacencyMatrix.Multiply(xw.ToMatrix());
+        // First: X * W using Engine operations
+        var xw = Engine.TensorMatMul(input, _weights);
 
-        // Add bias
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int n = 0; n < numNodes; n++)
-            {
-                for (int f = 0; f < outputFeatures; f++)
-                {
-                    output[b, n, f] = NumOps.Add(output[b, n, f], _bias[f]);
-                }
-            }
-        }
+        // Then: A * (X * W) using Engine operations (batch matrix multiplication)
+        var output = Engine.TensorMatMul(_adjacencyMatrix, xw);
+
+        // Add bias by broadcasting across batch and node dimensions
+        var biasBroadcast = BroadcastBias(_bias, batchSize, numNodes);
+        output = Engine.TensorAdd(output, biasBroadcast);
 
         _lastOutput = ApplyActivation(output);
 
@@ -505,6 +506,26 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastNodeFeatures = _lastOutput;
 
         return _lastOutput;
+    }
+
+    /// <summary>
+    /// Broadcasts a bias tensor across batch and node dimensions.
+    /// </summary>
+    /// <param name="bias">The bias tensor of shape [outputFeatures].</param>
+    /// <param name="batchSize">The batch size for broadcasting.</param>
+    /// <param name="numNodes">The number of nodes for broadcasting.</param>
+    /// <returns>A tensor of shape [batchSize, numNodes, outputFeatures] with biases broadcast.</returns>
+    private Tensor<T> BroadcastBias(Tensor<T> bias, int batchSize, int numNodes)
+    {
+        int outputFeatures = bias.Length;
+
+        // Reshape bias from [outputFeatures] to [1, 1, outputFeatures]
+        var biasReshaped = bias.Reshape([1, 1, outputFeatures]);
+
+        // Tile across batch and node dimensions: [batchSize, numNodes, outputFeatures]
+        var broadcast = Engine.TensorTile(biasReshaped, [batchSize, numNodes, 1]);
+
+        return broadcast;
     }
 
     /// <summary>
@@ -553,62 +574,56 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
         int inputFeatures = _lastInput.Shape[2];
-        int outputFeatures = _weights.Columns;
+        int outputFeatures = _weights.Shape[1];
 
-        // Calculate gradients for weights and bias
-        _weightsGradient = new Matrix<T>(inputFeatures, outputFeatures);
-        _biasGradient = new Vector<T>(outputFeatures);
+        // Calculate bias gradient using ReduceSum: sum over batch and nodes (axes 0 and 1)
+        _biasGradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
 
+        // Calculate weights gradient: dW = sum_b (X^T @ A^T @ dY)
+        // For batched: we need to transpose adjacency and input, then multiply
+        // dW = sum over batches of: input[b]^T @ (adj[b]^T @ actGrad[b])
+        _weightsGradient = new Tensor<T>([inputFeatures, outputFeatures]);
+        _weightsGradient.Fill(NumOps.Zero);
+
+        // Transpose adjacency matrix (swap last two dims for each batch element)
+        var adjTransposed = Engine.TensorTranspose(_adjacencyMatrix);
+
+        // For each batch, compute: input^T @ adj^T @ activationGradient
+        // This equals: (adj @ input)^T @ activationGradient for forward was: A @ X @ W
+        // Gradient: dW = X^T @ A^T @ dY (summed over batches)
         for (int b = 0; b < batchSize; b++)
         {
-            for (int i = 0; i < numNodes; i++)
-            {
-                for (int j = 0; j < numNodes; j++)
-                {
-                    for (int f_in = 0; f_in < inputFeatures; f_in++)
-                    {
-                        for (int f_out = 0; f_out < outputFeatures; f_out++)
-                        {
-                            T gradValue = NumOps.Multiply(_adjacencyMatrix[b, i, j], 
-                                NumOps.Multiply(_lastInput[b, j, f_in], activationGradient[b, i, f_out]));
-                            _weightsGradient[f_in, f_out] = NumOps.Add(_weightsGradient[f_in, f_out], gradValue);
-                        }
-                    }
-                }
-            }
+            // Extract batch slices
+            var inputBatch = Engine.TensorSlice(_lastInput, [b, 0, 0], [1, numNodes, inputFeatures]).Reshape([numNodes, inputFeatures]);
+            var adjTBatch = Engine.TensorSlice(adjTransposed, [b, 0, 0], [1, numNodes, numNodes]).Reshape([numNodes, numNodes]);
+            var gradBatch = Engine.TensorSlice(activationGradient, [b, 0, 0], [1, numNodes, outputFeatures]).Reshape([numNodes, outputFeatures]);
+
+            // inputT @ adjT @ gradBatch
+            var inputT = Engine.TensorTranspose(inputBatch); // [inputFeatures, numNodes]
+            var adjTGrad = Engine.TensorMatMul(adjTBatch, gradBatch); // [numNodes, outputFeatures]
+            var batchWeightGrad = Engine.TensorMatMul(inputT, adjTGrad); // [inputFeatures, outputFeatures]
+
+            _weightsGradient = Engine.TensorAdd(_weightsGradient, batchWeightGrad);
         }
 
-        // Calculate bias gradient
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int n = 0; n < numNodes; n++)
-            {
-                for (int f = 0; f < outputFeatures; f++)
-                {
-                    _biasGradient[f] = NumOps.Add(_biasGradient[f], activationGradient[b, n, f]);
-                }
-            }
-        }
+        // Calculate input gradient: dX = A^T @ dY @ W^T
+        var weightsT = Engine.TensorTranspose(_weights); // [outputFeatures, inputFeatures]
 
-        // Calculate input gradient
+        // For batched computation
         var inputGradient = new Tensor<T>(_lastInput.Shape);
+        inputGradient.Fill(NumOps.Zero);
+
         for (int b = 0; b < batchSize; b++)
         {
-            for (int i = 0; i < numNodes; i++)
-            {
-                for (int j = 0; j < numNodes; j++)
-                {
-                    for (int f_in = 0; f_in < inputFeatures; f_in++)
-                    {
-                        for (int f_out = 0; f_out < outputFeatures; f_out++)
-                        {
-                            T gradValue = NumOps.Multiply(_adjacencyMatrix[b, j, i],
-                                NumOps.Multiply(activationGradient[b, j, f_out], _weights[f_in, f_out]));
-                            inputGradient[b, i, f_in] = NumOps.Add(inputGradient[b, i, f_in], gradValue);
-                        }
-                    }
-                }
-            }
+            var adjTBatch = Engine.TensorSlice(adjTransposed, [b, 0, 0], [1, numNodes, numNodes]).Reshape([numNodes, numNodes]);
+            var gradBatch = Engine.TensorSlice(activationGradient, [b, 0, 0], [1, numNodes, outputFeatures]).Reshape([numNodes, outputFeatures]);
+
+            // adjT @ gradBatch @ weightsT
+            var adjTGrad = Engine.TensorMatMul(adjTBatch, gradBatch); // [numNodes, outputFeatures]
+            var inputGradBatch = Engine.TensorMatMul(adjTGrad, weightsT); // [numNodes, inputFeatures]
+
+            // Set slice in inputGradient
+            inputGradient = Engine.TensorSetSlice(inputGradient, inputGradBatch.Reshape([1, numNodes, inputFeatures]), [b, 0, 0]);
         }
 
         return inputGradient;
@@ -650,11 +665,11 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             preActivationGradient = outputGradient;
         }
 
-        // Create computation nodes with efficient conversions
+        // Create computation nodes (weights/bias already Tensor<T>)
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
         var adjNode = Autodiff.TensorOperations<T>.Variable(_adjacencyMatrix, "adjacency", requiresGradient: false);
-        var weightsNode = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromRowMatrix(_weights), "weights", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromVector(_bias), "bias", requiresGradient: true);
+        var weightsNode = Autodiff.TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(_bias, "bias", requiresGradient: true);
 
         // Build minimal autodiff graph for linear operations (activation derivative already applied)
         var preActivationNode = Autodiff.TensorOperations<T>.GraphConv(inputNode, adjNode, weightsNode, biasNode);
@@ -698,12 +713,9 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
         }
 
-        // Extract gradients using efficient methods
-        if (weightsNode.Gradient != null)
-            _weightsGradient = weightsNode.Gradient.ToMatrix();
-
-        if (biasNode.Gradient != null)
-            _biasGradient = biasNode.Gradient.ToVector();
+        // Extract gradients (already Tensor<T>)
+        _weightsGradient = weightsNode.Gradient;
+        _biasGradient = biasNode.Gradient;
 
         // Return input gradient
         return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
@@ -737,8 +749,12 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_weightsGradient == null || _biasGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
-        _bias = _bias.Subtract(_biasGradient.Multiply(learningRate));
+        // Use Engine operations for parameter updates
+        var scaledWeightsGrad = Engine.TensorMultiplyScalar(_weightsGradient, learningRate);
+        _weights = Engine.TensorSubtract(_weights, scaledWeightsGrad);
+
+        var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient, learningRate);
+        _bias = Engine.TensorSubtract(_bias, scaledBiasGrad);
     }
 
     /// <summary>
@@ -766,28 +782,11 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _weights.Rows * _weights.Columns + _bias.Length;
-        var parameters = new Vector<T>(totalParams);
-
-        int index = 0;
-
-        // Copy weights parameters
-        for (int i = 0; i < _weights.Rows; i++)
-        {
-            for (int j = 0; j < _weights.Columns; j++)
-            {
-                parameters[index++] = _weights[i, j];
-            }
-        }
-
-        // Copy bias parameters
-        for (int i = 0; i < _bias.Length; i++)
-        {
-            parameters[index++] = _bias[i];
-        }
-
-        return parameters;
+        // Use Vector.Concatenate to efficiently combine all parameters
+        return Vector<T>.Concatenate(
+            new Vector<T>(_weights.ToArray()),
+            new Vector<T>(_bias.ToArray())
+        );
     }
 
     /// <summary>
@@ -818,27 +817,25 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != _weights.Rows * _weights.Columns + _bias.Length)
+        int weightsSize = _weights.Shape[0] * _weights.Shape[1];
+        int biasSize = _bias.Length;
+        int totalParams = weightsSize + biasSize;
+
+        if (parameters.Length != totalParams)
         {
-            throw new ArgumentException($"Expected {_weights.Rows * _weights.Columns + _bias.Length} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
         int index = 0;
 
-        // Set weights parameters
-        for (int i = 0; i < _weights.Rows; i++)
-        {
-            for (int j = 0; j < _weights.Columns; j++)
-            {
-                _weights[i, j] = parameters[index++];
-            }
-        }
+        // Set weights using Tensor.FromVector
+        var weightsParams = parameters.SubVector(index, weightsSize);
+        _weights = Tensor<T>.FromVector(weightsParams).Reshape(_weights.Shape);
+        index += weightsSize;
 
-        // Set bias parameters
-        for (int i = 0; i < _bias.Length; i++)
-        {
-            _bias[i] = parameters[index++];
-        }
+        // Set bias using Tensor.FromVector
+        var biasParams = parameters.SubVector(index, biasSize);
+        _bias = Tensor<T>.FromVector(biasParams);
     }
 
     /// <summary>
@@ -1037,34 +1034,21 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("Adjacency matrix not set. Call SetAdjacencyMatrix() first.");
 
         // Create symbolic input [numNodes, inputFeatures]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var symbolicInput = new Tensor<T>([1, .. InputShape]);
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
         // Convert adjacency matrix to constant node
         var adjNode = TensorOperations<T>.Constant(_adjacencyMatrix, "adjacency");
 
-        // Convert weights matrix to tensor
-        var weightsTensor = new Tensor<T>(new int[] { _weights.Rows, _weights.Columns });
-        for (int i = 0; i < _weights.Rows; i++)
-        {
-            for (int j = 0; j < _weights.Columns; j++)
-            {
-                weightsTensor[i, j] = _weights[i, j];
-            }
-        }
-        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "weights");
+        // Weights are already Tensor<T>, use them directly
+        var weightsNode = TensorOperations<T>.Constant(_weights, "weights");
 
         // Use GraphConv operation: output = adjacency @ input @ weights
         var convOutput = TensorOperations<T>.GraphConv(inputNode, adjNode, weightsNode);
 
-        // Add bias
-        var biasTensor = new Tensor<T>(new int[] { _bias.Length });
-        for (int i = 0; i < _bias.Length; i++)
-        {
-            biasTensor[i] = _bias[i];
-        }
-        var biasNode = TensorOperations<T>.Constant(biasTensor, "bias");
+        // Bias is already Tensor<T>, use directly
+        var biasNode = TensorOperations<T>.Constant(_bias, "bias");
         var output = TensorOperations<T>.Add(convOutput, biasNode);
 
         // Apply activation if present

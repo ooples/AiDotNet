@@ -451,34 +451,11 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Get parameters from all sublayers
-        var fc1Params = _fc1.GetParameters();
-        var fc2Params = _fc2.GetParameters();
-        var fc3Params = _fc3.GetParameters();
-    
-        // Create a combined parameter vector
-        int totalParams = fc1Params.Length + fc2Params.Length + fc3Params.Length;
-        var parameters = new Vector<T>(totalParams);
-    
-        // Copy parameters from each layer
-        int index = 0;
-    
-        for (int i = 0; i < fc1Params.Length; i++)
-        {
-            parameters[index++] = fc1Params[i];
-        }
-    
-        for (int i = 0; i < fc2Params.Length; i++)
-        {
-            parameters[index++] = fc2Params[i];
-        }
-    
-        for (int i = 0; i < fc3Params.Length; i++)
-        {
-            parameters[index++] = fc3Params[i];
-        }
-    
-        return parameters;
+        // Use Vector<T>.Concatenate for production-grade parameter collection
+        return Vector<T>.Concatenate(
+            _fc1.GetParameters(),
+            _fc2.GetParameters(),
+            _fc3.GetParameters());
     }
 
     /// <summary>
@@ -515,35 +492,21 @@ public class ReconstructionLayer<T> : LayerBase<T>
         int fc2ParamCount = _fc2.ParameterCount;
         int fc3ParamCount = _fc3.ParameterCount;
         int totalParams = fc1ParamCount + fc2ParamCount + fc3ParamCount;
-    
+
         if (parameters.Length != totalParams)
         {
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
-    
-        // Extract and set parameters for each sublayer
-        int index = 0;
-    
-        var fc1Params = new Vector<T>(fc1ParamCount);
-        for (int i = 0; i < fc1ParamCount; i++)
-        {
-            fc1Params[i] = parameters[index++];
-        }
-        _fc1.SetParameters(fc1Params);
-    
-        var fc2Params = new Vector<T>(fc2ParamCount);
-        for (int i = 0; i < fc2ParamCount; i++)
-        {
-            fc2Params[i] = parameters[index++];
-        }
-        _fc2.SetParameters(fc2Params);
-    
-        var fc3Params = new Vector<T>(fc3ParamCount);
-        for (int i = 0; i < fc3ParamCount; i++)
-        {
-            fc3Params[i] = parameters[index++];
-        }
-        _fc3.SetParameters(fc3Params);
+
+        // Use Vector.Slice for production-grade parameter distribution
+        int offset = 0;
+        _fc1.SetParameters(parameters.Slice(offset, fc1ParamCount));
+        offset += fc1ParamCount;
+
+        _fc2.SetParameters(parameters.Slice(offset, fc2ParamCount));
+        offset += fc2ParamCount;
+
+        _fc3.SetParameters(parameters.Slice(offset, fc3ParamCount));
     }
 
     /// <summary>

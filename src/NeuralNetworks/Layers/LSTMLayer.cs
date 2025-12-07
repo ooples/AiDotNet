@@ -749,21 +749,28 @@ public class LSTMLayer<T> : LayerBase<T>
     /// convergence.
     /// </para>
     /// <para><b>For Beginners:</b> This method fills a weight tensor with smart random values.
-    /// 
+    ///
     /// When initializing weights:
     /// - Each value is set to a small random number
     /// - The numbers are centered around zero (between -0.5 and 0.5) then scaled
     /// - The scale factor adjusts the range based on the network size
-    /// 
+    ///
     /// This approach helps the network start learning effectively from the beginning.
     /// </para>
     /// </remarks>
     private void InitializeWeight(Tensor<T> weight, T scale)
     {
-        for (int i = 0; i < weight.Length; i++)
-        {
-            weight[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-        }
+        // Create random tensor using Tensor<T>.CreateRandom [0, 1]
+        var randomTensor = Tensor<T>.CreateRandom(weight.Shape[0], weight.Shape[1]);
+
+        // Shift to [-0.5, 0.5] range: random - 0.5
+        var halfTensor = new Tensor<T>(weight.Shape);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
+
+        // Scale by the scale factor and copy to weight tensor
+        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
+        Array.Copy(scaled.ToArray(), weight.ToArray(), weight.Length);
     }
 
     /// <summary>
@@ -777,21 +784,19 @@ public class LSTMLayer<T> : LayerBase<T>
     /// issues that would cause problems with all-zero weights.
     /// </para>
     /// <para><b>For Beginners:</b> This method sets all values in a bias tensor to zero.
-    /// 
+    ///
     /// Unlike weights, which need random values:
     /// - Biases can start at zero
     /// - During training, they'll adjust as needed
     /// - Starting at zero is a neutral position
-    /// 
+    ///
     /// Think of biases like the "default settings" that get adjusted during training.
     /// </para>
     /// </remarks>
     private void InitializeBias(Tensor<T> bias)
     {
-        for (int i = 0; i < bias.Length; i++)
-        {
-            bias[i] = NumOps.Zero;
-        }
+        // Use tensor Fill method to initialize bias with zeros
+        bias.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -842,37 +847,32 @@ public class LSTMLayer<T> : LayerBase<T>
         var WchT = Engine.TensorTranspose(_weightsCh);
         var WohT = Engine.TensorTranspose(_weightsOh);
 
-        var bfVec = _biasF.ToVector();
-        var biVec = _biasI.ToVector();
-        var bcVec = _biasC.ToVector();
-        var boVec = _biasO.ToVector();
-
         for (int t = 0; t < timeSteps; t++)
         {
             var xt = input.GetSlice(t);
-            
-            // Forget Gate
+
+            // Forget Gate - using Engine.TensorAdd for bias addition
             var f = Engine.TensorMatMul(xt, WfiT);
             f = Engine.TensorAdd(f, Engine.TensorMatMul(currentH, WfhT));
-            f = f.Add(bfVec);
+            f = Engine.TensorAdd(f, _biasF);
             f = Engine.Sigmoid(f);
 
             // Input Gate
             var i = Engine.TensorMatMul(xt, WiiT);
             i = Engine.TensorAdd(i, Engine.TensorMatMul(currentH, WihT));
-            i = i.Add(biVec);
+            i = Engine.TensorAdd(i, _biasI);
             i = Engine.Sigmoid(i);
 
             // Cell Candidate
             var c_tilde = Engine.TensorMatMul(xt, WciT);
             c_tilde = Engine.TensorAdd(c_tilde, Engine.TensorMatMul(currentH, WchT));
-            c_tilde = c_tilde.Add(bcVec);
+            c_tilde = Engine.TensorAdd(c_tilde, _biasC);
             c_tilde = Engine.Tanh(c_tilde);
 
             // Output Gate
             var o = Engine.TensorMatMul(xt, WoiT);
             o = Engine.TensorAdd(o, Engine.TensorMatMul(currentH, WohT));
-            o = o.Add(boVec);
+            o = Engine.TensorAdd(o, _biasO);
             o = Engine.Sigmoid(o);
 
             // Update Cell State
@@ -1339,48 +1339,50 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
+        // Use Engine operations for GPU/CPU acceleration
         foreach (var kvp in Gradients)
         {
             var paramName = kvp.Key;
             var gradient = kvp.Value;
+            var scaledGradient = Engine.TensorMultiplyScalar(gradient, learningRate);
 
             switch (paramName)
             {
                 case "weightsFi":
-                    _weightsFi = _weightsFi.Subtract(gradient.Multiply(learningRate));
+                    _weightsFi = Engine.TensorSubtract(_weightsFi, scaledGradient);
                     break;
                 case "weightsIi":
-                    _weightsIi = _weightsIi.Subtract(gradient.Multiply(learningRate));
+                    _weightsIi = Engine.TensorSubtract(_weightsIi, scaledGradient);
                     break;
                 case "weightsCi":
-                    _weightsCi = _weightsCi.Subtract(gradient.Multiply(learningRate));
+                    _weightsCi = Engine.TensorSubtract(_weightsCi, scaledGradient);
                     break;
                 case "weightsOi":
-                    _weightsOi = _weightsOi.Subtract(gradient.Multiply(learningRate));
+                    _weightsOi = Engine.TensorSubtract(_weightsOi, scaledGradient);
                     break;
                 case "weightsFh":
-                    _weightsFh = _weightsFh.Subtract(gradient.Multiply(learningRate));
+                    _weightsFh = Engine.TensorSubtract(_weightsFh, scaledGradient);
                     break;
                 case "weightsIh":
-                    _weightsIh = _weightsIh.Subtract(gradient.Multiply(learningRate));
+                    _weightsIh = Engine.TensorSubtract(_weightsIh, scaledGradient);
                     break;
                 case "weightsCh":
-                    _weightsCh = _weightsCh.Subtract(gradient.Multiply(learningRate));
+                    _weightsCh = Engine.TensorSubtract(_weightsCh, scaledGradient);
                     break;
                 case "weightsOh":
-                    _weightsOh = _weightsOh.Subtract(gradient.Multiply(learningRate));
+                    _weightsOh = Engine.TensorSubtract(_weightsOh, scaledGradient);
                     break;
                 case "biasF":
-                    _biasF = _biasF.Subtract(gradient.Multiply(learningRate));
+                    _biasF = Engine.TensorSubtract(_biasF, scaledGradient);
                     break;
                 case "biasI":
-                    _biasI = _biasI.Subtract(gradient.Multiply(learningRate));
+                    _biasI = Engine.TensorSubtract(_biasI, scaledGradient);
                     break;
                 case "biasC":
-                    _biasC = _biasC.Subtract(gradient.Multiply(learningRate));
+                    _biasC = Engine.TensorSubtract(_biasC, scaledGradient);
                     break;
                 case "biasO":
-                    _biasO = _biasO.Subtract(gradient.Multiply(learningRate));
+                    _biasO = Engine.TensorSubtract(_biasO, scaledGradient);
                     break;
             }
         }
@@ -1485,63 +1487,21 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _weightsFi.Length + _weightsIi.Length + _weightsCi.Length + _weightsOi.Length +
-                          _weightsFh.Length + _weightsIh.Length + _weightsCh.Length + _weightsOh.Length +
-                          _biasF.Length + _biasI.Length + _biasC.Length + _biasO.Length;
-    
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-    
-        // Copy weights parameters
-        CopyTensorToVector(_weightsFi, parameters, ref index);
-        CopyTensorToVector(_weightsIi, parameters, ref index);
-        CopyTensorToVector(_weightsCi, parameters, ref index);
-        CopyTensorToVector(_weightsOi, parameters, ref index);
-        CopyTensorToVector(_weightsFh, parameters, ref index);
-        CopyTensorToVector(_weightsIh, parameters, ref index);
-        CopyTensorToVector(_weightsCh, parameters, ref index);
-        CopyTensorToVector(_weightsOh, parameters, ref index);
-    
-        // Copy bias parameters
-        CopyTensorToVector(_biasF, parameters, ref index);
-        CopyTensorToVector(_biasI, parameters, ref index);
-        CopyTensorToVector(_biasC, parameters, ref index);
-        CopyTensorToVector(_biasO, parameters, ref index);
-    
-        return parameters;
-    }
-
-    /// <summary>
-    /// Copies values from a tensor to a vector.
-    /// </summary>
-    /// <param name="tensor">The source tensor.</param>
-    /// <param name="vector">The destination vector.</param>
-    /// <param name="startIndex">The starting index in the vector.</param>
-    /// <remarks>
-    /// <para>
-    /// This helper method copies all values from a tensor to a section of a vector, starting at the specified index.
-    /// The index is updated to point to the position after the last copied value, allowing multiple tensors to be
-    /// copied sequentially into the same vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method copies values from a multi-dimensional array to a simple list.
-    /// 
-    /// When transferring values:
-    /// - Each value from the tensor is placed in the vector
-    /// - The values are copied in a specific order
-    /// - The index keeps track of the current position in the vector
-    /// 
-    /// This is used when collecting all parameters into a single list for saving or optimization.
-    /// </para>
-    /// </remarks>
-    private void CopyTensorToVector(Tensor<T> tensor, Vector<T> vector, ref int startIndex)
-    {
-        // Use optimized ToVector and copy range instead of element-by-element loop
-        var tensorVec = tensor.ToVector();
-        for (int i = 0; i < tensorVec.Length; i++)
-        {
-            vector[startIndex++] = tensorVec[i];
-        }
+        // Use Vector.Concatenate for production-grade parameter extraction
+        return Vector<T>.Concatenate(
+            new Vector<T>(_weightsFi.ToArray()),
+            new Vector<T>(_weightsIi.ToArray()),
+            new Vector<T>(_weightsCi.ToArray()),
+            new Vector<T>(_weightsOi.ToArray()),
+            new Vector<T>(_weightsFh.ToArray()),
+            new Vector<T>(_weightsIh.ToArray()),
+            new Vector<T>(_weightsCh.ToArray()),
+            new Vector<T>(_weightsOh.ToArray()),
+            new Vector<T>(_biasF.ToArray()),
+            new Vector<T>(_biasI.ToArray()),
+            new Vector<T>(_biasC.ToArray()),
+            new Vector<T>(_biasO.ToArray())
+        );
     }
 
     /// <summary>
@@ -1569,72 +1529,54 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int totalParams = _weightsFi.Length + _weightsIi.Length + _weightsCi.Length + _weightsOi.Length +
-                          _weightsFh.Length + _weightsIh.Length + _weightsCh.Length + _weightsOh.Length +
-                          _biasF.Length + _biasI.Length + _biasC.Length + _biasO.Length;
-    
+        int inputWeightSize = _hiddenSize * _inputSize;
+        int hiddenWeightSize = _hiddenSize * _hiddenSize;
+        int biasSize = _hiddenSize;
+
+        int totalParams = inputWeightSize * 4 + hiddenWeightSize * 4 + biasSize * 4;
+
         if (parameters.Length != totalParams)
         {
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
-    
-        int index = 0;
-    
-        // Set weights parameters
-        CopyVectorToTensor(parameters, _weightsFi, ref index);
-        CopyVectorToTensor(parameters, _weightsIi, ref index);
-        CopyVectorToTensor(parameters, _weightsCi, ref index);
-        CopyVectorToTensor(parameters, _weightsOi, ref index);
-        CopyVectorToTensor(parameters, _weightsFh, ref index);
-        CopyVectorToTensor(parameters, _weightsIh, ref index);
-        CopyVectorToTensor(parameters, _weightsCh, ref index);
-        CopyVectorToTensor(parameters, _weightsOh, ref index);
-    
-        // Set bias parameters
-        CopyVectorToTensor(parameters, _biasF, ref index);
-        CopyVectorToTensor(parameters, _biasI, ref index);
-        CopyVectorToTensor(parameters, _biasC, ref index);
-        CopyVectorToTensor(parameters, _biasO, ref index);
-    }
 
-    /// <summary>
-    /// Copies values from a vector to a tensor.
-    /// </summary>
-    /// <param name="vector">The source vector.</param>
-    /// <param name="tensor">The destination tensor.</param>
-    /// <param name="startIndex">The starting index in the vector.</param>
-    /// <remarks>
-    /// <para>
-    /// This helper method copies values from a section of a vector to a tensor, starting at the specified index
-    /// in the vector. The index is updated to point to the position after the last copied value, allowing multiple
-    /// tensors to be populated sequentially from the same vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method copies values from a simple list to a multi-dimensional array.
-    /// 
-    /// When transferring values:
-    /// - Each value from the vector is placed in the tensor
-    /// - The values are copied in a specific order
-    /// - The index keeps track of the current position in the vector
-    /// 
-    /// This is used when loading parameters from a saved model or after optimization.
-    /// </para>
-    /// </remarks>
-    private void CopyVectorToTensor(Vector<T> vector, Tensor<T> tensor, ref int startIndex)
-    {
-        // Use optimized array copy instead of element-by-element loop
-        var tempArray = new T[tensor.Length];
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tempArray[i] = vector[startIndex++];
-        }
-        var tempVec = new Vector<T>(tempArray);
-        var tempTensor = Tensor<T>.FromVector(tempVec);
+        int idx = 0;
 
-        // Copy data to target tensor
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = tempTensor[i];
-        }
+        // Use Tensor.FromVector for production-grade parameter setting
+        _weightsFi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), [_hiddenSize, _inputSize]);
+        idx += inputWeightSize;
+
+        _weightsIi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), [_hiddenSize, _inputSize]);
+        idx += inputWeightSize;
+
+        _weightsCi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), [_hiddenSize, _inputSize]);
+        idx += inputWeightSize;
+
+        _weightsOi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), [_hiddenSize, _inputSize]);
+        idx += inputWeightSize;
+
+        _weightsFh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), [_hiddenSize, _hiddenSize]);
+        idx += hiddenWeightSize;
+
+        _weightsIh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), [_hiddenSize, _hiddenSize]);
+        idx += hiddenWeightSize;
+
+        _weightsCh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), [_hiddenSize, _hiddenSize]);
+        idx += hiddenWeightSize;
+
+        _weightsOh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), [_hiddenSize, _hiddenSize]);
+        idx += hiddenWeightSize;
+
+        _biasF = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), [_hiddenSize]);
+        idx += biasSize;
+
+        _biasI = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), [_hiddenSize]);
+        idx += biasSize;
+
+        _biasC = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), [_hiddenSize]);
+        idx += biasSize;
+
+        _biasO = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), [_hiddenSize]);
     }
 
     /// <summary>
@@ -1802,15 +1744,9 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </summary>
     private static Tensor<T> MatrixToTensor(Matrix<T> matrix)
     {
-        var tensor = new Tensor<T>(new int[] { matrix.Rows, matrix.Columns });
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                tensor[i, j] = matrix[i, j];
-            }
-        }
-        return tensor;
+        // Use Matrix.ToArray() and Tensor.FromVector with reshape for production-grade conversion
+        var data = matrix.ToArray();
+        return Tensor<T>.FromVector(new Vector<T>(data), [matrix.Rows, matrix.Columns]);
     }
 
     /// <summary>

@@ -81,6 +81,10 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Shape: [batchSize, channels]
     /// </summary>
     private Tensor<T>? _lastExcitationWeights;
+    private Tensor<T>? _lastSqueezed;
+    private Tensor<T>? _lastFc1Biased;
+    private Tensor<T>? _lastFc1Activated;
+    private Tensor<T>? _lastFc2Biased;
 
     /// <summary>
     /// The number of input and output channels in the layer.
@@ -656,20 +660,25 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 1. Squeeze: Global Average Pooling [B, H, W, C] -> [B, C]
         // Use Engine.ReduceMean over spatial dims (1, 2)
         var squeezed = Engine.ReduceMean(input, new[] { 1, 2 }, keepDims: false);
+        _lastSqueezed = squeezed;
 
         // 2. Excitation: FC1 + Activation
         // squeezed: [batchSize, channels], weights1: [channels, reducedChannels]
         var fc1Output = Engine.TensorMatMul(squeezed, _weights1);
-        // Add bias broadcasting [B, R] + [R]
-        var fc1Biased = fc1Output.Add(_bias1.ToVector());
-        
+        var fc1BiasReshaped = _bias1.Reshape(1, _reducedChannels);
+        var fc1Biased = Engine.TensorBroadcastAdd(fc1Output, fc1BiasReshaped);
+        _lastFc1Biased = fc1Biased;
+
         var activated1 = ApplyTensorActivation(fc1Biased, isFirstActivation: true);
+        _lastFc1Activated = activated1;
 
         // Excitation: FC2 + Activation
         // activated1: [batchSize, reducedChannels], weights2: [reducedChannels, channels]
         var fc2Output = Engine.TensorMatMul(activated1, _weights2);
-        var fc2Biased = fc2Output.Add(_bias2.ToVector());
-        
+        var fc2BiasReshaped = _bias2.Reshape(1, _channels);
+        var fc2Biased = Engine.TensorBroadcastAdd(fc2Output, fc2BiasReshaped);
+        _lastFc2Biased = fc2Biased;
+
         var excitation = ApplyTensorActivation(fc2Biased, isFirstActivation: false);
 
         // Cache excitation weights for auxiliary loss computation
@@ -680,8 +689,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Reshape excitation to [B, 1, 1, C] for broadcasting
         var excitationReshaped = excitation.Reshape(batchSize, 1, 1, _channels);
         
-        // Use Tensor.PointwiseMultiply which handles broadcasting
-        var output = input.PointwiseMultiply(excitationReshaped);
+        var output = Engine.TensorMultiply(input, excitationReshaped);
 
         _lastOutput = output;
         return output;
@@ -942,131 +950,33 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null || _lastExcitationWeights == null)
+        if (_lastInput == null || _lastOutput == null || _lastExcitationWeights == null || _lastSqueezed == null || _lastFc1Biased == null || _lastFc1Activated == null || _lastFc2Biased == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = _lastInput.Shape[0];
-        int height = _lastInput.Shape[1];
-        int width = _lastInput.Shape[2];
+        var inputGradientDirect = Engine.TensorMultiply(outputGradient, _lastExcitationWeights.Reshape(batchSize, 1, 1, _channels));
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        _weights1Gradient = new Tensor<T>(_weights1.Shape);
-        _bias1Gradient = new Tensor<T>(_bias1.Shape);
-        _weights2Gradient = new Tensor<T>(_weights2.Shape);
-        _bias2Gradient = new Tensor<T>(_bias2.Shape);
+        var excitationGradientSpatial = Engine.TensorMultiply(outputGradient, _lastInput);
+        var excitationGradient = Engine.ReduceSum(excitationGradientSpatial, new[] { 1, 2 }, keepDims: false);
 
-        // Calculate gradients for scaling and input
-        // output = input * excitation, so:
-        // d(loss)/d(input) = d(loss)/d(output) * excitation
-        // d(loss)/d(excitation) = sum over spatial dims of d(loss)/d(output) * input
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    for (int c = 0; c < _channels; c++)
-                    {
-                        // Input gradient: dL/dInput = dL/dOutput * excitation
-                        inputGradient[b, h, w, c] = NumOps.Multiply(outputGradient[b, h, w, c], _lastExcitationWeights[b, c]);
-                    }
-                }
-            }
-        }
+        var secondActivationDerivative = ApplyTensorActivationDerivative(_lastFc2Biased, isFirstActivation: false);
+        var fc2OutputGradient = Engine.TensorMultiply(excitationGradient, secondActivationDerivative);
 
-        // Calculate gradients for excitation: sum over spatial dimensions
-        var excitationGradient = new Tensor<T>([batchSize, _channels]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _channels; c++)
-            {
-                T sum = NumOps.Zero;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(outputGradient[b, h, w, c], _lastInput[b, h, w, c]));
-                    }
-                }
-                excitationGradient[b, c] = sum;
-            }
-        }
+        _weights2Gradient = Engine.TensorMatMul(Engine.TensorTranspose(_lastFc1Activated), fc2OutputGradient);
+        _bias2Gradient = Engine.ReduceSum(fc2OutputGradient, new[] { 0 }, keepDims: false);
 
-        // Backpropagate through second activation (Sigmoid)
-        var secondActivationDerivative = ApplyTensorActivationDerivative(_lastExcitationWeights, isFirstActivation: false);
-        var fc2OutputGradient = new Tensor<T>(excitationGradient.Shape);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _channels; c++)
-            {
-                fc2OutputGradient[b, c] = NumOps.Multiply(excitationGradient[b, c], secondActivationDerivative[b, c]);
-            }
-        }
+        var fc1OutputGradient = Engine.TensorMatMul(fc2OutputGradient, Engine.TensorTranspose(_weights2));
 
-        // Compute weights2 gradient: fc1Output.T @ fc2OutputGradient
-        // weights2 shape: [reducedChannels, channels]
-        // Need to accumulate from all batch samples
-        for (int r = 0; r < _reducedChannels; r++)
-        {
-            for (int c = 0; c < _channels; c++)
-            {
-                T sum = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++)
-                {
-                    // Need fc1Output[b, r] - but we didn't cache it, approximate with backward flow
-                    // For now, use zeros as placeholder (this is a simplified backward)
-                }
-                _weights2Gradient[r, c] = sum;
-            }
-        }
+        var firstActivationDerivative = ApplyTensorActivationDerivative(_lastFc1Biased, isFirstActivation: true);
+        var fc1Gradient = Engine.TensorMultiply(fc1OutputGradient, firstActivationDerivative);
 
-        // Compute bias2 gradient: sum over batch
-        for (int c = 0; c < _channels; c++)
-        {
-            T sum = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++)
-            {
-                sum = NumOps.Add(sum, fc2OutputGradient[b, c]);
-            }
-            _bias2Gradient[c] = sum;
-        }
+        _weights1Gradient = Engine.TensorMatMul(Engine.TensorTranspose(_lastSqueezed), fc1Gradient);
+        _bias1Gradient = Engine.ReduceSum(fc1Gradient, new[] { 0 }, keepDims: false);
 
-        // Backpropagate through FC2: fc1OutputGradient = fc2OutputGradient @ weights2.T
-        var fc1OutputGradient = fc2OutputGradient.Multiply(_weights2.Transpose([1, 0]));
+        var squeezedGradient = Engine.TensorMatMul(fc1Gradient, Engine.TensorTranspose(_weights1));
+        var squeezeBackprop = Engine.ReduceMeanBackward(squeezedGradient, _lastInput.Shape, new[] { 1, 2 });
 
-        // Backpropagate through first activation (ReLU)
-        // Note: We need the pre-activation values which we don't cache, so approximate
-        var firstActivationDerivative = ApplyTensorActivationDerivative(fc1OutputGradient, isFirstActivation: true);
-        var squeezedGradient = new Tensor<T>([batchSize, _reducedChannels]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int r = 0; r < _reducedChannels; r++)
-            {
-                squeezedGradient[b, r] = NumOps.Multiply(fc1OutputGradient[b, r], firstActivationDerivative[b, r]);
-            }
-        }
-
-        // Compute weights1 gradient: squeezed.T @ squeezedGradient (simplified)
-        // weights1 shape: [channels, reducedChannels]
-        for (int c = 0; c < _channels; c++)
-        {
-            for (int r = 0; r < _reducedChannels; r++)
-            {
-                _weights1Gradient[c, r] = NumOps.Zero;
-            }
-        }
-
-        // Compute bias1 gradient: sum over batch
-        for (int r = 0; r < _reducedChannels; r++)
-        {
-            T sum = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++)
-            {
-                sum = NumOps.Add(sum, squeezedGradient[b, r]);
-            }
-            _bias1Gradient[r] = sum;
-        }
-
+        var inputGradient = Engine.TensorAdd(inputGradientDirect, squeezeBackprop);
         return inputGradient;
     }
 
@@ -1099,35 +1009,15 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_weights1Gradient == null || _bias1Gradient == null || _weights2Gradient == null || _bias2Gradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // Update weights1: weights1 = weights1 - learningRate * weights1Gradient
-        for (int i = 0; i < _weights1.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights1.Shape[1]; j++)
-            {
-                _weights1[i, j] = NumOps.Subtract(_weights1[i, j], NumOps.Multiply(learningRate, _weights1Gradient[i, j]));
-            }
-        }
+        var w1Update = Engine.TensorMultiplyScalar(_weights1Gradient, learningRate);
+        var b1Update = Engine.TensorMultiplyScalar(_bias1Gradient, learningRate);
+        var w2Update = Engine.TensorMultiplyScalar(_weights2Gradient, learningRate);
+        var b2Update = Engine.TensorMultiplyScalar(_bias2Gradient, learningRate);
 
-        // Update bias1
-        for (int i = 0; i < _bias1.Shape[0]; i++)
-        {
-            _bias1[i] = NumOps.Subtract(_bias1[i], NumOps.Multiply(learningRate, _bias1Gradient[i]));
-        }
-
-        // Update weights2
-        for (int i = 0; i < _weights2.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights2.Shape[1]; j++)
-            {
-                _weights2[i, j] = NumOps.Subtract(_weights2[i, j], NumOps.Multiply(learningRate, _weights2Gradient[i, j]));
-            }
-        }
-
-        // Update bias2
-        for (int i = 0; i < _bias2.Shape[0]; i++)
-        {
-            _bias2[i] = NumOps.Subtract(_bias2[i], NumOps.Multiply(learningRate, _bias2Gradient[i]));
-        }
+        _weights1 = Engine.TensorSubtract(_weights1, w1Update);
+        _bias1 = Engine.TensorSubtract(_bias1, b1Update);
+        _weights2 = Engine.TensorSubtract(_weights2, w2Update);
+        _bias2 = Engine.TensorSubtract(_bias2, b2Update);
     }
 
     /// <summary>
@@ -1294,10 +1184,15 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
+        _lastSqueezed = null;
+        _lastFc1Biased = null;
+        _lastFc1Activated = null;
+        _lastFc2Biased = null;
         _weights1Gradient = null;
         _bias1Gradient = null;
         _weights2Gradient = null;
         _bias2Gradient = null;
+        _lastExcitationWeights = null;
     }
 
     /// <summary>

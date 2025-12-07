@@ -33,21 +33,21 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class PrimaryCapsuleLayer<T> : LayerBase<T>
 {
     /// <summary>
-    /// The weight matrix for convolution operations.
+    /// The weight tensor for convolution operations. Shape: [outputChannels, inputChannels * kernelSize * kernelSize]
     /// </summary>
     /// <remarks>
-    /// This matrix contains the learnable weights for the convolution operation.
+    /// This tensor contains the learnable weights for the convolution operation.
     /// </remarks>
-    private Matrix<T> _convWeights;
-    
+    private Tensor<T> _convWeights;
+
     /// <summary>
-    /// The bias vector for convolution operations.
+    /// The bias tensor for convolution operations. Shape: [outputChannels]
     /// </summary>
     /// <remarks>
-    /// This vector contains the learnable biases for the convolution operation.
+    /// This tensor contains the learnable biases for the convolution operation.
     /// </remarks>
-    private Vector<T> _convBias;
-    
+    private Tensor<T> _convBias;
+
     /// <summary>
     /// The gradient of the loss with respect to the convolution weights.
     /// </summary>
@@ -55,8 +55,8 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// This field stores the gradient of the convolution weights, which is used to update the weights
     /// during the parameter update step.
     /// </remarks>
-    private Matrix<T>? _convWeightsGradient;
-    
+    private Tensor<T>? _convWeightsGradient;
+
     /// <summary>
     /// The gradient of the loss with respect to the convolution bias.
     /// </summary>
@@ -64,7 +64,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// This field stores the gradient of the convolution bias, which is used to update the bias
     /// during the parameter update step.
     /// </remarks>
-    private Vector<T>? _convBiasGradient;
+    private Tensor<T>? _convBiasGradient;
     
     /// <summary>
     /// The input tensor from the most recent forward pass.
@@ -191,8 +191,10 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         _kernelSize = kernelSize;
         _stride = stride;
 
-        _convWeights = new Matrix<T>(capsuleChannels * capsuleDimension, inputChannels * kernelSize * kernelSize);
-        _convBias = new Vector<T>(capsuleChannels * capsuleDimension);
+        int outputChannels = capsuleChannels * capsuleDimension;
+        int inputSize = inputChannels * kernelSize * kernelSize;
+        _convWeights = new Tensor<T>([outputChannels, inputSize]);
+        _convBias = new Tensor<T>([outputChannels]);
 
         InitializeParameters();
     }
@@ -213,14 +215,14 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// A vector activation function operates on entire capsule vectors rather than individual elements.
     /// </para>
     /// <para><b>For Beginners:</b> This constructor is similar to the other one, but uses a vector-based activation function.
-    /// 
+    ///
     /// A vector activation function:
     /// - Operates on entire capsule vectors at once, rather than one value at a time
     /// - Can better preserve the relationship between values in a capsule
     /// - The default Squash function ensures vector lengths are between 0 and 1
-    /// 
-    /// The Squash function is specifically designed for capsule networks. It scales vectors 
-    /// non-linearly so that small vectors shrink to nearly zero length, while large vectors 
+    ///
+    /// The Squash function is specifically designed for capsule networks. It scales vectors
+    /// non-linearly so that small vectors shrink to nearly zero length, while large vectors
     /// shrink to have a length slightly below 1, preserving their direction.
     /// </para>
     /// </remarks>
@@ -233,8 +235,10 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         _kernelSize = kernelSize;
         _stride = stride;
 
-        _convWeights = new Matrix<T>(capsuleChannels * capsuleDimension, inputChannels * kernelSize * kernelSize);
-        _convBias = new Vector<T>(capsuleChannels * capsuleDimension);
+        int outputChannels = capsuleChannels * capsuleDimension;
+        int inputSize = inputChannels * kernelSize * kernelSize;
+        _convWeights = new Tensor<T>([outputChannels, inputSize]);
+        _convBias = new Tensor<T>([outputChannels]);
 
         InitializeParameters();
     }
@@ -266,19 +270,19 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_convWeights.Rows + _convWeights.Columns)));
-        for (int i = 0; i < _convWeights.Rows; i++)
-        {
-            for (int j = 0; j < _convWeights.Columns; j++)
-            {
-                _convWeights[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            }
-        }
+        int rows = _convWeights.Shape[0];
+        int cols = _convWeights.Shape[1];
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (rows + cols)));
 
-        for (int i = 0; i < _convBias.Length; i++)
-        {
-            _convBias[i] = NumOps.Zero;
-        }
+        // Initialize weights with scaled random values using Engine operations
+        var randomTensor = Tensor<T>.CreateRandom(rows, cols);
+        var halfTensor = new Tensor<T>([rows, cols]);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
+        _convWeights = Engine.TensorMultiplyScalar(shifted, scale);
+
+        // Initialize bias to zero using Fill
+        _convBias.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -322,7 +326,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
 
         var output = new Tensor<T>([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
 
-        // Perform convolution and reshape
+        // Perform convolution and reshape using Engine operations
         for (int b = 0; b < batchSize; b++)
         {
             for (int i = 0; i < outputHeight; i++)
@@ -330,12 +334,18 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
                 for (int j = 0; j < outputWidth; j++)
                 {
                     var patch = ExtractPatch(input, b, i * _stride, j * _stride);
-                    var capsule = _convWeights.Multiply(patch).Add(_convBias);
+                    // Convert patch to tensor for matrix multiplication
+                    var patchTensor = Tensor<T>.FromVector(patch).Reshape([patch.Length, 1]);
+                    // W @ patch using Engine
+                    var weightedTensor = Engine.TensorMatMul(_convWeights, patchTensor);
+                    // Add bias using Engine
+                    var capsuleTensor = Engine.TensorAdd(weightedTensor.Reshape([_convBias.Length]), _convBias);
+
                     for (int c = 0; c < _capsuleChannels; c++)
                     {
                         for (int d = 0; d < _capsuleDimension; d++)
                         {
-                            output[b, i, j, c, d] = capsule[c * _capsuleDimension + d];
+                            output[b, i, j, c, d] = capsuleTensor[c * _capsuleDimension + d];
                         }
                     }
                 }
@@ -451,8 +461,10 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         int outputHeight = activationGradient.Shape[1];
         int outputWidth = activationGradient.Shape[2];
 
-        _convWeightsGradient = new Matrix<T>(_convWeights.Rows, _convWeights.Columns);
-        _convBiasGradient = new Vector<T>(_convBias.Length);
+        int rows = _convWeights.Shape[0];
+        int cols = _convWeights.Shape[1];
+        _convWeightsGradient = new Tensor<T>([rows, cols]);
+        _convBiasGradient = new Tensor<T>([_convBias.Length]);
 
         var inputGradient = new Tensor<T>(_lastInput.Shape);
 
@@ -473,10 +485,19 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
                         }
                     }
 
-                    _convWeightsGradient = _convWeightsGradient.Add(capsuleGradient.OuterProduct(patch));
-                    _convBiasGradient = _convBiasGradient.Add(capsuleGradient);
+                    // Compute outer product: capsuleGradient @ patch.T
+                    var capsuleGradTensor = Tensor<T>.FromVector(capsuleGradient).Reshape([capsuleGradient.Length, 1]);
+                    var patchTensor = Tensor<T>.FromVector(patch).Reshape([1, patch.Length]);
+                    var outerProduct = Engine.TensorMatMul(capsuleGradTensor, patchTensor);
+                    _convWeightsGradient = Engine.TensorAdd(_convWeightsGradient, outerProduct);
 
-                    var patchGradient = _convWeights.Transpose().Multiply(capsuleGradient);
+                    // Accumulate bias gradient
+                    _convBiasGradient = Engine.TensorAdd(_convBiasGradient, Tensor<T>.FromVector(capsuleGradient));
+
+                    // Compute patch gradient: W.T @ capsuleGrad
+                    var weightsTranspose = Engine.TensorTranspose(_convWeights);
+                    var patchGradTensor = Engine.TensorMatMul(weightsTranspose, capsuleGradTensor);
+                    var patchGradient = patchGradTensor.ToVector();
                     int index = 0;
                     for (int c = 0; c < _inputChannels; c++)
                     {
@@ -548,8 +569,12 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         if (_convWeightsGradient == null || _convBiasGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _convWeights = _convWeights.Subtract(_convWeightsGradient.Multiply(learningRate));
-        _convBias = _convBias.Subtract(_convBiasGradient.Multiply(learningRate));
+        // Use Engine operations for GPU/CPU acceleration
+        var scaledWeightGrad = Engine.TensorMultiplyScalar(_convWeightsGradient, learningRate);
+        _convWeights = Engine.TensorSubtract(_convWeights, scaledWeightGrad);
+
+        var scaledBiasGrad = Engine.TensorMultiplyScalar(_convBiasGradient, learningRate);
+        _convBias = Engine.TensorSubtract(_convBias, scaledBiasGrad);
     }
 
     /// <summary>
@@ -580,28 +605,11 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _convWeights.Rows * _convWeights.Columns + _convBias.Length;
-    
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-    
-        // Copy convolution weights
-        for (int i = 0; i < _convWeights.Rows; i++)
-        {
-            for (int j = 0; j < _convWeights.Columns; j++)
-            {
-                parameters[index++] = _convWeights[i, j];
-            }
-        }
-    
-        // Copy convolution bias
-        for (int i = 0; i < _convBias.Length; i++)
-        {
-            parameters[index++] = _convBias[i];
-        }
-    
-        return parameters;
+        // Use Vector.Concatenate for production-grade parameter extraction
+        return Vector<T>.Concatenate(
+            new Vector<T>(_convWeights.ToArray()),
+            new Vector<T>(_convBias.ToArray())
+        );
     }
 
     /// <summary>
@@ -633,29 +641,18 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int totalParams = _convWeights.Rows * _convWeights.Columns + _convBias.Length;
-    
+        int weightSize = _convWeights.Length;
+        int biasSize = _convBias.Length;
+        int totalParams = weightSize + biasSize;
+
         if (parameters.Length != totalParams)
         {
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
-    
-        int index = 0;
-    
-        // Set convolution weights
-        for (int i = 0; i < _convWeights.Rows; i++)
-        {
-            for (int j = 0; j < _convWeights.Columns; j++)
-            {
-                _convWeights[i, j] = parameters[index++];
-            }
-        }
-    
-        // Set convolution bias
-        for (int i = 0; i < _convBias.Length; i++)
-        {
-            _convBias[i] = parameters[index++];
-        }
+
+        // Use Tensor.FromVector for production-grade parameter setting
+        _convWeights = Tensor<T>.FromVector(parameters.Slice(0, weightSize), _convWeights.Shape);
+        _convBias = Tensor<T>.FromVector(parameters.Slice(weightSize, biasSize), [biasSize]);
     }
 
     /// <summary>
@@ -731,11 +728,8 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         }
         var weightsNode = Autodiff.TensorOperations<T>.Constant(convWeightsTensor, "conv_weights");
 
-        // Convert bias vector to tensor
-        var biasTensor = new Tensor<T>(new int[] { totalOutputChannels });
-        for (int i = 0; i < _convBias.Length; i++)
-            biasTensor[i] = _convBias[i];
-        var biasNode = Autodiff.TensorOperations<T>.Constant(biasTensor, "conv_bias");
+        // _convBias is already a Tensor<T>, use directly
+        var biasNode = Autodiff.TensorOperations<T>.Constant(_convBias, "conv_bias");
 
         // Apply convolution: [batch, height, width, channels] -> [batch, outH, outW, totalOutputChannels]
         var convOutput = Autodiff.TensorOperations<T>.Conv2D(inputNode, weightsNode, biasNode, new[] { _stride, _stride }, padding: new[] { 0, 0 });

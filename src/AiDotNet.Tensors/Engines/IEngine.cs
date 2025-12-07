@@ -2851,5 +2851,130 @@ public interface IEngine
     /// </remarks>
     Tensor<T> TensorEmbeddingLookupBackward<T>(Tensor<T> gradOutput, Tensor<T> indices, int vocabSize, int embeddingDim);
 
+    /// <summary>
+    /// Computes the Radial Basis Function (RBF) kernel between input samples and centers.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, features].</param>
+    /// <param name="centers">The RBF center positions with shape [numCenters, features].</param>
+    /// <param name="epsilons">The epsilon values (1/(2*width²)) for each center with shape [numCenters].</param>
+    /// <returns>The RBF kernel output with shape [batch, numCenters], computing exp(-epsilon * ||x - center||²).</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes Gaussian RBF: K(x, c) = exp(-epsilon * ||x - c||²) where:
+    /// - x is an input sample
+    /// - c is a center
+    /// - epsilon = 1/(2*width²) controls the spread
+    /// </para>
+    /// <para><b>For Beginners:</b> RBF kernels measure similarity between points.
+    /// Points close to a center produce values near 1, distant points produce values near 0.
+    /// </para>
+    /// </remarks>
+    Tensor<T> RBFKernel<T>(Tensor<T> input, Tensor<T> centers, Tensor<T> epsilons);
+
+    /// <summary>
+    /// Computes the backward pass for the RBF kernel.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer with shape [batch, numCenters].</param>
+    /// <param name="input">The original input tensor with shape [batch, features].</param>
+    /// <param name="centers">The RBF center positions with shape [numCenters, features].</param>
+    /// <param name="epsilons">The epsilon values with shape [numCenters].</param>
+    /// <param name="output">The output from the forward pass with shape [batch, numCenters].</param>
+    /// <returns>A tuple containing gradients for (input, centers, epsilons).</returns>
+    (Tensor<T> gradInput, Tensor<T> gradCenters, Tensor<T> gradEpsilons) RBFKernelBackward<T>(
+        Tensor<T> gradOutput, Tensor<T> input, Tensor<T> centers, Tensor<T> epsilons, Tensor<T> output);
+
+    #endregion
+
+    #region Tensor Shape Operations
+
+    /// <summary>
+    /// Repeats each element of a tensor along the specified axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor to repeat.</param>
+    /// <param name="repeats">The number of times to repeat each element.</param>
+    /// <param name="axis">The axis along which to repeat. Default is 0.</param>
+    /// <returns>A tensor with elements repeated along the specified axis.</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation is similar to numpy.repeat(). For a 1D tensor [a, b, c] with repeats=2:
+    /// Result: [a, a, b, b, c, c]
+    /// </para>
+    /// <para><b>For Beginners:</b> This is useful for creating masks or expanding data
+    /// where each element needs to be duplicated multiple times.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorRepeatElements<T>(Tensor<T> tensor, int repeats, int axis = 0);
+
+    /// <summary>
+    /// Tiles (repeats) a tensor along each axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor to tile.</param>
+    /// <param name="multiples">The number of times to tile along each axis.</param>
+    /// <returns>A tensor that is the input tiled according to multiples.</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation is similar to numpy.tile(). For a tensor [a, b] with multiples=[3]:
+    /// Result: [a, b, a, b, a, b]
+    /// </para>
+    /// <para>
+    /// For a 2D tensor [[1, 2], [3, 4]] with multiples=[2, 3]:
+    /// Result: [[1,2,1,2,1,2], [3,4,3,4,3,4], [1,2,1,2,1,2], [3,4,3,4,3,4]]
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorTile<T>(Tensor<T> tensor, int[] multiples);
+
+    /// <summary>
+    /// Extracts a slice from a tensor along specified axes.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor to slice.</param>
+    /// <param name="start">The starting indices for each axis.</param>
+    /// <param name="length">The length to extract along each axis.</param>
+    /// <returns>A tensor containing the sliced portion.</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation extracts a contiguous region from the tensor.
+    /// For a 1D tensor [a, b, c, d, e] with start=[1] and length=[3]:
+    /// Result: [b, c, d]
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorSlice<T>(Tensor<T> tensor, int[] start, int[] length);
+
+    /// <summary>
+    /// Sets a slice of a tensor to values from another tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="destination">The tensor to modify (in-place or returns new tensor).</param>
+    /// <param name="source">The tensor containing values to set.</param>
+    /// <param name="start">The starting indices where to place the source tensor.</param>
+    /// <returns>A tensor with the slice set to the source values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation sets values in a region of the destination tensor.
+    /// Useful for building tensors piece by piece without manual loops.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorSetSlice<T>(Tensor<T> destination, Tensor<T> source, int[] start);
+
+    /// <summary>
+    /// Creates a tensor by selecting elements based on a condition mask.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="condition">A boolean-like tensor where non-zero means true.</param>
+    /// <param name="x">Values to select where condition is true.</param>
+    /// <param name="y">Values to select where condition is false.</param>
+    /// <returns>A tensor with elements from x where condition is true, else from y.</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation is similar to numpy.where() or torch.where().
+    /// Result[i] = condition[i] != 0 ? x[i] : y[i]
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorWhere<T>(Tensor<T> condition, Tensor<T> x, Tensor<T> y);
+
     #endregion
 }

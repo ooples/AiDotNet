@@ -466,9 +466,9 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var outputTransposed = output4D.Transpose(new[] { 0, 2, 1, 3 });
         var outputFlat = outputTransposed.Reshape(batchSize, sequenceLength, embeddingDimension);
 
-        // 7. Add Bias
-        // Use Tensor.Add(Vector) which broadcasts bias [E] to [B, S, E]
-        var outputBiased = outputFlat.Add(_outputBias.ToVector());
+        // 7. Add Bias with engine broadcast for GPU acceleration
+        var biasBroadcast = _outputBias.Reshape(1, 1, embeddingDimension);
+        var outputBiased = Engine.TensorBroadcastAdd(outputFlat, biasBroadcast);
 
         _lastOutput = ApplyActivation(outputBiased);
         return _lastOutput;
@@ -728,23 +728,9 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>A tensor with bias replicated across the batch dimension.</returns>
     private Tensor<T> BroadcastBias(Tensor<T> bias, int batchSize)
     {
-        // For self-attention, bias is [embeddingDimension]
-        // We need to broadcast to [batchSize, sequenceLength, embeddingDimension]
-        var broadcastShape = new int[] { batchSize, _sequenceLength, _embeddingDimension };
-        var result = new Tensor<T>(broadcastShape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int s = 0; s < _sequenceLength; s++)
-            {
-                for (int e = 0; e < _embeddingDimension; e++)
-                {
-                    result[b, s, e] = bias.GetFlat(e);
-                }
-            }
-        }
-
-        return result;
+        var biasReshaped = bias.Reshape(1, 1, _embeddingDimension);
+        var zeros = new Tensor<T>(new[] { batchSize, _sequenceLength, _embeddingDimension });
+        return Engine.TensorBroadcastAdd(zeros, biasReshaped);
     }
 
     /// <summary>

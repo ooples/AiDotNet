@@ -769,21 +769,22 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        var allParameters = new List<T>();
+        // Use Vector<T>.Concatenate for production-grade parameter collection
+        var paramVectors = new List<Vector<T>>();
 
         // Add router parameters
         if (_router.ParameterCount > 0)
         {
-            allParameters.AddRange(_router.GetParameters().ToArray());
+            paramVectors.Add(_router.GetParameters());
         }
 
         // Add expert parameters
         foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
         {
-            allParameters.AddRange(expert.GetParameters().ToArray());
+            paramVectors.Add(expert.GetParameters());
         }
 
-        return new Vector<T>(allParameters.ToArray());
+        return paramVectors.Count > 0 ? Vector<T>.Concatenate(paramVectors.ToArray()) : new Vector<T>(0);
     }
 
     /// <summary>
@@ -821,29 +822,20 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 nameof(parameters));
         }
 
+        // Use Vector.Slice for production-grade parameter distribution
         int offset = 0;
 
         // Set router parameters
         if (_router.ParameterCount > 0)
         {
-            var routerParams = new List<T>();
-            for (int i = 0; i < _router.ParameterCount; i++)
-            {
-                routerParams.Add(parameters[offset + i]);
-            }
-            _router.SetParameters(new Vector<T>(routerParams.ToArray()));
+            _router.SetParameters(parameters.Slice(offset, _router.ParameterCount));
             offset += _router.ParameterCount;
         }
 
         // Set expert parameters
         foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
         {
-            var expertParams = new List<T>();
-            for (int i = 0; i < expert.ParameterCount; i++)
-            {
-                expertParams.Add(parameters[offset + i]);
-            }
-            expert.SetParameters(new Vector<T>(expertParams.ToArray()));
+            expert.SetParameters(parameters.Slice(offset, expert.ParameterCount));
             offset += expert.ParameterCount;
         }
     }

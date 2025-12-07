@@ -232,17 +232,15 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int vocabSize = _embeddingTensor.Shape[0];
         int embeddingDim = _embeddingTensor.Shape[1];
 
-        // Initialize embedding tensor with small random values
+        // Initialize embedding tensor with small random values using Engine operations
         T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(1.0), NumOps.FromDouble(embeddingDim)));
 
-        for (int i = 0; i < vocabSize; i++)
-        {
-            for (int j = 0; j < embeddingDim; j++)
-            {
-                T randomValue = NumOps.FromDouble(Random.NextDouble() - 0.5);
-                _embeddingTensor[i, j] = NumOps.Multiply(randomValue, scale);
-            }
-        }
+        // Create random tensor [0, 1], shift to [-0.5, 0.5], then scale
+        var randomTensor = Tensor<T>.CreateRandom(vocabSize, embeddingDim);
+        var halfTensor = new Tensor<T>([vocabSize, embeddingDim]);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
+        _embeddingTensor = Engine.TensorMultiplyScalar(shifted, scale);
     }
 
     /// <summary>
@@ -462,23 +460,8 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        int vocabSize = _embeddingTensor.Shape[0];
-        int embeddingDim = _embeddingTensor.Shape[1];
-        int totalParams = vocabSize * embeddingDim;
-        var parameters = new Vector<T>(totalParams);
-
-        int index = 0;
-
-        // Copy embedding tensor parameters
-        for (int i = 0; i < vocabSize; i++)
-        {
-            for (int j = 0; j < embeddingDim; j++)
-            {
-                parameters[index++] = _embeddingTensor[i, j];
-            }
-        }
-
-        return parameters;
+        // Use ToArray() for production-grade parameter extraction
+        return new Vector<T>(_embeddingTensor.ToArray());
     }
 
     /// <summary>
@@ -518,16 +501,8 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentException($"Expected {expectedParams} parameters, but got {parameters.Length}");
         }
 
-        int index = 0;
-
-        // Set embedding tensor parameters
-        for (int i = 0; i < vocabSize; i++)
-        {
-            for (int j = 0; j < embeddingDim; j++)
-            {
-                _embeddingTensor[i, j] = parameters[index++];
-            }
-        }
+        // Use Tensor.FromVector for production-grade parameter setting
+        _embeddingTensor = Tensor<T>.FromVector(parameters, [vocabSize, embeddingDim]);
     }
 
     /// <summary>

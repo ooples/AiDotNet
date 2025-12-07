@@ -338,14 +338,19 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        var parameters = new List<T>();
-        parameters.AddRange(_selfAttention.GetParameters());
-        parameters.AddRange(_crossAttention.GetParameters());
-        parameters.AddRange(_feedForward.GetParameters());
-        parameters.AddRange(_norm1.GetParameters());
-        parameters.AddRange(_norm2.GetParameters());
-        parameters.AddRange(_norm3.GetParameters());
-        return new Vector<T>(parameters.ToArray());
+        // Use Vector<T>.Concatenate for efficient parameter collection
+        var selfAttnParams = _selfAttention.GetParameters();
+        var crossAttnParams = _crossAttention.GetParameters();
+        var ffParams = _feedForward.GetParameters();
+        var norm1Params = _norm1.GetParameters();
+        var norm2Params = _norm2.GetParameters();
+        var norm3Params = _norm3.GetParameters();
+
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(
+                Vector<T>.Concatenate(selfAttnParams, crossAttnParams),
+                Vector<T>.Concatenate(ffParams, norm1Params)),
+            Vector<T>.Concatenate(norm2Params, norm3Params));
     }
 
     /// <summary>
@@ -383,8 +388,12 @@ public class DecoderLayer<T> : LayerBase<T>
     private int UpdateComponentParameters(LayerBase<T> component, Vector<T> parameters, int startIndex)
     {
         int paramCount = component.ParameterCount;
-        var componentParams = new Vector<T>(paramCount);
-        Array.Copy(parameters.ToArray(), startIndex, componentParams.ToArray(), 0, paramCount);
+
+        // Use Engine.TensorSlice to extract component parameters without manual loops
+        var paramsTensor = Tensor<T>.FromVector(parameters);
+        var componentParamsTensor = Engine.TensorSlice(paramsTensor, [startIndex], [paramCount]);
+        var componentParams = new Vector<T>(componentParamsTensor.ToArray());
+
         component.UpdateParameters(componentParams);
 
         return startIndex + paramCount;

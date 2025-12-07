@@ -92,9 +92,9 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private readonly int _capsuleDimension;
     private readonly int _numRoutingIterations;
     private Tensor<T> _transformationMatrix;
-    private Vector<T> _bias;
+    private Tensor<T> _bias;
     private Tensor<T>? _transformationMatrixGradient;
-    private Vector<T>? _biasGradient;
+    private Tensor<T>? _biasGradient;
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput;
     private Tensor<T>? _lastCouplingCoefficients;
@@ -173,7 +173,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _numRoutingIterations = numRoutingIterations;
 
         _transformationMatrix = new Tensor<T>([inputCapsules, inputDimension, numCapsules, capsuleDimension]);
-        _bias = new Vector<T>(numCapsules * capsuleDimension);
+        _bias = new Tensor<T>([numCapsules * capsuleDimension]);
 
         InitializeParameters();
     }
@@ -209,10 +209,8 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / totalElements));
         InitializeTensor(_transformationMatrix, scale);
 
-        for (int i = 0; i < _bias.Length; i++)
-        {
-            _bias[i] = NumOps.Zero;
-        }
+        // Initialize bias to zero using Fill
+        _bias.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -228,22 +226,35 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// exploding gradients.
     /// </para>
     /// <para><b>For Beginners:</b> This method fills a tensor with random values of an appropriate size.
-    /// 
+    ///
     /// When filling the tensor:
     /// - We generate random numbers between -0.5 and 0.5
     /// - We multiply each by a scaling factor to control their magnitude
     /// - The result is a tensor filled with small random values
-    /// 
+    ///
     /// This randomness is essential for neural networks - if all values started the same,
     /// the network wouldn't be able to learn different features.
     /// </para>
     /// </remarks>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
-        for (int i = 0; i < tensor.Shape.Aggregate(1, (acc, dim) => acc * dim); i++)
-        {
-            tensor.SetFlatIndex(i, NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale));
-        }
+        // For multi-dimensional tensors, create random and apply transformation
+        int totalElements = tensor.Shape.Aggregate(1, (acc, dim) => acc * dim);
+
+        // Create a flat random tensor [0, 1]
+        var randomTensor = Tensor<T>.CreateRandom(totalElements, 1).Reshape([totalElements]);
+
+        // Shift to [-0.5, 0.5] range: random - 0.5
+        var halfTensor = new Tensor<T>([totalElements]);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
+
+        // Scale by the scale factor
+        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
+
+        // Copy to original tensor - reshape maintains the same underlying data
+        var scaledReshaped = scaled.Reshape(tensor.Shape);
+        Array.Copy(scaledReshaped.ToArray(), tensor.ToArray(), totalElements);
     }
 
     /// <summary>
@@ -604,7 +615,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
 
         _transformationMatrixGradient = new Tensor<T>([inputCapsules, inputDimension, _numCapsules, _capsuleDimension]);
-        _biasGradient = new Vector<T>(_numCapsules * _capsuleDimension);
+        _biasGradient = new Tensor<T>([_numCapsules * _capsuleDimension]);
         var inputGradient = new Tensor<T>(_lastInput.Shape);
 
         // === Vectorized Gradient Accumulation using IEngine (Phase B: US-GPU-015) ===
@@ -725,8 +736,12 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_transformationMatrixGradient == null || _biasGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _transformationMatrix = _transformationMatrix.Subtract(_transformationMatrixGradient.Multiply(learningRate));
-        _bias = _bias.Subtract(_biasGradient.Multiply(learningRate));
+        // Use Engine operations for GPU/CPU acceleration
+        var scaledTransformGrad = Engine.TensorMultiplyScalar(_transformationMatrixGradient, learningRate);
+        _transformationMatrix = Engine.TensorSubtract(_transformationMatrix, scaledTransformGrad);
+
+        var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient, learningRate);
+        _bias = Engine.TensorSubtract(_bias, scaledBiasGrad);
     }
 
     /// <summary>
@@ -786,23 +801,11 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Flatten the transformation matrix and concatenate with bias
-        int matrixSize = _transformationMatrix.Shape.Aggregate(1, (acc, dim) => acc * dim);
-        var parameters = new Vector<T>(matrixSize + _bias.Length);
-        
-        // Copy transformation matrix parameters
-        for (int i = 0; i < matrixSize; i++)
-        {
-            parameters[i] = _transformationMatrix.GetFlatIndexValue(i);
-        }
-        
-        // Copy bias parameters
-        for (int i = 0; i < _bias.Length; i++)
-        {
-            parameters[matrixSize + i] = _bias[i];
-        }
-        
-        return parameters;
+        // Use Vector.Concatenate for production-grade parameter extraction
+        return Vector<T>.Concatenate(
+            new Vector<T>(_transformationMatrix.ToArray()),
+            new Vector<T>(_bias.ToArray())
+        );
     }
 
     /// <summary>
@@ -834,21 +837,14 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int matrixSize = _transformationMatrix.Shape.Aggregate(1, (acc, dim) => acc * dim);
-        
-        if (parameters.Length != matrixSize + _bias.Length)
-            throw new ArgumentException($"Expected {matrixSize + _bias.Length} parameters, but got {parameters.Length}");
-        
-        // Set transformation matrix parameters
-        for (int i = 0; i < matrixSize; i++)
-        {
-            _transformationMatrix.SetFlatIndex(i, parameters[i]);
-        }
-        
-        // Set bias parameters
-        for (int i = 0; i < _bias.Length; i++)
-        {
-            _bias[i] = parameters[matrixSize + i];
-        }
+        int biasSize = _bias.Length;
+
+        if (parameters.Length != matrixSize + biasSize)
+            throw new ArgumentException($"Expected {matrixSize + biasSize} parameters, but got {parameters.Length}");
+
+        // Use Tensor.FromVector for production-grade parameter setting
+        _transformationMatrix = Tensor<T>.FromVector(parameters.Slice(0, matrixSize), _transformationMatrix.Shape);
+        _bias = Tensor<T>.FromVector(parameters.Slice(matrixSize, biasSize), [biasSize]);
     }
 
     /// <summary>
@@ -907,9 +903,8 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _transformationMatrix.ToVector());
         var transformationMatrixNode = TensorOperations<T>.Constant(transformTensor, "CapsuleTransformMatrix");
 
-        // Bias vector as constant
-        var biasTensor = new Tensor<T>(new[] { _bias.Length }, _bias);
-        var biasNode = TensorOperations<T>.Constant(biasTensor, "CapsuleBias");
+        // Bias is already a Tensor<T>, use directly
+        var biasNode = TensorOperations<T>.Constant(_bias, "CapsuleBias");
 
         // Reshape input for matrix multiplication: [batchSize * inputCapsules, inputDimension]
         var reshapedInput = TensorOperations<T>.Reshape(input, [inputCapsules, inputDimension]);
@@ -918,12 +913,10 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // This gives us [inputCapsules, numCapsules, capsuleDimension]
         var predictions = TensorOperations<T>.MatrixMultiply(reshapedInput, transformationMatrixNode);
 
-        // Initialize coupling coefficients as uniform: 1/numCapsules
+        // Initialize coupling coefficients as uniform: 1/numCapsules using Fill
         var uniformCoeff = NumOps.FromDouble(1.0 / _numCapsules);
-        var couplingsData = new T[inputCapsules * _numCapsules];
-        for (int i = 0; i < couplingsData.Length; i++)
-            couplingsData[i] = uniformCoeff;
-        var couplingsTensor = new Tensor<T>(new[] { inputCapsules, _numCapsules }, new Vector<T>(couplingsData));
+        var couplingsTensor = new Tensor<T>(new[] { inputCapsules, _numCapsules });
+        couplingsTensor.Fill(uniformCoeff);
         var couplings = TensorOperations<T>.Constant(couplingsTensor, "InitialCouplings");
 
         ComputationNode<T> output = predictions;

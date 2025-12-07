@@ -152,27 +152,24 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     {
         int batchSize = input.Shape[0];
         int latentSize = input.Shape[1] / 2;
-        _lastMean = new Tensor<T>([batchSize, latentSize]);
-        _lastLogVar = new Tensor<T>([batchSize, latentSize]);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < latentSize; j++)
-            {
-                _lastMean[i, j] = input[i, j];
-                _lastLogVar[i, j] = input[i, j + latentSize];
-            }
-        }
-        _lastEpsilon = new Tensor<T>([batchSize, latentSize]);
-        var output = new Tensor<T>([batchSize, latentSize]);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < latentSize; j++)
-            {
-                _lastEpsilon[i, j] = NumOps.FromDouble(Random.NextDouble());
-                T stdDev = NumOps.Exp(NumOps.Multiply(_lastLogVar[i, j], NumOps.FromDouble(0.5)));
-                output[i, j] = NumOps.Add(_lastMean[i, j], NumOps.Multiply(stdDev, _lastEpsilon[i, j]));
-            }
-        }
+
+        // Use Engine.TensorSlice to split mean and logvar
+        _lastMean = Engine.TensorSlice(input, [0, 0], [batchSize, latentSize]);
+        _lastLogVar = Engine.TensorSlice(input, [0, latentSize], [batchSize, latentSize]);
+
+        // Generate random epsilon using Tensor<T>.CreateRandom
+        _lastEpsilon = Tensor<T>.CreateRandom(batchSize, latentSize);
+
+        // Compute stdDev = exp(logvar * 0.5) using Engine operations
+        var halfTensor = new Tensor<T>([batchSize, latentSize]);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var scaledLogVar = Engine.TensorMultiply(_lastLogVar, halfTensor);
+        var stdDev = Engine.TensorExp(scaledLogVar);
+
+        // Compute output = mean + stdDev * epsilon using Engine operations
+        var scaledEpsilon = Engine.TensorMultiply(stdDev, _lastEpsilon);
+        var output = Engine.TensorAdd(_lastMean, scaledEpsilon);
+
         return output;
     }
 
@@ -220,25 +217,31 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     {
         if (_lastMean == null || _lastLogVar == null || _lastEpsilon == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
         int batchSize = outputGradient.Shape[0];
         int latentSize = outputGradient.Shape[1];
+
+        // Compute stdDev = exp(logvar * 0.5) using Engine operations
+        var halfTensor = new Tensor<T>([batchSize, latentSize]);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var scaledLogVar = Engine.TensorMultiply(_lastLogVar, halfTensor);
+        var stdDev = Engine.TensorExp(scaledLogVar);
+
+        // Gradient for mean = outputGradient (unchanged)
+        var gradMean = outputGradient;
+
+        // Gradient for log variance = outputGradient * epsilon * stdDev * 0.5
+        var gradLogVar = Engine.TensorMultiply(
+            Engine.TensorMultiply(
+                Engine.TensorMultiply(outputGradient, _lastEpsilon),
+                stdDev),
+            halfTensor);
+
+        // Concatenate gradients: [gradMean, gradLogVar]
         var inputGradient = new Tensor<T>([batchSize, latentSize * 2]);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < latentSize; j++)
-            {
-                T stdDev = NumOps.Exp(NumOps.Multiply(_lastLogVar[i, j], NumOps.FromDouble(0.5)));
-                
-                // Gradient for mean
-                inputGradient[i, j] = outputGradient[i, j];
-                // Gradient for log variance
-                T gradLogVar = NumOps.Multiply(
-                    NumOps.Multiply(outputGradient[i, j], _lastEpsilon[i, j]),
-                    NumOps.Multiply(stdDev, NumOps.FromDouble(0.5))
-                );
-                inputGradient[i, j + latentSize] = gradLogVar;
-            }
-        }
+        inputGradient = Engine.TensorSetSlice(inputGradient, gradMean, [0, 0]);
+        inputGradient = Engine.TensorSetSlice(inputGradient, gradLogVar, [0, latentSize]);
+
         return inputGradient;
     }
 
@@ -249,9 +252,21 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method computes gradients using the same computation as BackwardManual to ensure
-    /// identical results. Both paths use cached values from the forward pass to avoid
-    /// floating-point discrepancies.
+    /// This method builds a computation graph for the reparameterization trick and uses autodiff
+    /// to compute gradients. The forward computation is: z = mean + exp(logvar * 0.5) * epsilon
+    ///
+    /// The gradients are:
+    /// - dL/d_mean = dL/dz (gradient passes through unchanged)
+    /// - dL/d_logvar = dL/dz * epsilon * exp(logvar * 0.5) * 0.5
+    /// </para>
+    /// <para>
+    /// <b>Production-Ready Features:</b>
+    /// <list type="bullet">
+    /// <item>Builds proper computation graph using TensorOperations</item>
+    /// <item>Uses inline topological sort for backward pass</item>
+    /// <item>Fully vectorized - no nested loops</item>
+    /// <item>GPU-accelerated via IEngine</item>
+    /// </list>
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
@@ -259,26 +274,92 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         if (_lastMean == null || _lastLogVar == null || _lastEpsilon == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Use the same computation as BackwardManual to ensure identical results
         int batchSize = outputGradient.Shape[0];
         int latentSize = outputGradient.Shape[1];
-        var inputGradient = new Tensor<T>([batchSize, latentSize * 2]);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < latentSize; j++)
-            {
-                T stdDev = NumOps.Exp(NumOps.Multiply(_lastLogVar[i, j], NumOps.FromDouble(0.5)));
 
-                // Gradient for mean
-                inputGradient[i, j] = outputGradient[i, j];
-                // Gradient for log variance
-                T gradLogVar = NumOps.Multiply(
-                    NumOps.Multiply(outputGradient[i, j], _lastEpsilon[i, j]),
-                    NumOps.Multiply(stdDev, NumOps.FromDouble(0.5))
-                );
-                inputGradient[i, j + latentSize] = gradLogVar;
+        // Build computation graph for the reparameterization trick
+        // Create variable nodes for mean and logvar (these require gradients)
+        var meanNode = TensorOperations<T>.Variable(_lastMean, "mean", requiresGradient: true);
+        var logvarNode = TensorOperations<T>.Variable(_lastLogVar, "logvar", requiresGradient: true);
+
+        // Create constant node for epsilon (random noise - no gradients)
+        var epsilonNode = TensorOperations<T>.Constant(_lastEpsilon, "epsilon");
+
+        // Create constant for 0.5 scalar multiplication
+        var halfTensor = new Tensor<T>([batchSize, latentSize]);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var halfNode = TensorOperations<T>.Constant(halfTensor, "half");
+
+        // Build forward graph: z = mean + exp(logvar * 0.5) * epsilon
+        // Step 1: scaledLogVar = logvar * 0.5
+        var scaledLogVarNode = TensorOperations<T>.ElementwiseMultiply(logvarNode, halfNode);
+
+        // Step 2: stdDev = exp(scaledLogVar)
+        var stdDevNode = TensorOperations<T>.Exp(scaledLogVarNode);
+
+        // Step 3: scaledEpsilon = stdDev * epsilon
+        var scaledEpsilonNode = TensorOperations<T>.ElementwiseMultiply(stdDevNode, epsilonNode);
+
+        // Step 4: z = mean + scaledEpsilon
+        var zNode = TensorOperations<T>.Add(meanNode, scaledEpsilonNode);
+
+        // Set the output gradient as the seed for backpropagation
+        zNode.Gradient = outputGradient;
+
+        // Inline topological sort (matching FullyConnectedLayer pattern)
+        var visited = new HashSet<ComputationNode<T>>();
+        var topoOrder = new List<ComputationNode<T>>();
+        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
+        stack.Push((zNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
             }
         }
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients for mean and logvar
+        if (meanNode.Gradient == null)
+            throw new InvalidOperationException("Gradient computation failed for mean.");
+        if (logvarNode.Gradient == null)
+            throw new InvalidOperationException("Gradient computation failed for logvar.");
+
+        var gradMean = meanNode.Gradient;
+        var gradLogVar = logvarNode.Gradient;
+
+        // Concatenate gradients: [gradMean, gradLogVar] using Engine operations
+        var inputGradient = new Tensor<T>([batchSize, latentSize * 2]);
+        inputGradient = Engine.TensorSetSlice(inputGradient, gradMean, [0, 0]);
+        inputGradient = Engine.TensorSetSlice(inputGradient, gradLogVar, [0, latentSize]);
+
         return inputGradient;
     }
 

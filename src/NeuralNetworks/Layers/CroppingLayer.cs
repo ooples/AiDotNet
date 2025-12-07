@@ -289,27 +289,8 @@ public class CroppingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input; // Store for autodiff backward pass
-
-        int[] inputShape = input.Shape;
-        int[] outputShape = GetOutputShape();
-        Tensor<T> output = new Tensor<T>(outputShape);
-        int batchSize = inputShape[0];
-        int channels = inputShape[3];
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int y = 0; y < outputShape[1]; y++)
-            {
-                for (int x = 0; x < outputShape[2]; x++)
-                {
-                    for (int c = 0; c < channels; c++)
-                    {
-                        output[b, y, x, c] = input[b, y + _cropTop[1], x + _cropLeft[2], c];
-                    }
-                }
-            }
-        }
-
-        return ApplyActivation(output);
+        var cropped = Engine.Crop(input, _cropTop[1], _cropLeft[2], GetOutputShape()[1], GetOutputShape()[2]);
+        return ApplyActivation(cropped);
     }
 
     /// <summary>
@@ -353,23 +334,8 @@ public class CroppingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int[] inputShape = GetInputShape();
-        Tensor<T> inputGradient = new Tensor<T>(inputShape);
-        int batchSize = inputShape[0];
-        int channels = inputShape[3];
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int y = 0; y < outputGradient.Shape[1]; y++)
-            {
-                for (int x = 0; x < outputGradient.Shape[2]; x++)
-                {
-                    for (int c = 0; c < channels; c++)
-                    {
-                        inputGradient[b, y + _cropTop[1], x + _cropLeft[2], c] = outputGradient[b, y, x, c];
-                    }
-                }
-            }
-        }
+        var inputShape = GetInputShape();
+        var inputGradient = Engine.CropBackward(outputGradient, inputShape, _cropTop[1], _cropLeft[2]);
         return ApplyActivationDerivative(_lastInput, inputGradient);
     }
 
@@ -395,24 +361,8 @@ public class CroppingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Use the same computation as BackwardManual to ensure identical results
-        int[] inputShape = GetInputShape();
-        Tensor<T> inputGradient = new Tensor<T>(inputShape);
-        int batchSize = inputShape[0];
-        int channels = inputShape[3];
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int y = 0; y < outputGradient.Shape[1]; y++)
-            {
-                for (int x = 0; x < outputGradient.Shape[2]; x++)
-                {
-                    for (int c = 0; c < channels; c++)
-                    {
-                        inputGradient[b, y + _cropTop[1], x + _cropLeft[2], c] = outputGradient[b, y, x, c];
-                    }
-                }
-            }
-        }
+        var inputShape = GetInputShape();
+        var inputGradient = Engine.CropBackward(outputGradient, inputShape, _cropTop[1], _cropLeft[2]);
         return ApplyActivationDerivative(_lastInput, inputGradient);
     }
    

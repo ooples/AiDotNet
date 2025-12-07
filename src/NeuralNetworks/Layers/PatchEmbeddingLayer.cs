@@ -230,7 +230,8 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         var projected = Engine.TensorMatMul(patches, _projectionWeights);
         
         // Add bias (broadcast)
-        var preActivation = projected.Add(_projectionBias.ToVector());
+        var biasBroadcast = _projectionBias.Reshape(1, 1, _embeddingDim);
+        var preActivation = Engine.TensorBroadcastAdd(projected, biasBroadcast);
 
         _lastPreActivation = preActivation;
         return ApplyActivation(preActivation);
@@ -300,7 +301,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         int patchDim = _channels * _patchSize * _patchSize;
 
         // 1. Gradient w.r.t Bias: Sum over batch and patches
-        _projectionBiasGradient = activationGradient.Sum(new[] { 0, 1 }).Reshape(_projectionBias.Shape);
+        _projectionBiasGradient = Engine.ReduceSum(activationGradient, new[] { 0, 1 });
 
         // 2. Reconstruct patches from input
         var reshapedInput = _lastInput.Reshape(batchSize, _channels, _numPatchesHeight, _patchSize, _numPatchesWidth, _patchSize);
@@ -312,7 +313,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         // [B, P, N] @ [B, N, E] -> [B, P, E]
         var weightGradBatch = Engine.BatchMatMul(patchesT, activationGradient);
         // Sum over batch
-        _projectionWeightsGradient = weightGradBatch.Sum(new[] { 0 }).Reshape(_projectionWeights.Shape);
+        _projectionWeightsGradient = Engine.ReduceSum(weightGradBatch, new[] { 0 });
 
         // 4. Gradient w.r.t Input (Patches)
         // [B*N, E] @ [E, P] -> [B*N, P]

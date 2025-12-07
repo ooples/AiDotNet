@@ -260,7 +260,7 @@ public class ResidualLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         _lastInnerOutput = _innerLayer?.Forward(input);
-        var result = _lastInnerOutput == null ? input : input.Add(_lastInnerOutput);
+        var result = _lastInnerOutput == null ? input : Engine.TensorAdd(input, _lastInnerOutput);
 
         return ApplyActivation(result);
     }
@@ -312,7 +312,7 @@ public class ResidualLayer<T> : LayerBase<T>
         // Forward does: result = _lastInnerOutput == null ? input : input.Add(_lastInnerOutput)
         var combinedOutput = _lastInnerOutput == null
             ? _lastInput
-            : _lastInput.Add(_lastInnerOutput);
+            : Engine.TensorAdd(_lastInput, _lastInnerOutput);
 
         // ApplyActivationDerivative already includes the outputGradient multiplication,
         // so we use the result directly (no additional multiplication needed)
@@ -326,7 +326,7 @@ public class ResidualLayer<T> : LayerBase<T>
         }
 
         var innerGradient = _innerLayer.Backward(combinedGradient);
-        return combinedGradient.Add(innerGradient);
+        return Engine.TensorAdd(combinedGradient, innerGradient);
     }
 
     /// <summary>
@@ -356,7 +356,7 @@ public class ResidualLayer<T> : LayerBase<T>
         // Forward does: result = _lastInnerOutput == null ? input : input.Add(_lastInnerOutput)
         var combinedOutput = _lastInnerOutput == null
             ? _lastInput
-            : _lastInput.Add(_lastInnerOutput);
+            : Engine.TensorAdd(_lastInput, _lastInnerOutput);
 
         // Step 2: Compute activation derivative using cached combined output
         Tensor<T> combinedGradient;
@@ -389,7 +389,7 @@ public class ResidualLayer<T> : LayerBase<T>
         var innerGradient = _innerLayer.Backward(combinedGradient);
 
         // Skip connection gradient + inner branch gradient
-        return combinedGradient.Add(innerGradient);
+        return Engine.TensorAdd(combinedGradient, innerGradient);
     }
 
     /// <summary>

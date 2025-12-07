@@ -126,7 +126,7 @@ public class MeasurementLayer<T> : LayerBase<T>
     {
         _lastInput = input;
         // Assume input is a complex-valued tensor representing quantum states
-        var probabilities = new T[input.Shape[0]];
+        var probabilities = new Tensor<T>(new[] { input.Shape[0] });
     
         // Get numeric operations for complex numbers
         var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
@@ -140,18 +140,13 @@ public class MeasurementLayer<T> : LayerBase<T>
             var imagSquared = NumOps.Multiply(complexValue.Imaginary, complexValue.Imaginary);
             probabilities[i] = NumOps.Add(realSquared, imagSquared);
         }
-        // === Vectorized Probability Normalization (Phase B: US-GPU-015) ===
-        // Normalize probabilities
-        var probVec = new Vector<T>(probabilities);
-        var sum = NumOps.Zero;
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            sum = NumOps.Add(sum, probabilities[i]);
-        }
-        probVec = (Vector<T>)Engine.Divide(probVec, sum);
-        probabilities = probVec.ToArray();
-        // Create a new tensor with the calculated probabilities
-        _lastOutput = new Tensor<T>([input.Shape[0]], new Vector<T>(probabilities));
+        // Normalize probabilities using engine ops
+        var sumTensor = Engine.ReduceSum(probabilities, new[] { 0 }, keepDims: false);
+        var sumValue = sumTensor[0];
+        var invSum = NumOps.Equals(sumValue, NumOps.Zero)
+            ? NumOps.Zero
+            : NumOps.Divide(NumOps.One, sumValue);
+        _lastOutput = Engine.TensorMultiplyScalar(probabilities, invSum);
         return _lastOutput;
     }
 

@@ -203,23 +203,11 @@ public class PaddingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        var paddedOutput = new Tensor<T>(OutputShape);
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[3];
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int i = 0; i < input.Shape[1]; i++)
-                {
-                    for (int j = 0; j < input.Shape[2]; j++)
-                    {
-                        // _padding[1] = height padding, _padding[2] = width padding for BHWC format
-                        paddedOutput[b, i + _padding[1], j + _padding[2], c] = input[b, i, j, c];
-                    }
-                }
-            }
-        }
+        if (_padding.Length != input.Shape.Length)
+            throw new ArgumentException("Padding array length must match input dimensions.");
+
+        // Assume BHWC format: padding order [batch, height, width, channels]
+        var paddedOutput = Engine.Pad(input, _padding[1], _padding[1], _padding[2], _padding[2], NumOps.Zero);
         return ApplyActivation(paddedOutput);
     }
     
@@ -268,23 +256,10 @@ public class PaddingLayer<T> : LayerBase<T>
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        int batchSize = _lastInput.Shape[0];
-        int channels = _lastInput.Shape[3];
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int i = 0; i < _lastInput.Shape[1]; i++)
-                {
-                    for (int j = 0; j < _lastInput.Shape[2]; j++)
-                    {
-                        // _padding[1] = height padding, _padding[2] = width padding for BHWC format
-                        inputGradient[b, i, j, c] = outputGradient[b, i + _padding[1], j + _padding[2], c];
-                    }
-                }
-            }
-        }
+        if (_padding.Length != _lastInput.Shape.Length)
+            throw new ArgumentException("Padding array length must match input dimensions.");
+
+        var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape);
         return ApplyActivationDerivative(_lastInput, inputGradient);
     }
 
@@ -306,24 +281,10 @@ public class PaddingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Use the same computation as BackwardManual to ensure identical results
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        int batchSize = _lastInput.Shape[0];
-        int channels = _lastInput.Shape[3];
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int i = 0; i < _lastInput.Shape[1]; i++)
-                {
-                    for (int j = 0; j < _lastInput.Shape[2]; j++)
-                    {
-                        // _padding[1] = height padding, _padding[2] = width padding for BHWC format
-                        inputGradient[b, i, j, c] = outputGradient[b, i + _padding[1], j + _padding[2], c];
-                    }
-                }
-            }
-        }
+        if (_padding.Length != _lastInput.Shape.Length)
+            throw new ArgumentException("Padding array length must match input dimensions.");
+
+        var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape);
         return ApplyActivationDerivative(_lastInput, inputGradient);
     }
     

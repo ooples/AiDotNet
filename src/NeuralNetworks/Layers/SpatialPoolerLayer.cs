@@ -115,10 +115,10 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// in the input data.
     /// </para>
     /// </remarks>
-    private Matrix<T> Connections;
+    private Tensor<T> Connections;
     
     /// <summary>
-    /// Stores the input vector from the most recent forward pass or learning step.
+    /// Stores the input tensor from the most recent forward pass or learning step.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -126,16 +126,16 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// parameter updates. It is cleared when ResetState() is called.
     /// </para>
     /// <para><b>For Beginners:</b> This is like the layer's short-term memory of what input it received.
-    /// 
+    ///
     /// The layer needs to remember what input it processed so that it can properly update
     /// its connections during learning. This temporary storage is cleared between batches
     /// or when you explicitly reset the layer.
     /// </para>
     /// </remarks>
-    private Vector<T>? LastInput;
-    
+    private Tensor<T>? LastInput;
+
     /// <summary>
-    /// Stores the output vector from the most recent forward pass or learning step.
+    /// Stores the output tensor from the most recent forward pass or learning step.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -143,13 +143,13 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// parameter updates. It is cleared when ResetState() is called.
     /// </para>
     /// <para><b>For Beginners:</b> This is the layer's memory of what output it produced.
-    /// 
+    ///
     /// The layer needs to remember which columns were activated so that it can update
     /// the connections appropriately during learning. This temporary storage is cleared
     /// between batches or when you explicitly reset the layer.
     /// </para>
     /// </remarks>
-    private Vector<T>? LastOutput;
+    private Tensor<T>? LastOutput;
     
     /// <summary>
     /// The learning rate used during the learning process.
@@ -241,7 +241,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         InputSize = inputSize;
         ColumnCount = columnCount;
         SparsityThreshold = sparsityThreshold;
-        Connections = new Matrix<T>(inputSize, columnCount);
+        Connections = new Tensor<T>([inputSize, columnCount]);
 
         InitializeConnections();
     }
@@ -303,20 +303,27 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        var inputVector = input.ToVector();
-        var output = new Vector<T>(ColumnCount);
+        // Flatten to 1D tensor if needed
+        LastInput = input.Shape.Length == 1
+            ? input
+            : input.Reshape([input.Length]);
 
+        // Use Engine tensor operations: output = Connections^T @ input
+        var inputTensor = LastInput.Reshape([InputSize, 1]);
+
+        var connectionsT = Engine.TensorTranspose(Connections);
+        var activations = Engine.TensorMatMul(connectionsT, inputTensor);
+
+        // Apply threshold to get sparse binary output
+        T threshold = NumOps.FromDouble(SparsityThreshold);
+        var output = new Tensor<T>([ColumnCount]);
         for (int i = 0; i < ColumnCount; i++)
         {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < InputSize; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(inputVector[j], Connections[j, i]));
-            }
-            output[i] = NumOps.GreaterThan(sum, NumOps.FromDouble(SparsityThreshold)) ? NumOps.One : NumOps.Zero;
+            output[i] = NumOps.GreaterThan(activations[i, 0], threshold) ? NumOps.One : NumOps.Zero;
         }
 
-        return Tensor<T>.FromVector(output);
+        LastOutput = output;
+        return output;
     }
 
     /// <summary>
@@ -348,17 +355,24 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </remarks>
     public void Learn(Vector<T> input)
     {
-        LastInput = input;
-        LastOutput = Forward(Tensor<T>.FromVector(input)).ToVector();
+        // Convert to tensor and call Forward which stores in LastInput/LastOutput
+        var inputTensor = Tensor<T>.FromVector(input);
+        Forward(inputTensor);
+
+        if (LastInput == null || LastOutput == null)
+            return;
+
+        T lr = NumOps.FromDouble(LearningRate);
+        T bf = NumOps.FromDouble(BoostFactor);
 
         for (int i = 0; i < ColumnCount; i++)
         {
             if (NumOps.Equals(LastOutput[i], NumOps.One))
             {
+                // Strengthen connections for active columns
                 for (int j = 0; j < InputSize; j++)
                 {
-                    T delta = NumOps.Multiply(NumOps.FromDouble(LearningRate), 
-                        NumOps.Subtract(input[j], Connections[j, i]));
+                    T delta = NumOps.Multiply(lr, NumOps.Subtract(LastInput[j], Connections[j, i]));
                     Connections[j, i] = NumOps.Add(Connections[j, i], delta);
                 }
             }
@@ -371,7 +385,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
             {
                 for (int j = 0; j < InputSize; j++)
                 {
-                    T boost = NumOps.Multiply(NumOps.FromDouble(BoostFactor), input[j]);
+                    T boost = NumOps.Multiply(bf, LastInput[j]);
                     Connections[j, i] = NumOps.Add(Connections[j, i], boost);
                 }
             }
@@ -456,18 +470,21 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        var inputGradient = new Vector<T>(InputSize);
+        // Use Engine tensor operations: inputGrad = Connections @ outputGrad
+        // Connections is [InputSize, ColumnCount], no transpose needed
         var flatGradient = outputGradient.ToVector();
+        var gradTensor = new Tensor<T>([ColumnCount, 1]);
+        for (int i = 0; i < ColumnCount; i++)
+        {
+            gradTensor[i, 0] = flatGradient[i];
+        }
 
+        var inputGradTensor = Engine.TensorMatMul(Connections, gradTensor);
+
+        var inputGradient = new Vector<T>(InputSize);
         for (int i = 0; i < InputSize; i++)
         {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < ColumnCount; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(flatGradient[j], Connections[i, j]));
-            }
-
-            inputGradient[i] = sum;
+            inputGradient[i] = inputGradTensor[i, 0];
         }
 
         return Tensor<T>.FromVector(inputGradient);
@@ -489,33 +506,8 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     {
         // SpatialPooler uses straight-through estimator: gradient flows through threshold as if it's identity
         // Backward: inputGrad = Connections @ outputGrad (no transpose needed)
-
-        // Convert Connections matrix to tensor [InputSize, ColumnCount]
-        var connectionsTensor = new Tensor<T>([InputSize, ColumnCount]);
-        for (int i = 0; i < InputSize; i++)
-            for (int j = 0; j < ColumnCount; j++)
-                connectionsTensor[i, j] = Connections[i, j];
-
-        // Convert gradients to proper shapes for MatMul
-        var outputGradVec = outputGradient.ToVector();
-        var outputGradTensor = new Tensor<T>([ColumnCount, 1]);
-        for (int i = 0; i < ColumnCount; i++)
-            outputGradTensor[i, 0] = outputGradVec[i];
-
-        // Create computation node (we don't actually need to track this, just compute the result)
-        // inputGrad = Connections @ outputGrad (Connections is [InputSize, ColumnCount], no transpose)
-        var inputGradient = new Vector<T>(InputSize);
-        for (int i = 0; i < InputSize; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < ColumnCount; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(connectionsTensor[i, j], outputGradVec[j]));
-            }
-            inputGradient[i] = sum;
-        }
-
-        return Tensor<T>.FromVector(inputGradient);
+        // Use the same Engine-based computation as manual backward
+        return BackwardManual(outputGradient);
     }
 
 
@@ -587,19 +579,9 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Convert the connection matrix to a vector
-        var parameters = new Vector<T>(InputSize * ColumnCount);
-        int index = 0;
-    
-        for (int i = 0; i < InputSize; i++)
-        {
-            for (int j = 0; j < ColumnCount; j++)
-            {
-                parameters[index++] = Connections[i, j];
-            }
-        }
-    
-        return parameters;
+        // Use Tensor.ToArray() to efficiently convert to vector
+        var flatConnections = new Vector<T>(Connections.ToArray());
+        return flatConnections;
     }
 
     /// <summary>
@@ -635,16 +617,9 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         {
             throw new ArgumentException($"Expected {InputSize * ColumnCount} parameters, but got {parameters.Length}");
         }
-    
-        int index = 0;
-    
-        for (int i = 0; i < InputSize; i++)
-        {
-            for (int j = 0; j < ColumnCount; j++)
-            {
-                Connections[i, j] = parameters[index++];
-            }
-        }
+
+        // Use Tensor<T>.FromVector and reshape to restore connections
+        Connections = Tensor<T>.FromVector(parameters).Reshape([InputSize, ColumnCount]);
     }
 
     /// <summary>
@@ -697,13 +672,8 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
 
         var input = inputNodes[0];
 
-        // Convert connections to tensor [InputSize, ColumnCount]
-        var connectionsTensor = new Tensor<T>([InputSize, ColumnCount]);
-        for (int i = 0; i < InputSize; i++)
-            for (int j = 0; j < ColumnCount; j++)
-                connectionsTensor[i, j] = Connections[i, j];
-
-        var connectionsNode = TensorOperations<T>.Constant(connectionsTensor, "sp_connections");
+        // Connections is already a Tensor<T>, use it directly
+        var connectionsNode = TensorOperations<T>.Constant(Connections, "sp_connections");
 
         // Transpose connections for multiplication: [ColumnCount, InputSize]
         var connectionsTransposed = TensorOperations<T>.Transpose(connectionsNode);

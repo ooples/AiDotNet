@@ -276,30 +276,42 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </remarks>
     private double CalculateAnomalyScore(Vector<T> actual, Vector<T> predicted)
     {
-        int mismatchCount = 0;
-        int totalCount = 0;
-        
-        for (int i = 0; i < actual.Length; i++)
-        {
-            // For binary values (0 or 1), count mismatches
-            if (NumOps.Equals(actual[i], NumOps.One) || NumOps.Equals(predicted[i], NumOps.One))
-            {
-                totalCount++;
-                
-                // If one is active and the other is not, it's a mismatch
-                if (!NumOps.Equals(actual[i], predicted[i]))
-                {
-                    mismatchCount++;
-                }
-            }
-        }
-        
+        // Convert vectors to tensors for Engine operations
+        var actualTensor = Tensor<T>.FromVector(actual);
+        var predictedTensor = Tensor<T>.FromVector(predicted);
+
+        // Create threshold tensor for comparison (value of 1)
+        var onesTensor = new Tensor<T>(actualTensor.Shape);
+        onesTensor.Fill(NumOps.One);
+
+        // isActiveActual = (actual == 1)
+        var isActiveActual = Engine.TensorEquals(actualTensor, NumOps.One);
+        // isActivePredicted = (predicted == 1)
+        var isActivePredicted = Engine.TensorEquals(predictedTensor, NumOps.One);
+
+        // anyActive = isActiveActual OR isActivePredicted (using max since values are 0/1)
+        var anyActive = Engine.TensorMax(isActiveActual, isActivePredicted);
+
+        // Count total active using ReduceSum
+        var totalActiveSum = Engine.ReduceSum(anyActive, null, keepDims: false);
+        double totalCount = NumOps.ToDouble(totalActiveSum[0]);
+
         // If nothing is active, assume no anomaly
         if (totalCount == 0)
             return 0.0;
-            
+
+        // isMismatch = (actual != predicted) represented as 0/1
+        var notEqual = Engine.TensorNotEquals(actualTensor, predictedTensor);
+
+        // mismatchAndActive = isMismatch AND anyActive (element-wise multiply since values are 0/1)
+        var mismatchAndActive = Engine.TensorMultiply(notEqual, anyActive);
+
+        // Count mismatches using ReduceSum
+        var mismatchSum = Engine.ReduceSum(mismatchAndActive, null, keepDims: false);
+        double mismatchCount = NumOps.ToDouble(mismatchSum[0]);
+
         // Calculate the anomaly score
-        return (double)mismatchCount / totalCount;
+        return mismatchCount / totalCount;
     }
     
     /// <summary>

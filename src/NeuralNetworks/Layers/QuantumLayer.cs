@@ -31,8 +31,8 @@ public class QuantumLayer<T> : LayerBase<T>
     private readonly int _numQubits;
     private Tensor<Complex<T>> _quantumCircuit;
     private Tensor<T>? _lastInput;
-    private Vector<T> _rotationAngles;
-    private Vector<T> _angleGradients;
+    private Tensor<T> _rotationAngles;
+    private Tensor<T> _angleGradients;
     private readonly INumericOperations<Complex<T>> _complexOps;
 
     /// <summary>
@@ -91,11 +91,11 @@ public class QuantumLayer<T> : LayerBase<T>
     {
         _numQubits = numQubits;
         _complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-            
-        // Initialize parameters
-        _rotationAngles = new Vector<T>(_numQubits);
-        _angleGradients = new Vector<T>(_numQubits);
-            
+
+        // Initialize parameters as Tensor<T>
+        _rotationAngles = new Tensor<T>([_numQubits]);
+        _angleGradients = new Tensor<T>([_numQubits]);
+
         // Create quantum circuit as a tensor
         int dimension = 1 << _numQubits;
         _quantumCircuit = new Tensor<Complex<T>>([dimension, dimension]);
@@ -336,14 +336,15 @@ public class QuantumLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
+        // Use Engine operations for gradient update
+        var scaledGradients = Engine.TensorMultiplyScalar(_angleGradients, learningRate);
+        _rotationAngles = Engine.TensorSubtract(_rotationAngles, scaledGradients);
+
+        // Ensure angles stay within [0, 2π] and apply rotations
         for (int i = 0; i < _numQubits; i++)
         {
-            // Update rotation angles using gradient descent
-            _rotationAngles[i] = NumOps.Subtract(_rotationAngles[i], NumOps.Multiply(learningRate, _angleGradients[i]));
-
-            // Ensure angles stay within [0, 2p]
             _rotationAngles[i] = MathHelper.Modulo(
-                NumOps.Add(_rotationAngles[i], NumOps.FromDouble(2 * Math.PI)), 
+                NumOps.Add(_rotationAngles[i], NumOps.FromDouble(2 * Math.PI)),
                 NumOps.FromDouble(2 * Math.PI));
 
             // Apply updated rotation
@@ -351,7 +352,8 @@ public class QuantumLayer<T> : LayerBase<T>
         }
 
         // Reset angle gradients for the next iteration
-        _angleGradients = new Vector<T>(_numQubits);
+        _angleGradients = new Tensor<T>([_numQubits]);
+        _angleGradients.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -379,8 +381,8 @@ public class QuantumLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Return a copy of the rotation angles
-        return _rotationAngles.Clone();
+        // Return rotation angles as a Vector<T>
+        return new Vector<T>(_rotationAngles.ToArray());
     }
 
     /// <summary>
@@ -415,14 +417,15 @@ public class QuantumLayer<T> : LayerBase<T>
         {
             throw new ArgumentException($"Expected {_numQubits} parameters, but got {parameters.Length}");
         }
-    
+
         // Reset the quantum circuit to identity
         ResetQuantumCircuit();
-    
-        // Set new rotation angles and apply them
+
+        // Set new rotation angles using Tensor.FromVector and apply them
+        _rotationAngles = Tensor<T>.FromVector(parameters);
+
         for (int i = 0; i < _numQubits; i++)
         {
-            _rotationAngles[i] = parameters[i];
             ApplyRotation(i, _rotationAngles[i]);
         }
     }
@@ -456,9 +459,10 @@ public class QuantumLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward pass
         _lastInput = null;
-    
+
         // Reset angle gradients
-        _angleGradients = new Vector<T>(_numQubits);
+        _angleGradients = new Tensor<T>([_numQubits]);
+        _angleGradients.Fill(NumOps.Zero);
     }
 
     /// <summary>

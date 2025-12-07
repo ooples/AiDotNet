@@ -36,16 +36,16 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class ConditionalRandomFieldLayer<T> : LayerBase<T>
 {
-    private Matrix<T> _transitionMatrix;
-    private Vector<T> _startScores;
-    private Vector<T> _endScores;
+    private Tensor<T> _transitionMatrix;
+    private Tensor<T> _startScores;
+    private Tensor<T> _endScores;
 
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput;
 
-    private Matrix<T>? _transitionMatrixGradient;
-    private Vector<T>? _startScoresGradient;
-    private Vector<T>? _endScoresGradient;
+    private Tensor<T>? _transitionMatrixGradient;
+    private Tensor<T>? _startScoresGradient;
+    private Tensor<T>? _endScoresGradient;
 
     private readonly int _numClasses;
     private readonly int _sequenceLength;
@@ -109,9 +109,9 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     {
         _numClasses = numClasses;
         _sequenceLength = sequenceLength;
-        _transitionMatrix = new Matrix<T>(_numClasses, _numClasses);
-        _startScores = new Vector<T>(_numClasses);
-        _endScores = new Vector<T>(_numClasses);
+        _transitionMatrix = new Tensor<T>([_numClasses, _numClasses]);
+        _startScores = new Tensor<T>([_numClasses]);
+        _endScores = new Tensor<T>([_numClasses]);
 
         InitializeParameters();
     }
@@ -146,9 +146,9 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     {
         _numClasses = numClasses;
         _sequenceLength = sequenceLength;
-        _transitionMatrix = new Matrix<T>(_numClasses, _numClasses);
-        _startScores = new Vector<T>(_numClasses);
-        _endScores = new Vector<T>(_numClasses);
+        _transitionMatrix = new Tensor<T>([_numClasses, _numClasses]);
+        _startScores = new Tensor<T>([_numClasses]);
+        _endScores = new Tensor<T>([_numClasses]);
 
         InitializeParameters();
     }
@@ -179,76 +179,21 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     private void InitializeParameters()
     {
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numClasses + _numClasses)));
-        InitializeMatrix(_transitionMatrix, scale);
-        InitializeVector(_startScores, scale);
-        InitializeVector(_endScores, scale);
-    }
 
-    /// <summary>
-    /// Initializes a matrix with scaled random values.
-    /// </summary>
-    /// <param name="matrix">The matrix to initialize.</param>
-    /// <param name="scale">The scale factor for the random values.</param>
-    /// <remarks>
-    /// <para>
-    /// This method fills the given matrix with random values drawn from a uniform distribution
-    /// centered at zero (-0.5 to 0.5) and scaled by the provided scale factor. This type of
-    /// initialization helps with the training process by preventing issues like vanishing or
-    /// exploding gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method fills a matrix with random values of an appropriate size.
-    /// 
-    /// When filling the matrix:
-    /// - We generate random numbers between -0.5 and 0.5
-    /// - We multiply each by a scaling factor to control their magnitude
-    /// - The result is a matrix filled with small random values
-    /// 
-    /// For the transition matrix, these values represent the initial "guesses" about
-    /// how likely one label is to follow another. These values will be adjusted during
-    /// training to reflect the actual patterns in the data.
-    /// </para>
-    /// </remarks>
-    private void InitializeMatrix(Matrix<T> matrix, T scale)
-    {
-        for (int i = 0; i < matrix.Rows; i++)
+        // Initialize transition matrix with scaled random values
+        for (int i = 0; i < _numClasses; i++)
         {
-            for (int j = 0; j < matrix.Columns; j++)
+            for (int j = 0; j < _numClasses; j++)
             {
-                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+                _transitionMatrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
             }
         }
-    }
 
-    /// <summary>
-    /// Initializes a vector with scaled random values.
-    /// </summary>
-    /// <param name="vector">The vector to initialize.</param>
-    /// <param name="scale">The scale factor for the random values.</param>
-    /// <remarks>
-    /// <para>
-    /// This method fills the given vector with random values drawn from a uniform distribution
-    /// centered at zero (-0.5 to 0.5) and scaled by the provided scale factor. This helps with
-    /// the training process by providing a good starting point for the parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method fills a vector with random values of an appropriate size.
-    /// 
-    /// When filling the vector:
-    /// - We generate random numbers between -0.5 and 0.5
-    /// - We multiply each by a scaling factor to control their magnitude
-    /// - The result is a vector filled with small random values
-    /// 
-    /// These random values serve as starting points for:
-    /// - Start scores: initial "guesses" about which labels appear at sequence beginnings
-    /// - End scores: initial "guesses" about which labels appear at sequence endings
-    /// 
-    /// These values will be adjusted during training to reflect patterns in the actual data.
-    /// </para>
-    /// </remarks>
-    private void InitializeVector(Vector<T> vector, T scale)
-    {
-        for (int i = 0; i < vector.Length; i++)
+        // Initialize start and end scores with scaled random values
+        for (int i = 0; i < _numClasses; i++)
         {
-            vector[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+            _startScores[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+            _endScores[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
         }
     }
 
@@ -451,9 +396,12 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         int batchSize = _lastInput.Shape[0];
 
         var inputGradient = new Tensor<T>(_lastInput.Shape);
-        _transitionMatrixGradient = new Matrix<T>(_numClasses, _numClasses);
-        _startScoresGradient = new Vector<T>(_numClasses);
-        _endScoresGradient = new Vector<T>(_numClasses);
+        _transitionMatrixGradient = new Tensor<T>([_numClasses, _numClasses]);
+        _transitionMatrixGradient.Fill(NumOps.Zero);
+        _startScoresGradient = new Tensor<T>([_numClasses]);
+        _startScoresGradient.Fill(NumOps.Zero);
+        _endScoresGradient = new Tensor<T>([_numClasses]);
+        _endScoresGradient.Fill(NumOps.Zero);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -579,36 +527,15 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (_transitionMatrixGradient == null || _startScoresGradient == null || _endScoresGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        // === Vectorized Parameter Updates using IEngine (Phase B: US-GPU-015) ===
-        // Update start and end scores (vectorized)
-        var scaledStartGrad = (Vector<T>)Engine.Multiply(_startScoresGradient, learningRate);
-        _startScores = (Vector<T>)Engine.Subtract(_startScores, scaledStartGrad);
+        // Update using Engine tensor operations: param = param - lr * gradient
+        var scaledTransGrad = Engine.TensorMultiplyScalar(_transitionMatrixGradient, learningRate);
+        _transitionMatrix = Engine.TensorSubtract(_transitionMatrix, scaledTransGrad);
 
-        var scaledEndGrad = (Vector<T>)Engine.Multiply(_endScoresGradient, learningRate);
-        _endScores = (Vector<T>)Engine.Subtract(_endScores, scaledEndGrad);
+        var scaledStartGrad = Engine.TensorMultiplyScalar(_startScoresGradient, learningRate);
+        _startScores = Engine.TensorSubtract(_startScores, scaledStartGrad);
 
-        // Update transition matrix (row-wise vectorization)
-        for (int i = 0; i < _numClasses; i++)
-        {
-            // Extract row vectors
-            var transRow = new Vector<T>(_numClasses);
-            var gradRow = new Vector<T>(_numClasses);
-            for (int j = 0; j < _numClasses; j++)
-            {
-                transRow[j] = _transitionMatrix[i, j];
-                gradRow[j] = _transitionMatrixGradient[i, j];
-            }
-
-            // Vectorized: row = row - learningRate * gradRow
-            var scaledGrad = (Vector<T>)Engine.Multiply(gradRow, learningRate);
-            var updatedRow = (Vector<T>)Engine.Subtract(transRow, scaledGrad);
-
-            // Store back
-            for (int j = 0; j < _numClasses; j++)
-            {
-                _transitionMatrix[i, j] = updatedRow[j];
-            }
-        }
+        var scaledEndGrad = Engine.TensorMultiplyScalar(_endScoresGradient, learningRate);
+        _endScores = Engine.TensorSubtract(_endScores, scaledEndGrad);
     }
 
     /// <summary>
@@ -638,34 +565,12 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Flatten all parameters into a single vector
-        int totalParams = _numClasses * _numClasses + _numClasses * 2;
-        var parameters = new Vector<T>(totalParams);
-        
-        int index = 0;
-        
-        // Copy transition matrix parameters
-        for (int i = 0; i < _numClasses; i++)
-        {
-            for (int j = 0; j < _numClasses; j++)
-            {
-                parameters[index++] = _transitionMatrix[i, j];
-            }
-        }
-        
-        // Copy start scores
-        for (int i = 0; i < _numClasses; i++)
-        {
-            parameters[index++] = _startScores[i];
-        }
-        
-        // Copy end scores
-        for (int i = 0; i < _numClasses; i++)
-        {
-            parameters[index++] = _endScores[i];
-        }
-        
-        return parameters;
+        // Use Vector<T>.Concatenate for efficient parameter collection
+        var flatTrans = new Vector<T>(_transitionMatrix.ToArray());
+        var flatStart = new Vector<T>(_startScores.ToArray());
+        var flatEnd = new Vector<T>(_endScores.ToArray());
+
+        return Vector<T>.Concatenate(Vector<T>.Concatenate(flatTrans, flatStart), flatEnd);
     }
 
     /// <summary>

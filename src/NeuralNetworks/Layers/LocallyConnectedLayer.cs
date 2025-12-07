@@ -65,20 +65,20 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector contains the bias values that are added to each output channel after the filter
+    /// This tensor contains the bias values that are added to each output channel after the filter
     /// application. These are shared across spatial locations but different for each output channel.
     /// </para>
     /// <para><b>For Beginners:</b> These are additional learnable values added to each output channel.
-    /// 
+    ///
     /// The biases:
     /// - Are added to each output after applying the filters
     /// - Help the network learn by providing an adjustable baseline
     /// - Are the same for a given channel across all spatial positions
-    /// 
+    ///
     /// They're like a "starting point" that the network can adjust during learning.
     /// </para>
     /// </remarks>
-    private Vector<T> _biases;
+    private Tensor<T> _biases;
 
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.
@@ -103,7 +103,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// <summary>
     /// Stores the gradients for the biases calculated during the backward pass.
     /// </summary>
-    private Vector<T>? _biasGradients;
+    private Tensor<T>? _biasGradients;
 
     /// <summary>
     /// The height of the input tensor.
@@ -335,7 +335,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
 
         // Initialize weights and biases
         _weights = new Tensor<T>([_outputHeight, _outputWidth, _outputChannels, _kernelSize, _kernelSize, _inputChannels]);
-        _biases = new Vector<T>(_outputChannels);
+        _biases = new Tensor<T>([_outputChannels]);
 
         InitializeParameters();
     }
@@ -396,7 +396,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
 
         // Initialize weights and biases
         _weights = new Tensor<T>([_outputHeight, _outputWidth, _outputChannels, _kernelSize, _kernelSize, _inputChannels]);
-        _biases = new Vector<T>(_outputChannels);
+        _biases = new Tensor<T>([_outputChannels]);
 
         InitializeParameters();
     }
@@ -449,10 +449,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         }
 
         // Initialize biases to zero
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            _biases[i] = NumOps.Zero;
-        }
+        _biases.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -491,10 +488,9 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         // Weights need to be permuted from [oh, ow, oc, kh, kw, ic] to [oh, ow, oc, ic, kh, kw]
         var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
 
-        // Convert bias to Tensor and reshape for per-position bias (broadcast across spatial)
+        // Reshape bias for per-position bias (broadcast across spatial)
         // Engine expects per-position bias [oh, ow, oc], but we have per-channel [oc]
         // Create per-position bias by broadcasting
-        var biasTensor = Tensor<T>.FromVector(_biases);
         var biasReshaped = new Tensor<T>([_outputHeight, _outputWidth, _outputChannels]);
         for (int h = 0; h < _outputHeight; h++)
         {
@@ -502,7 +498,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             {
                 for (int oc = 0; oc < _outputChannels; oc++)
                 {
-                    biasReshaped[h, w, oc] = biasTensor[oc];
+                    biasReshaped[h, w, oc] = _biases[oc];
                 }
             }
         }
@@ -600,7 +596,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         // We need bias gradient of shape [channels] - sum over dims [0, 2, 3]
         var biasGradTensor = Engine.LocallyConnectedConv2DBackwardBias(gradNCHW);
         // biasGradTensor is [oh, ow, oc], sum to get per-channel [oc]
-        _biasGradients = new Vector<T>(_biases.Length);
+        _biasGradients = new Tensor<T>([_outputChannels]);
         for (int oc = 0; oc < _outputChannels; oc++)
         {
             T sum = NumOps.Zero;
@@ -663,7 +659,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         // Create computation nodes with efficient conversions
         var inputNode = Autodiff.TensorOperations<T>.Variable(inputNCHW, "input", requiresGradient: true);
         var weightsNode = Autodiff.TensorOperations<T>.Variable(weightsNCHW, "weights", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(Tensor<T>.FromVector(_biases), "bias", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(_biases, "bias", requiresGradient: true);
 
         // Build minimal autodiff graph for linear operations (activation derivative already applied)
         var preActivationNode = Autodiff.TensorOperations<T>.LocallyConnectedConv2D(
@@ -719,7 +715,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             _weightGradients = ConvertWeightsFromNCHW(weightsNode.Gradient);
 
         if (biasNode.Gradient != null)
-            _biasGradients = biasNode.Gradient.ToVector();
+            _biasGradients = biasNode.Gradient;
 
         // Convert input gradient from NCHW back to NHWC
         var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
@@ -905,39 +901,14 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _weights.Length + _biases.Length;
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
+        // Get weight parameters as vector
+        var weightVector = new Vector<T>(_weights.ToArray());
 
-        // Copy weights parameters
-        for (int h = 0; h < _outputHeight; h++)
-        {
-            for (int w = 0; w < _outputWidth; w++)
-            {
-                for (int oc = 0; oc < _outputChannels; oc++)
-                {
-                    for (int kh = 0; kh < _kernelSize; kh++)
-                    {
-                        for (int kw = 0; kw < _kernelSize; kw++)
-                        {
-                            for (int ic = 0; ic < _inputChannels; ic++)
-                            {
-                                parameters[index++] = _weights[h, w, oc, kh, kw, ic];
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // Get bias parameters as vector
+        var biasVector = new Vector<T>(_biases.ToArray());
 
-        // Copy bias parameters
-        for (int oc = 0; oc < _outputChannels; oc++)
-        {
-            parameters[index++] = _biases[oc];
-        }
-
-        return parameters;
+        // Concatenate weights and biases
+        return Vector<T>.Concatenate(weightVector, biasVector);
     }
 
     /// <summary>
@@ -974,33 +945,24 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        int index = 0;
-        // Set weights parameters
-        for (int h = 0; h < _outputHeight; h++)
+        // Split parameters into weights and biases
+        int weightsLength = _weights.Length;
+        var weightsVector = new Vector<T>(weightsLength);
+        var biasesVector = new Vector<T>(_biases.Length);
+
+        for (int i = 0; i < weightsLength; i++)
         {
-            for (int w = 0; w < _outputWidth; w++)
-            {
-                for (int oc = 0; oc < _outputChannels; oc++)
-                {
-                    for (int kh = 0; kh < _kernelSize; kh++)
-                    {
-                        for (int kw = 0; kw < _kernelSize; kw++)
-                        {
-                            for (int ic = 0; ic < _inputChannels; ic++)
-                            {
-                                _weights[h, w, oc, kh, kw, ic] = parameters[index++];
-                            }
-                        }
-                    }
-                }
-            }
+            weightsVector[i] = parameters[i];
         }
 
-        // Set bias parameters
-        for (int oc = 0; oc < _outputChannels; oc++)
+        for (int i = 0; i < _biases.Length; i++)
         {
-            _biases[oc] = parameters[index++];
+            biasesVector[i] = parameters[weightsLength + i];
         }
+
+        // Convert vectors to tensors and assign
+        _weights = Tensor<T>.FromVector(weightsVector, _weights.Shape);
+        _biases = Tensor<T>.FromVector(biasesVector, _biases.Shape);
     }
 
     /// <summary>
@@ -1094,8 +1056,8 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         var weightsNCHW = ConvertWeightsToNCHW(_weights);
         var weightsNode = Autodiff.TensorOperations<T>.Constant(weightsNCHW, "locally_connected_weights");
 
-        // Convert bias to tensor
-        var biasNode = Autodiff.TensorOperations<T>.Constant(Tensor<T>.FromVector(_biases), "locally_connected_bias");
+        // Use bias tensor directly
+        var biasNode = Autodiff.TensorOperations<T>.Constant(_biases, "locally_connected_bias");
 
         // Apply LocallyConnectedConv2D operation
         var convOutput = Autodiff.TensorOperations<T>.LocallyConnectedConv2D(
