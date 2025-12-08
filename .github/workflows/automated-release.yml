@@ -351,7 +351,7 @@ jobs:
     if: needs.version-and-build.outputs.should_release == 'true'
     steps:
       - name: Download package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: nuget-package-${{ github.sha }}
           path: out/
@@ -393,7 +393,7 @@ jobs:
     if: needs.version-and-build.outputs.should_release == 'true'
     steps:
       - name: Download package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: nuget-package-${{ github.sha }}
           path: out/
