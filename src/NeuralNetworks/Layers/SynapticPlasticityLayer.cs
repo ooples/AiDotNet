@@ -486,10 +486,54 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // SynapticPlasticityLayer implements STDP (Spike-Timing-Dependent Plasticity)
-        // The manual implementation provides correct gradient computation for this
-        // biologically-inspired learning rule. No new TensorOperation needed.
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Identity passthrough graph for gradients
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "stdp_input", requiresGradient: true);
+        var outputNode = inputNode;
+        outputNode.Gradient = outputGradient;
+
+        // Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed in synaptic plasticity autodiff.");
     }
 
 
@@ -671,8 +715,8 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {expectedParams} parameters, but got {parameters.Length}");
         }
 
-        // Use Tensor<T>.FromVector and reshape to restore weights
-        _weights = Tensor<T>.FromVector(parameters).Reshape([size, size]);
+        // Restore weights without hot-path conversions
+        _weights = new Tensor<T>(new[] { size, size }, parameters);
     }
 
     /// <summary>

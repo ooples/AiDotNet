@@ -244,9 +244,11 @@ public class DropoutLayer<T> : LayerBase<T>
         if (!IsTrainingMode)
             return input;
 
-        // Generate dropout mask using Engine (allows for potential acceleration)
-        var maskVector = Engine.GenerateDropoutMask(input.Length, _dropoutRate, _scale);
-        _dropoutMask = Tensor<T>.FromVector(maskVector, input.Shape);
+        // Generate dropout mask using tensor ops to avoid vector conversions
+        var random = Tensor<T>.CreateRandom(input.Shape);
+        var threshold = Tensor<T>.CreateDefault(input.Shape, _dropoutRate);
+        var keepMask = Engine.TensorGreaterThan(random, threshold);
+        _dropoutMask = Engine.TensorMultiplyScalar(keepMask, _scale);
 
         // Apply mask using Engine for GPU/CPU accelerated element-wise multiplication
         return Engine.TensorMultiply(input, _dropoutMask);

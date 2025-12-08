@@ -1173,21 +1173,8 @@ public class SpikingLayer<T> : LayerBase<T>
         int outputSize = _weights.Shape[1];
         int weightCount = inputSize * outputSize;
 
-        // Extract weight parameters and reshape
-        var weightParams = new Vector<T>(weightCount);
-        for (int i = 0; i < weightCount; i++)
-        {
-            weightParams[i] = parameters[i];
-        }
-        _weights = Tensor<T>.FromVector(weightParams).Reshape([inputSize, outputSize]);
-
-        // Extract bias parameters
-        var biasParams = new Vector<T>(_bias.Shape[0]);
-        for (int i = 0; i < _bias.Shape[0]; i++)
-        {
-            biasParams[i] = parameters[weightCount + i];
-        }
-        _bias = Tensor<T>.FromVector(biasParams);
+        _weights = new Tensor<T>([inputSize, outputSize], parameters.Slice(0, weightCount));
+        _bias = new Tensor<T>([_bias.Shape[0]], parameters.Slice(weightCount, _bias.Shape[0]));
     }
     
     /// <summary>
@@ -1658,12 +1645,16 @@ public class SpikingLayer<T> : LayerBase<T>
             // weightsNode gradient is for transposed weights [outputSize, inputSize]
             // Need to transpose back to [inputSize, outputSize] for accumulation
             var weightsGradT = Engine.TensorTranspose(weightsNode.Gradient);
-            _weightGradients = Engine.TensorAdd(_weightGradients, weightsGradT);
+            _weightGradients = _weightGradients == null
+                ? weightsGradT
+                : Engine.TensorAdd(_weightGradients, weightsGradT);
         }
 
         if (biasNode.Gradient != null)
         {
-            _biasGradients = Engine.TensorAdd(_biasGradients, biasNode.Gradient);
+            _biasGradients = _biasGradients == null
+                ? biasNode.Gradient
+                : Engine.TensorAdd(_biasGradients, biasNode.Gradient);
         }
 
         // Return input gradient, reshaping if necessary

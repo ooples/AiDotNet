@@ -414,7 +414,7 @@ public class RBMLayer<T> : LayerBase<T>
     public void TrainWithContrastiveDivergence(Vector<T> input, T learningRate, int kSteps = 1)
     {
         // Delegate to tensor-based implementation
-        TrainWithContrastiveDivergenceTensor(Tensor<T>.FromVector(input), learningRate, kSteps);
+        TrainWithContrastiveDivergenceTensor(new Tensor<T>([input.Length], input), learningRate, kSteps);
     }
 
     /// <summary>
@@ -485,7 +485,7 @@ public class RBMLayer<T> : LayerBase<T>
     private Tensor<T> ComputeOuterProduct(Vector<T> a, Vector<T> b)
     {
         // Delegate to tensor version
-        return ComputeOuterProductTensor(Tensor<T>.FromVector(a), Tensor<T>.FromVector(b));
+        return ComputeOuterProductTensor(new Tensor<T>([a.Length], a), new Tensor<T>([b.Length], b));
     }
 
     /// <summary>
@@ -518,9 +518,9 @@ public class RBMLayer<T> : LayerBase<T>
     private Vector<T> SampleBinaryStates(Vector<T> probabilities)
     {
         // Delegate to tensor version and convert back
-        var probTensor = Tensor<T>.FromVector(probabilities);
+        var probTensor = new Tensor<T>([probabilities.Length], probabilities);
         var samplesTensor = SampleBinaryStatesTensor(probTensor);
-        return samplesTensor.ToVector();
+        return new Vector<T>(samplesTensor.ToArray());
     }
 
     /// <summary>
@@ -752,9 +752,9 @@ public class RBMLayer<T> : LayerBase<T>
     private Vector<T> SampleHiddenGivenVisible(Vector<T> visible)
     {
         // Use tensor-based implementation and convert back
-        var visibleTensor = Tensor<T>.FromVector(visible);
+        var visibleTensor = new Tensor<T>([visible.Length], visible);
         var hiddenProbsTensor = SampleHiddenGivenVisibleTensor(visibleTensor);
-        return hiddenProbsTensor.ToVector();
+        return new Vector<T>(hiddenProbsTensor.ToArray());
     }
 
     /// <summary>
@@ -783,9 +783,9 @@ public class RBMLayer<T> : LayerBase<T>
     private Vector<T> SampleVisibleGivenHidden(Vector<T> hidden)
     {
         // Use tensor-based implementation and convert back
-        var hiddenTensor = Tensor<T>.FromVector(hidden);
+        var hiddenTensor = new Tensor<T>([hidden.Length], hidden);
         var visibleProbsTensor = SampleVisibleGivenHiddenTensor(hiddenTensor);
-        return visibleProbsTensor.ToVector();
+        return new Vector<T>(visibleProbsTensor.ToArray());
     }
 
     /// <summary>

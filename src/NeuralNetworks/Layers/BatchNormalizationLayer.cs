@@ -368,55 +368,16 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             var scale = Engine.TensorDivide(_gamma, stdDev);
             var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
             var shift = Engine.TensorSubtract(_beta, term2);
-            
-            // Now input * scale + shift.
-            // input is [B, C], scale is [C], shift is [C].
-            // We need row-wise multiplication/addition.
-            // CpuEngine.TensorMultiply requires matching shapes.
-            // We can iterate over batch (less ideal) or create a "Broadcast" tensor.
-            // Or, if we look at LayerNormalizationLayer upgrade, we avoided loops?
-            // Actually LayerNormalization uses Engine.LayerNorm.
-            
-            // Use Tensor.Multiply(Matrix) or similar? No.
-            // Let's use a loop over batch for now, but using vectorized ops per row.
-            // Since B can be large, we should ideally use a kernel.
-            // BUT, we can simply expand scale/shift to [B, C].
-            
+
+            // Expand scale/shift to match [batch, features] without vector conversions
             int batchSize = input.Shape[0];
             int featureSize = input.Shape[1];
-            
-            // Expand scale and shift to [B, C]
-            // Ideally Engine should have a Broadcast operation.
-            // For now, we can use a loop to fill a tensor, which is O(N) but parallelizable.
-            // Or check if Tensor.Add(Vector) works.
-            
-            // Actually, Tensor.cs has Add(Vector) which broadcasts!
-            // public Tensor<T> Add(Vector<T> vector)
-            // For 2D: [batch, features] + [features] -> broadcasts vector across batch
-            
-            // So we can convert scale/shift to Vectors and use input.Multiply(scaleVec).Add(shiftVec).
-            // But we want to use Engine.
-            // If CpuEngine just delegates to Tensor ops, and Tensor ops support broadcasting...
-            // CpuEngine.Multiply checks "a.Length != b.Length". It uses TensorPrimitives.
-            
-            // So Engine.TensorMultiply might NOT support broadcasting yet.
-            // We will implement the loop over batch for inference for now, as it's still O(N) and uses SIMD for rows.
-            
-            var output = new Tensor<T>(input.Shape);
-            var scaleVec = scale.ToVector();
-            var shiftVec = shift.ToVector();
-            
-            for(int i=0; i < batchSize; i++)
-            {
-                // output[i] = input[i] * scale + shift
-                var row = input.GetRow(i);
-                // Use Engine vector ops
-                var scaledRow = Engine.Multiply(row, scaleVec);
-                var shiftedRow = Engine.Add(scaledRow, shiftVec);
-                output.SetRow(i, shiftedRow);
-            }
-            
-            return output;
+
+            var scaleExpanded = Engine.TensorRepeatElements(scale.Reshape([1, featureSize]), batchSize, axis: 0);
+            var shiftExpanded = Engine.TensorRepeatElements(shift.Reshape([1, featureSize]), batchSize, axis: 0);
+
+            var scaled = Engine.TensorMultiply(input, scaleExpanded);
+            return Engine.TensorAdd(scaled, shiftExpanded);
         }
     }
 

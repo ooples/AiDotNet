@@ -337,9 +337,9 @@ public class FeedForwardLayer<T> : LayerBase<T>
         // Use Engine.TensorMatMul for GPU acceleration
         var matmul = Engine.TensorMatMul(Input, Weights);
         
-        // Add biases (broadcast [1, outputSize] to [batchSize, outputSize])
-        // Using Tensor.Add(Vector) for reliable broadcasting
-        var linearOutput = matmul.Add(Biases.ToVector());
+        // Add biases (broadcast [1, outputSize] to [batchSize, outputSize]) using engine op
+        var biasBroadcast = Biases.Reshape([1, Weights.Shape[1]]);
+        var linearOutput = Engine.TensorBroadcastAdd(matmul, biasBroadcast);
         
         Output = ApplyActivation(linearOutput);
 

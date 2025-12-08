@@ -537,8 +537,8 @@ public class QuantumLayer<T> : LayerBase<T>
         // Reset the quantum circuit to identity
         ResetQuantumCircuit();
 
-        // Set new rotation angles using Tensor.FromVector and apply them
-        _rotationAngles = Tensor<T>.FromVector(parameters);
+        // Set new rotation angles using tensor ctor (no conversion hot path)
+        _rotationAngles = new Tensor<T>([parameters.Length], parameters);
 
         for (int i = 0; i < _numQubits; i++)
         {

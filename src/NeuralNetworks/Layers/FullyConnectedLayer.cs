@@ -380,7 +380,8 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         var linearOutput = Engine.TensorMatMul(input, weightsT);
         
         // Add biases (broadcast)
-        var biasedOutput = linearOutput.Add(_biases.ToVector());
+        var biasBroadcast = _biases.Reshape(1, _biases.Shape[0]);
+        var biasedOutput = Engine.TensorBroadcastAdd(linearOutput, biasBroadcast);
 
         _lastOutput = ApplyActivation(biasedOutput);
         return _lastOutput;

@@ -245,18 +245,18 @@ public class ReadoutLayer<T> : LayerBase<T>
 
         if (UsingVectorActivation)
         {
-            var preActVector = _lastPreActivation.ToVector();
-            var outputVector = VectorActivation!.Activate(preActVector);
-            _lastOutput = Tensor<T>.FromVector(outputVector);
+            _lastOutput = VectorActivation!.Activate(_lastPreActivation);
             return _lastOutput;
         }
-        else
+
+        var activated = new Tensor<T>(_lastPreActivation.Shape);
+        for (int i = 0; i < activated.Length; i++)
         {
-            var preActVector = _lastPreActivation.ToVector();
-            var outputVector = preActVector.Transform(x => ScalarActivation!.Activate(x));
-            _lastOutput = Tensor<T>.FromVector(outputVector);
-            return _lastOutput;
+            activated[i] = ScalarActivation!.Activate(_lastPreActivation[i]);
         }
+
+        _lastOutput = activated;
+        return _lastOutput;
     }
 
     /// <summary>
@@ -308,25 +308,20 @@ public class ReadoutLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        // Convert tensors to vectors for activation derivative computation
-        var gradientVec = outputGradient.ToVector();
-        var preActVec = _lastPreActivation.ToVector();
-
+        Tensor<T> gradTensor;
         if (UsingVectorActivation)
         {
-            // Use cached pre-activation for derivative computation
-            var activationDerivative = VectorActivation!.Derivative(preActVec);
-            var diagonalDerivative = activationDerivative.Diagonal();
-            gradientVec = gradientVec.PointwiseMultiply(diagonalDerivative);
+            var activationDerivative = VectorActivation!.Derivative(_lastPreActivation);
+            gradTensor = Engine.TensorMultiply(outputGradient, activationDerivative);
         }
         else
         {
-            // Use cached pre-activation for derivative computation
-            gradientVec = gradientVec.PointwiseMultiply(preActVec.Transform(x => ScalarActivation!.Derivative(x)));
+            gradTensor = new Tensor<T>(_lastPreActivation.Shape);
+            for (int i = 0; i < gradTensor.Length; i++)
+            {
+                gradTensor[i] = NumOps.Multiply(outputGradient[i], ScalarActivation!.Derivative(_lastPreActivation[i]));
+            }
         }
-
-        // Convert gradient vector to tensor
-        var gradTensor = Tensor<T>.FromVector(gradientVec);
 
         // Compute weight gradients using outer product via Engine: gradient outer input
         // gradient: [outputSize], input: [inputSize] -> outer product: [outputSize, inputSize]
@@ -364,31 +359,27 @@ public class ReadoutLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastPreActivation == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Convert to vectors for activation derivative computation
-        var gradientVec = outputGradient.ToVector();
-        var preActVec = _lastPreActivation.ToVector();
-        Vector<T> preActivationGradient;
-
+        // Compute activation derivative on tensors
+        Tensor<T> preActGradTensor;
         if (UsingVectorActivation)
         {
-            var activationDerivative = VectorActivation!.Derivative(preActVec);
-            var diagonalDerivative = activationDerivative.Diagonal();
-            preActivationGradient = gradientVec.PointwiseMultiply(diagonalDerivative);
+            var activationDerivative = VectorActivation!.Derivative(_lastPreActivation);
+            preActGradTensor = Engine.TensorMultiply(outputGradient, activationDerivative);
         }
         else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
         {
-            var activation = ScalarActivation;
-            preActivationGradient = gradientVec.PointwiseMultiply(preActVec.Transform(x => activation.Derivative(x)));
+            preActGradTensor = new Tensor<T>(_lastPreActivation.Shape);
+            for (int i = 0; i < preActGradTensor.Length; i++)
+            {
+                preActGradTensor[i] = NumOps.Multiply(outputGradient[i], ScalarActivation!.Derivative(_lastPreActivation[i]));
+            }
         }
         else
         {
-            preActivationGradient = gradientVec;
+            preActGradTensor = outputGradient;
         }
 
-        // Convert to tensors using efficient methods
         var inputTensor = _lastInput.Reshape([1, _lastInput.Length]);
-
-        var preActGradTensor = Tensor<T>.FromVector(preActivationGradient);
 
         // Build minimal autodiff graph for linear part only (gradient routing)
         var inputNode = Autodiff.TensorOperations<T>.Variable(inputTensor, "input", requiresGradient: true);
@@ -400,13 +391,8 @@ public class ReadoutLayer<T> : LayerBase<T>
         // Forward pass for linear part: output = weights * input.T + bias
         var matmulNode = Autodiff.TensorOperations<T>.MatrixMultiply(weightsNode, Autodiff.TensorOperations<T>.Transpose(inputNode));
 
-        // Reshape matmul result from [outputSize, 1] to [outputSize] and add bias
-        int outputSize = _weights.Shape[0];
-        var matmulFlat = new Tensor<T>([outputSize]);
-        for (int i = 0; i < outputSize; i++)
-            matmulFlat[i] = matmulNode.Value[i, 0];
-        var flatNode = Autodiff.TensorOperations<T>.Variable(matmulFlat, "matmul_flat", requiresGradient: false);
-        var preActivationNode = Autodiff.TensorOperations<T>.Add(flatNode, biasNode);
+        var matmulFlatNode = Autodiff.TensorOperations<T>.Reshape(matmulNode, _bias.Shape[0]);
+        var preActivationNode = Autodiff.TensorOperations<T>.Add(matmulFlatNode, biasNode);
 
         // Set pre-activation gradient (activation derivative already applied)
         preActivationNode.Gradient = preActGradTensor;

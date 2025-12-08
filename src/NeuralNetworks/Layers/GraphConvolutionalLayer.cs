@@ -876,56 +876,66 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             return NumOps.Zero;
         }
 
-        // Compute Laplacian smoothness: weighted sum of squared L2 distances across all edges
-        // Formula: ∑_{(i,j)} A_ij ||x_i - x_j||²
-        T smoothnessLoss = NumOps.Zero;
-        T totalWeight = NumOps.Zero;
-
-        // Average across batch
+        // Compute Laplacian smoothness via tensor ops:
+        // For each edge (i,j), compute ||x_i - x_j||^2, weight by adjacency, sum, then normalize.
+        // Shapes: _lastNodeFeatures [batch, nodes, features], adjacency [batch?, nodes, nodes]
         int batchSize = _lastNodeFeatures.Shape[0];
-        int numFeatures = _lastNodeFeatures.Shape[2];
+        int numNodes = _lastNodeFeatures.Shape[1];
 
-        for (int b = 0; b < batchSize; b++)
+        // Expand adjacency to [batch, nodes, nodes] (if single matrix provided, broadcast first dim)
+        Tensor<T> adj;
+        if (_adjacencyMatrix != null && _adjacencyMatrix.Shape.Length == 2)
         {
-            foreach (var edge in _graphEdges)
+            // [nodes, nodes] -> [batch, nodes, nodes]
+            adj = Engine.TensorRepeatElements(_adjacencyMatrix.Reshape([1, numNodes, numNodes]), batchSize, axis: 0);
+        }
+        else if (_adjacencyMatrix != null)
+        {
+            adj = _adjacencyMatrix;
+        }
+        else
+        {
+            // Default to identity adjacency (tensor built locally)
+            var identityTensor = new Tensor<T>([numNodes, numNodes]);
+            identityTensor.Fill(NumOps.Zero);
+            for (int i = 0; i < numNodes; i++)
             {
-                int nodeI = edge.Source;
-                int nodeJ = edge.Target;
-
-                // Get edge weight from adjacency matrix
-                // Use batch-specific weight if available, otherwise use batch 0
-                T edgeWeight = NumOps.One; // Default to 1 if adjacency not available
-                if (_adjacencyMatrix != null && _adjacencyMatrix.Shape.Length >= 3)
-                {
-                    int batchIdx = Math.Min(b, _adjacencyMatrix.Shape[0] - 1);
-                    edgeWeight = _adjacencyMatrix[batchIdx, nodeI, nodeJ];
-                }
-
-                // Compute squared L2 distance between features of connected nodes
-                T squaredDistance = NumOps.Zero;
-                for (int f = 0; f < numFeatures; f++)
-                {
-                    T diff = NumOps.Subtract(_lastNodeFeatures[b, nodeI, f], _lastNodeFeatures[b, nodeJ, f]);
-                    squaredDistance = NumOps.Add(squaredDistance, NumOps.Multiply(diff, diff));
-                }
-
-                // Weight the distance by the adjacency value
-                T weightedDistance = NumOps.Multiply(edgeWeight, squaredDistance);
-                smoothnessLoss = NumOps.Add(smoothnessLoss, weightedDistance);
-                totalWeight = NumOps.Add(totalWeight, edgeWeight);
+                identityTensor[i, i] = NumOps.One;
             }
+            adj = Engine.TensorRepeatElements(identityTensor.Reshape([1, numNodes, numNodes]), batchSize, axis: 0);
         }
 
-        // Normalize by total weight (not edge count) for proper Laplacian formulation
-        if (NumOps.GreaterThan(totalWeight, NumOps.Zero))
-        {
-            smoothnessLoss = NumOps.Divide(smoothnessLoss, totalWeight);
-        }
+        // Compute pairwise differences for all node pairs: x_i - x_j
+        var features = _lastNodeFeatures; // [B, N, F]
+        var featuresI = Engine.TensorRepeatElements(features, numNodes, axis: 1); // [B, N*N, F], but reshape differently
+        var featuresJ = Engine.TensorTile(features, new[] { 1, numNodes, 1 });    // [B, N*N, F]
 
-        // Apply smoothness weight to allow tuning of this auxiliary loss
-        smoothnessLoss = NumOps.Multiply(smoothnessLoss, SmoothnessWeight);
+        // We need a consistent ordering for edges: flatten adjacency and align
+        var adjFlat = adj.Reshape([batchSize, numNodes * numNodes, 1]); // [B, N*N, 1]
 
-        return smoothnessLoss;
+        // Compute squared L2 per edge: sum over features
+        var diff = Engine.TensorSubtract(featuresI, featuresJ);           // [B, N*N, F]
+        var diffSquared = Engine.TensorMultiply(diff, diff);             // [B, N*N, F]
+        var squaredDistance = Engine.ReduceSum(diffSquared, new[] { 2 }, keepDims: false); // [B, N*N]
+
+        // Weighted by adjacency
+        var weighted = Engine.TensorMultiply(squaredDistance, adjFlat.Reshape([batchSize, numNodes * numNodes])); // [B, N*N]
+
+        // Sum all edges per batch
+        var sumPerBatch = Engine.ReduceSum(weighted, new[] { 1 }, keepDims: false); // [B]
+
+        // Total weight per batch for normalization
+        var totalWeightPerBatch = Engine.ReduceSum(adjFlat.Reshape([batchSize, numNodes * numNodes]), new[] { 1 }, keepDims: false); // [B]
+
+        // Avoid divide by zero by max with epsilon
+        var epsilon = NumOps.FromDouble(1e-10);
+        var safeWeights = Engine.TensorMax(totalWeightPerBatch, epsilon);
+        var normalized = Engine.TensorDivide(sumPerBatch, safeWeights); // [B]
+
+        // Mean across batch
+        var meanLoss = Engine.ReduceMean(normalized, new[] { 0 }, keepDims: false); // scalar tensor
+        _lastGraphSmoothnessLoss = NumOps.Multiply(meanLoss.GetFlat(0), SmoothnessWeight);
+        return _lastGraphSmoothnessLoss;
     }
 
     /// <summary>

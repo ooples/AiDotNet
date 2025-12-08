@@ -6021,6 +6021,124 @@ public class CpuEngine : IEngine
         return new Tensor<T>(inputShape, new Vector<T>(gradInputData));
     }
 
+    public Tensor<T> AffineGrid<T>(Tensor<T> theta, int outputHeight, int outputWidth)
+    {
+        if (theta == null) throw new ArgumentNullException(nameof(theta));
+        if (theta.Shape.Length != 3 || theta.Shape[1] != 2 || theta.Shape[2] != 3)
+            throw new ArgumentException("AffineGrid expects theta shape [batch, 2, 3]");
+
+        int batchSize = theta.Shape[0];
+        var grid = new Tensor<T>([batchSize, outputHeight, outputWidth, 2]);
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < outputHeight; h++)
+            {
+                T yNorm = outputHeight == 1
+                    ? numOps.Zero
+                    : numOps.FromDouble((double)h / (outputHeight - 1) * 2.0 - 1.0);
+
+                for (int w = 0; w < outputWidth; w++)
+                {
+                    T xNorm = outputWidth == 1
+                        ? numOps.Zero
+                        : numOps.FromDouble((double)w / (outputWidth - 1) * 2.0 - 1.0);
+
+                    T xPrime = numOps.Add(
+                        numOps.Add(
+                            numOps.Multiply(theta[b, 0, 0], xNorm),
+                            numOps.Multiply(theta[b, 0, 1], yNorm)),
+                        theta[b, 0, 2]);
+
+                    T yPrime = numOps.Add(
+                        numOps.Add(
+                            numOps.Multiply(theta[b, 1, 0], xNorm),
+                            numOps.Multiply(theta[b, 1, 1], yNorm)),
+                        theta[b, 1, 2]);
+
+                    grid[b, h, w, 0] = xPrime;
+                    grid[b, h, w, 1] = yPrime;
+                }
+            }
+        }
+
+        return grid;
+    }
+
+    public Tensor<T> GridSample<T>(Tensor<T> input, Tensor<T> grid)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (grid == null) throw new ArgumentNullException(nameof(grid));
+
+        if (input.Shape.Length != 4)
+            throw new ArgumentException("GridSample expects input shape [batch, height, width, channels]");
+        if (grid.Shape.Length != 4 || grid.Shape[3] != 2)
+            throw new ArgumentException("GridSample expects grid shape [batch, outH, outW, 2]");
+        if (input.Shape[0] != grid.Shape[0])
+            throw new ArgumentException("GridSample batch size mismatch between input and grid");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int batch = input.Shape[0];
+        int inH = input.Shape[1];
+        int inW = input.Shape[2];
+        int channels = input.Shape[3];
+        int outH = grid.Shape[1];
+        int outW = grid.Shape[2];
+
+        var output = new Tensor<T>([batch, outH, outW, channels]);
+
+        T heightScale = numOps.FromDouble((inH - 1) / 2.0);
+        T widthScale = numOps.FromDouble((inW - 1) / 2.0);
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int h = 0; h < outH; h++)
+            {
+                for (int w = 0; w < outW; w++)
+                {
+                    T gridX = grid[b, h, w, 0];
+                    T gridY = grid[b, h, w, 1];
+
+                    T srcX = numOps.Multiply(numOps.Add(gridX, numOps.One), widthScale);
+                    T srcY = numOps.Multiply(numOps.Add(gridY, numOps.One), heightScale);
+
+                    double srcXDouble = Convert.ToDouble(srcX);
+                    double srcYDouble = Convert.ToDouble(srcY);
+                    int x0 = Math.Max(0, Math.Min((int)Math.Floor(srcXDouble), inW - 1));
+                    int x1 = Math.Max(0, Math.Min(x0 + 1, inW - 1));
+                    int y0 = Math.Max(0, Math.Min((int)Math.Floor(srcYDouble), inH - 1));
+                    int y1 = Math.Max(0, Math.Min(y0 + 1, inH - 1));
+
+                    T wx1 = numOps.Subtract(srcX, numOps.FromDouble(x0));
+                    T wx0 = numOps.Subtract(numOps.One, wx1);
+                    T wy1 = numOps.Subtract(srcY, numOps.FromDouble(y0));
+                    T wy0 = numOps.Subtract(numOps.One, wy1);
+
+                    for (int c = 0; c < channels; c++)
+                    {
+                        T v00 = input[b, y0, x0, c];
+                        T v01 = input[b, y0, x1, c];
+                        T v10 = input[b, y1, x0, c];
+                        T v11 = input[b, y1, x1, c];
+
+                        T interp = numOps.Add(
+                            numOps.Add(
+                                numOps.Multiply(numOps.Multiply(v00, wx0), wy0),
+                                numOps.Multiply(numOps.Multiply(v01, wx1), wy0)),
+                            numOps.Add(
+                                numOps.Multiply(numOps.Multiply(v10, wx0), wy1),
+                                numOps.Multiply(numOps.Multiply(v11, wx1), wy1)));
+
+                        output[b, h, w, c] = interp;
+                    }
+                }
+            }
+        }
+
+        return output;
+    }
+
     /// <inheritdoc/>
     public Tensor<T> Crop<T>(Tensor<T> input, int top, int left, int height, int width)
     {

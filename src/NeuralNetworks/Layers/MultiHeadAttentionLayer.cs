@@ -278,40 +278,26 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private void InitializeParameters()
     {
-        // Calculate scale using tensor shape (production-ready pattern)
+        // Xavier scale based on query weight shape
         int rows = _queryWeights.Shape[0];
         int cols = _queryWeights.Shape[1];
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (rows + cols)));
 
-        InitializeTensor(_queryWeights, scale);
-        InitializeTensor(_keyWeights, scale);
-        InitializeTensor(_valueWeights, scale);
-        InitializeTensor(_outputWeights, scale);
+        _queryWeights = Engine.TensorMultiplyScalar(
+            new Tensor<T>(_queryWeights.Shape, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
+            scale);
+        _keyWeights = Engine.TensorMultiplyScalar(
+            new Tensor<T>(_keyWeights.Shape, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
+            scale);
+        _valueWeights = Engine.TensorMultiplyScalar(
+            new Tensor<T>(_valueWeights.Shape, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
+            scale);
+        _outputWeights = Engine.TensorMultiplyScalar(
+            new Tensor<T>(_outputWeights.Shape, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
+            scale);
 
         // Initialize bias tensor to zeros
-        int biasLen = _outputBias.Shape[0];
-        for (int i = 0; i < biasLen; i++)
-        {
-            _outputBias[i] = NumOps.Zero;
-        }
-    }
-
-    /// <summary>
-    /// Initializes a 2D tensor with random values scaled appropriately.
-    /// </summary>
-    /// <param name="tensor">The tensor to initialize.</param>
-    /// <param name="scale">The scaling factor for the random values.</param>
-    private void InitializeTensor(Tensor<T> tensor, T scale)
-    {
-        int rows = tensor.Shape[0];
-        int cols = tensor.Shape[1];
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                tensor[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            }
-        }
+        _outputBias.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -388,26 +374,33 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // 2. Compute head diversity penalty
         // Penalize high cosine similarity between head outputs
-        if (_lastHeadOutputs != null && _lastHeadOutputs.Count == _headCount)
+        if (_lastHeadOutputs != null && _lastHeadOutputs.Count > 0)
         {
-            T diversityPenalty = NumOps.Zero;
-            int pairCount = 0;
+            // Stacked heads tensor: [H, B, S, D]
+            var headStack = _lastHeadOutputs[0];
+            int flattenDim = headStack.Shape[1] * headStack.Shape[2] * headStack.Shape[3];
 
-            for (int i = 0; i < _headCount; i++)
-            {
-                for (int j = i + 1; j < _headCount; j++)
-                {
-                    // Compute cosine similarity between head outputs
-                    T similarity = ComputeCosineSimilarity(_lastHeadOutputs[i], _lastHeadOutputs[j]);
-                    diversityPenalty = NumOps.Add(diversityPenalty, similarity);
-                    pairCount++;
-                }
-            }
+            // Flatten heads to [H, K]
+            var headsFlat = headStack.Reshape([_headCount, flattenDim]);
 
-            if (pairCount > 0)
-            {
-                diversityPenalty = NumericalStabilityHelper.SafeDiv(diversityPenalty, NumOps.FromDouble(pairCount));
-            }
+            // Normalize each head vector
+            var squared = Engine.TensorMultiply(headsFlat, headsFlat);
+            var normSquared = Engine.ReduceSum(squared, new[] { 1 }, keepDims: true); // [H,1]
+            var norm = Engine.TensorSqrt(normSquared);
+            var normSafe = Engine.TensorMax(norm, NumOps.FromDouble(1e-12));
+            var normalized = Engine.TensorDivide(headsFlat, normSafe); // broadcast divide
+
+            // Cosine similarity matrix: [H, H]
+            var normalizedT = Engine.TensorTranspose(normalized);
+            var cosine = Engine.TensorMatMul(normalized, normalizedT);
+
+            // Sum off-diagonal entries
+            T sumAll = Engine.TensorSum(cosine);
+            T sumDiag = NumOps.FromDouble(_headCount); // diag ~1 after normalization
+            T offDiagSum = NumOps.Subtract(sumAll, sumDiag);
+            T pairCount = NumOps.FromDouble(_headCount * (_headCount - 1)); // counts upper+lower
+
+            var diversityPenalty = NumericalStabilityHelper.SafeDiv(offDiagSum, pairCount);
 
             _lastDiversityLoss = diversityPenalty;
             totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(HeadDiversityWeight, diversityPenalty));
@@ -584,12 +577,8 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // 4. Cache Head Outputs
         var context_4D = attentionOutput.Reshape(batchSize, _headCount, seqLengthQ, _headDimension);
-        _lastHeadOutputs = new List<Tensor<T>>(_headCount);
         var permutedForCache = context_4D.Transpose(new[] { 1, 0, 2, 3 }); // [H, B, S, D]
-        for (int h = 0; h < _headCount; h++)
-        {
-            _lastHeadOutputs.Add(permutedForCache.Slice(h));
-        }
+        _lastHeadOutputs = new List<Tensor<T>> { permutedForCache }; // store stacked heads
 
         // 5. Concatenate and Project Output
         // [B, H, S, D] -> [B, S, H, D] -> [B, S, E]
@@ -599,7 +588,8 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var output_flat = Engine.TensorMatMul(context_flat, _outputWeights);
         var output_reshaped = output_flat.Reshape(batchSize, seqLengthQ, embeddingDimension);
         
-        var output = output_reshaped.Add(_outputBias.ToVector());
+        var biasBroadcast = _outputBias.Reshape(1, 1, embeddingDimension);
+        var output = Engine.TensorBroadcastAdd(output_reshaped, biasBroadcast);
         _lastOutput = ApplyActivation(output);
 
         return _lastOutput;
@@ -837,61 +827,12 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters using tensor shape
-        int qRows = _queryWeights.Shape[0], qCols = _queryWeights.Shape[1];
-        int kRows = _keyWeights.Shape[0], kCols = _keyWeights.Shape[1];
-        int vRows = _valueWeights.Shape[0], vCols = _valueWeights.Shape[1];
-        int oRows = _outputWeights.Shape[0], oCols = _outputWeights.Shape[1];
-        int biasLen = _outputBias.Shape[0];
-
-        int totalParams = qRows * qCols + kRows * kCols + vRows * vCols + oRows * oCols + biasLen;
-
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        // Copy query weights
-        for (int i = 0; i < qRows; i++)
-        {
-            for (int j = 0; j < qCols; j++)
-            {
-                parameters[index++] = _queryWeights[i, j];
-            }
-        }
-
-        // Copy key weights
-        for (int i = 0; i < kRows; i++)
-        {
-            for (int j = 0; j < kCols; j++)
-            {
-                parameters[index++] = _keyWeights[i, j];
-            }
-        }
-
-        // Copy value weights
-        for (int i = 0; i < vRows; i++)
-        {
-            for (int j = 0; j < vCols; j++)
-            {
-                parameters[index++] = _valueWeights[i, j];
-            }
-        }
-
-        // Copy output weights
-        for (int i = 0; i < oRows; i++)
-        {
-            for (int j = 0; j < oCols; j++)
-            {
-                parameters[index++] = _outputWeights[i, j];
-            }
-        }
-
-        // Copy output bias
-        for (int i = 0; i < biasLen; i++)
-        {
-            parameters[index++] = _outputBias[i];
-        }
-
-        return parameters;
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeights.ToArray()),
+            new Vector<T>(_keyWeights.ToArray()),
+            new Vector<T>(_valueWeights.ToArray()),
+            new Vector<T>(_outputWeights.ToArray()),
+            new Vector<T>(_outputBias.ToArray()));
     }
 
     /// <summary>
@@ -925,47 +866,24 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int index = 0;
 
-        // Set query weights
-        for (int i = 0; i < qRows; i++)
-        {
-            for (int j = 0; j < qCols; j++)
-            {
-                _queryWeights[i, j] = parameters[index++];
-            }
-        }
+        var qLen = qRows * qCols;
+        var kLen = kRows * kCols;
+        var vLen = vRows * vCols;
+        var oLen = oRows * oCols;
 
-        // Set key weights
-        for (int i = 0; i < kRows; i++)
-        {
-            for (int j = 0; j < kCols; j++)
-            {
-                _keyWeights[i, j] = parameters[index++];
-            }
-        }
+        _queryWeights = new Tensor<T>([qRows, qCols], parameters.Slice(index, qLen));
+        index += qLen;
 
-        // Set value weights
-        for (int i = 0; i < vRows; i++)
-        {
-            for (int j = 0; j < vCols; j++)
-            {
-                _valueWeights[i, j] = parameters[index++];
-            }
-        }
+        _keyWeights = new Tensor<T>([kRows, kCols], parameters.Slice(index, kLen));
+        index += kLen;
 
-        // Set output weights
-        for (int i = 0; i < oRows; i++)
-        {
-            for (int j = 0; j < oCols; j++)
-            {
-                _outputWeights[i, j] = parameters[index++];
-            }
-        }
+        _valueWeights = new Tensor<T>([vRows, vCols], parameters.Slice(index, vLen));
+        index += vLen;
 
-        // Set output bias
-        for (int i = 0; i < biasLen; i++)
-        {
-            _outputBias[i] = parameters[index++];
-        }
+        _outputWeights = new Tensor<T>([oRows, oCols], parameters.Slice(index, oLen));
+        index += oLen;
+
+        _outputBias = new Tensor<T>([biasLen], parameters.Slice(index, biasLen));
     }
 
     /// <summary>

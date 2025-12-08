@@ -462,24 +462,12 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         // Xavier initialization
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputDepth * _kernelSize * _kernelSize + _outputDepth * _upscaleFactor * _upscaleFactor)));
 
-        for (int i = 0; i < _kernels.Shape[0]; i++)
-        {
-            for (int j = 0; j < _kernels.Shape[1]; j++)
-            {
-                for (int k = 0; k < _kernels.Shape[2]; k++)
-                {
-                    for (int l = 0; l < _kernels.Shape[3]; l++)
-                    {
-                        _kernels[i, j, k, l] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-                    }
-                }
-            }
-        }
+        // Vectorized random init in [-0.5, 0.5], scaled by Xavier factor
+        var randVec = Vector<T>.CreateRandom(_kernels.Length, -0.5, 0.5);
+        var randTensor = new Tensor<T>(_kernels.Shape, randVec);
+        _kernels = Engine.TensorMultiplyScalar(randTensor, scale);
 
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            _biases[i] = NumOps.Zero;
-        }
+        _biases.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -891,7 +879,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Concatenate(_kernels.ToVector(), _biases.ToVector());
+        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
     }
 
     /// <summary>

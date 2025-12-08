@@ -18,7 +18,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     private readonly int[] _updateFrequencies;
     private readonly int[] _chunkSizes;
     private readonly T[] _learningRates;
-    private Tensor<T>[] _accumulatedGradients;
+    private Vector<T>[] _accumulatedGradients;
     private readonly int[] _stepCounters;
     private Tensor<T>[] _storedInputs;  // Store input to each MLP block for Modified GD
     private int _globalStep;
@@ -113,12 +113,12 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         }
 
         // Initialize gradient accumulation buffers as Tensor<T>
-        _accumulatedGradients = new Tensor<T>[numFrequencyLevels];
+        _accumulatedGradients = new Vector<T>[numFrequencyLevels];
         _stepCounters = new int[numFrequencyLevels];
         for (int i = 0; i < numFrequencyLevels; i++)
         {
             int paramCount = _mlpBlocks[i].ParameterCount;
-            _accumulatedGradients[i] = new Tensor<T>([paramCount]);
+            _accumulatedGradients[i] = new Vector<T>(paramCount);
             _accumulatedGradients[i].Fill(NumOps.Zero);
             _stepCounters[i] = 0;
         }
@@ -215,16 +215,15 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             var mlpGradient = _mlpBlocks[level].GetParameterGradients();
             if (mlpGradient != null && mlpGradient.Length > 0)
             {
-                int expectedLength = _accumulatedGradients[level].Shape[0];
+                int expectedLength = _accumulatedGradients[level].Length;
                 if (mlpGradient.Length != expectedLength)
                 {
                     throw new InvalidOperationException(
                         $"Gradient length mismatch at level {level}: expected {expectedLength}, got {mlpGradient.Length}");
                 }
 
-                // Convert mlpGradient to Tensor and use Engine.TensorAdd
-                var gradTensor = Tensor<T>.FromVector(mlpGradient);
-                _accumulatedGradients[level] = Engine.TensorAdd(_accumulatedGradients[level], gradTensor);
+                // Vectorized accumulation with engine vector ops (no tensor conversion)
+                _accumulatedGradients[level] = Engine.Add(_accumulatedGradients[level], mlpGradient);
             }
 
             _stepCounters[level]++;
@@ -236,8 +235,8 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
                 _stepCounters[level] = 0;
 
                 // Reset gradient accumulation
-                int paramCount = _accumulatedGradients[level].Shape[0];
-                _accumulatedGradients[level] = new Tensor<T>([paramCount]);
+                int paramCount = _accumulatedGradients[level].Length;
+                _accumulatedGradients[level] = new Vector<T>(paramCount);
                 _accumulatedGradients[level].Fill(NumOps.Zero);
             }
         }
@@ -288,16 +287,15 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
                 var mlpGradient = _mlpBlocks[level].GetParameterGradients();
                 if (mlpGradient != null && mlpGradient.Length > 0)
                 {
-                    int expectedLength = _accumulatedGradients[level].Shape[0];
+                    int expectedLength = _accumulatedGradients[level].Length;
                     if (mlpGradient.Length != expectedLength)
                     {
                         throw new InvalidOperationException(
                             $"Gradient length mismatch at level {level}: expected {expectedLength}, got {mlpGradient.Length}");
                     }
 
-                    // Convert mlpGradient to Tensor and use Engine.TensorAdd
-                    var gradTensor = Tensor<T>.FromVector(mlpGradient);
-                    _accumulatedGradients[level] = Engine.TensorAdd(_accumulatedGradients[level], gradTensor);
+                    // Vectorized accumulation with engine vector ops (no tensor conversion)
+                    _accumulatedGradients[level] = Engine.Add(_accumulatedGradients[level], mlpGradient);
                 }
 
                 _stepCounters[level]++;
@@ -309,8 +307,8 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
                     _stepCounters[level] = 0;
 
                     // Reset gradient accumulation
-                    int paramCount = _accumulatedGradients[level].Shape[0];
-                    _accumulatedGradients[level] = new Tensor<T>([paramCount]);
+                    int paramCount = _accumulatedGradients[level].Length;
+                    _accumulatedGradients[level] = new Vector<T>(paramCount);
                     _accumulatedGradients[level].Fill(NumOps.Zero);
                 }
             }
@@ -339,7 +337,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         if (currentParams == null || currentParams.Length == 0)
             throw new InvalidOperationException($"MLP block at level {level} has no parameters");
 
-        int accumulatedLength = _accumulatedGradients[level].Shape[0];
+        int accumulatedLength = _accumulatedGradients[level].Length;
         if (currentParams.Length != accumulatedLength)
         {
             throw new InvalidOperationException(
@@ -350,11 +348,10 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 
         // === Vectorized Standard Gradient Descent using Engine Tensor Operations ===
         // θ^(fℓ)_{i+1} = θ^(fℓ)_i - η^(ℓ) * Σ gradients
-        var paramsTensor = Tensor<T>.FromVector(currentParams);
-        var scaledGrad = Engine.TensorMultiplyScalar(_accumulatedGradients[level], learningRate);
-        var updated = Engine.TensorSubtract(paramsTensor, scaledGrad);
+        var scaledGrad = Engine.Multiply(_accumulatedGradients[level], learningRate);
+        var updated = Engine.Subtract(currentParams, scaledGrad);
 
-        _mlpBlocks[level].SetParameters(new Vector<T>(updated.ToArray()));
+        _mlpBlocks[level].SetParameters(updated);
     }
 
     /// <summary>
@@ -390,17 +387,15 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             T oneMinusTransfer = _numOps.Subtract(_numOps.One, transferRate);
 
             // Convert to tensors for Engine operations
-            var slowTensor = Tensor<T>.FromVector(slowParams);
-            var fastTensor = Tensor<T>.FromVector(fastParams);
-            var consolidated = new Tensor<T>([slowParams.Length]);
+            var consolidated = new Vector<T>(slowParams.Length);
 
             if (minLen > 0 && minLen == slowParams.Length && minLen == fastParams.Length)
             {
                 // Same size - use full tensor operations
                 // consolidated = slow * (1 - rate) + fast * rate
-                var slowScaled = Engine.TensorMultiplyScalar(slowTensor, oneMinusTransfer);
-                var fastScaled = Engine.TensorMultiplyScalar(fastTensor, transferRate);
-                consolidated = Engine.TensorAdd(slowScaled, fastScaled);
+                var slowScaled = Engine.Multiply(slowParams, oneMinusTransfer);
+                var fastScaled = Engine.Multiply(fastParams, transferRate);
+                consolidated = Engine.Add(slowScaled, fastScaled);
             }
             else if (minLen > 0)
             {
@@ -428,7 +423,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
                 }
             }
 
-            _mlpBlocks[i + 1].SetParameters(new Vector<T>(consolidated.ToArray()));
+            _mlpBlocks[i + 1].SetParameters(consolidated);
         }
     }
 
@@ -448,13 +443,13 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             mlp.ResetState();
         }
 
-        for (int i = 0; i < _accumulatedGradients.Length; i++)
-        {
-            int paramCount = _accumulatedGradients[i].Shape[0];
-            _accumulatedGradients[i] = new Tensor<T>([paramCount]);
+            for (int i = 0; i < _accumulatedGradients.Length; i++)
+            {
+            int paramCount = _accumulatedGradients[i].Length;
+            _accumulatedGradients[i] = new Vector<T>(paramCount);
             _accumulatedGradients[i].Fill(NumOps.Zero);
             _stepCounters[i] = 0;
-        }
+            }
 
         _globalStep = 0;
     }
@@ -628,8 +623,8 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         // Clear accumulated gradients
         for (int i = 0; i < _accumulatedGradients.Length; i++)
         {
-            int paramCount = _accumulatedGradients[i].Shape[0];
-            _accumulatedGradients[i] = new Tensor<T>([paramCount]);
+            int paramCount = _accumulatedGradients[i].Length;
+            _accumulatedGradients[i] = new Vector<T>(paramCount);
             _accumulatedGradients[i].Fill(NumOps.Zero);
         }
     }

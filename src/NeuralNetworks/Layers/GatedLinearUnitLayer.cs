@@ -411,46 +411,16 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         int outputDimension = _linearWeights.Shape[0];
         int inputDimension = _linearWeights.Shape[1];
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (outputDimension + inputDimension)));
-        InitializeTensor(_linearWeights, scale);
-        InitializeTensor(_gateWeights, scale);
 
-        for (int i = 0; i < _linearBias.Length; i++)
-        {
-            _linearBias[i] = NumOps.Zero;
-            _gateBias[i] = NumOps.Zero;
-        }
-    }
+        _linearWeights = Engine.TensorMultiplyScalar(
+            new Tensor<T>(_linearWeights.Shape, Vector<T>.CreateRandom(_linearWeights.Length, -0.5, 0.5)),
+            scale);
+        _gateWeights = Engine.TensorMultiplyScalar(
+            new Tensor<T>(_gateWeights.Shape, Vector<T>.CreateRandom(_gateWeights.Length, -0.5, 0.5)),
+            scale);
 
-    /// <summary>
-    /// Helper method to initialize a 2D tensor with scaled random values.
-    /// </summary>
-    /// <param name="tensor">The tensor to initialize.</param>
-    /// <param name="scale">The scaling factor for the random values.</param>
-    /// <remarks>
-    /// <para>
-    /// This helper method initializes a tensor with random values scaled by the provided factor.
-    /// The random values are centered around zero and scaled to help with training convergence.
-    /// </para>
-    /// <para><b>For Beginners:</b> This fills a weight tensor with appropriate random starting values.
-    ///
-    /// The method:
-    /// - Goes through each position in the tensor
-    /// - Assigns a random value centered around zero (between -0.5 and 0.5)
-    /// - Scales that value by the provided factor
-    ///
-    /// This scaling ensures the initial weights are in an appropriate range
-    /// that will allow effective gradient-based learning.
-    /// </para>
-    /// </remarks>
-    private void InitializeTensor(Tensor<T> tensor, T scale)
-    {
-        for (int i = 0; i < tensor.Shape[0]; i++)
-        {
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                tensor[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            }
-        }
+        _linearBias.Fill(NumOps.Zero);
+        _gateBias.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -718,47 +688,11 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int linearWeightsSize = _linearWeights.Shape[0] * _linearWeights.Shape[1];
-        int gateWeightsSize = _gateWeights.Shape[0] * _gateWeights.Shape[1];
-        int totalParams = linearWeightsSize + gateWeightsSize +
-                          _linearBias.Length + _gateBias.Length;
-
-        var parameters = new Vector<T>(totalParams);
-
-        int index = 0;
-
-        // Copy linear weights parameters
-        for (int i = 0; i < _linearWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _linearWeights.Shape[1]; j++)
-            {
-                parameters[index++] = _linearWeights[i, j];
-            }
-        }
-
-        // Copy gate weights parameters
-        for (int i = 0; i < _gateWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _gateWeights.Shape[1]; j++)
-            {
-                parameters[index++] = _gateWeights[i, j];
-            }
-        }
-
-        // Copy linear bias parameters
-        for (int i = 0; i < _linearBias.Length; i++)
-        {
-            parameters[index++] = _linearBias[i];
-        }
-
-        // Copy gate bias parameters
-        for (int i = 0; i < _gateBias.Length; i++)
-        {
-            parameters[index++] = _gateBias[i];
-        }
-
-        return parameters;
+        return Vector<T>.Concatenate(
+            new Vector<T>(_linearWeights.ToArray()),
+            new Vector<T>(_gateWeights.ToArray()),
+            new Vector<T>(_linearBias.ToArray()),
+            new Vector<T>(_gateBias.ToArray()));
     }
 
     /// <summary>
@@ -801,36 +735,13 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         }
 
         int index = 0;
-
-        // Set linear weights parameters
-        for (int i = 0; i < _linearWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _linearWeights.Shape[1]; j++)
-            {
-                _linearWeights[i, j] = parameters[index++];
-            }
-        }
-
-        // Set gate weights parameters
-        for (int i = 0; i < _gateWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _gateWeights.Shape[1]; j++)
-            {
-                _gateWeights[i, j] = parameters[index++];
-            }
-        }
-
-        // Set linear bias parameters
-        for (int i = 0; i < _linearBias.Length; i++)
-        {
-            _linearBias[i] = parameters[index++];
-        }
-
-        // Set gate bias parameters
-        for (int i = 0; i < _gateBias.Length; i++)
-        {
-            _gateBias[i] = parameters[index++];
-        }
+        _linearWeights = new Tensor<T>(_linearWeights.Shape, parameters.Slice(index, linearWeightsSize));
+        index += linearWeightsSize;
+        _gateWeights = new Tensor<T>(_gateWeights.Shape, parameters.Slice(index, gateWeightsSize));
+        index += gateWeightsSize;
+        _linearBias = new Tensor<T>(_linearBias.Shape, parameters.Slice(index, _linearBias.Length));
+        index += _linearBias.Length;
+        _gateBias = new Tensor<T>(_gateBias.Shape, parameters.Slice(index, _gateBias.Length));
     }
 
     /// <summary>

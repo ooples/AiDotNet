@@ -324,33 +324,23 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
         int outputWidth = (inputWidth - _kernelSize) / _stride + 1;
 
-        var output = new Tensor<T>([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
+        // Reshape weights to Conv2D kernel format [outChannels, inChannels, kH, kW]
+        int outputChannels = _capsuleChannels * _capsuleDimension;
+        var kernelNCHW = _convWeights.Reshape([outputChannels, _inputChannels, _kernelSize, _kernelSize]);
 
-        // Perform convolution and reshape using Engine operations
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < outputHeight; i++)
-            {
-                for (int j = 0; j < outputWidth; j++)
-                {
-                    var patch = ExtractPatch(input, b, i * _stride, j * _stride);
-                    // Convert patch to tensor for matrix multiplication
-                    var patchTensor = Tensor<T>.FromVector(patch).Reshape([patch.Length, 1]);
-                    // W @ patch using Engine
-                    var weightedTensor = Engine.TensorMatMul(_convWeights, patchTensor);
-                    // Add bias using Engine
-                    var capsuleTensor = Engine.TensorAdd(weightedTensor.Reshape([_convBias.Length]), _convBias);
+        // Convert input to NCHW for Conv2D
+        var inputNCHW = input.Transpose([0, 3, 1, 2]);
 
-                    for (int c = 0; c < _capsuleChannels; c++)
-                    {
-                        for (int d = 0; d < _capsuleDimension; d++)
-                        {
-                            output[b, i, j, c, d] = capsuleTensor[c * _capsuleDimension + d];
-                        }
-                    }
-                }
-            }
-        }
+        // Convolution
+        var convNCHW = Engine.Conv2D(inputNCHW, kernelNCHW, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
+
+        // Add bias (reshape to [1, outChannels, 1, 1] for broadcast)
+        var biasNCHW = _convBias.Reshape([1, outputChannels, 1, 1]);
+        convNCHW = Engine.TensorBroadcastAdd(convNCHW, biasNCHW);
+
+        // Convert back to NHWC and reshape to capsule layout
+        var convNHWC = convNCHW.Transpose([0, 2, 3, 1]);
+        var output = convNHWC.Reshape([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
 
         _lastOutput = ApplyActivation(output);
         return _lastOutput;
@@ -456,67 +446,32 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
 
         int batchSize = _lastInput.Shape[0];
-        int inputHeight = _lastInput.Shape[1];
-        int inputWidth = _lastInput.Shape[2];
         int outputHeight = activationGradient.Shape[1];
         int outputWidth = activationGradient.Shape[2];
+        int outputChannels = _capsuleChannels * _capsuleDimension;
 
-        int rows = _convWeights.Shape[0];
-        int cols = _convWeights.Shape[1];
-        _convWeightsGradient = new Tensor<T>([rows, cols]);
-        _convBiasGradient = new Tensor<T>([_convBias.Length]);
+        // Reshape activation gradient to NCHW [batch, outC, H, W]
+        var gradNHWC = activationGradient.Reshape([batchSize, outputHeight, outputWidth, outputChannels]);
+        var gradNCHW = gradNHWC.Transpose([0, 3, 1, 2]);
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        // Prepare kernel in Conv2D layout
+        var kernelNCHW = _convWeights.Reshape([outputChannels, _inputChannels, _kernelSize, _kernelSize]);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < outputHeight; i++)
-            {
-                for (int j = 0; j < outputWidth; j++)
-                {
-                    var patch = ExtractPatch(_lastInput, b, i * _stride, j * _stride);
-                    var capsuleGradient = new Vector<T>(_capsuleChannels * _capsuleDimension);
+        // Input in NCHW
+        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
 
-                    for (int c = 0; c < _capsuleChannels; c++)
-                    {
-                        for (int d = 0; d < _capsuleDimension; d++)
-                        {
-                            capsuleGradient[c * _capsuleDimension + d] = activationGradient[b, i, j, c, d];
-                        }
-                    }
+        // Gradients via Conv2D ops
+        var inputGradNCHW = Engine.Conv2DBackwardInput(gradNCHW, kernelNCHW, inputNCHW.Shape, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
+        var kernelGrad = Engine.Conv2DBackwardKernel(gradNCHW, inputNCHW, kernelNCHW.Shape, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
 
-                    // Compute outer product: capsuleGradient @ patch.T
-                    var capsuleGradTensor = Tensor<T>.FromVector(capsuleGradient).Reshape([capsuleGradient.Length, 1]);
-                    var patchTensor = Tensor<T>.FromVector(patch).Reshape([1, patch.Length]);
-                    var outerProduct = Engine.TensorMatMul(capsuleGradTensor, patchTensor);
-                    _convWeightsGradient = Engine.TensorAdd(_convWeightsGradient, outerProduct);
+        // Bias gradient: sum over batch/height/width
+        _convBiasGradient = Engine.ReduceSum(gradNCHW, new[] { 0, 2, 3 }, keepDims: false);
 
-                    // Accumulate bias gradient
-                    _convBiasGradient = Engine.TensorAdd(_convBiasGradient, Tensor<T>.FromVector(capsuleGradient));
+        // Reshape kernel gradient back to [outC, flatPatch]
+        _convWeightsGradient = kernelGrad.Reshape([outputChannels, _inputChannels * _kernelSize * _kernelSize]);
 
-                    // Compute patch gradient: W.T @ capsuleGrad
-                    var weightsTranspose = Engine.TensorTranspose(_convWeights);
-                    var patchGradTensor = Engine.TensorMatMul(weightsTranspose, capsuleGradTensor);
-                    var patchGradient = patchGradTensor.ToVector();
-                    int index = 0;
-                    for (int c = 0; c < _inputChannels; c++)
-                    {
-                        for (int ki = 0; ki < _kernelSize; ki++)
-                        {
-                            for (int kj = 0; kj < _kernelSize; kj++)
-                            {
-                                inputGradient[b, i * _stride + ki, j * _stride + kj, c] = NumOps.Add(
-                                    inputGradient[b, i * _stride + ki, j * _stride + kj, c],
-                                    patchGradient[index++]
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return inputGradient;
+        // Input gradient back to NHWC
+        return inputGradNCHW.Transpose([0, 2, 3, 1]);
     }
 
     /// <summary>
@@ -795,27 +750,9 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        // Reshape convolution weights from Matrix to Conv2D format
-        // Current: Matrix [capsuleChannels * capsuleDimension, inputChannels * kernelSize * kernelSize]
-        // Need: Tensor [kernelSize, kernelSize, inputChannels, capsuleChannels * capsuleDimension]
+        // Reshape the matrix weights to Conv2D format [outChannels, inChannels, kH, kW]
         int totalOutputChannels = _capsuleChannels * _capsuleDimension;
-        var convWeightsTensor = new Tensor<T>(new int[] { _kernelSize, _kernelSize, _inputChannels, totalOutputChannels });
-
-        // Reshape the matrix weights to Conv2D format
-        for (int outCh = 0; outCh < totalOutputChannels; outCh++)
-        {
-            for (int inCh = 0; inCh < _inputChannels; inCh++)
-            {
-                for (int kh = 0; kh < _kernelSize; kh++)
-                {
-                    for (int kw = 0; kw < _kernelSize; kw++)
-                    {
-                        int matrixCol = inCh * _kernelSize * _kernelSize + kh * _kernelSize + kw;
-                        convWeightsTensor[kh, kw, inCh, outCh] = _convWeights[outCh, matrixCol];
-                    }
-                }
-            }
-        }
+        var convWeightsTensor = _convWeights.Reshape(new int[] { totalOutputChannels, _inputChannels, _kernelSize, _kernelSize });
         var weightsNode = Autodiff.TensorOperations<T>.Constant(convWeightsTensor, "conv_weights");
 
         // _convBias is already a Tensor<T>, use directly

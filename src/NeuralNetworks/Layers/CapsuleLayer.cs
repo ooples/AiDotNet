@@ -961,9 +961,9 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (parameters.Length != matrixSize + biasSize)
             throw new ArgumentException($"Expected {matrixSize + biasSize} parameters, but got {parameters.Length}");
 
-        // Use Tensor.FromVector for production-grade parameter setting
-        _transformationMatrix = Tensor<T>.FromVector(parameters.Slice(0, matrixSize), _transformationMatrix.Shape);
-        _bias = Tensor<T>.FromVector(parameters.Slice(matrixSize, biasSize), [biasSize]);
+        // Set parameters without hot-path conversions
+        _transformationMatrix = new Tensor<T>(_transformationMatrix.Shape, parameters.Slice(0, matrixSize));
+        _bias = new Tensor<T>([biasSize], parameters.Slice(matrixSize, biasSize));
     }
 
     /// <summary>

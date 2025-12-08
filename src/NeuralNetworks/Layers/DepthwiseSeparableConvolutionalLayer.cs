@@ -476,52 +476,14 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         T depthwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_kernelSize * _kernelSize)));
         T pointwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_inputDepth)));
 
-        InitializeTensor(_depthwiseKernels, depthwiseScale);
-        InitializeTensor(_pointwiseKernels, pointwiseScale);
+        _depthwiseKernels = Engine.TensorMultiplyScalar(
+            new Tensor<T>(_depthwiseKernels.Shape, Vector<T>.CreateRandom(_depthwiseKernels.Length, -0.5, 0.5)),
+            depthwiseScale);
+        _pointwiseKernels = Engine.TensorMultiplyScalar(
+            new Tensor<T>(_pointwiseKernels.Shape, Vector<T>.CreateRandom(_pointwiseKernels.Length, -0.5, 0.5)),
+            pointwiseScale);
 
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            _biases[i] = NumOps.Zero;
-        }
-    }
-
-    /// <summary>
-    /// Initializes a tensor with random values scaled by the specified factor.
-    /// </summary>
-    /// <param name="tensor">The tensor to initialize.</param>
-    /// <param name="scale">The scaling factor for the random values.</param>
-    /// <remarks>
-    /// <para>
-    /// This helper method initializes a tensor with random values between -0.5 and 0.5, scaled by
-    /// the specified factor. This ensures that the initial values are appropriately sized to avoid
-    /// issues during training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This helper method fills a tensor with carefully scaled random values.
-    /// 
-    /// For each value in the tensor:
-    /// - Generate a random number between -0.5 and 0.5
-    /// - Multiply it by the scaling factor
-    /// - This keeps the initial values in a good range for learning
-    /// 
-    /// The scaling helps prevent the network from starting with values that are
-    /// too large or too small, which can cause problems during training.
-    /// </para>
-    /// </remarks>
-    private void InitializeTensor(Tensor<T> tensor, T scale)
-    {
-        for (int i = 0; i < tensor.Shape[0]; i++)
-        {
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                for (int k = 0; k < tensor.Shape[2]; k++)
-                {
-                    for (int l = 0; l < tensor.Shape[3]; l++)
-                    {
-                        tensor[i, j, k, l] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-                    }
-                }
-            }
-        }
+        _biases.Fill(NumOps.Zero);
     }
 
     /// <summary>

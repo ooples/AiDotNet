@@ -2734,6 +2734,25 @@ public interface IEngine
     Tensor<T> PixelShuffleBackward<T>(Tensor<T> gradOutput, int[] inputShape, int upscaleFactor);
 
     /// <summary>
+    /// Generates a normalized affine grid for spatial transformer sampling.
+    /// </summary>
+    /// <typeparam name="T">Numeric type.</typeparam>
+    /// <param name="theta">Affine matrices of shape [batch, 2, 3].</param>
+    /// <param name="outputHeight">Target grid height.</param>
+    /// <param name="outputWidth">Target grid width.</param>
+    /// <returns>Grid tensor of shape [batch, outputHeight, outputWidth, 2] in [-1, 1] normalized coords.</returns>
+    Tensor<T> AffineGrid<T>(Tensor<T> theta, int outputHeight, int outputWidth);
+
+    /// <summary>
+    /// Samples an input tensor using a normalized grid with bilinear interpolation.
+    /// </summary>
+    /// <typeparam name="T">Numeric type.</typeparam>
+    /// <param name="input">Input tensor [batch, height, width, channels].</param>
+    /// <param name="grid">Sampling grid [batch, outH, outW, 2] with coords in [-1, 1].</param>
+    /// <returns>Sampled output tensor [batch, outH, outW, channels].</returns>
+    Tensor<T> GridSample<T>(Tensor<T> input, Tensor<T> grid);
+
+    /// <summary>
     /// Crops a region from a 4D tensor.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>

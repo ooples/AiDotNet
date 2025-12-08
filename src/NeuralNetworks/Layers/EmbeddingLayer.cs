@@ -518,8 +518,8 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentException($"Expected {expectedParams} parameters, but got {parameters.Length}");
         }
 
-        // Use Tensor.FromVector for production-grade parameter setting
-        _embeddingTensor = Tensor<T>.FromVector(parameters, [vocabSize, embeddingDim]);
+        // Restore embeddings without hot-path conversions
+        _embeddingTensor = new Tensor<T>([vocabSize, embeddingDim], parameters);
     }
 
     /// <summary>

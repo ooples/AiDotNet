@@ -21092,6 +21092,18 @@ public class GpuEngine : IEngine, IDisposable
         return _cpuFallback.TensorWhere(condition, x, y);
     }
 
+    public Tensor<T> AffineGrid<T>(Tensor<T> theta, int outputHeight, int outputWidth)
+    {
+        // Fallback to CPU implementation for now
+        return _cpuFallback.AffineGrid(theta, outputHeight, outputWidth);
+    }
+
+    public Tensor<T> GridSample<T>(Tensor<T> input, Tensor<T> grid)
+    {
+        // Fallback to CPU implementation for now
+        return _cpuFallback.GridSample(input, grid);
+    }
+
     #endregion
 }
 #endif

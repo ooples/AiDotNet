@@ -253,14 +253,8 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeConnections()
     {
-        // Initialize connections with random values
-        for (int i = 0; i < InputSize; i++)
-        {
-            for (int j = 0; j < ColumnCount; j++)
-            {
-                Connections[i, j] = NumOps.FromDouble(Random.NextDouble());
-            }
-        }
+        // Initialize connections with random values using tensor ops
+        Connections = new Tensor<T>([InputSize, ColumnCount], Vector<T>.CreateRandom(InputSize * ColumnCount, 0.0, 1.0));
     }
 
     /// <summary>
@@ -303,11 +297,8 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
 
         // Apply threshold to get sparse binary output
         T threshold = NumOps.FromDouble(SparsityThreshold);
-        var output = new Tensor<T>([ColumnCount]);
-        for (int i = 0; i < ColumnCount; i++)
-        {
-            output[i] = NumOps.GreaterThan(activations[i, 0], threshold) ? NumOps.One : NumOps.Zero;
-        }
+        var outputMask = Engine.TensorGreaterThan(activations, threshold);
+        var output = outputMask.Reshape([ColumnCount]);
 
         LastOutput = output;
         return output;
@@ -343,7 +334,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     public void Learn(Vector<T> input)
     {
         // Convert to tensor and call Forward which stores in LastInput/LastOutput
-        var inputTensor = Tensor<T>.FromVector(input);
+        var inputTensor = new Tensor<T>(new[] { InputSize }, input);
         Forward(inputTensor);
 
         if (LastInput == null || LastOutput == null)
@@ -352,31 +343,19 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         T lr = NumOps.FromDouble(LearningRate);
         T bf = NumOps.FromDouble(BoostFactor);
 
-        for (int i = 0; i < ColumnCount; i++)
-        {
-            if (NumOps.Equals(LastOutput[i], NumOps.One))
-            {
-                // Strengthen connections for active columns
-                for (int j = 0; j < InputSize; j++)
-                {
-                    T delta = NumOps.Multiply(lr, NumOps.Subtract(LastInput[j], Connections[j, i]));
-                    Connections[j, i] = NumOps.Add(Connections[j, i], delta);
-                }
-            }
-        }
+        // Strengthen active columns: Connections += lr * (input - Connections) * activeMask
+        var activeMask = LastOutput.Reshape([1, ColumnCount]);
+        var inputRow = LastInput.Reshape([InputSize, 1]);
+        var onesCol = new Tensor<T>([1, ColumnCount]);
+        onesCol.Fill(NumOps.One);
+        var inputExpanded = Engine.TensorMatMul(inputRow, onesCol); // [InputSize, ColumnCount]
+        var deltaActive = Engine.TensorMultiplyScalar(Engine.TensorSubtract(inputExpanded, Connections), lr);
+        Connections = Engine.TensorAdd(Connections, Engine.TensorMultiply(deltaActive, activeMask));
 
-        // Boost inactive columns
-        for (int i = 0; i < ColumnCount; i++)
-        {
-            if (NumOps.Equals(LastOutput[i], NumOps.Zero))
-            {
-                for (int j = 0; j < InputSize; j++)
-                {
-                    T boost = NumOps.Multiply(bf, LastInput[j]);
-                    Connections[j, i] = NumOps.Add(Connections[j, i], boost);
-                }
-            }
-        }
+        // Boost inactive columns: Connections += bf * input * inactiveMask
+        var inactiveMask = Engine.TensorSubtract(onesCol, activeMask);
+        var boostTensor = Engine.TensorMultiplyScalar(inputExpanded, bf);
+        Connections = Engine.TensorAdd(Connections, Engine.TensorMultiply(boostTensor, inactiveMask));
 
         NormalizeConnections();
     }
@@ -403,21 +382,9 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </remarks>
     private void NormalizeConnections()
     {
-        for (int i = 0; i < ColumnCount; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < InputSize; j++)
-            {
-                sum = NumOps.Add(sum, Connections[j, i]);
-            }
-            if (!NumOps.Equals(sum, NumOps.Zero))
-            {
-                for (int j = 0; j < InputSize; j++)
-                {
-                    Connections[j, i] = NumOps.Divide(Connections[j, i], sum);
-                }
-            }
-        }
+        var colSums = Engine.ReduceSum(Connections, new[] { 0 }, keepDims: true);
+        var safeSums = Engine.TensorMax(colSums, NumOps.FromDouble(1e-12));
+        Connections = Engine.TensorDivide(Connections, safeSums);
     }
 
     /// <summary>
@@ -459,22 +426,14 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     {
         // Use Engine tensor operations: inputGrad = Connections @ outputGrad
         // Connections is [InputSize, ColumnCount], no transpose needed
-        var flatGradient = outputGradient.ToVector();
-        var gradTensor = new Tensor<T>([ColumnCount, 1]);
-        for (int i = 0; i < ColumnCount; i++)
-        {
-            gradTensor[i, 0] = flatGradient[i];
-        }
+        // outputGradient expected shape [ColumnCount]
+        var gradTensor = outputGradient.Shape.Length == 1
+            ? outputGradient.Reshape([ColumnCount, 1])
+            : outputGradient;
 
         var inputGradTensor = Engine.TensorMatMul(Connections, gradTensor);
 
-        var inputGradient = new Vector<T>(InputSize);
-        for (int i = 0; i < InputSize; i++)
-        {
-            inputGradient[i] = inputGradTensor[i, 0];
-        }
-
-        return Tensor<T>.FromVector(inputGradient);
+        return inputGradTensor.Reshape([InputSize]);
     }
 
     /// <summary>
@@ -660,8 +619,8 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {InputSize * ColumnCount} parameters, but got {parameters.Length}");
         }
 
-        // Use Tensor<T>.FromVector and reshape to restore connections
-        Connections = Tensor<T>.FromVector(parameters).Reshape([InputSize, ColumnCount]);
+        // Restore connections without hot-path conversions
+        Connections = new Tensor<T>([InputSize, ColumnCount], parameters);
     }
 
     /// <summary>

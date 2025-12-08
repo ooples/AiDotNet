@@ -14,9 +14,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// <para><b>For Beginners:</b> This layer helps the network remember and predict sequences of patterns.
 /// 
-/// Think of it like learning to anticipate what comes next in a song:
-/// - The layer organizes memory cells into columns (like musical notes)
-/// - Each column can have multiple cells (representing different contexts for the same note)
+    /// Think of it like learning to anticipate what comes next in a song:
+    /// - The layer organizes memory cells into columns (like musical notes)
+    /// - Each column can have multiple cells (representing different contexts for the same note)
 /// - When a note plays, the layer activates specific cells based on what came before
 /// - Over time, it learns which notes typically follow others in different contexts
 /// 
@@ -69,6 +69,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private readonly int CellsPerColumn;
+    private Tensor<T>? _lastInput;
 
     /// <summary>
     /// The states of all cells in the temporal memory layer.
@@ -226,6 +227,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        _lastInput = input;
         // Reshape CellStates from [ColumnCount, CellsPerColumn] to [ColumnCount * CellsPerColumn]
         var flatCellStates = CellStates.Reshape([ColumnCount * CellsPerColumn]);
 
@@ -275,7 +277,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     public void Learn(Vector<T> input, Vector<T> previousState)
     {
         // Convert input to tensor and create mask for active/inactive columns
-        var inputTensor = Tensor<T>.FromVector(input).Reshape([ColumnCount]);
+        var inputTensor = new Tensor<T>(new[] { ColumnCount }, input);
 
         // Create column mask repeated for each cell: [ColumnCount, CellsPerColumn]
         var columnMask = Engine.TensorRepeatElements(inputTensor, CellsPerColumn, axis: 0)
@@ -436,10 +438,66 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TemporalMemoryLayer implements HTM temporal memory with complex state management
-        // The manual implementation provides correct gradient computation through temporal sequences
-        // No new TensorOperation needed as the logic is domain-specific to HTM.
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Build graph equivalent to repeating input across cells: matmul with ones then flatten
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "tm_input", requiresGradient: true);
+        var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, new[] { ColumnCount, 1 });
+
+        var onesData = new T[CellsPerColumn];
+        for (int i = 0; i < CellsPerColumn; i++) onesData[i] = NumOps.One;
+        var onesTensor = new Tensor<T>(new[] { 1, CellsPerColumn }, new Vector<T>(onesData));
+        var onesNode = Autodiff.TensorOperations<T>.Constant(onesTensor, "tm_ones");
+
+        var repeated = Autodiff.TensorOperations<T>.MatrixMultiply(inputReshaped, onesNode);
+        var flattened = Autodiff.TensorOperations<T>.Reshape(repeated, new[] { ColumnCount * CellsPerColumn });
+
+        flattened.Gradient = outputGradient;
+
+        // Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((flattened, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        if (inputNode.Gradient == null)
+            throw new InvalidOperationException("Gradient computation failed in temporal memory autodiff.");
+
+        return inputNode.Gradient;
     }
 
 
@@ -519,7 +577,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
         }
 
         // Use Tensor<T>.FromVector and reshape to restore cell states
-        CellStates = Tensor<T>.FromVector(parameters).Reshape([ColumnCount, CellsPerColumn]);
+        CellStates = new Tensor<T>(new[] { ColumnCount, CellsPerColumn }, parameters);
     }
 
     /// <summary>

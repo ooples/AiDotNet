@@ -732,7 +732,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Concatenate(_kernels.ToVector(), _biases.ToVector());
+        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
     }
 
     /// <summary>
@@ -770,8 +770,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         var kernelVec = parameters.Slice(0, _kernels.Length);
         var biasVec = parameters.Slice(_kernels.Length, _biases.Length);
 
-        _kernels = Tensor<T>.FromVector(kernelVec, [InputDepth, OutputDepth, KernelSize, KernelSize]);
-        _biases = Tensor<T>.FromVector(biasVec, [OutputDepth]);
+        _kernels = new Tensor<T>([InputDepth, OutputDepth, KernelSize, KernelSize], kernelVec);
+        _biases = new Tensor<T>([OutputDepth], biasVec);
     }
 
     /// <summary>

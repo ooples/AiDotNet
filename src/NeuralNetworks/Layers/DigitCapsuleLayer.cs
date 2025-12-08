@@ -338,62 +338,39 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         _lastInput = input;
         int batchSize = input.Shape[0];
 
-        var predictions = new Tensor<T>([batchSize, _inputCapsules, _numClasses, _outputCapsuleDimension]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < _inputCapsules; i++)
-            {
-                for (int j = 0; j < _numClasses; j++)
-                {
-                    var inputCapsule = input.SubTensor(b, i);
-                    var weightMatrix = _weights.SubTensor(i, j);
-                    var result = inputCapsule.MatrixMultiply(weightMatrix);
-                    predictions.SetSubTensor([b, i, j], result);
-                }
-            }
-        }
+        // Compute predictions with tensor matmul: reshape input and weights for batched matmul
+        var inputCapsulesFlat = input.Reshape([batchSize * _inputCapsules, _inputCapsuleDimension, 1]);
+        var weightsFlat = _weights.Reshape([_inputCapsules * _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
+        // Expand weights across batch
+        var tiledWeights = Engine.TensorTile(weightsFlat, new[] { batchSize, 1, 1 });
+        var predictionsFlat = Engine.BatchMatMul(tiledWeights, inputCapsulesFlat); // [B*I*C, outDim, 1]
+        var predictions = predictionsFlat.Reshape([batchSize, _inputCapsules, _numClasses, _outputCapsuleDimension]);
 
         var couplings = new Tensor<T>([batchSize, _inputCapsules, _numClasses]);
         couplings.Fill(NumOps.Zero);
 
         var output = new Tensor<T>([batchSize, _numClasses, _outputCapsuleDimension]);
 
+        var softmaxActivation = new SoftmaxActivation<T>();
         for (int iteration = 0; iteration < _routingIterations; iteration++)
         {
-            var softmaxActivation = new SoftmaxActivation<T>();
-            var routingWeights = softmaxActivation.Activate(couplings);
+            var routingWeights = softmaxActivation.Activate(couplings); // [B,I,C]
 
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int j = 0; j < _numClasses; j++)
-                {
-                    var weightedSum = new Tensor<T>(new[] { _outputCapsuleDimension });
-                    for (int i = 0; i < _inputCapsules; i++)
-                    {
-                        var predictionVector = predictions.SubTensor(b, i, j);
-                        var scaledPrediction = predictionVector.Multiply(routingWeights[b, i, j]);
-                        weightedSum = weightedSum.Add(scaledPrediction);
-                    }
-                    var activatedOutput = ApplyActivation(weightedSum);
-                    output.SetSubTensor(new[] { b, j }, activatedOutput);
-                }
-            }
+            // weightedSum = sum_i routing * predictions
+            var routingExpanded = routingWeights.Reshape([batchSize, _inputCapsules, _numClasses, 1]);
+            var weightedPred = Engine.TensorMultiply(predictions, routingExpanded);
+            var weightedSum = Engine.ReduceSum(weightedPred, new[] { 1 }, keepDims: false); // [B, C, outDim]
+
+            // activation
+            var activated = ApplyActivation(weightedSum);
+            output = activated;
 
             if (iteration < _routingIterations - 1)
             {
-                for (int b = 0; b < batchSize; b++)
-                {
-                    for (int i = 0; i < _inputCapsules; i++)
-                    {
-                        for (int j = 0; j < _numClasses; j++)
-                        {
-                            var predictionVector = predictions.SubTensor(b, i, j);
-                            var outputVector = output.SubTensor(b, j);
-                            var dotProduct = predictionVector.DotProduct(outputVector);
-                            couplings[b, i, j] = NumOps.Add(couplings[b, i, j], dotProduct);
-                        }
-                    }
-                }
+                // couplings += predictions · output
+                var outputExpanded = output.Reshape([batchSize, 1, _numClasses, _outputCapsuleDimension]);
+                var dot = Engine.ReduceSum(Engine.TensorMultiply(predictions, outputExpanded), new[] { 3 }, keepDims: false); // [B,I,C]
+                couplings = Engine.TensorAdd(couplings, dot);
             }
         }
 
@@ -455,39 +432,71 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         var routingWeights = softmaxActivation.Activate(_lastCouplings);
         var routingWeightsGradient = softmaxActivation.Derivative(_lastCouplings);
 
+        // Tensorized prediction gradients: [B, I, C, outDim]
+        var predGrad = new Tensor<T>([batchSize, _inputCapsules, _numClasses, _outputCapsuleDimension]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int i = 0; i < _inputCapsules; i++)
             {
                 for (int j = 0; j < _numClasses; j++)
                 {
-                    var inputCapsule = _lastInput.SubTensor(b, i);
+                    var pg = activationGradient.SubTensor(b, j).Multiply(routingWeights[b, i, j]);
+                    for (int l = 0; l < _outputCapsuleDimension; l++)
+                    {
+                        predGrad[b, i, j, l] = pg[l];
+                    }
+                }
+            }
+        }
+
+        // Weight gradients: sum over batch of outer(inputCapsule, predGrad)
+        for (int i = 0; i < _inputCapsules; i++)
+        {
+            for (int j = 0; j < _numClasses; j++)
+            {
+                var accum = new Tensor<T>([_inputCapsuleDimension, _outputCapsuleDimension]);
+                for (int b = 0; b < batchSize; b++)
+                {
+                    var inputCapsule = _lastInput.SubTensor(b, i).Reshape([_inputCapsuleDimension, 1]);
+                    var pg = predGrad.SubTensor(b, i, j).Reshape([1, _outputCapsuleDimension]);
+                    var outer = Engine.TensorMatMul(inputCapsule, pg);
+                    accum = Engine.TensorAdd(accum, outer);
+                }
+                for (int k = 0; k < _inputCapsuleDimension; k++)
+                    for (int l = 0; l < _outputCapsuleDimension; l++)
+                        _weightsGradient[i, j, k, l] = accum[k, l];
+            }
+        }
+
+        // Input gradient accumulation
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < _inputCapsules; i++)
+            {
+                var gradVec = new Tensor<T>([_inputCapsuleDimension, 1]);
+                for (int j = 0; j < _numClasses; j++)
+                {
+                    var weightsMat = _weights.SubTensor(i, j);
+                    var pg = predGrad.SubTensor(b, i, j).Reshape([_outputCapsuleDimension, 1]);
+                    gradVec = Engine.TensorAdd(gradVec, Engine.TensorMatMul(weightsMat, pg));
+
+                    // coupling gradient contribution
                     var outputCapsule = _lastOutput.SubTensor(b, j);
-                    var predictionGradient = activationGradient.SubTensor(b, j).Multiply(routingWeights[b, i, j]);
-
-                    for (int k = 0; k < _inputCapsuleDimension; k++)
+                    var actGradCapsule = activationGradient.SubTensor(b, j);
+                    T dot = NumOps.Zero;
+                    for (int l = 0; l < _outputCapsuleDimension; l++)
                     {
-                        for (int l = 0; l < _outputCapsuleDimension; l++)
-                        {
-                            _weightsGradient[i, j, k, l] = NumOps.Add(_weightsGradient[i, j, k, l],
-                                NumOps.Multiply(inputCapsule[k], predictionGradient[l]));
-                        }
+                        dot = NumOps.Add(dot, NumOps.Multiply(outputCapsule[l], actGradCapsule[l]));
                     }
+                    dot = NumOps.Multiply(dot, routingWeightsGradient[b, i, j]);
+                    var couplingVec = new Tensor<T>([_outputCapsuleDimension, 1]);
+                    couplingVec.Fill(dot);
+                    gradVec = Engine.TensorAdd(gradVec, Engine.TensorMatMul(weightsMat, couplingVec));
+                }
 
-                    var gradientUpdate = _weights.SubTensor(i, j).MatrixMultiply(predictionGradient);
-                    for (int k = 0; k < _inputCapsuleDimension; k++)
-                    {
-                        inputGradient[b, i, k] = NumOps.Add(inputGradient[b, i, k], gradientUpdate[k]);
-                    }
-
-                    var couplingGradient = NumOps.Multiply(outputCapsule.ToVector().DotProduct(activationGradient.SubTensor(b, j).ToVector()),
-                        routingWeightsGradient[b, i, j]);
-
-                    var couplingGradientUpdate = _weights.SubTensor(i, j).MatrixMultiply(new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { couplingGradient })));
-                    for (int k = 0; k < _inputCapsuleDimension; k++)
-                    {
-                        inputGradient[b, i, k] = NumOps.Add(inputGradient[b, i, k], couplingGradientUpdate[0, k]);
-                    }
+                for (int k = 0; k < _inputCapsuleDimension; k++)
+                {
+                    inputGradient[b, i, k] = gradVec[k, 0];
                 }
             }
         }

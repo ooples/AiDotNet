@@ -491,10 +491,66 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // ConditionalRandomFieldLayer uses Forward-Backward algorithm and Viterbi decoding
-        // The manual implementation provides correct gradient computation through CRF inference
-        // These structured prediction algorithms are domain-specific to sequence labeling
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Build computation graph using differentiable CRF forward op
+        var emissionsNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "crf_emissions", requiresGradient: true);
+        var transitionsNode = Autodiff.TensorOperations<T>.Variable(_transitionMatrix, "crf_transitions", requiresGradient: true);
+        var startNode = Autodiff.TensorOperations<T>.Variable(_startScores, "crf_start", requiresGradient: true);
+        var endNode = Autodiff.TensorOperations<T>.Variable(_endScores, "crf_end", requiresGradient: true);
+
+        var outputNode = Autodiff.TensorOperations<T>.CRFForward(emissionsNode, transitionsNode, startNode, endNode);
+        outputNode.Gradient = outputGradient;
+
+        // Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Capture gradients
+        _transitionMatrixGradient = transitionsNode.Gradient ?? new Tensor<T>([_numClasses, _numClasses]);
+        _startScoresGradient = startNode.Gradient ?? new Tensor<T>([_numClasses]);
+        _endScoresGradient = endNode.Gradient ?? new Tensor<T>([_numClasses]);
+
+        if (emissionsNode.Gradient == null)
+            throw new InvalidOperationException("Gradient computation failed in CRF autodiff.");
+
+        return emissionsNode.Gradient;
     }
 
     /// <summary>

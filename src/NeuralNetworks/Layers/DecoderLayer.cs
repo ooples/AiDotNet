@@ -390,7 +390,7 @@ public class DecoderLayer<T> : LayerBase<T>
         int paramCount = component.ParameterCount;
 
         // Use Engine.TensorSlice to extract component parameters without manual loops
-        var paramsTensor = Tensor<T>.FromVector(parameters);
+        var paramsTensor = new Tensor<T>([parameters.Length], parameters);
         var componentParamsTensor = Engine.TensorSlice(paramsTensor, [startIndex], [paramCount]);
         var componentParams = new Vector<T>(componentParamsTensor.ToArray());
 

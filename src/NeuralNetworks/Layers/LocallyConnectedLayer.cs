@@ -488,20 +488,10 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         // Weights need to be permuted from [oh, ow, oc, kh, kw, ic] to [oh, ow, oc, ic, kh, kw]
         var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
 
-        // Reshape bias for per-position bias (broadcast across spatial)
-        // Engine expects per-position bias [oh, ow, oc], but we have per-channel [oc]
-        // Create per-position bias by broadcasting
-        var biasReshaped = new Tensor<T>([_outputHeight, _outputWidth, _outputChannels]);
-        for (int h = 0; h < _outputHeight; h++)
-        {
-            for (int w = 0; w < _outputWidth; w++)
-            {
-                for (int oc = 0; oc < _outputChannels; oc++)
-                {
-                    biasReshaped[h, w, oc] = _biases[oc];
-                }
-            }
-        }
+        // Broadcast bias to per-position bias [oh, ow, oc] without manual loops
+        var biasReshaped = Engine.TensorTile(
+            _biases.Reshape(1, 1, _outputChannels),
+            new[] { _outputHeight, _outputWidth, 1 });
 
         // Call GPU-accelerated LocallyConnectedConv2D
         int[] strideArr = [_stride, _stride];
@@ -596,19 +586,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         // We need bias gradient of shape [channels] - sum over dims [0, 2, 3]
         var biasGradTensor = Engine.LocallyConnectedConv2DBackwardBias(gradNCHW);
         // biasGradTensor is [oh, ow, oc], sum to get per-channel [oc]
-        _biasGradients = new Tensor<T>([_outputChannels]);
-        for (int oc = 0; oc < _outputChannels; oc++)
-        {
-            T sum = NumOps.Zero;
-            for (int h = 0; h < _outputHeight; h++)
-            {
-                for (int w = 0; w < _outputWidth; w++)
-                {
-                    sum = NumOps.Add(sum, biasGradTensor[h, w, oc]);
-                }
-            }
-            _biasGradients[oc] = sum;
-        }
+        _biasGradients = Engine.ReduceSum(biasGradTensor, new[] { 0, 1 }, keepDims: false);
 
         // Transpose input gradient back from NCHW to NHWC
         var inputGradient = inputGradNCHW.Transpose([0, 2, 3, 1]);
@@ -653,8 +631,8 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         }
 
         // Convert from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
-        var inputNCHW = ConvertNHWCtoNCHW(_lastInput);
-        var weightsNCHW = ConvertWeightsToNCHW(_weights);
+        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
+        var weightsNCHW = _weights.Transpose([0, 1, 2, 5, 3, 4]);
 
         // Create computation nodes with efficient conversions
         var inputNode = Autodiff.TensorOperations<T>.Variable(inputNCHW, "input", requiresGradient: true);
@@ -669,7 +647,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             stride: new int[] { _stride, _stride });
 
         // Convert pre-activation gradient from NHWC to NCHW
-        var preActivationGradientNCHW = ConvertNHWCtoNCHW(preActivationGradient);
+        var preActivationGradientNCHW = preActivationGradient.Transpose([0, 3, 1, 2]);
 
         // Set gradient on pre-activation node (activation derivative already applied)
         preActivationNode.Gradient = preActivationGradientNCHW;
@@ -712,104 +690,14 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
 
         // Update parameter gradients using efficient conversion
         if (weightsNode.Gradient != null)
-            _weightGradients = ConvertWeightsFromNCHW(weightsNode.Gradient);
+            _weightGradients = weightsNode.Gradient.Transpose([0, 1, 2, 4, 5, 3]);
 
         if (biasNode.Gradient != null)
             _biasGradients = biasNode.Gradient;
 
         // Convert input gradient from NCHW back to NHWC
         var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-        return ConvertNCHWtoNHWC(inputGradientNCHW);
-    }
-
-    /// <summary>
-    /// Converts tensor from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W] format.
-    /// </summary>
-    private Tensor<T> ConvertNHWCtoNCHW(Tensor<T> nhwc)
-    {
-        int batch = nhwc.Shape[0];
-        int height = nhwc.Shape[1];
-        int width = nhwc.Shape[2];
-        int channels = nhwc.Shape[3];
-
-        var nchw = new Tensor<T>([batch, channels, height, width]);
-        for (int b = 0; b < batch; b++)
-            for (int c = 0; c < channels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        nchw[b, c, h, w] = nhwc[b, h, w, c];
-
-        return nchw;
-    }
-
-    /// <summary>
-    /// Converts tensor from NCHW [batch, channels, H, W] to NHWC [batch, H, W, channels] format.
-    /// </summary>
-    private Tensor<T> ConvertNCHWtoNHWC(Tensor<T> nchw)
-    {
-        int batch = nchw.Shape[0];
-        int channels = nchw.Shape[1];
-        int height = nchw.Shape[2];
-        int width = nchw.Shape[3];
-
-        var nhwc = new Tensor<T>([batch, height, width, channels]);
-        for (int b = 0; b < batch; b++)
-            for (int h = 0; h < height; h++)
-                for (int w = 0; w < width; w++)
-                    for (int c = 0; c < channels; c++)
-                        nhwc[b, h, w, c] = nchw[b, c, h, w];
-
-        return nhwc;
-    }
-
-    /// <summary>
-    /// Converts weights from [out_h, out_w, out_channels, kernel_h, kernel_w, in_channels]
-    /// to [out_h, out_w, out_channels, in_channels, kernel_h, kernel_w] format.
-    /// </summary>
-    private Tensor<T> ConvertWeightsToNCHW(Tensor<T> weights)
-    {
-        int outH = weights.Shape[0];
-        int outW = weights.Shape[1];
-        int outChannels = weights.Shape[2];
-        int kernelH = weights.Shape[3];
-        int kernelW = weights.Shape[4];
-        int inChannels = weights.Shape[5];
-
-        var nchw = new Tensor<T>([outH, outW, outChannels, inChannels, kernelH, kernelW]);
-        for (int oh = 0; oh < outH; oh++)
-            for (int ow = 0; ow < outW; ow++)
-                for (int oc = 0; oc < outChannels; oc++)
-                    for (int ic = 0; ic < inChannels; ic++)
-                        for (int kh = 0; kh < kernelH; kh++)
-                            for (int kw = 0; kw < kernelW; kw++)
-                                nchw[oh, ow, oc, ic, kh, kw] = weights[oh, ow, oc, kh, kw, ic];
-
-        return nchw;
-    }
-
-    /// <summary>
-    /// Converts weights from [out_h, out_w, out_channels, in_channels, kernel_h, kernel_w]
-    /// back to [out_h, out_w, out_channels, kernel_h, kernel_w, in_channels] format.
-    /// </summary>
-    private Tensor<T> ConvertWeightsFromNCHW(Tensor<T> weights)
-    {
-        int outH = weights.Shape[0];
-        int outW = weights.Shape[1];
-        int outChannels = weights.Shape[2];
-        int inChannels = weights.Shape[3];
-        int kernelH = weights.Shape[4];
-        int kernelW = weights.Shape[5];
-
-        var nhwc = new Tensor<T>([outH, outW, outChannels, kernelH, kernelW, inChannels]);
-        for (int oh = 0; oh < outH; oh++)
-            for (int ow = 0; ow < outW; ow++)
-                for (int oc = 0; oc < outChannels; oc++)
-                    for (int kh = 0; kh < kernelH; kh++)
-                        for (int kw = 0; kw < kernelW; kw++)
-                            for (int ic = 0; ic < inChannels; ic++)
-                                nhwc[oh, ow, oc, kh, kw, ic] = weights[oh, ow, oc, ic, kh, kw];
-
-        return nhwc;
+        return inputGradientNCHW.Transpose([0, 2, 3, 1]);
     }
 
     /// <summary>
@@ -843,34 +731,8 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             throw new InvalidOperationException("UpdateParameters called before Backward. Gradients are null.");
         }
 
-        // Update weights
-        for (int h = 0; h < _outputHeight; h++)
-        {
-            for (int w = 0; w < _outputWidth; w++)
-            {
-                for (int oc = 0; oc < _outputChannels; oc++)
-                {
-                    for (int kh = 0; kh < _kernelSize; kh++)
-                    {
-                        for (int kw = 0; kw < _kernelSize; kw++)
-                        {
-                            for (int ic = 0; ic < _inputChannels; ic++)
-                            {
-                                T update = NumOps.Multiply(learningRate, _weightGradients[h, w, oc, kh, kw, ic]);
-                                _weights[h, w, oc, kh, kw, ic] = NumOps.Subtract(_weights[h, w, oc, kh, kw, ic], update);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Update biases
-        for (int oc = 0; oc < _outputChannels; oc++)
-        {
-            T update = NumOps.Multiply(learningRate, _biasGradients[oc]);
-            _biases[oc] = NumOps.Subtract(_biases[oc], update);
-        }
+        _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightGradients, learningRate));
+        _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasGradients, learningRate));
     }
 
     /// <summary>
@@ -1053,7 +915,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         inputNodes.Add(inputNode);
 
         // Convert weights to NCHW format for LocallyConnectedConv2D
-        var weightsNCHW = ConvertWeightsToNCHW(_weights);
+        var weightsNCHW = _weights.Transpose([0, 1, 2, 5, 3, 4]);
         var weightsNode = Autodiff.TensorOperations<T>.Constant(weightsNCHW, "locally_connected_weights");
 
         // Use bias tensor directly

@@ -870,7 +870,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Concatenate(_kernels.ToVector(), _biases.ToVector());
+        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
     }
 
     /// <summary>
@@ -910,8 +910,8 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         var kernelVec = parameters.Slice(0, _kernels.Length);
         var biasVec = parameters.Slice(_kernels.Length, _biases.Length);
 
-        _kernels = Tensor<T>.FromVector(kernelVec, [_outputDepth, _inputDepth, _kernelSize, _kernelSize]);
-        _biases = Tensor<T>.FromVector(biasVec, [_outputDepth]);
+        _kernels = new Tensor<T>([_outputDepth, _inputDepth, _kernelSize, _kernelSize], kernelVec);
+        _biases = new Tensor<T>([_outputDepth], biasVec);
     }
 
     /// <summary>

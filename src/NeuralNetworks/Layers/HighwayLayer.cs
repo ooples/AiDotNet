@@ -811,46 +811,11 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int transformWeightsSize = _transformWeights.Shape[0] * _transformWeights.Shape[1];
-        int gateWeightsSize = _gateWeights.Shape[0] * _gateWeights.Shape[1];
-        int totalParams = transformWeightsSize + _transformBias.Length +
-                          gateWeightsSize + _gateBias.Length;
-
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        // Copy transform weights parameters
-        for (int i = 0; i < _transformWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _transformWeights.Shape[1]; j++)
-            {
-                parameters[index++] = _transformWeights[i, j];
-            }
-        }
-
-        // Copy transform bias parameters
-        for (int i = 0; i < _transformBias.Length; i++)
-        {
-            parameters[index++] = _transformBias[i];
-        }
-
-        // Copy gate weights parameters
-        for (int i = 0; i < _gateWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _gateWeights.Shape[1]; j++)
-            {
-                parameters[index++] = _gateWeights[i, j];
-            }
-        }
-
-        // Copy gate bias parameters
-        for (int i = 0; i < _gateBias.Length; i++)
-        {
-            parameters[index++] = _gateBias[i];
-        }
-
-        return parameters;
+        return Vector<T>.Concatenate(
+            new Vector<T>(_transformWeights.ToArray()),
+            new Vector<T>(_transformBias.ToArray()),
+            new Vector<T>(_gateWeights.ToArray()),
+            new Vector<T>(_gateBias.ToArray()));
     }
 
     /// <summary>
@@ -893,35 +858,16 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int index = 0;
 
-        // Set transform weights parameters
-        for (int i = 0; i < _transformWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _transformWeights.Shape[1]; j++)
-            {
-                _transformWeights[i, j] = parameters[index++];
-            }
-        }
+        _transformWeights = new Tensor<T>(_transformWeights.Shape, parameters.Slice(index, transformWeightsSize));
+        index += transformWeightsSize;
 
-        // Set transform bias parameters
-        for (int i = 0; i < _transformBias.Length; i++)
-        {
-            _transformBias[i] = parameters[index++];
-        }
+        _transformBias = new Tensor<T>(_transformBias.Shape, parameters.Slice(index, _transformBias.Length));
+        index += _transformBias.Length;
 
-        // Set gate weights parameters
-        for (int i = 0; i < _gateWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _gateWeights.Shape[1]; j++)
-            {
-                _gateWeights[i, j] = parameters[index++];
-            }
-        }
+        _gateWeights = new Tensor<T>(_gateWeights.Shape, parameters.Slice(index, gateWeightsSize));
+        index += gateWeightsSize;
 
-        // Set gate bias parameters
-        for (int i = 0; i < _gateBias.Length; i++)
-        {
-            _gateBias[i] = parameters[index++];
-        }
+        _gateBias = new Tensor<T>(_gateBias.Shape, parameters.Slice(index, _gateBias.Length));
     }
 
     /// <summary>

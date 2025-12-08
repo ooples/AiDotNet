@@ -457,10 +457,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         InitializeTensor(_pointwiseKernels, scale);
 
         // Initialize biases to zero
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            _biases[i] = NumOps.Zero;
-        }
+        _biases.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -486,9 +483,12 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
+        var rand = Vector<T>.CreateRandom(tensor.Length, -0.5, 0.5);
+        var randTensor = new Tensor<T>(tensor.Shape, rand);
+        var scaled = Engine.TensorMultiplyScalar(randTensor, scale);
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+            tensor[i] = scaled[i];
         }
     }
 
@@ -759,68 +759,30 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// <summary>
     /// Converts depthwise kernel from [inputDepth, kernelSize, kernelSize, 1] to [inputDepth, 1, kernelSize, kernelSize] format.
     /// </summary>
-    private Tensor<T> ConvertDepthwiseKernelToNCHW(Tensor<T> kernel)
-    {
-        int inputDepth = kernel.Shape[0];
-        int kernelSize = kernel.Shape[1];
-
-        var nchw = new Tensor<T>([inputDepth, 1, kernelSize, kernelSize]);
-        for (int d = 0; d < inputDepth; d++)
-            for (int kh = 0; kh < kernelSize; kh++)
-                for (int kw = 0; kw < kernelSize; kw++)
-                    nchw[d, 0, kh, kw] = kernel[d, kh, kw, 0];
-
-        return nchw;
-    }
+    private Tensor<T> ConvertDepthwiseKernelToNCHW(Tensor<T> kernel) =>
+        // [inputDepth, kernelH, kernelW, 1] -> [inputDepth, 1, kernelH, kernelW]
+        kernel.Transpose([0, 3, 1, 2]);
 
     /// <summary>
     /// Converts depthwise kernel from [inputDepth, 1, kernelSize, kernelSize] back to [inputDepth, kernelSize, kernelSize, 1] format.
     /// </summary>
-    private Tensor<T> ConvertDepthwiseKernelFromNCHW(Tensor<T> kernel)
-    {
-        int inputDepth = kernel.Shape[0];
-        int kernelSize = kernel.Shape[2];
-
-        var nhwc = new Tensor<T>([inputDepth, kernelSize, kernelSize, 1]);
-        for (int d = 0; d < inputDepth; d++)
-            for (int kh = 0; kh < kernelSize; kh++)
-                for (int kw = 0; kw < kernelSize; kw++)
-                    nhwc[d, kh, kw, 0] = kernel[d, 0, kh, kw];
-
-        return nhwc;
-    }
+    private Tensor<T> ConvertDepthwiseKernelFromNCHW(Tensor<T> kernel) =>
+        // [inputDepth, 1, kernelH, kernelW] -> [inputDepth, kernelH, kernelW, 1]
+        kernel.Transpose([0, 2, 3, 1]);
 
     /// <summary>
     /// Converts pointwise kernel from [inputDepth, 1, 1, outputDepth] to [outputDepth, inputDepth, 1, 1] format.
     /// </summary>
-    private Tensor<T> ConvertPointwiseKernelToNCHW(Tensor<T> kernel)
-    {
-        int inputDepth = kernel.Shape[0];
-        int outputDepth = kernel.Shape[3];
-
-        var nchw = new Tensor<T>([outputDepth, inputDepth, 1, 1]);
-        for (int od = 0; od < outputDepth; od++)
-            for (int id = 0; id < inputDepth; id++)
-                nchw[od, id, 0, 0] = kernel[id, 0, 0, od];
-
-        return nchw;
-    }
+    private Tensor<T> ConvertPointwiseKernelToNCHW(Tensor<T> kernel) =>
+        // [inputDepth, 1, 1, outputDepth] -> [outputDepth, inputDepth, 1, 1]
+        kernel.Transpose([3, 0, 1, 2]);
 
     /// <summary>
     /// Converts pointwise kernel from [outputDepth, inputDepth, 1, 1] back to [inputDepth, 1, 1, outputDepth] format.
     /// </summary>
-    private Tensor<T> ConvertPointwiseKernelFromNCHW(Tensor<T> kernel)
-    {
-        int outputDepth = kernel.Shape[0];
-        int inputDepth = kernel.Shape[1];
-
-        var nhwc = new Tensor<T>([inputDepth, 1, 1, outputDepth]);
-        for (int id = 0; id < inputDepth; id++)
-            for (int od = 0; od < outputDepth; od++)
-                nhwc[id, 0, 0, od] = kernel[od, id, 0, 0];
-
-        return nhwc;
-    }
+    private Tensor<T> ConvertPointwiseKernelFromNCHW(Tensor<T> kernel) =>
+        // [outputDepth, inputDepth, 1, 1] -> [inputDepth, 1, 1, outputDepth]
+        kernel.Transpose([1, 2, 3, 0]);
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients and momentum.

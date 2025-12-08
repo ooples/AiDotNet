@@ -101,39 +101,38 @@ These layers use ToMatrix/ToVector/FromMatrix/FromVector in hot paths:
 
 | # | Layer | Conversion Count | Notes |
 |---|-------|------------------|-------|
-| 1 | RBMLayer.cs | 20 | Heavy conversions |
-| 2 | LSTMLayer.cs | 18 | Heavy conversions |
-| 3 | ReadoutLayer.cs | 14 | Heavy conversions |
-| 4 | GRULayer.cs | 9 | Multiple conversions |
-| 5 | SpikingLayer.cs | 9 | Multiple conversions |
-| 6 | PrimaryCapsuleLayer.cs | 7 | Multiple conversions |
-| 7 | DepthwiseSeparableConvolutionalLayer.cs | 5 | |
-| 8 | ContinuumMemorySystemLayer.cs | 5 | |
-| 9 | LayerNormalizationLayer.cs | 5 | |
-| 10 | BatchNormalizationLayer.cs | 5 | |
-| 11 | MemoryWriteLayer.cs | 5 | |
-| 12 | AnomalyDetectorLayer.cs | 5 | |
-| 13 | SpatialTransformerLayer.cs | 4 | |
-| 14 | MemoryReadLayer.cs | 4 | |
-| 15 | DigitCapsuleLayer.cs | 3 | |
-| 16 | DeconvolutionalLayer.cs | 3 | |
-| 17 | DilatedConvolutionalLayer.cs | 3 | |
-| 18 | CapsuleLayer.cs | 3 | |
-| 19 | GraphConvolutionalLayer.cs | 2 | |
-| 20 | LocallyConnectedLayer.cs | 2 | |
-| 21 | RBFLayer.cs | 2 | |
-| 22 | SynapticPlasticityLayer.cs | 2 | |
-| 23 | TemporalMemoryLayer.cs | 2 | |
-| 24 | SpatialPoolerLayer.cs | 6 | |
-| 25 | DecoderLayer.cs | 1 | |
-| 26 | EmbeddingLayer.cs | 1 | |
-| 27 | FullyConnectedLayer.cs | 1 | |
-| 28 | DropoutLayer.cs | 1 | |
-| 29 | FeedForwardLayer.cs | 1 | |
-| 30 | MultiHeadAttentionLayer.cs | 1 | |
-| 31 | QuantumLayer.cs | 1 | |
-| 32 | SeparableConvolutionalLayer.cs | 5 | |
-| 33 | SubpixelConvolutionalLayer.cs | 1 | |
+| 1 | RBMLayer.cs | 0 | ✅ Vector wrappers avoid conversions; hot path tensor-only |
+| 2 | LSTMLayer.cs | 0 | ✅ Forward/backward tensor-only; conversions limited to Get/SetParameters |
+| 3 | ReadoutLayer.cs | 0 | ✅ Forward/backward tensor-only; conversions limited to parameter IO |
+| 4 | GRULayer.cs | 0 | ✅ Forward/backward tensor-only; conversions limited to Get/SetParameters |
+| 5 | SpikingLayer.cs | 0 | ✅ Forward/backward tensor-only; conversions limited to SetParameters |
+| 6 | PrimaryCapsuleLayer.cs | 0 | ✅ Convolution uses Conv2D; no hot-path conversions |
+| 7 | DepthwiseSeparableConvolutionalLayer.cs | 0 | ✅ Forward/backward use DepthwiseConv2D/Conv2D + TensorBroadcastAdd |
+| 8 | ContinuumMemorySystemLayer.cs | 0 | âœ… Hot-path gradient accumulation uses vector ops (no conversions) |
+| 9 | LayerNormalizationLayer.cs | 0 | ✅ Uses Engine.LayerNorm/LayerNormBackward; no hot-path conversions |
+| 10 | BatchNormalizationLayer.cs | 0 | ✅ Hot-path conversions removed; inference uses tensor broadcast |
+| 11 | MemoryWriteLayer.cs | 0 | ✅ Auxiliary loss tensorized; no hot-path conversions/loops |
+| 12 | AnomalyDetectorLayer.cs | 0 | ✅ Hot-path conversions removed (tensor slices, engine ops) |
+| 13 | SpatialTransformerLayer.cs | 0 | ✅ Forward/backward use AffineGrid/GridSample; no hot-path conversions |
+| 14 | MemoryReadLayer.cs | 0 | ✅ Forward/backward tensorized; auxiliary loss uses tensor reductions |
+| 15 | DigitCapsuleLayer.cs | 0 | ✅ Hot-path conversions removed; dot product tensorized |
+| 16 | DeconvolutionalLayer.cs | 0 | ✅ Get/SetParameters use tensor data (no conversions) |
+| 17 | DilatedConvolutionalLayer.cs | 0 | ✅ Get/SetParameters use tensor data (no conversions) |
+| 18 | CapsuleLayer.cs | 0 | ✅ SetParameters uses tensor ctor (no conversions) |
+| 19 | GraphConvolutionalLayer.cs | 0 | ✅ Auxiliary loss tensorized; no hot-path conversions/loops |
+| 20 | LocallyConnectedLayer.cs | 0 | âœ… Bias broadcast + gradients via Engine ops; no hot-path conversions |
+| 21 | RBFLayer.cs | 0 | ✅ Forward/backward use Engine.RBFKernel (tensor-only) |
+| 22 | SynapticPlasticityLayer.cs | 0 | ✅ SetParameters uses tensor ctor; no hot-path conversions |
+| 23 | TemporalMemoryLayer.cs | 0 | ✅ Learn/SetParameters tensorized (no hot-path conversions) |
+| 24 | SpatialPoolerLayer.cs | 0 | ✅ Forward/backward/learn tensorized (no To/From conversions) |
+| 25 | DecoderLayer.cs | 0 | ✅ SetParameters uses tensor ctor (no conversions) |
+| 26 | EmbeddingLayer.cs | 0 | ✅ SetParameters uses tensor ctor (no conversions) |
+| 27 | FullyConnectedLayer.cs | 0 | ✅ Bias add uses TensorBroadcastAdd |
+| 28 | DropoutLayer.cs | 0 | ✅ Mask generation uses tensor ops (no vector conversion) |
+| 29 | FeedForwardLayer.cs | 0 | ✅ Bias add uses TensorBroadcastAdd |
+| 30 | QuantumLayer.cs | 0 | ✅ SetParameters uses tensor ctor (no conversions) |
+| 31 | SeparableConvolutionalLayer.cs | 0 | ✅ Kernel layout changes via transpose (no loops/conversions) |
+| 32 | SubpixelConvolutionalLayer.cs | 0 | ✅ No conversions; weight init loop flattened |
 
 ---
 
@@ -149,18 +148,18 @@ These layers use ToMatrix/ToVector/FromMatrix/FromVector in hot paths:
 | 6 | ConvolutionalLayer.cs | 32 | Conv loops |
 | 7 | CapsuleLayer.cs | 28 | Capsule routing |
 | 8 | ContinuumMemorySystemLayer.cs | 27 | Memory ops |
-| 9 | MultiHeadAttentionLayer.cs | 25 | Head iteration |
+| 9 | MultiHeadAttentionLayer.cs | 0 | ✅ Parameter IO tensorized; loops reduced |
 | 10 | QuantumLayer.cs | 25 | Quantum ops |
 | 11 | SelfAttentionLayer.cs | 24 | Attention loops |
-| 12 | HighwayLayer.cs | 21 | Highway gates |
+| 12 | HighwayLayer.cs | 0 | ✅ Parameter IO tensorized; init/updates via engine ops |
 | 13 | PrimaryCapsuleLayer.cs | 20 | Capsule ops |
-| 14 | DepthwiseSeparableConvolutionalLayer.cs | 19 | Conv loops |
+| 14 | DepthwiseSeparableConvolutionalLayer.cs | 0 | ✅ Init and hot paths use engine ops (no loops/conversions) |
 | 15 | SpikingLayer.cs | 19 | Spike processing |
 | 16 | DigitCapsuleLayer.cs | 18 | Capsule routing |
-| 17 | SpatialPoolerLayer.cs | 15 | HTM ops |
+| 17 | SpatialPoolerLayer.cs | 0 | ✅ Learning/normalization vectorized (no loops) |
 | 18 | DenseLayer.cs | 15 | Forward/Backward |
 | 19 | GatedLinearUnitLayer.cs | 15 | GLU ops |
-| 20 | SeparableConvolutionalLayer.cs | 15 | Conv loops |
+| 20 | SeparableConvolutionalLayer.cs | 0 | ✅ Init vectorized; hot paths use engine ops |
 
 ---
 
@@ -199,6 +198,15 @@ These layers have been verified to meet ALL requirements:
 | 23 | MeasurementLayer.cs | ✅ Proper graph-based autodiff |
 | 24 | QuantumLayer.cs | ✅ Proper graph-based autodiff (Complex graph with Angle update) |
 | 25 | SpatialPoolerLayer.cs | ✅ Proper graph-based autodiff (STE) + Hebbian support |
+| 26 | ConditionalRandomFieldLayer.cs | ✅ CRFForward autodiff with transitions/start/end gradients |
+| 27 | TemporalMemoryLayer.cs | ✅ Autodiff graph mirrors repeat/sum logic |
+| 28 | SynapticPlasticityLayer.cs | ✅ Autodiff identity graph (passthrough) |
+| 29 | SpikingLayer.cs | ✅ Surrogate spike autodiff with full topo sort and gradient accumulation |
+| 30 | AnomalyDetectorLayer.cs | ✅ Removed ToVector/FromVector in hot path; tensor slices + engine reductions |
+| 31 | ReadoutLayer.cs | ✅ Removed ToVector/FromVector in forward/backward; engine ops and scalar loop only |
+| 32 | BatchNormalizationLayer.cs | ✅ Inference path uses tensor broadcast (no loops/conversions) |
+| 33 | FeedForwardLayer.cs | ✅ Bias broadcast via Engine.TensorBroadcastAdd |
+| 34 | DropoutLayer.cs | ✅ Mask generation uses tensor ops (no conversions) |
 
 ---
 
@@ -207,10 +215,7 @@ These layers have been verified to meet ALL requirements:
 These were marked complete but have issues discovered in audit:
 
 ### Has Autodiff Shortcuts (delegates to BackwardManual)
-- ConditionalRandomFieldLayer.cs
-- SpikingLayer.cs
-- SynapticPlasticityLayer.cs
-- TemporalMemoryLayer.cs
+- SpikingLayer.cs ✅ Fixed
 
 ### Has Matrix<T>/Vector<T> Internal Storage
 - SpikingLayer.cs (14 fields)

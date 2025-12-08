@@ -952,28 +952,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _weights.Shape[0] * _weights.Shape[1] + _biases.Shape[0];
-        var parameters = new Vector<T>(totalParams);
-
-        int index = 0;
-
-        // Copy weight parameters
-        for (int i = 0; i < _weights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights.Shape[1]; j++)
-            {
-                parameters[index++] = _weights[i, j];
-            }
-        }
-
-        // Copy bias parameters
-        for (int i = 0; i < _biases.Shape[0]; i++)
-        {
-            parameters[index++] = _biases[i];
-        }
-
-        return parameters;
+        return Vector<T>.Concatenate(new Vector<T>(_weights.ToArray()), new Vector<T>(_biases.ToArray()));
     }
 
     /// <summary>
@@ -1002,27 +981,16 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != _weights.Shape[0] * _weights.Shape[1] + _biases.Shape[0])
+        int expected = _weights.Length + _biases.Length;
+        if (parameters.Length != expected)
         {
-            throw new ArgumentException($"Expected {_weights.Shape[0] * _weights.Shape[1] + _biases.Shape[0]} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
         }
 
         int index = 0;
-
-        // Set weight parameters
-        for (int i = 0; i < _weights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights.Shape[1]; j++)
-            {
-                _weights[i, j] = parameters[index++];
-            }
-        }
-
-        // Set bias parameters
-        for (int i = 0; i < _biases.Shape[0]; i++)
-        {
-            _biases[i] = parameters[index++];
-        }
+        _weights = new Tensor<T>(_weights.Shape, parameters.Slice(index, _weights.Length));
+        index += _weights.Length;
+        _biases = new Tensor<T>(_biases.Shape, parameters.Slice(index, _biases.Length));
     }
 
     /// <summary>

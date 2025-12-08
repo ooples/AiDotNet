@@ -986,35 +986,16 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             return _lastAttentionSparsityLoss;
         }
 
-        // Compute negative entropy to encourage low entropy (focused attention)
-        // L = -Σ(p * log(p))
-        T totalNegativeEntropy = NumOps.Zero;
-        int batchSize = _lastAttentionScores.Shape[0];
-        int sequenceLength = _lastAttentionScores.Shape.Length > 1 ? _lastAttentionScores.Shape[1] : 1;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            T entropy = NumOps.Zero;
-            for (int i = 0; i < sequenceLength; i++)
-            {
-                T attnWeight = _lastAttentionScores.Shape.Length > 1
-                    ? _lastAttentionScores[b, i]
-                    : _lastAttentionScores[b];
-
-                if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
-                    continue;
-
-                T logWeight = NumOps.Log(attnWeight);
-                T term = NumOps.Multiply(attnWeight, logWeight);
-                entropy = NumOps.Subtract(entropy, term);
-            }
-            // Add entropy to accumulate positive negative-entropy loss
-            // (entropy is already positive from the subtraction above)
-            totalNegativeEntropy = NumOps.Add(totalNegativeEntropy, entropy);
-        }
-
-        // Average across batch
-        _lastAttentionSparsityLoss = NumOps.Divide(totalNegativeEntropy, NumOps.FromDouble(batchSize));
+        // Compute negative entropy to encourage focused attention using tensor ops
+        // L = -mean(sum(p * log(p), axis=-1))
+        var epsilon = NumOps.FromDouble(1e-10);
+        var safeAttention = Engine.TensorMax(_lastAttentionScores, epsilon);
+        var logAttention = Engine.TensorLog(safeAttention);
+        var product = Engine.TensorMultiply(safeAttention, logAttention);
+        var sumPerBatch = Engine.ReduceSum(product, new[] { product.Shape.Length - 1 }, keepDims: false);
+        var negativeEntropy = Engine.TensorMultiplyScalar<T>(sumPerBatch, NumOps.FromDouble(-1));
+        var meanEntropy = Engine.ReduceMean(negativeEntropy, new[] { 0 }, keepDims: false);
+        _lastAttentionSparsityLoss = meanEntropy.GetFlat(0);
         return _lastAttentionSparsityLoss;
     }
 
