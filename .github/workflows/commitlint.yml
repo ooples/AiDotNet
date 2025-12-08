@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the PR
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Lint commits
         uses: wagoid/commitlint-github-action@v6

@@ -31,7 +31,7 @@ jobs:
             exit 1
           fi
       - name: Checkout Failing Ref
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.FAILED_HEAD_SHA }}
           fetch-depth: 0
