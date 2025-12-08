@@ -688,22 +688,141 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Backward pass implementation using automatic differentiation.
+    /// Backward pass implementation using automatic differentiation with unrolled routing.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. Dynamic routing and capsule-specific
-    /// operations are not yet available in TensorOperations, so this falls back to the manual implementation.
-    /// </para>
-    /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // CapsuleLayer implements dynamic routing by agreement
-        // The manual implementation provides correct gradient computation through routing iterations
-        // This iterative agreement-based routing is domain-specific to capsule networks
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // 1. Create variables
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var weightsNode = Autodiff.TensorOperations<T>.Variable(_transformationMatrix, "weights", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(_bias, "bias", requiresGradient: true);
+
+        int batchSize = _lastInput.Shape[0];
+        int inputCapsules = _lastInput.Shape[1];
+        int inputDim = _lastInput.Shape[2];
+        int numCapsules = _numCapsules;
+        int capsuleDim = _capsuleDimension;
+
+        // 2. Prepare Weights: [I, D_in, O, D_out] -> [I, O, D_in, D_out]
+        var weightsPermuted = Autodiff.TensorOperations<T>.Permute(weightsNode, 0, 2, 1, 3);
+
+        // 3. Compute Predictions: input @ weights
+        // Input: [B, I, D_in] -> [B, I, 1, D_in]
+        var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, batchSize, inputCapsules, 1, inputDim);
+        
+        // Weights: [I, O, D_in, D_out] -> [1, I, O, D_in, D_out]
+        var weightsReshaped = Autodiff.TensorOperations<T>.Reshape(weightsPermuted, 1, inputCapsules, numCapsules, inputDim, capsuleDim);
+
+        // Result: [B, I, O, 1, D_out]
+        var predictionsRaw = Autodiff.TensorOperations<T>.MatrixMultiply(inputReshaped, weightsReshaped);
+
+        // Reshape to [B, I, O, D_out]
+        var predictions = Autodiff.TensorOperations<T>.Reshape(predictionsRaw, batchSize, inputCapsules, numCapsules, capsuleDim);
+
+        // 4. Dynamic Routing
+        // Initialize couplings to uniform (1/O) as per Forward, but Constant
+        // Note: Forward used Fill(1.0/O). BackwardManual used Softmax(0)=Uniform?
+        // Standard CapsNet starts with 0 logits (softmax(0) = uniform).
+        // Forward uses Fill(1.0/O) which sums to 1.
+        // If we use Softmax in loop, we should start with 0 logits.
+        // If Forward uses fixed coefficients, we should match.
+        // Forward: `couplingCoefficients.Fill(NumOps.FromDouble(1.0 / _numCapsules));`
+        // Loop starts. `weighted = ... * coupling`.
+        // Then `Update coupling`.
+        // It does NOT Softmax the initial couplings in the first iteration?
+        // Let's check Forward logic carefully.
+        // "Initialize coupling coefficients... Perform dynamic routing... for (int i = 0; i < _numRoutingIterations; i++)"
+        // Inside loop: `var weighted = ... couplingCoefficients ...`
+        // `if (i < ... - 1) { ... couplingCoefficients = ApplySoftmax(couplingCoefficients); }`
+        // It applies Softmax AFTER update.
+        // So initial coefficients are used AS IS.
+        // 1/N sums to 1. So it works.
+        // But for autodiff, if we want to learn routing, we usually softmax logits.
+        // Here we have fixed initial values.
+        
+        // We'll create a Constant node for initial couplings.
+        var couplingsTensor = new Tensor<T>(new int[] { batchSize, inputCapsules, numCapsules });
+        couplingsTensor.Fill(NumOps.FromDouble(1.0 / numCapsules));
+        var couplings = Autodiff.TensorOperations<T>.Constant(couplingsTensor, "couplings");
+
+        Autodiff.ComputationNode<T> output = predictions; // Placeholder
+
+        for (int iter = 0; iter < _numRoutingIterations; iter++)
+        {
+            // Note: Forward doesn't Softmax at start of loop, only at end of previous.
+            // So use 'couplings' directly.
+            
+            // Reshape couplings to [B, I, O, 1]
+            var couplingsBroad = Autodiff.TensorOperations<T>.Reshape(couplings, batchSize, inputCapsules, numCapsules, 1);
+
+            // Weighted predictions
+            var weightedPredictions = Autodiff.TensorOperations<T>.ElementwiseMultiply(predictions, couplingsBroad);
+
+            // Sum over input capsules (axis 1) -> [B, O, D_out]
+            var weightedSum = Autodiff.TensorOperations<T>.Sum(weightedPredictions, new int[] { 1 }, keepDims: false);
+
+            // Add Bias
+            // Bias [O * D]. Reshape to [1, O, D] for broadcast.
+            // Wait, _bias is flattened?
+            // Constructor: _bias = new Tensor<T>([numCapsules * capsuleDimension]);
+            // We need to reshape it to [numCapsules, capsuleDimension] to match weightedSum.
+            var biasReshaped = Autodiff.TensorOperations<T>.Reshape(biasNode, 1, numCapsules, capsuleDim);
+            var withBias = Autodiff.TensorOperations<T>.Add(weightedSum, biasReshaped);
+
+            // Squash activation
+            var s2 = Autodiff.TensorOperations<T>.Square(withBias);
+            var normSq = Autodiff.TensorOperations<T>.Sum(s2, new int[] { 2 }, keepDims: true); // [B, O, 1]
+            var norm = Autodiff.TensorOperations<T>.Sqrt(normSq);
+
+            var one = Autodiff.TensorOperations<T>.Constant(Tensor<T>.CreateDefault(new int[] { 1 }, NumOps.One));
+            var scale = Autodiff.TensorOperations<T>.Divide(normSq, Autodiff.TensorOperations<T>.Add(one, normSq));
+            var unitVec = Autodiff.TensorOperations<T>.Divide(withBias, norm);
+            
+            output = Autodiff.TensorOperations<T>.ElementwiseMultiply(scale, unitVec);
+
+            // Update couplings if not last iteration
+            if (iter < _numRoutingIterations - 1)
+            {
+                // Agreement = predictions . output
+                var outputBroad = Autodiff.TensorOperations<T>.Reshape(output, batchSize, 1, numCapsules, capsuleDim);
+                var agreementRaw = Autodiff.TensorOperations<T>.ElementwiseMultiply(predictions, outputBroad);
+                var agreement = Autodiff.TensorOperations<T>.Sum(agreementRaw, new int[] { 3 }, keepDims: false);
+                
+                // Update and Softmax
+                var rawCouplings = Autodiff.TensorOperations<T>.Add(couplings, agreement);
+                couplings = Autodiff.TensorOperations<T>.Softmax(rawCouplings, axis: 2);
+            }
+        }
+
+        // 5. Set Gradient
+        output.Gradient = outputGradient;
+
+        // 6. Backward
+        output.Backward();
+
+        // 7. Store Gradients
+        // _biasGradient is flattened
+        _biasGradient = biasNode.Gradient;
+
+        // _transformationMatrixGradient needs [I, D_in, O, D_out]
+        // weightsPermuted.Gradient is [I, O, D_in, D_out]
+        // Permute back to [I, D_in, O, D_out] (0, 2, 1, 3)
+        var gradPermuted = weightsPermuted.Gradient;
+        if (gradPermuted != null)
+        {
+            _transformationMatrixGradient = gradPermuted.Transpose(new int[] { 0, 2, 1, 3 });
+        }
+        else 
+        {
+             _transformationMatrixGradient = Tensor<T>.CreateDefault(_transformationMatrix.Shape, NumOps.Zero);
+        }
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>

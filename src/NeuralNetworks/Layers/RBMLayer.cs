@@ -136,6 +136,21 @@ public class RBMLayer<T> : LayerBase<T>
     private Tensor<T> _hiddenBiases;
 
     /// <summary>
+    /// Gradient of the weights computed during backpropagation.
+    /// </summary>
+    private Tensor<T>? _weightsGradient;
+
+    /// <summary>
+    /// Gradient of the visible biases computed during backpropagation.
+    /// </summary>
+    private Tensor<T>? _visibleBiasesGradient;
+
+    /// <summary>
+    /// Gradient of the hidden biases computed during backpropagation.
+    /// </summary>
+    private Tensor<T>? _hiddenBiasesGradient;
+
+    /// <summary>
     /// Stores the last input from the visible layer during training.
     /// </summary>
     /// <remarks>
@@ -570,16 +585,89 @@ public class RBMLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Specialized operations
-    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// This method uses automatic differentiation to compute gradients for the mean-field forward pass.
+    /// This enables discriminative fine-tuning of the RBM using standard backpropagation, distinct from
+    /// the Contrastive Divergence training used for generative learning.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // RBMLayer uses Contrastive Divergence for training, not standard backpropagation
-        // The manual implementation provides correct CD-k gradient estimation
-        // This is fundamentally different from standard autodiff and is correctly implemented
-        return BackwardManual(outputGradient);
+        if (_lastVisibleInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // 1. Create variables
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastVisibleInput, "input", requiresGradient: true);
+        var weightsNode = Autodiff.TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(_hiddenBiases, "hBias", requiresGradient: true);
+
+        // 2. Build graph (mean-field inference: sigmoid(W @ v + b))
+        // Reshape input [V] to [V, 1] for matrix multiply
+        var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, _visibleUnits, 1);
+        
+        // W @ v
+        var weighted = Autodiff.TensorOperations<T>.MatrixMultiply(weightsNode, inputReshaped);
+        
+        // Reshape to [H] to match bias
+        var weightedFlat = Autodiff.TensorOperations<T>.Reshape(weighted, _hiddenUnits);
+        
+        // Add bias
+        var preActivation = Autodiff.TensorOperations<T>.Add(weightedFlat, biasNode);
+        
+        // Sigmoid activation (RBM standard)
+        var output = Autodiff.TensorOperations<T>.Sigmoid(preActivation);
+
+        // 3. Set gradient
+        output.Gradient = outputGradient;
+
+        // 4. Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((output, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // 5. Execute backward pass
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // 6. Store gradients
+        _weightsGradient = weightsNode.Gradient;
+        _hiddenBiasesGradient = biasNode.Gradient;
+        
+        // Visible biases are not involved in forward pass, so their gradient is zero for discriminative task
+        _visibleBiasesGradient = new Tensor<T>(_visibleBiases.Shape);
+        _visibleBiasesGradient.Fill(NumOps.Zero);
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
 
@@ -701,20 +789,26 @@ public class RBMLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the layer's parameters using contrastive divergence.
+    /// Updates the layer's parameters using either standard backpropagation or contrastive divergence.
     /// </summary>
     /// <param name="learningRate">The learning rate for parameter updates.</param>
     /// <remarks>
-    /// This method implements contrastive divergence with k=1 (CD-1) for training the RBM.
-    /// The steps are:
-    /// 1. Start with a visible vector v0 (input data)
-    /// 2. Compute hidden probabilities h0 given v0 and sample a hidden state
-    /// 3. Compute visible probabilities v1 given h0 and sample a visible state
-    /// 4. Compute hidden probabilities h1 given v1
-    /// 5. Update weights and biases using the difference between positive and negative phases
+    /// This method handles two training modes:
+    /// 1. Discriminative training (backprop): Uses gradients computed by BackwardViaAutodiff.
+    /// 2. Generative training (CD-k): Uses statistics from the Gibbs sampling chain.
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
+        // 1. Standard Backpropagation (Discriminative Fine-tuning)
+        if (_weightsGradient != null && _visibleBiasesGradient != null && _hiddenBiasesGradient != null)
+        {
+            _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightsGradient, learningRate));
+            _visibleBiases = Engine.TensorSubtract(_visibleBiases, Engine.TensorMultiplyScalar(_visibleBiasesGradient, learningRate));
+            _hiddenBiases = Engine.TensorSubtract(_hiddenBiases, Engine.TensorMultiplyScalar(_hiddenBiasesGradient, learningRate));
+            return;
+        }
+
+        // 2. Contrastive Divergence (Generative Training)
         // This method updates parameters using stored values from forward/backward pass
         if (_lastVisibleInput != null && _lastHiddenOutput != null &&
             _reconstructedVisible != null && _reconstructedHidden != null)
@@ -789,7 +883,7 @@ public class RBMLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method clears the cached data used during contrastive divergence training.
+    /// This method clears the cached data used during training (both CD and backprop).
     /// While RBMs don't maintain state between passes in the same way as recurrent networks,
     /// this implementation does cache intermediate values for training purposes.
     /// </para>
@@ -813,6 +907,11 @@ public class RBMLayer<T> : LayerBase<T>
         _lastHiddenOutput = null;
         _reconstructedVisible = null;
         _reconstructedHidden = null;
+
+        // Clear gradients from backpropagation
+        _weightsGradient = null;
+        _visibleBiasesGradient = null;
+        _hiddenBiasesGradient = null;
     }
 
     /// <summary>

@@ -225,16 +225,40 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Specialized operations
-    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// This method uses automatic differentiation to compute gradients. It constructs a computation graph
+    /// that mirrors the forward pass operations (Square -> Sum -> Normalize) to calculate exact gradients.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // MeasurementLayer performs quantum measurements (probabilistic collapse)
-        // The manual implementation provides correct gradient computation for measurement outcomes
-        // Quantum measurement is probabilistic and uses expectation value gradients
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // 1. Create input variable
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // 2. Build computation graph
+        // Forward computes: p = |x|^2 / sum(|x|^2)
+        // For real inputs T, |x|^2 = x^2
+        var squared = Autodiff.TensorOperations<T>.Square(inputNode);
+        
+        // Sum over all elements
+        var sumSquared = Autodiff.TensorOperations<T>.Sum(squared);
+
+        // Add epsilon for numerical stability
+        var epsilonTensor = new Tensor<T>(new int[] { 1 });
+        epsilonTensor[0] = NumOps.FromDouble(1e-10);
+        var epsilonNode = Autodiff.TensorOperations<T>.Constant(epsilonTensor, "epsilon");
+        var safeSum = Autodiff.TensorOperations<T>.Add(sumSquared, epsilonNode);
+
+        // Normalize (Divide broadcasts scalar safeSum to vector squared)
+        var output = Autodiff.TensorOperations<T>.Divide(squared, safeSum);
+
+        // 3. Set gradient and execute backward
+        output.Gradient = outputGradient;
+        output.Backward();
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
 

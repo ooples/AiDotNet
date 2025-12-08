@@ -298,16 +298,132 @@ public class QuantumLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Specialized operations
-    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// This method uses automatic differentiation to compute gradients. It builds a computation graph
+    /// for the quantum measurement process (State -> Circuit -> Measurement) to compute exact gradients
+    /// for both the input and the rotation angles.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // QuantumLayer implements quantum circuit operations with complex-valued unitaries
-        // The manual implementation provides correct gradient computation through quantum gates
-        // Complex number gradients and quantum parameter shift rules are already implemented
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        int batchSize = _lastInput.Shape[0];
+        int dimension = 1 << _numQubits;
+        int inputSize = _lastInput.Shape[1];
+        var inputGradient = new Tensor<T>(_lastInput.Shape);
+
+        // Reset angle gradients
+        _angleGradients.Fill(NumOps.Zero);
+
+        // Prepare Quantum Circuit Node (Constant for the batch pass)
+        // Convert _quantumCircuit to real/imag split format [2*dim, dim]
+        var circuitRealImag = new T[dimension * dimension * 2];
+        for (int i = 0; i < dimension; i++)
+        {
+            for (int j = 0; j < dimension; j++)
+            {
+                var complex = _quantumCircuit[i, j];
+                circuitRealImag[i * dimension + j] = complex.Real;
+                circuitRealImag[(dimension + i) * dimension + j] = complex.Imaginary;
+            }
+        }
+        var circuitTensor = new Tensor<T>(new[] { 2 * dimension, dimension }, new Vector<T>(circuitRealImag));
+        // We mark circuit as Variable to allow gradient flow through it, but we won't use circuitNode.Gradient directly
+        // for updates (we use UpdateAngleGradients). However, setting it to Variable ensures backprop flows to it.
+        // Wait, UpdateAngleGradients takes dL/dPsi (result gradient).
+        // We don't need dL/dCircuit from graph?
+        // Yes, UpdateAngleGradients computes dL/dAngles using dL/dPsi and Circuit.
+        // So we don't strictly need circuit to be a Variable, but we need result (psi) gradient.
+        // Result depends on Circuit. If Circuit is Constant, result gradient is still computed w.r.t Result.
+        // So Constant is fine.
+        var quantumCircuitNode = Autodiff.TensorOperations<T>.Constant(circuitTensor, "QuantumCircuit");
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // 1. Build graph for single item
+            // Slice input [1, inputSize]
+            var inputSlice = new Tensor<T>([1, inputSize]);
+            for (int i = 0; i < inputSize; i++) inputSlice[0, i] = _lastInput[b, i];
+            var inputNode = Autodiff.TensorOperations<T>.Variable(inputSlice, "input", requiresGradient: true);
+
+            // Pad and Normalize (mirrors ExportComputationGraph)
+            // ... simplified logic matching Export ...
+            // Input is [1, inputSize]. Flatten to [inputSize].
+            var flatInput = Autodiff.TensorOperations<T>.Reshape(inputNode, inputSize);
+            
+            // Padding
+            int padAmount = dimension - inputSize;
+            Autodiff.ComputationNode<T> paddedInput = flatInput;
+            if (padAmount > 0)
+            {
+                var padTensor = new Tensor<T>([padAmount]); // zeros
+                padTensor.Fill(NumOps.Zero);
+                var padNode = Autodiff.TensorOperations<T>.Constant(padTensor, "pad");
+                paddedInput = Autodiff.TensorOperations<T>.Concat(new List<Autodiff.ComputationNode<T>> { flatInput, padNode }, axis: 0);
+            }
+
+            // Normalize
+            var inputSquared = Autodiff.TensorOperations<T>.Square(paddedInput);
+            var sumSquared = Autodiff.TensorOperations<T>.Sum(inputSquared);
+            var normFactor = Autodiff.TensorOperations<T>.Sqrt(sumSquared);
+            var epsilonTensor = new Tensor<T>(new[] { 1 });
+            epsilonTensor[0] = NumOps.FromDouble(1e-10);
+            var epsilon = Autodiff.TensorOperations<T>.Constant(epsilonTensor, "Epsilon");
+            var safeDenom = Autodiff.TensorOperations<T>.Add(normFactor, epsilon);
+            var normalizedInput = Autodiff.TensorOperations<T>.Divide(paddedInput, safeDenom);
+
+            // Create complex state [normalized; zeros]
+            var zerosTensor = new Tensor<T>([dimension]);
+            zerosTensor.Fill(NumOps.Zero);
+            var zerosNode = Autodiff.TensorOperations<T>.Constant(zerosTensor, "zeros");
+            var complexState = Autodiff.TensorOperations<T>.Concat(new List<Autodiff.ComputationNode<T>> { normalizedInput, zerosNode }, axis: 0);
+
+            // Apply circuit
+            var result = Autodiff.TensorOperations<T>.ComplexMatMul(quantumCircuitNode, complexState, "split");
+
+            // Probabilities
+            var resultReal = Autodiff.TensorOperations<T>.Slice(result, 0, dimension, step: 1, axis: 0);
+            var resultImag = Autodiff.TensorOperations<T>.Slice(result, dimension, dimension, step: 1, axis: 0);
+            var realSquared = Autodiff.TensorOperations<T>.Square(resultReal);
+            var imagSquared = Autodiff.TensorOperations<T>.Square(resultImag);
+            var probabilities = Autodiff.TensorOperations<T>.Add(realSquared, imagSquared);
+
+            // 2. Set Gradient
+            // Output gradient slice [dimension]
+            var gradSlice = new Tensor<T>([dimension]);
+            for (int i = 0; i < dimension; i++) gradSlice[i] = outputGradient[b, i];
+            probabilities.Gradient = gradSlice;
+
+            // 3. Backward
+            probabilities.Backward();
+
+            // 4. Store Input Gradient
+            var inGrad = inputNode.Gradient;
+            if (inGrad != null)
+            {
+                for (int i = 0; i < inputSize; i++) inputGradient[b, i] = inGrad[0, i];
+            }
+
+            // 5. Update Angle Gradients
+            // Get dL/dResult from result node
+            var resGrad = result.Gradient;
+            if (resGrad != null)
+            {
+                // Reconstruct complex gradient tensor [dimension]
+                var complexGrad = new Tensor<Complex<T>>([dimension]);
+                for (int i = 0; i < dimension; i++)
+                {
+                    var r = resGrad[i];
+                    var im = resGrad[dimension + i];
+                    complexGrad[i] = new Complex<T>(r, im);
+                }
+                
+                UpdateAngleGradients(complexGrad, b);
+            }
+        }
+
+        return inputGradient;
     }
 
 

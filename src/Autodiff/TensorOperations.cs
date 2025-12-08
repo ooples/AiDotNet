@@ -1273,6 +1273,63 @@ public static class TensorOperations<T>
     }
 
     /// <summary>
+    /// Permutes the dimensions of a computation node (general transpose).
+    /// </summary>
+    /// <param name="a">The computation node to permute.</param>
+    /// <param name="axes">The new order of dimensions.</param>
+    /// <returns>A computation node with permuted dimensions.</returns>
+    /// <remarks>
+    /// <para>
+    /// Rearranges dimensions according to the axes array.
+    /// Equivalent to Transpose but for N dimensions.
+    /// </para>
+    /// <para><b>Gradient computation:</b>
+    /// - ∂(Permute(A))/∂A = Permute(gradOut, inverseAxes)
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Permute(ComputationNode<T> a, params int[] axes)
+    {
+        var result = a.Value.Transpose(axes);
+        
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // Calculate inverse permutation
+                var inverseAxes = new int[axes.Length];
+                for (int i = 0; i < axes.Length; i++)
+                {
+                    inverseAxes[axes[i]] = i;
+                }
+
+                var gradA = gradient.Transpose(inverseAxes);
+                var engine = AiDotNetEngine.Current;
+                var existingGrad = a.Gradient;
+                a.Gradient = existingGrad == null ? gradA : engine.TensorAdd(existingGrad, gradA);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Permute;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Axes", axes }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
     /// Broadcasts a 1D tensor to a 2D tensor by tiling along the batch dimension.
     /// </summary>
     /// <param name="a">The input 1D tensor node with shape [N].</param>

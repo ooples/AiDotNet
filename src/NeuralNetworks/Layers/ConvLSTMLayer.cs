@@ -493,53 +493,168 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Backward pass implementation using automatic differentiation.
+    /// Backward pass implementation using automatic differentiation with proper BPTT graph construction.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// ConvLSTM autodiff implementation note: This layer combines several complex operations:
-    /// 1. Backpropagation Through Time (BPTT) across multiple timesteps
-    /// 2. Four convolutional gates (forget, input, cell, output) at each timestep
-    /// 3. Hidden state and cell state propagation through time
-    /// 4. Spatial convolutions at each gate operation
-    /// 5. Complex gradient flow through temporal and spatial dependencies
-    /// </para>
-    /// <para>
-    /// A full autodiff implementation would require:
-    /// - Creating computation graphs for each timestep's forward pass
-    /// - Properly handling gradient accumulation across timesteps
-    /// - Managing Conv2D operations with proper padding and stride handling
-    /// - Coordinating gradients between hidden/cell states across time
-    /// - Handling the interaction between sigmoid gates and tanh activations
-    /// </para>
-    /// <para>
-    /// Due to this complexity, the current implementation falls back to the optimized manual
-    /// BPTT implementation, which correctly handles all these gradient flows efficiently.
-    /// Future work could implement this using TensorOperations<T>.Conv2D and proper
-    /// temporal unrolling in the computation graph.
+    /// This method implements Backpropagation Through Time (BPTT) by unrolling the computation graph
+    /// across all time steps. It correctly handles:
+    /// - Temporal dependencies (hidden and cell states)
+    /// - Spatial convolutions (using correct NHWC/NCHW conversions)
+    /// - Complex gating logic
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // ConvLSTM autodiff with BPTT is highly complex due to:
-        // 1. Temporal unrolling across multiple timesteps
-        // 2. Four convolutional gates per timestep (forget, input, cell, output)
-        // 3. Gradient flow through hidden and cell states across time
-        // 4. Spatial convolutions at each gate operation
-        // 5. Complex interaction between gate activations (sigmoid) and cell activations (tanh)
-        //
-        // A proper implementation would need to:
-        // - Build computation graph for each timestep using TensorOperations<T>.Conv2D
-        // - Handle Conv2D operations with correct padding, stride, and channel dimensions
-        // - Accumulate gradients across timesteps for shared parameters
-        // - Propagate gradients backward through time for hidden/cell states
-        // - Coordinate between 8 weight tensors (4 input + 4 hidden) and 4 bias tensors
-        //
-        // For now, fall back to the efficient manual BPTT implementation.
-        // TODO: Implement full autodiff version using TensorOperations<T> operations
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // 1. Create Variables for all parameters
+        var wFi = Autodiff.TensorOperations<T>.Variable(_weightsFi, "weightsFi", true);
+        var wIi = Autodiff.TensorOperations<T>.Variable(_weightsIi, "weightsIi", true);
+        var wCi = Autodiff.TensorOperations<T>.Variable(_weightsCi, "weightsCi", true);
+        var wOi = Autodiff.TensorOperations<T>.Variable(_weightsOi, "weightsOi", true);
+
+        var wFh = Autodiff.TensorOperations<T>.Variable(_weightsFh, "weightsFh", true);
+        var wIh = Autodiff.TensorOperations<T>.Variable(_weightsIh, "weightsIh", true);
+        var wCh = Autodiff.TensorOperations<T>.Variable(_weightsCh, "weightsCh", true);
+        var wOh = Autodiff.TensorOperations<T>.Variable(_weightsOh, "weightsOh", true);
+
+        var bF = Autodiff.TensorOperations<T>.Variable(_biasF, "biasF", true);
+        var bI = Autodiff.TensorOperations<T>.Variable(_biasI, "biasI", true);
+        var bC = Autodiff.TensorOperations<T>.Variable(_biasC, "biasC", true);
+        var bO = Autodiff.TensorOperations<T>.Variable(_biasO, "biasO", true);
+
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", true);
+
+        // 2. Pre-process weights for Conv2D (NHWC -> NCHW equivalent for kernels: [kH, kW, In, Out] -> [Out, In, kH, kW])
+        // _weightsFi shape: [kH, kW, In, Out]
+        // Target: [Out, In, kH, kW] => Permute(3, 2, 0, 1)
+        var wFi_T = Autodiff.TensorOperations<T>.Permute(wFi, 3, 2, 0, 1);
+        var wIi_T = Autodiff.TensorOperations<T>.Permute(wIi, 3, 2, 0, 1);
+        var wCi_T = Autodiff.TensorOperations<T>.Permute(wCi, 3, 2, 0, 1);
+        var wOi_T = Autodiff.TensorOperations<T>.Permute(wOi, 3, 2, 0, 1);
+
+        var wFh_T = Autodiff.TensorOperations<T>.Permute(wFh, 3, 2, 0, 1);
+        var wIh_T = Autodiff.TensorOperations<T>.Permute(wIh, 3, 2, 0, 1);
+        var wCh_T = Autodiff.TensorOperations<T>.Permute(wCh, 3, 2, 0, 1);
+        var wOh_T = Autodiff.TensorOperations<T>.Permute(wOh, 3, 2, 0, 1);
+
+        // Reshape biases for broadcasting: [1, 1, 1, Filters] -> [1, Filters, 1, 1] (NCHW)
+        // Input bias is [1, 1, 1, F]
+        var bF_T = Autodiff.TensorOperations<T>.Reshape(bF, 1, _filters, 1, 1);
+        var bI_T = Autodiff.TensorOperations<T>.Reshape(bI, 1, _filters, 1, 1);
+        var bC_T = Autodiff.TensorOperations<T>.Reshape(bC, 1, _filters, 1, 1);
+        var bO_T = Autodiff.TensorOperations<T>.Reshape(bO, 1, _filters, 1, 1);
+
+        int batchSize = _lastInput.Shape[0];
+        int timeSteps = _lastInput.Shape[1];
+        int height = _lastInput.Shape[2];
+        int width = _lastInput.Shape[3];
+        int channels = _lastInput.Shape[4];
+
+        // Initialize states (Zero tensors)
+        var hiddenState = Autodiff.TensorOperations<T>.Constant(new Tensor<T>([batchSize, _filters, height, width]), "h0"); // NCHW for internal
+        var cellState = Autodiff.TensorOperations<T>.Constant(new Tensor<T>([batchSize, _filters, height, width]), "c0");   // NCHW for internal
+
+        var outputNodes = new List<Autodiff.ComputationNode<T>>();
+        var stride = new int[] { _strides, _strides };
+        var padding = new int[] { _padding, _padding };
+
+        // 3. Unroll BPTT Loop
+        for (int t = 0; t < timeSteps; t++)
+        {
+            // Slice time step t: [Batch, 1, H, W, C] -> [Batch, H, W, C]
+            // Note: Using axis 1 for time dimension slice
+            var xt_raw = Autodiff.TensorOperations<T>.Slice(inputNode, t, 1, 1, axis: 1);
+            var xt_NHWC = Autodiff.TensorOperations<T>.Reshape(xt_raw, batchSize, height, width, channels);
+            
+            // Permute input to NCHW: [Batch, C, H, W]
+            var xt = Autodiff.TensorOperations<T>.Permute(xt_NHWC, 0, 3, 1, 2);
+
+            // Gates Calculation (All in NCHW format)
+            // Forget Gate
+            var f_x = Autodiff.TensorOperations<T>.Conv2D(xt, wFi_T, bF_T, stride, padding);
+            var f_h = Autodiff.TensorOperations<T>.Conv2D(hiddenState, wFh_T, stride: stride, padding: padding);
+            var f_sum = Autodiff.TensorOperations<T>.Add(f_x, f_h);
+            var f = Autodiff.TensorOperations<T>.Sigmoid(f_sum);
+
+            // Input Gate
+            var i_x = Autodiff.TensorOperations<T>.Conv2D(xt, wIi_T, bI_T, stride, padding);
+            var i_h = Autodiff.TensorOperations<T>.Conv2D(hiddenState, wIh_T, stride: stride, padding: padding);
+            var i_sum = Autodiff.TensorOperations<T>.Add(i_x, i_h);
+            var i_gate = Autodiff.TensorOperations<T>.Sigmoid(i_sum);
+
+            // Cell Candidate
+            var c_x = Autodiff.TensorOperations<T>.Conv2D(xt, wCi_T, bC_T, stride, padding);
+            var c_h = Autodiff.TensorOperations<T>.Conv2D(hiddenState, wCh_T, stride: stride, padding: padding);
+            var c_sum = Autodiff.TensorOperations<T>.Add(c_x, c_h);
+            // Apply layer activation (defaults to Tanh for cell candidate in standard LSTM)
+            // But constructor allows custom activation. LayerBase ApplyActivation uses it.
+            // Standard ConvLSTM uses Tanh/Sigmoid/Tanh structure.
+            // We'll use Tanh for standard compliance or ApplyActivationToGraph if it matches?
+            // The constructor sets base activation to TanhActivation.
+            // Let's use Tanh directly as per standard LSTM logic, or delegate?
+            // Forward uses ApplyActivation for candidate cell.
+            var c_cand = ApplyActivationToGraph(c_sum);
+
+            // Output Gate
+            var o_x = Autodiff.TensorOperations<T>.Conv2D(xt, wOi_T, bO_T, stride, padding);
+            var o_h = Autodiff.TensorOperations<T>.Conv2D(hiddenState, wOh_T, stride: stride, padding: padding);
+            var o_sum = Autodiff.TensorOperations<T>.Add(o_x, o_h);
+            var o = Autodiff.TensorOperations<T>.Sigmoid(o_sum);
+
+            // Update Cell State
+            var c_forget = Autodiff.TensorOperations<T>.ElementwiseMultiply(f, cellState);
+            var c_input = Autodiff.TensorOperations<T>.ElementwiseMultiply(i_gate, c_cand);
+            var newC = Autodiff.TensorOperations<T>.Add(c_forget, c_input);
+
+            // Update Hidden State
+            // Forward uses ApplyActivation(newCellState) ... usually Tanh
+            var c_activated = ApplyActivationToGraph(newC);
+            var newH = Autodiff.TensorOperations<T>.ElementwiseMultiply(o, c_activated);
+
+            // Store for next step
+            cellState = newC;
+            hiddenState = newH;
+
+            // Convert Output back to NHWC for consistency with layer output
+            var output_NHWC = Autodiff.TensorOperations<T>.Permute(newH, 0, 2, 3, 1);
+            
+            // Reshape to [Batch, 1, H, W, C] for concatenation
+            var output_step = Autodiff.TensorOperations<T>.Reshape(output_NHWC, batchSize, 1, height, width, _filters);
+            outputNodes.Add(output_step);
+        }
+
+        // 4. Concatenate outputs along time axis (axis 1)
+        var finalOutput = Autodiff.TensorOperations<T>.Concat(outputNodes, axis: 1);
+
+        // 5. Backward Pass
+        finalOutput.Gradient = outputGradient;
+
+        // Topo sort and execute backward
+        finalOutput.Backward(); // Uses built-in topo sort and execution
+
+        // 6. Extract and Store Gradients in Dictionary
+        _gradients = new Dictionary<string, object>
+        {
+            ["weightsFi"] = wFi.Gradient ?? Tensor<T>.CreateDefault(_weightsFi.Shape, NumOps.Zero),
+            ["weightsIi"] = wIi.Gradient ?? Tensor<T>.CreateDefault(_weightsIi.Shape, NumOps.Zero),
+            ["weightsCi"] = wCi.Gradient ?? Tensor<T>.CreateDefault(_weightsCi.Shape, NumOps.Zero),
+            ["weightsOi"] = wOi.Gradient ?? Tensor<T>.CreateDefault(_weightsOi.Shape, NumOps.Zero),
+            ["weightsFh"] = wFh.Gradient ?? Tensor<T>.CreateDefault(_weightsFh.Shape, NumOps.Zero),
+            ["weightsIh"] = wIh.Gradient ?? Tensor<T>.CreateDefault(_weightsIh.Shape, NumOps.Zero),
+            ["weightsCh"] = wCh.Gradient ?? Tensor<T>.CreateDefault(_weightsCh.Shape, NumOps.Zero),
+            ["weightsOh"] = wOh.Gradient ?? Tensor<T>.CreateDefault(_weightsOh.Shape, NumOps.Zero),
+            ["biasF"] = bF.Gradient ?? Tensor<T>.CreateDefault(_biasF.Shape, NumOps.Zero),
+            ["biasI"] = bI.Gradient ?? Tensor<T>.CreateDefault(_biasI.Shape, NumOps.Zero),
+            ["biasC"] = bC.Gradient ?? Tensor<T>.CreateDefault(_biasC.Shape, NumOps.Zero),
+            ["biasO"] = bO.Gradient ?? Tensor<T>.CreateDefault(_biasO.Shape, NumOps.Zero)
+        };
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>

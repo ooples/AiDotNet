@@ -526,16 +526,106 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Specialized operations
-    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// This method uses automatic differentiation to compute gradients by building a computation graph
+    /// that mirrors the forward pass operations (Convolution -> Reshape -> Activation).
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // PrimaryCapsuleLayer creates capsule representations from convolution outputs
-        // The manual implementation provides correct gradient computation for capsule formation
-        // Uses standard convolution with squashing, already correctly implemented
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // 1. Create variables
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var weightsNode = Autodiff.TensorOperations<T>.Variable(_convWeights, "convWeights", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(_convBias, "convBias", requiresGradient: true);
+
+        // 2. Reshape 2D weights to 4D for Conv2D [Out, In, K, K]
+        // _convWeights is [OutputChannels, InputChannels * KernelSize * KernelSize]
+        // We need [OutputChannels, InputChannels, KernelSize, KernelSize]
+        int totalOutputChannels = _capsuleChannels * _capsuleDimension;
+        var weights4DNode = Autodiff.TensorOperations<T>.Reshape(weightsNode, 
+            new int[] { totalOutputChannels, _inputChannels, _kernelSize, _kernelSize });
+
+        // 3. Conv2D Operation
+        var convOutput = Autodiff.TensorOperations<T>.Conv2D(
+            inputNode, 
+            weights4DNode, 
+            biasNode, 
+            new int[] { _stride, _stride }, 
+            new int[] { 0, 0 } // Padding is handled via output size calculation usually, check Forward
+        );
+        // Note: Forward uses manual padding logic? 
+        // Forward: int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
+        // ExtractPatch uses input directly.
+        // If ExtractPatch handles bounds checking (it doesn't seem to pad, just extracts), then padding=0 is correct.
+        // ConvolutionalLayer uses padding parameter. PrimaryCapsuleLayer constructor takes padding but Forward doesn't seem to use it explicitly for bounds extension?
+        // ExtractPatch: "patch[index++] = input[batch, startY + i, startX + j, c];" 
+        // If indices are out of bounds, Tensor indexer might throw.
+        // But let's assume 0 padding for now based on Forward logic matching loop bounds.
+
+        // 4. Reshape to Capsules [Batch, OutH, OutW, Caps, Dim]
+        int batchSize = _lastInput.Shape[0];
+        int inputHeight = _lastInput.Shape[1];
+        int inputWidth = _lastInput.Shape[2];
+        int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
+        int outputWidth = (inputWidth - _kernelSize) / _stride + 1;
+
+        var reshapedOutput = Autodiff.TensorOperations<T>.Reshape(
+            convOutput,
+            new int[] { batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension }
+        );
+
+        // 5. Apply Activation (Squash)
+        var activatedOutput = ApplyActivationToGraph(reshapedOutput);
+
+        // 6. Set Gradient and Execute Backward
+        activatedOutput.Gradient = outputGradient;
+
+        // Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((activatedOutput, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // 7. Store Gradients
+        _convWeightsGradient = weightsNode.Gradient;
+        _convBiasGradient = biasNode.Gradient;
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
 

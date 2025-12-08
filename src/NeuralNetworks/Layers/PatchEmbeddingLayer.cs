@@ -269,18 +269,96 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. It's slower than the
-    /// manual implementation but can be useful for:
-    /// - Verifying gradient correctness
-    /// - Rapid prototyping with custom modifications
-    /// - Research and experimentation
+    /// This method uses automatic differentiation to compute gradients by building a computation graph
+    /// that mirrors the forward pass operations (Reshape -> Permute -> Reshape -> MatMul -> Add).
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // For complex/composite layers, delegate to manual implementation
-        // Full autodiff requires implementing all sub-operations
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // 1. Create variables
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var weightsNode = Autodiff.TensorOperations<T>.Variable(_projectionWeights, "weights", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(_projectionBias, "bias", requiresGradient: true);
+
+        // 2. Patchify Logic
+        int batchSize = _lastInput.Shape[0];
+        int patchDim = _channels * _patchSize * _patchSize;
+
+        // Reshape to split H and W into patches: [B, C, Nh, P, Nw, P]
+        var reshapedNode = Autodiff.TensorOperations<T>.Reshape(inputNode, 
+            batchSize, _channels, _numPatchesHeight, _patchSize, _numPatchesWidth, _patchSize);
+
+        // Permute to group patch dimensions: [B, Nh, Nw, C, P, P]
+        // Using new Permute operation added to TensorOperations
+        var transposedNode = Autodiff.TensorOperations<T>.Permute(reshapedNode, 0, 2, 4, 1, 3, 5);
+
+        // Flatten patches: [B, N, patchDim]
+        var patchesNode = Autodiff.TensorOperations<T>.Reshape(transposedNode, batchSize, _numPatches, patchDim);
+
+        // 3. Projection: patches @ weights
+        var projectedNode = Autodiff.TensorOperations<T>.MatrixMultiply(patchesNode, weightsNode);
+
+        // 4. Add Bias (broadcast)
+        // Reshape bias to [1, 1, EmbedDim] to match [B, N, EmbedDim] for broadcasting on last dim
+        // Note: TensorOperations.Add supports broadcasting if implemented, or we can explicit reshape
+        // TensorOperations.Add usually does broadcast logic.
+        // But to be safe and explicit (and match Forward logic), let's reshape bias.
+        var biasReshapedNode = Autodiff.TensorOperations<T>.Reshape(biasNode, 1, 1, _embeddingDim);
+        var preActivationNode = Autodiff.TensorOperations<T>.Add(projectedNode, biasReshapedNode);
+
+        // 5. Apply Activation
+        var activatedOutput = ApplyActivationToGraph(preActivationNode);
+
+        // 6. Set Gradient and Execute Backward
+        activatedOutput.Gradient = outputGradient;
+
+        // Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((activatedOutput, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // 7. Store Gradients
+        _projectionWeightsGradient = weightsNode.Gradient;
+        _projectionBiasGradient = biasNode.Gradient;
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>

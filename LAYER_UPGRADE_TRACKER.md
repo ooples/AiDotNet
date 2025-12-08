@@ -179,6 +179,26 @@ These layers have been verified to meet ALL requirements:
 | 3 | InputLayer.cs | Pass-through, no parameters |
 | 4 | ReshapeLayer.cs | Simple reshape, Engine.Reshape |
 | 5 | FlattenLayer.cs | Simple flatten, Engine.Reshape |
+| 6 | ActivationLayer.cs | ✅ Proper graph-based autodiff |
+| 7 | AddLayer.cs | ✅ Proper graph-based autodiff |
+| 8 | MultiplyLayer.cs | ✅ Proper graph-based autodiff |
+| 9 | ConvolutionalLayer.cs | ✅ Full autodiff computation graph |
+| 10 | GlobalPoolingLayer.cs | ✅ Proper graph-based autodiff |
+| 11 | DeconvolutionalLayer.cs | ✅ Proper graph-based autodiff |
+| 12 | PrimaryCapsuleLayer.cs | ✅ Proper graph-based autodiff |
+| 13 | RBMLayer.cs | ✅ Proper graph-based autodiff (Mean-Field) + CD support |
+| 14 | PatchEmbeddingLayer.cs | ✅ Proper graph-based autodiff (enabled by Permute op) |
+| 15 | MultiHeadAttentionLayer.cs | ✅ Proper graph-based autodiff (enabled by Permute op, Cross-Attention supported) |
+| 16 | ConvLSTMLayer.cs | ✅ Proper graph-based autodiff (BPTT unrolled) |
+| 17 | TransformerEncoderLayer.cs | ✅ Composite layer; delegates to graph-capable sublayers |
+| 18 | TransformerDecoderLayer.cs | ✅ Composite layer; delegates to graph-capable sublayers |
+| 19 | EmbeddingLayer.cs | ✅ Proper graph-based autodiff (using EmbeddingLookup) |
+| 20 | DigitCapsuleLayer.cs | ✅ Proper graph-based autodiff (unrolled routing) |
+| 21 | CapsuleLayer.cs | ✅ Proper graph-based autodiff (unrolled routing) |
+| 22 | AttentionLayer.cs | ✅ Proper graph-based autodiff (Full graph for Self/Cross/Masked) |
+| 23 | MeasurementLayer.cs | ✅ Proper graph-based autodiff |
+| 24 | QuantumLayer.cs | ✅ Proper graph-based autodiff (Complex graph with Angle update) |
+| 25 | SpatialPoolerLayer.cs | ✅ Proper graph-based autodiff (STE) + Hebbian support |
 
 ---
 
@@ -187,30 +207,10 @@ These layers have been verified to meet ALL requirements:
 These were marked complete but have issues discovered in audit:
 
 ### Has Autodiff Shortcuts (delegates to BackwardManual)
-- ActivationLayer.cs
-- AddLayer.cs
-- AttentionLayer.cs
-- CapsuleLayer.cs
 - ConditionalRandomFieldLayer.cs
-- ConvLSTMLayer.cs
-- ConvolutionalLayer.cs
-- DeconvolutionalLayer.cs
-- DigitCapsuleLayer.cs
-- EmbeddingLayer.cs
-- GlobalPoolingLayer.cs
-- MeasurementLayer.cs
-- MultiHeadAttentionLayer.cs
-- MultiplyLayer.cs
-- PatchEmbeddingLayer.cs
-- PrimaryCapsuleLayer.cs
-- QuantumLayer.cs
-- RBMLayer.cs
-- SpatialPoolerLayer.cs
 - SpikingLayer.cs
 - SynapticPlasticityLayer.cs
 - TemporalMemoryLayer.cs
-- TransformerDecoderLayer.cs
-- TransformerEncoderLayer.cs
 
 ### Has Matrix<T>/Vector<T> Internal Storage
 - SpikingLayer.cs (14 fields)

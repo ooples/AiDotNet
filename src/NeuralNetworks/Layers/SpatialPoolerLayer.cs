@@ -97,25 +97,12 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// <summary>
     /// The connection strengths between input elements and columns.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This matrix stores the connection strengths between each input element and each column. These connections
-    /// determine how strongly each input element influences the activation of each column. The connections are
-    /// adjusted during learning to strengthen the response to frequent patterns.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like a weight matrix that stores how strongly each input value
-    /// connects to each column.
-    /// 
-    /// Think of it as a table where:
-    /// - Rows represent input elements
-    /// - Columns represent the layer's feature detectors
-    /// - Each value shows how strongly that input affects that column
-    /// 
-    /// During learning, these connection strengths are adjusted to better recognize important patterns
-    /// in the input data.
-    /// </para>
-    /// </remarks>
     private Tensor<T> Connections;
+
+    /// <summary>
+    /// Gradient of the connections computed during backpropagation.
+    /// </summary>
+    private Tensor<T>? _connectionsGradient;
     
     /// <summary>
     /// Stores the input tensor from the most recent forward pass or learning step.
@@ -498,16 +485,43 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This method uses automatic differentiation with a straight-through estimator for the threshold.
-    /// The threshold operation is non-differentiable, so we pass gradients through as if it were identity.
-    /// This uses MatMul for the linear transformation.
+    /// It constructs the computation graph to compute gradients for both input and connections.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // SpatialPooler uses straight-through estimator: gradient flows through threshold as if it's identity
-        // Backward: inputGrad = Connections @ outputGrad (no transpose needed)
-        // Use the same Engine-based computation as manual backward
-        return BackwardManual(outputGradient);
+        if (LastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // 1. Variables
+        var inputNode = Autodiff.TensorOperations<T>.Variable(LastInput, "input", requiresGradient: true);
+        var connectionsNode = Autodiff.TensorOperations<T>.Variable(Connections, "connections", requiresGradient: true);
+
+        // 2. Graph Construction (mirrors Forward/Export)
+        // Transpose connections: [ColumnCount, InputSize]
+        var connectionsTransposed = Autodiff.TensorOperations<T>.Transpose(connectionsNode);
+
+        // Reshape input for matrix multiplication: [InputSize, 1]
+        var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, InputSize, 1);
+
+        // activation = Connections^T @ input
+        var activation = Autodiff.TensorOperations<T>.MatrixMultiply(connectionsTransposed, inputReshaped);
+        var activationFlat = Autodiff.TensorOperations<T>.Reshape(activation, ColumnCount);
+
+        // Apply straight-through threshold for sparse binary output
+        var output = Autodiff.TensorOperations<T>.StraightThroughThreshold(activationFlat, SparsityThreshold);
+
+        // Apply layer activation if present
+        var finalOutput = ApplyActivationToGraph(output);
+
+        // 3. Set Gradient and Backward
+        finalOutput.Gradient = outputGradient;
+        finalOutput.Backward();
+
+        // 4. Store Gradients
+        _connectionsGradient = connectionsNode.Gradient;
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
 
@@ -535,19 +549,47 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        if (LastOutput == null || LastInput == null)
+        // 1. Standard Backpropagation (Discriminative Training)
+        if (_connectionsGradient != null)
         {
-            // Skip parameter update if we don't have previous input/output data
+            var delta = Engine.TensorMultiplyScalar(_connectionsGradient, learningRate);
+            Connections = Engine.TensorSubtract(Connections, delta);
+            
+            // Maintain connection constraints
+            NormalizeConnections();
             return;
         }
 
-        for (int i = 0; i < InputSize; i++)
+        // 2. Hebbian Learning (HTM Training)
+        if (LastOutput == null || LastInput == null)
+            return;
+
+        T lr = NumOps.FromDouble(LearningRate);
+        T bf = NumOps.FromDouble(BoostFactor);
+
+        for (int i = 0; i < ColumnCount; i++)
         {
-            for (int j = 0; j < ColumnCount; j++)
+            if (NumOps.Equals(LastOutput[i], NumOps.One))
             {
-                T delta = NumOps.Multiply(learningRate, 
-                    NumOps.Multiply(LastOutput[j], LastInput[i]));
-                Connections[i, j] = NumOps.Add(Connections[i, j], delta);
+                // Strengthen connections for active columns
+                for (int j = 0; j < InputSize; j++)
+                {
+                    T delta = NumOps.Multiply(lr, NumOps.Subtract(LastInput[j], Connections[j, i]));
+                    Connections[j, i] = NumOps.Add(Connections[j, i], delta);
+                }
+            }
+        }
+
+        // Boost inactive columns
+        for (int i = 0; i < ColumnCount; i++)
+        {
+            if (NumOps.Equals(LastOutput[i], NumOps.Zero))
+            {
+                for (int j = 0; j < InputSize; j++)
+                {
+                    T boost = NumOps.Multiply(bf, LastInput[j]);
+                    Connections[j, i] = NumOps.Add(Connections[j, i], boost);
+                }
             }
         }
 
@@ -650,6 +692,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         // Clear cached values
         LastInput = null;
         LastOutput = null;
+        _connectionsGradient = null;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

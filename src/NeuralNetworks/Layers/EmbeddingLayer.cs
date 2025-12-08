@@ -381,19 +381,36 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// EmbeddingLayer implements table lookup followed by scatter-add for gradients.
-    /// The manual implementation provides the correct gradient computation for embedding lookups.
-    /// Since embedding lookup is a discrete indexing operation (not differentiable with respect to indices),
-    /// and scatter-add operations are not available in TensorOperations, this falls back to manual implementation.
+    /// This method uses automatic differentiation to compute gradients.
+    /// It builds a computation graph with EmbeddingLookup operation which handles
+    /// the scatter-add gradient accumulation during the backward pass.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // EmbeddingLayer performs discrete table lookup: output = embeddingMatrix[indices[i]]
-        // The gradient computation requires scatter-add: embeddingGradient[indices[i]] += outputGradient[i]
-        // This is a discrete indexing operation that cannot be represented with standard differentiable operations
-        // Therefore, we fall back to the manual implementation which correctly handles the scatter operation
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // 1. Create variables
+        // Input indices do not require gradients
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "indices", requiresGradient: false);
+        // Embeddings require gradients
+        var embeddingNode = Autodiff.TensorOperations<T>.Variable(_embeddingTensor, "embeddings", requiresGradient: true);
+
+        // 2. Build graph
+        var output = Autodiff.TensorOperations<T>.EmbeddingLookup(embeddingNode, inputNode);
+
+        // 3. Set gradient
+        output.Gradient = outputGradient;
+
+        // 4. Topo sort and backward pass
+        output.Backward();
+
+        // 5. Extract gradient
+        _embeddingGradient = embeddingNode.Gradient;
+
+        // Return zero gradient for input (indices are not differentiable)
+        return new Tensor<T>(_lastInput.Shape);
     }
 
     /// <summary>

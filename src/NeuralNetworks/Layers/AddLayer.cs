@@ -339,13 +339,8 @@ public class AddLayer<T> : LayerBase<T>
     /// <para>
     /// This method uses a production-grade pattern for computing gradients:
     /// - Uses cached values from forward pass (locality caching)
-    /// - Uses Tensor.Transform for vectorized activation derivative computation
-    /// - Uses Engine.TensorMultiply for GPU/CPU accelerated element-wise operations
-    /// - Builds minimal autodiff graph only for the addition operation
-    /// </para>
-    /// <para>
-    /// For addition: d(a+b)/da = 1, d(a+b)/db = 1
-    /// So the gradient flows equally to all inputs after accounting for the activation derivative.
+    /// - Builds full computation graph including addition and activation
+    /// - Executes inline topological sort for graph traversal
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
@@ -355,37 +350,68 @@ public class AddLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        // Step 1: Compute activation derivative using cached output (locality caching)
-        // Use Tensor.Transform for vectorized computation
-        Tensor<T> gradientWithActivation;
-        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        // 1. Create variable nodes for inputs that need gradients
+        var inputNodes = new List<ComputationNode<T>>();
+        for (int i = 0; i < _lastInputs.Length; i++)
         {
-            // Production-grade: Use cached _lastOutput for activation derivative
-            var cachedOutput = _lastOutput;
-            var activation = ScalarActivation;
-
-            // Vectorized activation derivative via Engine (delegated to activation function)
-            var activationDerivative = activation.Derivative(cachedOutput);
-
-            // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
-            gradientWithActivation = Engine.TensorMultiply(outputGradient, activationDerivative);
-        }
-        else
-        {
-            // Identity activation: gradient passes through unchanged
-            gradientWithActivation = outputGradient;
+            inputNodes.Add(TensorOperations<T>.Variable(_lastInputs[i], $"input_{i}", requiresGradient: true));
         }
 
-        // Step 2: For addition, the gradient flows equally to all inputs
-        // d(a + b + c + ...)/da = 1 for all inputs
-        // Build minimal autodiff graph only for gradient routing
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInputs[0], "input_0", requiresGradient: true);
+        // 2. Build computation graph (Sum)
+        ComputationNode<T> sumNode = inputNodes[0];
+        for (int i = 1; i < inputNodes.Count; i++)
+        {
+            sumNode = TensorOperations<T>.Add(sumNode, inputNodes[i]);
+        }
 
-        // Set the gradient directly - for addition, input gradient equals pre-activation gradient
-        inputNode.Gradient = gradientWithActivation;
+        // Apply activation function using LayerBase helper
+        var outputNode = ApplyActivationToGraph(sumNode);
 
-        // Return the input gradient (same for all inputs in addition)
-        return inputNode.Gradient;
+        // 3. Set output gradient
+        outputNode.Gradient = outputGradient;
+
+        // 4. Inline topological sort
+        var visited = new HashSet<ComputationNode<T>>();
+        var topoOrder = new List<ComputationNode<T>>();
+        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // 5. Execute backward pass
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // 6. Return the gradient for the first input (as per interface contract)
+        return inputNodes[0].Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>

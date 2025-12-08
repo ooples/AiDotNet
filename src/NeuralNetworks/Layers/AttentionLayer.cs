@@ -88,6 +88,11 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private Tensor<T>? _lastInput;
 
+    private Tensor<T>? _lastQueryInput;
+    private Tensor<T>? _lastKeyInput;
+    private Tensor<T>? _lastValueInput;
+    private Tensor<T>? _lastMask;
+
     /// <summary>
     /// The last attention weights computed by the layer.
     /// </summary>
@@ -277,8 +282,11 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+        _lastQueryInput = input;
+        _lastKeyInput = input;
         _lastWasCrossAttention = false;
         _lastUsedMask = false;
+        _lastMask = null;
 
         int batchSize = input.Shape[0];
         int seqLen = input.Shape[1];
@@ -407,6 +415,10 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T> ForwardMaskedAttention(Tensor<T> input, Tensor<T> mask)
     {
         _lastInput = input;
+        _lastQueryInput = input;
+        _lastKeyInput = input;
+        _lastValueInput = input;
+        _lastMask = mask;
 
         int batchSize = input.Shape[0];
         int seqLen = input.Shape[1];
@@ -456,7 +468,11 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         _lastWasCrossAttention = true;
         _lastUsedMask = mask != null;
+        _lastMask = mask;
         _lastInput = queryInput;
+        _lastQueryInput = queryInput;
+        _lastKeyInput = keyValueInput;
+        _lastValueInput = keyValueInput;
 
         int batchSize = queryInput.Shape[0];
         int seqLenQ = queryInput.Shape[1];
@@ -571,168 +587,85 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <para>
     /// <b>Production-Ready Features:</b>
     /// <list type="bullet">
-    /// <item>Uses cached attention weights from forward pass for softmax derivative</item>
-    /// <item>Uses Engine.TensorMultiply for GPU/CPU accelerated element-wise operations</item>
-    /// <item>Computes softmax derivative vectorized using Tensor.Transform</item>
-    /// <item>Builds minimal autodiff graph only for necessary matrix multiplications</item>
+    /// <item>Full computation graph construction for Self and Cross Attention</item>
+    /// <item>Supports masking via graph operations</item>
+    /// <item>Uses Permute/Reshape/MatMul for correct gradient flow</item>
     /// </list>
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastAttentionWeights == null)
+        if (_lastQueryInput == null || _lastKeyInput == null || _lastValueInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Use cached values from forward pass - attention = softmax(Q @ K.T / sqrt(d_k))
-        // V was computed as input @ Wv in forward
-        var V = _lastInput.Multiply(_Wv);
+        // 1. Create variables
+        var qInput = Autodiff.TensorOperations<T>.Variable(_lastQueryInput, "query", true);
+        var kInput = Autodiff.TensorOperations<T>.Variable(_lastKeyInput, "key", true);
+        var vInput = Autodiff.TensorOperations<T>.Variable(_lastValueInput, "value", true);
+        
+        var wq = Autodiff.TensorOperations<T>.Variable(_Wq, "Wq", true);
+        var wk = Autodiff.TensorOperations<T>.Variable(_Wk, "Wk", true);
+        var wv = Autodiff.TensorOperations<T>.Variable(_Wv, "Wv", true);
 
-        // Step 1: Compute dL/dV and dL/d(attention_weights) using cached attention weights
-        // dL/dV = attention_weights.T @ outputGradient
-        var dV = _lastAttentionWeights.Transpose([1, 0]).Multiply(outputGradient);
+        int batchSize = _lastQueryInput.Shape[0];
+        int seqLenQ = _lastQueryInput.Shape[1];
+        int seqLenKV = _lastKeyInput.Shape[1];
 
-        // dL/d(attention_weights) = outputGradient @ V.T
-        var dAttentionWeights = outputGradient.Multiply(V.Transpose([1, 0]));
+        // 2. Projections
+        // Reshape inputs to 2D [B*S, E]
+        var q2D = Autodiff.TensorOperations<T>.Reshape(qInput, batchSize * seqLenQ, _inputSize);
+        var k2D = Autodiff.TensorOperations<T>.Reshape(kInput, batchSize * seqLenKV, _inputSize);
+        var v2D = Autodiff.TensorOperations<T>.Reshape(vInput, batchSize * seqLenKV, _inputSize);
 
-        // Step 2: Production-grade softmax derivative using cached attention weights
-        // For softmax: dL/d(scores)_i = attention_i * (dL/d(attention)_i - sum_j(dL/d(attention)_j * attention_j))
-        // This is: attention * (dAttentionWeights - rowwise_dot_product)
+        // Transpose weights: [In, Att] -> [Att, In]
+        var wqT = Autodiff.TensorOperations<T>.Transpose(wq);
+        var wkT = Autodiff.TensorOperations<T>.Transpose(wk);
+        var wvT = Autodiff.TensorOperations<T>.Transpose(wv);
 
-        // Compute rowwise dot product: sum_j(dL/d(attention)_j * attention_j) per row
-        // Using Engine.TensorMultiply for GPU/CPU accelerated element-wise multiply
-        var elementwiseProduct = Engine.TensorMultiply(_lastAttentionWeights, dAttentionWeights);
+        var qFlat = Autodiff.TensorOperations<T>.MatrixMultiply(q2D, wqT);
+        var kFlat = Autodiff.TensorOperations<T>.MatrixMultiply(k2D, wkT);
+        var vFlat = Autodiff.TensorOperations<T>.MatrixMultiply(v2D, wvT);
 
-        // Sum over last axis and reshape for broadcasting
-        var rowwiseDotProduct = elementwiseProduct.SumOverAxis(-1);
+        // Reshape back: [B, S, Att]
+        var Q = Autodiff.TensorOperations<T>.Reshape(qFlat, batchSize, seqLenQ, _attentionSize);
+        var K = Autodiff.TensorOperations<T>.Reshape(kFlat, batchSize, seqLenKV, _attentionSize);
+        var V = Autodiff.TensorOperations<T>.Reshape(vFlat, batchSize, seqLenKV, _attentionSize);
 
-        // Broadcast rowwiseDotProduct to match attention weights shape
-        var broadcastedDot = rowwiseDotProduct.Reshape(_lastAttentionWeights.Shape);
+        // 3. Scores: Q @ K.T
+        // Permute K: [B, S, A] -> [B, A, S]
+        var KT = Autodiff.TensorOperations<T>.Permute(K, 0, 2, 1);
+        var scores = Autodiff.TensorOperations<T>.MatrixMultiply(Q, KT);
 
-        // Compute softmax derivative: attention * (dAttentionWeights - rowwiseDotProduct)
-        // Using Tensor.Transform for vectorized subtraction
-        var diff = dAttentionWeights.Transform((x, i) => NumOps.Subtract(x, broadcastedDot[i]));
+        // Scale
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(_attentionSize)));
+        var scaleTensor = new Tensor<T>(new int[] { 1 });
+        scaleTensor[0] = scaleValue;
+        var scaleNode = Autodiff.TensorOperations<T>.Constant(scaleTensor, "scale");
+        var scaledScores = Autodiff.TensorOperations<T>.ElementwiseMultiply(scores, scaleNode);
 
-        // Final softmax gradient using Engine.TensorMultiply for GPU acceleration
-        var dAttentionScores = Engine.TensorMultiply(_lastAttentionWeights, diff);
-
-        // Step 3: Apply scaling factor
-        var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_Wk.Shape[_Wk.Shape.Length - 1]));
-        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
-        dAttentionScores = dAttentionScores.Scale(scaleValue);
-
-        // Step 4: Build minimal autodiff graph only for the matrix multiplications
-        // This is more efficient than rebuilding the entire forward graph
-        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var Wq = Autodiff.TensorOperations<T>.Variable(_Wq, "Wq", requiresGradient: true);
-        var Wk = Autodiff.TensorOperations<T>.Variable(_Wk, "Wk", requiresGradient: true);
-        var Wv = Autodiff.TensorOperations<T>.Variable(_Wv, "Wv", requiresGradient: true);
-
-        // Q = input @ Wq, K = input @ Wk, V = input @ Wv
-        var Q = Autodiff.TensorOperations<T>.MatrixMultiply(input, Wq);
-        var K = Autodiff.TensorOperations<T>.MatrixMultiply(input, Wk);
-        var VNode = Autodiff.TensorOperations<T>.MatrixMultiply(input, Wv);
-
-        // Attention scores = Q @ K^T
-        var K_T = Autodiff.TensorOperations<T>.Transpose(K);
-        var attentionScores = Autodiff.TensorOperations<T>.MatrixMultiply(Q, K_T);
-
-        // Set the pre-computed softmax gradient at the attention scores node
-        attentionScores.Gradient = dAttentionScores;
-
-        // Also set gradient for V node
-        VNode.Gradient = dV;
-
-        // Production-grade: Inline topological sort for Q/K backward pass
-        var visitedQK = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrderQK = new List<Autodiff.ComputationNode<T>>();
-        var stackQK = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stackQK.Push((attentionScores, false));
-
-        while (stackQK.Count > 0)
+        // Mask
+        if (_lastMask != null)
         {
-            var (node, processed) = stackQK.Pop();
-
-            if (visitedQK.Contains(node))
-                continue;
-
-            if (processed)
-            {
-                visitedQK.Add(node);
-                topoOrderQK.Add(node);
-            }
-            else
-            {
-                stackQK.Push((node, true));
-                foreach (var parent in node.Parents)
-                {
-                    if (!visitedQK.Contains(parent))
-                        stackQK.Push((parent, false));
-                }
-            }
+            var maskNode = Autodiff.TensorOperations<T>.Constant(_lastMask, "mask");
+            scaledScores = Autodiff.TensorOperations<T>.Add(scaledScores, maskNode);
         }
 
-        for (int i = topoOrderQK.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrderQK[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
+        // Softmax
+        var attentionWeights = Autodiff.TensorOperations<T>.Softmax(scaledScores);
 
-        // Production-grade: Inline topological sort for V backward pass
-        var visitedV = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrderV = new List<Autodiff.ComputationNode<T>>();
-        var stackV = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stackV.Push((VNode, false));
+        // Output: Weights @ V
+        var output = Autodiff.TensorOperations<T>.MatrixMultiply(attentionWeights, V);
 
-        while (stackV.Count > 0)
-        {
-            var (node, processed) = stackV.Pop();
+        // Gradient
+        output.Gradient = outputGradient;
+        output.Backward();
 
-            if (visitedV.Contains(node))
-                continue;
+        // Store
+        _dWq = wq.Gradient;
+        _dWk = wk.Gradient;
+        _dWv = wv.Gradient;
 
-            if (processed)
-            {
-                visitedV.Add(node);
-                topoOrderV.Add(node);
-            }
-            else
-            {
-                stackV.Push((node, true));
-                foreach (var parent in node.Parents)
-                {
-                    if (!visitedV.Contains(parent))
-                        stackV.Push((parent, false));
-                }
-            }
-        }
-
-        for (int i = topoOrderV.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrderV[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients - use null-safe pattern
-        if (Wq.Gradient == null)
-            throw new InvalidOperationException("Wq gradient is null after backward pass");
-        if (Wk.Gradient == null)
-            throw new InvalidOperationException("Wk gradient is null after backward pass");
-        if (Wv.Gradient == null)
-            throw new InvalidOperationException("Wv gradient is null after backward pass");
-        if (input.Gradient == null)
-            throw new InvalidOperationException("Input gradient is null after backward pass");
-
-        _dWq = Wq.Gradient;
-        _dWk = Wk.Gradient;
-        _dWv = Wv.Gradient;
-
-        return input.Gradient;
+        return qInput.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>

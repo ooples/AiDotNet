@@ -496,22 +496,101 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Backward pass implementation using automatic differentiation.
+    /// Backward pass implementation using automatic differentiation with unrolled routing.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. Specialized operations
-    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
-    /// </para>
-    /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // DigitCapsuleLayer is the final capsule layer with margin loss
-        // The manual implementation provides correct gradient computation with routing
-        // The iterative routing procedure is specific to capsule networks
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // 1. Create variables
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var weightsNode = Autodiff.TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
+
+        int batchSize = _lastInput.Shape[0];
+        int inputCapsules = _inputCapsules;
+        int numClasses = _numClasses;
+        int inputDim = _inputCapsuleDimension;
+        int outputDim = _outputCapsuleDimension;
+
+        // 2. Compute Predictions: input @ weights
+        // Input: [B, I, D_in] -> Reshape to [B, I, 1, D_in] to broadcast over C
+        var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, batchSize, inputCapsules, 1, inputDim);
+        
+        // Weights: [I, C, D_in, D_out] -> Reshape to [1, I, C, D_in, D_out] to broadcast over B
+        var weightsReshaped = Autodiff.TensorOperations<T>.Reshape(weightsNode, 1, inputCapsules, numClasses, inputDim, outputDim);
+
+        // Result: [B, I, C, 1, D_out] (Batched MatMul handles broadcasting [B, I, 1] vs [1, I, C])
+        var predictionsRaw = Autodiff.TensorOperations<T>.MatrixMultiply(inputReshaped, weightsReshaped);
+
+        // Reshape to [B, I, C, D_out]
+        var predictions = Autodiff.TensorOperations<T>.Reshape(predictionsRaw, batchSize, inputCapsules, numClasses, outputDim);
+
+        // 3. Dynamic Routing
+        // Initialize couplings to zero [B, I, C]
+        var couplingsTensor = new Tensor<T>(new int[] { batchSize, inputCapsules, numClasses });
+        couplingsTensor.Fill(NumOps.Zero);
+        var couplings = Autodiff.TensorOperations<T>.Constant(couplingsTensor, "couplings");
+
+        Autodiff.ComputationNode<T> output = predictions; // Placeholder
+
+        for (int iter = 0; iter < _routingIterations; iter++)
+        {
+            // Softmax over classes (axis 2) -> [B, I, C]
+            var routingWeights = Autodiff.TensorOperations<T>.Softmax(couplings, axis: 2);
+
+            // Reshape routing weights to [B, I, C, 1] for broadcasting
+            var routingWeightsBroad = Autodiff.TensorOperations<T>.Reshape(routingWeights, batchSize, inputCapsules, numClasses, 1);
+
+            // Weighted predictions: predictions * routing
+            var weightedPredictions = Autodiff.TensorOperations<T>.ElementwiseMultiply(predictions, routingWeightsBroad);
+
+            // Sum over input capsules (axis 1) -> [B, C, D_out]
+            var weightedSum = Autodiff.TensorOperations<T>.Sum(weightedPredictions, new int[] { 1 }, keepDims: false);
+
+            // Squash activation
+            // v = ||s||^2 / (1 + ||s||^2) * s / ||s||
+            // ||s||^2 = sum(s^2, axis=-1)
+            var s2 = Autodiff.TensorOperations<T>.Square(weightedSum);
+            var normSq = Autodiff.TensorOperations<T>.Sum(s2, new int[] { 2 }, keepDims: true); // [B, C, 1]
+            var norm = Autodiff.TensorOperations<T>.Sqrt(normSq);
+
+            var one = Autodiff.TensorOperations<T>.Constant(Tensor<T>.CreateDefault(new int[] { 1 }, NumOps.One));
+            var scale = Autodiff.TensorOperations<T>.Divide(normSq, Autodiff.TensorOperations<T>.Add(one, normSq));
+            var unitVec = Autodiff.TensorOperations<T>.Divide(weightedSum, norm);
+            
+            // output = scale * unitVec
+            output = Autodiff.TensorOperations<T>.ElementwiseMultiply(scale, unitVec);
+
+            // Update couplings (agreement)
+            if (iter < _routingIterations - 1)
+            {
+                // Agreement = predictions . output
+                // predictions [B, I, C, D], output [B, C, D] -> reshape output to [B, 1, C, D]
+                var outputBroad = Autodiff.TensorOperations<T>.Reshape(output, batchSize, 1, numClasses, outputDim);
+                
+                // Elementwise multiply -> [B, I, C, D]
+                var agreementRaw = Autodiff.TensorOperations<T>.ElementwiseMultiply(predictions, outputBroad);
+                
+                // Sum over D (axis 3) -> [B, I, C]
+                var agreement = Autodiff.TensorOperations<T>.Sum(agreementRaw, new int[] { 3 }, keepDims: false);
+                
+                couplings = Autodiff.TensorOperations<T>.Add(couplings, agreement);
+            }
+        }
+
+        // 4. Set Gradient
+        output.Gradient = outputGradient;
+
+        // 5. Backward
+        output.Backward();
+
+        // 6. Store Gradients
+        _weightsGradient = weightsNode.Gradient;
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
 

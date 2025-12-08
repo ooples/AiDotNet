@@ -283,13 +283,8 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <para>
     /// This method uses a production-grade pattern for computing gradients:
     /// - Uses cached _lastInput from forward pass (locality caching)
-    /// - Uses Tensor.Transform for vectorized activation derivative computation
-    /// - Uses Engine.TensorMultiply for GPU/CPU accelerated element-wise operations
     /// - Builds minimal autodiff graph only for gradient routing
-    /// </para>
-    /// <para>
-    /// For activation: output = activation(input)
-    /// Gradient: d(output)/d(input) = activation'(input) * outputGradient
+    /// - Executes inline topological sort for graph traversal
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
@@ -299,12 +294,60 @@ public class ActivationLayer<T> : LayerBase<T>
 
         TensorValidator.ValidateShapesMatch(_lastInput, outputGradient, "Activation Layer", "Backward Pass");
 
-        var activation = ScalarActivation ?? (IActivationFunction<T>?)VectorActivation;
-        
-        if (activation == null)
-            return outputGradient;
+        // 1. Create variable nodes for inputs that need gradients
+        var inputNode = AiDotNet.Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
-        return activation.Backward(_lastInput, outputGradient);
+        // 2. Build computation graph
+        var activation = ScalarActivation ?? (IActivationFunction<T>?)VectorActivation;
+        if (activation == null) return outputGradient;
+
+        var outputNode = activation.ApplyToGraph(inputNode);
+
+        // 3. Set output gradient
+        outputNode.Gradient = outputGradient;
+
+        // 4. Inline topological sort
+        var visited = new HashSet<AiDotNet.Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<AiDotNet.Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(AiDotNet.Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // 5. Execute backward pass
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // 6. Extract gradient
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>

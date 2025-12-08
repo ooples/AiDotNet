@@ -114,6 +114,10 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Cached input from the forward pass for use in the backward pass.
     /// </summary>
     private Tensor<T>? _lastInput;
+
+    private Tensor<T>? _lastQueryInput;
+    private Tensor<T>? _lastKeyInput;
+    private Tensor<T>? _lastValueInput;
     
     /// <summary>
     /// Cached output from the forward pass for use in the backward pass.
@@ -517,28 +521,48 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
-        int sequenceLength = input.Shape[1];
-        int embeddingDimension = input.Shape[2];
+        return ForwardInternal(input, input, input);
+    }
+
+    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 1) return ForwardInternal(inputs[0], inputs[0], inputs[0]);
+        if (inputs.Length == 2) return ForwardInternal(inputs[0], inputs[1], inputs[1]); // Q, K=V (Cross Attention)
+        if (inputs.Length == 3) return ForwardInternal(inputs[0], inputs[1], inputs[2]); // Q, K, V
+        throw new ArgumentException("MultiHeadAttentionLayer supports 1, 2, or 3 inputs.");
+    }
+
+    private Tensor<T> ForwardInternal(Tensor<T> query, Tensor<T> key, Tensor<T> value)
+    {
+        _lastInput = query;
+        _lastQueryInput = query;
+        _lastKeyInput = key;
+        _lastValueInput = value;
+
+        int batchSize = query.Shape[0];
+        int seqLengthQ = query.Shape[1];
+        int embeddingDimension = query.Shape[2];
+        int seqLengthKV = key.Shape[1];
 
         // 1. Project Input to Q, K, V
-        var input2D = input.Reshape(batchSize * sequenceLength, embeddingDimension);
+        var q2D = query.Reshape(batchSize * seqLengthQ, embeddingDimension);
+        var k2D = key.Reshape(batchSize * seqLengthKV, embeddingDimension);
+        var v2D = value.Reshape(batchSize * seqLengthKV, embeddingDimension);
         
-        var Q_flat = Engine.TensorMatMul(input2D, _queryWeights);
-        var K_flat = Engine.TensorMatMul(input2D, _keyWeights);
-        var V_flat = Engine.TensorMatMul(input2D, _valueWeights);
+        var Q_flat = Engine.TensorMatMul(q2D, _queryWeights);
+        var K_flat = Engine.TensorMatMul(k2D, _keyWeights);
+        var V_flat = Engine.TensorMatMul(v2D, _valueWeights);
 
         // Reshape and Transpose to [Batch, HeadCount, Seq, HeadDim]
-        var queries = Q_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
-        var keys = K_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
-        var values = V_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
+        var queries = Q_flat.Reshape(batchSize, seqLengthQ, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
+        var keys = K_flat.Reshape(batchSize, seqLengthKV, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
+        var values = V_flat.Reshape(batchSize, seqLengthKV, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
 
         // 2. Compute Attention Scores: Q @ K.T
-        // [B, H, S, D] @ [B, H, D, S] -> [B, H, S, S]
+        // [B, H, Sq, D] @ [B, H, D, Sk] -> [B, H, Sq, Sk]
         // Flatten batch and heads for 3D BatchMatMul
-        var Q_3D = queries.Reshape(batchSize * _headCount, sequenceLength, _headDimension);
-        var K_3D = keys.Reshape(batchSize * _headCount, sequenceLength, _headDimension);
+        var Q_3D = queries.Reshape(batchSize * _headCount, seqLengthQ, _headDimension);
+        var K_3D = keys.Reshape(batchSize * _headCount, seqLengthKV, _headDimension);
         var KT_3D = K_3D.Transpose(new[] { 0, 2, 1 });
         
         var attentionScores = Engine.BatchMatMul(Q_3D, KT_3D);
@@ -551,15 +575,15 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Softmax
         var softmaxActivation = new SoftmaxActivation<T>();
         var attentionWeights = softmaxActivation.Activate(attentionScores);
-        _lastAttentionScores = attentionWeights.Reshape(batchSize, _headCount, sequenceLength, sequenceLength);
+        _lastAttentionScores = attentionWeights.Reshape(batchSize, _headCount, seqLengthQ, seqLengthKV);
 
         // 3. Output: Weights @ V
-        // [B*H, S, S] @ [B*H, S, D] -> [B*H, S, D]
-        var V_3D = values.Reshape(batchSize * _headCount, sequenceLength, _headDimension);
+        // [B*H, Sq, Sk] @ [B*H, Sk, D] -> [B*H, Sq, D]
+        var V_3D = values.Reshape(batchSize * _headCount, seqLengthKV, _headDimension);
         var attentionOutput = Engine.BatchMatMul(attentionWeights, V_3D);
 
         // 4. Cache Head Outputs
-        var context_4D = attentionOutput.Reshape(batchSize, _headCount, sequenceLength, _headDimension);
+        var context_4D = attentionOutput.Reshape(batchSize, _headCount, seqLengthQ, _headDimension);
         _lastHeadOutputs = new List<Tensor<T>>(_headCount);
         var permutedForCache = context_4D.Transpose(new[] { 1, 0, 2, 3 }); // [H, B, S, D]
         for (int h = 0; h < _headCount; h++)
@@ -570,10 +594,10 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 5. Concatenate and Project Output
         // [B, H, S, D] -> [B, S, H, D] -> [B, S, E]
         var context_transposed = context_4D.Transpose(new[] { 0, 2, 1, 3 });
-        var context_flat = context_transposed.Reshape(batchSize * sequenceLength, embeddingDimension);
+        var context_flat = context_transposed.Reshape(batchSize * seqLengthQ, embeddingDimension);
         
         var output_flat = Engine.TensorMatMul(context_flat, _outputWeights);
-        var output_reshaped = output_flat.Reshape(batchSize, sequenceLength, embeddingDimension);
+        var output_reshaped = output_flat.Reshape(batchSize, seqLengthQ, embeddingDimension);
         
         var output = output_reshaped.Add(_outputBias.ToVector());
         _lastOutput = ApplyActivation(output);
@@ -666,23 +690,111 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. It's slower than the
-    /// manual implementation but can be useful for:
-    /// - Verifying gradient correctness
-    /// - Rapid prototyping with custom modifications
-    /// - Research and experimentation
+    /// This method uses automatic differentiation to compute gradients by building a computation graph
+    /// that mirrors the multi-head attention forward pass operations. It supports both Self-Attention and Cross-Attention.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null || _lastAttentionScores == null)
+        if (_lastQueryInput == null || _lastKeyInput == null || _lastValueInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Note: Multi-head attention involves complex reshaping and multi-dimensional operations
-        // that are not fully supported by the current TensorOperations.
-        // For now, fall back to manual implementation.
-        // A complete autodiff version would require implementing multi-head attention specific ops.
-        return BackwardManual(outputGradient);
+        // 1. Create variables
+        var qInputNode = Autodiff.TensorOperations<T>.Variable(_lastQueryInput, "query", requiresGradient: true);
+        var kInputNode = Autodiff.TensorOperations<T>.Variable(_lastKeyInput, "key", requiresGradient: true);
+        var vInputNode = Autodiff.TensorOperations<T>.Variable(_lastValueInput, "value", requiresGradient: true);
+        
+        var qWeightsNode = Autodiff.TensorOperations<T>.Variable(_queryWeights, "QWeights", requiresGradient: true);
+        var kWeightsNode = Autodiff.TensorOperations<T>.Variable(_keyWeights, "KWeights", requiresGradient: true);
+        var vWeightsNode = Autodiff.TensorOperations<T>.Variable(_valueWeights, "VWeights", requiresGradient: true);
+        var oWeightsNode = Autodiff.TensorOperations<T>.Variable(_outputWeights, "OWeights", requiresGradient: true);
+        var oBiasNode = Autodiff.TensorOperations<T>.Variable(_outputBias, "OBias", requiresGradient: true);
+
+        int batchSize = _lastQueryInput.Shape[0];
+        int seqLengthQ = _lastQueryInput.Shape[1];
+        int embeddingDimension = _lastQueryInput.Shape[2];
+        int seqLengthKV = _lastKeyInput.Shape[1];
+
+        // 2. Project Input to Q, K, V
+        // Reshape to 2D [B*S, E] for matrix multiply
+        var qInput2D = Autodiff.TensorOperations<T>.Reshape(qInputNode, batchSize * seqLengthQ, embeddingDimension);
+        var kInput2D = Autodiff.TensorOperations<T>.Reshape(kInputNode, batchSize * seqLengthKV, embeddingDimension);
+        var vInput2D = Autodiff.TensorOperations<T>.Reshape(vInputNode, batchSize * seqLengthKV, embeddingDimension);
+        
+        var qFlat = Autodiff.TensorOperations<T>.MatrixMultiply(qInput2D, qWeightsNode);
+        var kFlat = Autodiff.TensorOperations<T>.MatrixMultiply(kInput2D, kWeightsNode);
+        var vFlat = Autodiff.TensorOperations<T>.MatrixMultiply(vInput2D, vWeightsNode);
+
+        // Reshape to [B, S, H, D]
+        var qReshaped = Autodiff.TensorOperations<T>.Reshape(qFlat, batchSize, seqLengthQ, _headCount, _headDimension);
+        var kReshaped = Autodiff.TensorOperations<T>.Reshape(kFlat, batchSize, seqLengthKV, _headCount, _headDimension);
+        var vReshaped = Autodiff.TensorOperations<T>.Reshape(vFlat, batchSize, seqLengthKV, _headCount, _headDimension);
+
+        // Permute to [B, H, S, D]
+        var qHeads = Autodiff.TensorOperations<T>.Permute(qReshaped, 0, 2, 1, 3);
+        var kHeads = Autodiff.TensorOperations<T>.Permute(kReshaped, 0, 2, 1, 3);
+        var vHeads = Autodiff.TensorOperations<T>.Permute(vReshaped, 0, 2, 1, 3);
+
+        // 3. Attention Scores: Q @ K.T
+        // Permute K to [B, H, D, S] for multiplication
+        var kHeadsT = Autodiff.TensorOperations<T>.Permute(kHeads, 0, 1, 3, 2);
+        
+        // [B, H, Sq, D] @ [B, H, D, Sk] -> [B, H, Sq, Sk]
+        var scores = Autodiff.TensorOperations<T>.MatrixMultiply(qHeads, kHeadsT);
+
+        // Scale
+        T scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_headDimension));
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
+        var scaleTensor = new Tensor<T>(new int[] { 1 });
+        scaleTensor[0] = scaleValue;
+        var scaleNode = Autodiff.TensorOperations<T>.Constant(scaleTensor, "scale");
+        
+        var scaledScores = Autodiff.TensorOperations<T>.ElementwiseMultiply(scores, scaleNode);
+
+        // Softmax
+        var attentionWeights = Autodiff.TensorOperations<T>.Softmax(scaledScores);
+
+        // 4. Output: Weights @ V
+        // [B, H, Sq, Sk] @ [B, H, Sk, D] -> [B, H, Sq, D]
+        var attentionOutput = Autodiff.TensorOperations<T>.MatrixMultiply(attentionWeights, vHeads);
+
+        // 5. Merge Heads
+        // Permute to [B, Sq, H, D]
+        var contextPermuted = Autodiff.TensorOperations<T>.Permute(attentionOutput, 0, 2, 1, 3);
+        
+        // Reshape to [B*Sq, E]
+        var contextFlat = Autodiff.TensorOperations<T>.Reshape(contextPermuted, batchSize * seqLengthQ, embeddingDimension);
+
+        // 6. Output Projection
+        var outputFlat = Autodiff.TensorOperations<T>.MatrixMultiply(contextFlat, oWeightsNode);
+        
+        // Reshape to [B, Sq, E]
+        var outputReshaped = Autodiff.TensorOperations<T>.Reshape(outputFlat, batchSize, seqLengthQ, embeddingDimension);
+
+        // Add Bias (broadcast)
+        var biasReshaped = Autodiff.TensorOperations<T>.Reshape(oBiasNode, 1, 1, embeddingDimension);
+        var outputWithBias = Autodiff.TensorOperations<T>.Add(outputReshaped, biasReshaped);
+
+        // Apply Activation
+        var finalOutput = ApplyActivationToGraph(outputWithBias);
+
+        // 7. Set Gradient
+        finalOutput.Gradient = outputGradient;
+
+        // 8. Topo Sort & Backward
+        finalOutput.Backward();
+
+        // 9. Store Gradients
+        _queryWeightsGradient = qWeightsNode.Gradient;
+        _keyWeightsGradient = kWeightsNode.Gradient;
+        _valueWeightsGradient = vWeightsNode.Gradient;
+        _outputWeightsGradient = oWeightsNode.Gradient;
+        _outputBiasGradient = oBiasNode.Gradient;
+
+        // Return gradient w.r.t Query input (as expected by TransformerDecoderLayer)
+        // Note: Gradients for Key and Value (Encoder outputs) are computed in kInputNode.Gradient and vInputNode.Gradient
+        // but ILayer only returns one gradient tensor.
+        return qInputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
 
