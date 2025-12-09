@@ -112,7 +112,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             currentDim = hiddenDim;
         }
 
-        // Initialize gradient accumulation buffers as Tensor<T>
+        // Initialize gradient accumulation buffers
         _accumulatedGradients = new Vector<T>[numFrequencyLevels];
         _stepCounters = new int[numFrequencyLevels];
         for (int i = 0; i < numFrequencyLevels; i++)
@@ -443,13 +443,13 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             mlp.ResetState();
         }
 
-            for (int i = 0; i < _accumulatedGradients.Length; i++)
-            {
+        for (int i = 0; i < _accumulatedGradients.Length; i++)
+        {
             int paramCount = _accumulatedGradients[i].Length;
             _accumulatedGradients[i] = new Vector<T>(paramCount);
             _accumulatedGradients[i].Fill(NumOps.Zero);
             _stepCounters[i] = 0;
-            }
+        }
 
         _globalStep = 0;
     }

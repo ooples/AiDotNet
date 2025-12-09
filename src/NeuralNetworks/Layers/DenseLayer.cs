@@ -717,16 +717,16 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         // 1. Calculate activation gradient: dL/dz = dL/dy * f'(z)
-        // Unified Backward method handles both Scalar and Vector activations efficiently
+        // The activation was applied to _lastOutput (pre-activation), so use it for derivative computation
         Tensor<T> activationGradient;
 
         if (UsingVectorActivation && VectorActivation != null)
         {
-             activationGradient = VectorActivation.Backward(_lastInput, outputGradient);
+             activationGradient = VectorActivation.Backward(_lastOutput, outputGradient);
         }
         else if (ScalarActivation != null)
         {
-             activationGradient = ScalarActivation.Backward(_lastInput, outputGradient);
+             activationGradient = ScalarActivation.Backward(_lastOutput, outputGradient);
         }
         else
         {

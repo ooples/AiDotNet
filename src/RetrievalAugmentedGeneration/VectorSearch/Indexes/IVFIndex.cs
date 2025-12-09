@@ -76,10 +76,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
                 throw new ArgumentNullException(nameof(vectors), "Vector cannot be null");
             }
 
-            // Add all vectors by mapping keys to values
-            foreach (var key in vectors.Select(kvp => kvp.Key))
+            // Add all vectors directly from key-value pairs
+            foreach (var kvp in vectors)
             {
-                _vectors[key] = vectors[key];
+                _vectors[kvp.Key] = kvp.Value;
             }
             _centroids = null; // Invalidate centroids, will rebuild on next search
         }

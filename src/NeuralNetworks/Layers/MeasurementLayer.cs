@@ -226,7 +226,9 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This method uses automatic differentiation to compute gradients. It constructs a computation graph
-    /// that mirrors the forward pass operations (Square -> Sum -> Normalize) to calculate exact gradients.
+    /// that mirrors the forward pass operations (complex magnitude squared -> Sum -> Normalize) to calculate exact gradients.
+    /// The input is complex-valued stored as [real_0, imag_0, real_1, imag_1, ...] (interleaved format),
+    /// so we extract real and imaginary parts and compute |z|² = real² + imag².
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
@@ -237,13 +239,22 @@ public class MeasurementLayer<T> : LayerBase<T>
         // 1. Create input variable
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
-        // 2. Build computation graph
-        // Forward computes: p = |x|^2 / sum(|x|^2)
-        // For real inputs T, |x|^2 = x^2
-        var squared = Autodiff.TensorOperations<T>.Square(inputNode);
-        
+        // 2. Build computation graph matching Forward's complex magnitude computation
+        // Input is complex-valued stored as [real_0, imag_0, real_1, imag_1, ...] (interleaved)
+        // Forward computes: p = |z|² / sum(|z|²) where |z|² = real² + imag²
+        int size = _lastInput.Shape[0];
+
+        // Extract real parts (even indices) and imaginary parts (odd indices)
+        var realPart = Autodiff.TensorOperations<T>.Slice(inputNode, 0, size, step: 2, axis: 0);
+        var imagPart = Autodiff.TensorOperations<T>.Slice(inputNode, 1, size, step: 2, axis: 0);
+
+        // Compute |z|² = real² + imag²
+        var realSquared = Autodiff.TensorOperations<T>.Square(realPart);
+        var imagSquared = Autodiff.TensorOperations<T>.Square(imagPart);
+        var magnitudeSquared = Autodiff.TensorOperations<T>.Add(realSquared, imagSquared);
+
         // Sum over all elements
-        var sumSquared = Autodiff.TensorOperations<T>.Sum(squared);
+        var sumSquared = Autodiff.TensorOperations<T>.Sum(magnitudeSquared);
 
         // Add epsilon for numerical stability
         var epsilonTensor = new Tensor<T>(new int[] { 1 });
@@ -251,8 +262,8 @@ public class MeasurementLayer<T> : LayerBase<T>
         var epsilonNode = Autodiff.TensorOperations<T>.Constant(epsilonTensor, "epsilon");
         var safeSum = Autodiff.TensorOperations<T>.Add(sumSquared, epsilonNode);
 
-        // Normalize (Divide broadcasts scalar safeSum to vector squared)
-        var output = Autodiff.TensorOperations<T>.Divide(squared, safeSum);
+        // Normalize to get probabilities
+        var output = Autodiff.TensorOperations<T>.Divide(magnitudeSquared, safeSum);
 
         // 3. Set gradient and execute backward
         output.Gradient = outputGradient;

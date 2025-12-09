@@ -1393,60 +1393,86 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         var prevCellNode = TensorOperations<T>.Variable(prevCellPlaceholder, "c_prev");
         inputNodes.Add(prevCellNode);
 
-        // Create constant nodes for all weights (input weights)
-        var weightsFiNode = TensorOperations<T>.Constant(_weightsFi, "W_fi");
-        var weightsIiNode = TensorOperations<T>.Constant(_weightsIi, "W_ii");
-        var weightsCiNode = TensorOperations<T>.Constant(_weightsCi, "W_ci");
-        var weightsOiNode = TensorOperations<T>.Constant(_weightsOi, "W_oi");
+        // Create variable nodes for all weights (input weights)
+        var wFi = TensorOperations<T>.Variable(_weightsFi, "W_fi");
+        var wIi = TensorOperations<T>.Variable(_weightsIi, "W_ii");
+        var wCi = TensorOperations<T>.Variable(_weightsCi, "W_ci");
+        var wOi = TensorOperations<T>.Variable(_weightsOi, "W_oi");
 
-        // Create constant nodes for all weights (hidden/recurrent weights)
-        var weightsFhNode = TensorOperations<T>.Constant(_weightsFh, "W_fh");
-        var weightsIhNode = TensorOperations<T>.Constant(_weightsIh, "W_ih");
-        var weightsChNode = TensorOperations<T>.Constant(_weightsCh, "W_ch");
-        var weightsOhNode = TensorOperations<T>.Constant(_weightsOh, "W_oh");
+        // Create variable nodes for all weights (hidden/recurrent weights)
+        var wFh = TensorOperations<T>.Variable(_weightsFh, "W_fh");
+        var wIh = TensorOperations<T>.Variable(_weightsIh, "W_ih");
+        var wCh = TensorOperations<T>.Variable(_weightsCh, "W_ch");
+        var wOh = TensorOperations<T>.Variable(_weightsOh, "W_oh");
 
-        // Create constant nodes for biases
-        var biasFNode = TensorOperations<T>.Constant(_biasF, "b_f");
-        var biasINode = TensorOperations<T>.Constant(_biasI, "b_i");
-        var biasCNode = TensorOperations<T>.Constant(_biasC, "b_c");
-        var biasONode = TensorOperations<T>.Constant(_biasO, "b_o");
+        // Create variable nodes for biases
+        var bF = TensorOperations<T>.Variable(_biasF, "b_f");
+        var bI = TensorOperations<T>.Variable(_biasI, "b_i");
+        var bC = TensorOperations<T>.Variable(_biasC, "b_c");
+        var bO = TensorOperations<T>.Variable(_biasO, "b_o");
+
+        // Pre-process weights for Conv2D: [kH, kW, In, Out] -> [Out, In, kH, kW]
+        // This matches the permutation used in BackwardViaAutodiff for consistency
+        var wFi_T = TensorOperations<T>.Permute(wFi, 3, 2, 0, 1);
+        var wIi_T = TensorOperations<T>.Permute(wIi, 3, 2, 0, 1);
+        var wCi_T = TensorOperations<T>.Permute(wCi, 3, 2, 0, 1);
+        var wOi_T = TensorOperations<T>.Permute(wOi, 3, 2, 0, 1);
+
+        var wFh_T = TensorOperations<T>.Permute(wFh, 3, 2, 0, 1);
+        var wIh_T = TensorOperations<T>.Permute(wIh, 3, 2, 0, 1);
+        var wCh_T = TensorOperations<T>.Permute(wCh, 3, 2, 0, 1);
+        var wOh_T = TensorOperations<T>.Permute(wOh, 3, 2, 0, 1);
+
+        // Reshape biases for NCHW broadcasting: [1, 1, 1, Filters] -> [1, Filters, 1, 1]
+        var bF_T = TensorOperations<T>.Reshape(bF, 1, _filters, 1, 1);
+        var bI_T = TensorOperations<T>.Reshape(bI, 1, _filters, 1, 1);
+        var bC_T = TensorOperations<T>.Reshape(bC, 1, _filters, 1, 1);
+        var bO_T = TensorOperations<T>.Reshape(bO, 1, _filters, 1, 1);
+
+        // Permute inputs from NHWC to NCHW for Conv2D operations
+        var inputNCHW = TensorOperations<T>.Permute(inputNode, 0, 3, 1, 2);
+        var prevHiddenNCHW = TensorOperations<T>.Permute(prevHiddenNode, 0, 3, 1, 2);
+        var prevCellNCHW = TensorOperations<T>.Permute(prevCellNode, 0, 3, 1, 2);
 
         // Stride and padding arrays for Conv2D
         var stride = new int[] { _strides, _strides };
         var padding = new int[] { _padding, _padding };
 
         // ========== Forget Gate: f_t = sigmoid(Conv2D(x_t, W_fi) + Conv2D(h_{t-1}, W_fh) + b_f) ==========
-        var f_input = TensorOperations<T>.Conv2D(inputNode, weightsFiNode, biasFNode, stride, padding);
-        var f_hidden = TensorOperations<T>.Conv2D(prevHiddenNode, weightsFhNode, stride: stride, padding: padding);
+        var f_input = TensorOperations<T>.Conv2D(inputNCHW, wFi_T, bF_T, stride, padding);
+        var f_hidden = TensorOperations<T>.Conv2D(prevHiddenNCHW, wFh_T, stride: stride, padding: padding);
         var f_preact = TensorOperations<T>.Add(f_input, f_hidden);
         var f_t = TensorOperations<T>.Sigmoid(f_preact);
 
         // ========== Input Gate: i_t = sigmoid(Conv2D(x_t, W_ii) + Conv2D(h_{t-1}, W_ih) + b_i) ==========
-        var i_input = TensorOperations<T>.Conv2D(inputNode, weightsIiNode, biasINode, stride, padding);
-        var i_hidden = TensorOperations<T>.Conv2D(prevHiddenNode, weightsIhNode, stride: stride, padding: padding);
+        var i_input = TensorOperations<T>.Conv2D(inputNCHW, wIi_T, bI_T, stride, padding);
+        var i_hidden = TensorOperations<T>.Conv2D(prevHiddenNCHW, wIh_T, stride: stride, padding: padding);
         var i_preact = TensorOperations<T>.Add(i_input, i_hidden);
         var i_t = TensorOperations<T>.Sigmoid(i_preact);
 
         // ========== Cell Candidate: c̃_t = tanh(Conv2D(x_t, W_ci) + Conv2D(h_{t-1}, W_ch) + b_c) ==========
-        var c_input = TensorOperations<T>.Conv2D(inputNode, weightsCiNode, biasCNode, stride, padding);
-        var c_hidden = TensorOperations<T>.Conv2D(prevHiddenNode, weightsChNode, stride: stride, padding: padding);
+        var c_input = TensorOperations<T>.Conv2D(inputNCHW, wCi_T, bC_T, stride, padding);
+        var c_hidden = TensorOperations<T>.Conv2D(prevHiddenNCHW, wCh_T, stride: stride, padding: padding);
         var c_preact = TensorOperations<T>.Add(c_input, c_hidden);
         var c_tilde = TensorOperations<T>.Tanh(c_preact);
 
         // ========== Output Gate: o_t = sigmoid(Conv2D(x_t, W_oi) + Conv2D(h_{t-1}, W_oh) + b_o) ==========
-        var o_input = TensorOperations<T>.Conv2D(inputNode, weightsOiNode, biasONode, stride, padding);
-        var o_hidden = TensorOperations<T>.Conv2D(prevHiddenNode, weightsOhNode, stride: stride, padding: padding);
+        var o_input = TensorOperations<T>.Conv2D(inputNCHW, wOi_T, bO_T, stride, padding);
+        var o_hidden = TensorOperations<T>.Conv2D(prevHiddenNCHW, wOh_T, stride: stride, padding: padding);
         var o_preact = TensorOperations<T>.Add(o_input, o_hidden);
         var o_t = TensorOperations<T>.Sigmoid(o_preact);
 
         // ========== Cell State: c_t = f_t ⊙ c_{t-1} + i_t ⊙ c̃_t ==========
-        var forget_gated = TensorOperations<T>.ElementwiseMultiply(f_t, prevCellNode);
+        var forget_gated = TensorOperations<T>.ElementwiseMultiply(f_t, prevCellNCHW);
         var input_gated = TensorOperations<T>.ElementwiseMultiply(i_t, c_tilde);
         var c_t = TensorOperations<T>.Add(forget_gated, input_gated);
 
         // ========== Hidden State: h_t = o_t ⊙ tanh(c_t) ==========
         var c_t_activated = TensorOperations<T>.Tanh(c_t);
-        var h_t = TensorOperations<T>.ElementwiseMultiply(o_t, c_t_activated);
+        var h_t_NCHW = TensorOperations<T>.ElementwiseMultiply(o_t, c_t_activated);
+
+        // Permute output from NCHW back to NHWC for consistency with layer output format
+        var h_t = TensorOperations<T>.Permute(h_t_NCHW, 0, 2, 3, 1);
 
         // Apply layer activation if configured (typically identity for ConvLSTM)
         var output = ApplyActivationToGraph(h_t);
