@@ -31,46 +31,46 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class SynapticPlasticityLayer<T> : LayerBase<T>
 {
     /// <summary>
-    /// The input vector from the last forward pass.
+    /// The input tensor from the last forward pass.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This field stores the input vector from the most recent forward pass, which is used during the update process
+    /// This field stores the input tensor from the most recent forward pass, which is used during the update process
     /// to determine which presynaptic neurons were active.
     /// </para>
     /// <para><b>For Beginners:</b> This stores which input neurons were recently active.
-    /// 
+    ///
     /// Think of it as recording:
     /// - Which sensors or input neurons sent signals
     /// - How strong those signals were
     /// - This information is used to determine which connections should be modified
-    /// 
-    /// For example, in visual learning, this might represent which specific visual features 
+    ///
+    /// For example, in visual learning, this might represent which specific visual features
     /// were detected in an image.
     /// </para>
     /// </remarks>
-    private Vector<T> _lastInput;
+    private Tensor<T> _lastInput;
 
     /// <summary>
-    /// The output vector from the last forward pass.
+    /// The output tensor from the last forward pass.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This field stores the output vector from the most recent forward pass, which is used during the update process
+    /// This field stores the output tensor from the most recent forward pass, which is used during the update process
     /// to determine which postsynaptic neurons were active.
     /// </para>
     /// <para><b>For Beginners:</b> This stores which output neurons were recently active.
-    /// 
+    ///
     /// This records:
     /// - Which output neurons responded to the input
     /// - How strongly they responded
     /// - This information helps determine which connections to strengthen or weaken
-    /// 
-    /// For example, if learning to recognize faces, this might represent which "face detector" 
+    ///
+    /// For example, if learning to recognize faces, this might represent which "face detector"
     /// neurons activated in response to an image.
     /// </para>
     /// </remarks>
-    private Vector<T> _lastOutput;
+    private Tensor<T> _lastOutput;
 
     /// <summary>
     /// The weight matrix representing connection strengths between neurons.
@@ -205,84 +205,84 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the decaying traces of recent presynaptic activity, which are used to implement
+    /// This tensor stores the decaying traces of recent presynaptic activity, which are used to implement
     /// spike-timing-dependent plasticity. Each trace decays exponentially over time.
     /// </para>
     /// <para><b>For Beginners:</b> This tracks the recent history of input neuron activity.
-    /// 
+    ///
     /// Presynaptic traces work like this:
     /// - When an input neuron spikes (activates strongly), its trace jumps to 1.0
     /// - This trace then gradually fades over time
     /// - The trace represents "this neuron was recently active"
-    /// 
+    ///
     /// Think of it like a gradually fading footprint showing which input neurons
     /// were active in the recent past.
     /// </para>
     /// </remarks>
-    private Vector<T> _presynapticTraces;
+    private Tensor<T> _presynapticTraces;
 
     /// <summary>
     /// The activity traces of postsynaptic neurons.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the decaying traces of recent postsynaptic activity, which are used to implement
+    /// This tensor stores the decaying traces of recent postsynaptic activity, which are used to implement
     /// spike-timing-dependent plasticity. Each trace decays exponentially over time.
     /// </para>
     /// <para><b>For Beginners:</b> This tracks the recent history of output neuron activity.
-    /// 
+    ///
     /// Postsynaptic traces work the same way as presynaptic traces, but for output neurons:
     /// - They jump to 1.0 when the neuron activates
     /// - Then gradually decay over time
     /// - They help determine which connections should be strengthened or weakened
-    /// 
+    ///
     /// These traces allow the network to consider the relative timing between
     /// input and output activity, which is crucial for spike-timing-dependent plasticity.
     /// </para>
     /// </remarks>
-    private Vector<T> _postsynapticTraces;
+    private Tensor<T> _postsynapticTraces;
 
     /// <summary>
     /// The current spike state of presynaptic neurons (binary).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the current spike state of each presynaptic neuron, with 1 indicating a spike and 0 indicating
+    /// This tensor stores the current spike state of each presynaptic neuron, with 1 indicating a spike and 0 indicating
     /// no spike. A spike occurs when the neuron's activation exceeds a threshold (typically 0.5).
     /// </para>
     /// <para><b>For Beginners:</b> This records which input neurons are currently firing.
-    /// 
+    ///
     /// Spikes are:
     /// - Binary events (either a neuron spikes or it doesn't)
     /// - Determined by whether the neuron's activation exceeds a threshold
     /// - How real neurons communicate in the brain
-    /// 
+    ///
     /// In this model, an input value above 0.5 is considered a spike, which is a simplified
     /// version of how biological neurons generate electrical impulses when sufficiently activated.
     /// </para>
     /// </remarks>
-    private Vector<T> _presynapticSpikes;
+    private Tensor<T> _presynapticSpikes;
 
     /// <summary>
     /// The current spike state of postsynaptic neurons (binary).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the current spike state of each postsynaptic neuron, with 1 indicating a spike and 0 indicating
+    /// This tensor stores the current spike state of each postsynaptic neuron, with 1 indicating a spike and 0 indicating
     /// no spike. A spike occurs when the neuron's activation exceeds a threshold (typically 0.5).
     /// </para>
     /// <para><b>For Beginners:</b> This records which output neurons are currently firing.
-    /// 
+    ///
     /// Just like with input neurons:
     /// - Output neurons either spike (1) or don't spike (0)
     /// - A spike happens when activation exceeds the threshold
     /// - This binary state is used in determining how connections should change
-    /// 
+    ///
     /// The combination of current spikes and spike traces allows the network to implement
     /// timing-dependent learning rules.
     /// </para>
     /// </remarks>
-    private Vector<T> _postsynapticSpikes;
+    private Tensor<T> _postsynapticSpikes;
 
     /// <summary>
     /// The decay rate of activity traces.
@@ -363,11 +363,15 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// These settings control the learning dynamics and how the layer will adapt to patterns over time.
     /// </para>
     /// </remarks>
-    public SynapticPlasticityLayer(int size, double stdpLtpRate = 0.005, 
+    public SynapticPlasticityLayer(int size, double stdpLtpRate = 0.005,
         double stdpLtdRate = 0.0025, double homeostasisRate = 0.0001, double minWeight = 0, double maxWeight = 1, double traceDecay = 0.95) : base([size], [size])
     {
-        _lastInput = new Vector<T>(size);
-        _lastOutput = new Vector<T>(size);
+        // Initialize cached state tensors
+        _lastInput = new Tensor<T>([size]);
+        _lastInput.Fill(NumOps.Zero);
+        _lastOutput = new Tensor<T>([size]);
+        _lastOutput.Fill(NumOps.Zero);
+
         _stdpLtpRate = stdpLtpRate;
         _stdpLtdRate = stdpLtdRate;
         _homeostasisRate = homeostasisRate;
@@ -375,11 +379,18 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
         _maxWeight = maxWeight;
         _traceDecay = traceDecay;
 
-        _weights = Tensor<T>.CreateRandom([size, size]); // Initialize with small random values
-        _presynapticTraces = new Vector<T>(size);
-        _postsynapticTraces = new Vector<T>(size);
-        _presynapticSpikes = new Vector<T>(size);
-        _postsynapticSpikes = new Vector<T>(size);
+        // Initialize weights with small random values
+        _weights = Tensor<T>.CreateRandom([size, size]);
+
+        // Initialize trace and spike tensors
+        _presynapticTraces = new Tensor<T>([size]);
+        _presynapticTraces.Fill(NumOps.Zero);
+        _postsynapticTraces = new Tensor<T>([size]);
+        _postsynapticTraces.Fill(NumOps.Zero);
+        _presynapticSpikes = new Tensor<T>([size]);
+        _presynapticSpikes.Fill(NumOps.Zero);
+        _postsynapticSpikes = new Tensor<T>([size]);
+        _postsynapticSpikes.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -408,9 +419,14 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        var inputVector = input.ToVector();
-        _lastInput = inputVector;
-        _lastOutput = inputVector; // Pass-through layer
+        // Flatten to 1D tensor if needed
+        var inputFlat = input.Shape.Length == 1
+            ? input
+            : input.Reshape([input.Length]);
+
+        // Store for STDP learning
+        _lastInput = inputFlat;
+        _lastOutput = inputFlat; // Pass-through layer
 
         return input;
     }
@@ -470,10 +486,54 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // SynapticPlasticityLayer implements STDP (Spike-Timing-Dependent Plasticity)
-        // The manual implementation provides correct gradient computation for this
-        // biologically-inspired learning rule. No new TensorOperation needed.
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Identity passthrough graph for gradients
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "stdp_input", requiresGradient: true);
+        var outputNode = inputNode;
+        outputNode.Gradient = outputGradient;
+
+        // Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed in synaptic plasticity autodiff.");
     }
 
 
@@ -613,29 +673,50 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets all trainable parameters of the layer as a single vector.
     /// </summary>
-    /// <returns>An empty vector, as the layer's plasticity is handled differently than traditional parameters.</returns>
+    /// <returns>A vector containing the weight matrix parameters.</returns>
     /// <remarks>
     /// <para>
-    /// This method returns an empty vector, as the synaptic plasticity layer handles its learning through
-    /// biologically-inspired plasticity rules rather than through traditional parameter optimization.
+    /// This method returns the weight matrix as a flattened vector. Although this layer primarily
+    /// uses STDP learning rules, exposing parameters allows for saving/loading state.
     /// </para>
-    /// <para><b>For Beginners:</b> This method is included for compatibility but doesn't actually return parameters.
-    /// 
-    /// The reason for returning an empty vector:
-    /// - This layer doesn't use standard backpropagation to update weights
-    /// - Instead, it uses spike-timing-dependent plasticity rules
-    /// - These rules are applied directly in the UpdateParameters method
-    /// 
-    /// While the layer does have parameters (the weight matrix), they're not exposed
-    /// through this method because they're updated through a different mechanism.
+    /// <para><b>For Beginners:</b> This method returns the layer's weights for saving or inspection.
+    ///
+    /// While the layer uses spike-timing-dependent plasticity rules for learning,
+    /// it still has parameters (the weight matrix) that can be:
+    /// - Saved to disk
+    /// - Loaded from a previously trained model
+    /// - Inspected for analysis
     /// </para>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // This layer doesn't have traditional parameters like weights and biases
-        // Instead, it uses the input and output values for plasticity rules
-        // Return an empty vector to satisfy the interface
-        return Vector<T>.Empty();
+        // Return the weight tensor as a flattened vector
+        return new Vector<T>(_weights.ToArray());
+    }
+
+    /// <summary>
+    /// Sets the trainable parameters of the layer from a single vector.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters to set.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets the weight matrix from a flattened vector. This is useful for loading
+    /// saved model weights or for implementing optimization algorithms.
+    /// </para>
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int size = GetInputShape()[0];
+        int expectedParams = size * size;
+
+        if (parameters.Length != expectedParams)
+        {
+            throw new ArgumentException($"Expected {expectedParams} parameters, but got {parameters.Length}");
+        }
+
+        // Restore weights without hot-path conversions
+        _weights = new Tensor<T>(new[] { size, size }, parameters);
     }
 
     /// <summary>
@@ -659,11 +740,23 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
-        // === Vectorized State Reset (Phase B: US-GPU-015) ===
-        // Reset the internal state of the layer
+        // Reset the internal state of the layer using Tensor<T>
         int size = GetInputShape()[0];
-        _lastInput = Vector<T>.CreateDefault(size, NumOps.Zero);
-        _lastOutput = Vector<T>.CreateDefault(size, NumOps.Zero);
+
+        _lastInput = new Tensor<T>([size]);
+        _lastInput.Fill(NumOps.Zero);
+        _lastOutput = new Tensor<T>([size]);
+        _lastOutput.Fill(NumOps.Zero);
+
+        // Also reset traces and spikes
+        _presynapticTraces = new Tensor<T>([size]);
+        _presynapticTraces.Fill(NumOps.Zero);
+        _postsynapticTraces = new Tensor<T>([size]);
+        _postsynapticTraces.Fill(NumOps.Zero);
+        _presynapticSpikes = new Tensor<T>([size]);
+        _presynapticSpikes.Fill(NumOps.Zero);
+        _postsynapticSpikes = new Tensor<T>([size]);
+        _postsynapticSpikes.Fill(NumOps.Zero);
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

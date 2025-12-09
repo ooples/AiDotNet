@@ -277,8 +277,16 @@ public class ActivationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Backward pass implementation using automatic differentiation.
+    /// Backward pass implementation using automatic differentiation with production-grade optimizations.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method uses a production-grade pattern for computing gradients:
+    /// - Uses cached _lastInput from forward pass (locality caching)
+    /// - Builds minimal autodiff graph only for gradient routing
+    /// - Executes inline topological sort for graph traversal
+    /// </para>
+    /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
@@ -286,17 +294,49 @@ public class ActivationLayer<T> : LayerBase<T>
 
         TensorValidator.ValidateShapesMatch(_lastInput, outputGradient, "Activation Layer", "Backward Pass");
 
-        // Create computation node for input
-        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        // 1. Create variable nodes for inputs that need gradients
+        var inputNode = AiDotNet.Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
-        // Apply activation using autodiff
-        var output = ApplyActivationAutodiff(input);
+        // 2. Build computation graph
+        var activation = ScalarActivation ?? (IActivationFunction<T>?)VectorActivation;
+        if (activation == null) return outputGradient;
 
-        // Set the gradient and propagate backward
-        output.Gradient = outputGradient;
+        var outputNode = activation.ApplyToGraph(inputNode);
 
-        // Perform backward pass
-        var topoOrder = GetTopologicalOrder(output);
+        // 3. Set output gradient
+        outputNode.Gradient = outputGradient;
+
+        // 4. Inline topological sort
+        var visited = new HashSet<AiDotNet.Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<AiDotNet.Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(AiDotNet.Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // 5. Execute backward pass
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -306,64 +346,8 @@ public class ActivationLayer<T> : LayerBase<T>
             }
         }
 
-        return input.Gradient!;
-    }
-
-    /// <summary>
-    /// Applies activation function using autodiff operations.
-    /// </summary>
-    /// <remarks>
-    /// This method uses the generic TensorOperations<T>.ApplyActivation which supports ALL 39 built-in
-    /// activation functions automatically. Only truly custom user-defined activations would fail.
-    /// </remarks>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (ScalarActivation == null)
-            return input;
-
-        return Autodiff.TensorOperations<T>.ApplyActivation(input, ScalarActivation);
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
+        // 6. Extract gradient
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>
@@ -372,12 +356,13 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <param name="input">The input tensor to transform</param>
     /// <returns>A new tensor with the activation function applied to each element</returns>
     /// <remarks>
-    /// This private helper method applies the scalar activation function to each element of the input tensor
-    /// independently. It uses the Transform method of the Tensor class to apply the function element-wise.
+    /// This private helper method applies the scalar activation function to the input tensor.
+    /// It delegates to the activation function's Activate(Tensor) method, allowing for potential
+    /// optimizations (like GPU acceleration) implemented within the activation function class.
     /// </remarks>
     private Tensor<T> ApplyScalarActivation(Tensor<T> input)
     {
-        return input.Transform((x, _) => ScalarActivation!.Activate(x));
+        return ScalarActivation!.Activate(input);
     }
 
     /// <summary>
@@ -402,14 +387,12 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <returns>The gradient with respect to this layer's input</returns>
     /// <remarks>
     /// This private helper method calculates the gradient for the backward pass when using a scalar activation function.
-    /// It applies the derivative of the activation function to each element of the last input, then multiplies
-    /// the result by the corresponding element of the output gradient.
+    /// It uses the activation function's vectorized Derivative method and Engine.TensorMultiply for efficient
+    /// element-wise computation.
     /// </remarks>
     private Tensor<T> BackwardScalarActivation(Tensor<T> outputGradient)
     {
-        // Use flat indexing since Transform provides a flat index, not an array of indices
-        return _lastInput!.Transform((x, flatIndex) =>
-            NumOps.Multiply(ScalarActivation!.Derivative(x), outputGradient.GetFlat(flatIndex)));
+        return ScalarActivation!.Backward(_lastInput!, outputGradient);
     }
 
 
@@ -443,7 +426,8 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardVectorActivation(Tensor<T> outputGradient)
     {
-        return VectorActivation!.Derivative(_lastInput!) * outputGradient;
+        // Now unified via IVectorActivationFunction.Backward
+        return VectorActivation!.Backward(_lastInput!, outputGradient);
     }
 
     /// <summary>

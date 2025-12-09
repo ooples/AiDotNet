@@ -656,15 +656,15 @@ public abstract class LayerBase<T> : ILayer<T>
     /// This method lets you inspect or modify the weights after training.
     /// </para>
     /// </remarks>
-    public virtual Matrix<T>? GetWeights() => null;
+    public virtual Tensor<T>? GetWeights() => null;
 
     /// <summary>
-    /// Gets the bias vector for layers that have trainable biases.
+    /// Gets the bias tensor for layers that have trainable biases.
     /// </summary>
-    /// <returns>The bias vector, or null if the layer has no biases.</returns>
+    /// <returns>The bias tensor, or null if the layer has no biases.</returns>
     /// <remarks>
     /// <para>
-    /// This method provides access to the layer's bias vector for layers that use biases
+    /// This method provides access to the layer's bias tensor for layers that use biases
     /// during computation. Layers without biases return null.
     /// </para>
     /// <para><b>For Beginners:</b> Biases are learnable offsets added to the layer's output.
@@ -676,7 +676,7 @@ public abstract class LayerBase<T> : ILayer<T>
     /// Biases help the network learn more flexible patterns by shifting the activation function.
     /// </para>
     /// </remarks>
-    public virtual Vector<T>? GetBiases() => null;
+    public virtual Tensor<T>? GetBiases() => null;
 
     /// <summary>
     /// Exports the layer's computation graph for JIT compilation.
@@ -946,40 +946,23 @@ public abstract class LayerBase<T> : ILayer<T>
     }
 
     /// <summary>
-    /// Applies the activation function to a rank-1 tensor (vector).
+    /// Applies the activation function to a tensor.
     /// </summary>
     /// <param name="input">The input tensor to activate.</param>
     /// <returns>The activated tensor.</returns>
-    /// <exception cref="ArgumentException">Thrown when the input tensor is not rank-1.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method applies the layer's activation function to a rank-1 tensor (a vector). It first converts
-    /// the tensor to a vector, applies the activation, and then converts it back to a tensor.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method applies the activation function to a 1D array of values.
-    /// 
-    /// When processing a single "row" of data:
-    /// - This method converts it to a format the activation function can process
-    /// - Applies either the scalar or vector activation function
-    /// - Converts the result back to a tensor
-    /// 
-    /// This is a utility method used internally by various layer types.
-    /// </para>
-    /// </remarks>
     protected Tensor<T> ApplyActivation(Tensor<T> input)
     {
-        // Use centralized ActivationHelper for optimized activation dispatch
         if (VectorActivation != null)
         {
-            return ActivationHelper.ApplyActivation(VectorActivation, input, Engine);
+            return VectorActivation.Activate(input);
+        }
+        
+        if (ScalarActivation != null)
+        {
+            return ScalarActivation.Activate(input);
         }
 
-        // Fall back to vector-based activation for scalar activations
-        Vector<T> inputVector = input.ToVector();
-        Vector<T> outputVector = ApplyActivation(inputVector);
-
-        // Preserve the original tensor shape when creating the result
-        return new Tensor<T>(input.Shape, outputVector);
+        return input;
     }
 
     /// <summary>
@@ -1213,7 +1196,7 @@ public abstract class LayerBase<T> : ILayer<T>
             return Tensor<T>.CreateDefault(input.Shape, NumOps.One);
         }
 
-        return input.Transform((x, _) => activation.Derivative(x));
+        return activation.Derivative(input);
     }
 
     /// <summary>
@@ -1288,7 +1271,8 @@ public abstract class LayerBase<T> : ILayer<T>
         else if (ScalarActivation != null)
         {
             // Element-wise application of scalar activation derivative
-            return input.Transform((x, _) => ScalarActivation.Derivative(x)).ElementwiseMultiply(outputGradient);
+            // Optimized to use Tensor operations
+            return ScalarActivation.Derivative(input).ElementwiseMultiply(outputGradient);
         }
         else
         {

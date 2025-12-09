@@ -149,46 +149,15 @@ public class AvgPoolingLayer<T> : LayerBase<T>
         // Store input for autodiff backward pass
         _lastInput = input;
 
-        int channels = input.Shape[0];
-        int inputHeight = input.Shape[1];
-        int inputWidth = input.Shape[2];
-        int outputHeight = OutputShape[1];
-        int outputWidth = OutputShape[2];
+        // Reshape to 4D [1, C, H, W] for Engine
+        var input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
 
-        var output = new Tensor<T>(OutputShape);
+        // Use GPU-accelerated AvgPool2D via Engine
+        var output4D = Engine.AvgPool2D(input4D, PoolSize, Strides, padding: 0);
+
+        // Reshape back to 3D
+        var output = output4D.Reshape(OutputShape);
         _lastOutputShape = OutputShape;
-
-        // Pool size squared for averaging
-        T poolSizeSquared = NumOps.FromDouble(PoolSize * PoolSize);
-
-        for (int c = 0; c < channels; c++)
-        {
-            for (int h = 0; h < outputHeight; h++)
-            {
-                for (int w = 0; w < outputWidth; w++)
-                {
-                    T sum = NumOps.Zero;
-
-                    // Sum all values in the pooling window
-                    for (int ph = 0; ph < PoolSize; ph++)
-                    {
-                        for (int pw = 0; pw < PoolSize; pw++)
-                        {
-                            int ih = h * Strides + ph;
-                            int iw = w * Strides + pw;
-
-                            if (ih < inputHeight && iw < inputWidth)
-                            {
-                                sum = NumOps.Add(sum, input[c, ih, iw]);
-                            }
-                        }
-                    }
-
-                    // Compute average
-                    output[c, h, w] = NumericalStabilityHelper.SafeDiv(sum, poolSizeSquared);
-                }
-            }
-        }
 
         return output;
     }
@@ -224,45 +193,25 @@ public class AvgPoolingLayer<T> : LayerBase<T>
     /// <exception cref="ArgumentException">Thrown when the output gradient tensor doesn't have 3 dimensions.</exception>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
         if (outputGradient.Shape.Length != 3)
             throw new ArgumentException("Output gradient tensor must have 3 dimensions (channels, height, width)");
 
-        int channels = InputShape[0];
-        int inputHeight = InputShape[1];
-        int inputWidth = InputShape[2];
+        // Reshape gradient to 4D [1, C, H, W]
+        var gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
 
-        var inputGradient = new Tensor<T>(InputShape);
+        // Prepare parameters for Engine operation
+        var inputShape4D = new int[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] };
+        var poolSizeArr = new int[] { PoolSize, PoolSize };
+        var strideArr = new int[] { Strides, Strides };
 
-        // Pool size squared for distributing gradients
-        T poolSizeSquared = NumOps.FromDouble(PoolSize * PoolSize);
+        // Use GPU-accelerated AvgPool2DBackward via Engine
+        var inputGradient4D = Engine.AvgPool2DBackward(gradient4D, inputShape4D, poolSizeArr, strideArr);
 
-        for (int c = 0; c < channels; c++)
-        {
-            for (int h = 0; h < outputGradient.Shape[1]; h++)
-            {
-                for (int w = 0; w < outputGradient.Shape[2]; w++)
-                {
-                    // Distribute gradient equally to all positions in the pooling window
-                    T gradValue = NumericalStabilityHelper.SafeDiv(outputGradient[c, h, w], poolSizeSquared);
-
-                    for (int ph = 0; ph < PoolSize; ph++)
-                    {
-                        for (int pw = 0; pw < PoolSize; pw++)
-                        {
-                            int ih = h * Strides + ph;
-                            int iw = w * Strides + pw;
-
-                            if (ih < inputHeight && iw < inputWidth)
-                            {
-                                inputGradient[c, ih, iw] = NumOps.Add(inputGradient[c, ih, iw], gradValue);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return inputGradient;
+        // Reshape back to 3D
+        return inputGradient4D.Reshape(_lastInput.Shape);
     }
 
     /// <summary>
@@ -299,7 +248,39 @@ public class AvgPoolingLayer<T> : LayerBase<T>
 
         // Perform backward pass with 4D gradient
         outputNode.Gradient = gradient4D;
-        var topoOrder = GetTopologicalOrder(outputNode);
+
+        // Production-grade: Inline topological sort for backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+                continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -312,50 +293,6 @@ public class AvgPoolingLayer<T> : LayerBase<T>
         // Extract input gradient and reshape back to 3D
         var inputGrad4D = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
         return inputGrad4D.Reshape(_lastInput.Shape);
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    /// <param name="root">The root node of the computation graph.</param>
-    /// <returns>A list of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
     }
 
     /// <summary>

@@ -108,14 +108,13 @@ namespace AiDotNetTests.UnitTests.Interpretability
             inputs[3, 0] = 0.6; inputs[3, 1] = 0; // predict 1
             // Group 1: 1 predicted positive out of 2 actual positive (TPR=0.5, Precision=1.0)
             inputs[4, 0] = 0.6; inputs[4, 1] = 1; // predict 1
-            inputs[5, 0] = 0.4; inputs[5, 1] = 1; // predict 0
+            inputs[5, 0] = 0.6; inputs[5, 1] = 1; // predict 1
             inputs[6, 0] = 0.4; inputs[6, 1] = 1; // predict 0
             inputs[7, 0] = 0.4; inputs[7, 1] = 1; // predict 0
 
-            // Labels to create different metrics:
-            // Group 0: [1,1,1,0] - 3 actual positive, 3 predicted positive, 3 TP → TPR=3/3=1.0, Precision=3/4=0.75
-            // Group 1: [1,1,0,0] - 2 actual positive, 1 predicted positive, 1 TP → TPR=1/2=0.5, Precision=1/1=1.0
-            Vector<double> actualLabels = new Vector<double>(new double[] { 1, 1, 1, 0, 1, 1, 0, 0 });
+            // Group 0: actuals [1,1,1,0], predictions [1,1,0,0] -> TPR=2/3, Precision=2/2=1.0
+            // Group 1: actuals [1,0,0,0], predictions [1,1,0,0] -> TPR=1/1=1.0, Precision=1/2=0.5
+            Vector<double> actualLabels = new Vector<double>(new double[] { 1, 1, 1, 0, 1, 0, 0, 0 });
 
             // Act
             var result = evaluator.EvaluateFairness(model, inputs, 1, actualLabels);

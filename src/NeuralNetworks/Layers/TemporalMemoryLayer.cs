@@ -14,9 +14,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// <para><b>For Beginners:</b> This layer helps the network remember and predict sequences of patterns.
 /// 
-/// Think of it like learning to anticipate what comes next in a song:
-/// - The layer organizes memory cells into columns (like musical notes)
-/// - Each column can have multiple cells (representing different contexts for the same note)
+    /// Think of it like learning to anticipate what comes next in a song:
+    /// - The layer organizes memory cells into columns (like musical notes)
+    /// - Each column can have multiple cells (representing different contexts for the same note)
 /// - When a note plays, the layer activates specific cells based on what came before
 /// - Over time, it learns which notes typically follow others in different contexts
 /// 
@@ -69,6 +69,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private readonly int CellsPerColumn;
+    private Tensor<T>? _lastInput;
 
     /// <summary>
     /// The states of all cells in the temporal memory layer.
@@ -90,7 +91,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// that particular memory cell is at the current moment.
     /// </para>
     /// </remarks>
-    private Matrix<T> CellStates;
+    private Tensor<T> CellStates;
 
     /// <summary>
     /// Gets or sets the previous input state of the layer.
@@ -166,7 +167,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     {
         ColumnCount = columnCount;
         CellsPerColumn = cellsPerColumn;
-        CellStates = new Matrix<T>(columnCount, cellsPerColumn);
+        CellStates = new Tensor<T>([columnCount, cellsPerColumn]);
         PreviousState = Vector<T>.Empty();
 
         InitializeCellStates();
@@ -193,13 +194,8 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeCellStates()
     {
-        for (int i = 0; i < ColumnCount; i++)
-        {
-            for (int j = 0; j < CellsPerColumn; j++)
-            {
-                CellStates[i, j] = NumOps.Zero;
-            }
-        }
+        // Use Fill for efficient initialization
+        CellStates.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -231,21 +227,20 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        var inputVector = input.ToVector();
-        var output = new Vector<T>(ColumnCount * CellsPerColumn);
+        _lastInput = input;
+        // Reshape CellStates from [ColumnCount, CellsPerColumn] to [ColumnCount * CellsPerColumn]
+        var flatCellStates = CellStates.Reshape([ColumnCount * CellsPerColumn]);
 
-        for (int i = 0; i < ColumnCount; i++)
-        {
-            if (NumOps.Equals(inputVector[i], NumOps.One))
-            {
-                for (int j = 0; j < CellsPerColumn; j++)
-                {
-                    output[i * CellsPerColumn + j] = CellStates[i, j];
-                }
-            }
-        }
+        // Create mask by repeating input values CellsPerColumn times each
+        // input is [ColumnCount], we need mask of [ColumnCount * CellsPerColumn]
+        // Use Engine.TensorRepeatElements to repeat each input element CellsPerColumn times
+        var inputFlat = input.Reshape([ColumnCount]);
+        var mask = Engine.TensorRepeatElements(inputFlat, CellsPerColumn, axis: 0);
 
-        return Tensor<T>.FromVector(output);
+        // output = mask * flatCellStates (element-wise)
+        var output = Engine.TensorMultiply(mask, flatCellStates);
+
+        return output;
     }
 
     /// <summary>
@@ -281,45 +276,57 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     public void Learn(Vector<T> input, Vector<T> previousState)
     {
-        for (int i = 0; i < ColumnCount; i++)
-        {
-            if (NumOps.Equals(input[i], NumOps.One))
-            {
-                // Strengthen connections for active cells
-                for (int j = 0; j < CellsPerColumn; j++)
-                {
-                    if (NumOps.Equals(CellStates[i, j], NumOps.One))
-                    {
-                        CellStates[i, j] = NumOps.Add(CellStates[i, j], NumOps.Multiply(NumOps.FromDouble(0.1), NumOps.One));
-                    }
-                }
-            }
-            else
-            {
-                // Weaken connections for inactive cells
-                for (int j = 0; j < CellsPerColumn; j++)
-                {
-                    CellStates[i, j] = NumOps.Subtract(CellStates[i, j], NumOps.Multiply(NumOps.FromDouble(0.05), NumOps.One));
-                }
-            }
-        }
+        // Convert input to tensor and create mask for active/inactive columns
+        var inputTensor = new Tensor<T>(new[] { ColumnCount }, input);
 
-        // Normalize cell states
-        for (int i = 0; i < ColumnCount; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < CellsPerColumn; j++)
-            {
-                sum = NumOps.Add(sum, CellStates[i, j]);
-            }
-            if (!NumOps.Equals(sum, NumOps.Zero))
-            {
-                for (int j = 0; j < CellsPerColumn; j++)
-                {
-                    CellStates[i, j] = NumOps.Divide(CellStates[i, j], sum);
-                }
-            }
-        }
+        // Create column mask repeated for each cell: [ColumnCount, CellsPerColumn]
+        var columnMask = Engine.TensorRepeatElements(inputTensor, CellsPerColumn, axis: 0)
+            .Reshape([ColumnCount, CellsPerColumn]);
+
+        // Create ones tensor for comparison
+        var onesTensor = new Tensor<T>([ColumnCount, CellsPerColumn]);
+        onesTensor.Fill(NumOps.One);
+
+        // Create delta tensors for strengthening and weakening
+        var strengthenDelta = new Tensor<T>([ColumnCount, CellsPerColumn]);
+        strengthenDelta.Fill(NumOps.FromDouble(0.1));
+
+        var weakenDelta = new Tensor<T>([ColumnCount, CellsPerColumn]);
+        weakenDelta.Fill(NumOps.FromDouble(0.05));
+
+        var zeroTensor = new Tensor<T>([ColumnCount, CellsPerColumn]);
+        zeroTensor.Fill(NumOps.Zero);
+
+        // For active columns (mask == 1): strengthen active cells
+        // activeCellMask = (CellStates == 1) to identify which cells are active
+        var activeCellMask = Engine.TensorEquals(CellStates, NumOps.One);
+
+        // strengthenAmount = activeCellMask * strengthenDelta (only apply to active cells)
+        var strengthenAmount = Engine.TensorMultiply(activeCellMask, strengthenDelta);
+
+        // For inactive columns (mask == 0): weaken all cells
+        // inactiveMask = 1 - columnMask
+        var inactiveMask = Engine.TensorSubtract(onesTensor, columnMask);
+
+        // weakenAmount = inactiveMask * weakenDelta
+        var weakenAmount = Engine.TensorMultiply(inactiveMask, weakenDelta);
+
+        // Apply strengthening for active columns: CellStates += columnMask * strengthenAmount
+        var activeContribution = Engine.TensorMultiply(columnMask, strengthenAmount);
+        CellStates = Engine.TensorAdd(CellStates, activeContribution);
+
+        // Apply weakening for inactive columns: CellStates -= weakenAmount
+        CellStates = Engine.TensorSubtract(CellStates, weakenAmount);
+
+        // Normalize cell states per column using ReduceSum along axis 1
+        // Sum along cells (axis 1) to get [ColumnCount, 1] sums
+        var columnSums = Engine.ReduceSum(CellStates, [1], keepDims: true);
+
+        // Avoid division by zero: where sum is zero, keep original values
+        var safeSums = Engine.TensorMax(columnSums, NumOps.FromDouble(1e-10));
+
+        // Normalize: CellStates = CellStates / safeSums (broadcast division)
+        CellStates = Engine.TensorDivide(CellStates, safeSums);
     }
 
     /// <summary>
@@ -347,31 +354,24 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     public Vector<T> GetPredictions()
     {
-        var predictions = new Vector<T>(ColumnCount);
-    
         // Prediction threshold - cells with activation above this value
         // contribute to predicting their column will be active
         T predictionThreshold = NumOps.FromDouble(0.3);
-    
-        for (int i = 0; i < ColumnCount; i++)
-        {
-            // A column is predicted if any of its cells have a high activation state
-            bool isPredicted = false;
-        
-            for (int j = 0; j < CellsPerColumn; j++)
-            {
-                if (NumOps.GreaterThan(CellStates[i, j], predictionThreshold))
-                {
-                    isPredicted = true;
-                    break;
-                }
-            }
-        
-            // Set prediction for this column
-            predictions[i] = isPredicted ? NumOps.One : NumOps.Zero;
-        }
-    
-        return predictions;
+
+        // Check which cells exceed threshold: CellStates > threshold
+        var exceedsThreshold = Engine.TensorGreaterThan(CellStates, predictionThreshold);
+
+        // Reduce max along axis 1 (cells) to see if any cell in each column exceeds threshold
+        // If any cell in a column exceeds threshold, the max will be > 0
+        var columnMax = Engine.ReduceMax(exceedsThreshold, [1], keepDims: false, out _);
+
+        // Convert to binary predictions (1 if max > 0, else 0)
+        // Create a zero tensor for comparison
+        var zeroTensor = new Tensor<T>(columnMax.Shape);
+        zeroTensor.Fill(NumOps.Zero);
+        var predictions = Engine.TensorGreaterThan(columnMax, zeroTensor);
+
+        return new Vector<T>(predictions.ToArray());
     }
 
     /// <summary>
@@ -415,21 +415,14 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        var inputGradient = new Vector<T>(ColumnCount);
-        var flatGradient = outputGradient.ToVector();
+        // Reshape output gradient from [ColumnCount * CellsPerColumn] to [ColumnCount, CellsPerColumn]
+        var reshapedGrad = outputGradient.Reshape([ColumnCount, CellsPerColumn]);
 
-        for (int i = 0; i < ColumnCount; i++)
-        {
-            T columnGradient = NumOps.Zero;
-            for (int j = 0; j < CellsPerColumn; j++)
-            {
-                columnGradient = NumOps.Add(columnGradient, flatGradient[i * CellsPerColumn + j]);
-            }
+        // Sum gradients along axis 1 (cells) to get gradient per column
+        // This aggregates the gradients from all cells in each column
+        var inputGradient = Engine.ReduceSum(reshapedGrad, [1], keepDims: false);
 
-            inputGradient[i] = columnGradient;
-        }
-
-        return Tensor<T>.FromVector(inputGradient);
+        return inputGradient;
     }
 
     /// <summary>
@@ -445,10 +438,66 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TemporalMemoryLayer implements HTM temporal memory with complex state management
-        // The manual implementation provides correct gradient computation through temporal sequences
-        // No new TensorOperation needed as the logic is domain-specific to HTM.
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Build graph equivalent to repeating input across cells: matmul with ones then flatten
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "tm_input", requiresGradient: true);
+        var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, new[] { ColumnCount, 1 });
+
+        var onesData = new T[CellsPerColumn];
+        for (int i = 0; i < CellsPerColumn; i++) onesData[i] = NumOps.One;
+        var onesTensor = new Tensor<T>(new[] { 1, CellsPerColumn }, new Vector<T>(onesData));
+        var onesNode = Autodiff.TensorOperations<T>.Constant(onesTensor, "tm_ones");
+
+        var repeated = Autodiff.TensorOperations<T>.MatrixMultiply(inputReshaped, onesNode);
+        var flattened = Autodiff.TensorOperations<T>.Reshape(repeated, new[] { ColumnCount * CellsPerColumn });
+
+        flattened.Gradient = outputGradient;
+
+        // Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((flattened, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        if (inputNode.Gradient == null)
+            throw new InvalidOperationException("Gradient computation failed in temporal memory autodiff.");
+
+        return inputNode.Gradient;
     }
 
 
@@ -503,19 +552,32 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Flatten the cell states matrix into a vector
-        var parameters = new Vector<T>(ColumnCount * CellsPerColumn);
-    
-        int index = 0;
-        for (int i = 0; i < ColumnCount; i++)
+        // Use Tensor.ToArray() to efficiently convert to vector
+        return new Vector<T>(CellStates.ToArray());
+    }
+
+    /// <summary>
+    /// Sets the trainable parameters of the layer from a single vector.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters to set.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets the cell states from a flattened vector. This is useful for loading
+    /// saved model states or for transferring learned patterns to another network.
+    /// </para>
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int expectedParams = ColumnCount * CellsPerColumn;
+
+        if (parameters.Length != expectedParams)
         {
-            for (int j = 0; j < CellsPerColumn; j++)
-            {
-                parameters[index++] = CellStates[i, j];
-            }
+            throw new ArgumentException($"Expected {expectedParams} parameters, but got {parameters.Length}");
         }
-    
-        return parameters;
+
+        // Use Tensor<T>.FromVector and reshape to restore cell states
+        CellStates = new Tensor<T>(new[] { ColumnCount, CellsPerColumn }, parameters);
     }
 
     /// <summary>
@@ -544,25 +606,23 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
-        // Reset all cell states to zero
+        // Reset all cell states to zero using Fill
         InitializeCellStates();
-    
-        // Clear previous state
+
+        // Clear or initialize previous state
         if (PreviousState.Length > 0)
         {
-            for (int i = 0; i < PreviousState.Length; i++)
-            {
-                PreviousState[i] = NumOps.Zero;
-            }
+            // Convert to tensor, fill with zeros, convert back
+            var prevStateTensor = new Tensor<T>([PreviousState.Length]);
+            prevStateTensor.Fill(NumOps.Zero);
+            PreviousState = new Vector<T>(prevStateTensor.ToArray());
         }
         else if (ColumnCount > 0)
         {
             // Initialize previous state if it's empty
-            PreviousState = new Vector<T>(ColumnCount);
-            for (int i = 0; i < ColumnCount; i++)
-            {
-                PreviousState[i] = NumOps.Zero;
-            }
+            var prevStateTensor = new Tensor<T>([ColumnCount]);
+            prevStateTensor.Fill(NumOps.Zero);
+            PreviousState = new Vector<T>(prevStateTensor.ToArray());
         }
     }
 
@@ -586,12 +646,21 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
 
         var input = inputNodes[0];
 
-        // Convert cell states to tensor [ColumnCount * CellsPerColumn, InputSize]
+        // CellStates is [ColumnCount, CellsPerColumn], need to reshape for projection
+        // Transpose CellStates to [CellsPerColumn, ColumnCount] then expand for output
         int outputSize = ColumnCount * CellsPerColumn;
+
+        // Create expanded cell states tensor for projection [outputSize, ColumnCount]
         var cellStatesTensor = new Tensor<T>([outputSize, ColumnCount]);
-        for (int i = 0; i < outputSize; i++)
-            for (int j = 0; j < ColumnCount; j++)
-                cellStatesTensor[i, j] = CellStates[i, j];
+        for (int col = 0; col < ColumnCount; col++)
+        {
+            for (int cell = 0; cell < CellsPerColumn; cell++)
+            {
+                int outputIdx = col * CellsPerColumn + cell;
+                // Each output cell responds to its column's input
+                cellStatesTensor[outputIdx, col] = CellStates[col, cell];
+            }
+        }
 
         var cellStatesNode = TensorOperations<T>.Constant(cellStatesTensor, "tm_cell_states");
 

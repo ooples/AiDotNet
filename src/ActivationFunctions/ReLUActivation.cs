@@ -104,7 +104,7 @@ public class ReLUActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        return input.Transform((x, _) => MathHelper.Max(NumOps.Zero, x));
+        return Engine.ReLU(input);
     }
 
     /// <summary>
@@ -119,7 +119,7 @@ public class ReLUActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        return input.Transform((x, _) => NumOps.GreaterThan(x, NumOps.Zero) ? NumOps.One : NumOps.Zero);
+        return Engine.TensorGreaterThan(input, NumOps.Zero);
     }
 
     /// <summary>

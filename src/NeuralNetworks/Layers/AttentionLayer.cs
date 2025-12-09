@@ -88,6 +88,11 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private Tensor<T>? _lastInput;
 
+    private Tensor<T>? _lastQueryInput;
+    private Tensor<T>? _lastKeyInput;
+    private Tensor<T>? _lastValueInput;
+    private Tensor<T>? _lastMask;
+
     /// <summary>
     /// The last attention weights computed by the layer.
     /// </summary>
@@ -276,22 +281,80 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Validate input tensor shape: must be 3D [Batch, Seq, InputSize]
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
+        }
+        if (input.Shape.Length != 3)
+        {
+            throw new ArgumentException(
+                $"AttentionLayer requires a 3D tensor with shape [Batch, Seq, InputSize]. " +
+                $"Got tensor with rank {input.Shape.Length}.",
+                nameof(input));
+        }
+        if (input.Shape[0] <= 0 || input.Shape[1] <= 0)
+        {
+            throw new ArgumentException(
+                $"AttentionLayer requires positive batch size and sequence length. " +
+                $"Got shape [{input.Shape[0]}, {input.Shape[1]}, {input.Shape[2]}].",
+                nameof(input));
+        }
+        if (input.Shape[2] != _inputSize)
+        {
+            throw new ArgumentException(
+                $"AttentionLayer input size mismatch. Expected InputSize={_inputSize}, " +
+                $"but got {input.Shape[2]} in shape [{input.Shape[0]}, {input.Shape[1]}, {input.Shape[2]}].",
+                nameof(input));
+        }
+
         _lastInput = input;
+        _lastQueryInput = input;
+        _lastKeyInput = input;
         _lastWasCrossAttention = false;
         _lastUsedMask = false;
+        _lastMask = null;
 
-        var Q = input.Multiply(_Wq);
-        var K = input.Multiply(_Wk);
-        var V = input.Multiply(_Wv);
+        int batchSize = input.Shape[0];
+        int seqLen = input.Shape[1];
 
-        var attentionScores = Q.Multiply(K.Transpose([1, 0]));
-        var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(K.Shape[K.Shape.Length - 1]));
-        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
-        attentionScores = attentionScores.Scale(scaleValue);
+        // 1. Project Input to Q, K, V
+        // Reshape input to 2D [Batch*Seq, InputSize] for efficient MatrixMultiply
+        var input2D = input.Reshape(batchSize * seqLen, _inputSize);
 
+        // Transpose weights to [InputSize, AttSize] using Engine 2D transpose
+        var WqT = Engine.TensorTranspose(_Wq);
+        var WkT = Engine.TensorTranspose(_Wk);
+        var WvT = Engine.TensorTranspose(_Wv);
+
+        // Compute Projections: [B*S, In] @ [In, Att] -> [B*S, Att]
+        var Q_flat = Engine.TensorMatMul(input2D, WqT);
+        var K_flat = Engine.TensorMatMul(input2D, WkT);
+        var V_flat = Engine.TensorMatMul(input2D, WvT);
+
+        // Reshape back to [Batch, Seq, AttSize]
+        var Q = Q_flat.Reshape(batchSize, seqLen, _attentionSize);
+        var K = K_flat.Reshape(batchSize, seqLen, _attentionSize);
+        var V = V_flat.Reshape(batchSize, seqLen, _attentionSize);
+
+        // 2. Compute Attention Scores: Q @ K.T
+        // K is [B, S, A]. We need K.T as [B, A, S].
+        var KT = K.Transpose(new[] { 0, 2, 1 });
+        
+        // [B, S, A] @ [B, A, S] -> [B, S, S]
+        var attentionScores = Engine.BatchMatMul(Q, KT);
+
+        // 3. Scale
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(_attentionSize)));
+        attentionScores = Engine.TensorMultiplyScalar(attentionScores, scaleValue);
+
+        // 4. Softmax
         _lastAttentionWeights = ApplyActivation(attentionScores);
 
-        var output = _lastAttentionWeights.Multiply(V);
+        // 5. Output: Weights @ V
+        // [B, S, S] @ [B, S, A] -> [B, S, A]
+        var output = Engine.BatchMatMul(_lastAttentionWeights, V);
+
         return output;
     }
 
@@ -379,24 +442,44 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T> ForwardMaskedAttention(Tensor<T> input, Tensor<T> mask)
     {
         _lastInput = input;
+        _lastQueryInput = input;
+        _lastKeyInput = input;
+        _lastValueInput = input;
+        _lastMask = mask;
 
-        var Q = input.Multiply(_Wq);
-        var K = input.Multiply(_Wk);
-        var V = input.Multiply(_Wv);
+        int batchSize = input.Shape[0];
+        int seqLen = input.Shape[1];
 
-        var attentionScores = Q.Multiply(K.Transpose([1, 0]));
+        // 1. Project Input to Q, K, V
+        var input2D = input.Reshape(batchSize * seqLen, _inputSize);
+        var WqT = Engine.TensorTranspose(_Wq);
+        var WkT = Engine.TensorTranspose(_Wk);
+        var WvT = Engine.TensorTranspose(_Wv);
 
-        // Apply scaling factor
-        var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(K.Shape[K.Shape.Length - 1]));
-        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
-        attentionScores = attentionScores.Scale(scaleValue);
+        var Q_flat = Engine.TensorMatMul(input2D, WqT);
+        var K_flat = Engine.TensorMatMul(input2D, WkT);
+        var V_flat = Engine.TensorMatMul(input2D, WvT);
 
-        // Apply mask - typically mask values are 0 for positions to attend to and very negative (e.g., -10000) for positions to ignore
-        attentionScores = attentionScores.Add(mask);
+        var Q = Q_flat.Reshape(batchSize, seqLen, _attentionSize);
+        var K = K_flat.Reshape(batchSize, seqLen, _attentionSize);
+        var V = V_flat.Reshape(batchSize, seqLen, _attentionSize);
 
+        // 2. Compute Attention Scores: Q @ K.T
+        var KT = K.Transpose(new[] { 0, 2, 1 });
+        var attentionScores = Engine.BatchMatMul(Q, KT);
+
+        // 3. Scale
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(_attentionSize)));
+        attentionScores = Engine.TensorMultiplyScalar(attentionScores, scaleValue);
+
+        // 4. Mask
+        attentionScores = Engine.TensorAdd(attentionScores, mask);
+
+        // 5. Softmax
         _lastAttentionWeights = ApplyActivation(attentionScores);
 
-        var output = _lastAttentionWeights.Multiply(V);
+        // 6. Output: Weights @ V
+        var output = Engine.BatchMatMul(_lastAttentionWeights, V);
         return output;
     }
 
@@ -412,28 +495,49 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         _lastWasCrossAttention = true;
         _lastUsedMask = mask != null;
-        _lastInput = queryInput;  // Store the query input for backward pass
+        _lastMask = mask;
+        _lastInput = queryInput;
+        _lastQueryInput = queryInput;
+        _lastKeyInput = keyValueInput;
+        _lastValueInput = keyValueInput;
 
-        var Q = queryInput.Multiply(_Wq);
-        var K = keyValueInput.Multiply(_Wk);
-        var V = keyValueInput.Multiply(_Wv);
+        int batchSize = queryInput.Shape[0];
+        int seqLenQ = queryInput.Shape[1];
+        int seqLenKV = keyValueInput.Shape[1];
 
-        var attentionScores = Q.Multiply(K.Transpose([1, 0]));
+        // Project Q
+        var query2D = queryInput.Reshape(batchSize * seqLenQ, _inputSize);
+        var WqT = Engine.TensorTranspose(_Wq);
+        var Q_flat = Engine.TensorMatMul(query2D, WqT);
+        var Q = Q_flat.Reshape(batchSize, seqLenQ, _attentionSize);
 
-        // Apply scaling factor
-        var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(K.Shape[K.Shape.Length - 1]));
-        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
-        attentionScores = attentionScores.Scale(scaleValue);
+        // Project K, V
+        var kv2D = keyValueInput.Reshape(batchSize * seqLenKV, _inputSize);
+        var WkT = Engine.TensorTranspose(_Wk);
+        var WvT = Engine.TensorTranspose(_Wv);
+        var K_flat = Engine.TensorMatMul(kv2D, WkT);
+        var V_flat = Engine.TensorMatMul(kv2D, WvT);
+        var K = K_flat.Reshape(batchSize, seqLenKV, _attentionSize);
+        var V = V_flat.Reshape(batchSize, seqLenKV, _attentionSize);
 
-        // Apply mask if provided
+        // Compute Scores: Q @ K.T
+        var KT = K.Transpose(new[] { 0, 2, 1 });
+        var attentionScores = Engine.BatchMatMul(Q, KT);
+
+        // Scale
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(_attentionSize)));
+        attentionScores = Engine.TensorMultiplyScalar(attentionScores, scaleValue);
+
+        // Mask
         if (mask != null)
         {
-            attentionScores = attentionScores.Add(mask);
+            attentionScores = Engine.TensorAdd(attentionScores, mask);
         }
 
         _lastAttentionWeights = ApplyActivation(attentionScores);
 
-        var output = _lastAttentionWeights.Multiply(V);
+        // Output
+        var output = Engine.BatchMatMul(_lastAttentionWeights, V);
         return output;
     }
 
@@ -502,143 +606,95 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Backward pass implementation using automatic differentiation.
+    /// Backward pass implementation using automatic differentiation with production-grade optimizations.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. It's slower than the
-    /// manual implementation but can be useful for:
-    /// - Verifying gradient correctness
-    /// - Rapid prototyping with custom modifications
-    /// - Research and experimentation
+    /// <b>Production-Ready Features:</b>
+    /// <list type="bullet">
+    /// <item>Full computation graph construction for Self and Cross Attention</item>
+    /// <item>Supports masking via graph operations</item>
+    /// <item>Uses Permute/Reshape/MatMul for correct gradient flow</item>
+    /// </list>
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastAttentionWeights == null)
+        if (_lastQueryInput == null || _lastKeyInput == null || _lastValueInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Create computation graph
-        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var Wq = Autodiff.TensorOperations<T>.Variable(_Wq, "Wq", requiresGradient: true);
-        var Wk = Autodiff.TensorOperations<T>.Variable(_Wk, "Wk", requiresGradient: true);
-        var Wv = Autodiff.TensorOperations<T>.Variable(_Wv, "Wv", requiresGradient: true);
+        // 1. Create variables
+        var qInput = Autodiff.TensorOperations<T>.Variable(_lastQueryInput, "query", true);
+        var kInput = Autodiff.TensorOperations<T>.Variable(_lastKeyInput, "key", true);
+        var vInput = Autodiff.TensorOperations<T>.Variable(_lastValueInput, "value", true);
+        
+        var wq = Autodiff.TensorOperations<T>.Variable(_Wq, "Wq", true);
+        var wk = Autodiff.TensorOperations<T>.Variable(_Wk, "Wk", true);
+        var wv = Autodiff.TensorOperations<T>.Variable(_Wv, "Wv", true);
 
-        // Forward computation using autodiff ops
-        // Q = input @ Wq, K = input @ Wk, V = input @ Wv
-        var Q = Autodiff.TensorOperations<T>.MatrixMultiply(input, Wq);
-        var K = Autodiff.TensorOperations<T>.MatrixMultiply(input, Wk);
-        var V = Autodiff.TensorOperations<T>.MatrixMultiply(input, Wv);
+        int batchSize = _lastQueryInput.Shape[0];
+        int seqLenQ = _lastQueryInput.Shape[1];
+        int seqLenKV = _lastKeyInput.Shape[1];
 
-        // Attention scores = Q @ K^T
-        var K_T = Autodiff.TensorOperations<T>.Transpose(K);
-        var attentionScores = Autodiff.TensorOperations<T>.MatrixMultiply(Q, K_T);
+        // 2. Projections
+        // Reshape inputs to 2D [B*S, E]
+        var q2D = Autodiff.TensorOperations<T>.Reshape(qInput, batchSize * seqLenQ, _inputSize);
+        var k2D = Autodiff.TensorOperations<T>.Reshape(kInput, batchSize * seqLenKV, _inputSize);
+        var v2D = Autodiff.TensorOperations<T>.Reshape(vInput, batchSize * seqLenKV, _inputSize);
 
-        // Apply scaling
-        var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_Wk.Shape[_Wk.Shape.Length - 1]));
-        var scale = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
-        var scaleTensor = CreateScalarTensor(scale, attentionScores.Value.Shape);
-        var scaleNode = Autodiff.TensorOperations<T>.Variable(scaleTensor, "scale", requiresGradient: false);
-        var scaledScores = Autodiff.TensorOperations<T>.ElementwiseMultiply(attentionScores, scaleNode);
+        // Transpose weights: [In, Att] -> [Att, In]
+        var wqT = Autodiff.TensorOperations<T>.Transpose(wq);
+        var wkT = Autodiff.TensorOperations<T>.Transpose(wk);
+        var wvT = Autodiff.TensorOperations<T>.Transpose(wv);
 
-        // Apply activation (softmax approximation using available ops)
-        var attentionWeights = ApplyActivationAutodiff(scaledScores);
+        var qFlat = Autodiff.TensorOperations<T>.MatrixMultiply(q2D, wqT);
+        var kFlat = Autodiff.TensorOperations<T>.MatrixMultiply(k2D, wkT);
+        var vFlat = Autodiff.TensorOperations<T>.MatrixMultiply(v2D, wvT);
 
-        // Output = attentionWeights @ V
-        var output = Autodiff.TensorOperations<T>.MatrixMultiply(attentionWeights, V);
+        // Reshape back: [B, S, Att]
+        var Q = Autodiff.TensorOperations<T>.Reshape(qFlat, batchSize, seqLenQ, _attentionSize);
+        var K = Autodiff.TensorOperations<T>.Reshape(kFlat, batchSize, seqLenKV, _attentionSize);
+        var V = Autodiff.TensorOperations<T>.Reshape(vFlat, batchSize, seqLenKV, _attentionSize);
 
-        // Set gradient and perform backward pass
+        // 3. Scores: Q @ K.T
+        // Permute K: [B, S, A] -> [B, A, S]
+        var KT = Autodiff.TensorOperations<T>.Permute(K, 0, 2, 1);
+        // Use BatchMatrixMultiply for 3D tensors [B, S_Q, A] @ [B, A, S_KV] -> [B, S_Q, S_KV]
+        var scores = Autodiff.TensorOperations<T>.BatchMatrixMultiply(Q, KT);
+
+        // Scale
+        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(_attentionSize)));
+        var scaleTensor = new Tensor<T>(new int[] { 1 });
+        scaleTensor[0] = scaleValue;
+        var scaleNode = Autodiff.TensorOperations<T>.Constant(scaleTensor, "scale");
+        var scaledScores = Autodiff.TensorOperations<T>.ElementwiseMultiply(scores, scaleNode);
+
+        // Mask
+        if (_lastMask != null)
+        {
+            var maskNode = Autodiff.TensorOperations<T>.Constant(_lastMask, "mask");
+            scaledScores = Autodiff.TensorOperations<T>.Add(scaledScores, maskNode);
+        }
+
+        // Softmax
+        var attentionWeights = Autodiff.TensorOperations<T>.Softmax(scaledScores);
+
+        // Output: Weights @ V
+        // Use BatchMatrixMultiply for 3D tensors [B, S_Q, S_KV] @ [B, S_KV, A] -> [B, S_Q, A]
+        var output = Autodiff.TensorOperations<T>.BatchMatrixMultiply(attentionWeights, V);
+
+        // Gradient
         output.Gradient = outputGradient;
+        output.Backward();
 
-        var topoOrder = GetTopologicalOrder(output);
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
+        // Store
+        _dWq = wq.Gradient;
+        _dWk = wk.Gradient;
+        _dWv = wv.Gradient;
 
-        // Extract gradients
-        _dWq = Wq.Gradient!;
-        _dWk = Wk.Gradient!;
-        _dWv = Wv.Gradient!;
-
-        return input.Gradient!;
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Applies activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (ScalarActivation is ReLUActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.ReLU(input);
-        }
-        else if (ScalarActivation is SigmoidActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Sigmoid(input);
-        }
-        else if (ScalarActivation is TanhActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Tanh(input);
-        }
-        else if (ScalarActivation is SoftmaxActivation<T>)
-        {
-            // Use Softmax operation for attention weights normalization
-            return Autodiff.TensorOperations<T>.Softmax(input, axis: -1);
-        }
-        else
-        {
-            // For unsupported activations, fallback to manual implementation
-            throw new NotSupportedException($"Activation {ScalarActivation?.GetType().Name} not supported in autodiff mode");
-        }
+        return qInput.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>
@@ -646,9 +702,14 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private Tensor<T> CreateScalarTensor(T value, int[] shape)
     {
-        // === Vectorized Tensor Fill (Phase B: US-GPU-015) ===
-        var filledVector = Vector<T>.CreateDefault(shape.Aggregate(1, (a, b) => a * b), value);
-        return Tensor<T>.FromVector(filledVector).Reshape(shape);
+        // Create a tensor filled with the scalar value - use direct Tensor constructor
+        var totalSize = shape.Aggregate(1, (a, b) => a * b);
+        var data = new T[totalSize];
+        for (int i = 0; i < totalSize; i++)
+        {
+            data[i] = value;
+        }
+        return new Tensor<T>(shape, new Vector<T>(data));
     }
 
     /// <summary>
@@ -778,21 +839,18 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Compute entropy of attention weights: H = -Σ(p * log(p))
-        // Use vectorized operations for better performance
+        // Use GPU-accelerated tensor operations for better performance
         T epsilon = NumOps.FromDouble(1e-10); // Small value to prevent log(0)
 
-        var weightsVec = _lastAttentionWeights.ToVector();
+        // Clamp weights to prevent log(0) - use TensorMax with scalar
+        var clampedWeights = Engine.TensorMax(_lastAttentionWeights, epsilon);
 
-        // Clamp weights to prevent log(0) - add epsilon
-        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, weightsVec.Length).ToArray());
-        var clampedWeights = (Vector<T>)Engine.Max(weightsVec, epsilonVec);
+        // Compute p * log(p) using GPU-accelerated tensor operations
+        var logWeights = Engine.TensorLog(clampedWeights);
+        var pLogP = Engine.TensorMultiply(clampedWeights, logWeights);
 
-        // Compute p * log(p) using vectorized operations
-        var logWeights = Engine.Log(clampedWeights);
-        var pLogP = (Vector<T>)Engine.Multiply(clampedWeights, logWeights);
-
-        // Sum all terms: Σ(p * log(p)) (vectorized)
-        T sumPLogP = Engine.Sum(pLogP);
+        // Sum all terms: Σ(p * log(p)) using GPU-accelerated reduction
+        T sumPLogP = Engine.TensorSum(pLogP);
         T entropy = NumOps.Negate(sumPLogP);
 
         // Average entropy over all attention weights
@@ -844,16 +902,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastAttentionWeights != null)
         {
             // Calculate max attention weight (indicates peakiness)
-            // Use vectorized max reduction for better performance
-            var weightsVec = _lastAttentionWeights.ToVector();
-            T maxWeight = NumOps.Zero;
-            for (int i = 0; i < weightsVec.Length; i++)
-            {
-                if (NumOps.GreaterThan(weightsVec[i], maxWeight))
-                {
-                    maxWeight = weightsVec[i];
-                }
-            }
+            // Use GPU-accelerated TensorMaxValue for efficient reduction
+            T maxWeight = Engine.TensorMaxValue(_lastAttentionWeights);
             diagnostics["MaxAttentionWeight"] = maxWeight?.ToString() ?? "0";
         }
 

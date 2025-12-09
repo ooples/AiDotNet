@@ -176,29 +176,7 @@ public class SplitLayer<T> : LayerBase<T>
         int batchSize = input.Shape[0];
         int inputSize = input.Shape[1];
         int splitSize = inputSize / _numSplits;
-        var output = new Tensor<T>([batchSize, _numSplits, splitSize]);
-
-        // === Vectorized Split Operation (Phase B: US-GPU-015) ===
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Extract full input row as vector
-            var inputRow = new Vector<T>(inputSize);
-            for (int idx = 0; idx < inputSize; idx++)
-            {
-                inputRow[idx] = input[i, idx];
-            }
-
-            // Split into chunks using Vector.Slice
-            for (int j = 0; j < _numSplits; j++)
-            {
-                var splitChunk = inputRow.Slice(j * splitSize, splitSize);
-                for (int k = 0; k < splitSize; k++)
-                {
-                    output[i, j, k] = splitChunk[k];
-                }
-            }
-        }
-        return output;
+        return Engine.Reshape(input, new[] { batchSize, _numSplits, splitSize });
     }
 
     /// <summary>
@@ -242,38 +220,7 @@ public class SplitLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         int batchSize = _lastInput.Shape[0];
         int inputSize = _lastInput.Shape[1];
-        int splitSize = inputSize / _numSplits;
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-
-        // === Vectorized Gradient Recombination (Phase B: US-GPU-015) ===
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Collect all split gradients into a single vector using Vector.Concatenate
-            var gradientChunks = new Vector<T>[_numSplits];
-            for (int j = 0; j < _numSplits; j++)
-            {
-                var chunk = new Vector<T>(splitSize);
-                for (int k = 0; k < splitSize; k++)
-                {
-                    chunk[k] = outputGradient[i, j, k];
-                }
-                gradientChunks[j] = chunk;
-            }
-
-            // Concatenate all chunks into single gradient vector
-            var fullGradient = gradientChunks[0];
-            for (int j = 1; j < _numSplits; j++)
-            {
-                fullGradient = Vector<T>.Concatenate(fullGradient, gradientChunks[j]);
-            }
-
-            // Copy back to tensor
-            for (int idx = 0; idx < inputSize; idx++)
-            {
-                inputGradient[i, idx] = fullGradient[idx];
-            }
-        }
-        return inputGradient;
+        return Engine.Reshape(outputGradient, new[] { batchSize, inputSize });
     }
 
     /// <summary>
@@ -296,7 +243,7 @@ public class SplitLayer<T> : LayerBase<T>
         // Create computation node
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
-        // Split is effectively a reshape: [batch, inputSize] → [batch, numSplits, splitSize]
+        // Split is effectively a reshape: [batch, inputSize] -> [batch, numSplits, splitSize]
         int batchSize = _lastInput.Shape[0];
         int inputSize = _lastInput.Shape[1];
         int splitSize = inputSize / _numSplits;
@@ -304,9 +251,42 @@ public class SplitLayer<T> : LayerBase<T>
 
         var outputNode = Autodiff.TensorOperations<T>.Reshape(inputNode, outputShape);
 
-        // Perform backward pass
+        // Perform backward pass with inline topological sort
         outputNode.Gradient = outputGradient;
-        var topoOrder = GetTopologicalOrder(outputNode);
+
+        // Production-grade: Inline topological sort for backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+                continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -319,46 +299,6 @@ public class SplitLayer<T> : LayerBase<T>
         // Extract input gradient
         return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    /// <param name="root">The root node of the computation graph.</param>
-    /// <returns>A list of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-                continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                        stack.Push((parent, false));
-                }
-            }
-        }
-
-        return result;
-    }
-
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.

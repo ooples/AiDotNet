@@ -455,23 +455,38 @@ public class HalfOperations : INumericOperations<Half>
     /// <summary>
     /// Computes square root of each element. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
     /// </summary>
+#if NET8_0_OR_GREATER
+    public void Sqrt(ReadOnlySpan<Half> x, Span<Half> destination)
+        => System.Numerics.Tensors.TensorPrimitives.Sqrt<Half>(x, destination);
+#else
     public void Sqrt(ReadOnlySpan<Half> x, Span<Half> destination)
         => VectorizedOperationsFallback.Sqrt(_instance, x, destination);
+#endif
 
     /// <summary>
     /// Computes absolute value of each element. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
     /// </summary>
+#if NET8_0_OR_GREATER
+    public void Abs(ReadOnlySpan<Half> x, Span<Half> destination)
+        => System.Numerics.Tensors.TensorPrimitives.Abs<Half>(x, destination);
+#else
     public void Abs(ReadOnlySpan<Half> x, Span<Half> destination)
         => VectorizedOperationsFallback.Abs(_instance, x, destination);
+#endif
 
     /// <summary>
     /// Negates each element. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
     /// </summary>
+#if NET8_0_OR_GREATER
+    public void Negate(ReadOnlySpan<Half> x, Span<Half> destination)
+        => System.Numerics.Tensors.TensorPrimitives.Negate<Half>(x, destination);
+#else
     public void Negate(ReadOnlySpan<Half> x, Span<Half> destination)
         => VectorizedOperationsFallback.Negate(_instance, x, destination);
+#endif
 
     /// <summary>
-    /// Clips each element to the specified range. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
+    /// Clips each element to the specified range. Falls back to loops.
     /// </summary>
     public void Clip(ReadOnlySpan<Half> x, Half min, Half max, Span<Half> destination)
         => VectorizedOperationsFallback.Clip(_instance, x, min, max, destination);
@@ -479,8 +494,13 @@ public class HalfOperations : INumericOperations<Half>
     /// <summary>
     /// Raises each element to a specified power. Uses SIMD on .NET 8+, falls back to loops on older frameworks.
     /// </summary>
+#if NET8_0_OR_GREATER
+    public void Pow(ReadOnlySpan<Half> x, Half power, Span<Half> destination)
+        => System.Numerics.Tensors.TensorPrimitives.Pow<Half>(x, power, destination);
+#else
     public void Pow(ReadOnlySpan<Half> x, Half power, Span<Half> destination)
         => VectorizedOperationsFallback.Pow(_instance, x, power, destination);
+#endif
 
     /// <summary>
     /// Copies elements from source to destination.

@@ -226,17 +226,15 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Convert input tensor to vector for easier processing
-        var inputVector = input.ToVector();
-        int halfSize = inputVector.Length / 2;
+        int halfSize = input.Shape[0] / 2;
         
         // Get actual and predicted values
         // The first half of the input is assumed to be the actual state
         // The second half is assumed to be the predicted state
 
-        // === Vectorized Vector Slicing (Phase B: US-GPU-015) ===
-        var actual = inputVector.Slice(0, halfSize);
-        var predicted = inputVector.Slice(halfSize, halfSize);
+        // Slice tensors directly (no conversions)
+        var actual = Engine.TensorSlice(input, new[] { 0 }, new[] { halfSize });
+        var predicted = Engine.TensorSlice(input, new[] { halfSize }, new[] { halfSize });
         
         // Calculate the anomaly score
         double anomalyScore = CalculateAnomalyScore(actual, predicted);
@@ -254,8 +252,8 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// <summary>
     /// Calculates the anomaly score based on the difference between actual and predicted states.
     /// </summary>
-    /// <param name="actual">The actual state vector.</param>
-    /// <param name="predicted">The predicted state vector.</param>
+    /// <param name="actual">The actual state tensor.</param>
+    /// <param name="predicted">The predicted state tensor.</param>
     /// <returns>The anomaly score as a value between 0 and 1.</returns>
     /// <remarks>
     /// <para>
@@ -274,32 +272,36 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// while 1 means completely wrong prediction (highly anomalous).
     /// </para>
     /// </remarks>
-    private double CalculateAnomalyScore(Vector<T> actual, Vector<T> predicted)
+    private double CalculateAnomalyScore(Tensor<T> actual, Tensor<T> predicted)
     {
-        int mismatchCount = 0;
-        int totalCount = 0;
-        
-        for (int i = 0; i < actual.Length; i++)
-        {
-            // For binary values (0 or 1), count mismatches
-            if (NumOps.Equals(actual[i], NumOps.One) || NumOps.Equals(predicted[i], NumOps.One))
-            {
-                totalCount++;
-                
-                // If one is active and the other is not, it's a mismatch
-                if (!NumOps.Equals(actual[i], predicted[i]))
-                {
-                    mismatchCount++;
-                }
-            }
-        }
-        
+        // isActiveActual = (actual == 1)
+        var isActiveActual = Engine.TensorEquals(actual, NumOps.One);
+        // isActivePredicted = (predicted == 1)
+        var isActivePredicted = Engine.TensorEquals(predicted, NumOps.One);
+
+        // anyActive = isActiveActual OR isActivePredicted (using max since values are 0/1)
+        var anyActive = Engine.TensorMax(isActiveActual, isActivePredicted);
+
+        // Count total active using ReduceSum
+        var totalActiveSum = Engine.ReduceSum(anyActive, null, keepDims: false);
+        double totalCount = NumOps.ToDouble(totalActiveSum[0]);
+
         // If nothing is active, assume no anomaly
         if (totalCount == 0)
             return 0.0;
-            
+
+        // isMismatch = (actual != predicted) represented as 0/1
+        var notEqual = Engine.TensorNotEquals(actual, predicted);
+
+        // mismatchAndActive = isMismatch AND anyActive (element-wise multiply since values are 0/1)
+        var mismatchAndActive = Engine.TensorMultiply(notEqual, anyActive);
+
+        // Count mismatches using ReduceSum
+        var mismatchSum = Engine.ReduceSum(mismatchAndActive, null, keepDims: false);
+        double mismatchCount = NumOps.ToDouble(mismatchSum[0]);
+
         // Calculate the anomaly score
-        return (double)mismatchCount / totalCount;
+        return mismatchCount / totalCount;
     }
     
     /// <summary>
@@ -495,11 +497,8 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         // Since this layer doesn't have trainable parameters, we just propagate the gradient
         // back to the input. For anomaly detection, this is primarily a pass-through operation.
 
-        // === Vectorized Zero-Fill Gradient (Phase B: US-GPU-015) ===
-        // Create an input gradient filled with zeros since we don't directly optimize for anomaly detection
-        var inputGradient = Vector<T>.CreateDefault(InputShape[0], NumOps.Zero);
-
-        return Tensor<T>.FromVector(inputGradient);
+        // Zero gradient matching output gradient shape (no params to learn)
+        return Engine.TensorMultiplyScalar(outputGradient, NumOps.Zero);
     }
 
     /// <summary>
@@ -516,11 +515,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // === Vectorized Zero-Fill Gradient (Phase B: US-GPU-015) ===
-        // AnomalyDetectorLayer has no trainable parameters and is typically used for monitoring.
-        // Return zero gradients to match manual implementation.
-        var inputGradient = Vector<T>.CreateDefault(InputShape[0], NumOps.Zero);
-        return Tensor<T>.FromVector(inputGradient);
+        return Engine.TensorMultiplyScalar(outputGradient, NumOps.Zero);
     }
 
     /// <summary>

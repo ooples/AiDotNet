@@ -63,8 +63,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// Also known as gamma. This learnable parameter allows the network to scale
     /// each normalized feature. Initialized to ones.
     /// </remarks>
-    private Vector<T> _gamma;
-    
+    private Tensor<T> _gamma;
+
     /// <summary>
     /// The shift parameter applied after normalization.
     /// </summary>
@@ -72,8 +72,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// Also known as beta. This learnable parameter allows the network to shift
     /// each normalized feature. Initialized to zeros.
     /// </remarks>
-    private Vector<T> _beta;
-    
+    private Tensor<T> _beta;
+
     /// <summary>
     /// The running mean used during inference.
     /// </summary>
@@ -81,8 +81,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// This is updated during training and used for normalization during inference.
     /// Initialized to zeros.
     /// </remarks>
-    private Vector<T> _runningMean;
-    
+    private Tensor<T> _runningMean;
+
     /// <summary>
     /// The running variance used during inference.
     /// </summary>
@@ -90,7 +90,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// This is updated during training and used for normalization during inference.
     /// Initialized to ones.
     /// </remarks>
-    private Vector<T> _runningVariance;
+    private Tensor<T> _runningVariance;
     
     /// <summary>
     /// The input from the last forward pass.
@@ -101,45 +101,36 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
     
     /// <summary>
-    /// The normalized values from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// These are the values after normalization but before scaling and shifting.
-    /// Stored for use in the backward pass.
-    /// </remarks>
-    private Tensor<T>? _lastNormalized;
-    
-    /// <summary>
     /// The batch mean from the last forward pass.
     /// </summary>
     /// <remarks>
     /// Stored for use in the backward pass.
     /// </remarks>
-    private Vector<T>? _lastMean;
-    
+    private Tensor<T>? _lastMean;
+
     /// <summary>
     /// The batch variance from the last forward pass.
     /// </summary>
     /// <remarks>
     /// Stored for use in the backward pass.
     /// </remarks>
-    private Vector<T>? _lastVariance;
-    
+    private Tensor<T>? _lastVariance;
+
     /// <summary>
     /// The gradient of the loss with respect to gamma.
     /// </summary>
     /// <remarks>
     /// Computed during the backward pass and used to update gamma.
     /// </remarks>
-    private Vector<T>? _gammaGradient;
-    
+    private Tensor<T>? _gammaGradient;
+
     /// <summary>
     /// The gradient of the loss with respect to beta.
     /// </summary>
     /// <remarks>
     /// Computed during the backward pass and used to update beta.
     /// </remarks>
-    private Vector<T>? _betaGradient;
+    private Tensor<T>? _betaGradient;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training mode.
@@ -171,8 +162,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the gamma (scale) parameters of the batch normalization layer.
     /// </summary>
-    /// <returns>The gamma vector used for scaling normalized values.</returns>
-    public Vector<T> GetGamma()
+    /// <returns>The gamma tensor used for scaling normalized values.</returns>
+    public Tensor<T> GetGamma()
     {
         return _gamma;
     }
@@ -180,8 +171,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the beta (shift) parameters of the batch normalization layer.
     /// </summary>
-    /// <returns>The beta vector used for shifting scaled values.</returns>
-    public Vector<T> GetBeta()
+    /// <returns>The beta tensor used for shifting scaled values.</returns>
+    public Tensor<T> GetBeta()
     {
         return _beta;
     }
@@ -189,8 +180,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the running mean of the batch normalization layer.
     /// </summary>
-    /// <returns>The running mean vector used during inference.</returns>
-    public Vector<T> GetRunningMean()
+    /// <returns>The running mean tensor used during inference.</returns>
+    public Tensor<T> GetRunningMean()
     {
         return _runningMean;
     }
@@ -198,8 +189,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the running variance of the batch normalization layer.
     /// </summary>
-    /// <returns>The running variance vector used during inference.</returns>
-    public Vector<T> GetRunningVariance()
+    /// <returns>The running variance tensor used during inference.</returns>
+    public Tensor<T> GetRunningVariance()
     {
         return _runningVariance;
     }
@@ -265,10 +256,10 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     {
         _epsilon = NumericalStabilityHelper.GetEpsilon<T>(epsilon);
         _momentum = NumOps.FromDouble(momentum);
-        _gamma = Vector<T>.CreateDefault(featureSize, NumOps.One);
-        _beta = new Vector<T>(featureSize);
-        _runningMean = new Vector<T>(featureSize);
-        _runningVariance = Vector<T>.CreateDefault(featureSize, NumOps.One);
+        _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
+        _beta = new Tensor<T>([featureSize]);
+        _runningMean = new Tensor<T>([featureSize]);
+        _runningVariance = Tensor<T>.CreateDefault([featureSize], NumOps.One);
     }
 
     /// <summary>
@@ -311,49 +302,83 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        int batchSize = input.Shape[0];
-        int featureSize = input.Shape[1];
-
-        var output = new Tensor<T>(input.Shape);
 
         if (IsTrainingMode)
         {
-            _lastMean = ComputeMean(input);
-            _lastVariance = ComputeVariance(input, _lastMean);
+            // Training: Use Engine.BatchNorm to compute batch stats and normalize
+            // This is fully GPU accelerated
+            var output = Engine.BatchNorm(input, _gamma, _beta, NumOps.ToDouble(_epsilon), out var batchMean, out var batchVariance);
+            
+            _lastMean = batchMean;
+            _lastVariance = batchVariance;
 
-            // Update running statistics
-            _runningMean = UpdateRunningStatistic(_runningMean, _lastMean);
-            _runningVariance = UpdateRunningStatistic(_runningVariance, _lastVariance);
+            // Update running statistics using Exponential Moving Average (Vectorized)
+            // running_mean = momentum * running_mean + (1 - momentum) * batch_mean
+            T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentum);
+            
+            var momentumRunningMean = Engine.TensorMultiplyScalar(_runningMean, _momentum);
+            var scaledBatchMean = Engine.TensorMultiplyScalar(batchMean, oneMinusMomentum);
+            _runningMean = Engine.TensorAdd(momentumRunningMean, scaledBatchMean);
 
-            _lastNormalized = Normalize(input, _lastMean, _lastVariance);
+            var momentumRunningVar = Engine.TensorMultiplyScalar(_runningVariance, _momentum);
+            var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, oneMinusMomentum);
+            _runningVariance = Engine.TensorAdd(momentumRunningVar, scaledBatchVar);
+
+            return output;
         }
         else
         {
-            _lastNormalized = Normalize(input, _runningMean, _runningVariance);
+            // Inference: Use running statistics (Vectorized)
+            // output = gamma * (input - runningMean) / sqrt(runningVar + epsilon) + beta
+            
+            // 1. Normalize: (input - runningMean) / sqrt(runningVar + epsilon)
+            // Note: runningMean/Var are [features], input is [batch, features]. 
+            // Engine operations typically handle broadcasting for [batch, features] vs [features]
+            // If not, we might need explicit broadcasting, but Cpu/Gpu engines usually support basic broadcasting 
+            // or we can use a custom inference kernel if needed. 
+            // Assuming Engine supports [batch, features] - [features] broadcasting (standard requirement).
+            
+            // Calculate denominator: sqrt(runningVar + epsilon)
+            var epsilonVec = Tensor<T>.CreateDefault(_runningVariance.Shape, _epsilon);
+            var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
+            var stdDev = Engine.TensorSqrt(variancePlusEps);
+            
+            // Calculate (input - runningMean)
+            // We need to broadcast runningMean to [batch, features].
+            // If Engine.TensorSubtract handles this (NumPy style), great.
+            // CpuEngine.TensorSubtract checks "ShapesMatch". 
+            // Tensor.Subtract (helper) handles broadcasting? No, it enforces same shape.
+            // We need to manually broadcast or use a specialized kernel.
+            // Since we are upgrading to production grade, let's use explicit expansion if needed.
+            // Actually, BatchNorm handles this internally during training. For inference, we can re-use BatchNorm
+            // but passing running stats as if they were batch stats, IF BatchNorm operation allows overriding mean/var.
+            // Engine.BatchNorm signature has 'out mean, out var'. It doesn't take them as input for normalization logic override.
+            // It computes them.
+            
+            // So we must implement inference normalization manually using Engine ops.
+            // To broadcast 1D [C] to 2D [B, C], we can rely on the fact that Tensor.Add(Vector) supports it?
+            // Tensor.cs has Add(Vector). 
+            
+            // Better approach: Construct pre-computed scale and shift terms.
+            // scale = gamma / stdDev
+            // shift = beta - (gamma * runningMean) / stdDev
+            // output = input * scale + shift
+            // This reduces inference to a linear transformation per feature.
+            
+            var scale = Engine.TensorDivide(_gamma, stdDev);
+            var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
+            var shift = Engine.TensorSubtract(_beta, term2);
+
+            // Expand scale/shift to match [batch, features] without vector conversions
+            int batchSize = input.Shape[0];
+            int featureSize = input.Shape[1];
+
+            var scaleExpanded = Engine.TensorRepeatElements(scale.Reshape([1, featureSize]), batchSize, axis: 0);
+            var shiftExpanded = Engine.TensorRepeatElements(shift.Reshape([1, featureSize]), batchSize, axis: 0);
+
+            var scaled = Engine.TensorMultiply(input, scaleExpanded);
+            return Engine.TensorAdd(scaled, shiftExpanded);
         }
-
-        // === Vectorized Scale and Shift Operations (Phase B: US-GPU-015) ===
-        // output = normalized * gamma + beta (per feature, broadcast across batch)
-        for (int i = 0; i < batchSize; i++)
-        {
-            var normalizedRow = new Vector<T>(featureSize);
-            for (int j = 0; j < featureSize; j++)
-            {
-                normalizedRow[j] = _lastNormalized[i, j];
-            }
-
-            // Vectorized: scaled = normalized * gamma
-            var scaled = (Vector<T>)Engine.Multiply(normalizedRow, _gamma);
-            // Vectorized: output = scaled + beta
-            var outputRow = (Vector<T>)Engine.Add(scaled, _beta);
-
-            for (int j = 0; j < featureSize; j++)
-            {
-                output[i, j] = outputRow[j];
-            }
-        }
-
-        return output;
     }
 
     /// <summary>
@@ -417,62 +442,22 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastNormalized == null || _lastMean == null || _lastVariance == null)
+        if (_lastInput == null || _lastMean == null || _lastVariance == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int batchSize = _lastInput.Shape[0];
-        int featureSize = _lastInput.Shape[1];
+        // Use Engine for GPU/CPU accelerated Batch Normalization Backward
+        var inputGradient = Engine.BatchNormBackward(
+            outputGradient,
+            _lastInput,
+            _gamma,
+            _lastMean,
+            _lastVariance,
+            NumOps.ToDouble(_epsilon),
+            out var gradGamma,
+            out var gradBeta);
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        _gammaGradient = new Vector<T>(featureSize);
-        _betaGradient = new Vector<T>(featureSize);
-
-        var varianceEpsilon = _lastVariance.Add(_epsilon);
-        var invStd = varianceEpsilon.Transform(NumOps.Sqrt).Transform(x => MathHelper.Reciprocal(x));
-
-        // === Vectorized Gradient Computation (Phase B: US-GPU-015) ===
-        for (int j = 0; j < featureSize; j++)
-        {
-            // Extract column vectors for feature j
-            var dyCol = new Vector<T>(batchSize);
-            var xmuCol = new Vector<T>(batchSize);
-
-            for (int i = 0; i < batchSize; i++)
-            {
-                dyCol[i] = outputGradient[i, j];
-                xmuCol[i] = _lastNormalized[i, j];
-            }
-
-            // Vectorized: sumDy = sum(dyCol)
-            T sumDy = dyCol.Sum();
-
-            // Vectorized: dyXmu = dy * xmu (element-wise)
-            var dyXmu = (Vector<T>)Engine.Multiply(dyCol, xmuCol);
-            T sumDyXmu = dyXmu.Sum();
-
-            _gammaGradient[j] = sumDyXmu;
-            _betaGradient[j] = sumDy;
-
-            T invN = NumOps.FromDouble(1.0 / batchSize);
-            T invVar = invStd[j];
-
-            // === Vectorized Input Gradient Calculation (Phase B: US-GPU-015) ===
-            // inputGradient = gamma * invN * invVar * (batchSize * dy - sumDy - xmu * sumDyXmu)
-            var batchSizeScalar = NumOps.FromDouble(batchSize);
-            var scaledDy = dyCol.Multiply(batchSizeScalar);
-            var sumDyVec = Vector<T>.CreateDefault(batchSize, sumDy);
-            var term1 = (Vector<T>)Engine.Subtract(scaledDy, sumDyVec);
-            var xmuScaled = xmuCol.Multiply(sumDyXmu);
-            var term2 = (Vector<T>)Engine.Subtract(term1, xmuScaled);
-            var term3 = term2.Multiply(invVar);
-            var term4 = term3.Multiply(invN);
-            var inputGradCol = term4.Multiply(_gamma[j]);
-
-            for (int i = 0; i < batchSize; i++)
-            {
-                inputGradient[i, j] = inputGradCol[i];
-            }
-        }
+        _gammaGradient = gradGamma;
+        _betaGradient = gradBeta;
 
         return inputGradient;
     }
@@ -493,35 +478,58 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int featureSize = _lastInput.Shape[1];
-
         // Convert to computation nodes
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
-        // Convert gamma and beta to tensors for autodiff
-        var gammaTensor = VectorToTensor(_gamma);
-        var betaTensor = VectorToTensor(_beta);
-        var gammaNode = Autodiff.TensorOperations<T>.Variable(gammaTensor, "gamma", requiresGradient: true);
-        var betaNode = Autodiff.TensorOperations<T>.Variable(betaTensor, "beta", requiresGradient: true);
-
-        // Convert running statistics to tensors
-        var runningMeanTensor = VectorToTensor(_runningMean);
-        var runningVarTensor = VectorToTensor(_runningVariance);
+        // Use gamma and beta tensors directly
+        var gammaNode = Autodiff.TensorOperations<T>.Variable(_gamma, "gamma", requiresGradient: true);
+        var betaNode = Autodiff.TensorOperations<T>.Variable(_beta, "beta", requiresGradient: true);
 
         // Forward pass using autodiff BatchNorm operation
         var outputNode = Autodiff.TensorOperations<T>.BatchNorm(
             inputNode,
             gammaNode,
             betaNode,
-            runningMeanTensor,
-            runningVarTensor,
+            _runningMean,
+            _runningVariance,
             IsTrainingMode,
             NumOps.ToDouble(_epsilon)
         );
 
-        // Perform backward pass
+        // Set output gradient
         outputNode.Gradient = outputGradient;
-        var topoOrder = GetTopologicalOrder(outputNode);
+
+        // Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -531,304 +539,14 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             }
         }
 
-        // Extract gradients
-        _gammaGradient = TensorToVector(gammaNode.Gradient ?? throw new InvalidOperationException("Gamma gradient is null."));
-        _betaGradient = TensorToVector(betaNode.Gradient ?? throw new InvalidOperationException("Beta gradient is null."));
+        // Extract gradients directly
+        _gammaGradient = gammaNode.Gradient ?? throw new InvalidOperationException("Gamma gradient is null.");
+        _betaGradient = betaNode.Gradient ?? throw new InvalidOperationException("Beta gradient is null.");
 
         return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>
-    /// Converts a Vector to a 1D Tensor.
-    /// </summary>
-    private Tensor<T> VectorToTensor(Vector<T> vector)
-    {
-        // === Vectorized Vector to Tensor Copy (Phase B: US-GPU-015) ===
-        // Use Tensor.FromVector for efficient conversion
-        return Tensor<T>.FromVector(vector);
-    }
-
-    /// <summary>
-    /// Converts a 1D Tensor to a Vector.
-    /// </summary>
-    private Vector<T> TensorToVector(Tensor<T> tensor)
-    {
-        // === Vectorized Tensor to Vector Copy (Phase B: US-GPU-015) ===
-        // Use Tensor.ToVector for efficient conversion
-        return tensor.ToVector();
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Broadcasts a 1D vector across the batch dimension to create a 2D tensor.
-    /// </summary>
-    private Tensor<T> BroadcastVector(Tensor<T> vector, int batchSize)
-    {
-        var featureSize = vector.Length;
-        var broadcasted = new Tensor<T>(new int[] { batchSize, featureSize });
-
-        // === Vectorized Broadcasting (Phase B: US-GPU-015) ===
-        // Broadcast vector row across all batch samples
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < featureSize; j++)
-            {
-                broadcasted[i, j] = vector[j];
-            }
-        }
-
-        return broadcasted;
-    }
-
-    /// <summary>
-    /// Computes the mean of each feature across the batch.
-    /// </summary>
-    /// <param name="input">The input tensor with shape [batchSize, featureSize].</param>
-    /// <returns>A vector containing the mean of each feature.</returns>
-    /// <remarks>
-    /// <para>
-    /// This private helper method calculates the mean of each feature across all samples in the batch.
-    /// For each feature, it sums the values across all samples and then divides by the batch size.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates the average value of each feature across the batch.
-    ///
-    /// For example, if we have a batch of 4 samples with 3 features each:
-    /// ```
-    /// [
-    ///   [1.0, 2.0, 3.0],
-    ///   [4.0, 5.0, 6.0],
-    ///   [7.0, 8.0, 9.0],
-    ///   [10.0, 11.0, 12.0]
-    /// ]
-    /// ```
-    ///
-    /// The mean would be:
-    /// ```
-    /// [5.5, 6.5, 7.5]
-    /// ```
-    ///
-    /// This is calculated by:
-    /// 1. Summing each column: [22.0, 26.0, 30.0]
-    /// 2. Dividing by the batch size (4): [5.5, 6.5, 7.5]
-    ///
-    /// These mean values are used in the normalization process to center the data
-    /// around zero.
-    /// </para>
-    /// </remarks>
-    private Vector<T> ComputeMean(Tensor<T> input)
-    {
-        int batchSize = input.Shape[0];
-        int featureSize = input.Shape[1];
-        var mean = new Vector<T>(featureSize);
-
-        // === Vectorized Mean Calculation (Phase B: US-GPU-015) ===
-        // Sum across batch dimension for each feature
-        for (int i = 0; i < batchSize; i++)
-        {
-            var row = new Vector<T>(featureSize);
-            for (int j = 0; j < featureSize; j++)
-            {
-                row[j] = input[i, j];
-            }
-            mean = (Vector<T>)Engine.Add(mean, row);
-        }
-
-        T batchSizeDivisor = NumOps.FromDouble(batchSize);
-        return mean.Transform(x => NumericalStabilityHelper.SafeDiv(x, batchSizeDivisor));
-    }
-
-    /// <summary>
-    /// Computes the variance of each feature across the batch.
-    /// </summary>
-    /// <param name="input">The input tensor with shape [batchSize, featureSize].</param>
-    /// <param name="mean">The mean of each feature across the batch.</param>
-    /// <returns>A vector containing the variance of each feature.</returns>
-    /// <remarks>
-    /// <para>
-    /// This private helper method calculates the variance of each feature across all samples in the batch.
-    /// For each feature, it sums the squared differences from the mean across all samples and then divides
-    /// by the batch size.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how spread out the values are for each feature.
-    /// 
-    /// Variance measures how far each value is from the mean, on average. To calculate it:
-    /// 1. For each value, find the difference from the mean
-    /// 2. Square that difference (to make all values positive)
-    /// 3. Average all these squared differences
-    /// 
-    /// Using the same example as before, for the first feature with mean 5.5:
-    /// - (1.0 - 5.5)λ = (-4.5)λ = 20.25
-    /// - (4.0 - 5.5)λ = (-1.5)λ = 2.25
-    /// - (7.0 - 5.5)λ = (1.5)λ = 2.25
-    /// - (10.0 - 5.5)λ = (4.5)λ = 20.25
-    /// - Average: (20.25 + 2.25 + 2.25 + 20.25) / 4 = 11.25
-    /// 
-    /// The variance is used in the normalization process to scale the data to have
-    /// unit variance (standard deviation of 1).
-    /// </para>
-    /// </remarks>
-    private Vector<T> ComputeVariance(Tensor<T> input, Vector<T> mean)
-    {
-        int batchSize = input.Shape[0];
-        int featureSize = input.Shape[1];
-        var variance = new Vector<T>(featureSize);
-
-        // Vectorized variance calculation across batch dimension
-        for (int i = 0; i < batchSize; i++)
-        {
-            var row = input.GetRow(i);
-            var diff = (Vector<T>)Engine.Subtract(row, mean);
-            var squaredDiff = (Vector<T>)Engine.Multiply(diff, diff);
-            variance = (Vector<T>)Engine.Add(variance, squaredDiff);
-        }
-
-        T batchSizeDivisor = NumOps.FromDouble(batchSize);
-        return variance.Transform(x => NumericalStabilityHelper.SafeDiv(x, batchSizeDivisor));
-    }
-
-    /// <summary>
-    /// Normalizes the input tensor using the provided mean and variance.
-    /// </summary>
-    /// <param name="input">The input tensor with shape [batchSize, featureSize].</param>
-    /// <param name="mean">The mean of each feature.</param>
-    /// <param name="variance">The variance of each feature.</param>
-    /// <returns>The normalized tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// This private helper method normalizes the input tensor by subtracting the mean and dividing by the
-    /// standard deviation (square root of variance plus epsilon) for each feature. This transforms the data
-    /// to have approximately zero mean and unit variance.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method standardizes the input data to have zero mean and unit variance.
-    ///
-    /// For each value in the input, this method:
-    /// 1. Subtracts the mean (to center the data around zero)
-    /// 2. Divides by the standard deviation (to scale the data to have unit variance)
-    ///
-    /// The formula is: normalized = (input - mean) / sqrt(variance + epsilon)
-    ///
-    /// The epsilon value is a small constant added for numerical stability to prevent
-    /// division by zero when the variance is very small.
-    ///
-    /// This standardization makes the data more consistent and helps the network
-    /// learn more efficiently.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Normalize(Tensor<T> input, Vector<T> mean, Vector<T> variance)
-    {
-        int batchSize = input.Shape[0];
-        int featureSize = input.Shape[1];
-        var normalized = new Tensor<T>(input.Shape);
-
-        var varianceEpsilon = variance.Add(_epsilon);
-        var invStd = varianceEpsilon.Transform(NumOps.Sqrt).Transform(x => MathHelper.Reciprocal(x));
-
-        // === Vectorized Normalization (Phase B: US-GPU-015) ===
-        // normalized = (input - mean) * invStd
-        for (int i = 0; i < batchSize; i++)
-        {
-            var row = new Vector<T>(featureSize);
-            for (int j = 0; j < featureSize; j++)
-            {
-                row[j] = input[i, j];
-            }
-
-            // Vectorized: centered = row - mean
-            var centered = (Vector<T>)Engine.Subtract(row, mean);
-            // Vectorized: normalizedRow = centered * invStd
-            var normalizedRow = (Vector<T>)Engine.Multiply(centered, invStd);
-
-            for (int j = 0; j < featureSize; j++)
-            {
-                normalized[i, j] = normalizedRow[j];
-            }
-        }
-
-        return normalized;
-    }
-
-    /// <summary>
-    /// Updates a running statistic with a new batch statistic.
-    /// </summary>
-    /// <param name="runningStatistic">The current running statistic (mean or variance).</param>
-    /// <param name="batchStatistic">The statistic from the current batch.</param>
-    /// <returns>The updated running statistic.</returns>
-    /// <remarks>
-    /// <para>
-    /// This private helper method updates a running statistic (either mean or variance) using the
-    /// exponential moving average formula:
-    /// 
-    /// runningStatistic = momentum * runningStatistic + (1 - momentum) * batchStatistic
-    /// </para>
-    /// <para>
-    /// This gives more weight to past statistics (controlled by the momentum parameter) and less
-    /// weight to the current batch, resulting in a more stable estimate over time.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates the running average of statistics used during inference.
-    /// 
-    /// During training, we calculate statistics (mean and variance) for each batch.
-    /// But during inference, we need stable statistics that represent the entire dataset.
-    /// 
-    /// This method implements an exponential moving average that gradually updates
-    /// the running statistics with each new batch:
-    /// 
-    /// newRunningValue = momentum * oldRunningValue + (1 - momentum) * currentBatchValue
-    /// 
-    /// For example, with momentum = 0.9:
-    /// - 90% of the old running value is kept
-    /// - 10% of the current batch value is added
-    /// 
-    /// This creates a smoothed estimate that becomes more stable as training progresses,
-    /// which is then used during inference instead of batch-specific statistics.
-    /// </para>
-    /// </remarks>
-    private Vector<T> UpdateRunningStatistic(Vector<T> runningStatistic, Vector<T> batchStatistic)
-    {
-        return runningStatistic.Multiply(_momentum).Add(batchStatistic.Multiply(NumOps.Subtract(NumOps.One, _momentum)));
-    }
-
-        /// <summary>
     /// Gets all trainable parameters of the batch normalization layer.
     /// </summary>
     /// <returns>A vector containing all trainable parameters (gamma and beta) concatenated together.</returns>
@@ -864,9 +582,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // === Vectorized Parameter Concatenation (Phase B: US-GPU-015) ===
-        // Concatenate gamma and beta parameters using Vector.Concatenate
-        return Vector<T>.Concatenate(_gamma, _beta);
+        // Production-grade: Use Vector.Concatenate instead of manual loops
+        return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());
     }
 
     /// <summary>
@@ -910,10 +627,12 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         if (parameters.Length != featureSize * 2)
             throw new ArgumentException($"Expected {featureSize * 2} parameters, but got {parameters.Length}", nameof(parameters));
 
-        // === Vectorized Parameter Extraction (Phase B: US-GPU-015) ===
-        // Extract gamma and beta using Vector.Slice
-        _gamma = parameters.Slice(0, featureSize);
-        _beta = parameters.Slice(featureSize, featureSize);
+        // Production-grade: Use Tensor.FromVector instead of manual loops
+        var gammaVec = parameters.Slice(0, featureSize);
+        var betaVec = parameters.Slice(featureSize, featureSize);
+
+        _gamma = Tensor<T>.FromVector(gammaVec, [featureSize]);
+        _beta = Tensor<T>.FromVector(betaVec, [featureSize]);
     }
 
     /// <summary>
@@ -958,8 +677,9 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         if (_gammaGradient == null || _betaGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _gamma = _gamma.Subtract(_gammaGradient.Multiply(learningRate));
-        _beta = _beta.Subtract(_betaGradient.Multiply(learningRate));
+        // Production-grade: Use Engine operations instead of manual loops
+        _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
+        _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
     }
 
     /// <summary>
@@ -1006,7 +726,6 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
-        _lastNormalized = null;
         _lastMean = null;
         _lastVariance = null;
         _gammaGradient = null;
@@ -1065,25 +784,21 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         inputNodes.Add(inputNode);
 
         // Create constant nodes for gamma (scale) and beta (shift) parameters
-        var gammaTensor = new Tensor<T>(new[] { _gamma.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_gamma.ToArray()));
-        var betaTensor = new Tensor<T>(new[] { _beta.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_beta.ToArray()));
-        var gammaNode = TensorOperations<T>.Constant(gammaTensor, "gamma");
-        var betaNode = TensorOperations<T>.Constant(betaTensor, "beta");
-
-        // Create tensors for running statistics (used during inference)
-        var runningMeanTensor = new Tensor<T>(new[] { _runningMean.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_runningMean.ToArray()));
-        var runningVarTensor = new Tensor<T>(new[] { _runningVariance.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_runningVariance.ToArray()));
+        // Use tensors directly - no conversion needed
+        var gammaNode = TensorOperations<T>.Constant(_gamma, "gamma");
+        var betaNode = TensorOperations<T>.Constant(_beta, "beta");
 
         // Convert epsilon from T to double for BatchNorm call
         var epsilonDouble = NumOps.ToDouble(_epsilon);
 
         // Apply BatchNorm operation (inference mode with running statistics)
+        // Use running statistics tensors directly - no conversion needed
         var batchNormNode = TensorOperations<T>.BatchNorm(
             inputNode,
             gamma: gammaNode,
             beta: betaNode,
-            runningMean: runningMeanTensor,
-            runningVar: runningVarTensor,
+            runningMean: _runningMean,
+            runningVar: _runningVariance,
             training: false,  // Inference mode for JIT compilation
             epsilon: epsilonDouble);
 

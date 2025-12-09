@@ -341,14 +341,13 @@ public class ExpertLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        var allParameters = new List<T>();
+        // Use Vector<T>.Concatenate for production-grade parameter collection
+        var layerParams = _layers
+            .Where(l => l.ParameterCount > 0)
+            .Select(l => l.GetParameters())
+            .ToArray();
 
-        foreach (var layer in _layers.Where(l => l.ParameterCount > 0))
-        {
-            allParameters.AddRange(layer.GetParameters().ToArray());
-        }
-
-        return new Vector<T>(allParameters.ToArray());
+        return layerParams.Length > 0 ? Vector<T>.Concatenate(layerParams) : new Vector<T>(0);
     }
 
     /// <summary>
