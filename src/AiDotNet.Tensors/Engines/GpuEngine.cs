@@ -12414,7 +12414,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorLog(tensor);
         }
@@ -12449,7 +12449,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorLog(tensor);
         }
@@ -12505,7 +12505,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorExp(tensor);
         }
@@ -12540,7 +12540,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorExp(tensor);
         }
@@ -12596,7 +12596,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorSqrt(tensor);
         }
@@ -12631,7 +12631,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorSqrt(tensor);
         }
@@ -12687,7 +12687,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorAbs(tensor);
         }
@@ -12722,7 +12722,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorAbs(tensor);
         }
@@ -12780,7 +12780,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorNegate(tensor);
         }
@@ -12815,7 +12815,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorNegate(tensor);
         }
@@ -12879,7 +12879,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorPow(tensor, exponent);
         }
@@ -12914,7 +12914,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorPow(tensor, exponent);
         }
@@ -12976,7 +12976,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorMax(a, b);
         }
@@ -13016,7 +13016,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorMax(a, b);
         }
@@ -13129,7 +13129,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorMin(a, b);
         }
@@ -13169,7 +13169,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorMin(a, b);
         }
@@ -13282,7 +13282,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorClamp(tensor, min, max);
         }
@@ -13317,7 +13317,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorClamp(tensor, min, max);
         }
@@ -13385,7 +13385,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuPartialSums);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorSum(tensor);
         }
@@ -13428,7 +13428,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuPartialSums);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorSum(tensor);
         }
@@ -13477,6 +13477,12 @@ public class GpuEngine : IEngine, IDisposable
         {
             // Normalize axes (handle negative indices)
             var normalizedAxes = axes.Select(a => a < 0 ? a + tensor.Rank : a).OrderBy(a => a).ToArray();
+
+            // Validate axes are within bounds
+            if (normalizedAxes.Any(a => a < 0 || a >= tensor.Rank))
+            {
+                return _cpuFallback.ReduceSum(tensor, axes, keepDims);
+            }
 
             // Compute outer, reduce, and inner sizes
             // For axes to reduce, we reshape logically to [outerSize, reduceSize, innerSize]
@@ -13561,7 +13567,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.ReduceSum(tensor, axes, keepDims);
         }
@@ -13572,6 +13578,12 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var normalizedAxes = axes.Select(a => a < 0 ? a + tensor.Rank : a).OrderBy(a => a).ToArray();
+
+            // Validate axes are within bounds
+            if (normalizedAxes.Any(a => a < 0 || a >= tensor.Rank))
+            {
+                return _cpuFallback.ReduceSum(tensor, axes, keepDims);
+            }
 
             int outerSize = 1;
             int reduceSize = 1;
@@ -13649,7 +13661,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.ReduceSum(tensor, axes, keepDims);
         }
@@ -13718,7 +13730,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuPartialMaxes);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorMaxValue(tensor);
         }
@@ -13764,7 +13776,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuPartialMaxes);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorMaxValue(tensor);
         }
@@ -13832,7 +13844,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuPartialMins);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorMinValue(tensor);
         }
@@ -13878,7 +13890,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuPartialMins);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorMinValue(tensor);
         }
@@ -20068,7 +20080,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuPartialSums);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorSumOfSquares(tensor);
         }
@@ -20112,7 +20124,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuPartialSums);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorSumOfSquares(tensor);
         }
@@ -20199,7 +20211,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorEmbeddingLookup<float, TIndex>(embeddings, indices);
         }
@@ -20256,7 +20268,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorEmbeddingLookup<double, TIndex>(embeddings, indices);
         }
@@ -20338,7 +20350,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuGradEmbeddings);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorEmbeddingLookupBackward<float, TIndex>(gradOutput, indices, vocabSize, embeddingDim);
         }
@@ -20391,7 +20403,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuGradEmbeddings);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.TensorEmbeddingLookupBackward<double, TIndex>(gradOutput, indices, vocabSize, embeddingDim);
         }
@@ -20522,7 +20534,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.LocallyConnectedConv2D(input, weights, bias, stride);
         }
@@ -20585,7 +20597,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuOutput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.LocallyConnectedConv2D(input, weights, bias, stride);
         }
@@ -20676,7 +20688,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuGradInput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.LocallyConnectedConv2DBackwardInput(gradOutput, weights, inputShape, stride);
         }
@@ -20735,7 +20747,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuGradInput);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.LocallyConnectedConv2DBackwardInput(gradOutput, weights, inputShape, stride);
         }
@@ -20826,7 +20838,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuGradWeights);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.LocallyConnectedConv2DBackwardWeights(gradOutput, input, weightsShape, stride);
         }
@@ -20885,7 +20897,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuGradWeights);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.LocallyConnectedConv2DBackwardWeights(gradOutput, input, weightsShape, stride);
         }
@@ -20968,7 +20980,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolFloat.Return(gpuGradBias);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.LocallyConnectedConv2DBackwardBias(gradOutput);
         }
@@ -21019,7 +21031,7 @@ public class GpuEngine : IEngine, IDisposable
                 _memoryPoolDouble.Return(gpuGradBias);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or DllNotFoundException or PlatformNotSupportedException)
         {
             return _cpuFallback.LocallyConnectedConv2DBackwardBias(gradOutput);
         }
