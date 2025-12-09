@@ -2574,8 +2574,6 @@ public class CpuEngine : IEngine
     {
         if (tensor == null) throw new ArgumentNullException(nameof(tensor));
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-
         // Full reduction - sum all elements
         if (axes == null || axes.Length == 0)
         {
@@ -2591,8 +2589,8 @@ public class CpuEngine : IEngine
             return new Tensor<T>([1], new Vector<T>([sum]));
         }
 
-        // Normalize negative axes
-        var normalizedAxes = axes.Select(a => a < 0 ? a + tensor.Rank : a).OrderBy(a => a).ToArray();
+        // Validate and normalize axes consistently with other reducers
+        var normalizedAxes = ValidateAndNormalizeAxes(axes, tensor.Rank);
 
         // Calculate output shape
         var outputShape = new List<int>();
@@ -2639,10 +2637,12 @@ public class CpuEngine : IEngine
         // Parallel reduction for large tensors
         if (tensor.Length > 10000)
         {
-            var localMaxes = new T[Environment.ProcessorCount];
-            int chunkSize = (tensor.Length + Environment.ProcessorCount - 1) / Environment.ProcessorCount;
+            int workerCount = Environment.ProcessorCount;
+            var localMaxes = new T[workerCount];
+            var hasValue = new bool[workerCount];
+            int chunkSize = (tensor.Length + workerCount - 1) / workerCount;
 
-            Parallel.For(0, Environment.ProcessorCount, threadIdx =>
+            Parallel.For(0, workerCount, threadIdx =>
             {
                 int start = threadIdx * chunkSize;
                 int end = Math.Min(start + chunkSize, tensor.Length);
@@ -2656,14 +2656,23 @@ public class CpuEngine : IEngine
                         localMax = val;
                 }
                 localMaxes[threadIdx] = localMax;
+                hasValue[threadIdx] = true;
             });
 
-            // Combine local maxes
-            maxVal = localMaxes[0];
-            for (int i = 1; i < Environment.ProcessorCount; i++)
+            // Combine only populated slots
+            bool first = true;
+            for (int i = 0; i < workerCount; i++)
             {
-                if (numOps.GreaterThan(localMaxes[i], maxVal))
+                if (!hasValue[i]) continue;
+                if (first)
+                {
                     maxVal = localMaxes[i];
+                    first = false;
+                }
+                else if (numOps.GreaterThan(localMaxes[i], maxVal))
+                {
+                    maxVal = localMaxes[i];
+                }
             }
         }
         else
@@ -2691,10 +2700,12 @@ public class CpuEngine : IEngine
         // Parallel reduction for large tensors
         if (tensor.Length > 10000)
         {
-            var localMins = new T[Environment.ProcessorCount];
-            int chunkSize = (tensor.Length + Environment.ProcessorCount - 1) / Environment.ProcessorCount;
+            int workerCount = Environment.ProcessorCount;
+            var localMins = new T[workerCount];
+            var hasValue = new bool[workerCount];
+            int chunkSize = (tensor.Length + workerCount - 1) / workerCount;
 
-            Parallel.For(0, Environment.ProcessorCount, threadIdx =>
+            Parallel.For(0, workerCount, threadIdx =>
             {
                 int start = threadIdx * chunkSize;
                 int end = Math.Min(start + chunkSize, tensor.Length);
@@ -2708,14 +2719,23 @@ public class CpuEngine : IEngine
                         localMin = val;
                 }
                 localMins[threadIdx] = localMin;
+                hasValue[threadIdx] = true;
             });
 
-            // Combine local mins
-            minVal = localMins[0];
-            for (int i = 1; i < Environment.ProcessorCount; i++)
+            // Combine only populated slots
+            bool first = true;
+            for (int i = 0; i < workerCount; i++)
             {
-                if (numOps.LessThan(localMins[i], minVal))
+                if (!hasValue[i]) continue;
+                if (first)
+                {
                     minVal = localMins[i];
+                    first = false;
+                }
+                else if (numOps.LessThan(localMins[i], minVal))
+                {
+                    minVal = localMins[i];
+                }
             }
         }
         else
@@ -6461,7 +6481,7 @@ public class CpuEngine : IEngine
         if (embeddings.Rank != 2)
             throw new ArgumentException($"Embeddings must be a 2D tensor [vocab_size, embedding_dim]. Got rank {embeddings.Rank}.");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
+        int vocabSize = embeddings.Shape[0];
         int embeddingDim = embeddings.Shape[1];
         int numIndices = indices.Length;
 
@@ -6481,6 +6501,12 @@ public class CpuEngine : IEngine
         for (int i = 0; i < numIndices; i++)
         {
             int tokenIdx = Convert.ToInt32(idxData[i]);
+
+            // Bounds check for index
+            if (tokenIdx < 0 || tokenIdx >= vocabSize)
+                throw new ArgumentOutOfRangeException(nameof(indices),
+                    $"Index {tokenIdx} at position {i} is out of bounds for embedding table with vocabulary size {vocabSize}.");
+
             int srcOffset = tokenIdx * embeddingDim;
             int dstOffset = i * embeddingDim;
 
@@ -6499,6 +6525,10 @@ public class CpuEngine : IEngine
     {
         if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
         if (indices == null) throw new ArgumentNullException(nameof(indices));
+        if (vocabSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(vocabSize), "Vocabulary size must be positive.");
+        if (embeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(embeddingDim), "Embedding dimension must be positive.");
 
         var numOps = MathHelper.GetNumericOperations<T>();
         var gradEmbeddings = new Tensor<T>(new[] { vocabSize, embeddingDim });
@@ -6511,6 +6541,12 @@ public class CpuEngine : IEngine
         for (int i = 0; i < numIndices; i++)
         {
             int tokenIdx = Convert.ToInt32(idxData[i]);
+
+            // Bounds check for index
+            if (tokenIdx < 0 || tokenIdx >= vocabSize)
+                throw new ArgumentOutOfRangeException(nameof(indices),
+                    $"Index {tokenIdx} at position {i} is out of bounds for vocabulary size {vocabSize}.");
+
             int srcOffset = i * embeddingDim;
             int dstOffset = tokenIdx * embeddingDim;
 
@@ -6533,10 +6569,22 @@ public class CpuEngine : IEngine
         if (centers == null) throw new ArgumentNullException(nameof(centers));
         if (epsilons == null) throw new ArgumentNullException(nameof(epsilons));
 
+        if (input.Rank != 2)
+            throw new ArgumentException($"input must be 2D [batch, features], got rank {input.Rank}", nameof(input));
+        if (centers.Rank != 2)
+            throw new ArgumentException($"centers must be 2D [numCenters, features], got rank {centers.Rank}", nameof(centers));
+        if (epsilons.Rank != 1)
+            throw new ArgumentException($"epsilons must be 1D [numCenters], got rank {epsilons.Rank}", nameof(epsilons));
+
         var numOps = MathHelper.GetNumericOperations<T>();
         int batchSize = input.Shape[0];
         int features = input.Shape[1];
         int numCenters = centers.Shape[0];
+
+        if (centers.Shape[1] != features)
+            throw new ArgumentException($"centers features dimension ({centers.Shape[1]}) must match input features ({features})", nameof(centers));
+        if (epsilons.Shape[0] != numCenters)
+            throw new ArgumentException($"epsilons length ({epsilons.Shape[0]}) must match number of centers ({numCenters})", nameof(epsilons));
 
         var output = new Tensor<T>([batchSize, numCenters]);
         var inputData = input.ToArray();
@@ -6578,10 +6626,30 @@ public class CpuEngine : IEngine
         if (epsilons == null) throw new ArgumentNullException(nameof(epsilons));
         if (output == null) throw new ArgumentNullException(nameof(output));
 
+        if (input.Rank != 2)
+            throw new ArgumentException($"input must be 2D [batch, features], got rank {input.Rank}", nameof(input));
+        if (centers.Rank != 2)
+            throw new ArgumentException($"centers must be 2D [numCenters, features], got rank {centers.Rank}", nameof(centers));
+        if (epsilons.Rank != 1)
+            throw new ArgumentException($"epsilons must be 1D [numCenters], got rank {epsilons.Rank}", nameof(epsilons));
+        if (gradOutput.Rank != 2)
+            throw new ArgumentException($"gradOutput must be 2D [batch, numCenters], got rank {gradOutput.Rank}", nameof(gradOutput));
+        if (output.Rank != 2)
+            throw new ArgumentException($"output must be 2D [batch, numCenters], got rank {output.Rank}", nameof(output));
+
         var numOps = MathHelper.GetNumericOperations<T>();
         int batchSize = input.Shape[0];
         int features = input.Shape[1];
         int numCenters = centers.Shape[0];
+
+        if (centers.Shape[1] != features)
+            throw new ArgumentException($"centers features dimension ({centers.Shape[1]}) must match input features ({features})", nameof(centers));
+        if (epsilons.Shape[0] != numCenters)
+            throw new ArgumentException($"epsilons length ({epsilons.Shape[0]}) must match number of centers ({numCenters})", nameof(epsilons));
+        if (gradOutput.Shape[0] != batchSize || gradOutput.Shape[1] != numCenters)
+            throw new ArgumentException($"gradOutput shape [{gradOutput.Shape[0]}, {gradOutput.Shape[1]}] must be [{batchSize}, {numCenters}]", nameof(gradOutput));
+        if (output.Shape[0] != batchSize || output.Shape[1] != numCenters)
+            throw new ArgumentException($"output shape [{output.Shape[0]}, {output.Shape[1]}] must be [{batchSize}, {numCenters}]", nameof(output));
 
         var gradInput = new Tensor<T>(input.Shape);
         var gradCenters = new Tensor<T>(centers.Shape);
@@ -6657,8 +6725,6 @@ public class CpuEngine : IEngine
         if (axis < 0 || axis >= tensor.Shape.Length)
             throw new ArgumentOutOfRangeException(nameof(axis), $"Axis {axis} out of range for tensor with {tensor.Shape.Length} dimensions");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-
         // Calculate output shape
         var outputShape = new int[tensor.Shape.Length];
         Array.Copy(tensor.Shape, outputShape, tensor.Shape.Length);
@@ -6705,8 +6771,6 @@ public class CpuEngine : IEngine
         if (multiples == null) throw new ArgumentNullException(nameof(multiples));
         if (multiples.Length != tensor.Shape.Length)
             throw new ArgumentException($"Multiples length ({multiples.Length}) must match tensor dimensions ({tensor.Shape.Length})");
-
-        var numOps = MathHelper.GetNumericOperations<T>();
 
         // Calculate output shape
         var outputShape = new int[tensor.Shape.Length];

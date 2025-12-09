@@ -57,6 +57,7 @@ All 6 layers have been converted from Matrix<T>/Vector<T> internal storage to Te
 After detailed audit, many layers have valid reasons for fallbacks. Here's the breakdown:
 
 ### Layers with PROPER autodiff implementation (no changes needed)
+
 | # | Layer | Notes |
 |---|-------|-------|
 | 1 | ActivationLayer.cs | ✅ Has proper autodiff; only falls back for vector activations |
@@ -69,6 +70,7 @@ After detailed audit, many layers have valid reasons for fallbacks. Here's the b
 | 8 | SpikingLayer.cs | ✅ COMPLETED - Proper autodiff with computation graph |
 
 ### Layers with ACCEPTABLE fallbacks (domain-specific algorithms)
+
 | # | Layer | Reason |
 |---|-------|--------|
 | 1 | CapsuleLayer.cs | Dynamic routing by agreement (iterative capsule-specific algorithm) |
@@ -82,6 +84,7 @@ After detailed audit, many layers have valid reasons for fallbacks. Here's the b
 | 9 | SynapticPlasticityLayer.cs | STDP learning (bio-inspired plasticity rules) |
 
 ### Layers that COULD benefit from proper autodiff (lower priority)
+
 | # | Layer | Complexity | Notes |
 |---|-------|------------|-------|
 | 1 | MultiHeadAttentionLayer.cs | HIGH | Complex multi-dimensional reshaping |
@@ -137,6 +140,8 @@ These layers use ToMatrix/ToVector/FromMatrix/FromVector in hot paths:
 ---
 
 ## LAYERS WITH EXCESSIVE LOOPS (Top 20 by loop count) - UPDATED Dec 2024
+
+The following table shows the layers ordered by loop count. Many have been vectorized where possible:
 
 | # | Layer | Loop Count | Status | Notes |
 |---|-------|-----------|--------|-------|
