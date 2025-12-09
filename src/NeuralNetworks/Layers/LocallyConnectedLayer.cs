@@ -441,9 +441,9 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         var centeredTensor = Engine.TensorSubtract(randomTensor.Reshape([totalElements]), halfTensor);
         var scaledTensor = Engine.TensorMultiplyScalar(centeredTensor, scale);
 
-        // Copy back to weights tensor (preserving shape)
-        var reshapedResult = scaledTensor.Reshape(_weights.Shape);
-        Array.Copy(reshapedResult.ToArray(), _weights.ToArray(), totalElements);
+        // Assign the scaled tensor to weights (preserving shape)
+        // Note: Array.Copy to _weights.ToArray() creates a temporary copy, not updating _weights
+        _weights = scaledTensor.Reshape(_weights.Shape);
 
         // Initialize biases to zero
         _biases.Fill(NumOps.Zero);
