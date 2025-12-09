@@ -3053,6 +3053,10 @@ public interface IEngine
     /// This operation is similar to numpy.where() or torch.where().
     /// Result[i] = condition[i] != 0 ? x[i] : y[i]
     /// </para>
+    /// <para>
+    /// <b>Note:</b> Prefer the overload that accepts <c>Tensor&lt;bool&gt;</c> for explicit boolean conditions.
+    /// This overload treats any non-zero value as true, which may lead to unexpected behavior with floating-point types.
+    /// </para>
     /// </remarks>
     Tensor<T> TensorWhere<T>(Tensor<T> condition, Tensor<T> x, Tensor<T> y);
 
@@ -3438,13 +3442,19 @@ public interface IEngine
     Tensor<T> TensorNormalize<T>(Tensor<T> tensor, int axis, T epsilon);
 
     /// <summary>
-    /// Clips tensor values to a range.
+    /// Clips tensor values to a range. This is an alias for <see cref="TensorClamp{T}"/>.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
     /// <param name="tensor">The input tensor.</param>
     /// <param name="minValue">The minimum value.</param>
     /// <param name="maxValue">The maximum value.</param>
     /// <returns>A tensor with values clipped to [minValue, maxValue].</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides the same functionality as <see cref="TensorClamp{T}"/>.
+    /// Both "clip" and "clamp" are common names for the same operation (min(max(x, min), max)).
+    /// </para>
+    /// </remarks>
     Tensor<T> TensorClip<T>(Tensor<T> tensor, T minValue, T maxValue);
 
     /// <summary>
@@ -3581,7 +3591,7 @@ public interface IEngine
     Tensor<T> TensorLinspace<T>(T start, T end, int count);
 
     /// <summary>
-    /// Batched matrix multiplication for 3D tensors.
+    /// Batched matrix multiplication for 3D tensors. This is an alias for <see cref="BatchMatMul{T}"/>.
     /// Computes batched matrix multiply: result[b] = a[b] @ b[b] for each batch.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
@@ -3593,6 +3603,10 @@ public interface IEngine
     /// Similar to torch.bmm() or np.matmul() with 3D tensors.
     /// Essential for RNN/LSTM/GRU vectorization where we compute all timesteps at once.
     /// If b is 2D [K, N], it broadcasts across the batch dimension.
+    /// </para>
+    /// <para>
+    /// This method provides the same functionality as <see cref="BatchMatMul{T}"/>.
+    /// The "Tensor" prefix variant exists for API consistency with other tensor operations.
     /// </para>
     /// </remarks>
     Tensor<T> TensorBatchMatMul<T>(Tensor<T> a, Tensor<T> b);
@@ -3614,7 +3628,7 @@ public interface IEngine
     void TensorSetSliceAxis<T>(Tensor<T> destination, Tensor<T> source, int axis, int index);
 
     /// <summary>
-    /// Applies softmax along a specified axis.
+    /// Applies softmax along a specified axis. This is an alias for <see cref="Softmax{T}(Tensor{T}, int)"/>.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
     /// <param name="tensor">The input tensor.</param>
@@ -3625,17 +3639,27 @@ public interface IEngine
     /// Computes softmax(x)_i = exp(x_i) / sum(exp(x_j)) along the specified axis.
     /// Numerically stable implementation subtracts max before exp.
     /// </para>
+    /// <para>
+    /// This method provides the same functionality as <see cref="Softmax{T}(Tensor{T}, int)"/>.
+    /// The "Tensor" prefix variant exists for API consistency with other tensor operations.
+    /// </para>
     /// </remarks>
     Tensor<T> TensorSoftmax<T>(Tensor<T> tensor, int axis);
 
     /// <summary>
-    /// Computes the backward pass for softmax.
+    /// Computes the backward pass for softmax. This is an alias for <see cref="SoftmaxBackward{T}"/>.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
     /// <param name="softmaxOutput">The output from the forward softmax pass.</param>
     /// <param name="outputGradient">The gradient flowing back.</param>
     /// <param name="axis">The axis along which softmax was applied.</param>
     /// <returns>The gradient with respect to the softmax input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides the same functionality as <see cref="SoftmaxBackward{T}"/>.
+    /// The "Tensor" prefix variant exists for API consistency with other tensor operations.
+    /// </para>
+    /// </remarks>
     Tensor<T> TensorSoftmaxBackward<T>(Tensor<T> softmaxOutput, Tensor<T> outputGradient, int axis);
 
     /// <summary>

@@ -7977,18 +7977,32 @@ public class CpuEngine : IEngine
         if (a == null) throw new ArgumentNullException(nameof(a));
         if (b == null) throw new ArgumentNullException(nameof(b));
 
+        // If both tensors are 3D, delegate to BatchMatMul
+        if (a.Rank == 3 && b.Rank == 3)
+        {
+            return BatchMatMul(a, b);
+        }
+
+        // Handle broadcasting case where b is 2D [K, N]
+        if (a.Rank != 3 || b.Rank != 2)
+        {
+            throw new ArgumentException(
+                $"TensorBatchMatMul requires a to be 3D and b to be 2D or 3D. Got ranks {a.Rank} and {b.Rank}.");
+        }
+
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        // a: [batch, M, K], b: [batch, K, N] or [K, N]
+        // a: [batch, M, K], b: [K, N]
         int batch = a.Shape[0];
         int M = a.Shape[1];
         int K = a.Shape[2];
+        int N = b.Shape[1];
 
-        bool broadcastB = b.Rank == 2;
-        int N = broadcastB ? b.Shape[1] : b.Shape[2];
-
-        if (!broadcastB && b.Shape[0] != batch)
-            throw new ArgumentException("Batch dimensions must match or b must be 2D for broadcasting.");
+        if (b.Shape[0] != K)
+        {
+            throw new ArgumentException(
+                $"Matrix dimensions incompatible. a has shape [{batch}, {M}, {K}], b has shape [{b.Shape[0]}, {N}]. Inner dimensions must match.");
+        }
 
         var result = new Tensor<T>([batch, M, N]);
 
@@ -8001,9 +8015,7 @@ public class CpuEngine : IEngine
                     T sum = numOps.Zero;
                     for (int k = 0; k < K; k++)
                     {
-                        T aVal = a[batchIdx, i, k];
-                        T bVal = broadcastB ? b[k, j] : b[batchIdx, k, j];
-                        sum = numOps.Add(sum, numOps.Multiply(aVal, bVal));
+                        sum = numOps.Add(sum, numOps.Multiply(a[batchIdx, i, k], b[k, j]));
                     }
                     result[batchIdx, i, j] = sum;
                 }
@@ -8072,52 +8084,15 @@ public class CpuEngine : IEngine
     /// <inheritdoc/>
     public Tensor<T> TensorSoftmax<T>(Tensor<T> tensor, int axis)
     {
-        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
-
-        var numOps = MathHelper.GetNumericOperations<T>();
-
-        // Normalize axis
-        if (axis < 0) axis = tensor.Rank + axis;
-
-        // Get max along axis for numerical stability
-        var maxValues = ReduceMax(tensor, new[] { axis }, keepDims: true, out _);
-
-        // Subtract max and exp
-        var shifted = TensorSubtract(tensor, maxValues);
-        var expValues = TensorExp(shifted);
-
-        // Sum along axis
-        var sumExp = ReduceSum(expValues, new[] { axis }, keepDims: true);
-
-        // Divide
-        return TensorDivide(expValues, sumExp);
+        // Delegate to Softmax which has the same functionality
+        return Softmax(tensor, axis);
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorSoftmaxBackward<T>(Tensor<T> softmaxOutput, Tensor<T> outputGradient, int axis)
     {
-        if (softmaxOutput == null) throw new ArgumentNullException(nameof(softmaxOutput));
-        if (outputGradient == null) throw new ArgumentNullException(nameof(outputGradient));
-
-        var numOps = MathHelper.GetNumericOperations<T>();
-
-        // Normalize axis
-        if (axis < 0) axis = softmaxOutput.Rank + axis;
-
-        // Softmax backward: dy/dx = softmax * (grad - sum(softmax * grad))
-        // Element-wise: s * (g - sum(s * g))
-
-        // Compute s * g
-        var sg = TensorMultiply(softmaxOutput, outputGradient);
-
-        // Sum along axis
-        var sumSG = ReduceSum(sg, new[] { axis }, keepDims: true);
-
-        // grad - sum(s * g)
-        var diff = TensorSubtract(outputGradient, sumSG);
-
-        // s * diff
-        return TensorMultiply(softmaxOutput, diff);
+        // Delegate to SoftmaxBackward with reordered parameters (grad first, then output)
+        return SoftmaxBackward(outputGradient, softmaxOutput, axis);
     }
 
     /// <inheritdoc/>
