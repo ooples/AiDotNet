@@ -360,7 +360,13 @@ public class ResidualLayer<T> : LayerBase<T>
 
         // Step 2: Compute activation derivative using cached combined output
         Tensor<T> combinedGradient;
-        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        if (VectorActivation != null)
+        {
+            // Production-grade: Handle VectorActivation derivative
+            var activationDerivative = VectorActivation.Derivative(combinedOutput);
+            combinedGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
+        }
+        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
         {
             // Production-grade: Use cached combinedOutput for activation derivative
             var activation = ScalarActivation;
