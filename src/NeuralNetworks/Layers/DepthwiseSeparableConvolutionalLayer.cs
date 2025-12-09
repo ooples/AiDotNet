@@ -154,6 +154,27 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _lastOutput;
 
     /// <summary>
+    /// Stored pre-activation output from the most recent forward pass, used for backpropagation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This tensor stores the output before the activation function is applied. It's needed during
+    /// backpropagation because some activation functions (like Sigmoid, Tanh) require the pre-activation
+    /// value to compute their derivative correctly, rather than the post-activation value.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the network's memory of the result before the activation function.
+    ///
+    /// The layer remembers:
+    /// - The output after convolution and bias addition, but before activation
+    /// - This is needed because some activation functions need the "raw" value to compute their derivative
+    ///
+    /// Think of it like remembering the score before applying a curve - you need the original score
+    /// to calculate how much the curve changed things.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastPreActivation;
+
+    /// <summary>
     /// Calculated gradients for the depthwise kernels during backpropagation.
     /// </summary>
     /// <remarks>
@@ -675,6 +696,9 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         // Convert output from NCHW back to NHWC
         var output = pointwiseOutputNCHW.Transpose([0, 2, 3, 1]);
 
+        // Cache pre-activation for proper derivative computation during backward pass
+        // Some activation functions (Sigmoid, Tanh) require the pre-activation value
+        _lastPreActivation = output;
         _lastOutput = ApplyActivation(output);
         return _lastOutput;
     }
@@ -846,11 +870,11 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastDepthwiseOutput == null || _lastOutput == null)
+        if (_lastInput == null || _lastDepthwiseOutput == null || _lastOutput == null || _lastPreActivation == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Apply activation derivative
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+        // Apply activation derivative using pre-activation value for correctness
+        var delta = ApplyActivationDerivative(_lastPreActivation, outputGradient);
 
         // Convert gradients from NHWC to NCHW for Engine operations
         var deltaNCHW = delta.Transpose([0, 3, 1, 2]);
@@ -893,20 +917,21 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null)
+        if (_lastInput == null || _lastOutput == null || _lastPreActivation == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Production-grade: Compute activation derivative using cached output
+        // Production-grade: Compute activation derivative using cached pre-activation
+        // Some activations (Sigmoid, Tanh) require pre-activation value for correct derivative
         Tensor<T> preActivationGradient;
         if (VectorActivation != null)
         {
-            var actDeriv = VectorActivation.Derivative(_lastOutput);
+            var actDeriv = VectorActivation.Derivative(_lastPreActivation);
             preActivationGradient = Engine.TensorMultiply(outputGradient, actDeriv);
         }
         else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
         {
             var activation = ScalarActivation;
-            var activationDerivative = _lastOutput.Transform((x, _) => activation.Derivative(x));
+            var activationDerivative = _lastPreActivation.Transform((x, _) => activation.Derivative(x));
             preActivationGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
         }
         else
@@ -1197,6 +1222,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastDepthwiseOutput = null;
         _lastOutput = null;
+        _lastPreActivation = null;
         _depthwiseKernelsGradient = null;
         _pointwiseKernelsGradient = null;
         _biasesGradient = null;
