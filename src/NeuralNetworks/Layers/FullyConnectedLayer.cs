@@ -492,7 +492,6 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         // Create computation nodes - _weights and _biases are already Tensor<T>
         var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
         var weights = Autodiff.TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
-        var biases = Autodiff.TensorOperations<T>.Variable(_biases, "biases", requiresGradient: true);
 
         // Forward computation using autodiff ops
         // For each example: output = weights @ input + biases
@@ -509,12 +508,18 @@ public class FullyConnectedLayer<T> : LayerBase<T>
                 biasesBroadcast[i, j] = _biases[j];
             }
         }
-        var biasNode = Autodiff.TensorOperations<T>.Variable(biasesBroadcast, "biases_broadcast", requiresGradient: false);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(biasesBroadcast, "biases_broadcast", requiresGradient: true);
         var output = Autodiff.TensorOperations<T>.Add(matmul, biasNode);
 
         // Apply activation using autodiff
         Autodiff.ComputationNode<T> activated;
-        if (ScalarActivation is ReLUActivation<T>)
+        if (VectorActivation != null)
+        {
+            // Vector activation functions (e.g., Softmax) require Jacobian computation
+            // Fall back to manual backward pass for vector activations
+            return BackwardManual(outputGradient);
+        }
+        else if (ScalarActivation is ReLUActivation<T>)
         {
             activated = Autodiff.TensorOperations<T>.ReLU(output);
         }
@@ -525,6 +530,11 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         else if (ScalarActivation is TanhActivation<T>)
         {
             activated = Autodiff.TensorOperations<T>.Tanh(output);
+        }
+        else if (ScalarActivation != null)
+        {
+            // Unsupported scalar activation - fall back to manual backward
+            return BackwardManual(outputGradient);
         }
         else
         {
@@ -577,13 +587,15 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         // Extract gradients - already Tensor<T>
         if (weights.Gradient == null)
             throw new InvalidOperationException("Gradient computation failed for weights.");
-        if (biases.Gradient == null)
+        if (biasNode.Gradient == null)
             throw new InvalidOperationException("Gradient computation failed for biases.");
         if (input.Gradient == null)
             throw new InvalidOperationException("Gradient computation failed for input.");
 
         _weightsGradient = weights.Gradient;
-        _biasesGradient = biases.Gradient;
+        // Sum bias gradients over batch dimension since biases are shared across batch
+        // biasNode.Gradient shape: [batchSize, outputSize] -> _biasesGradient shape: [outputSize]
+        _biasesGradient = biasNode.Gradient.SumOverAxis(0);
 
         return input.Gradient;
     }
