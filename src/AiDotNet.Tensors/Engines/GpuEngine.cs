@@ -229,11 +229,10 @@ internal static class LocallyConnectedConv2DKernels
             }
         }
 
-        // Add bias if provided - bias is per-position: [oh, ow, oc]
+        // Add bias if provided - bias is per-channel: [oc]
         if (hasBias != 0)
         {
-            int biasIdx = (oh * p.OutputWidth + ow) * p.OutChannels + oc;
-            sum += bias[biasIdx];
+            sum += bias[oc];
         }
 
         output[index] = sum;
@@ -273,11 +272,10 @@ internal static class LocallyConnectedConv2DKernels
             }
         }
 
-        // Add bias if provided - bias is per-position: [oh, ow, oc]
+        // Add bias if provided - bias is per-channel: [oc]
         if (hasBias != 0)
         {
-            int biasIdx = (oh * p.OutputWidth + ow) * p.OutChannels + oc;
-            sum += bias[biasIdx];
+            sum += bias[oc];
         }
 
         output[index] = sum;

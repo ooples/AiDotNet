@@ -485,14 +485,10 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         // Weights need to be permuted from [oh, ow, oc, kh, kw, ic] to [oh, ow, oc, ic, kh, kw]
         var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
 
-        // Broadcast bias to per-position bias [oh, ow, oc] without manual loops
-        var biasReshaped = Engine.TensorTile(
-            _biases.Reshape(1, 1, _outputChannels),
-            new[] { _outputHeight, _outputWidth, 1 });
-
-        // Call GPU-accelerated LocallyConnectedConv2D
+        // Pass bias as 1D tensor [outChannels] to ensure consistent behavior across
+        // CPU fallback, GPU, and JIT paths. The engine handles per-channel bias internally.
         int[] strideArr = [_stride, _stride];
-        var outputNCHW = Engine.LocallyConnectedConv2D(inputNCHW, weightsPermuted, biasReshaped, strideArr);
+        var outputNCHW = Engine.LocallyConnectedConv2D(inputNCHW, weightsPermuted, _biases, strideArr);
 
         // Transpose output back from NCHW [batch, channels, height, width] to NHWC [batch, height, width, channels]
         var preActivation = outputNCHW.Transpose([0, 2, 3, 1]);
