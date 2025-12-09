@@ -467,16 +467,9 @@ public class FeedForwardLayer<T> : LayerBase<T>
         var weights = Autodiff.TensorOperations<T>.Variable(Weights, "weights", requiresGradient: true);
         var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weights);
 
-        // Broadcast biases to match batch dimension
-        var broadcastedBiasesData = new T[batchSize * outputSize];
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < outputSize; o++)
-            {
-                broadcastedBiasesData[b * outputSize + o] = Biases[0, o];
-            }
-        }
-        var broadcastedBiases = new Tensor<T>([batchSize, outputSize], new Vector<T>(broadcastedBiasesData));
+        // Broadcast biases to match batch dimension using engine TensorTile
+        // Biases: [1, outputSize] -> tile to [batchSize, outputSize]
+        var broadcastedBiases = Engine.TensorTile(Biases, new[] { batchSize, 1 });
         var biasesBroadcast = Autodiff.TensorOperations<T>.Variable(broadcastedBiases, "biases_broadcast", requiresGradient: true);
         var linearOutput = Autodiff.TensorOperations<T>.Add(matmul, biasesBroadcast);
 
@@ -527,18 +520,8 @@ public class FeedForwardLayer<T> : LayerBase<T>
 
         WeightsGradient = weights.Gradient;
 
-        // Sum the broadcasted bias gradient along the batch dimension
-        var biasGradData = new T[outputSize];
-        for (int o = 0; o < outputSize; o++)
-        {
-            T sum = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++)
-            {
-                sum = NumOps.Add(sum, biasesBroadcast.Gradient[b, o]);
-            }
-            biasGradData[o] = sum;
-        }
-        BiasesGradient = new Tensor<T>([1, outputSize], new Vector<T>(biasGradData));
+        // Use Engine.ReduceSum for consistency with BackwardManual
+        BiasesGradient = Engine.ReduceSum(biasesBroadcast.Gradient, new[] { 0 }, keepDims: true);
 
         return input.Gradient;
     }
