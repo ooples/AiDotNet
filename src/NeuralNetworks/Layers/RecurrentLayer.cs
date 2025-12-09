@@ -514,21 +514,16 @@ public class RecurrentLayer<T> : LayerBase<T>
             var hiddenNode = Autodiff.TensorOperations<T>.Variable(hiddenAtT, "hidden", requiresGradient: true);
             var inputWeightsNode = Autodiff.TensorOperations<T>.Variable(_inputWeights, "input_weights", requiresGradient: true);
             var hiddenWeightsNode = Autodiff.TensorOperations<T>.Variable(_hiddenWeights, "hidden_weights", requiresGradient: true);
-            var biasesNode = Autodiff.TensorOperations<T>.Variable(_biases, "biases", requiresGradient: true);
 
-            // Forward pass for linear part only: preAct = input @ W_input^T + hidden @ W_hidden^T + bias
+            // Forward pass for linear part only: preAct = input @ W_input^T + hidden @ W_hidden^T
+            // Biases are not included in autodiff graph - gradients computed manually below
             var inputWeightsTransposed = Autodiff.TensorOperations<T>.Transpose(inputWeightsNode);
             var hiddenWeightsTransposed = Autodiff.TensorOperations<T>.Transpose(hiddenWeightsNode);
 
             var inputContribution = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, inputWeightsTransposed);
             var hiddenContribution = Autodiff.TensorOperations<T>.MatrixMultiply(hiddenNode, hiddenWeightsTransposed);
 
-            // Broadcast biases across batch dimension
-            var biasesBroadcast = BroadcastBiases(_biases, batchSize);
-            var biasNodeBroadcast = Autodiff.TensorOperations<T>.Variable(biasesBroadcast, "biases_broadcast", requiresGradient: false);
-
             var preActivation = Autodiff.TensorOperations<T>.Add(inputContribution, hiddenContribution);
-            preActivation = Autodiff.TensorOperations<T>.Add(preActivation, biasNodeBroadcast);
 
             // Set pre-activation gradient (activation derivative already applied)
             preActivation.Gradient = preActivationGradient;
@@ -552,10 +547,13 @@ public class RecurrentLayer<T> : LayerBase<T>
                 else
                 {
                     stack.Push((node, true));
-                    foreach (var parent in node.Parents)
+                    if (node.Parents != null)
                     {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
+                        foreach (var parent in node.Parents)
+                        {
+                            if (!visited.Contains(parent))
+                                stack.Push((parent, false));
+                        }
                     }
                 }
             }
@@ -580,10 +578,11 @@ public class RecurrentLayer<T> : LayerBase<T>
                 hiddenWeightsGrad = Engine.TensorAdd(hiddenWeightsGrad, hiddenWeightsNode.Gradient);
             }
 
-            if (biasesNode.Gradient != null)
-            {
-                biasesGrad = Engine.TensorAdd(biasesGrad, biasesNode.Gradient);
-            }
+            // Accumulate bias gradients manually: dL/db = sum over batch of preActivationGradient
+            // preActivationGradient shape: [batchSize, hiddenSize]
+            // Sum along batch axis (axis 0) to get [hiddenSize] gradient for biases
+            var stepBiasGrad = preActivationGradient.SumOverAxis(0);
+            biasesGrad = Engine.TensorAdd(biasesGrad, stepBiasGrad);
 
             // VECTORIZED: Store input gradient using tensor slice operation
             if (inputNode.Gradient != null)
