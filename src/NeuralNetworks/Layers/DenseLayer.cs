@@ -791,6 +791,12 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Validate tensor ranks before accessing Shape indices
+        if (_lastInput.Rank < 2)
+            throw new ArgumentException($"Expected _lastInput to have at least 2 dimensions, but got {_lastInput.Rank}D tensor.", nameof(outputGradient));
+        if (outputGradient.Rank < 2)
+            throw new ArgumentException($"Expected outputGradient to have at least 2 dimensions, but got {outputGradient.Rank}D tensor.", nameof(outputGradient));
+
         int batchSize = _lastInput.Shape[0];
         var flattenedInput = _lastInput.Reshape(batchSize, _lastInput.Shape[1]);
 
