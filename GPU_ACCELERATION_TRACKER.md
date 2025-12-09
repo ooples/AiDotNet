@@ -6,8 +6,8 @@
 
 **Summary**:
 - **File**: `src/AiDotNet.Tensors/Engines/GpuEngine.cs` (21,339 lines)
-- **GPU implementations**: 122 unique operations with GPU kernels
-- **CPU-only fallbacks**: 81 methods that still need GPU implementation
+- **GPU implementations**: 126 unique operations with GPU kernels
+- **CPU-only fallbacks**: 77 methods that still need GPU implementation
 - **Conditional fallbacks**: Many GPU-implemented methods correctly fall back to CPU for small tensors (below threshold) or unsupported types
 
 The GpuEngine class has comprehensive ILGPU infrastructure with most critical neural network operations having GPU implementations. The remaining CPU fallbacks are for specialized/less common operations.
@@ -54,17 +54,17 @@ The GpuEngine class has comprehensive ILGPU infrastructure with most critical ne
 | 6 | Swish | ✓ GPU | Self-gated activation |
 | 7 | ELU | ✓ GPU | Exponential linear unit |
 
-### Priority 3: HIGH - Reduction Operations (MOSTLY IMPLEMENTED)
+### Priority 3: HIGH - Reduction Operations (ALL IMPLEMENTED ✓)
 
 | # | Method | Status | Notes |
 |---|--------|--------|-------|
 | 1 | ReduceSum | ✓ GPU | Sum reduction |
 | 2 | ReduceMean | ✓ GPU | Mean reduction |
 | 3 | ReduceMax | ✓ GPU | Max reduction |
-| 4 | ReduceMeanBackward | ❌ CPU | Mean gradient - NEEDS GPU |
+| 4 | ReduceMeanBackward | ✓ GPU | Mean gradient |
 | 5 | ReduceMaxBackward | ✓ GPU | Max gradient |
-| 6 | ReduceVariance | ❌ CPU | Variance computation - NEEDS GPU |
-| 7 | ReduceVarianceBackward | ❌ CPU | Variance gradient - NEEDS GPU |
+| 6 | ReduceVariance | ✓ GPU | Variance computation |
+| 7 | ReduceVarianceBackward | ✓ GPU | Variance gradient |
 | 8 | TensorSum | ✓ GPU | Tensor sum |
 | 9 | TensorMaxValue | ✓ GPU | Tensor max |
 | 10 | TensorMinValue | ✓ GPU | Tensor min |
@@ -183,7 +183,7 @@ The GpuEngine class has comprehensive ILGPU infrastructure with most critical ne
 | 20 | OuterProduct | ✓ GPU | Outer product |
 | 21 | MatrixMultiply | ✓ GPU | Matrix multiply |
 | 22 | MatrixAdd | ✓ GPU | Matrix add |
-| 23 | MatrixSubtract | ❌ CPU | Matrix subtract - NEEDS GPU |
+| 23 | MatrixSubtract | ✓ GPU | Matrix subtract |
 | 24 | MatrixMultiplyScalar | ✓ GPU | Matrix scalar mult |
 | 25 | MatrixTranspose | ✓ GPU | Matrix transpose |
 | 26 | MatrixVectorMultiply | ✓ GPU | Matrix-vector mult |
@@ -244,16 +244,12 @@ The GpuEngine class has comprehensive ILGPU infrastructure with most critical ne
 Based on analysis, these methods have NO GPU implementation (only return _cpuFallback):
 
 ### High Priority (Commonly Used)
-1. ReduceMeanBackward
-2. ReduceVariance
-3. ReduceVarianceBackward
-4. CropBackward
-5. GridSample
-6. AffineGrid
-7. Product
-8. MatrixSubtract
-9. MatrixSumOfSquares
-10. Conv2D (int[] parameters overload)
+1. CropBackward
+2. GridSample
+3. AffineGrid
+4. Product
+5. MatrixSumOfSquares
+6. Conv2D (int[] parameters overload)
 
 ### Medium Priority (Shape/Index Operations)
 11. TensorSlice

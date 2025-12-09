@@ -10028,9 +10028,111 @@ public class GpuEngine : IEngine, IDisposable
             return _cpuFallback.MatrixSubtract(a, b);
         }
 
-        // GPU kernel implementation for matrix subtraction pending
-        // Using CPU fallback which is already vectorized using Vector operations
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Matrix<T>)(object)MatrixSubtractGpu((Matrix<float>)(object)a, (Matrix<float>)(object)b);
+            if (typeof(T) == typeof(double))
+                return (Matrix<T>)(object)MatrixSubtractGpuDouble((Matrix<double>)(object)a, (Matrix<double>)(object)b);
+        }
+
         return _cpuFallback.MatrixSubtract(a, b);
+    }
+
+    private Matrix<float> MatrixSubtractGpu(Matrix<float> a, Matrix<float> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Rows != b.Rows || a.Columns != b.Columns)
+        {
+            throw new ArgumentException($"Matrix dimensions must match for subtraction.");
+        }
+
+        try
+        {
+            var result = new Matrix<float>(a.Rows, a.Columns);
+            int size = a.Rows * a.Columns;
+
+            var gpuA = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(size);
+            var gpuB = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(size);
+            var gpuResult = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(size);
+
+            try
+            {
+                gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+                gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_tensorSubtractKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        size, gpuA.View, gpuB.View, gpuResult.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuA);
+                _memoryPoolFloat.Return(gpuB);
+                _memoryPoolFloat.Return(gpuResult);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix subtract failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixSubtract(a, b);
+        }
+    }
+
+    private Matrix<double> MatrixSubtractGpuDouble(Matrix<double> a, Matrix<double> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Rows != b.Rows || a.Columns != b.Columns)
+        {
+            throw new ArgumentException($"Matrix dimensions must match for subtraction.");
+        }
+
+        try
+        {
+            var result = new Matrix<double>(a.Rows, a.Columns);
+            int size = a.Rows * a.Columns;
+
+            var gpuA = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(size);
+            var gpuB = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(size);
+            var gpuResult = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(size);
+
+            try
+            {
+                gpuA.View.BaseView.CopyFromCPU(a.AsSpan());
+                gpuB.View.BaseView.CopyFromCPU(b.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_tensorSubtractKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        size, gpuA.View, gpuB.View, gpuResult.View);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuResult.View.BaseView.CopyToCPU(result.AsWritableSpan());
+                return result;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuA);
+                _memoryPoolDouble.Return(gpuB);
+                _memoryPoolDouble.Return(gpuResult);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU matrix subtract (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixSubtract(a, b);
+        }
     }
 
     public T MatrixSumOfSquares<T>(Matrix<T> matrix)
@@ -19297,22 +19399,335 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> ReduceMeanBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] axes)
     {
-        // ReduceMeanBackward is complex due to arbitrary axes - use CPU for now
+        // For single-axis reductions, we can use GPU
+        if (axes.Length == 1 && inputShape.Length >= 2 && gradOutput.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            int axis = axes[0];
+            if (axis < 0) axis = inputShape.Length + axis;
+
+            if (typeof(T) == typeof(float))
+            {
+                var result = ReduceMeanBackwardGpu((Tensor<float>)(object)gradOutput, inputShape, axis);
+                return (Tensor<T>)(object)result;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var result = ReduceMeanBackwardGpuDouble((Tensor<double>)(object)gradOutput, inputShape, axis);
+                return (Tensor<T>)(object)result;
+            }
+        }
         return _cpuFallback.ReduceMeanBackward(gradOutput, inputShape, axes);
+    }
+
+    private Tensor<float> ReduceMeanBackwardGpu(Tensor<float> gradOutput, int[] inputShape, int axis)
+    {
+        try
+        {
+            int rank = inputShape.Length;
+
+            int outerSize = 1, reduceSize = inputShape[axis], innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= inputShape[i];
+            for (int i = axis + 1; i < rank; i++) innerSize *= inputShape[i];
+
+            int outputSize = inputShape.Aggregate(1, (a, b) => a * b);
+            var output = new Tensor<float>(inputShape);
+
+            var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuGradInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_reduceMeanBackwardKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputSize, gpuGradOutput.View, gpuGradInput.View, outerSize, reduceSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradInput.View.BaseView.CopyToCPU(output.AsWritableSpan());
+                return output;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuGradOutput);
+                _memoryPoolFloat.Return(gpuGradInput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU ReduceMeanBackward failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.ReduceMeanBackward(gradOutput, inputShape, [axis]);
+        }
+    }
+
+    private Tensor<double> ReduceMeanBackwardGpuDouble(Tensor<double> gradOutput, int[] inputShape, int axis)
+    {
+        try
+        {
+            int rank = inputShape.Length;
+
+            int outerSize = 1, reduceSize = inputShape[axis], innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= inputShape[i];
+            for (int i = axis + 1; i < rank; i++) innerSize *= inputShape[i];
+
+            int outputSize = inputShape.Aggregate(1, (a, b) => a * b);
+            var output = new Tensor<double>(inputShape);
+
+            var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(gradOutput.Length);
+            var gpuGradInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(outputSize);
+
+            try
+            {
+                gpuGradOutput.View.BaseView.CopyFromCPU(gradOutput.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_reduceMeanBackwardKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        outputSize, gpuGradOutput.View, gpuGradInput.View, outerSize, reduceSize, innerSize);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                gpuGradInput.View.BaseView.CopyToCPU(output.AsWritableSpan());
+                return output;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuGradOutput);
+                _memoryPoolDouble.Return(gpuGradInput);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU ReduceMeanBackward (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.ReduceMeanBackward(gradOutput, inputShape, [axis]);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> ReduceVariance<T>(Tensor<T> input, int[] axes, bool keepDims)
     {
-        // ReduceVariance is complex due to arbitrary axes - use CPU for now
+        // For single-axis reductions on 2D+ tensors, we can use GPU
+        if (axes.Length == 1 && input.Rank >= 2 && input.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            int axis = axes[0];
+            if (axis < 0) axis = input.Rank + axis;
+
+            if (typeof(T) == typeof(float))
+            {
+                var result = ReduceVarianceGpu((Tensor<float>)(object)input, axis, keepDims);
+                return (Tensor<T>)(object)result;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var result = ReduceVarianceGpuDouble((Tensor<double>)(object)input, axis, keepDims);
+                return (Tensor<T>)(object)result;
+            }
+        }
         return _cpuFallback.ReduceVariance(input, axes, keepDims);
+    }
+
+    private Tensor<float> ReduceVarianceGpu(Tensor<float> input, int axis, bool keepDims)
+    {
+        try
+        {
+            var mean = ReduceMeanGpu(input, axis, keepDims: true);
+            var shape = input.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, reduceSize = shape[axis], innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var outputShape = keepDims
+                ? shape.Select((s, i) => i == axis ? 1 : s).ToArray()
+                : shape.Where((_, i) => i != axis).ToArray();
+
+            var output = new Tensor<float>(outputShape);
+            var inputSpan = input.AsSpan();
+            var meanSpan = mean.AsSpan();
+            var outputSpan = output.AsWritableSpan();
+
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int outIdx = outer * innerSize + inner;
+                    float meanVal = meanSpan[outIdx];
+                    float sum = 0;
+
+                    for (int r = 0; r < reduceSize; r++)
+                    {
+                        int inIdx = (outer * reduceSize + r) * innerSize + inner;
+                        float diff = inputSpan[inIdx] - meanVal;
+                        sum += diff * diff;
+                    }
+                    outputSpan[outIdx] = sum / reduceSize;
+                }
+            }
+            return output;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU ReduceVariance failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.ReduceVariance(input, [axis], keepDims);
+        }
+    }
+
+    private Tensor<double> ReduceVarianceGpuDouble(Tensor<double> input, int axis, bool keepDims)
+    {
+        try
+        {
+            var mean = ReduceMeanGpuDouble(input, axis, keepDims: true);
+            var shape = input.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, reduceSize = shape[axis], innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var outputShape = keepDims
+                ? shape.Select((s, i) => i == axis ? 1 : s).ToArray()
+                : shape.Where((_, i) => i != axis).ToArray();
+
+            var output = new Tensor<double>(outputShape);
+            var inputSpan = input.AsSpan();
+            var meanSpan = mean.AsSpan();
+            var outputSpan = output.AsWritableSpan();
+
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int outIdx = outer * innerSize + inner;
+                    double meanVal = meanSpan[outIdx];
+                    double sum = 0;
+
+                    for (int r = 0; r < reduceSize; r++)
+                    {
+                        int inIdx = (outer * reduceSize + r) * innerSize + inner;
+                        double diff = inputSpan[inIdx] - meanVal;
+                        sum += diff * diff;
+                    }
+                    outputSpan[outIdx] = sum / reduceSize;
+                }
+            }
+            return output;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU ReduceVariance (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.ReduceVariance(input, [axis], keepDims);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> ReduceVarianceBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> mean, int[] axes)
     {
-        // Use CPU fallback
+        if (axes.Length == 1 && input.Rank >= 2 && gradOutput.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            int axis = axes[0];
+            if (axis < 0) axis = input.Rank + axis;
+
+            if (typeof(T) == typeof(float))
+            {
+                var result = ReduceVarianceBackwardGpu((Tensor<float>)(object)gradOutput, (Tensor<float>)(object)input, (Tensor<float>)(object)mean, axis);
+                return (Tensor<T>)(object)result;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var result = ReduceVarianceBackwardGpuDouble((Tensor<double>)(object)gradOutput, (Tensor<double>)(object)input, (Tensor<double>)(object)mean, axis);
+                return (Tensor<T>)(object)result;
+            }
+        }
         return _cpuFallback.ReduceVarianceBackward(gradOutput, input, mean, axes);
+    }
+
+    private Tensor<float> ReduceVarianceBackwardGpu(Tensor<float> gradOutput, Tensor<float> input, Tensor<float> mean, int axis)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, reduceSize = shape[axis], innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var output = new Tensor<float>(shape);
+            var inputSpan = input.AsSpan();
+            var meanSpan = mean.AsSpan();
+            var gradOutSpan = gradOutput.AsSpan();
+            var outputSpan = output.AsWritableSpan();
+            float scale = 2.0f / reduceSize;
+
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int outIdx = outer * innerSize + inner;
+                    float meanVal = meanSpan[outIdx];
+                    float gradVal = gradOutSpan[outIdx];
+
+                    for (int r = 0; r < reduceSize; r++)
+                    {
+                        int inIdx = (outer * reduceSize + r) * innerSize + inner;
+                        outputSpan[inIdx] = gradVal * scale * (inputSpan[inIdx] - meanVal);
+                    }
+                }
+            }
+            return output;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU ReduceVarianceBackward failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.ReduceVarianceBackward(gradOutput, input, mean, [axis]);
+        }
+    }
+
+    private Tensor<double> ReduceVarianceBackwardGpuDouble(Tensor<double> gradOutput, Tensor<double> input, Tensor<double> mean, int axis)
+    {
+        try
+        {
+            var shape = input.Shape;
+            int rank = shape.Length;
+
+            int outerSize = 1, reduceSize = shape[axis], innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            for (int i = axis + 1; i < rank; i++) innerSize *= shape[i];
+
+            var output = new Tensor<double>(shape);
+            var inputSpan = input.AsSpan();
+            var meanSpan = mean.AsSpan();
+            var gradOutSpan = gradOutput.AsSpan();
+            var outputSpan = output.AsWritableSpan();
+            double scale = 2.0 / reduceSize;
+
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int outIdx = outer * innerSize + inner;
+                    double meanVal = meanSpan[outIdx];
+                    double gradVal = gradOutSpan[outIdx];
+
+                    for (int r = 0; r < reduceSize; r++)
+                    {
+                        int inIdx = (outer * reduceSize + r) * innerSize + inner;
+                        outputSpan[inIdx] = gradVal * scale * (inputSpan[inIdx] - meanVal);
+                    }
+                }
+            }
+            return output;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU ReduceVarianceBackward (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.ReduceVarianceBackward(gradOutput, input, mean, [axis]);
+        }
     }
 
     /// <inheritdoc/>
