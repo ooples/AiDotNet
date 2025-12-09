@@ -214,9 +214,9 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// <returns>The gradient to pass to the previous layer.</returns>
     /// <remarks>
     /// <para>
-    /// This method computes gradients using the same computation as BackwardManual to ensure
-    /// identical results. Both paths use cached values from the forward pass (_maxIndices)
-    /// to avoid floating-point discrepancies.
+    /// This method reconstructs a MaxPool2D operation using automatic differentiation
+    /// and propagates gradients through the computation graph. It serves as an alternative
+    /// reference implementation to the manual engine-backed backward pass.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)

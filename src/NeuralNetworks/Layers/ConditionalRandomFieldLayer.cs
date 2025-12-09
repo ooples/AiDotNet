@@ -107,6 +107,9 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     public ConditionalRandomFieldLayer(int numClasses, int sequenceLength, IActivationFunction<T>? scalarActivation = null)
         : base([sequenceLength, numClasses], [sequenceLength, numClasses], scalarActivation ?? new IdentityActivation<T>())
     {
+        if (sequenceLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "sequenceLength must be greater than 0.");
+
         _numClasses = numClasses;
         _sequenceLength = sequenceLength;
         _transitionMatrix = new Tensor<T>([_numClasses, _numClasses]);
@@ -144,6 +147,9 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     public ConditionalRandomFieldLayer(int numClasses, int sequenceLength, IVectorActivationFunction<T>? vectorActivation = null)
         : base([sequenceLength, numClasses], [sequenceLength, numClasses], vectorActivation ?? new IdentityActivation<T>())
     {
+        if (sequenceLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "sequenceLength must be greater than 0.");
+
         _numClasses = numClasses;
         _sequenceLength = sequenceLength;
         _transitionMatrix = new Tensor<T>([_numClasses, _numClasses]);
@@ -448,8 +454,10 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Viterbi algorithm and CRF-specific
-    /// operations are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// This method uses automatic differentiation to compute gradients via the CRFForward operation.
+    /// It builds a computation graph for the CRF forward pass, then propagates gradients backward
+    /// through the graph. The activation function derivative is applied separately after the autodiff
+    /// backward pass to match the behavior of BackwardManual.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
