@@ -242,9 +242,40 @@ public class MaskingLayer<T> : LayerBase<T>
         // Forward pass: output = input * mask (element-wise multiplication)
         var outputNode = Autodiff.TensorOperations<T>.ElementwiseMultiply(inputNode, maskNode);
 
-        // Perform backward pass
+        // Set gradient at output
         outputNode.Gradient = outputGradient;
-        var topoOrder = GetTopologicalOrder(outputNode);
+
+        // Production-grade: Inline topological sort for backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -256,51 +287,6 @@ public class MaskingLayer<T> : LayerBase<T>
 
         return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    /// <param name="root">The root node of the computation graph.</param>
-    /// <returns>A list of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
 
     /// <summary>
     /// Creates a binary mask from the input tensor based on the mask value.
@@ -326,19 +312,9 @@ public class MaskingLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> CreateMask(Tensor<T> input)
     {
-        var mask = new Tensor<T>(input.Shape);
-        for (int i = 0; i < input.Shape[0]; i++)
-        {
-            for (int j = 0; j < input.Shape[1]; j++)
-            {
-                for (int k = 0; k < input.Shape[2]; k++)
-                {
-                    mask[i, j, k] = !NumOps.Equals(input[i, j, k], _maskValue) ? NumOps.One : NumOps.Zero;
-                }
-            }
-        }
-
-        return mask;
+        // Use Engine for GPU/CPU accelerated vectorized comparison
+        // Returns 1 where input != maskValue, 0 where input == maskValue
+        return Engine.TensorNotEquals(input, _maskValue);
     }
 
     /// <summary>
@@ -367,19 +343,8 @@ public class MaskingLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyMask(Tensor<T> input, Tensor<T> mask)
     {
-        var output = new Tensor<T>(input.Shape);
-        for (int i = 0; i < input.Shape[0]; i++)
-        {
-            for (int j = 0; j < input.Shape[1]; j++)
-            {
-                for (int k = 0; k < input.Shape[2]; k++)
-                {
-                    output[i, j, k] = NumOps.Multiply(input[i, j, k], mask[i, j, k]);
-                }
-            }
-        }
-
-        return output;
+        // Use Engine for GPU/CPU accelerated element-wise multiplication
+        return Engine.TensorMultiply(input, mask);
     }
 
     /// <summary>

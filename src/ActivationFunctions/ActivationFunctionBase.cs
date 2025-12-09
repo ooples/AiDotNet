@@ -177,4 +177,26 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
             $"Either the gradient computation is not implemented, or the activation uses " +
             $"operations not compatible with computation graphs.");
     }
+
+    /// <summary>
+    /// Calculates the backward pass gradient for this activation function.
+    /// </summary>
+    /// <param name="input">The input tensor that was used in the forward pass.</param>
+    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// Default implementation assumes element-wise activation.
+    /// Returns: Derivative(input) * outputGradient (element-wise).
+    /// </para>
+    /// </remarks>
+    public virtual Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
+    {
+        // Default behavior: Element-wise multiplication of derivative and gradient
+        // This works for ReLU, Sigmoid, Tanh, etc.
+        // Derived classes like Softmax MUST override this.
+        
+        var derivative = Derivative(input);
+        return Engine.TensorMultiply(derivative, outputGradient);
+    }
 }

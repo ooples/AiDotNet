@@ -163,7 +163,7 @@ public class PoolingLayer<T> : LayerBase<T>
     /// performing max pooling. These indices are needed during the backward pass to properly
     /// route gradients back to the corresponding input positions.
     /// </remarks>
-    private Tensor<int>? _maxIndices;
+    private int[,,,,]? _maxIndices;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PoolingLayer{T}"/> class with the specified dimensions and pooling parameters.
@@ -273,60 +273,21 @@ public class PoolingLayer<T> : LayerBase<T>
         // Achieves 20-100x speedup on GPU for large feature maps
 
         Tensor<T> output;
+        var poolSizeArr = new[] { PoolSize, PoolSize };
+        var strideArr = new[] { Stride, Stride };
 
         if (Type == PoolingType.Max)
         {
-            // Use GPU-accelerated MaxPool2D
-            output = (Tensor<T>)Engine.MaxPool2D(input, PoolSize, Stride, padding: 0);
-
-            // Compute max indices for backward pass
-            // We need to find which position in each pooling window had the maximum value
-            _maxIndices = new Tensor<int>(output.Shape);
-            int batchSize = input.Shape[0];
-            int channels = input.Shape[1];
-            int outputHeight = output.Shape[2];
-            int outputWidth = output.Shape[3];
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int h = 0; h < outputHeight; h++)
-                    {
-                        for (int w = 0; w < outputWidth; w++)
-                        {
-                            int hStart = h * Stride;
-                            int wStart = w * Stride;
-
-                            // Initialize with negative infinity to find maximum
-                            T maxVal = NumOps.FromDouble(double.NegativeInfinity);
-                            int maxIdx = 0;
-
-                            // Find the position within the pooling window that has the max value
-                            for (int ph = 0; ph < PoolSize; ph++)
-                            {
-                                for (int pw = 0; pw < PoolSize; pw++)
-                                {
-                                    T val = input[b, c, hStart + ph, wStart + pw];
-                                    if (NumOps.GreaterThan(val, maxVal))
-                                    {
-                                        maxVal = val;
-                                        maxIdx = ph * PoolSize + pw;
-                                    }
-                                }
-                            }
-
-                            _maxIndices[b, c, h, w] = maxIdx;
-                        }
-                    }
-                }
-            }
+            // Use GPU-accelerated MaxPool2DWithIndices
+            // This provides both the pooled output and the indices for backpropagation
+            // in a single optimized kernel call
+            output = Engine.MaxPool2DWithIndices(input, poolSizeArr, strideArr, out _maxIndices);
         }
         else if (Type == PoolingType.Average)
         {
             // Use GPU-accelerated AvgPool2D
-            output = (Tensor<T>)Engine.AvgPool2D(input, PoolSize, Stride, padding: 0);
-            _maxIndices = new Tensor<int>(output.Shape); // Not used for average pooling
+            output = Engine.AvgPool2D(input, poolSizeArr, strideArr);
+            _maxIndices = null;
         }
         else
         {
@@ -386,56 +347,24 @@ public class PoolingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int batchSize = _lastInput.Shape[0];
-        int channels = _lastInput.Shape[1];
-        int inputHeight = _lastInput.Shape[2];
-        int inputWidth = _lastInput.Shape[3];
+        var poolSizeArr = new[] { PoolSize, PoolSize };
+        var strideArr = new[] { Stride, Stride };
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-
-        for (int b = 0; b < batchSize; b++)
+        if (Type == PoolingType.Max)
         {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < outputGradient.Shape[2]; h++)
-                {
-                    for (int w = 0; w < outputGradient.Shape[3]; w++)
-                    {
-                        int hStart = h * Stride;
-                        int wStart = w * Stride;
+            if (_maxIndices == null)
+                throw new InvalidOperationException("Max indices not available for backward pass.");
 
-                        if (Type == PoolingType.Max)
-                        {
-                            if (_maxIndices != null)
-                            {
-                                int maxIndex = _maxIndices[b, c, h, w];
-                                int maxH = hStart + maxIndex / PoolSize;
-                                int maxW = wStart + maxIndex % PoolSize;
-                                inputGradient[b, c, maxH, maxW] = NumOps.Add(inputGradient[b, c, maxH, maxW], outputGradient[b, c, h, w]);
-                            }
-                            else
-                            {
-                                throw new InvalidOperationException("_maxIndices is null. This should not happen.");
-                            }
-                        }
-                        else if (Type == PoolingType.Average)
-                        {
-                            T gradValue = outputGradient[b, c, h, w];
-                            gradValue = NumericalStabilityHelper.SafeDiv(gradValue, NumOps.FromDouble(PoolSize * PoolSize));
-                            for (int ph = 0; ph < PoolSize; ph++)
-                            {
-                                for (int pw = 0; pw < PoolSize; pw++)
-                                {
-                                    inputGradient[b, c, hStart + ph, wStart + pw] = NumOps.Add(inputGradient[b, c, hStart + ph, wStart + pw], gradValue);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            // Use GPU-accelerated MaxPool2DBackward
+            return Engine.MaxPool2DBackward(outputGradient, _maxIndices, _lastInput.Shape, poolSizeArr, strideArr);
+        }
+        else if (Type == PoolingType.Average)
+        {
+            // Use GPU-accelerated AvgPool2DBackward
+            return Engine.AvgPool2DBackward(outputGradient, _lastInput.Shape, poolSizeArr, strideArr);
         }
 
-        return inputGradient;
+        throw new InvalidOperationException($"Unsupported pooling type: {Type}");
     }
 
     /// <summary>
@@ -479,9 +408,42 @@ public class PoolingLayer<T> : LayerBase<T>
             outputNode = Autodiff.TensorOperations<T>.AvgPool2D(inputNode, poolSize, strides);
         }
 
-        // Perform backward pass
+        // Perform backward pass with inline topological sort
         outputNode.Gradient = outputGradient;
-        var topoOrder = GetTopologicalOrder(outputNode);
+
+        // Production-grade: Inline topological sort for backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+                continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -493,50 +455,6 @@ public class PoolingLayer<T> : LayerBase<T>
 
         // Extract input gradient
         return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    /// <param name="root">The root node of the computation graph.</param>
-    /// <returns>A list of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
     }
 
     /// <summary>

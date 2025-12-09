@@ -1629,6 +1629,16 @@ public interface IEngine
     #region Tensor Operations (Phase B: Epic 3)
 
     /// <summary>
+    /// Reshapes a tensor to a new shape with the same total number of elements.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor to reshape.</param>
+    /// <param name="newShape">The new shape dimensions.</param>
+    /// <returns>A new tensor with the specified shape and the same data.</returns>
+    /// <exception cref="ArgumentException">Thrown when the total number of elements doesn't match.</exception>
+    Tensor<T> Reshape<T>(Tensor<T> tensor, int[] newShape);
+
+    /// <summary>
     /// Performs batched matrix multiplication on 3D tensors.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
@@ -1674,6 +1684,49 @@ public interface IEngine
     Tensor<T> TensorAdd<T>(Tensor<T> a, Tensor<T> b);
 
     /// <summary>
+    /// Adds two tensors with broadcasting support, following NumPy/PyTorch broadcasting rules.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor. Can have different shape if broadcastable.</param>
+    /// <returns>A new tensor containing the element-wise sum with broadcasting.</returns>
+    /// <exception cref="ArgumentException">Thrown when shapes are not broadcastable.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Element-Wise Operations with Broadcasting</b></para>
+    /// <para>
+    /// Broadcasting allows tensors of different shapes to be added together by automatically
+    /// expanding dimensions of size 1 to match the other tensor. This is essential for operations
+    /// like adding per-channel bias in convolutional layers.
+    /// </para>
+    /// <para>
+    /// For example, adding shapes [batch, channels, H, W] + [1, channels, 1, 1] broadcasts
+    /// the bias across batch and spatial dimensions.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorBroadcastAdd<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Adds multiple tensors element-wise in a single optimized operation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensors">The tensors to add together.</param>
+    /// <returns>A new tensor containing the element-wise sum of all inputs.</returns>
+    /// <exception cref="ArgumentException">Thrown when fewer than 2 tensors provided or shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Element-Wise Operations</b></para>
+    /// <para>
+    /// Like PyTorch's torch.stack + torch.sum pattern, this avoids intermediate allocations
+    /// by computing all additions in a single pass. Essential for residual networks and
+    /// skip connections that combine multiple feature maps.
+    /// </para>
+    /// <para>
+    /// Performance: O(n*elements) where n is number of tensors, but with single output allocation
+    /// instead of n-1 intermediate allocations from chained binary additions.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorAddMany<T>(params Tensor<T>[] tensors);
+
+    /// <summary>
     /// Subtracts tensor b from tensor a element-wise.
     /// </summary>
     /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
@@ -1700,6 +1753,27 @@ public interface IEngine
     Tensor<T> TensorMultiply<T>(Tensor<T> a, Tensor<T> b);
 
     /// <summary>
+    /// Multiplies multiple tensors element-wise in a single optimized operation.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensors">The tensors to multiply together.</param>
+    /// <returns>A new tensor containing the element-wise product of all inputs.</returns>
+    /// <exception cref="ArgumentException">Thrown when fewer than 2 tensors provided or shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Element-Wise Operations</b></para>
+    /// <para>
+    /// Like PyTorch's torch.stack + torch.prod pattern, this avoids intermediate allocations
+    /// by computing all multiplications in a single pass. Useful for gating mechanisms
+    /// and attention computations that combine multiple masks or weights.
+    /// </para>
+    /// <para>
+    /// Performance: O(n*elements) where n is number of tensors, but with single output allocation
+    /// instead of n-1 intermediate allocations from chained binary multiplications.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorMultiplyMany<T>(params Tensor<T>[] tensors);
+
+    /// <summary>
     /// Multiplies a tensor by a scalar.
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
@@ -1724,6 +1798,370 @@ public interface IEngine
     /// <para><b>US-GPU-014: Tensor Element-Wise Operations</b></para>
     /// </remarks>
     Tensor<T> TensorDivide<T>(Tensor<T> a, Tensor<T> b);
+
+    #region Tensor Comparison Operations
+
+    /// <summary>
+    /// Compares each element of a tensor to a scalar value for equality.
+    /// Returns a tensor where each element is 1 if equal, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="value">The scalar value to compare against.</param>
+    /// <returns>A tensor of the same shape with 1 where equal, 0 where not equal.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// <para>
+    /// Like PyTorch's torch.eq(), this enables vectorized comparison operations.
+    /// Essential for masking operations in neural networks.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorEquals<T>(Tensor<T> tensor, T value);
+
+    /// <summary>
+    /// Compares two tensors element-wise for equality.
+    /// Returns a tensor where each element is 1 if equal, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A tensor of the same shape with 1 where equal, 0 where not equal.</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorEquals<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Compares each element of a tensor to a scalar value for inequality.
+    /// Returns a tensor where each element is 1 if not equal, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="value">The scalar value to compare against.</param>
+    /// <returns>A tensor of the same shape with 1 where not equal, 0 where equal.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// <para>
+    /// Like PyTorch's torch.ne(), this enables vectorized inequality comparison.
+    /// Essential for masking layers where we need to identify non-padding values.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorNotEquals<T>(Tensor<T> tensor, T value);
+
+    /// <summary>
+    /// Compares two tensors element-wise for inequality.
+    /// Returns a tensor where each element is 1 if not equal, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A tensor of the same shape with 1 where not equal, 0 where equal.</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorNotEquals<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Compares each element of tensor a to corresponding element of tensor b for greater than.
+    /// Returns a tensor where each element is 1 if a > b, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A tensor of the same shape with 1 where a > b, 0 otherwise.</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorGreaterThan<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Compares each element of a tensor to a scalar value for greater than.
+    /// Returns a tensor where each element is 1 if element > value, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="value">The scalar value to compare against.</param>
+    /// <returns>A tensor of the same shape with 1 where greater, 0 otherwise.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorGreaterThan<T>(Tensor<T> tensor, T value);
+
+    /// <summary>
+    /// Compares each element of tensor a to corresponding element of tensor b for less than.
+    /// Returns a tensor where each element is 1 if a &lt; b, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A tensor of the same shape with 1 where a &lt; b, 0 otherwise.</returns>
+    /// <exception cref="ArgumentException">Thrown when tensor shapes don't match.</exception>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorLessThan<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Compares each element of a tensor to a scalar value for less than.
+    /// Returns a tensor where each element is 1 if element &lt; value, 0 otherwise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="value">The scalar value to compare against.</param>
+    /// <returns>A tensor of the same shape with 1 where less, 0 otherwise.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-014: Tensor Comparison Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorLessThan<T>(Tensor<T> tensor, T value);
+
+    #endregion
+
+    #region Tensor Element-wise Math Operations
+
+    /// <summary>
+    /// Computes the element-wise natural logarithm of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with the natural logarithm of each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Computes log(x) for each element. Used in:
+    /// - Cross-entropy loss calculation
+    /// - Log-probability computations
+    /// - Attention entropy regularization
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorLog<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise exponential of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with exp(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in softmax computation, probability distributions, and exponential scaling.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorExp<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise square root of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with sqrt(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in normalization layers, RMSProp/Adam optimizers, and standard deviation calculations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorSqrt<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise absolute value of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with abs(x) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in L1 regularization, MAE loss, and gradient clipping.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorAbs<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise negation of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>A tensor with -x for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorNegate<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the element-wise power of a tensor raised to a scalar exponent.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor (base).</param>
+    /// <param name="exponent">The scalar exponent.</param>
+    /// <returns>A tensor with pow(x, exponent) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in polynomial features, learning rate scheduling, and custom activations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorPow<T>(Tensor<T> tensor, T exponent);
+
+    /// <summary>
+    /// Computes the element-wise maximum of two tensors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A tensor with max(a[i], b[i]) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in ReLU activation, gradient clipping, and element-wise maximum operations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorMax<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Computes the element-wise maximum of a tensor and a scalar.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="value">The scalar value to compare against.</param>
+    /// <returns>A tensor with max(x, value) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in ReLU activation (max(0, x)), clamping lower bounds, and preventing log(0).
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorMax<T>(Tensor<T> tensor, T value);
+
+    /// <summary>
+    /// Computes the element-wise minimum of two tensors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor.</param>
+    /// <param name="b">The second tensor.</param>
+    /// <returns>A tensor with min(a[i], b[i]) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// </remarks>
+    Tensor<T> TensorMin<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Computes the element-wise minimum of a tensor and a scalar.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="value">The scalar value to compare against.</param>
+    /// <returns>A tensor with min(x, value) for each element.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in clamping upper bounds and gradient clipping.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorMin<T>(Tensor<T> tensor, T value);
+
+    /// <summary>
+    /// Clamps tensor values to a specified range.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="min">The minimum value (lower bound).</param>
+    /// <param name="max">The maximum value (upper bound).</param>
+    /// <returns>A tensor with values clamped to [min, max].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Equivalent to min(max(x, min), max). Used for gradient clipping and value normalization.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorClamp<T>(Tensor<T> tensor, T min, T max);
+
+    /// <summary>
+    /// Computes the sum of all elements in a tensor (full reduction).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>The scalar sum of all elements.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Performs full reduction to a scalar. For axis-wise reduction, use ReduceSum.
+    /// </para>
+    /// </remarks>
+    T TensorSum<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the sum along specified axes (axis reduction).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="axes">The axes along which to sum. Null or empty for full reduction.</param>
+    /// <param name="keepDims">Whether to keep reduced dimensions with size 1.</param>
+    /// <returns>The reduced tensor.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Used in batch/layer normalization, attention weight computation, and loss calculation.
+    /// </para>
+    /// </remarks>
+    Tensor<T> ReduceSum<T>(Tensor<T> tensor, int[]? axes = null, bool keepDims = false);
+
+    /// <summary>
+    /// Computes the maximum value of all elements in a tensor (full reduction).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>The scalar maximum of all elements.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Performs full reduction to find the maximum value. Used in:
+    /// - Attention weight analysis (max weight indicates peakiness)
+    /// - Gradient clipping (finding max gradient magnitude)
+    /// - Numerical stability (finding scale factors)
+    /// - Normalization (max-normalization)
+    /// </para>
+    /// </remarks>
+    T TensorMaxValue<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the minimum value of all elements in a tensor (full reduction).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>The scalar minimum of all elements.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Performs full reduction to find the minimum value. Used in:
+    /// - Range normalization (min-max scaling)
+    /// - Gradient analysis
+    /// - Numerical stability checks
+    /// </para>
+    /// </remarks>
+    T TensorMinValue<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Computes the mean (average) of all elements in a tensor (full reduction).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>The scalar mean of all elements.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Performs full reduction to compute mean. Used in:
+    /// - Layer normalization (computing mean for centering)
+    /// - Batch statistics
+    /// - Loss averaging
+    /// </para>
+    /// </remarks>
+    T TensorMean<T>(Tensor<T> tensor);
+
+    #endregion
 
     /// <summary>
     /// Performs 2D max pooling on a 4D tensor (batch, channels, height, width).
@@ -1842,22 +2280,37 @@ public interface IEngine
     /// <summary>
     /// Computes the gradient of Conv2D with respect to the kernel (weights).
     /// </summary>
-    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="gradOutput">The gradient flowing back from the output.</param>
-    /// <param name="input">The original input tensor.</param>
-    /// <param name="kernelShape">The shape of the kernel [out_channels, in_channels, kernelH, kernelW].</param>
-    /// <param name="stride">The stride [strideH, strideW] used in forward pass.</param>
-    /// <param name="padding">The padding [padH, padW] used in forward pass.</param>
-    /// <param name="dilation">The dilation [dilationH, dilationW] used in forward pass.</param>
-    /// <returns>The gradient with respect to the kernel.</returns>
     Tensor<T> Conv2DBackwardKernel<T>(Tensor<T> gradOutput, Tensor<T> input, int[] kernelShape, int[] stride, int[] padding, int[] dilation);
+
+    /// <summary>
+    /// Performs a Locally Connected 2D convolution.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor [batch, in_channels, height, width].</param>
+    /// <param name="weights">The weights tensor [out_h, out_w, out_channels, in_channels, kernel_h, kernel_w].</param>
+    /// <param name="bias">Optional bias tensor [out_channels].</param>
+    /// <param name="stride">The stride [strideH, strideW].</param>
+    /// <returns>The convolved tensor [batch, out_channels, output_height, output_width].</returns>
+    Tensor<T> LocallyConnectedConv2D<T>(Tensor<T> input, Tensor<T> weights, Tensor<T>? bias, int[] stride);
+
+    /// <summary>
+    /// Computes the gradient of LocallyConnectedConv2D with respect to the input tensor.
+    /// </summary>
+    Tensor<T> LocallyConnectedConv2DBackwardInput<T>(Tensor<T> gradOutput, Tensor<T> weights, int[] inputShape, int[] stride);
+
+    /// <summary>
+    /// Computes the gradient of LocallyConnectedConv2D with respect to the weights.
+    /// </summary>
+    Tensor<T> LocallyConnectedConv2DBackwardWeights<T>(Tensor<T> gradOutput, Tensor<T> input, int[] weightsShape, int[] stride);
+
+    /// <summary>
+    /// Computes the gradient of LocallyConnectedConv2D with respect to the bias.
+    /// </summary>
+    Tensor<T> LocallyConnectedConv2DBackwardBias<T>(Tensor<T> gradOutput);
 
     /// <summary>
     /// Transposes a 2D tensor (matrix represented as tensor).
     /// </summary>
-    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="tensor">The input 2D tensor to transpose.</param>
-    /// <returns>The transposed tensor where rows become columns.</returns>
     Tensor<T> TensorTranspose<T>(Tensor<T> tensor);
 
     /// <summary>
@@ -2192,6 +2645,50 @@ public interface IEngine
     /// <returns>The gradient with respect to the input.</returns>
     Tensor<T> ReduceMeanBackward<T>(Tensor<T> gradOutput, int[] inputShape, int[] axes);
 
+    /// <summary>
+    /// Computes the variance of tensor elements along specified axes.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="axes">The axes along which to compute the variance.</param>
+    /// <param name="keepDims">Whether to keep reduced dimensions with size 1.</param>
+    /// <returns>The tensor containing variance values.</returns>
+    Tensor<T> ReduceVariance<T>(Tensor<T> input, int[] axes, bool keepDims);
+
+    /// <summary>
+    /// Computes the backward pass for reduce variance.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <param name="mean">The mean values computed during forward pass.</param>
+    /// <param name="axes">The axes that were reduced.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> ReduceVarianceBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> mean, int[] axes);
+
+    /// <summary>
+    /// Computes the natural logarithm of variance of tensor elements along specified axes.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="axes">The axes along which to compute the log variance.</param>
+    /// <param name="keepDims">Whether to keep reduced dimensions with size 1.</param>
+    /// <param name="epsilon">Small value for numerical stability (prevents log(0)).</param>
+    /// <returns>The tensor containing log variance values.</returns>
+    Tensor<T> ReduceLogVariance<T>(Tensor<T> input, int[] axes, bool keepDims, double epsilon = 1e-8);
+
+    /// <summary>
+    /// Computes the backward pass for reduce log variance.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer.</param>
+    /// <param name="input">The original input tensor.</param>
+    /// <param name="mean">The mean values computed during forward pass.</param>
+    /// <param name="variance">The variance values computed during forward pass.</param>
+    /// <param name="axes">The axes that were reduced.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> ReduceLogVarianceBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> mean, Tensor<T> variance, int[] axes);
+
     #endregion
 
     #region Spatial Operations
@@ -2235,6 +2732,82 @@ public interface IEngine
     /// <param name="upscaleFactor">The upscale factor used in forward pass.</param>
     /// <returns>The gradient with respect to the input.</returns>
     Tensor<T> PixelShuffleBackward<T>(Tensor<T> gradOutput, int[] inputShape, int upscaleFactor);
+
+    /// <summary>
+    /// Generates a normalized affine grid for spatial transformer sampling.
+    /// </summary>
+    /// <typeparam name="T">Numeric type.</typeparam>
+    /// <param name="theta">Affine matrices of shape [batch, 2, 3].</param>
+    /// <param name="outputHeight">Target grid height.</param>
+    /// <param name="outputWidth">Target grid width.</param>
+    /// <returns>Grid tensor of shape [batch, outputHeight, outputWidth, 2] in [-1, 1] normalized coords.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>IMPORTANT: Layout Note</b> - This method and <see cref="GridSample{T}"/> use NHWC layout
+    /// [batch, height, width, channels/coords], which differs from Conv2D, MaxPool2D, and other
+    /// spatial operations that use NCHW layout [batch, channels, height, width].
+    /// </para>
+    /// <para>
+    /// When using these methods with NCHW tensors, you must transpose:
+    /// <code>
+    /// // NCHW to NHWC before GridSample
+    /// var inputNHWC = input.Transpose([0, 2, 3, 1]);
+    /// var output = engine.GridSample(inputNHWC, grid);
+    /// // NHWC to NCHW after GridSample
+    /// var outputNCHW = output.Transpose([0, 3, 1, 2]);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    Tensor<T> AffineGrid<T>(Tensor<T> theta, int outputHeight, int outputWidth);
+
+    /// <summary>
+    /// Samples an input tensor using a normalized grid with bilinear interpolation.
+    /// </summary>
+    /// <typeparam name="T">Numeric type.</typeparam>
+    /// <param name="input">Input tensor [batch, height, width, channels] (NHWC format).</param>
+    /// <param name="grid">Sampling grid [batch, outH, outW, 2] with coords in [-1, 1].</param>
+    /// <returns>Sampled output tensor [batch, outH, outW, channels] (NHWC format).</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>IMPORTANT: Layout Note</b> - This method uses NHWC layout [batch, height, width, channels],
+    /// which differs from Conv2D, MaxPool2D, and other spatial operations that use NCHW layout
+    /// [batch, channels, height, width]. Ensure inputs are transposed appropriately.
+    /// </para>
+    /// <para>
+    /// The grid coordinates are normalized to [-1, 1] range where (-1, -1) is the top-left corner
+    /// and (1, 1) is the bottom-right corner of the input tensor.
+    /// </para>
+    /// </remarks>
+    Tensor<T> GridSample<T>(Tensor<T> input, Tensor<T> grid);
+
+    /// <summary>
+    /// Performs complex-valued matrix multiplication using split real/imaginary tensors.
+    /// </summary>
+    /// <typeparam name="T">Numeric type.</typeparam>
+    /// <param name="aReal">Real part of left matrix [M, K].</param>
+    /// <param name="aImag">Imag part of left matrix [M, K].</param>
+    /// <param name="bReal">Real part of right matrix [K, N].</param>
+    /// <param name="bImag">Imag part of right matrix [K, N].</param>
+    /// <returns>(real, imag) tuple representing the product [M, N].</returns>
+    (Tensor<T> real, Tensor<T> imag) ComplexMatMul<T>(Tensor<T> aReal, Tensor<T> aImag, Tensor<T> bReal, Tensor<T> bImag);
+
+    /// <summary>
+    /// Computes magnitude squared of a complex tensor given real/imag split.
+    /// </summary>
+    /// <typeparam name="T">Numeric type.</typeparam>
+    /// <param name="real">Real part tensor.</param>
+    /// <param name="imag">Imag part tensor.</param>
+    /// <returns>Tensor of magnitudes squared.</returns>
+    Tensor<T> ComplexMagnitudeSquared<T>(Tensor<T> real, Tensor<T> imag);
+
+    /// <summary>
+    /// Normalizes a complex tensor (real/imag split) so that sum(|z|^2) = 1.
+    /// </summary>
+    /// <typeparam name="T">Numeric type.</typeparam>
+    /// <param name="real">Real part tensor.</param>
+    /// <param name="imag">Imag part tensor.</param>
+    /// <returns>(real, imag) tuple of normalized complex tensor.</returns>
+    (Tensor<T> real, Tensor<T> imag) ComplexNormalize<T>(Tensor<T> real, Tensor<T> imag);
 
     /// <summary>
     /// Crops a region from a 4D tensor.
@@ -2291,6 +2864,930 @@ public interface IEngine
     /// <param name="axis">The axis along which to concatenate.</param>
     /// <returns>The concatenated tensor.</returns>
     Tensor<T> Concat<T>(IReadOnlyList<Tensor<T>> tensors, int axis);
+
+    /// <summary>
+    /// Computes the sum of squares of all elements in a tensor (L2 norm squared).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <returns>The scalar sum of squared elements.</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-016: Tensor Element-wise Math Operations</b></para>
+    /// <para>
+    /// Computes Σ(x_i²) for all elements in the tensor. Used in:
+    /// - L2 regularization loss computation
+    /// - Frobenius norm calculation (sqrt of sum of squares)
+    /// - Gradient magnitude computation
+    /// - Weight decay penalties
+    /// </para>
+    /// <para>
+    /// GPU acceleration provides significant speedup for large tensors.
+    /// </para>
+    /// </remarks>
+    T TensorSumOfSquares<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Performs embedding lookup - gathers rows from an embedding table based on indices.
+    /// </summary>
+    /// <typeparam name="TValue">The numeric type of embedding values.</typeparam>
+    /// <typeparam name="TIndex">The integer type for indices (must be unmanaged).</typeparam>
+    /// <param name="embeddings">The embedding table tensor [vocab_size, embedding_dim].</param>
+    /// <param name="indices">The indices tensor containing token IDs.</param>
+    /// <returns>The gathered embeddings with shape [*indices.shape, embedding_dim].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-017: Embedding Operations</b></para>
+    /// <para>
+    /// Embedding lookup is a fundamental operation for NLP and sequence models:
+    /// - Word/token embeddings in language models
+    /// - Item embeddings in recommendation systems
+    /// - Categorical feature embeddings
+    /// </para>
+    /// <para>
+    /// For each index i in indices, retrieves embeddings[i, :] and places it in the output.
+    /// GPU acceleration provides significant speedup for large vocabularies and batch sizes.
+    /// </para>
+    /// </remarks>
+    Tensor<TValue> TensorEmbeddingLookup<TValue, TIndex>(Tensor<TValue> embeddings, Tensor<TIndex> indices)
+        where TIndex : unmanaged;
+
+    /// <summary>
+    /// Performs embedding lookup backward pass - scatters gradients back to embedding table.
+    /// </summary>
+    /// <typeparam name="TValue">The numeric type of gradient and embedding values.</typeparam>
+    /// <typeparam name="TIndex">The integer type for indices (must be unmanaged).</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer [*indices.shape, embedding_dim].</param>
+    /// <param name="indices">The indices tensor containing token IDs.</param>
+    /// <param name="vocabSize">The vocabulary size (number of rows in embedding table).</param>
+    /// <param name="embeddingDim">The embedding dimension.</param>
+    /// <returns>The gradient for the embedding table [vocab_size, embedding_dim].</returns>
+    /// <remarks>
+    /// <para><b>US-GPU-017: Embedding Operations</b></para>
+    /// <para>
+    /// Computes the gradient for embedding parameters by accumulating gradients for each index.
+    /// For each index i, adds gradOutput[position] to embeddingGrad[i, :].
+    /// Handles duplicate indices by accumulating their gradients.
+    /// </para>
+    /// </remarks>
+    Tensor<TValue> TensorEmbeddingLookupBackward<TValue, TIndex>(Tensor<TValue> gradOutput, Tensor<TIndex> indices, int vocabSize, int embeddingDim)
+        where TIndex : unmanaged;
+
+    /// <summary>
+    /// Computes the Radial Basis Function (RBF) kernel between input samples and centers.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The input tensor with shape [batch, features].</param>
+    /// <param name="centers">The RBF center positions with shape [numCenters, features].</param>
+    /// <param name="epsilons">The epsilon values (1/(2*width²)) for each center with shape [numCenters].</param>
+    /// <returns>The RBF kernel output with shape [batch, numCenters], computing exp(-epsilon * ||x - center||²).</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes Gaussian RBF: K(x, c) = exp(-epsilon * ||x - c||²) where:
+    /// - x is an input sample
+    /// - c is a center
+    /// - epsilon = 1/(2*width²) controls the spread
+    /// </para>
+    /// <para><b>For Beginners:</b> RBF kernels measure similarity between points.
+    /// Points close to a center produce values near 1, distant points produce values near 0.
+    /// </para>
+    /// </remarks>
+    Tensor<T> RBFKernel<T>(Tensor<T> input, Tensor<T> centers, Tensor<T> epsilons);
+
+    /// <summary>
+    /// Computes the backward pass for the RBF kernel.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient from the next layer with shape [batch, numCenters].</param>
+    /// <param name="input">The original input tensor with shape [batch, features].</param>
+    /// <param name="centers">The RBF center positions with shape [numCenters, features].</param>
+    /// <param name="epsilons">The epsilon values with shape [numCenters].</param>
+    /// <param name="output">The output from the forward pass with shape [batch, numCenters].</param>
+    /// <returns>A tuple containing gradients for (input, centers, epsilons).</returns>
+    (Tensor<T> gradInput, Tensor<T> gradCenters, Tensor<T> gradEpsilons) RBFKernelBackward<T>(
+        Tensor<T> gradOutput, Tensor<T> input, Tensor<T> centers, Tensor<T> epsilons, Tensor<T> output);
+
+    #endregion
+
+    #region Tensor Shape Operations
+
+    /// <summary>
+    /// Repeats each element of a tensor along the specified axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor to repeat.</param>
+    /// <param name="repeats">The number of times to repeat each element.</param>
+    /// <param name="axis">The axis along which to repeat. Default is 0.</param>
+    /// <returns>A tensor with elements repeated along the specified axis.</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation is similar to numpy.repeat(). For a 1D tensor [a, b, c] with repeats=2:
+    /// Result: [a, a, b, b, c, c]
+    /// </para>
+    /// <para><b>For Beginners:</b> This is useful for creating masks or expanding data
+    /// where each element needs to be duplicated multiple times.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorRepeatElements<T>(Tensor<T> tensor, int repeats, int axis = 0);
+
+    /// <summary>
+    /// Tiles (repeats) a tensor along each axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor to tile.</param>
+    /// <param name="multiples">The number of times to tile along each axis.</param>
+    /// <returns>A tensor that is the input tiled according to multiples.</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation is similar to numpy.tile(). For a tensor [a, b] with multiples=[3]:
+    /// Result: [a, b, a, b, a, b]
+    /// </para>
+    /// <para>
+    /// For a 2D tensor [[1, 2], [3, 4]] with multiples=[2, 3]:
+    /// Result: [[1,2,1,2,1,2], [3,4,3,4,3,4], [1,2,1,2,1,2], [3,4,3,4,3,4]]
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorTile<T>(Tensor<T> tensor, int[] multiples);
+
+    /// <summary>
+    /// Extracts a slice from a tensor along specified axes.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor to slice.</param>
+    /// <param name="start">The starting indices for each axis.</param>
+    /// <param name="length">The length to extract along each axis.</param>
+    /// <returns>A tensor containing the sliced portion.</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation extracts a contiguous region from the tensor.
+    /// For a 1D tensor [a, b, c, d, e] with start=[1] and length=[3]:
+    /// Result: [b, c, d]
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorSlice<T>(Tensor<T> tensor, int[] start, int[] length);
+
+    /// <summary>
+    /// Sets a slice of a tensor to values from another tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="destination">The tensor to modify (in-place or returns new tensor).</param>
+    /// <param name="source">The tensor containing values to set.</param>
+    /// <param name="start">The starting indices where to place the source tensor.</param>
+    /// <returns>A tensor with the slice set to the source values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation sets values in a region of the destination tensor.
+    /// Useful for building tensors piece by piece without manual loops.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorSetSlice<T>(Tensor<T> destination, Tensor<T> source, int[] start);
+
+    /// <summary>
+    /// Creates a tensor by selecting elements based on a condition mask.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="condition">A boolean-like tensor where non-zero means true.</param>
+    /// <param name="x">Values to select where condition is true.</param>
+    /// <param name="y">Values to select where condition is false.</param>
+    /// <returns>A tensor with elements from x where condition is true, else from y.</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation is similar to numpy.where() or torch.where().
+    /// Result[i] = condition[i] != 0 ? x[i] : y[i]
+    /// </para>
+    /// <para>
+    /// <b>Note:</b> Prefer the overload that accepts <c>Tensor&lt;bool&gt;</c> for explicit boolean conditions.
+    /// This overload treats any non-zero value as true, which may lead to unexpected behavior with floating-point types.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorWhere<T>(Tensor<T> condition, Tensor<T> x, Tensor<T> y);
+
+    #endregion
+
+    #region Loop Elimination Operations
+
+    /// <summary>
+    /// Copies data from a source tensor to a destination tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="source">The source tensor to copy from.</param>
+    /// <param name="destination">The destination tensor to copy to.</param>
+    /// <remarks>
+    /// <para>
+    /// This operation performs an in-place copy of tensor data.
+    /// Both tensors must have the same total number of elements.
+    /// </para>
+    /// </remarks>
+    void TensorCopy<T>(Tensor<T> source, Tensor<T> destination);
+
+    /// <summary>
+    /// Fills a tensor with a constant value.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The tensor to fill.</param>
+    /// <param name="value">The value to fill with.</param>
+    /// <remarks>
+    /// <para>
+    /// This operation sets all elements of the tensor to the specified value.
+    /// Useful for initialization without manual loops.
+    /// </para>
+    /// </remarks>
+    void TensorFill<T>(Tensor<T> tensor, T value);
+
+    /// <summary>
+    /// Computes the outer product of two tensors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor (typically a vector [N]).</param>
+    /// <param name="b">The second tensor (typically a vector [M]).</param>
+    /// <returns>A tensor containing the outer product [N, M].</returns>
+    /// <remarks>
+    /// <para>
+    /// For vectors a[N] and b[M], produces a matrix [N, M] where result[i,j] = a[i] * b[j].
+    /// This is useful for computing weight gradients: dW = x^T * dy.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorOuterProduct<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Computes batched outer products for all items in a batch.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">The first tensor [batch, N].</param>
+    /// <param name="b">The second tensor [batch, M].</param>
+    /// <returns>A tensor containing the batched outer products [batch, N, M].</returns>
+    /// <remarks>
+    /// <para>
+    /// For each batch item, computes result[b, i, j] = a[b, i] * b[b, j].
+    /// Useful for batched gradient computations without explicit loops.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorBatchOuterProduct<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Permutes the dimensions of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The tensor to permute.</param>
+    /// <param name="axes">The new order of dimensions (e.g., [0, 2, 1] swaps last two dims).</param>
+    /// <returns>A tensor with permuted dimensions.</returns>
+    /// <remarks>
+    /// <para>
+    /// This generalizes transpose to arbitrary dimension reordering.
+    /// Similar to numpy.transpose() or torch.permute().
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorPermute<T>(Tensor<T> tensor, int[] axes);
+
+    /// <summary>
+    /// Expands dimensions by inserting a new axis of size 1.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The tensor to expand.</param>
+    /// <param name="axis">The position where to insert the new axis.</param>
+    /// <returns>A tensor with an additional dimension of size 1.</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to numpy.expand_dims() or torch.unsqueeze().
+    /// Useful for broadcasting operations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorExpandDims<T>(Tensor<T> tensor, int axis);
+
+    /// <summary>
+    /// Removes singleton dimensions from a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The tensor to squeeze.</param>
+    /// <param name="axis">The axis to remove (must have size 1). Use -1 to remove all singleton dims.</param>
+    /// <returns>A tensor with the specified singleton dimension removed.</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to numpy.squeeze() or torch.squeeze().
+    /// Removes dimensions of size 1.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorSqueeze<T>(Tensor<T> tensor, int axis = -1);
+
+    /// <summary>
+    /// Performs scatter-add: adds values to specific indices in a destination tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="destination">The destination tensor to add values to.</param>
+    /// <param name="indices">The indices where to add values (integer tensor).</param>
+    /// <param name="updates">The values to add at the specified indices.</param>
+    /// <param name="axis">The axis along which to scatter.</param>
+    /// <returns>A tensor with values added at the specified indices.</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to torch.scatter_add() or tf.tensor_scatter_nd_add().
+    /// Useful for sparse gradient accumulation in embeddings.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorScatterAdd<T>(Tensor<T> destination, Tensor<int> indices, Tensor<T> updates, int axis = 0);
+
+    /// <summary>
+    /// Gathers values from a tensor along an axis using indices.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="source">The source tensor to gather from.</param>
+    /// <param name="indices">The indices specifying which values to gather (integer tensor).</param>
+    /// <param name="axis">The axis along which to gather.</param>
+    /// <returns>A tensor containing the gathered values.</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to torch.gather() or tf.gather().
+    /// Useful for index-based lookups without loops.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorGather<T>(Tensor<T> source, Tensor<int> indices, int axis = 0);
+
+    /// <summary>
+    /// Computes a cumulative sum along an axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="axis">The axis along which to compute the cumulative sum.</param>
+    /// <returns>A tensor where each element is the sum of all previous elements along the axis.</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to numpy.cumsum() or torch.cumsum().
+    /// Useful for CRF forward-backward and other sequence operations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorCumSum<T>(Tensor<T> tensor, int axis);
+
+    /// <summary>
+    /// Computes a log-sum-exp reduction along an axis (numerically stable).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="axis">The axis along which to compute logsumexp.</param>
+    /// <param name="keepDims">Whether to keep the reduced dimension.</param>
+    /// <returns>A tensor with the log-sum-exp values.</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes log(sum(exp(x))) in a numerically stable way.
+    /// Essential for CRF partition functions and attention mechanisms.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorLogSumExp<T>(Tensor<T> tensor, int axis, bool keepDims = false);
+
+    /// <summary>
+    /// Generates a tensor filled with random values from a uniform distribution [0, 1).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="shape">The shape of the output tensor.</param>
+    /// <returns>A tensor filled with random uniform values.</returns>
+    /// <remarks>
+    /// <para>
+    /// Useful for weight initialization and dropout masks without loops.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorRandomUniform<T>(int[] shape);
+
+    /// <summary>
+    /// Generates a tensor filled with random values from a normal distribution.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="shape">The shape of the output tensor.</param>
+    /// <param name="mean">The mean of the distribution.</param>
+    /// <param name="stddev">The standard deviation of the distribution.</param>
+    /// <returns>A tensor filled with random normal values.</returns>
+    /// <remarks>
+    /// <para>
+    /// Useful for Xavier/He initialization without loops.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorRandomNormal<T>(int[] shape, T mean, T stddev);
+
+    /// <summary>
+    /// Creates an identity matrix as a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="size">The size of the square identity matrix.</param>
+    /// <returns>A tensor [size, size] with 1s on diagonal and 0s elsewhere.</returns>
+    /// <remarks>
+    /// <para>
+    /// Useful for initializing transformation matrices and attention masks.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorEye<T>(int size);
+
+    /// <summary>
+    /// Creates a diagonal tensor from a vector.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="diagonal">The values to place on the diagonal.</param>
+    /// <returns>A tensor with the diagonal values and zeros elsewhere.</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to numpy.diag() or torch.diag().
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorDiag<T>(Tensor<T> diagonal);
+
+    /// <summary>
+    /// Extracts the diagonal from a matrix tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input matrix tensor.</param>
+    /// <returns>A 1D tensor containing the diagonal elements.</returns>
+    /// <remarks>
+    /// <para>
+    /// Extracts diagonal[i] = tensor[i, i] without loops.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorDiagonal<T>(Tensor<T> tensor);
+
+    /// <summary>
+    /// Applies einsum (Einstein summation) notation for flexible tensor contractions.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="subscripts">The einsum subscript notation (e.g., "ij,jk->ik" for matmul).</param>
+    /// <param name="tensors">The input tensors.</param>
+    /// <returns>The result of the einsum operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// Einsum is a powerful notation for expressing tensor operations.
+    /// Common patterns:
+    /// - "ij,jk->ik": matrix multiplication
+    /// - "bij,bjk->bik": batched matrix multiplication
+    /// - "bijk,bkl->bijl": batched tensor contraction
+    /// - "bi,bj->bij": batched outer product
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorEinsum<T>(string subscripts, params Tensor<T>[] tensors);
+
+    /// <summary>
+    /// Adds a scalar to all elements of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="scalar">The scalar to add.</param>
+    /// <returns>A tensor with the scalar added to all elements.</returns>
+    Tensor<T> TensorAddScalar<T>(Tensor<T> tensor, T scalar);
+
+    /// <summary>
+    /// Subtracts a scalar from all elements of a tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="scalar">The scalar to subtract.</param>
+    /// <returns>A tensor with the scalar subtracted from all elements.</returns>
+    Tensor<T> TensorSubtractScalar<T>(Tensor<T> tensor, T scalar);
+
+    /// <summary>
+    /// Divides all elements of a tensor by a scalar.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="scalar">The scalar divisor.</param>
+    /// <returns>A tensor with all elements divided by the scalar.</returns>
+    Tensor<T> TensorDivideScalar<T>(Tensor<T> tensor, T scalar);
+
+    /// <summary>
+    /// Applies the hyperbolic tangent derivative element-wise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tanhOutput">The output of tanh (not the input).</param>
+    /// <returns>A tensor containing 1 - tanh(x)^2 for each element.</returns>
+    /// <remarks>
+    /// <para>
+    /// Given y = tanh(x), the derivative is 1 - y^2.
+    /// This takes the tanh output directly to avoid recomputation.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TanhDerivative<T>(Tensor<T> tanhOutput);
+
+    /// <summary>
+    /// Applies the sigmoid derivative element-wise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="sigmoidOutput">The output of sigmoid (not the input).</param>
+    /// <returns>A tensor containing sigmoid(x) * (1 - sigmoid(x)) for each element.</returns>
+    /// <remarks>
+    /// <para>
+    /// Given y = sigmoid(x), the derivative is y * (1 - y).
+    /// This takes the sigmoid output directly to avoid recomputation.
+    /// </para>
+    /// </remarks>
+    Tensor<T> SigmoidDerivative<T>(Tensor<T> sigmoidOutput);
+
+    /// <summary>
+    /// Applies the ReLU derivative element-wise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="input">The original input to ReLU.</param>
+    /// <returns>A tensor containing 1 where input > 0, else 0.</returns>
+    Tensor<T> ReLUDerivative<T>(Tensor<T> input);
+
+    /// <summary>
+    /// Creates a triangular mask tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="size">The size of the square mask.</param>
+    /// <param name="upper">If true, creates upper triangular; otherwise lower triangular.</param>
+    /// <param name="diagonal">Offset from the main diagonal (0 = include diagonal).</param>
+    /// <returns>A tensor with 1s in the triangular region and 0s elsewhere.</returns>
+    /// <remarks>
+    /// <para>
+    /// Useful for causal attention masks without loops.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorTriangularMask<T>(int size, bool upper = false, int diagonal = 0);
+
+    /// <summary>
+    /// Applies element-wise squash function for capsule networks.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="axis">The axis along which to compute the norm.</param>
+    /// <returns>A tensor with vectors squashed to have magnitude in [0, 1).</returns>
+    /// <remarks>
+    /// <para>
+    /// Implements squash(v) = (||v||^2 / (1 + ||v||^2)) * (v / ||v||)
+    /// Used in capsule networks to ensure output vectors have bounded magnitude.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorSquash<T>(Tensor<T> tensor, int axis = -1);
+
+    /// <summary>
+    /// Computes the backward pass for squash function.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="gradOutput">The gradient of the loss with respect to squash output.</param>
+    /// <param name="input">The original input to squash.</param>
+    /// <param name="output">The output of squash.</param>
+    /// <param name="axis">The axis along which squash was computed.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    Tensor<T> TensorSquashBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> output, int axis = -1);
+
+    /// <summary>
+    /// Computes the L2 norm along an axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="axis">The axis along which to compute the norm.</param>
+    /// <param name="keepDims">Whether to keep the reduced dimension.</param>
+    /// <returns>A tensor containing the L2 norms.</returns>
+    Tensor<T> TensorNorm<T>(Tensor<T> tensor, int axis, bool keepDims = false);
+
+    /// <summary>
+    /// Normalizes vectors along an axis to unit length.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="axis">The axis along which to normalize.</param>
+    /// <param name="epsilon">Small value to prevent division by zero.</param>
+    /// <returns>A tensor with vectors normalized to unit length.</returns>
+    Tensor<T> TensorNormalize<T>(Tensor<T> tensor, int axis, T epsilon);
+
+    /// <summary>
+    /// Clips tensor values to a range. This is an alias for <see cref="TensorClamp{T}"/>.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="minValue">The minimum value.</param>
+    /// <param name="maxValue">The maximum value.</param>
+    /// <returns>A tensor with values clipped to [minValue, maxValue].</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides the same functionality as <see cref="TensorClamp{T}"/>.
+    /// Both "clip" and "clamp" are common names for the same operation (min(max(x, min), max)).
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorClip<T>(Tensor<T> tensor, T minValue, T maxValue);
+
+    /// <summary>
+    /// Creates a tensor by concatenating tensors along an axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensors">The tensors to concatenate.</param>
+    /// <param name="axis">The axis along which to concatenate.</param>
+    /// <returns>A tensor containing the concatenated tensors.</returns>
+    Tensor<T> TensorConcatenate<T>(Tensor<T>[] tensors, int axis = 0);
+
+    /// <summary>
+    /// Splits a tensor into multiple tensors along an axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The tensor to split.</param>
+    /// <param name="numSplits">The number of equal splits.</param>
+    /// <param name="axis">The axis along which to split.</param>
+    /// <returns>An array of tensors.</returns>
+    Tensor<T>[] TensorSplit<T>(Tensor<T> tensor, int numSplits, int axis = 0);
+
+    /// <summary>
+    /// Creates a one-hot encoded tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the output tensor elements.</typeparam>
+    /// <param name="indices">The indices tensor (must be integer values).</param>
+    /// <param name="depth">The number of classes (size of one-hot dimension).</param>
+    /// <returns>A tensor with one-hot encoding.</returns>
+    /// <remarks>
+    /// <para>
+    /// For indices [0, 2, 1] and depth 3:
+    /// [[1,0,0], [0,0,1], [0,1,0]]
+    /// </para>
+    /// <para>
+    /// Note: This is a breaking API change. Indices must now be Tensor&lt;int&gt; for type safety.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorOneHot<T>(Tensor<int> indices, int depth);
+
+    /// <summary>
+    /// Computes argmax along an axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of input tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="axis">The axis along which to find the maximum index.</param>
+    /// <returns>A tensor containing the integer indices of maximum values.</returns>
+    /// <remarks>
+    /// <para>
+    /// Note: This is a breaking API change. Return type is now Tensor&lt;int&gt; for type safety.
+    /// </para>
+    /// </remarks>
+    Tensor<int> TensorArgMax<T>(Tensor<T> tensor, int axis);
+
+    /// <summary>
+    /// Computes argmin along an axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of input tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="axis">The axis along which to find the minimum index.</param>
+    /// <returns>A tensor containing the integer indices of minimum values.</returns>
+    /// <remarks>
+    /// <para>
+    /// Note: This is a breaking API change. Return type is now Tensor&lt;int&gt; for type safety.
+    /// </para>
+    /// </remarks>
+    Tensor<int> TensorArgMin<T>(Tensor<T> tensor, int axis);
+
+    /// <summary>
+    /// Computes binary cross-entropy loss element-wise.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="predictions">The predicted probabilities (0-1).</param>
+    /// <param name="targets">The target values (0 or 1).</param>
+    /// <param name="epsilon">Small value for numerical stability.</param>
+    /// <returns>A tensor containing the loss for each element.</returns>
+    Tensor<T> TensorBinaryCrossEntropy<T>(Tensor<T> predictions, Tensor<T> targets, T epsilon);
+
+    /// <summary>
+    /// Computes the backward pass for binary cross-entropy.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="predictions">The predicted probabilities.</param>
+    /// <param name="targets">The target values.</param>
+    /// <param name="epsilon">Small value for numerical stability.</param>
+    /// <returns>The gradient with respect to predictions.</returns>
+    Tensor<T> TensorBinaryCrossEntropyBackward<T>(Tensor<T> predictions, Tensor<T> targets, T epsilon);
+
+    /// <summary>
+    /// Creates coordinate meshgrids from 1D coordinate arrays.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="x">1D array of x coordinates [width].</param>
+    /// <param name="y">1D array of y coordinates [height].</param>
+    /// <returns>A tuple of (X, Y) grids, each with shape [height, width].</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to numpy.meshgrid() or torch.meshgrid().
+    /// Creates 2D coordinate grids from 1D coordinate arrays.
+    /// Useful for spatial transformer networks and coordinate-based operations.
+    /// </para>
+    /// </remarks>
+    (Tensor<T> X, Tensor<T> Y) TensorMeshgrid<T>(Tensor<T> x, Tensor<T> y);
+
+    /// <summary>
+    /// Extracts a slice along a specific axis from a 3D tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor [dim0, dim1, dim2].</param>
+    /// <param name="axis">The axis to slice (0, 1, or 2).</param>
+    /// <param name="index">The index to extract along the axis.</param>
+    /// <returns>A 2D tensor with the specified slice.</returns>
+    /// <remarks>
+    /// <para>
+    /// For a 3D tensor [H, W, C], slicing along axis 2 with index i gives [H, W] at channel i.
+    /// This is useful for extracting channels from multi-channel tensors without loops.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorSliceAxis<T>(Tensor<T> tensor, int axis, int index);
+
+    /// <summary>
+    /// Creates a tensor filled with values from a linear range.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="start">The starting value of the range.</param>
+    /// <param name="end">The ending value of the range (exclusive).</param>
+    /// <param name="count">The number of values in the range.</param>
+    /// <returns>A 1D tensor with linearly spaced values from start to end.</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to numpy.linspace() or torch.linspace().
+    /// Useful for creating coordinate ranges without loops.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorLinspace<T>(T start, T end, int count);
+
+    /// <summary>
+    /// Batched matrix multiplication for 3D tensors. This is an alias for <see cref="BatchMatMul{T}"/>.
+    /// Computes batched matrix multiply: result[b] = a[b] @ b[b] for each batch.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="a">First tensor of shape [batch, M, K].</param>
+    /// <param name="b">Second tensor of shape [batch, K, N] or [K, N] for broadcasting.</param>
+    /// <returns>Result tensor of shape [batch, M, N].</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to torch.bmm() or np.matmul() with 3D tensors.
+    /// Essential for RNN/LSTM/GRU vectorization where we compute all timesteps at once.
+    /// If b is 2D [K, N], it broadcasts across the batch dimension.
+    /// </para>
+    /// <para>
+    /// This method provides the same functionality as <see cref="BatchMatMul{T}"/>.
+    /// The "Tensor" prefix variant exists for API consistency with other tensor operations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorBatchMatMul<T>(Tensor<T> a, Tensor<T> b);
+
+    /// <summary>
+    /// Sets a slice of a tensor along a specific axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="destination">The destination tensor to modify.</param>
+    /// <param name="source">The source tensor to copy from.</param>
+    /// <param name="axis">The axis along which to set the slice.</param>
+    /// <param name="index">The index at which to set the slice.</param>
+    /// <remarks>
+    /// <para>
+    /// Inverse of TensorSliceAxis. Sets destination[..., index, ...] = source along the specified axis.
+    /// Essential for building output tensors without loops.
+    /// </para>
+    /// </remarks>
+    void TensorSetSliceAxis<T>(Tensor<T> destination, Tensor<T> source, int axis, int index);
+
+    /// <summary>
+    /// Applies softmax along a specified axis. This is an alias for <see cref="Softmax{T}(Tensor{T}, int)"/>.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="axis">The axis along which to apply softmax.</param>
+    /// <returns>A tensor with softmax applied along the specified axis.</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes softmax(x)_i = exp(x_i) / sum(exp(x_j)) along the specified axis.
+    /// Numerically stable implementation subtracts max before exp.
+    /// </para>
+    /// <para>
+    /// This method provides the same functionality as <see cref="Softmax{T}(Tensor{T}, int)"/>.
+    /// The "Tensor" prefix variant exists for API consistency with other tensor operations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorSoftmax<T>(Tensor<T> tensor, int axis);
+
+    /// <summary>
+    /// Computes the backward pass for softmax. This is an alias for <see cref="SoftmaxBackward{T}"/>.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="softmaxOutput">The output from the forward softmax pass.</param>
+    /// <param name="outputGradient">The gradient flowing back.</param>
+    /// <param name="axis">The axis along which softmax was applied.</param>
+    /// <returns>The gradient with respect to the softmax input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides the same functionality as <see cref="SoftmaxBackward{T}"/>.
+    /// The "Tensor" prefix variant exists for API consistency with other tensor operations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorSoftmaxBackward<T>(Tensor<T> softmaxOutput, Tensor<T> outputGradient, int axis);
+
+    /// <summary>
+    /// Computes log-softmax along a specified axis (more numerically stable than log(softmax(x))).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="axis">The axis along which to apply log-softmax.</param>
+    /// <returns>A tensor with log-softmax applied along the specified axis.</returns>
+    Tensor<T> TensorLogSoftmax<T>(Tensor<T> tensor, int axis);
+
+    /// <summary>
+    /// Top-K selection along an axis, returning both values and indices.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="k">Number of top elements to select.</param>
+    /// <param name="axis">The axis along which to select.</param>
+    /// <param name="indices">Output tensor containing indices of top-k elements.</param>
+    /// <returns>A tensor containing the top-k values.</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to torch.topk(). Essential for MoE gating without loops.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorTopK<T>(Tensor<T> tensor, int k, int axis, out Tensor<int> indices);
+
+    /// <summary>
+    /// Scatter operation: sets values at specified indices along an axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="destination">The destination tensor (modified in place or returns new tensor).</param>
+    /// <param name="indices">Integer indices where to scatter values.</param>
+    /// <param name="source">Values to scatter.</param>
+    /// <param name="axis">The axis along which to scatter.</param>
+    /// <returns>The tensor with scattered values.</returns>
+    Tensor<T> TensorScatter<T>(Tensor<T> destination, Tensor<int> indices, Tensor<T> source, int axis);
+
+    /// <summary>
+    /// Index select: gathers slices from a tensor along an axis using integer indices.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The source tensor.</param>
+    /// <param name="indices">Integer indices to select.</param>
+    /// <param name="axis">The axis along which to select.</param>
+    /// <returns>Selected slices concatenated along the axis.</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to torch.index_select(). Essential for embedding lookups and expert selection.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorIndexSelect<T>(Tensor<T> tensor, Tensor<int> indices, int axis);
+
+    /// <summary>
+    /// Stacks multiple tensors along a new axis.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensors">Array of tensors to stack (must have same shape).</param>
+    /// <param name="axis">The axis along which to stack.</param>
+    /// <returns>A new tensor with an additional dimension.</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to torch.stack() or np.stack().
+    /// Essential for building batch tensors without loops.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorStack<T>(Tensor<T>[] tensors, int axis);
+
+    /// <summary>
+    /// Unstacks a tensor along an axis into multiple tensors.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The tensor to unstack.</param>
+    /// <param name="axis">The axis along which to unstack.</param>
+    /// <returns>An array of tensors.</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to torch.unbind() or tf.unstack().
+    /// Inverse of TensorStack.
+    /// </para>
+    /// </remarks>
+    Tensor<T>[] TensorUnstack<T>(Tensor<T> tensor, int axis);
+
+    /// <summary>
+    /// Applies a function element-wise to a tensor (vectorized map).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="func">The function to apply to each element.</param>
+    /// <returns>A tensor with the function applied to each element.</returns>
+    /// <remarks>
+    /// <para>
+    /// This enables custom element-wise operations without explicit loops.
+    /// The implementation should be parallelized internally.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorMap<T>(Tensor<T> tensor, Func<T, T> func);
+
+    /// <summary>
+    /// Masked fill: fills tensor elements with a value where mask is true.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="tensor">The input tensor.</param>
+    /// <param name="mask">Boolean mask tensor (same shape as input or broadcastable).</param>
+    /// <param name="value">The value to fill where mask is true.</param>
+    /// <returns>A tensor with masked positions filled.</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to torch.masked_fill(). Essential for attention masking.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorMaskedFill<T>(Tensor<T> tensor, Tensor<bool> mask, T value);
+
+    /// <summary>
+    /// Where operation: selects elements from two tensors based on a condition.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <param name="condition">Boolean condition tensor.</param>
+    /// <param name="x">Tensor to select from where condition is true.</param>
+    /// <param name="y">Tensor to select from where condition is false.</param>
+    /// <returns>A tensor with selected elements.</returns>
+    /// <remarks>
+    /// <para>
+    /// Similar to torch.where() or np.where().
+    /// Essential for conditional operations without loops.
+    /// </para>
+    /// </remarks>
+    Tensor<T> TensorWhere<T>(Tensor<bool> condition, Tensor<T> x, Tensor<T> y);
 
     #endregion
 }

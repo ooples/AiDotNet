@@ -92,7 +92,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var input = new Tensor<double>(new[] { 1, 10 });
             for (int i = 0; i < 10; i++)
             {
-                input[i] = 1.0;
+                input[0, i] = 1.0;
             }
 
             // Act
@@ -118,7 +118,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var outputGradient = new Tensor<double>(new[] { 1, 5 });
             for (int i = 0; i < 5; i++)
             {
-                outputGradient[i] = 0.1;
+                outputGradient[0, i] = 0.1;
             }
 
             // Act
@@ -166,7 +166,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var outputGradient = new Tensor<double>(new[] { 1, 5 });
             for (int i = 0; i < 5; i++)
             {
-                outputGradient[i] = 0.1;
+                outputGradient[0, i] = 0.1;
             }
             adapter.Backward(outputGradient);
 
@@ -268,7 +268,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var input = new Tensor<double>(new[] { 1, 10 });
             for (int i = 0; i < 10; i++)
             {
-                input[i] = (i + 1) * 0.1;
+                input[0, i] = (i + 1) * 0.1;
             }
 
             // Get output from adapter (with B=0 initially, LoRA has no effect)
@@ -286,7 +286,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(adapterOutput.Length, mergedOutput.Length);
             for (int i = 0; i < adapterOutput.Length; i++)
             {
-                Assert.Equal(adapterOutput[i], mergedOutput[i], precision: 10);
+                Assert.Equal(adapterOutput.GetFlat(i), mergedOutput.GetFlat(i), precision: 10);
             }
         }
 

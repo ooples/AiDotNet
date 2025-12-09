@@ -65,6 +65,34 @@ public interface IActivationFunction<T>
     T Derivative(T input);
 
     /// <summary>
+    /// Applies the activation function to each element in a vector.
+    /// </summary>
+    /// <param name="input">The input vector.</param>
+    /// <returns>A new vector with the activation function applied to each element.</returns>
+    Vector<T> Activate(Vector<T> input);
+
+    /// <summary>
+    /// Calculates the derivative matrix for a vector input.
+    /// </summary>
+    /// <param name="input">The input vector.</param>
+    /// <returns>A diagonal matrix containing derivatives for each input element.</returns>
+    Matrix<T> Derivative(Vector<T> input);
+
+    /// <summary>
+    /// Applies the activation function to each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>A new tensor with the activation function applied to each element.</returns>
+    Tensor<T> Activate(Tensor<T> input);
+
+    /// <summary>
+    /// Calculates the derivative for each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>A new tensor containing derivatives for each input element.</returns>
+    Tensor<T> Derivative(Tensor<T> input);
+
+    /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
     /// <value>True if the activation can be applied to computation graphs for JIT compilation.</value>
@@ -105,4 +133,19 @@ public interface IActivationFunction<T>
     /// </para>
     /// </remarks>
     ComputationNode<T> ApplyToGraph(ComputationNode<T> input);
+
+    /// <summary>
+    /// Calculates the backward pass gradient for this activation function.
+    /// </summary>
+    /// <param name="input">The input tensor that was used in the forward pass.</param>
+    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes dL/dx = dL/dy * dy/dx.
+    /// For element-wise activations (ReLU, Sigmoid), this is element-wise multiplication.
+    /// For vector activations (Softmax), this involves Jacobian multiplication.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient);
 }

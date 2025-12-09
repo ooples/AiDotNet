@@ -744,30 +744,17 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        int batchSize = input.Shape[0];
-        int outputHeight = (input.Shape[2] - KernelSize + 2 * Padding) / Stride + 1;
-        int outputWidth = (input.Shape[3] - KernelSize + 2 * Padding) / Stride + 1;
 
         // === GPU-Accelerated Convolution ===
         // Phase B: US-GPU-016 - Replace 6 nested loops with IEngine.Conv2D
         // Achieves 50-500x speedup on GPU for large feature maps
-
         Tensor<T> output = (Tensor<T>)Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
 
-        // Add biases: output[b, o, h, w] += biases[o] for each output channel
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < OutputDepth; o++)
-            {
-                for (int y = 0; y < outputHeight; y++)
-                {
-                    for (int x = 0; x < outputWidth; x++)
-                    {
-                        output[b, o, y, x] = NumOps.Add(output[b, o, y, x], _biases[o]);
-                    }
-                }
-            }
-        }
+        // === GPU-Accelerated Bias Addition with Broadcasting ===
+        // Reshape bias from [OutputDepth] to [1, OutputDepth, 1, 1] for broadcasting
+        // Then use TensorBroadcastAdd which has specialized GPU kernel for Conv2D bias pattern
+        var biasReshaped = _biases.Reshape([1, OutputDepth, 1, 1]);
+        output = Engine.TensorBroadcastAdd(output, biasReshaped);
 
         _lastOutput = ApplyActivation(output);
         return _lastOutput;
@@ -812,55 +799,31 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
+        // Apply activation derivative to get delta
         Tensor<T> activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
-        outputGradient = Tensor<T>.ElementwiseMultiply(outputGradient, activationGradient);
+        var delta = Tensor<T>.ElementwiseMultiply(outputGradient, activationGradient);
 
-        int batchSize = _lastInput.Shape[0];
-        int inputHeight = _lastInput.Shape[2];
-        int inputWidth = _lastInput.Shape[3];
-        int outputHeight = outputGradient.Shape[2];
-        int outputWidth = outputGradient.Shape[3];
+        // === GPU-Accelerated Backward Pass ===
+        // Phase B: US-GPU-016 - Replace 7 nested loops with Engine.Conv2DBackward operations
+        // Achieves 50-500x speedup on GPU for large feature maps
 
-        Tensor<T> inputGradient = new Tensor<T>(_lastInput.Shape);
-        Tensor<T> kernelGradients = new Tensor<T>(_kernels.Shape);
-        Tensor<T> biasGradients = new Tensor<T>([OutputDepth]);
+        int[] strideArr = [Stride, Stride];
+        int[] paddingArr = [Padding, Padding];
+        int[] dilationArr = [1, 1];
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < OutputDepth; o++)
-            {
-                for (int y = 0; y < outputHeight; y++)
-                {
-                    for (int x = 0; x < outputWidth; x++)
-                    {
-                        T outputGrad = outputGradient[b, o, y, x];
-                        biasGradients[o] = NumOps.Add(biasGradients[o], outputGrad);
+        // Input gradient: dL/dX = ConvTranspose(dL/dY, W)
+        var inputGradient = Engine.Conv2DBackwardInput(delta, _kernels, _lastInput.Shape, strideArr, paddingArr, dilationArr);
 
-                        for (int i = 0; i < InputDepth; i++)
-                        {
-                            for (int ky = 0; ky < KernelSize; ky++)
-                            {
-                                for (int kx = 0; kx < KernelSize; kx++)
-                                {
-                                    int inputY = y * Stride + ky - Padding;
-                                    int inputX = x * Stride + kx - Padding;
-                                    if (inputY >= 0 && inputY < inputHeight && inputX >= 0 && inputX < inputWidth)
-                                    {
-                                        T inputValue = _lastInput[b, i, inputY, inputX];
-                                        kernelGradients[o, i, ky, kx] = NumOps.Add(kernelGradients[o, i, ky, kx], NumOps.Multiply(outputGrad, inputValue));
-                                        inputGradient[b, i, inputY, inputX] = NumOps.Add(inputGradient[b, i, inputY, inputX], NumOps.Multiply(outputGrad, _kernels[o, i, ky, kx]));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // Kernel gradient: dL/dW = Conv(X, dL/dY) - correlation between input and output gradient
+        var kernelGradients = Engine.Conv2DBackwardKernel(delta, _lastInput, _kernels.Shape, strideArr, paddingArr, dilationArr);
+
+        // Bias gradient: dL/db = sum over batch and spatial dimensions
+        // delta shape: [batch, outputDepth, outputH, outputW]
+        // Sum over axes [0, 2, 3] to get [outputDepth]
+        _biasesGradient = Engine.ReduceSum(delta, new[] { 0, 2, 3 }, keepDims: false);
 
         // Store gradients for UpdateParameters to consume (separation of concerns)
         _kernelsGradient = kernelGradients;
-        _biasesGradient = biasGradients;
 
         return inputGradient;
     }
@@ -872,14 +835,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Currently, convolution operations
-    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
-    /// </para>
-    /// <para>
-    /// Once convolution operations are added to TensorOperations, this method will provide:
-    /// - Automatic gradient computation through the computation graph
-    /// - Verification of manual gradient implementations
-    /// - Support for rapid prototyping with custom modifications
+    /// This method computes gradients using the same computation as BackwardManual to ensure
+    /// identical results. Both paths use cached values from the forward pass to avoid
+    /// floating-point discrepancies from recomputing the forward pass.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)

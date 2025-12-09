@@ -113,6 +113,11 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     private Tensor<T>? _lastOutput;
 
     /// <summary>
+    /// Stores the indices of the maximum values found during global max pooling.
+    /// </summary>
+    private int[]? _maxIndices;
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -280,42 +285,21 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[3];
-        int height = input.Shape[1];
-        int width = input.Shape[2];
+        
+        // Global pooling reduces spatial dimensions (height=1, width=2)
+        var axes = new int[] { 1, 2 };
 
-        var output = new Tensor<T>([batchSize, 1, 1, channels]);
-
-        for (int b = 0; b < batchSize; b++)
+        Tensor<T> output;
+        if (_poolingType == PoolingType.Average)
         {
-            for (int c = 0; c < channels; c++)
-            {
-                T pooledValue = _poolingType == PoolingType.Average ? NumOps.Zero : NumOps.MinValue;
-
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        T value = input[b, h, w, c];
-                        if (_poolingType == PoolingType.Average)
-                        {
-                            pooledValue = NumOps.Add(pooledValue, value);
-                        }
-                        else // Max pooling
-                        {
-                            pooledValue = MathHelper.Max(pooledValue, value);
-                        }
-                    }
-                }
-
-                if (_poolingType == PoolingType.Average)
-                {
-                    pooledValue = NumericalStabilityHelper.SafeDiv(pooledValue, NumOps.FromDouble(height * width));
-                }
-
-                output[b, 0, 0, c] = pooledValue;
-            }
+            // Use GPU-accelerated ReduceMean
+            output = Engine.ReduceMean(input, axes, keepDims: true);
+            _maxIndices = null;
+        }
+        else // Max pooling
+        {
+            // Use GPU-accelerated ReduceMax
+            output = Engine.ReduceMax(input, axes, keepDims: true, out _maxIndices);
         }
 
         _lastOutput = ApplyActivation(output);
@@ -374,60 +358,24 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        int batchSize = _lastInput.Shape[0];
-        int height = _lastInput.Shape[1];
-        int width = _lastInput.Shape[2];
-        int channels = _lastInput.Shape[3];
-
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-
         // Apply activation derivative
         outputGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
 
-        for (int b = 0; b < batchSize; b++)
+        var axes = new int[] { 1, 2 };
+
+        if (_poolingType == PoolingType.Average)
         {
-            for (int c = 0; c < channels; c++)
-            {
-                T gradientValue = outputGradient[b, 0, 0, c];
-
-                if (_poolingType == PoolingType.Average)
-                {
-                    T averageGradient = NumericalStabilityHelper.SafeDiv(gradientValue, NumOps.FromDouble(height * width));
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            inputGradient[b, h, w, c] = averageGradient;
-                        }
-                    }
-                }
-                else // Max pooling
-                {
-                    T maxValue = NumOps.MinValue;
-                    int maxH = 0, maxW = 0;
-
-                    // Find the position of the maximum value
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            T value = _lastInput[b, h, w, c];
-                            if (NumOps.GreaterThan(value, maxValue))
-                            {
-                                maxValue = value;
-                                maxH = h;
-                                maxW = w;
-                            }
-                        }
-                    }
-
-                    // Set the gradient only for the maximum value position
-                    inputGradient[b, maxH, maxW, c] = gradientValue;
-                }
-            }
+            // Use GPU-accelerated ReduceMeanBackward
+            return Engine.ReduceMeanBackward(outputGradient, _lastInput.Shape, axes);
         }
+        else // Max pooling
+        {
+            if (_maxIndices == null)
+                throw new InvalidOperationException("Max indices not available for backward pass.");
 
-        return inputGradient;
+            // Use GPU-accelerated ReduceMaxBackward
+            return Engine.ReduceMaxBackward(outputGradient, _maxIndices, _lastInput.Shape);
+        }
     }
 
     /// <summary>
@@ -483,9 +431,42 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         // Apply activation if present
         var activated = ApplyScalarActivationAutodiff(squeezed);
 
-        // Perform backward pass
+        // Perform backward pass with inline topological sort
         activated.Gradient = outputGradient;
-        var topoOrder = GetTopologicalOrder(activated);
+
+        // Production-grade: Inline topological sort for backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((activated, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+                continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -510,50 +491,6 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
 
         // Use generic activation support - works for ALL 39 built-in activations
         return Autodiff.TensorOperations<T>.ApplyActivation(input, ScalarActivation);
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    /// <param name="root">The root node of the computation graph.</param>
-    /// <returns>A list of nodes in topological order.</returns>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
     }
 
     /// <summary>
@@ -637,6 +574,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
+        _maxIndices = null;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

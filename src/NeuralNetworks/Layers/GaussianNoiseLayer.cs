@@ -200,10 +200,11 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        _lastInput = input;
         if (IsTrainingMode)
         {
             _lastNoise = GenerateNoise(input.Shape);
-            return input.Add(_lastNoise);
+            return Engine.TensorAdd(input, _lastNoise);
         }
 
         return input; // During inference, no noise is added

@@ -245,11 +245,9 @@ public class AddLayer<T> : LayerBase<T>
 
         _lastInputs = inputs;
 
-        var result = inputs[0].Clone();
-        for (int i = 1; i < inputs.Length; i++)
-        {
-            result = result.Add(inputs[i]);
-        }
+        // Use Engine.TensorAddMany for GPU/CPU accelerated element-wise addition of all tensors
+        // This is production-grade: no loops, single optimized call that batches all additions
+        var result = Engine.TensorAddMany(inputs);
 
         _lastOutput = ApplyActivation(result);
         return _lastOutput;
@@ -314,9 +312,9 @@ public class AddLayer<T> : LayerBase<T>
         }
         else if (ScalarActivation != null)
         {
-            // Vectorized: compute activation derivatives and multiply element-wise
-            var derivatives = _lastOutput.Transform((x, i) => ScalarActivation.Derivative(x));
-            gradientWithActivation = Tensor<T>.ElementwiseMultiply(derivatives, outputGradient);
+            // Vectorized: compute activation derivatives and multiply element-wise using Engine
+            var derivatives = ScalarActivation.Derivative(_lastOutput);
+            gradientWithActivation = Engine.TensorMultiply(derivatives, outputGradient);
         }
         else
         {
@@ -333,13 +331,16 @@ public class AddLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Backward pass implementation using automatic differentiation.
+    /// Backward pass implementation using automatic differentiation with production-grade optimizations.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients for addition operation.
+    /// This method uses a production-grade pattern for computing gradients:
+    /// - Uses cached values from forward pass (locality caching)
+    /// - Builds full computation graph including addition and activation
+    /// - Executes inline topological sort for graph traversal
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
@@ -349,28 +350,57 @@ public class AddLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        // Convert to computation nodes
-        var inputNodes = new List<Autodiff.ComputationNode<T>>();
-        inputNodes.Add(Autodiff.TensorOperations<T>.Variable(_lastInputs[0], "input_0", requiresGradient: true));
-
-        // Forward computation using autodiff ops: result = input[0] + input[1] + ...
-        var result = inputNodes[0];
-        for (int i = 1; i < _lastInputs.Length; i++)
+        // 1. Create variable nodes for inputs that need gradients
+        var inputNodes = new List<ComputationNode<T>>();
+        for (int i = 0; i < _lastInputs.Length; i++)
         {
-            var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInputs[i], $"input_{i}", requiresGradient: false);
-            result = Autodiff.TensorOperations<T>.Add(result, inputNode);
+            inputNodes.Add(TensorOperations<T>.Variable(_lastInputs[i], $"input_{i}", requiresGradient: true));
         }
 
-        // Apply activation using autodiff
-        var activated = ApplyActivationAutodiff(result);
+        // 2. Build computation graph (Sum)
+        ComputationNode<T> sumNode = inputNodes[0];
+        for (int i = 1; i < inputNodes.Count; i++)
+        {
+            sumNode = TensorOperations<T>.Add(sumNode, inputNodes[i]);
+        }
 
-        // Set the gradient at the output
-        activated.Gradient = outputGradient;
+        // Apply activation function using LayerBase helper
+        var outputNode = ApplyActivationToGraph(sumNode);
 
-        // Perform topological sort and backward pass
-        var topoOrder = GetTopologicalOrder(activated);
+        // 3. Set output gradient
+        outputNode.Gradient = outputGradient;
 
-        // Execute backward pass in reverse topological order
+        // 4. Inline topological sort
+        var visited = new HashSet<ComputationNode<T>>();
+        var topoOrder = new List<ComputationNode<T>>();
+        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // 5. Execute backward pass
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -380,73 +410,8 @@ public class AddLayer<T> : LayerBase<T>
             }
         }
 
-        return inputNodes[0].Gradient!;
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Applies activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (ScalarActivation is ReLUActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.ReLU(input);
-        }
-        else if (ScalarActivation is SigmoidActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Sigmoid(input);
-        }
-        else if (ScalarActivation is TanhActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Tanh(input);
-        }
-        else
-        {
-            // For unsupported activations, return input unchanged
-            return input;
-        }
+        // 6. Return the gradient for the first input (as per interface contract)
+        return inputNodes[0].Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>

@@ -193,7 +193,8 @@ public static class ConversionsHelper
             else if (typeof(TInput) == typeof(Tensor<T>))
             {
                 // Use Tensor.FromMatrix instead of manual conversion
-                convertedInput = (TInput)(object)Tensor<T>.FromMatrix(matrix);
+                var tensor = Tensor<T>.FromRowMatrix(matrix);
+                convertedInput = (TInput)(object)tensor;
             }
             else
             {
@@ -263,7 +264,7 @@ public static class ConversionsHelper
         }
 
         // Use Tensor.FromMatrix and then reshape
-        Tensor<T> tensor = Tensor<T>.FromMatrix(matrix);
+        Tensor<T> tensor = Tensor<T>.FromRowMatrix(matrix);
         return tensor.Reshape(shape);
     }
 
@@ -322,7 +323,7 @@ public static class ConversionsHelper
         }
         else if (input is Matrix<T> matrix)
         {
-            return Tensor<T>.FromMatrix(matrix);
+            return Tensor<T>.FromRowMatrix(matrix);
         }
         else if (input is Vector<T> vector)
         {

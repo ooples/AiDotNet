@@ -199,25 +199,11 @@ public class MeanLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        var output = new Tensor<T>(OutputShape);
-        int axisSize = input.Shape[Axis];
-        T axisScale = NumOps.FromDouble(1.0 / axisSize);
-        
-        // Iterate over all dimensions except the mean axis
-        var indices = new int[input.Shape.Length];
-        IterateOverDimensions(input, output, indices, 0, Axis, (input, output, indices) =>
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < axisSize; i++)
-            {
-                indices[Axis] = i;
-                sum = NumOps.Add(sum, input[indices]);
-            }
-            output[indices] = NumOps.Multiply(sum, axisScale);
-        });
-        
-        _lastOutput = output;
-        return output;
+
+        // Use Engine operation for GPU/CPU acceleration
+        _lastOutput = Engine.ReduceMean(input, [Axis], keepDims: false);
+
+        return _lastOutput;
     }
 
     /// <summary>
@@ -266,22 +252,8 @@ public class MeanLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        int axisSize = _lastInput.Shape[Axis];
-        T axisScale = NumOps.FromDouble(1.0 / axisSize);
-
-        // Iterate over all dimensions except the mean axis
-        var indices = new int[_lastInput.Shape.Length];
-        IterateOverDimensions(_lastInput, outputGradient, indices, 0, Axis, (_, outputGradient, indices) =>
-        {
-            for (int i = 0; i < axisSize; i++)
-            {
-                indices[Axis] = i;
-                inputGradient[indices] = NumOps.Multiply(outputGradient[indices], axisScale);
-            }
-        });
-
-        return inputGradient;
+        // Use Engine operation for GPU/CPU acceleration
+        return Engine.ReduceMeanBackward(outputGradient, _lastInput.Shape, [Axis]);
     }
 
     /// <summary>
@@ -305,8 +277,37 @@ public class MeanLayer<T> : LayerBase<T>
         // Set gradient at output and perform backward pass
         outputNode.Gradient = outputGradient;
 
-        // Perform topological sort and backward pass
-        var topoOrder = GetTopologicalOrder(outputNode);
+        // Production-grade: Inline topological sort for backward pass
+        var visited = new HashSet<ComputationNode<T>>();
+        var topoOrder = new List<ComputationNode<T>>();
+        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+                continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
 
         // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)
@@ -323,49 +324,6 @@ public class MeanLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Gradient computation failed in automatic differentiation.");
 
         return inputNode.Gradient;
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<ComputationNode<T>> GetTopologicalOrder(ComputationNode<T> root)
-    {
-        var visited = new HashSet<ComputationNode<T>>();
-        var result = new List<ComputationNode<T>>();
-
-        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-                continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                        {
-                            stack.Push((parent, false));
-                        }
-                    }
-                }
-            }
-        }
-
-        return result;
     }
 
     /// <summary>
@@ -389,54 +347,6 @@ public class MeanLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // MeanLayer has no learnable parameters, so this method is empty
-    }
-
-    /// <summary>
-    /// Recursively iterates over all dimensions of the input tensor, skipping the specified dimension.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="output">The output tensor.</param>
-    /// <param name="indices">The current indices being processed.</param>
-    /// <param name="currentDim">The current dimension being processed.</param>
-    /// <param name="skipDim">The dimension to skip (the axis for mean calculation).</param>
-    /// <param name="action">The action to perform when all indices except the skip dimension have been determined.</param>
-    /// <remarks>
-    /// <para>
-    /// This private helper method is used to iterate over all positions in the input and output tensors.
-    /// It recursively explores all dimensions, skipping the dimension specified by skipDim. When all other
-    /// dimensions have been fixed, it calls the provided action with the current indices.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a helper method that efficiently processes multi-dimensional data.
-    /// 
-    /// Imagine you need to visit every cell in a 3D cube, but you want to handle entire slices at once:
-    /// - This method navigates through the dimensions one by one
-    /// - It skips the dimension you're averaging over
-    /// - When it has fixed positions in all other dimensions, it calls your provided function
-    /// 
-    /// This is a common pattern for processing multi-dimensional arrays efficiently.
-    /// It's like having nested for-loops, but implemented recursively for any number of dimensions.
-    /// </para>
-    /// </remarks>
-    private void IterateOverDimensions(Tensor<T> input, Tensor<T> output, int[] indices, int currentDim, int skipDim, Action<Tensor<T>, Tensor<T>, int[]> action)
-    {
-        if (currentDim == input.Shape.Length)
-        {
-            action(input, output, indices);
-            return;
-        }
-        
-        if (currentDim == skipDim)
-        {
-            IterateOverDimensions(input, output, indices, currentDim + 1, skipDim, action);
-        }
-        else
-        {
-            for (int i = 0; i < input.Shape[currentDim]; i++)
-            {
-                indices[currentDim] = i;
-                IterateOverDimensions(input, output, indices, currentDim + 1, skipDim, action);
-            }
-        }
     }
 
     /// <summary>

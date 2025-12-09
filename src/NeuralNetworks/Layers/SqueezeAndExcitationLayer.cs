@@ -80,7 +80,11 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Caches the excitation weights from the forward pass for auxiliary loss computation.
     /// Shape: [batchSize, channels]
     /// </summary>
-    private Matrix<T>? _lastExcitationWeights;
+    private Tensor<T>? _lastExcitationWeights;
+    private Tensor<T>? _lastSqueezed;
+    private Tensor<T>? _lastFc1Biased;
+    private Tensor<T>? _lastFc1Activated;
+    private Tensor<T>? _lastFc2Biased;
 
     /// <summary>
     /// The number of input and output channels in the layer.
@@ -141,69 +145,69 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This is part of the "squeeze" operation that compresses information.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weights1;
+    private Tensor<T> _weights1;
 
     /// <summary>
     /// The bias values for the first fully connected layer.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector contains the bias values that are added after applying the _weights1 transformation.
+    /// This tensor contains the bias values that are added after applying the _weights1 transformation.
     /// Biases allow the network to shift the activation function, providing more flexibility in learning.
     /// </para>
     /// <para><b>For Beginners:</b> These are baseline values added after the transformation.
-    /// 
+    ///
     /// Think of biases like default settings:
     /// - They provide starting values that get added regardless of the input
     /// - They help the network represent patterns more easily
     /// - Without biases, every feature would have to start from zero
-    /// 
+    ///
     /// For example, if a certain feature should usually be active, a positive bias
     /// means it starts with some activation even before the input is considered.
     /// </para>
     /// </remarks>
-    private Vector<T> _bias1;
+    private Tensor<T> _bias1;
 
     /// <summary>
     /// The weights for the second fully connected layer.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This matrix contains the weights that transform from the reduced representation back to the original channel dimensions.
+    /// This tensor contains the weights that transform from the reduced representation back to the original channel dimensions.
     /// These weights determine how much attention to give to each channel in the original input.
     /// </para>
     /// <para><b>For Beginners:</b> These values determine how important each feature is.
-    /// 
+    ///
     /// After compressing the information:
     /// - These weights expand it back to the original size
     /// - However, they now contain "importance scores" for each feature
     /// - Features deemed more important get higher weights
-    /// 
+    ///
     /// This is part of the "excitation" operation that decides which features to emphasize.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weights2;
+    private Tensor<T> _weights2;
 
     /// <summary>
     /// The bias values for the second fully connected layer.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector contains the bias values that are added after applying the _weights2 transformation.
+    /// This tensor contains the bias values that are added after applying the _weights2 transformation.
     /// These biases help determine the baseline attention given to each channel.
     /// </para>
     /// <para><b>For Beginners:</b> These are baseline attention values for each feature.
-    /// 
+    ///
     /// Similar to the first set of biases:
     /// - They provide default attention levels for each feature
     /// - They're added to the calculated importance scores
     /// - They help ensure certain features get at least some attention
-    /// 
+    ///
     /// For example, if color information is usually important, its bias might be higher
     /// so it receives attention even when the specific input doesn't strongly suggest it.
     /// </para>
     /// </remarks>
-    private Vector<T> _bias2;
+    private Tensor<T> _bias2;
 
     /// <summary>
     /// The input tensor from the most recent forward pass.
@@ -264,7 +268,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// "that weight should be much lower" to get better results next time.
     /// </para>
     /// </remarks>
-    private Matrix<T>? _weights1Gradient;
+    private Tensor<T>? _weights1Gradient;
 
     /// <summary>
     /// The gradient of the loss with respect to _bias1 from the most recent backward pass.
@@ -275,16 +279,16 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// should be adjusted to reduce the loss. The value is null if no backward pass has been performed yet or after ResetState is called.
     /// </para>
     /// <para><b>For Beginners:</b> This shows how the first set of biases should change.
-    /// 
+    ///
     /// Similar to the weight gradients:
     /// - This indicates how each bias value should be adjusted
     /// - It helps fine-tune the default settings for each feature
     /// - The network uses this to update the biases during learning
-    /// 
+    ///
     /// These gradients help the network gradually improve its performance over time.
     /// </para>
     /// </remarks>
-    private Vector<T>? _bias1Gradient;
+    private Tensor<T>? _bias1Gradient;
 
     /// <summary>
     /// The gradient of the loss with respect to _weights2 from the most recent backward pass.
@@ -295,16 +299,16 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// should be adjusted to reduce the loss. The value is null if no backward pass has been performed yet or after ResetState is called.
     /// </para>
     /// <para><b>For Beginners:</b> This shows how the second set of weights should change.
-    /// 
+    ///
     /// This is crucial because:
     /// - These weights determine which features get more attention
     /// - Adjusting them helps the network focus on the right things
     /// - It's like learning which parts of a picture are most important for identifying what's in it
-    /// 
+    ///
     /// The network uses these gradients to gradually improve its "attention mechanism" over time.
     /// </para>
     /// </remarks>
-    private Matrix<T>? _weights2Gradient;
+    private Tensor<T>? _weights2Gradient;
 
     /// <summary>
     /// The gradient of the loss with respect to _bias2 from the most recent backward pass.
@@ -324,7 +328,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Along with the other gradients, these help the network improve through training.
     /// </para>
     /// </remarks>
-    private Vector<T>? _bias2Gradient;
+    private Tensor<T>? _bias2Gradient;
 
     /// <summary>
     /// Gets or sets the weight for L1 sparsity regularization on attention weights.
@@ -498,10 +502,10 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _firstActivation = firstActivation ?? new ReLUActivation<T>();
         _secondActivation = secondActivation ?? new SigmoidActivation<T>();
 
-        _weights1 = new Matrix<T>(_channels, _reducedChannels);
-        _bias1 = new Vector<T>(_reducedChannels);
-        _weights2 = new Matrix<T>(_reducedChannels, _channels);
-        _bias2 = new Vector<T>(_channels);
+        _weights1 = new Tensor<T>([_channels, _reducedChannels]);
+        _bias1 = new Tensor<T>([_reducedChannels]);
+        _weights2 = new Tensor<T>([_reducedChannels, _channels]);
+        _bias2 = new Tensor<T>([_channels]);
 
         SparsityWeight = NumOps.FromDouble(0.0001);
 
@@ -522,12 +526,12 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// The reduction ratio determines how much the channel dimension is compressed in the bottleneck.
     /// </para>
     /// <para><b>For Beginners:</b> This constructor is similar to the previous one, but uses vector activations.
-    /// 
+    ///
     /// Vector activations:
     /// - Process entire groups of numbers at once, rather than one at a time
     /// - Can capture relationships between different elements
     /// - Allow for more complex transformations
-    /// 
+    ///
     /// This version is useful when you need more sophisticated processing that considers
     /// how different features relate to each other, rather than treating each feature independently.
     /// </para>
@@ -545,10 +549,10 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _firstVectorActivation = firstVectorActivation ?? new ReLUActivation<T>();
         _secondVectorActivation = secondVectorActivation ?? new SigmoidActivation<T>();
 
-        _weights1 = new Matrix<T>(_channels, _reducedChannels);
-        _bias1 = new Vector<T>(_reducedChannels);
-        _weights2 = new Matrix<T>(_reducedChannels, _channels);
-        _bias2 = new Vector<T>(_channels);
+        _weights1 = new Tensor<T>([_channels, _reducedChannels]);
+        _bias1 = new Tensor<T>([_reducedChannels]);
+        _weights2 = new Tensor<T>([_reducedChannels, _channels]);
+        _bias2 = new Tensor<T>([_channels]);
 
         SparsityWeight = NumOps.FromDouble(0.0001);
 
@@ -576,68 +580,42 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeWeights()
     {
-        InitializeMatrix(_weights1, NumOps.FromDouble(0.1));
-        InitializeMatrix(_weights2, NumOps.FromDouble(0.1));
-        InitializeVector(_bias1, NumOps.FromDouble(0.1));
-        InitializeVector(_bias2, NumOps.FromDouble(0.1));
+        T scale = NumOps.FromDouble(0.1);
+        InitializeTensor2D(_weights1, scale);
+        InitializeTensor2D(_weights2, scale);
+        InitializeTensor1D(_bias1, scale);
+        InitializeTensor1D(_bias2, scale);
     }
 
     /// <summary>
-    /// Initializes a matrix with small random values scaled by the specified factor.
+    /// Initializes a 2D tensor with small random values scaled by the specified factor.
     /// </summary>
-    /// <param name="matrix">The matrix to initialize.</param>
+    /// <param name="tensor">The tensor to initialize.</param>
     /// <param name="scale">The scaling factor for the random values.</param>
-    /// <remarks>
-    /// <para>
-    /// This method fills the given matrix with random values between -0.5 and 0.5, scaled by the specified factor.
-    /// This is a common practice in neural network initialization to ensure that weights are neither too large nor too small.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method sets random starting values for a group of parameters.
-    /// 
-    /// It works by:
-    /// - Generating random numbers between -0.5 and 0.5
-    /// - Multiplying them by a scaling factor (typically small, like 0.1)
-    /// - Storing these values in the matrix
-    /// 
-    /// This creates a good balance of positive and negative values that helps the network start learning.
-    /// </para>
-    /// </remarks>
-    private void InitializeMatrix(Matrix<T> matrix, T scale)
+    private void InitializeTensor2D(Tensor<T> tensor, T scale)
     {
-        for (int i = 0; i < matrix.Rows; i++)
+        int rows = tensor.Shape[0];
+        int cols = tensor.Shape[1];
+        for (int i = 0; i < rows; i++)
         {
-            for (int j = 0; j < matrix.Columns; j++)
+            for (int j = 0; j < cols; j++)
             {
-                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+                tensor[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
             }
         }
     }
 
     /// <summary>
-    /// Initializes a vector with small random values scaled by the specified factor.
+    /// Initializes a 1D tensor with small random values scaled by the specified factor.
     /// </summary>
-    /// <param name="vector">The vector to initialize.</param>
+    /// <param name="tensor">The tensor to initialize.</param>
     /// <param name="scale">The scaling factor for the random values.</param>
-    /// <remarks>
-    /// <para>
-    /// This method fills the given vector with random values between -0.5 and 0.5, scaled by the specified factor.
-    /// This approach helps ensure that the initial biases are neither too large nor too small.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method sets random starting values for a list of parameters.
-    /// 
-    /// Similar to initializing a matrix, it:
-    /// - Generates random numbers between -0.5 and 0.5
-    /// - Multiplies them by a scaling factor
-    /// - Stores these values in the vector
-    /// 
-    /// Biases typically require similar initialization to weights to ensure balanced starting conditions.
-    /// </para>
-    /// </remarks>
-    private void InitializeVector(Vector<T> vector, T scale)
+    private void InitializeTensor1D(Tensor<T> tensor, T scale)
     {
-        for (int i = 0; i < vector.Length; i++)
+        int length = tensor.Shape[0];
+        for (int i = 0; i < length; i++)
         {
-            vector[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
         }
     }
 
@@ -677,106 +655,63 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         _lastInput = input;
         int batchSize = input.Shape[0];
-        int height = input.Shape[1];
-        int width = input.Shape[2];
+        // height/width not needed for Engine operations
 
-        // Squeeze: Global Average Pooling
-        var squeezed = new Matrix<T>(batchSize, _channels);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _channels; c++)
-            {
-                T sum = NumOps.Zero;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        sum = NumOps.Add(sum, input[b, h, w, c]);
-                    }
-                }
+        // 1. Squeeze: Global Average Pooling [B, H, W, C] -> [B, C]
+        // Use Engine.ReduceMean over spatial dims (1, 2)
+        var squeezed = Engine.ReduceMean(input, new[] { 1, 2 }, keepDims: false);
+        _lastSqueezed = squeezed;
 
-                squeezed[b, c] = NumOps.Divide(sum, NumOps.FromDouble(height * width));
-            }
-        }
+        // 2. Excitation: FC1 + Activation
+        // squeezed: [batchSize, channels], weights1: [channels, reducedChannels]
+        var fc1Output = Engine.TensorMatMul(squeezed, _weights1);
+        var fc1BiasReshaped = _bias1.Reshape(1, _reducedChannels);
+        var fc1Biased = Engine.TensorBroadcastAdd(fc1Output, fc1BiasReshaped);
+        _lastFc1Biased = fc1Biased;
 
-        // Excitation: Two FC layers with activation
-        var excitation1 = squeezed.Multiply(_weights1).AddVectorToEachRow(_bias1);
-        excitation1 = ApplyActivation(excitation1, isFirstActivation: true);
-        var excitation2 = excitation1.Multiply(_weights2).AddVectorToEachRow(_bias2);
-        var excitation = ApplyActivation(excitation2, isFirstActivation: false);
+        var activated1 = ApplyTensorActivation(fc1Biased, isFirstActivation: true);
+        _lastFc1Activated = activated1;
+
+        // Excitation: FC2 + Activation
+        // activated1: [batchSize, reducedChannels], weights2: [reducedChannels, channels]
+        var fc2Output = Engine.TensorMatMul(activated1, _weights2);
+        var fc2BiasReshaped = _bias2.Reshape(1, _channels);
+        var fc2Biased = Engine.TensorBroadcastAdd(fc2Output, fc2BiasReshaped);
+        _lastFc2Biased = fc2Biased;
+
+        var excitation = ApplyTensorActivation(fc2Biased, isFirstActivation: false);
 
         // Cache excitation weights for auxiliary loss computation
         _lastExcitationWeights = excitation;
 
-        // Scale the input
-        var output = new Tensor<T>(input.Shape);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    for (int c = 0; c < _channels; c++)
-                    {
-                        output[b, h, w, c] = NumOps.Multiply(input[b, h, w, c], excitation[b, c]);
-                    }
-                }
-            }
-        }
+        // 3. Scale: input * excitation
+        // input: [B, H, W, C], excitation: [B, C]
+        // Reshape excitation to [B, 1, 1, C] for broadcasting
+        var excitationReshaped = excitation.Reshape(batchSize, 1, 1, _channels);
+        
+        var output = Engine.TensorMultiply(input, excitationReshaped);
 
         _lastOutput = output;
         return output;
     }
 
     /// <summary>
-    /// Applies the appropriate activation function to the input matrix.
+    /// Applies the appropriate activation function to the input tensor.
     /// </summary>
-    /// <param name="input">The input matrix to apply the activation to.</param>
+    /// <param name="input">The input tensor to apply the activation to.</param>
     /// <param name="isFirstActivation">Indicates whether to use the first or second activation function.</param>
-    /// <returns>The matrix after applying the activation function.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies either the first or second activation function to the input matrix, depending on the value
-    /// of the isFirstActivation parameter. It handles both scalar and vector activation functions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method applies a mathematical function to transform the values.
-    /// 
-    /// Activation functions:
-    /// - Add non-linearity to the network (making it able to learn complex patterns)
-    /// - Transform values in specific ways (like keeping only positive values or squashing values between 0 and 1)
-    /// 
-    /// This method chooses between:
-    /// - The first activation (typically ReLU) if processing the first layer
-    /// - The second activation (typically Sigmoid) if processing the second layer
-    /// 
-    /// It also handles two types of activations:
-    /// - Vector activations that process entire rows at once
-    /// - Scalar activations that process each value individually
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ApplyActivation(Matrix<T> input, bool isFirstActivation)
+    /// <returns>The tensor after applying the activation function.</returns>
+    private Tensor<T> ApplyTensorActivation(Tensor<T> input, bool isFirstActivation)
     {
         if (isFirstActivation)
         {
-            if (_firstVectorActivation != null)
-            {
-                return ApplyVectorActivation(input, _firstVectorActivation);
-            }
-            else if (_firstActivation != null)
-            {
-                return ApplyScalarActivation(input, _firstActivation);
-            }
+            if (_firstVectorActivation != null) return _firstVectorActivation.Activate(input);
+            if (_firstActivation != null) return _firstActivation.Activate(input);
         }
         else
         {
-            if (_secondVectorActivation != null)
-            {
-                return ApplyVectorActivation(input, _secondVectorActivation);
-            }
-            else if (_secondActivation != null)
-            {
-                return ApplyScalarActivation(input, _secondActivation);
-            }
+            if (_secondVectorActivation != null) return _secondVectorActivation.Activate(input);
+            if (_secondActivation != null) return _secondActivation.Activate(input);
         }
 
         // If no activation function is set, return the input as is
@@ -784,79 +719,80 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Applies a vector activation function to each row of the input matrix.
+    /// Applies the derivative of the activation function for backpropagation.
     /// </summary>
-    /// <param name="input">The input matrix.</param>
-    /// <param name="activationFunction">The vector activation function to apply.</param>
-    /// <returns>A new matrix with the activation function applied to each row.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies a vector activation function to each row of the input matrix. Vector activation functions
-    /// operate on entire vectors rather than individual elements, allowing them to capture relationships between elements.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method transforms entire rows of values at once.
-    /// 
-    /// Vector activation functions:
-    /// - Process an entire row of numbers together
-    /// - Can consider relationships between different elements
-    /// - Are more sophisticated than processing each number separately
-    /// 
-    /// For example, a vector activation might:
-    /// - Normalize the values so they sum to 1 (useful for attention mechanisms)
-    /// - Apply different transformations based on the pattern of values
-    /// - Calculate how different elements relate to each other
-    /// </para>
-    /// </remarks>
-    private static Matrix<T> ApplyVectorActivation(Matrix<T> input, IVectorActivationFunction<T> activationFunction)
+    /// <param name="input">The input tensor.</param>
+    /// <param name="isFirstActivation">Indicates whether to use the first or second activation function.</param>
+    /// <returns>The tensor with derivatives applied.</returns>
+    private Tensor<T> ApplyTensorActivationDerivative(Tensor<T> input, bool isFirstActivation)
     {
-        var result = new Matrix<T>(input.Rows, input.Columns);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            Vector<T> row = input.GetRow(i);
-            Vector<T> activatedRow = activationFunction.Activate(row);
-            result.SetRow(i, activatedRow);
-        }
+        int rows = input.Shape[0];
+        int cols = input.Shape[1];
+        var result = new Tensor<T>(input.Shape);
 
-        return result;
-    }
-
-    /// <summary>
-    /// Applies a scalar activation function to each element of the input matrix.
-    /// </summary>
-    /// <param name="input">The input matrix.</param>
-    /// <param name="activationFunction">The scalar activation function to apply.</param>
-    /// <returns>A new matrix with the activation function applied to each element.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies a scalar activation function to each element of the input matrix. Scalar activation functions
-    /// operate on individual elements independently.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method transforms each value individually.
-    /// 
-    /// Scalar activation functions:
-    /// - Process each number separately
-    /// - Apply the same transformation to each value
-    /// - Are simpler but often effective
-    /// 
-    /// Common scalar activations include:
-    /// - ReLU: Keeps positive values unchanged, sets negative values to zero
-    /// - Sigmoid: Squashes any value to be between 0 and 1
-    /// - Tanh: Squashes any value to be between -1 and 1
-    /// 
-    /// For example, applying ReLU to [2, -3, 4, -1] would result in [2, 0, 4, 0].
-    /// </para>
-    /// </remarks>
-    private static Matrix<T> ApplyScalarActivation(Matrix<T> input, IActivationFunction<T> activationFunction)
-    {
-        var result = new Matrix<T>(input.Rows, input.Columns);
-        for (int i = 0; i < input.Rows; i++)
+        if (isFirstActivation)
         {
-            for (int j = 0; j < input.Columns; j++)
+            if (_firstVectorActivation != null)
             {
-                result[i, j] = activationFunction.Activate(input[i, j]);
+                for (int i = 0; i < rows; i++)
+                {
+                    var row = new Vector<T>(cols);
+                    for (int j = 0; j < cols; j++)
+                        row[j] = input[i, j];
+                    var gradMatrix = _firstVectorActivation.Derivative(row);
+                    for (int j = 0; j < cols; j++)
+                        result[i, j] = gradMatrix[j, j]; // Diagonal element
+                }
+                return result;
+            }
+            else if (_firstActivation != null)
+            {
+                for (int i = 0; i < rows; i++)
+                {
+                    for (int j = 0; j < cols; j++)
+                    {
+                        result[i, j] = _firstActivation.Derivative(input[i, j]);
+                    }
+                }
+                return result;
+            }
+        }
+        else
+        {
+            if (_secondVectorActivation != null)
+            {
+                for (int i = 0; i < rows; i++)
+                {
+                    var row = new Vector<T>(cols);
+                    for (int j = 0; j < cols; j++)
+                        row[j] = input[i, j];
+                    var gradMatrix = _secondVectorActivation.Derivative(row);
+                    for (int j = 0; j < cols; j++)
+                        result[i, j] = gradMatrix[j, j]; // Diagonal element
+                }
+                return result;
+            }
+            else if (_secondActivation != null)
+            {
+                for (int i = 0; i < rows; i++)
+                {
+                    for (int j = 0; j < cols; j++)
+                    {
+                        result[i, j] = _secondActivation.Derivative(input[i, j]);
+                    }
+                }
+                return result;
             }
         }
 
+        // If no activation function, derivative is 1
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                result[i, j] = NumOps.One;
+            }
+        }
         return result;
     }
 
@@ -898,63 +834,118 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. It's slower than the
-    /// manual implementation but can be useful for:
-    /// - Verifying gradient correctness
-    /// - Rapid prototyping with custom modifications
-    /// - Research and experimentation
-    /// </para>
-    /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // For complex/composite layers, delegate to manual implementation
-        // Full autodiff requires implementing all sub-operations
-        return BackwardManual(outputGradient);
-    }
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
+        int batchSize = _lastInput.Shape[0];
+
+        // Build computation graph mirroring Forward
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        
+        // 1. Squeeze: Global Average Pooling
+        // Input [B, H, W, C] -> [B, C]
+        var axes = new int[] { 1, 2 };
+        var squeezed = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: false);
+
+        // 2. Excitation FC1
+        var w1Node = Autodiff.TensorOperations<T>.Variable(_weights1, "w1", requiresGradient: true);
+        var b1Node = Autodiff.TensorOperations<T>.Variable(_bias1, "b1", requiresGradient: true);
+        var fc1 = Autodiff.TensorOperations<T>.MatrixMultiply(squeezed, w1Node);
+        
+        // Broadcast bias (assumed supported by Add)
+        var fc1Biased = Autodiff.TensorOperations<T>.Add(fc1, b1Node);
+        
+        // Activation 1
+        var act1 = ApplyActivationToGraphNode(fc1Biased, true);
+
+        // Excitation FC2
+        var w2Node = Autodiff.TensorOperations<T>.Variable(_weights2, "w2", requiresGradient: true);
+        var b2Node = Autodiff.TensorOperations<T>.Variable(_bias2, "b2", requiresGradient: true);
+        var fc2 = Autodiff.TensorOperations<T>.MatrixMultiply(act1, w2Node);
+        var fc2Biased = Autodiff.TensorOperations<T>.Add(fc2, b2Node);
+        
+        // Activation 2
+        var excitation = ApplyActivationToGraphNode(fc2Biased, false);
+
+        // 3. Scale
+        // excitation [B, C] -> [B, 1, 1, C]
+        var reshapeShape = new int[] { batchSize, 1, 1, _channels };
+        var excitationReshaped = Autodiff.TensorOperations<T>.Reshape(excitation, reshapeShape);
+        
+        var outputNode = Autodiff.TensorOperations<T>.ElementwiseMultiply(inputNode, excitationReshaped);
+
+        // Backward
+        outputNode.Gradient = outputGradient;
+        
+        // Inline topological sort
         var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
         var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
+        stack.Push((outputNode, false));
 
         while (stack.Count > 0)
         {
             var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
+            if (visited.Contains(node)) continue;
 
             if (processed)
             {
                 visited.Add(node);
-                result.Add(node);
+                topoOrder.Add(node);
             }
             else
             {
                 stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
+                if (node.Parents != null)
                 {
-                    if (!visited.Contains(parent))
+                    foreach (var parent in node.Parents)
                     {
-                        stack.Push((parent, false));
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
                     }
                 }
             }
         }
 
-        return result;
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients
+        if (w1Node.Gradient != null) _weights1Gradient = w1Node.Gradient;
+        if (b1Node.Gradient != null) _bias1Gradient = b1Node.Gradient;
+        if (w2Node.Gradient != null) _weights2Gradient = w2Node.Gradient;
+        if (b2Node.Gradient != null) _bias2Gradient = b2Node.Gradient;
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
+
+    private Autodiff.ComputationNode<T> ApplyActivationToGraphNode(Autodiff.ComputationNode<T> input, bool isFirst)
+    {
+        if (isFirst)
+        {
+            if (_firstVectorActivation != null && _firstVectorActivation.SupportsJitCompilation)
+                return _firstVectorActivation.ApplyToGraph(input);
+            if (_firstActivation != null && _firstActivation.SupportsJitCompilation)
+                return _firstActivation.ApplyToGraph(input);
+        }
+        else
+        {
+            if (_secondVectorActivation != null && _secondVectorActivation.SupportsJitCompilation)
+                return _secondVectorActivation.ApplyToGraph(input);
+            if (_secondActivation != null && _secondActivation.SupportsJitCompilation)
+                return _secondActivation.ApplyToGraph(input);
+        }
+        return input;
+    }
+
     /// <summary>
     /// Manual backward pass implementation using optimized gradient calculations.
     /// </summary>
@@ -962,166 +953,34 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null)
+        if (_lastInput == null || _lastOutput == null || _lastExcitationWeights == null || _lastSqueezed == null || _lastFc1Biased == null || _lastFc1Activated == null || _lastFc2Biased == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = _lastInput.Shape[0];
-        int height = _lastInput.Shape[1];
-        int width = _lastInput.Shape[2];
+        var inputGradientDirect = Engine.TensorMultiply(outputGradient, _lastExcitationWeights.Reshape(batchSize, 1, 1, _channels));
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        _weights1Gradient = new Matrix<T>(_weights1.Rows, _weights1.Columns);
-        _bias1Gradient = new Vector<T>(_bias1.Length);
-        _weights2Gradient = new Matrix<T>(_weights2.Rows, _weights2.Columns);
-        _bias2Gradient = new Vector<T>(_bias2.Length);
+        var excitationGradientSpatial = Engine.TensorMultiply(outputGradient, _lastInput);
+        var excitationGradient = Engine.ReduceSum(excitationGradientSpatial, new[] { 1, 2 }, keepDims: false);
 
-        // Calculate gradients for scaling and input
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    for (int c = 0; c < _channels; c++)
-                    {
-                        T scaleFactor = NumOps.Divide(_lastOutput[b, h, w, c], _lastInput[b, h, w, c]);
-                        inputGradient[b, h, w, c] = NumOps.Multiply(outputGradient[b, h, w, c], scaleFactor);
-                    }
-                }
-            }
-        }
+        var secondActivationDerivative = ApplyTensorActivationDerivative(_lastFc2Biased, isFirstActivation: false);
+        var fc2OutputGradient = Engine.TensorMultiply(excitationGradient, secondActivationDerivative);
 
-        // Calculate gradients for excitation
-        var excitationGradient = new Matrix<T>(batchSize, _channels);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _channels; c++)
-            {
-                T sum = NumOps.Zero;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(outputGradient[b, h, w, c], _lastInput[b, h, w, c]));
-                    }
-                }
-                excitationGradient[b, c] = sum;
-            }
-        }
+        _weights2Gradient = Engine.TensorMatMul(Engine.TensorTranspose(_lastFc1Activated), fc2OutputGradient);
+        _bias2Gradient = Engine.ReduceSum(fc2OutputGradient, new[] { 0 }, keepDims: false);
 
-        // Backpropagate through FC layers
-        var excitation2Gradient = excitationGradient;
-        if (_secondVectorActivation != null)
-        {
-            excitation2Gradient = ApplyVectorActivationGradient(excitationGradient, _secondVectorActivation);
-        }
-        else if (_secondActivation != null)
-        {
-            excitation2Gradient = ApplyScalarActivationGradient(excitationGradient, _secondActivation);
-        }
+        var fc1OutputGradient = Engine.TensorMatMul(fc2OutputGradient, Engine.TensorTranspose(_weights2));
 
-        _weights2Gradient = excitation2Gradient.Transpose().Multiply(excitationGradient);
-        _bias2Gradient = excitationGradient.SumColumns();
+        var firstActivationDerivative = ApplyTensorActivationDerivative(_lastFc1Biased, isFirstActivation: true);
+        var fc1Gradient = Engine.TensorMultiply(fc1OutputGradient, firstActivationDerivative);
 
-        var excitation1Gradient = excitation2Gradient.Multiply(_weights2.Transpose());
-        if (_firstVectorActivation != null)
-        {
-            excitation1Gradient = ApplyVectorActivationGradient(excitation1Gradient, _firstVectorActivation);
-        }
-        else if (_firstActivation != null)
-        {
-            excitation1Gradient = ApplyScalarActivationGradient(excitation1Gradient, _firstActivation);
-        }
+        _weights1Gradient = Engine.TensorMatMul(Engine.TensorTranspose(_lastSqueezed), fc1Gradient);
+        _bias1Gradient = Engine.ReduceSum(fc1Gradient, new[] { 0 }, keepDims: false);
 
-        _weights1Gradient = excitation1Gradient.Transpose().Multiply(excitationGradient);
-        _bias1Gradient = excitation1Gradient.SumColumns();
+        var squeezedGradient = Engine.TensorMatMul(fc1Gradient, Engine.TensorTranspose(_weights1));
+        var squeezeBackprop = Engine.ReduceMeanBackward(squeezedGradient, _lastInput.Shape, new[] { 1, 2 });
 
+        var inputGradient = Engine.TensorAdd(inputGradientDirect, squeezeBackprop);
         return inputGradient;
-    }
-
-    /// <summary>
-    /// Applies the derivative of a vector activation function for backpropagation.
-    /// </summary>
-    /// <param name="input">The input matrix.</param>
-    /// <param name="activationFunction">The vector activation function whose derivative to apply.</param>
-    /// <returns>A new matrix with the activation function's derivative applied.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies the derivative of a vector activation function to the input matrix, which is necessary during
-    /// the backward pass of backpropagation. The derivative of the activation function determines how error gradients
-    /// flow backward through the activation function.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how changes should flow through vector activations.
-    /// 
-    /// During backpropagation (the learning process):
-    /// - We need to know how changes to the output affect the input of each function
-    /// - This requires the derivative (rate of change) of the activation function
-    /// - For vector activations, this is more complex as each output can depend on multiple inputs
-    /// 
-    /// This method:
-    /// 1. Calculates the derivative matrix for each row
-    /// 2. Extracts the diagonal elements (which represent direct effects)
-    /// 3. Multiplies the input gradients by these derivatives
-    /// 
-    /// This helps the network adjust its parameters correctly during learning.
-    /// </para>
-    /// </remarks>
-    private static Matrix<T> ApplyVectorActivationGradient(Matrix<T> input, IVectorActivationFunction<T> activationFunction)
-    {
-        var result = new Matrix<T>(input.Rows, input.Columns);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            Vector<T> row = input.GetRow(i);
-            Matrix<T> gradientMatrix = activationFunction.Derivative(row);
-            Vector<T> gradientDiagonal = gradientMatrix.Diagonal();
-        
-            // Element-wise multiplication of the input row with the gradient diagonal
-            Vector<T> gradientRow = row.ElementwiseMultiply(gradientDiagonal);
-        
-            result.SetRow(i, gradientRow);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Applies the derivative of a scalar activation function for backpropagation.
-    /// </summary>
-    /// <param name="input">The input matrix.</param>
-    /// <param name="activationFunction">The scalar activation function whose derivative to apply.</param>
-    /// <returns>A new matrix with the activation function's derivative applied.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method applies the derivative of a scalar activation function to the input matrix, which is necessary during
-    /// the backward pass of backpropagation. The derivative of the activation function determines how error gradients
-    /// flow backward through the activation function.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how changes should flow through scalar activations.
-    /// 
-    /// Similar to the vector version, but simpler:
-    /// - Each output only depends on a single input
-    /// - We calculate the derivative for each value separately
-    /// 
-    /// For example:
-    /// - ReLU's derivative is 1 for positive inputs and 0 for negative inputs
-    /// - This means errors flow unchanged through positive values, but stop at negative values
-    /// - This helps the network focus on updating parameters that have a positive effect
-    /// 
-    /// This is a key part of how neural networks learn from their mistakes.
-    /// </para>
-    /// </remarks>
-    private static Matrix<T> ApplyScalarActivationGradient(Matrix<T> input, IActivationFunction<T> activationFunction)
-    {
-        var result = new Matrix<T>(input.Rows, input.Columns);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int j = 0; j < input.Columns; j++)
-            {
-                result[i, j] = activationFunction.Derivative(input[i, j]);
-            }
-        }
-
-        return result;
     }
 
     /// <summary>
@@ -1153,10 +1012,15 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_weights1Gradient == null || _bias1Gradient == null || _weights2Gradient == null || _bias2Gradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _weights1 = _weights1.Subtract(_weights1Gradient.Multiply(learningRate));
-        _bias1 = _bias1.Subtract(_bias1Gradient.Multiply(learningRate));
-        _weights2 = _weights2.Subtract(_weights2Gradient.Multiply(learningRate));
-        _bias2 = _bias2.Subtract(_bias2Gradient.Multiply(learningRate));
+        var w1Update = Engine.TensorMultiplyScalar(_weights1Gradient, learningRate);
+        var b1Update = Engine.TensorMultiplyScalar(_bias1Gradient, learningRate);
+        var w2Update = Engine.TensorMultiplyScalar(_weights2Gradient, learningRate);
+        var b2Update = Engine.TensorMultiplyScalar(_bias2Gradient, learningRate);
+
+        _weights1 = Engine.TensorSubtract(_weights1, w1Update);
+        _bias1 = Engine.TensorSubtract(_bias1, b1Update);
+        _weights2 = Engine.TensorSubtract(_weights2, w2Update);
+        _bias2 = Engine.TensorSubtract(_bias2, b2Update);
     }
 
     /// <summary>
@@ -1184,44 +1048,44 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameters()
     {
         // Calculate total number of parameters
-        int totalParams = _weights1.Rows * _weights1.Columns +
-                          _bias1.Length +
-                          _weights2.Rows * _weights2.Columns +
-                          _bias2.Length;
-    
+        int totalParams = _weights1.Shape[0] * _weights1.Shape[1] +
+                          _bias1.Shape[0] +
+                          _weights2.Shape[0] * _weights2.Shape[1] +
+                          _bias2.Shape[0];
+
         var parameters = new Vector<T>(totalParams);
         int index = 0;
-    
+
         // Copy weights1
-        for (int i = 0; i < _weights1.Rows; i++)
+        for (int i = 0; i < _weights1.Shape[0]; i++)
         {
-            for (int j = 0; j < _weights1.Columns; j++)
+            for (int j = 0; j < _weights1.Shape[1]; j++)
             {
                 parameters[index++] = _weights1[i, j];
             }
         }
-    
+
         // Copy bias1
-        for (int i = 0; i < _bias1.Length; i++)
+        for (int i = 0; i < _bias1.Shape[0]; i++)
         {
             parameters[index++] = _bias1[i];
         }
-    
+
         // Copy weights2
-        for (int i = 0; i < _weights2.Rows; i++)
+        for (int i = 0; i < _weights2.Shape[0]; i++)
         {
-            for (int j = 0; j < _weights2.Columns; j++)
+            for (int j = 0; j < _weights2.Shape[1]; j++)
             {
                 parameters[index++] = _weights2[i, j];
             }
         }
-    
+
         // Copy bias2
-        for (int i = 0; i < _bias2.Length; i++)
+        for (int i = 0; i < _bias2.Shape[0]; i++)
         {
             parameters[index++] = _bias2[i];
         }
-    
+
         return parameters;
     }
 
@@ -1251,44 +1115,44 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int totalParams = _weights1.Rows * _weights1.Columns +
-                          _bias1.Length +
-                          _weights2.Rows * _weights2.Columns +
-                          _bias2.Length;
-    
+        int totalParams = _weights1.Shape[0] * _weights1.Shape[1] +
+                          _bias1.Shape[0] +
+                          _weights2.Shape[0] * _weights2.Shape[1] +
+                          _bias2.Shape[0];
+
         if (parameters.Length != totalParams)
         {
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
-    
+
         int index = 0;
-    
+
         // Set weights1
-        for (int i = 0; i < _weights1.Rows; i++)
+        for (int i = 0; i < _weights1.Shape[0]; i++)
         {
-            for (int j = 0; j < _weights1.Columns; j++)
+            for (int j = 0; j < _weights1.Shape[1]; j++)
             {
                 _weights1[i, j] = parameters[index++];
             }
         }
-    
+
         // Set bias1
-        for (int i = 0; i < _bias1.Length; i++)
+        for (int i = 0; i < _bias1.Shape[0]; i++)
         {
             _bias1[i] = parameters[index++];
         }
-    
+
         // Set weights2
-        for (int i = 0; i < _weights2.Rows; i++)
+        for (int i = 0; i < _weights2.Shape[0]; i++)
         {
-            for (int j = 0; j < _weights2.Columns; j++)
+            for (int j = 0; j < _weights2.Shape[1]; j++)
             {
                 _weights2[i, j] = parameters[index++];
             }
         }
-    
+
         // Set bias2
-        for (int i = 0; i < _bias2.Length; i++)
+        for (int i = 0; i < _bias2.Shape[0]; i++)
         {
             _bias2[i] = parameters[index++];
         }
@@ -1323,10 +1187,15 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
+        _lastSqueezed = null;
+        _lastFc1Biased = null;
+        _lastFc1Activated = null;
+        _lastFc2Biased = null;
         _weights1Gradient = null;
         _bias1Gradient = null;
         _weights2Gradient = null;
         _bias2Gradient = null;
+        _lastExcitationWeights = null;
     }
 
     /// <summary>
@@ -1373,8 +1242,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Compute L2 regularization on excitation weights
         // This penalizes large excitation values and encourages sparse channel attention
         T attentionLoss = NumOps.Zero;
-        int batchSize = _lastExcitationWeights.Rows;
-        int channels = _lastExcitationWeights.Columns;
+        int batchSize = _lastExcitationWeights.Shape[0];
+        int channels = _lastExcitationWeights.Shape[1];
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -1474,11 +1343,9 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Squeeze: Global Average Pooling across spatial dimensions
         var squeezed = TensorOperations<T>.ReduceMean(inputNode, axes: new[] { 1, 2 }, keepDims: false);
 
-        // Excitation: First fully connected layer
-        var weights1Tensor = new Tensor<T>(new[] { _weights1.Rows, _weights1.Columns }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_weights1.ToArray()));
-        var bias1Tensor = new Tensor<T>(new[] { _bias1.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_bias1.ToArray()));
-        var weights1Node = TensorOperations<T>.Constant(weights1Tensor, "se_weights1");
-        var bias1Node = TensorOperations<T>.Constant(bias1Tensor, "se_bias1");
+        // Excitation: First fully connected layer (weights and biases are already Tensor<T>)
+        var weights1Node = TensorOperations<T>.Constant(_weights1, "se_weights1");
+        var bias1Node = TensorOperations<T>.Constant(_bias1, "se_bias1");
 
         var fc1Output = TensorOperations<T>.MatrixMultiply(squeezed, weights1Node);
         fc1Output = TensorOperations<T>.Add(fc1Output, bias1Node);
@@ -1493,11 +1360,9 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             fc1Output = TensorOperations<T>.ReLU(fc1Output);
         }
 
-        // Excitation: Second fully connected layer
-        var weights2Tensor = new Tensor<T>(new[] { _weights2.Rows, _weights2.Columns }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_weights2.ToArray()));
-        var bias2Tensor = new Tensor<T>(new[] { _bias2.Length }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(_bias2.ToArray()));
-        var weights2Node = TensorOperations<T>.Constant(weights2Tensor, "se_weights2");
-        var bias2Node = TensorOperations<T>.Constant(bias2Tensor, "se_bias2");
+        // Excitation: Second fully connected layer (weights and biases are already Tensor<T>)
+        var weights2Node = TensorOperations<T>.Constant(_weights2, "se_weights2");
+        var bias2Node = TensorOperations<T>.Constant(_bias2, "se_bias2");
 
         var fc2Output = TensorOperations<T>.MatrixMultiply(fc1Output, weights2Node);
         fc2Output = TensorOperations<T>.Add(fc2Output, bias2Node);

@@ -1000,6 +1000,66 @@ public static class TensorOperations<T>
             tape.RecordOperation(node);
         return node;
     }
+
+    /// <summary>
+    /// Performs batched matrix multiplication of two 3D computation nodes.
+    /// </summary>
+    /// <param name="a">The first 3D tensor with shape [Batch, M, K].</param>
+    /// <param name="b">The second 3D tensor with shape [Batch, K, N].</param>
+    /// <returns>A computation node representing the batched matrix multiplication with shape [Batch, M, N].</returns>
+    /// <remarks>
+    /// <para>
+    /// For 3D tensors, performs element-wise matrix multiplication across the batch dimension:
+    /// result[i] = a[i] @ b[i] for each batch index i.
+    /// </para>
+    /// <para><b>Gradient computation:</b>
+    /// - ∂(A·B)/∂A = gradOut·B^T (batch-wise)
+    /// - ∂(A·B)/∂B = A^T·gradOut (batch-wise)
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> BatchMatrixMultiply(ComputationNode<T> a, ComputationNode<T> b)
+    {
+        var engine = AiDotNetEngine.Current;
+        var result = engine.BatchMatMul(a.Value, b.Value);
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // For batched matmul C[i] = A[i] @ B[i]:
+            // ∂L/∂A[i] = ∂L/∂C[i] @ B[i]^T
+            // ∂L/∂B[i] = A[i]^T @ ∂L/∂C[i]
+            if (a.RequiresGradient)
+            {
+                // Transpose B along last two dims: [Batch, K, N] -> [Batch, N, K]
+                var bTransposed = b.Value.Transpose([0, 2, 1]);
+                var gradA = engine.BatchMatMul(gradient, bTransposed);
+                var existingGrad = a.Gradient;
+                a.Gradient = existingGrad == null ? gradA : engine.TensorAdd(existingGrad, gradA);
+            }
+            if (b.RequiresGradient)
+            {
+                // Transpose A along last two dims: [Batch, M, K] -> [Batch, K, M]
+                var aTransposed = a.Value.Transpose([0, 2, 1]);
+                var gradB = engine.BatchMatMul(aTransposed, gradient);
+                var existingGrad = b.Gradient;
+                b.Gradient = existingGrad == null ? gradB : engine.TensorAdd(existingGrad, gradB);
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient || b.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a, b },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.MatMul;
+        node.OperationParams = null;
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
     /// <summary>
     /// Transposes a 2D computation node (matrix).
     /// </summary>
@@ -1271,6 +1331,145 @@ public static class TensorOperations<T>
             tape.RecordOperation(node);
         return node;
     }
+
+    /// <summary>
+    /// Permutes the dimensions of a computation node (general transpose).
+    /// </summary>
+    /// <param name="a">The computation node to permute.</param>
+    /// <param name="axes">The new order of dimensions.</param>
+    /// <returns>A computation node with permuted dimensions.</returns>
+    /// <remarks>
+    /// <para>
+    /// Rearranges dimensions according to the axes array.
+    /// Equivalent to Transpose but for N dimensions.
+    /// </para>
+    /// <para><b>Gradient computation:</b>
+    /// - ∂(Permute(A))/∂A = Permute(gradOut, inverseAxes)
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Permute(ComputationNode<T> a, params int[] axes)
+    {
+        var result = a.Value.Transpose(axes);
+        
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // Calculate inverse permutation
+                var inverseAxes = new int[axes.Length];
+                for (int i = 0; i < axes.Length; i++)
+                {
+                    inverseAxes[axes[i]] = i;
+                }
+
+                var gradA = gradient.Transpose(inverseAxes);
+                var engine = AiDotNetEngine.Current;
+                var existingGrad = a.Gradient;
+                a.Gradient = existingGrad == null ? gradA : engine.TensorAdd(existingGrad, gradA);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Permute;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "Axes", axes }
+        };
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Broadcasts a 1D tensor to a 2D tensor by tiling along the batch dimension.
+    /// </summary>
+    /// <param name="a">The input 1D tensor node with shape [N].</param>
+    /// <param name="targetShape">The target 2D shape [batchSize, N].</param>
+    /// <returns>A new computation node with the broadcasted tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation broadcasts a 1D tensor (e.g., biases with shape [outputSize]) to a 2D tensor
+    /// (e.g., [batchSize, outputSize]) by replicating values along the batch dimension.
+    /// The backward pass correctly sums gradients along the broadcasted dimension.
+    /// </para>
+    /// <para><b>For Beginners:</b> Broadcasting is like copying a row multiple times to create a matrix.
+    ///
+    /// For example, if you have biases [b1, b2, b3] and need to add them to a batch of outputs:
+    /// - Input: [b1, b2, b3] (shape [3])
+    /// - Target shape: [batchSize=2, 3]
+    /// - Output: [[b1, b2, b3], [b1, b2, b3]] (each row is a copy)
+    ///
+    /// During backpropagation, gradients from all rows are summed back to the original biases,
+    /// because each bias contributed to all batch elements.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Broadcast(ComputationNode<T> a, int[] targetShape)
+    {
+        var engine = AiDotNetEngine.Current;
+        var originalShape = a.Value.Shape;
+
+        // Validate: we support broadcasting 1D [N] to 2D [M, N]
+        if (originalShape.Length != 1 || targetShape.Length != 2 || originalShape[0] != targetShape[1])
+        {
+            throw new ArgumentException(
+                $"Broadcast currently supports 1D [N] to 2D [M, N]. " +
+                $"Got input shape [{string.Join(", ", originalShape)}] and target shape [{string.Join(", ", targetShape)}].");
+        }
+
+        int batchSize = targetShape[0];
+        int outputSize = originalShape[0];
+
+        // Forward pass: tile the 1D tensor along the batch dimension
+        var result = new Tensor<T>(targetShape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < outputSize; i++)
+            {
+                result[b, i] = a.Value[i];
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // Sum gradients along the batch dimension (axis 0) to get back to original shape
+                // gradient has shape [batchSize, outputSize], we need shape [outputSize]
+                var gradA = gradient.Sum(new int[] { 0 });
+                var existingGrad = a.Gradient;
+                a.Gradient = existingGrad == null ? gradA : engine.TensorAdd(existingGrad, gradA);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.Broadcast;
+        node.OperationParams = new Dictionary<string, object>
+        {
+            { "TargetShape", targetShape }
+        };
+
+        var broadcastTape = GradientTape<T>.Current;
+        if (broadcastTape != null && broadcastTape.IsRecording)
+            broadcastTape.RecordOperation(node);
+        return node;
+    }
+
     /// <summary>
     /// Computes the softmax function for a computation node along a specified axis.
     /// </summary>
@@ -7907,103 +8106,188 @@ public static class TensorOperations<T>
     /// </summary>
     /// <param name="emissions">Emission scores [seq_len, num_tags].</param>
     /// <param name="transitions">Transition matrix [num_tags, num_tags].</param>
+    /// <param name="startScores">Optional start scores [num_tags].</param>
+    /// <param name="endScores">Optional end scores [num_tags].</param>
     /// <returns>Log partition function (normalizer).</returns>
     /// <remarks>
     /// <para>
-    /// Computes the log partition function using the forward algorithm.
-    /// This is differentiable and can be used for CRF training.
+    /// Computes the log partition function using the forward-backward algorithm.
+    /// This is differentiable and returns proper gradients for emissions, transitions,
+    /// start scores, and end scores.
     /// </para>
     /// </remarks>
-    public static ComputationNode<T> CRFForward(ComputationNode<T> emissions, ComputationNode<T> transitions)
+    public static ComputationNode<T> CRFForward(
+        ComputationNode<T> emissions,
+        ComputationNode<T> transitions,
+        ComputationNode<T>? startScores = null,
+        ComputationNode<T>? endScores = null)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
         int seqLen = emissions.Value.Shape[0];
         int numTags = emissions.Value.Shape[1];
 
-        // Forward algorithm: alpha[t,j] = log(sum_i(exp(alpha[t-1,i] + trans[i,j]))) + emit[t,j]
-        var alpha = new Tensor<T>([numTags]);
+        // Copy values to double for stable log-sum-exp computations
+        double[,] emit = new double[seqLen, numTags];
+        for (int t = 0; t < seqLen; t++)
+            for (int j = 0; j < numTags; j++)
+                emit[t, j] = Convert.ToDouble(emissions.Value[t, j]);
 
-        // Initialize with first emissions
+        double[,] trans = new double[numTags, numTags];
+        for (int i = 0; i < numTags; i++)
+            for (int j = 0; j < numTags; j++)
+                trans[i, j] = Convert.ToDouble(transitions.Value[i, j]);
+
+        double[] start = new double[numTags];
+        double[] end = new double[numTags];
+        if (startScores != null)
+        {
+            for (int j = 0; j < numTags; j++) start[j] = Convert.ToDouble(startScores.Value[j]);
+        }
+        if (endScores != null)
+        {
+            for (int j = 0; j < numTags; j++) end[j] = Convert.ToDouble(endScores.Value[j]);
+        }
+
+        // Forward (alpha)
+        double[,] alpha = new double[seqLen, numTags];
         for (int j = 0; j < numTags; j++)
-            alpha[j] = emissions.Value[0, j];
+            alpha[0, j] = start[j] + emit[0, j];
 
-        // Forward pass
         for (int t = 1; t < seqLen; t++)
         {
-            var newAlpha = new Tensor<T>([numTags]);
             for (int j = 0; j < numTags; j++)
             {
-                // Log-sum-exp over previous states
-                double maxVal = double.NegativeInfinity;
+                double maxPrev = double.NegativeInfinity;
                 for (int i = 0; i < numTags; i++)
-                {
-                    var val = Convert.ToDouble(alpha[i]) + Convert.ToDouble(transitions.Value[i, j]);
-                    if (val > maxVal) maxVal = val;
-                }
+                    maxPrev = Math.Max(maxPrev, alpha[t - 1, i] + trans[i, j]);
 
-                double sumExp = 0;
+                double sumExp = 0.0;
                 for (int i = 0; i < numTags; i++)
-                {
-                    var val = Convert.ToDouble(alpha[i]) + Convert.ToDouble(transitions.Value[i, j]);
-                    sumExp += Math.Exp(val - maxVal);
-                }
+                    sumExp += Math.Exp(alpha[t - 1, i] + trans[i, j] - maxPrev);
 
-                newAlpha[j] = numOps.FromDouble(maxVal + Math.Log(sumExp) + Convert.ToDouble(emissions.Value[t, j]));
+                alpha[t, j] = emit[t, j] + maxPrev + Math.Log(sumExp);
             }
-            alpha = newAlpha;
         }
 
-        // Final log-sum-exp
-        double finalMax = double.NegativeInfinity;
+        // Termination with end scores
+        double maxFinal = double.NegativeInfinity;
         for (int j = 0; j < numTags; j++)
-        {
-            var val = Convert.ToDouble(alpha[j]);
-            if (val > finalMax) finalMax = val;
-        }
+            maxFinal = Math.Max(maxFinal, alpha[seqLen - 1, j] + end[j]);
 
-        double finalSum = 0;
+        double finalSum = 0.0;
         for (int j = 0; j < numTags; j++)
-            finalSum += Math.Exp(Convert.ToDouble(alpha[j]) - finalMax);
+            finalSum += Math.Exp(alpha[seqLen - 1, j] + end[j] - maxFinal);
 
-        var logPartition = new Tensor<T>([1]) { [0] = numOps.FromDouble(finalMax + Math.Log(finalSum)) };
+        double logZ = maxFinal + Math.Log(finalSum);
+        var logPartition = new Tensor<T>([1]) { [0] = numOps.FromDouble(logZ) };
 
         void BackwardFunction(Tensor<T> gradient)
         {
-            // Gradient computation via automatic differentiation of the forward algorithm
-            // For simplicity, we compute it numerically here; a full implementation would
-            // store forward/backward passes
-            if (emissions.RequiresGradient || transitions.RequiresGradient)
+            if (! (emissions.RequiresGradient || transitions.RequiresGradient || (startScores?.RequiresGradient ?? false) || (endScores?.RequiresGradient ?? false)))
+                return;
+
+            double gradScale = Convert.ToDouble(gradient[0]);
+
+            // Backward (beta)
+            double[,] beta = new double[seqLen, numTags];
+            for (int j = 0; j < numTags; j++)
+                beta[seqLen - 1, j] = end[j];
+
+            for (int t = seqLen - 2; t >= 0; t--)
             {
-                // Backward pass to compute gradients (simplified)
-                var emitGrad = new Tensor<T>(emissions.Value.Shape);
-                var transGrad = new Tensor<T>(transitions.Value.Shape);
-
-                // The gradient of log-partition w.r.t emissions and transitions
-                // requires the backward algorithm; for now pass through scaled gradients
-                var gradScale = Convert.ToDouble(gradient[0]);
-                for (int i = 0; i < emitGrad.Length; i++)
-                    emitGrad[i] = numOps.FromDouble(gradScale / emitGrad.Length);
-                for (int i = 0; i < transGrad.Length; i++)
-                    transGrad[i] = numOps.FromDouble(gradScale / transGrad.Length);
-
-                if (emissions.RequiresGradient)
+                for (int i = 0; i < numTags; i++)
                 {
-                    var existingEmissionsGrad = emissions.Gradient;
-                    emissions.Gradient = existingEmissionsGrad == null ? emitGrad : engine.TensorAdd(existingEmissionsGrad, emitGrad);
+                    double maxNext = double.NegativeInfinity;
+                    for (int j = 0; j < numTags; j++)
+                        maxNext = Math.Max(maxNext, trans[i, j] + emit[t + 1, j] + beta[t + 1, j]);
+
+                    double sumExp = 0.0;
+                    for (int j = 0; j < numTags; j++)
+                        sumExp += Math.Exp(trans[i, j] + emit[t + 1, j] + beta[t + 1, j] - maxNext);
+
+                    beta[t, i] = maxNext + Math.Log(sumExp);
                 }
-                if (transitions.RequiresGradient)
+            }
+
+            var emitGrad = new Tensor<T>(emissions.Value.Shape);
+            var transGrad = new Tensor<T>(transitions.Value.Shape);
+            Tensor<T>? startGrad = startScores != null ? new Tensor<T>(startScores.Value.Shape) : null;
+            Tensor<T>? endGrad = endScores != null ? new Tensor<T>(endScores.Value.Shape) : null;
+
+            // Emission grads (posterior)
+            for (int t = 0; t < seqLen; t++)
+            {
+                for (int j = 0; j < numTags; j++)
                 {
-                    var existingTransitionsGrad = transitions.Gradient;
-                    transitions.Gradient = existingTransitionsGrad == null ? transGrad : engine.TensorAdd(existingTransitionsGrad, transGrad);
+                    double logProb = alpha[t, j] + beta[t, j] - logZ;
+                    double prob = Math.Exp(logProb);
+                    emitGrad[t, j] = numOps.FromDouble(prob * gradScale);
                 }
+            }
+
+            // Transition grads (expected transitions)
+            for (int t = 1; t < seqLen; t++)
+            {
+                for (int i = 0; i < numTags; i++)
+                {
+                    for (int j = 0; j < numTags; j++)
+                    {
+                        double logProb = alpha[t - 1, i] + trans[i, j] + emit[t, j] + beta[t, j] - logZ;
+                        double prob = Math.Exp(logProb);
+                        transGrad[i, j] = numOps.Add(transGrad[i, j], numOps.FromDouble(prob * gradScale));
+                    }
+                }
+            }
+
+            // Start grads
+            if (startGrad != null && startScores != null)
+            {
+                for (int j = 0; j < numTags; j++)
+                {
+                    double logProb = start[j] + emit[0, j] + beta[0, j] - logZ;
+                    double prob = Math.Exp(logProb);
+                    startGrad[j] = numOps.FromDouble(prob * gradScale);
+                }
+            }
+
+            // End grads
+            if (endGrad != null && endScores != null)
+            {
+                for (int j = 0; j < numTags; j++)
+                {
+                    double logProb = alpha[seqLen - 1, j] + end[j] - logZ;
+                    double prob = Math.Exp(logProb);
+                    endGrad[j] = numOps.FromDouble(prob * gradScale);
+                }
+            }
+
+            if (emissions.RequiresGradient)
+            {
+                emissions.Gradient = emissions.Gradient == null ? emitGrad : engine.TensorAdd(emissions.Gradient, emitGrad);
+            }
+            if (transitions.RequiresGradient)
+            {
+                transitions.Gradient = transitions.Gradient == null ? transGrad : engine.TensorAdd(transitions.Gradient, transGrad);
+            }
+            if (startScores != null && startScores.RequiresGradient && startGrad != null)
+            {
+                startScores.Gradient = startScores.Gradient == null ? startGrad : engine.TensorAdd(startScores.Gradient, startGrad);
+            }
+            if (endScores != null && endScores.RequiresGradient && endGrad != null)
+            {
+                endScores.Gradient = endScores.Gradient == null ? endGrad : engine.TensorAdd(endScores.Gradient, endGrad);
             }
         }
 
+        var parents = new List<ComputationNode<T>> { emissions, transitions };
+        if (startScores != null) parents.Add(startScores);
+        if (endScores != null) parents.Add(endScores);
+
         var node = new ComputationNode<T>(
             value: logPartition,
-            requiresGradient: emissions.RequiresGradient || transitions.RequiresGradient,
-            parents: new List<ComputationNode<T>> { emissions, transitions },
+            requiresGradient: emissions.RequiresGradient || transitions.RequiresGradient || (startScores?.RequiresGradient ?? false) || (endScores?.RequiresGradient ?? false),
+            parents: parents,
             backwardFunction: BackwardFunction,
             name: null);
 

@@ -415,11 +415,11 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             
         if (_vectorActivation != null)
         {
-            return _vectorActivation.Activate(Tensor<T>.FromMatrix(hiddenActivations));
+            return _vectorActivation.Activate(Tensor<T>.FromRowMatrix(hiddenActivations));
         }
         else if (_scalarActivation != null)
         {
-            return Tensor<T>.FromMatrix(hiddenActivations.Transform((x, _, _) => _scalarActivation.Activate(x)));
+            return Tensor<T>.FromRowMatrix(hiddenActivations.Transform((x, _, _) => _scalarActivation.Activate(x)));
         }
         else
         {
@@ -632,11 +632,11 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             
         if (_vectorActivation != null)
         {
-            return _vectorActivation.Activate(Tensor<T>.FromMatrix(visibleActivations));
+            return _vectorActivation.Activate(Tensor<T>.FromRowMatrix(visibleActivations));
         }
         else if (_scalarActivation != null)
         {
-            return Tensor<T>.FromMatrix(visibleActivations.Transform((x, _, _) => _scalarActivation.Activate(x)));
+            return Tensor<T>.FromRowMatrix(visibleActivations.Transform((x, _, _) => _scalarActivation.Activate(x)));
         }
         else
         {

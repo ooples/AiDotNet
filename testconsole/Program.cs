@@ -17,9 +17,10 @@ class Program
         Console.WriteLine("5. Enhanced Neural Network Example (Customer Churn Prediction)");
         Console.WriteLine("6. Enhanced Time Series Example (Energy Demand Forecasting)");
         Console.WriteLine("7. Phase A GPU Acceleration Integration Tests");
+        Console.WriteLine("8. DeconvolutionalLayer Test");
         Console.WriteLine("0. Exit");
         Console.WriteLine();
-        Console.Write("Select an example to run (0-7): ");
+        Console.Write("Select an example to run (0-8): ");
 
         if (int.TryParse(Console.ReadLine(), out int choice))
         {
@@ -59,8 +60,11 @@ class Program
                     Console.WriteLine();
                     PrototypeIntegrationTests.RunAll();
                     break;
+                case 8:
+                    DeconvTest.Run();
+                    break;
                 default:
-                    Console.WriteLine("Invalid choice. Please select a number between 0 and 7.");
+                    Console.WriteLine("Invalid choice. Please select a number between 0 and 8.");
                     break;
             }
         }
