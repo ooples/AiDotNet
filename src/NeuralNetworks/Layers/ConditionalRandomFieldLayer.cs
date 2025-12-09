@@ -513,7 +513,15 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (emissionsNode.Gradient == null)
             throw new InvalidOperationException("Gradient computation failed in CRF autodiff.");
 
-        return emissionsNode.Gradient;
+        var inputGradient = emissionsNode.Gradient;
+
+        // Apply activation function gradient if applicable (matching BackwardManual behavior)
+        if (UsingVectorActivation || (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>)))
+        {
+            inputGradient = ApplyActivationDerivative(_lastInput, inputGradient);
+        }
+
+        return inputGradient;
     }
 
     /// <summary>
