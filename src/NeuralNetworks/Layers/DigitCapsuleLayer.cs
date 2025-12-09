@@ -533,7 +533,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
 
         // 2. Compute Predictions: input @ weights
         // Input: [B, I, D_in] -> Reshape to [B, I, 1, D_in] to broadcast over C
-        var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, batchSize, inputCapsules, 1, inputDim);
+        var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, batchSize, inputCapsules, 1, 1, inputDim);
         
         // Weights: [I, C, D_in, D_out] -> Reshape to [1, I, C, D_in, D_out] to broadcast over B
         var weightsReshaped = Autodiff.TensorOperations<T>.Reshape(weightsNode, 1, inputCapsules, numClasses, inputDim, outputDim);
