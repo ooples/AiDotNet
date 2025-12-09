@@ -6488,7 +6488,8 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
-    public Tensor<T> TensorEmbeddingLookup<T>(Tensor<T> embeddings, Tensor<T> indices)
+    public Tensor<TValue> TensorEmbeddingLookup<TValue, TIndex>(Tensor<TValue> embeddings, Tensor<TIndex> indices)
+        where TIndex : unmanaged
     {
         if (embeddings == null) throw new ArgumentNullException(nameof(embeddings));
         if (indices == null) throw new ArgumentNullException(nameof(indices));
@@ -6507,7 +6508,7 @@ public class CpuEngine : IEngine
         }
         outputShape[indices.Rank] = embeddingDim;
 
-        var result = new Tensor<T>(outputShape);
+        var result = new Tensor<TValue>(outputShape);
         var embData = embeddings.ToArray();
         var idxData = indices.ToArray();
 
@@ -6535,7 +6536,8 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
-    public Tensor<T> TensorEmbeddingLookupBackward<T>(Tensor<T> gradOutput, Tensor<T> indices, int vocabSize, int embeddingDim)
+    public Tensor<TValue> TensorEmbeddingLookupBackward<TValue, TIndex>(Tensor<TValue> gradOutput, Tensor<TIndex> indices, int vocabSize, int embeddingDim)
+        where TIndex : unmanaged
     {
         if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
         if (indices == null) throw new ArgumentNullException(nameof(indices));
@@ -6544,8 +6546,8 @@ public class CpuEngine : IEngine
         if (embeddingDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(embeddingDim), "Embedding dimension must be positive.");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var gradEmbeddings = new Tensor<T>(new[] { vocabSize, embeddingDim });
+        var numOps = MathHelper.GetNumericOperations<TValue>();
+        var gradEmbeddings = new Tensor<TValue>(new[] { vocabSize, embeddingDim });
 
         var gradData = gradOutput.ToArray();
         var idxData = indices.ToArray();
@@ -6567,8 +6569,8 @@ public class CpuEngine : IEngine
             // Accumulate gradient for this embedding row
             for (int d = 0; d < embeddingDim; d++)
             {
-                T current = gradEmbeddings.GetFlat(dstOffset + d);
-                T grad = gradData[srcOffset + d];
+                TValue current = gradEmbeddings.GetFlat(dstOffset + d);
+                TValue grad = gradData[srcOffset + d];
                 gradEmbeddings.SetFlat(dstOffset + d, numOps.Add(current, grad));
             }
         }

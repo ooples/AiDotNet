@@ -20121,7 +20121,8 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
-    public Tensor<T> TensorEmbeddingLookup<T>(Tensor<T> embeddings, Tensor<T> indices)
+    public Tensor<TValue> TensorEmbeddingLookup<TValue, TIndex>(Tensor<TValue> embeddings, Tensor<TIndex> indices)
+        where TIndex : unmanaged
     {
         if (embeddings == null) throw new ArgumentNullException(nameof(embeddings));
         if (indices == null) throw new ArgumentNullException(nameof(indices));
@@ -20133,23 +20134,24 @@ public class GpuEngine : IEngine, IDisposable
         // Use adaptive threshold
         if (totalElements < _thresholds.VectorAdd)
         {
-            return _cpuFallback.TensorEmbeddingLookup(embeddings, indices);
+            return _cpuFallback.TensorEmbeddingLookup<TValue, TIndex>(embeddings, indices);
         }
 
         if (SupportsGpu && _gpuHealthy)
         {
-            if (typeof(T) == typeof(float))
-                return (Tensor<T>)(object)TensorEmbeddingLookupGpu(
-                    (Tensor<float>)(object)embeddings, (Tensor<float>)(object)indices);
-            if (typeof(T) == typeof(double))
-                return (Tensor<T>)(object)TensorEmbeddingLookupGpuDouble(
-                    (Tensor<double>)(object)embeddings, (Tensor<double>)(object)indices);
+            if (typeof(TValue) == typeof(float))
+                return (Tensor<TValue>)(object)TensorEmbeddingLookupGpu(
+                    (Tensor<float>)(object)embeddings, indices);
+            if (typeof(TValue) == typeof(double))
+                return (Tensor<TValue>)(object)TensorEmbeddingLookupGpuDouble(
+                    (Tensor<double>)(object)embeddings, indices);
         }
 
-        return _cpuFallback.TensorEmbeddingLookup(embeddings, indices);
+        return _cpuFallback.TensorEmbeddingLookup<TValue, TIndex>(embeddings, indices);
     }
 
-    private Tensor<float> TensorEmbeddingLookupGpu(Tensor<float> embeddings, Tensor<float> indices)
+    private Tensor<float> TensorEmbeddingLookupGpu<TIndex>(Tensor<float> embeddings, Tensor<TIndex> indices)
+        where TIndex : unmanaged
     {
         try
         {
@@ -20158,11 +20160,11 @@ public class GpuEngine : IEngine, IDisposable
             int numIndices = indices.Length;
             int totalOutputElements = numIndices * embeddingDim;
 
-            // Convert float indices to int
+            // Convert indices to int
             var intIndices = new int[numIndices];
-            var indicesData = indices.AsSpan();
+            var indicesData = indices.ToArray();
             for (int i = 0; i < numIndices; i++)
-                intIndices[i] = (int)indicesData[i];
+                intIndices[i] = Convert.ToInt32(indicesData[i]);
 
             var gpuEmbeddings = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(embeddings.Length);
             var gpuIndices = (_memoryPoolInt ?? throw new InvalidOperationException("GPU not initialized")).Rent(numIndices);
@@ -20201,11 +20203,12 @@ public class GpuEngine : IEngine, IDisposable
         }
         catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
         {
-            return _cpuFallback.TensorEmbeddingLookup(embeddings, indices);
+            return _cpuFallback.TensorEmbeddingLookup<float, TIndex>(embeddings, indices);
         }
     }
 
-    private Tensor<double> TensorEmbeddingLookupGpuDouble(Tensor<double> embeddings, Tensor<double> indices)
+    private Tensor<double> TensorEmbeddingLookupGpuDouble<TIndex>(Tensor<double> embeddings, Tensor<TIndex> indices)
+        where TIndex : unmanaged
     {
         try
         {
@@ -20214,11 +20217,11 @@ public class GpuEngine : IEngine, IDisposable
             int numIndices = indices.Length;
             int totalOutputElements = numIndices * embeddingDim;
 
-            // Convert double indices to int
+            // Convert indices to int
             var intIndices = new int[numIndices];
-            var indicesData = indices.AsSpan();
+            var indicesData = indices.ToArray();
             for (int i = 0; i < numIndices; i++)
-                intIndices[i] = (int)indicesData[i];
+                intIndices[i] = Convert.ToInt32(indicesData[i]);
 
             var gpuEmbeddings = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(embeddings.Length);
             var gpuIndices = (_memoryPoolInt ?? throw new InvalidOperationException("GPU not initialized")).Rent(numIndices);
@@ -20257,12 +20260,13 @@ public class GpuEngine : IEngine, IDisposable
         }
         catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
         {
-            return _cpuFallback.TensorEmbeddingLookup(embeddings, indices);
+            return _cpuFallback.TensorEmbeddingLookup<double, TIndex>(embeddings, indices);
         }
     }
 
     /// <inheritdoc/>
-    public Tensor<T> TensorEmbeddingLookupBackward<T>(Tensor<T> gradOutput, Tensor<T> indices, int vocabSize, int embeddingDim)
+    public Tensor<TValue> TensorEmbeddingLookupBackward<TValue, TIndex>(Tensor<TValue> gradOutput, Tensor<TIndex> indices, int vocabSize, int embeddingDim)
+        where TIndex : unmanaged
     {
         if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
         if (indices == null) throw new ArgumentNullException(nameof(indices));
@@ -20273,23 +20277,24 @@ public class GpuEngine : IEngine, IDisposable
         // Use adaptive threshold
         if (totalGradElements < _thresholds.VectorAdd)
         {
-            return _cpuFallback.TensorEmbeddingLookupBackward(gradOutput, indices, vocabSize, embeddingDim);
+            return _cpuFallback.TensorEmbeddingLookupBackward<TValue, TIndex>(gradOutput, indices, vocabSize, embeddingDim);
         }
 
         if (SupportsGpu && _gpuHealthy)
         {
-            if (typeof(T) == typeof(float))
-                return (Tensor<T>)(object)TensorEmbeddingLookupBackwardGpu(
-                    (Tensor<float>)(object)gradOutput, (Tensor<float>)(object)indices, vocabSize, embeddingDim);
-            if (typeof(T) == typeof(double))
-                return (Tensor<T>)(object)TensorEmbeddingLookupBackwardGpuDouble(
-                    (Tensor<double>)(object)gradOutput, (Tensor<double>)(object)indices, vocabSize, embeddingDim);
+            if (typeof(TValue) == typeof(float))
+                return (Tensor<TValue>)(object)TensorEmbeddingLookupBackwardGpu(
+                    (Tensor<float>)(object)gradOutput, indices, vocabSize, embeddingDim);
+            if (typeof(TValue) == typeof(double))
+                return (Tensor<TValue>)(object)TensorEmbeddingLookupBackwardGpuDouble(
+                    (Tensor<double>)(object)gradOutput, indices, vocabSize, embeddingDim);
         }
 
-        return _cpuFallback.TensorEmbeddingLookupBackward(gradOutput, indices, vocabSize, embeddingDim);
+        return _cpuFallback.TensorEmbeddingLookupBackward<TValue, TIndex>(gradOutput, indices, vocabSize, embeddingDim);
     }
 
-    private Tensor<float> TensorEmbeddingLookupBackwardGpu(Tensor<float> gradOutput, Tensor<float> indices, int vocabSize, int embeddingDim)
+    private Tensor<float> TensorEmbeddingLookupBackwardGpu<TIndex>(Tensor<float> gradOutput, Tensor<TIndex> indices, int vocabSize, int embeddingDim)
+        where TIndex : unmanaged
     {
         try
         {
@@ -20297,11 +20302,11 @@ public class GpuEngine : IEngine, IDisposable
             int totalGradElements = numIndices * embeddingDim;
             int totalEmbeddingElements = vocabSize * embeddingDim;
 
-            // Convert float indices to int
+            // Convert indices to int
             var intIndices = new int[numIndices];
-            var indicesData = indices.AsSpan();
+            var indicesData = indices.ToArray();
             for (int i = 0; i < numIndices; i++)
-                intIndices[i] = (int)indicesData[i];
+                intIndices[i] = Convert.ToInt32(indicesData[i]);
 
             var gpuGradOutput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalGradElements);
             var gpuIndices = (_memoryPoolInt ?? throw new InvalidOperationException("GPU not initialized")).Rent(numIndices);
@@ -20337,11 +20342,12 @@ public class GpuEngine : IEngine, IDisposable
         }
         catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
         {
-            return _cpuFallback.TensorEmbeddingLookupBackward(gradOutput, indices, vocabSize, embeddingDim);
+            return _cpuFallback.TensorEmbeddingLookupBackward<float, TIndex>(gradOutput, indices, vocabSize, embeddingDim);
         }
     }
 
-    private Tensor<double> TensorEmbeddingLookupBackwardGpuDouble(Tensor<double> gradOutput, Tensor<double> indices, int vocabSize, int embeddingDim)
+    private Tensor<double> TensorEmbeddingLookupBackwardGpuDouble<TIndex>(Tensor<double> gradOutput, Tensor<TIndex> indices, int vocabSize, int embeddingDim)
+        where TIndex : unmanaged
     {
         try
         {
@@ -20349,11 +20355,11 @@ public class GpuEngine : IEngine, IDisposable
             int totalGradElements = numIndices * embeddingDim;
             int totalEmbeddingElements = vocabSize * embeddingDim;
 
-            // Convert double indices to int
+            // Convert indices to int
             var intIndices = new int[numIndices];
-            var indicesData = indices.AsSpan();
+            var indicesData = indices.ToArray();
             for (int i = 0; i < numIndices; i++)
-                intIndices[i] = (int)indicesData[i];
+                intIndices[i] = Convert.ToInt32(indicesData[i]);
 
             var gpuGradOutput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(totalGradElements);
             var gpuIndices = (_memoryPoolInt ?? throw new InvalidOperationException("GPU not initialized")).Rent(numIndices);
@@ -20389,7 +20395,7 @@ public class GpuEngine : IEngine, IDisposable
         }
         catch (Exception ex) when (ex is InvalidOperationException or OutOfMemoryException)
         {
-            return _cpuFallback.TensorEmbeddingLookupBackward(gradOutput, indices, vocabSize, embeddingDim);
+            return _cpuFallback.TensorEmbeddingLookupBackward<double, TIndex>(gradOutput, indices, vocabSize, embeddingDim);
         }
     }
 

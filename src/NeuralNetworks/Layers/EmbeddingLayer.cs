@@ -282,8 +282,8 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int batchSize = input.Shape[1];
         int embeddingDim = _embeddingTensor.Shape[1];
 
-        // Create flattened indices tensor for embedding lookup
-        var flatIndices = new Tensor<T>([sequenceLength * batchSize]);
+        // Create flattened indices tensor for embedding lookup (using int for type-safe indexing)
+        var flatIndices = new Tensor<int>([sequenceLength * batchSize]);
         int vocabularySize = _embeddingTensor.Shape[0];
         int flatIdx = 0;
 
@@ -303,12 +303,12 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                         $"Valid index range is [0, {vocabularySize - 1}] (vocabulary size: {vocabularySize}).");
                 }
 
-                flatIndices[flatIdx++] = indexValue;
+                flatIndices[flatIdx++] = index;
             }
         }
 
-        // Use Engine embedding lookup operation
-        var flatOutput = Engine.TensorEmbeddingLookup(_embeddingTensor, flatIndices);
+        // Use Engine embedding lookup operation with separate value/index types
+        var flatOutput = Engine.TensorEmbeddingLookup<T, int>(_embeddingTensor, flatIndices);
 
         // Reshape output: [seq * batch, embedding_dim] -> [seq, batch, embedding_dim]
         return flatOutput.Reshape([sequenceLength, batchSize, embeddingDim]);
@@ -367,22 +367,22 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int vocabSize = _embeddingTensor.Shape[0];
         int embeddingDim = _embeddingTensor.Shape[1];
 
-        // Flatten input indices: [seq, batch, 1] -> [seq * batch]
-        var flatIndices = new Tensor<T>([sequenceLength * batchSize]);
+        // Flatten input indices: [seq, batch, 1] -> [seq * batch] (using int for type-safe indexing)
+        var flatIndices = new Tensor<int>([sequenceLength * batchSize]);
         int flatIdx = 0;
         for (int t = 0; t < sequenceLength; t++)
         {
             for (int b = 0; b < batchSize; b++)
             {
-                flatIndices[flatIdx++] = _lastInput[t, b, 0];
+                flatIndices[flatIdx++] = Convert.ToInt32(_lastInput[t, b, 0]);
             }
         }
 
         // Flatten outputGradient: [seq, batch, embeddingDim] -> [seq * batch, embeddingDim]
         var flatGradOutput = outputGradient.Reshape([sequenceLength * batchSize, embeddingDim]);
 
-        // Use Engine scatter-add operation for gradient accumulation
-        _embeddingGradient = Engine.TensorEmbeddingLookupBackward(flatGradOutput, flatIndices, vocabSize, embeddingDim);
+        // Use Engine scatter-add operation for gradient accumulation with separate value/index types
+        _embeddingGradient = Engine.TensorEmbeddingLookupBackward<T, int>(flatGradOutput, flatIndices, vocabSize, embeddingDim);
 
         // We don't compute input gradients for embedding layer (indices are not differentiable)
         return new Tensor<T>(_lastInput.Shape);

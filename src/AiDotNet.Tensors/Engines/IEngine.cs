@@ -2861,7 +2861,8 @@ public interface IEngine
     /// <summary>
     /// Performs embedding lookup - gathers rows from an embedding table based on indices.
     /// </summary>
-    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <typeparam name="TValue">The numeric type of embedding values.</typeparam>
+    /// <typeparam name="TIndex">The integer type for indices (must be unmanaged).</typeparam>
     /// <param name="embeddings">The embedding table tensor [vocab_size, embedding_dim].</param>
     /// <param name="indices">The indices tensor containing token IDs.</param>
     /// <returns>The gathered embeddings with shape [*indices.shape, embedding_dim].</returns>
@@ -2878,12 +2879,14 @@ public interface IEngine
     /// GPU acceleration provides significant speedup for large vocabularies and batch sizes.
     /// </para>
     /// </remarks>
-    Tensor<T> TensorEmbeddingLookup<T>(Tensor<T> embeddings, Tensor<T> indices);
+    Tensor<TValue> TensorEmbeddingLookup<TValue, TIndex>(Tensor<TValue> embeddings, Tensor<TIndex> indices)
+        where TIndex : unmanaged;
 
     /// <summary>
     /// Performs embedding lookup backward pass - scatters gradients back to embedding table.
     /// </summary>
-    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <typeparam name="TValue">The numeric type of gradient and embedding values.</typeparam>
+    /// <typeparam name="TIndex">The integer type for indices (must be unmanaged).</typeparam>
     /// <param name="gradOutput">The gradient from the next layer [*indices.shape, embedding_dim].</param>
     /// <param name="indices">The indices tensor containing token IDs.</param>
     /// <param name="vocabSize">The vocabulary size (number of rows in embedding table).</param>
@@ -2897,7 +2900,8 @@ public interface IEngine
     /// Handles duplicate indices by accumulating their gradients.
     /// </para>
     /// </remarks>
-    Tensor<T> TensorEmbeddingLookupBackward<T>(Tensor<T> gradOutput, Tensor<T> indices, int vocabSize, int embeddingDim);
+    Tensor<TValue> TensorEmbeddingLookupBackward<TValue, TIndex>(Tensor<TValue> gradOutput, Tensor<TIndex> indices, int vocabSize, int embeddingDim)
+        where TIndex : unmanaged;
 
     /// <summary>
     /// Computes the Radial Basis Function (RBF) kernel between input samples and centers.
