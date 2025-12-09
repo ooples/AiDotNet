@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -200,7 +200,7 @@ public class GraphRAG<T>
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-        if (topK <= 0)
+        if (topK < 1)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
         // Step 1: Extract entities from query using LLM

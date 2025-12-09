@@ -1,3 +1,5 @@
+using AiDotNet.ActivationFunctions;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -22,7 +24,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - Input: [0.2, 0.5, 0.1] (representing features from previous layer)
 /// - Weights: [[0.1, 0.8], [0.4, 0.3], [0.7, 0.2]] (each input's influence on each output)
 /// - Biases: [0.1, -0.2] (starting values for each output)
-/// - Output before activation: [0.2×0.1 + 0.5×0.4 + 0.1×0.7 + 0.1, 0.2×0.8 + 0.5×0.3 + 0.1×0.2 - 0.2]
+/// - Output before activation: [0.2Ã—0.1 + 0.5Ã—0.4 + 0.1Ã—0.7 + 0.1, 0.2Ã—0.8 + 0.5Ã—0.3 + 0.1Ã—0.2 - 0.2]
 ///                           = [0.39, 0.33]
 /// - After activation (e.g., ReLU): [0.39, 0.33] (since both are already positive)
 /// 
@@ -182,6 +184,10 @@ public class FeedForwardLayer<T> : LayerBase<T>
     private Tensor<T> BiasesGradient { get; set; }
 
     /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -206,6 +212,16 @@ public class FeedForwardLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Gets the weight tensor for JIT compilation and graph composition.
+    /// </summary>
+    public Tensor<T> GetWeightsTensor() => Weights;
+
+    /// <summary>
+    /// Gets the bias tensor for JIT compilation and graph composition.
+    /// </summary>
+    public Tensor<T> GetBiasesTensor() => Biases;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="FeedForwardLayer{T}"/> class with a scalar activation function.
     /// </summary>
     /// <param name="inputSize">The number of input neurons.</param>
@@ -226,7 +242,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// 
     /// For example:
     /// ```csharp
-    /// // Create a layer with 784 inputs (e.g., from a 28×28 image), 
+    /// // Create a layer with 784 inputs (e.g., from a 28Ã—28 image), 
     /// // 128 outputs, and ReLU activation
     /// var hiddenLayer = new FeedForwardLayer<float>(784, 128, new ReLUActivation<float>());
     /// 
@@ -317,7 +333,14 @@ public class FeedForwardLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         Input = input;
-        var linearOutput = Input.MatrixMultiply(Weights).Add(Biases);
+        
+        // Use Engine.TensorMatMul for GPU acceleration
+        var matmul = Engine.TensorMatMul(Input, Weights);
+        
+        // Add biases (broadcast [1, outputSize] to [batchSize, outputSize]) using engine op
+        var biasBroadcast = Biases.Reshape([1, Weights.Shape[1]]);
+        var linearOutput = Engine.TensorBroadcastAdd(matmul, biasBroadcast);
+        
         Output = ApplyActivation(linearOutput);
 
         return Output;
@@ -335,7 +358,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// are used to update the parameters during training and to propagate the error signal back to the previous layer.
     /// </para>
     /// <para><b>For Beginners:</b> This is where the layer learns from its mistakes during training.
-    /// 
+    ///
     /// The backward pass has several steps:
     /// 1. Apply activation function derivative:
     ///    - This determines how sensitive the output is to small changes
@@ -345,7 +368,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
     ///    - Shows how each bias affected the output
     /// 4. Calculate gradient to pass to previous layer:
     ///    - Helps the earlier layers learn as well
-    /// 
+    ///
     /// It's like figuring out who was responsible for a mistake in a team:
     /// - How much did each weight contribute to the error?
     /// - How much did each bias contribute?
@@ -355,16 +378,152 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        var activationGradient = ApplyActivationDerivative(outputGradient, Output);
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
 
-        var inputGradient = activationGradient.MatrixMultiply(Weights.Transpose(new[] { 1, 0 }));
-        var weightsGradient = Input.Transpose(new[] { 1, 0 }).MatrixMultiply(activationGradient);
-        var biasesGradient = activationGradient.Sum(new[] { 0 });
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
+        // Apply activation derivative
+        Tensor<T> activationGradient;
+        if (ScalarActivation != null)
+        {
+             // Use optimized Engine operation
+             var derivatives = ScalarActivation.Derivative(Output);
+             activationGradient = Engine.TensorMultiply(derivatives, outputGradient);
+        }
+        else
+        {
+             // Fallback or Vector activation
+             activationGradient = ApplyActivationDerivative(Output, outputGradient);
+        }
 
-        WeightsGradient = weightsGradient;
-        BiasesGradient = biasesGradient;
+        // Input Gradient: grad @ Weights^T
+        var weightsT = Engine.TensorTranspose(Weights);
+        var inputGradient = Engine.TensorMatMul(activationGradient, weightsT);
+        
+        // Weights Gradient: Input^T @ grad
+        var inputT = Engine.TensorTranspose(Input);
+        WeightsGradient = Engine.TensorMatMul(inputT, activationGradient);
+        
+        // Biases Gradient: sum(grad, axis=0)
+        BiasesGradient = Engine.ReduceSum(activationGradient, new[] { 0 }, keepDims: true);
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It's slower than the
+    /// manual implementation but can be useful for:
+    /// - Verifying gradient correctness
+    /// - Rapid prototyping with custom modifications
+    /// - Research and experimentation
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (Input == null || Input.Shape == null || Input.Shape.Length == 0)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        int batchSize = Input.Shape[0];
+        int outputSize = Biases.Shape[1];
+
+        // Production-grade: Compute activation derivative using cached Output
+        // For most activations, derivative can be computed from the activated output:
+        // - ReLU: derivative is 1 where Output > 0, else 0
+        // - Sigmoid: derivative = Output * (1 - Output)
+        // - Tanh: derivative = 1 - OutputÂ²
+        Tensor<T> preActivationGradient;
+        if (UsingVectorActivation && VectorActivation != null)
+        {
+            var actDeriv = VectorActivation.Derivative(Output);
+            preActivationGradient = Engine.TensorMultiply(outputGradient, actDeriv);
+        }
+        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            var activation = ScalarActivation;
+            var activationDerivative = Output.Transform((x, _) => activation.Derivative(x));
+            preActivationGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
+        }
+        else
+        {
+            preActivationGradient = outputGradient;
+        }
+
+        // Build minimal autodiff graph for linear part: Z = X @ W + b
+        var input = Autodiff.TensorOperations<T>.Variable(Input, "input", requiresGradient: true);
+        var weights = Autodiff.TensorOperations<T>.Variable(Weights, "weights", requiresGradient: true);
+        var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weights);
+
+        // Broadcast biases to match batch dimension using engine TensorTile
+        // Biases: [1, outputSize] -> tile to [batchSize, outputSize]
+        var broadcastedBiases = Engine.TensorTile(Biases, new[] { batchSize, 1 });
+        var biasesBroadcast = Autodiff.TensorOperations<T>.Variable(broadcastedBiases, "biases_broadcast", requiresGradient: true);
+        var linearOutput = Autodiff.TensorOperations<T>.Add(matmul, biasesBroadcast);
+
+        // Set the pre-activation gradient at linearOutput (after manually handling activation)
+        linearOutput.Gradient = preActivationGradient;
+
+        // Topological sort and backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((linearOutput, false));
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients
+        if (weights.Gradient == null || biasesBroadcast.Gradient == null || input.Gradient == null)
+            throw new InvalidOperationException("Gradients not computed properly during autodiff backward pass.");
+
+        WeightsGradient = weights.Gradient;
+
+        // Use Engine.ReduceSum for consistency with BackwardManual
+        BiasesGradient = Engine.ReduceSum(biasesBroadcast.Gradient, new[] { 0 }, keepDims: true);
+
+        return input.Gradient;
     }
 
     /// <summary>
@@ -423,7 +582,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// - Advanced optimization techniques that need all parameters together
     /// 
     /// For example, a layer with 100 inputs and 10 outputs would have:
-    /// - 1,000 weight parameters (100 × 10)
+    /// - 1,000 weight parameters (100 Ã— 10)
     /// - 10 bias parameters (one per output)
     /// - Totaling 1,010 parameters in the returned vector
     /// </para>
@@ -537,5 +696,62 @@ public class FeedForwardLayer<T> : LayerBase<T>
         Output = Tensor<T>.Empty();
         WeightsGradient = Tensor<T>.Empty();
         BiasesGradient = Tensor<T>.Empty();
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (Weights == null || Biases == null)
+            throw new InvalidOperationException("Layer weights and biases not initialized.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        var weightsNode = TensorOperations<T>.Constant(Weights, "weights");
+        var biasesNode = TensorOperations<T>.Constant(Biases, "biases");
+
+        var matmulNode = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
+        var addNode = TensorOperations<T>.Add(matmulNode, biasesNode);
+
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+        {
+            return ScalarActivation.ApplyToGraph(addNode);
+        }
+        else if (VectorActivation != null)
+        {
+            var activation = (IActivationFunction<T>)VectorActivation;
+            if (activation.SupportsJitCompilation)
+            {
+                return activation.ApplyToGraph(addNode);
+            }
+        }
+
+        return addNode;
+    }
+
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            if (Weights == null || Biases == null)
+                return false;
+
+            if (ScalarActivation != null)
+                return ScalarActivation.SupportsJitCompilation;
+
+            if (VectorActivation != null)
+            {
+                var activation = (IActivationFunction<T>)VectorActivation;
+                return activation.SupportsJitCompilation;
+            }
+
+            return true;
+        }
     }
 }

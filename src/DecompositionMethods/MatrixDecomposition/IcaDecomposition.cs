@@ -192,13 +192,17 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
         Vector<T> mean = new Vector<T>(n);
         T invM = NumOps.FromDouble(1.0 / m);
 
+        // VECTORIZED: Use GetColumn to extract column and compute sum via dot product
         for (int j = 0; j < n; j++)
         {
-            T sum = NumOps.Zero;
+            Vector<T> col = X.GetColumn(j);
+            // Use dot product with ones vector to compute sum
+            Vector<T> ones = new Vector<T>(m);
             for (int i = 0; i < m; i++)
             {
-                sum = NumOps.Add(sum, X[i, j]);
+                ones[i] = NumOps.One;
             }
+            T sum = col.DotProduct(ones);
             mean[j] = NumOps.Multiply(sum, invM);
         }
 
@@ -254,11 +258,14 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
         Matrix<T> C = XT.Multiply(X);
         T scale = NumOps.FromDouble(1.0 / m);
 
+        // VECTORIZED: Scale entire matrix using Engine operations row by row
         for (int i = 0; i < C.Rows; i++)
         {
+            Vector<T> row = C.GetRow(i);
+            Vector<T> scaledRow = (Vector<T>)Engine.Multiply(row, scale);
             for (int j = 0; j < C.Columns; j++)
             {
-                C[i, j] = NumOps.Multiply(C[i, j], scale);
+                C[i, j] = scaledRow[j];
             }
         }
 
@@ -319,7 +326,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
         Matrix<T> W = new Matrix<T>(numComponents, n);
 
         // Initialize W with random values
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < numComponents; i++)
         {
             for (int j = 0; j < n; j++)
@@ -347,24 +354,40 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
                 Vector<T> wNew = new Vector<T>(n);
                 T invM = NumOps.FromDouble(1.0 / m);
 
+                // VECTORIZED: Precompute g and g' values for all samples
+                var gValues = new T[m];
+                var gPrimeValues = new T[m];
+
+                for (int i = 0; i < m; i++)
+                {
+                    Vector<T> x = X.GetRow(i);
+                    T wtx = w.DotProduct(x);
+
+                    // g(u) = tanh(u)
+                    gValues[i] = Tanh(wtx);
+                    // g'(u) = 1 - tanh²(u)
+                    gPrimeValues[i] = NumOps.Subtract(NumOps.One, NumOps.Multiply(gValues[i], gValues[i]));
+                }
+
+                var gVec = new Vector<T>(gValues);
+                var gPrimeVec = new Vector<T>(gPrimeValues);
+
+                // VECTORIZED: Use dot product for sum computations
                 for (int j = 0; j < n; j++)
                 {
-                    T sum1 = NumOps.Zero;
-                    T sum2 = NumOps.Zero;
+                    // Extract column j from X
+                    Vector<T> xCol = X.GetColumn(j);
 
-                    for (int i = 0; i < m; i++)
+                    // sum1 = Σ(x[i,j] * g[i]) - use dot product
+                    T sum1 = xCol.DotProduct(gVec);
+
+                    // sum2 = Σ(g'[i]) - use dot product with ones vector
+                    Vector<T> ones = new Vector<T>(m);
+                    for (int k = 0; k < m; k++)
                     {
-                        Vector<T> x = X.GetRow(i);
-                        T wtx = w.DotProduct(x);
-
-                        // g(u) = tanh(u)
-                        T g = Tanh(wtx);
-                        // g'(u) = 1 - tanh²(u)
-                        T gPrime = NumOps.Subtract(NumOps.One, NumOps.Multiply(g, g));
-
-                        sum1 = NumOps.Add(sum1, NumOps.Multiply(x[j], g));
-                        sum2 = NumOps.Add(sum2, gPrime);
+                        ones[k] = NumOps.One;
                     }
+                    T sum2 = gPrimeVec.DotProduct(ones);
 
                     T avg1 = NumOps.Multiply(sum1, invM);
                     T avg2 = NumOps.Multiply(sum2, invM);
@@ -378,14 +401,17 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
                 {
                     Vector<T> wj = W.GetRow(j);
                     T projection = w.DotProduct(wj);
-                    w = w.Subtract(wj.Multiply(projection));
+                    // VECTORIZED: Subtract projection using Engine operations
+                    var proj = (Vector<T>)Engine.Multiply(wj, projection);
+                    w = (Vector<T>)Engine.Subtract(w, proj);
                 }
 
                 // Normalize w
                 T norm = w.Norm();
                 if (!NumOps.Equals(norm, NumOps.Zero))
                 {
-                    w = w.Divide(norm);
+                    // VECTORIZED: Normalize using Engine division
+                    w = (Vector<T>)Engine.Divide(w, norm);
                 }
 
                 // Check for convergence
@@ -448,14 +474,17 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
             {
                 Vector<T> u = result.GetRow(j);
                 T projection = v.DotProduct(u);
-                v = v.Subtract(u.Multiply(projection));
+                // VECTORIZED: Subtract projection using Engine operations
+                var proj = (Vector<T>)Engine.Multiply(u, projection);
+                v = (Vector<T>)Engine.Subtract(v, proj);
             }
 
             // Normalize
             T norm = v.Norm();
             if (!NumOps.Equals(norm, NumOps.Zero))
             {
-                v = v.Divide(norm);
+                // VECTORIZED: Normalize using Engine division
+                v = (Vector<T>)Engine.Divide(v, norm);
             }
 
             for (int k = 0; k < cols; k++)

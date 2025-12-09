@@ -53,7 +53,8 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// </remarks>
     public AMSGradOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        AMSGradOptimizerOptions<T, TInput, TOutput>? options = null)
+        AMSGradOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
         : base(model, options ?? new())
     {
         _options = options ?? new AMSGradOptimizerOptions<T, TInput, TOutput>();
@@ -102,7 +103,6 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
-            _t++;
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
             var newSolution = UpdateSolution(currentSolution, gradient);
 
@@ -142,32 +142,133 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var parameters = currentSolution.GetParameters();
-        var newCoefficients = new Vector<T>(parameters.Length);
-        var beta1 = NumOps.FromDouble(_options.Beta1);
-        var beta2 = NumOps.FromDouble(_options.Beta2);
-        var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
-        var oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            // Update biased first moment estimate
-            _m![i] = NumOps.Add(NumOps.Multiply(beta1, _m[i]), NumOps.Multiply(oneMinusBeta1, gradient[i]));
-
-            // Update biased second raw moment estimate
-            _v![i] = NumOps.Add(NumOps.Multiply(beta2, _v[i]), NumOps.Multiply(oneMinusBeta2, NumOps.Multiply(gradient[i], gradient[i])));
-
-            // Update maximum of second raw moment estimate
-            _vHat![i] = MathHelper.Max(_vHat[i], _v[i]);
-
-            // Compute bias-corrected first moment estimate
-            var mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
-
-            // Update par
-            var update = NumOps.Divide(NumOps.Multiply(CurrentLearningRate, mHat), NumOps.Add(NumOps.Sqrt(_vHat[i]), NumOps.FromDouble(_options.Epsilon)));
-            newCoefficients[i] = NumOps.Subtract(parameters[i], update);
-        }
+        // Use shared UpdateParameters method to eliminate duplication
+        var newCoefficients = UpdateParameters(parameters, gradient);
 
         return currentSolution.WithParameters(newCoefficients);
+    }
+
+    /// <summary>
+    /// Updates a vector of parameters using the AMSGrad optimization algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter vector to be updated.</param>
+    /// <param name="gradient">The gradient vector corresponding to the parameters.</param>
+    /// <returns>The updated parameter vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// AMSGrad is a variant of Adam that uses the maximum of past second moments to ensure convergence.
+    /// This prevents the learning rate from becoming too large and helps with non-convex optimization.
+    /// </para>
+    /// <para><b>For Beginners:</b> AMSGrad is like Adam but keeps track of the largest variance
+    /// it has seen so far, preventing the optimizer from taking overly aggressive steps.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        if (_m == null || _v == null || _vHat == null || _m.Length != parameters.Length)
+        {
+            _m = new Vector<T>(parameters.Length);
+            _v = new Vector<T>(parameters.Length);
+            _vHat = new Vector<T>(parameters.Length);
+            _t = 0;
+        }
+
+        _t++;
+
+        // === Vectorized AMSGrad Update using IEngine (Phase B: US-GPU-015) ===
+        T beta1 = NumOps.FromDouble(_options.Beta1);
+        T beta2 = NumOps.FromDouble(_options.Beta2);
+        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T biasCorrectionFactor = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
+
+        // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
+        var beta1TimesM = (Vector<T>)Engine.Multiply(_m, beta1);
+        var oneMinusBeta1TimesGrad = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
+        _m = (Vector<T>)Engine.Add(beta1TimesM, oneMinusBeta1TimesGrad);
+
+        // Update biased second raw moment estimate: v = beta2 * v + (1 - beta2) * gradient^2
+        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
+        var beta2TimesV = (Vector<T>)Engine.Multiply(_v, beta2);
+        var oneMinusBeta2TimesGradSq = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
+        _v = (Vector<T>)Engine.Add(beta2TimesV, oneMinusBeta2TimesGradSq);
+
+        // Update maximum of second raw moment estimate: vHat = max(vHat, v)
+        _vHat = (Vector<T>)Engine.Max(_vHat, _v);
+
+        // Compute bias-corrected first moment estimate: mHat = m / (1 - beta1^t)
+        var mHat = (Vector<T>)Engine.Divide(_m, biasCorrectionFactor);
+
+        // Compute update: update = (lr * mHat) / (sqrt(vHat) + epsilon)
+        var sqrtVHat = (Vector<T>)Engine.Sqrt(_vHat);
+        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, sqrtVHat.Length));
+        var denominator = (Vector<T>)Engine.Add(sqrtVHat, epsilonVec);
+        var lrTimesMHat = (Vector<T>)Engine.Multiply(mHat, CurrentLearningRate);
+        var update = (Vector<T>)Engine.Divide(lrTimesMHat, denominator);
+
+        // Update parameters: params = params - update
+        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
+
+        return updatedParams;
+    }
+
+    /// <summary>
+    /// Reverses an AMSGrad gradient update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after AMSGrad update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// AMSGrad's reverse update requires the optimizer's internal state (_m, _v, _vHat, _t) from the forward pass.
+    /// This method must be called immediately after UpdateParameters while the state is fresh.
+    /// It uses the maximum of past second moments to recalculate the update.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before an AMSGrad update.
+    /// AMSGrad remembers the largest variance seen for each parameter, which prevents taking too-large steps.
+    /// To reverse the update, we need this maximum variance history (_vHat) along with momentum (_m).
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        if (_m == null || _v == null || _vHat == null || _m.Length != updatedParameters.Length)
+        {
+            throw new InvalidOperationException(
+                "AMSGrad optimizer state is not initialized. ReverseUpdate must be called after UpdateParameters.");
+        }
+
+        // === Vectorized Reverse AMSGrad Update using IEngine (Phase B: US-GPU-015) ===
+        // Recalculate bias-corrected first moment: mHat = m / (1 - beta1^t)
+        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
+        var biasCorrection1Vec = Vector<T>.CreateDefault(_m.Length, biasCorrection1);
+        var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1Vec);
+
+        // Recalculate the update: update = (lr * mHat) / (sqrt(vHat) + epsilon)
+        var currentLrVec = Vector<T>.CreateDefault(_m.Length, CurrentLearningRate);
+        var lrTimesMHat = (Vector<T>)Engine.Multiply(currentLrVec, mHat);
+
+        var vHatSqrt = (Vector<T>)Engine.Sqrt(_vHat);
+        var epsilonVec = Vector<T>.CreateDefault(_vHat.Length, NumOps.FromDouble(_options.Epsilon));
+        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
+
+        var update = (Vector<T>)Engine.Divide(lrTimesMHat, denominator);
+
+        // Reverse: original = updated + update
+        return (Vector<T>)Engine.Add(updatedParameters, update);
     }
 
     /// <summary>

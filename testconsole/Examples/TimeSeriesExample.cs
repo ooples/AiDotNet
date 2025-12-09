@@ -11,7 +11,7 @@ namespace AiDotNetTestConsole.Examples;
 /// </summary>
 public class TimeSeriesExample
 {
-    public void RunExample()
+    public async Task RunExample()
     {
         Console.WriteLine("Time Series Example - Stock Price Forecasting");
         Console.WriteLine("===========================================\n");
@@ -63,10 +63,10 @@ public class TimeSeriesExample
             };
 
             // Build the time series model
-            var model = modelBuilder
+            var model = await modelBuilder
                 .ConfigureOptimizer(optimizer)
                 .ConfigureModel(new ProphetModel<double, Matrix<double>, Vector<double>>(timeSeriesOptions))
-                .Build(timeFeatures, priceVector);
+                .BuildAsync(timeFeatures, priceVector);
 
             Console.WriteLine("Model trained successfully!");
 

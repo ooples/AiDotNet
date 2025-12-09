@@ -302,7 +302,7 @@ public class KrigingInterpolation<T> : I2DInterpolation<T>
     /// 
     /// <b>For Beginners:</b> This calculates how far apart two points are in a straight line,
     /// just like measuring the distance between two pins on a map with a ruler.
-    /// It uses the familiar formula from geometry: distance = v((x2-x1)² + (y2-y1)²).
+    /// It uses the familiar formula from geometry: distance = v((x2-x1)Â² + (y2-y1)Â²).
     /// </remarks>
     /// <param name="x1">The x-coordinate of the first point.</param>
     /// <param name="y1">The y-coordinate of the first point.</param>

@@ -20,7 +20,7 @@ namespace AiDotNet.Kernels;
 /// </para>
 /// <para>
 /// The formula for the Multiquadric kernel is:
-/// k(x, y) = v(||x - y||² + c²)
+/// k(x, y) = v(||x - y||Â² + cÂ²)
 /// where:
 /// - x and y are the two data points being compared
 /// - ||x - y|| is the Euclidean distance between them
@@ -104,7 +104,7 @@ public class MultiquadricKernel<T> : IKernelFunction<T>
     /// The calculation works by:
     /// 1. Finding the difference between the two vectors (diff)
     /// 2. Calculating the squared Euclidean distance between them (squaredDistance)
-    /// 3. Adding the square of the shape parameter (c²)
+    /// 3. Adding the square of the shape parameter (cÂ²)
     /// 4. Taking the square root of the result
     /// </para>
     /// <para>

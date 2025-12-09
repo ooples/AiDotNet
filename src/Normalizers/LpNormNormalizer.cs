@@ -35,7 +35,7 @@ namespace AiDotNet.Normalizers;
 /// - Higher p values: Increasingly emphasize the largest component
 /// 
 /// For example, normalizing the vector [3, 4] with p = 2 (Euclidean norm):
-/// - The norm is sqrt(3² + 4²) = sqrt(25) = 5
+/// - The norm is sqrt(3Â² + 4Â²) = sqrt(25) = 5
 /// - The normalized vector is [3/5, 4/5] = [0.6, 0.8]
 /// - This new vector points in the same direction but has a length of 1
 /// </para>
@@ -121,7 +121,7 @@ public class LpNormNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
     /// 2. Then, it divides each element of the vector by this length
     /// 
     /// For example, with vector [3, 4] and p = 2:
-    /// - The norm is sqrt(3² + 4²) = sqrt(25) = 5
+    /// - The norm is sqrt(3Â² + 4Â²) = sqrt(25) = 5
     /// - The normalized vector is [3/5, 4/5] = [0.6, 0.8]
     /// 
     /// After normalization:
@@ -288,7 +288,7 @@ public class LpNormNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
     /// - Multiply it by the original length (norm) that was saved during normalization
     /// 
     /// For example, if your normalized vector was [0.6, 0.8] with an original norm of 5:
-    /// - The denormalized vector would be [0.6 × 5, 0.8 × 5] = [3, 4]
+    /// - The denormalized vector would be [0.6 Ã— 5, 0.8 Ã— 5] = [3, 4]
     /// 
     /// This restores the vector to its original scale while maintaining its direction and the
     /// proportional relationships between its elements.
@@ -350,7 +350,7 @@ public class LpNormNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, TO
     /// - The output was normalized by dividing by 10
     /// - The model learned a coefficient of 2.0 for this feature on normalized data
     /// 
-    /// The denormalized coefficient would be 2.0 × (10 ÷ 5) = 4.0
+    /// The denormalized coefficient would be 2.0 Ã— (10 Ã· 5) = 4.0
     /// 
     /// This ensures that predictions made using original data will be properly scaled.
     /// </para>

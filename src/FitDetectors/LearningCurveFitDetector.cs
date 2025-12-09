@@ -166,7 +166,7 @@ public class LearningCurveFitDetector<T, TInput, TOutput> : FitDetectorBase<T, T
     /// - A slope close to zero means your model's performance has stabilized
     /// 
     /// The calculation uses the formula for the slope of a best-fit line:
-    /// slope = (n * sum(xy) - sum(x) * sum(y)) / (n * sum(x²) - sum(x)²)
+    /// slope = (n * sum(xy) - sum(x) * sum(y)) / (n * sum(xÂ²) - sum(x)Â²)
     /// where n is the number of points, x represents the position in the sequence, and y represents the performance value.
     /// </para>
     /// </remarks>

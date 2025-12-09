@@ -1,8 +1,10 @@
 using AiDotNet.Enums;
 using AiDotNet.FeatureSelectors;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.Autodiff;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.FeatureSelectors
@@ -49,6 +51,10 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
 
+        // ICheckpointableModel implementation
+        public void SaveState(Stream stream) { }
+        public void LoadState(Stream stream) { }
+
         // IParameterizable implementation
         public Vector<double> GetParameters() => new Vector<double>(0);
         public void SetParameters(Vector<double> parameters) { }
@@ -75,6 +81,36 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
         public IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
         {
             return new SimpleMockModel();
+        }
+
+        // IGradientComputable implementation
+        public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+
+        public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null)
+        {
+            return new Vector<double>(ParameterCount);
+        }
+
+        public void ApplyGradients(Vector<double> gradients, double learningRate)
+        {
+            // Mock implementation does nothing
+        }
+
+        // IJitCompilable implementation
+        public bool SupportsJitCompilation => true;
+
+        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
+        {
+            // Create a simple computation graph: sum of inputs > 10 ? 1 : 0
+            // For testing, we create a placeholder variable node
+            var inputShape = new int[] { 1, 3 }; // Assuming 3 features
+            var inputTensor = new Tensor<double>(inputShape);
+            var inputNode = TensorOperations<double>.Variable(inputTensor, "input");
+            inputNodes.Add(inputNode);
+
+            // Sum reduction and comparison (simplified for mock)
+            var sumNode = TensorOperations<double>.Sum(inputNode);
+            return sumNode;
         }
     }
 
@@ -390,6 +426,10 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
 
+        // ICheckpointableModel implementation
+        public void SaveState(Stream stream) { }
+        public void LoadState(Stream stream) { }
+
         // IParameterizable implementation
         public Vector<float> GetParameters() => new Vector<float>(0);
         public void SetParameters(Vector<float> parameters) { }
@@ -416,6 +456,35 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
         public IFullModel<float, Matrix<float>, Vector<float>> DeepCopy()
         {
             return new SimpleMockModelFloat();
+        }
+
+        // IGradientComputable implementation
+        public ILossFunction<float> DefaultLossFunction => new MeanSquaredErrorLoss<float>();
+
+        public Vector<float> ComputeGradients(Matrix<float> input, Vector<float> target, ILossFunction<float>? lossFunction = null)
+        {
+            return new Vector<float>(ParameterCount);
+        }
+
+        public void ApplyGradients(Vector<float> gradients, float learningRate)
+        {
+            // Mock implementation does nothing
+        }
+
+        // IJitCompilable implementation
+        public bool SupportsJitCompilation => true;
+
+        public ComputationNode<float> ExportComputationGraph(List<ComputationNode<float>> inputNodes)
+        {
+            // Create a simple computation graph: sum of inputs > 10 ? 1 : 0
+            var inputShape = new int[] { 1, 3 }; // Assuming 3 features
+            var inputTensor = new Tensor<float>(inputShape);
+            var inputNode = TensorOperations<float>.Variable(inputTensor, "input");
+            inputNodes.Add(inputNode);
+
+            // Sum reduction (simplified for mock)
+            var sumNode = TensorOperations<float>.Sum(inputNode);
+            return sumNode;
         }
     }
 }

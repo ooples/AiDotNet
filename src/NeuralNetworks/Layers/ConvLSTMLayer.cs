@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -63,6 +65,10 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     private const double MomentumFactor = 0.9;
 
     private readonly SigmoidActivation<T> _sigmoidActivation = new();
+
+    /// <summary>
+    /// The computation engine (CPU or GPU) for vectorized operations.
+    /// </summary>
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -259,8 +265,8 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// - Strides determine how far to move the cropping tool each time
     /// - Filters determine how many different "versions" of the output we'll have
     /// 
-    /// For example, if you have a 64�64 image and use a kernel size of 3, padding of 1,
-    /// and strides of 1, the output height and width will still be 64�64, preserving
+    /// For example, if you have a 64×64 image and use a kernel size of 3, padding of 1,
+    /// and strides of 1, the output height and width will still be 64×64, preserving
     /// the spatial dimensions.
     /// </para>
     /// </remarks>
@@ -416,10 +422,11 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private (Tensor<T> hiddenState, Tensor<T> cellState) ConvLSTMCell(Tensor<T> input, Tensor<T> prevHiddenState, Tensor<T> prevCellState)
     {
-        var forgetGate = Convolve(input, _weightsFi).Add(Convolve(prevHiddenState, _weightsFh)).Add(_biasF).Transform((x, _) => _sigmoidActivation.Activate(x));
-        var inputGate = Convolve(input, _weightsIi).Add(Convolve(prevHiddenState, _weightsIh)).Add(_biasI).Transform((x, _) => _sigmoidActivation.Activate(x));
+        // Use Engine.Sigmoid for vectorized/GPU-accelerated sigmoid activations
+        var forgetGate = Engine.Sigmoid(Convolve(input, _weightsFi).Add(Convolve(prevHiddenState, _weightsFh)).Add(_biasF));
+        var inputGate = Engine.Sigmoid(Convolve(input, _weightsIi).Add(Convolve(prevHiddenState, _weightsIh)).Add(_biasI));
         var candidateCell = ApplyActivation(Convolve(input, _weightsCi).Add(Convolve(prevHiddenState, _weightsCh)).Add(_biasC));
-        var outputGate = Convolve(input, _weightsOi).Add(Convolve(prevHiddenState, _weightsOh)).Add(_biasO).Transform((x, _) => _sigmoidActivation.Activate(x));
+        var outputGate = Engine.Sigmoid(Convolve(input, _weightsOi).Add(Convolve(prevHiddenState, _weightsOh)).Add(_biasO));
 
         var newCellState = forgetGate.Multiply(prevCellState).Add(inputGate.Multiply(candidateCell));
         var newHiddenState = outputGate.Multiply(ApplyActivation(newCellState));
@@ -433,77 +440,23 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// <param name="input">Input tensor with shape [batchSize, height, width, channels].</param>
     /// <param name="kernel">Kernel tensor with shape [kernelHeight, kernelWidth, inputChannels, outputChannels].</param>
     /// <returns>Output tensor with shape [batchSize, outputHeight, outputWidth, outputChannels].</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements a basic 2D convolution operation:
-    /// 1. Calculates output dimensions based on input size, kernel size, padding, and stride
-    /// 2. For each position in the output, computes the dot product between the kernel and the corresponding input region
-    /// 3. Handles padding by skipping positions outside the input boundaries
-    /// </para>
-    /// <para><b>For Beginners:</b> This method slides a "filter" across your data to detect patterns.
-    /// 
-    /// Convolution is like moving a spotlight across an image:
-    /// - The kernel (or filter) is the spotlight
-    /// - We move it across the input data in steps defined by the stride
-    /// - At each position, we multiply the overlapping values and sum them up
-    /// - This creates a new output value that captures local patterns
-    /// 
-    /// For example, if the kernel is designed to detect edges, the output will highlight
-    /// where edges appear in the input data. The ConvLSTM uses convolution to detect
-    /// spatial patterns while also tracking how these patterns change over time.
-    /// </para>
-    /// </remarks>
     private Tensor<T> Convolve(Tensor<T> input, Tensor<T> kernel)
     {
-        int batchSize = input.Shape[0];
-        int inputHeight = input.Shape[1];
-        int inputWidth = input.Shape[2];
-        int inputChannels = input.Shape[3];
-        int kernelHeight = kernel.Shape[0];
-        int kernelWidth = kernel.Shape[1];
-        int outputChannels = kernel.Shape[3];
+        // Transpose input from [B, H, W, C] to [B, C, H, W] for Engine
+        var inputNCHW = input.Transpose(new[] { 0, 3, 1, 2 });
 
-        int outputHeight = (inputHeight - kernelHeight + 2 * _padding) / _strides + 1;
-        int outputWidth = (inputWidth - kernelWidth + 2 * _padding) / _strides + 1;
+        // Transpose kernel from [kH, kW, inC, outC] to [outC, inC, kH, kW] for Engine
+        var kernelNCHW = kernel.Transpose(new[] { 3, 2, 0, 1 });
 
-        var output = new Tensor<T>([batchSize, outputHeight, outputWidth, outputChannels]);
+        var stride = new int[] { _strides, _strides };
+        var padding = new int[] { _padding, _padding };
+        var dilation = new int[] { 1, 1 };
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int oh = 0; oh < outputHeight; oh++)
-            {
-                for (int ow = 0; ow < outputWidth; ow++)
-                {
-                    for (int oc = 0; oc < outputChannels; oc++)
-                    {
-                        T sum = NumOps.Zero;
+        // Use GPU-accelerated Conv2D
+        var outputNCHW = Engine.Conv2D(inputNCHW, kernelNCHW, stride, padding, dilation);
 
-                        for (int kh = 0; kh < kernelHeight; kh++)
-                        {
-                            for (int kw = 0; kw < kernelWidth; kw++)
-                            {
-                                for (int ic = 0; ic < inputChannels; ic++)
-                                {
-                                    int ih = oh * _strides + kh - _padding;
-                                    int iw = ow * _strides + kw - _padding;
-
-                                    if (ih >= 0 && ih < inputHeight && iw >= 0 && iw < inputWidth)
-                                    {
-                                        T inputVal = input[b, ih, iw, ic];
-                                        T kernelVal = kernel[kh, kw, ic, oc];
-                                        sum = NumOps.Add(sum, NumOps.Multiply(inputVal, kernelVal));
-                                    }
-                                }
-                            }
-                        }
-
-                        output[b, oh, ow, oc] = sum;
-                    }
-                }
-            }
-        }
-
-        return output;
+        // Transpose output back to [B, H, W, outC]
+        return outputNCHW.Transpose(new[] { 0, 2, 3, 1 });
     }
 
     /// <summary>
@@ -521,18 +474,210 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// 5. Stores gradients for later use in parameter updates
     /// </para>
     /// <para><b>For Beginners:</b> This method figures out how to improve the layer during training.
-    /// 
+    ///
     /// During the backward pass:
     /// - The layer receives information about how to adjust its output to reduce errors
     /// - It works backwards through the sequence (from the most recent frame to the earliest)
     /// - It calculates how each of its internal values (weights and biases) should change
     /// - It also calculates how the input should have been different to reduce errors
-    /// 
+    ///
     /// Think of it like a coach reviewing a game film backwards, noting what each player
     /// should have done differently at each moment to get a better outcome.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation with proper BPTT graph construction.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements Backpropagation Through Time (BPTT) by unrolling the computation graph
+    /// across all time steps. It correctly handles:
+    /// - Temporal dependencies (hidden and cell states)
+    /// - Spatial convolutions (using correct NHWC/NCHW conversions)
+    /// - Complex gating logic
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // 1. Create Variables for all parameters
+        var wFi = Autodiff.TensorOperations<T>.Variable(_weightsFi, "weightsFi", true);
+        var wIi = Autodiff.TensorOperations<T>.Variable(_weightsIi, "weightsIi", true);
+        var wCi = Autodiff.TensorOperations<T>.Variable(_weightsCi, "weightsCi", true);
+        var wOi = Autodiff.TensorOperations<T>.Variable(_weightsOi, "weightsOi", true);
+
+        var wFh = Autodiff.TensorOperations<T>.Variable(_weightsFh, "weightsFh", true);
+        var wIh = Autodiff.TensorOperations<T>.Variable(_weightsIh, "weightsIh", true);
+        var wCh = Autodiff.TensorOperations<T>.Variable(_weightsCh, "weightsCh", true);
+        var wOh = Autodiff.TensorOperations<T>.Variable(_weightsOh, "weightsOh", true);
+
+        var bF = Autodiff.TensorOperations<T>.Variable(_biasF, "biasF", true);
+        var bI = Autodiff.TensorOperations<T>.Variable(_biasI, "biasI", true);
+        var bC = Autodiff.TensorOperations<T>.Variable(_biasC, "biasC", true);
+        var bO = Autodiff.TensorOperations<T>.Variable(_biasO, "biasO", true);
+
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", true);
+
+        // 2. Pre-process weights for Conv2D (NHWC -> NCHW equivalent for kernels: [kH, kW, In, Out] -> [Out, In, kH, kW])
+        // _weightsFi shape: [kH, kW, In, Out]
+        // Target: [Out, In, kH, kW] => Permute(3, 2, 0, 1)
+        var wFi_T = Autodiff.TensorOperations<T>.Permute(wFi, 3, 2, 0, 1);
+        var wIi_T = Autodiff.TensorOperations<T>.Permute(wIi, 3, 2, 0, 1);
+        var wCi_T = Autodiff.TensorOperations<T>.Permute(wCi, 3, 2, 0, 1);
+        var wOi_T = Autodiff.TensorOperations<T>.Permute(wOi, 3, 2, 0, 1);
+
+        var wFh_T = Autodiff.TensorOperations<T>.Permute(wFh, 3, 2, 0, 1);
+        var wIh_T = Autodiff.TensorOperations<T>.Permute(wIh, 3, 2, 0, 1);
+        var wCh_T = Autodiff.TensorOperations<T>.Permute(wCh, 3, 2, 0, 1);
+        var wOh_T = Autodiff.TensorOperations<T>.Permute(wOh, 3, 2, 0, 1);
+
+        // Reshape biases for broadcasting: [1, 1, 1, Filters] -> [1, Filters, 1, 1] (NCHW)
+        // Input bias is [1, 1, 1, F]
+        var bF_T = Autodiff.TensorOperations<T>.Reshape(bF, 1, _filters, 1, 1);
+        var bI_T = Autodiff.TensorOperations<T>.Reshape(bI, 1, _filters, 1, 1);
+        var bC_T = Autodiff.TensorOperations<T>.Reshape(bC, 1, _filters, 1, 1);
+        var bO_T = Autodiff.TensorOperations<T>.Reshape(bO, 1, _filters, 1, 1);
+
+        int batchSize = _lastInput.Shape[0];
+        int timeSteps = _lastInput.Shape[1];
+        int height = _lastInput.Shape[2];
+        int width = _lastInput.Shape[3];
+        int channels = _lastInput.Shape[4];
+
+        // Initialize states (Zero tensors)
+        var hiddenState = Autodiff.TensorOperations<T>.Constant(new Tensor<T>([batchSize, _filters, height, width]), "h0"); // NCHW for internal
+        var cellState = Autodiff.TensorOperations<T>.Constant(new Tensor<T>([batchSize, _filters, height, width]), "c0");   // NCHW for internal
+
+        var outputNodes = new List<Autodiff.ComputationNode<T>>();
+        var stride = new int[] { _strides, _strides };
+        var padding = new int[] { _padding, _padding };
+
+        // 3. Unroll BPTT Loop
+        for (int t = 0; t < timeSteps; t++)
+        {
+            // Slice time step t: [Batch, 1, H, W, C] -> [Batch, H, W, C]
+            // Note: Using axis 1 for time dimension slice
+            var xt_raw = Autodiff.TensorOperations<T>.Slice(inputNode, t, 1, 1, axis: 1);
+            var xt_NHWC = Autodiff.TensorOperations<T>.Reshape(xt_raw, batchSize, height, width, channels);
+            
+            // Permute input to NCHW: [Batch, C, H, W]
+            var xt = Autodiff.TensorOperations<T>.Permute(xt_NHWC, 0, 3, 1, 2);
+
+            // Gates Calculation (All in NCHW format)
+            // Forget Gate
+            var f_x = Autodiff.TensorOperations<T>.Conv2D(xt, wFi_T, bF_T, stride, padding);
+            var f_h = Autodiff.TensorOperations<T>.Conv2D(hiddenState, wFh_T, stride: stride, padding: padding);
+            var f_sum = Autodiff.TensorOperations<T>.Add(f_x, f_h);
+            var f = Autodiff.TensorOperations<T>.Sigmoid(f_sum);
+
+            // Input Gate
+            var i_x = Autodiff.TensorOperations<T>.Conv2D(xt, wIi_T, bI_T, stride, padding);
+            var i_h = Autodiff.TensorOperations<T>.Conv2D(hiddenState, wIh_T, stride: stride, padding: padding);
+            var i_sum = Autodiff.TensorOperations<T>.Add(i_x, i_h);
+            var i_gate = Autodiff.TensorOperations<T>.Sigmoid(i_sum);
+
+            // Cell Candidate
+            var c_x = Autodiff.TensorOperations<T>.Conv2D(xt, wCi_T, bC_T, stride, padding);
+            var c_h = Autodiff.TensorOperations<T>.Conv2D(hiddenState, wCh_T, stride: stride, padding: padding);
+            var c_sum = Autodiff.TensorOperations<T>.Add(c_x, c_h);
+            // Apply layer activation (defaults to Tanh for cell candidate in standard LSTM)
+            // But constructor allows custom activation. LayerBase ApplyActivation uses it.
+            // Standard ConvLSTM uses Tanh/Sigmoid/Tanh structure.
+            // We'll use Tanh for standard compliance or ApplyActivationToGraph if it matches?
+            // The constructor sets base activation to TanhActivation.
+            // Let's use Tanh directly as per standard LSTM logic, or delegate?
+            // Forward uses ApplyActivation for candidate cell.
+            var c_cand = ApplyActivationToGraph(c_sum);
+
+            // Output Gate
+            var o_x = Autodiff.TensorOperations<T>.Conv2D(xt, wOi_T, bO_T, stride, padding);
+            var o_h = Autodiff.TensorOperations<T>.Conv2D(hiddenState, wOh_T, stride: stride, padding: padding);
+            var o_sum = Autodiff.TensorOperations<T>.Add(o_x, o_h);
+            var o = Autodiff.TensorOperations<T>.Sigmoid(o_sum);
+
+            // Update Cell State
+            var c_forget = Autodiff.TensorOperations<T>.ElementwiseMultiply(f, cellState);
+            var c_input = Autodiff.TensorOperations<T>.ElementwiseMultiply(i_gate, c_cand);
+            var newC = Autodiff.TensorOperations<T>.Add(c_forget, c_input);
+
+            // Update Hidden State
+            // Forward uses ApplyActivation(newCellState) ... usually Tanh
+            var c_activated = ApplyActivationToGraph(newC);
+            var newH = Autodiff.TensorOperations<T>.ElementwiseMultiply(o, c_activated);
+
+            // Store for next step
+            cellState = newC;
+            hiddenState = newH;
+
+            // Convert Output back to NHWC for consistency with layer output
+            var output_NHWC = Autodiff.TensorOperations<T>.Permute(newH, 0, 2, 3, 1);
+            
+            // Reshape to [Batch, 1, H, W, C] for concatenation
+            var output_step = Autodiff.TensorOperations<T>.Reshape(output_NHWC, batchSize, 1, height, width, _filters);
+            outputNodes.Add(output_step);
+        }
+
+        // 4. Concatenate outputs along time axis (axis 1)
+        var finalOutput = Autodiff.TensorOperations<T>.Concat(outputNodes, axis: 1);
+
+        // 5. Backward Pass
+        finalOutput.Gradient = outputGradient;
+
+        // Topo sort and execute backward
+        finalOutput.Backward(); // Uses built-in topo sort and execution
+
+        // 6. Extract and Store Gradients in Dictionary
+        _gradients = new Dictionary<string, object>
+        {
+            ["weightsFi"] = wFi.Gradient ?? Tensor<T>.CreateDefault(_weightsFi.Shape, NumOps.Zero),
+            ["weightsIi"] = wIi.Gradient ?? Tensor<T>.CreateDefault(_weightsIi.Shape, NumOps.Zero),
+            ["weightsCi"] = wCi.Gradient ?? Tensor<T>.CreateDefault(_weightsCi.Shape, NumOps.Zero),
+            ["weightsOi"] = wOi.Gradient ?? Tensor<T>.CreateDefault(_weightsOi.Shape, NumOps.Zero),
+            ["weightsFh"] = wFh.Gradient ?? Tensor<T>.CreateDefault(_weightsFh.Shape, NumOps.Zero),
+            ["weightsIh"] = wIh.Gradient ?? Tensor<T>.CreateDefault(_weightsIh.Shape, NumOps.Zero),
+            ["weightsCh"] = wCh.Gradient ?? Tensor<T>.CreateDefault(_weightsCh.Shape, NumOps.Zero),
+            ["weightsOh"] = wOh.Gradient ?? Tensor<T>.CreateDefault(_weightsOh.Shape, NumOps.Zero),
+            ["biasF"] = bF.Gradient ?? Tensor<T>.CreateDefault(_biasF.Shape, NumOps.Zero),
+            ["biasI"] = bI.Gradient ?? Tensor<T>.CreateDefault(_biasI.Shape, NumOps.Zero),
+            ["biasC"] = bC.Gradient ?? Tensor<T>.CreateDefault(_biasC.Shape, NumOps.Zero),
+            ["biasO"] = bO.Gradient ?? Tensor<T>.CreateDefault(_biasO.Shape, NumOps.Zero)
+        };
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using Backpropagation Through Time (BPTT) for ConvLSTM.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the backward pass using manual gradient calculations optimized for
+    /// ConvLSTM networks. It performs backpropagation through time (BPTT), processing the
+    /// sequence in reverse order and computing gradients for all convolutional gate parameters,
+    /// hidden states, and cell states.
+    /// </para>
+    /// <para>
+    /// Autodiff Note: ConvLSTM backward pass combines the complexity of LSTM gates with
+    /// convolutional operations across spatial dimensions. Implementing this with automatic
+    /// differentiation would require handling temporal dependencies, spatial convolutions,
+    /// and gate-specific gradient flows. The manual implementation provides efficient and
+    /// correct gradient calculations for all ConvLSTM components.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         int batchSize = _lastInput!.Shape[0];
         int timeSteps = _lastInput.Shape[1];
@@ -770,10 +915,11 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     private (Tensor<T> f, Tensor<T> i, Tensor<T> c, Tensor<T> o, Tensor<T> newC, Tensor<T> newH) ForwardStep(
             Tensor<T> xt, Tensor<T> prevH, Tensor<T> prevC)
     {
-        var f = Convolve(xt, _weightsFi).Add(Convolve(prevH, _weightsFh)).Add(_biasF).Transform((x, _) => _sigmoidActivation.Activate(x));
-        var i = Convolve(xt, _weightsIi).Add(Convolve(prevH, _weightsIh)).Add(_biasI).Transform((x, _) => _sigmoidActivation.Activate(x));
+        // Use Engine.Sigmoid for vectorized/GPU-accelerated sigmoid activations
+        var f = Engine.Sigmoid(Convolve(xt, _weightsFi).Add(Convolve(prevH, _weightsFh)).Add(_biasF));
+        var i = Engine.Sigmoid(Convolve(xt, _weightsIi).Add(Convolve(prevH, _weightsIh)).Add(_biasI));
         var c = ApplyActivation(Convolve(xt, _weightsCi).Add(Convolve(prevH, _weightsCh)).Add(_biasC));
-        var o = Convolve(xt, _weightsOi).Add(Convolve(prevH, _weightsOh)).Add(_biasO).Transform((x, _) => _sigmoidActivation.Activate(x));
+        var o = Engine.Sigmoid(Convolve(xt, _weightsOi).Add(Convolve(prevH, _weightsOh)).Add(_biasO));
 
         var newC = f.Multiply(prevC).Add(i.Multiply(c));
         var newH = o.Multiply(ApplyActivation(newC));
@@ -873,19 +1019,19 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             throw new InvalidOperationException("No gradients available. Ensure backward pass is called before updating parameters.");
         }
 
-        UpdateParameterWithMomentum(_weightsFi, "weightsFi", learningRate);
-        UpdateParameterWithMomentum(_weightsIi, "weightsIi", learningRate);
-        UpdateParameterWithMomentum(_weightsCi, "weightsCi", learningRate);
-        UpdateParameterWithMomentum(_weightsOi, "weightsOi", learningRate);
-        UpdateParameterWithMomentum(_weightsFh, "weightsFh", learningRate);
-        UpdateParameterWithMomentum(_weightsIh, "weightsIh", learningRate);
-        UpdateParameterWithMomentum(_weightsCh, "weightsCh", learningRate);
-        UpdateParameterWithMomentum(_weightsOh, "weightsOh", learningRate);
+        _weightsFi = UpdateParameterWithMomentum(_weightsFi, "weightsFi", learningRate);
+        _weightsIi = UpdateParameterWithMomentum(_weightsIi, "weightsIi", learningRate);
+        _weightsCi = UpdateParameterWithMomentum(_weightsCi, "weightsCi", learningRate);
+        _weightsOi = UpdateParameterWithMomentum(_weightsOi, "weightsOi", learningRate);
+        _weightsFh = UpdateParameterWithMomentum(_weightsFh, "weightsFh", learningRate);
+        _weightsIh = UpdateParameterWithMomentum(_weightsIh, "weightsIh", learningRate);
+        _weightsCh = UpdateParameterWithMomentum(_weightsCh, "weightsCh", learningRate);
+        _weightsOh = UpdateParameterWithMomentum(_weightsOh, "weightsOh", learningRate);
 
-        UpdateParameterWithMomentum(_biasF, "biasF", learningRate);
-        UpdateParameterWithMomentum(_biasI, "biasI", learningRate);
-        UpdateParameterWithMomentum(_biasC, "biasC", learningRate);
-        UpdateParameterWithMomentum(_biasO, "biasO", learningRate);
+        _biasF = UpdateParameterWithMomentum(_biasF, "biasF", learningRate);
+        _biasI = UpdateParameterWithMomentum(_biasI, "biasI", learningRate);
+        _biasC = UpdateParameterWithMomentum(_biasC, "biasC", learningRate);
+        _biasO = UpdateParameterWithMomentum(_biasO, "biasO", learningRate);
 
         // Clear gradients after update
         _gradients.Clear();
@@ -923,7 +1069,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// - Small bumps in the terrain (noisy gradients) don't easily knock the ball off course
     /// </para>
     /// </remarks>
-    private void UpdateParameterWithMomentum(Tensor<T> parameter, string paramName, T learningRate)
+    private Tensor<T> UpdateParameterWithMomentum(Tensor<T> parameter, string paramName, T learningRate)
     {
         if (!_gradients.TryGetValue(paramName, out var gradientObj) || gradientObj is not Tensor<T> gradient)
         {
@@ -933,20 +1079,19 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         if (!_momentums.TryGetValue(paramName, out var momentum))
         {
             momentum = new Tensor<T>(parameter.Shape);
-            _momentums[paramName] = momentum;
+            // Initialize to zero (new Tensor does this)
         }
 
-        for (int i = 0; i < parameter.Length; i++)
-        {
-            // Update momentum
-            momentum[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(MomentumFactor), momentum[i]),
-                NumOps.Multiply(learningRate, gradient[i])
-            );
+        // momentum = momentumFactor * momentum + learningRate * gradient
+        var momFactor = NumOps.FromDouble(MomentumFactor);
+        var term1 = Engine.TensorMultiplyScalar(momentum, momFactor);
+        var term2 = Engine.TensorMultiplyScalar(gradient, learningRate);
+        var newMomentum = Engine.TensorAdd(term1, term2);
 
-            // Update parameter
-            parameter[i] = NumOps.Subtract(parameter[i], momentum[i]);
-        }
+        _momentums[paramName] = newMomentum;
+
+        // parameter = parameter - momentum
+        return Engine.TensorSubtract(parameter, newMomentum);
     }
 
     /// <summary>
@@ -1175,4 +1320,189 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         // Clear gradients
         _gradients.Clear();
     }
+
+    /// <summary>
+    /// Exports the ConvLSTM computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to which input nodes will be added. The method adds:
+    /// <list type="bullet">
+    /// <item><description>x_t: Current input tensor [batch, height, width, channels]</description></item>
+    /// <item><description>h_prev: Previous hidden state [batch, height, width, filters]</description></item>
+    /// <item><description>c_prev: Previous cell state [batch, height, width, filters]</description></item>
+    /// </list>
+    /// </param>
+    /// <returns>A computation node representing the new hidden state h_t.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method exports a single timestep of the ConvLSTM cell for JIT compilation.
+    /// The computation graph implements the full ConvLSTM equations using Conv2D operations:
+    /// </para>
+    /// <para>
+    /// <b>Gates (all use Conv2D operations):</b>
+    /// <list type="bullet">
+    /// <item><description>Forget gate: f_t = σ(Conv2D(x_t, W_fi) + Conv2D(h_{t-1}, W_fh) + b_f)</description></item>
+    /// <item><description>Input gate: i_t = σ(Conv2D(x_t, W_ii) + Conv2D(h_{t-1}, W_ih) + b_i)</description></item>
+    /// <item><description>Cell candidate: c̃_t = tanh(Conv2D(x_t, W_ci) + Conv2D(h_{t-1}, W_ch) + b_c)</description></item>
+    /// <item><description>Output gate: o_t = σ(Conv2D(x_t, W_oi) + Conv2D(h_{t-1}, W_oh) + b_o)</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>State updates:</b>
+    /// <list type="bullet">
+    /// <item><description>Cell state: c_t = f_t ⊙ c_{t-1} + i_t ⊙ c̃_t</description></item>
+    /// <item><description>Hidden state: h_t = o_t ⊙ tanh(c_t)</description></item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a blueprint for running ConvLSTM faster.
+    ///
+    /// For processing sequences:
+    /// 1. Initialize h_prev and c_prev to zeros for the first timestep
+    /// 2. Call the JIT-compiled graph for each timestep in your sequence
+    /// 3. Pass the output hidden state as h_prev for the next timestep
+    /// 4. Track cell state separately if needed for stateful operation
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // ConvLSTM expects input shape: [batch, height, width, channels]
+        // For JIT, we work with single-timestep input (no time dimension)
+        int height = InputShape[1];
+        int width = InputShape[2];
+        int inputChannels = InputShape[3];
+
+        // Create input placeholder: x_t with shape [batch, height, width, channels]
+        var inputPlaceholder = new Tensor<T>([1, height, width, inputChannels]);
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "x_t");
+        inputNodes.Add(inputNode);
+
+        // Create previous hidden state placeholder: h_{t-1} with shape [batch, height, width, filters]
+        int outHeight = OutputShape[1];
+        int outWidth = OutputShape[2];
+        var prevHiddenPlaceholder = new Tensor<T>([1, outHeight, outWidth, _filters]);
+        var prevHiddenNode = TensorOperations<T>.Variable(prevHiddenPlaceholder, "h_prev");
+        inputNodes.Add(prevHiddenNode);
+
+        // Create previous cell state placeholder: c_{t-1} with shape [batch, height, width, filters]
+        var prevCellPlaceholder = new Tensor<T>([1, outHeight, outWidth, _filters]);
+        var prevCellNode = TensorOperations<T>.Variable(prevCellPlaceholder, "c_prev");
+        inputNodes.Add(prevCellNode);
+
+        // Create variable nodes for all weights (input weights)
+        var wFi = TensorOperations<T>.Variable(_weightsFi, "W_fi");
+        var wIi = TensorOperations<T>.Variable(_weightsIi, "W_ii");
+        var wCi = TensorOperations<T>.Variable(_weightsCi, "W_ci");
+        var wOi = TensorOperations<T>.Variable(_weightsOi, "W_oi");
+
+        // Create variable nodes for all weights (hidden/recurrent weights)
+        var wFh = TensorOperations<T>.Variable(_weightsFh, "W_fh");
+        var wIh = TensorOperations<T>.Variable(_weightsIh, "W_ih");
+        var wCh = TensorOperations<T>.Variable(_weightsCh, "W_ch");
+        var wOh = TensorOperations<T>.Variable(_weightsOh, "W_oh");
+
+        // Create variable nodes for biases
+        var bF = TensorOperations<T>.Variable(_biasF, "b_f");
+        var bI = TensorOperations<T>.Variable(_biasI, "b_i");
+        var bC = TensorOperations<T>.Variable(_biasC, "b_c");
+        var bO = TensorOperations<T>.Variable(_biasO, "b_o");
+
+        // Pre-process weights for Conv2D: [kH, kW, In, Out] -> [Out, In, kH, kW]
+        // This matches the permutation used in BackwardViaAutodiff for consistency
+        var wFi_T = TensorOperations<T>.Permute(wFi, 3, 2, 0, 1);
+        var wIi_T = TensorOperations<T>.Permute(wIi, 3, 2, 0, 1);
+        var wCi_T = TensorOperations<T>.Permute(wCi, 3, 2, 0, 1);
+        var wOi_T = TensorOperations<T>.Permute(wOi, 3, 2, 0, 1);
+
+        var wFh_T = TensorOperations<T>.Permute(wFh, 3, 2, 0, 1);
+        var wIh_T = TensorOperations<T>.Permute(wIh, 3, 2, 0, 1);
+        var wCh_T = TensorOperations<T>.Permute(wCh, 3, 2, 0, 1);
+        var wOh_T = TensorOperations<T>.Permute(wOh, 3, 2, 0, 1);
+
+        // Reshape biases for NCHW broadcasting: [1, 1, 1, Filters] -> [1, Filters, 1, 1]
+        var bF_T = TensorOperations<T>.Reshape(bF, 1, _filters, 1, 1);
+        var bI_T = TensorOperations<T>.Reshape(bI, 1, _filters, 1, 1);
+        var bC_T = TensorOperations<T>.Reshape(bC, 1, _filters, 1, 1);
+        var bO_T = TensorOperations<T>.Reshape(bO, 1, _filters, 1, 1);
+
+        // Permute inputs from NHWC to NCHW for Conv2D operations
+        var inputNCHW = TensorOperations<T>.Permute(inputNode, 0, 3, 1, 2);
+        var prevHiddenNCHW = TensorOperations<T>.Permute(prevHiddenNode, 0, 3, 1, 2);
+        var prevCellNCHW = TensorOperations<T>.Permute(prevCellNode, 0, 3, 1, 2);
+
+        // Stride and padding arrays for Conv2D
+        var stride = new int[] { _strides, _strides };
+        var padding = new int[] { _padding, _padding };
+
+        // ========== Forget Gate: f_t = sigmoid(Conv2D(x_t, W_fi) + Conv2D(h_{t-1}, W_fh) + b_f) ==========
+        var f_input = TensorOperations<T>.Conv2D(inputNCHW, wFi_T, bF_T, stride, padding);
+        var f_hidden = TensorOperations<T>.Conv2D(prevHiddenNCHW, wFh_T, stride: stride, padding: padding);
+        var f_preact = TensorOperations<T>.Add(f_input, f_hidden);
+        var f_t = TensorOperations<T>.Sigmoid(f_preact);
+
+        // ========== Input Gate: i_t = sigmoid(Conv2D(x_t, W_ii) + Conv2D(h_{t-1}, W_ih) + b_i) ==========
+        var i_input = TensorOperations<T>.Conv2D(inputNCHW, wIi_T, bI_T, stride, padding);
+        var i_hidden = TensorOperations<T>.Conv2D(prevHiddenNCHW, wIh_T, stride: stride, padding: padding);
+        var i_preact = TensorOperations<T>.Add(i_input, i_hidden);
+        var i_t = TensorOperations<T>.Sigmoid(i_preact);
+
+        // ========== Cell Candidate: c̃_t = tanh(Conv2D(x_t, W_ci) + Conv2D(h_{t-1}, W_ch) + b_c) ==========
+        var c_input = TensorOperations<T>.Conv2D(inputNCHW, wCi_T, bC_T, stride, padding);
+        var c_hidden = TensorOperations<T>.Conv2D(prevHiddenNCHW, wCh_T, stride: stride, padding: padding);
+        var c_preact = TensorOperations<T>.Add(c_input, c_hidden);
+        var c_tilde = TensorOperations<T>.Tanh(c_preact);
+
+        // ========== Output Gate: o_t = sigmoid(Conv2D(x_t, W_oi) + Conv2D(h_{t-1}, W_oh) + b_o) ==========
+        var o_input = TensorOperations<T>.Conv2D(inputNCHW, wOi_T, bO_T, stride, padding);
+        var o_hidden = TensorOperations<T>.Conv2D(prevHiddenNCHW, wOh_T, stride: stride, padding: padding);
+        var o_preact = TensorOperations<T>.Add(o_input, o_hidden);
+        var o_t = TensorOperations<T>.Sigmoid(o_preact);
+
+        // ========== Cell State: c_t = f_t ⊙ c_{t-1} + i_t ⊙ c̃_t ==========
+        var forget_gated = TensorOperations<T>.ElementwiseMultiply(f_t, prevCellNCHW);
+        var input_gated = TensorOperations<T>.ElementwiseMultiply(i_t, c_tilde);
+        var c_t = TensorOperations<T>.Add(forget_gated, input_gated);
+
+        // ========== Hidden State: h_t = o_t ⊙ tanh(c_t) ==========
+        var c_t_activated = TensorOperations<T>.Tanh(c_t);
+        var h_t_NCHW = TensorOperations<T>.ElementwiseMultiply(o_t, c_t_activated);
+
+        // Permute output from NCHW back to NHWC for consistency with layer output format
+        var h_t = TensorOperations<T>.Permute(h_t_NCHW, 0, 2, 3, 1);
+
+        // Apply layer activation if configured (typically identity for ConvLSTM)
+        var output = ApplyActivationToGraph(h_t);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c>. ConvLSTMLayer exports a single-step LSTM cell computation
+    /// with full Conv2D operations for all gates.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for ConvLSTM exports a single timestep of the LSTM cell computation.
+    /// The exported graph uses proper Conv2D operations for all gate computations, matching
+    /// the behavior of the Forward method.
+    /// </para>
+    /// <para>
+    /// For processing sequences with the JIT-compiled graph:
+    /// <list type="number">
+    /// <item><description>Initialize hidden and cell states to zero tensors</description></item>
+    /// <item><description>For each timestep, call the compiled graph with (input, h_prev, c_prev)</description></item>
+    /// <item><description>The output is the new hidden state h_t</description></item>
+    /// <item><description>Track cell state c_t for the next iteration (available from intermediate computation)</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
 }
