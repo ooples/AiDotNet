@@ -5668,44 +5668,9 @@ public class CpuEngine : IEngine
         {
             var multiIndex = FlatToMultiIndex(i, inputShape, inputStrides);
 
-            // Map to output index
-            var outputMultiIndex = new List<int>();
-            int d2 = 0;
-            for (int d = 0; d < inputShape.Length; d++)
-            {
-                if (normalizedAxes.Contains(d))
-                {
-                    if (d2 < gradOutputShape.Length && gradOutputShape[d2] == 1)
-                    {
-                        outputMultiIndex.Add(0);
-                        d2++;
-                    }
-                }
-                else
-                {
-                    if (d2 < gradOutputShape.Length)
-                    {
-                        outputMultiIndex.Add(multiIndex[d]);
-                        d2++;
-                    }
-                }
-            }
-            if (outputMultiIndex.Count == 0) outputMultiIndex.Add(0);
-            while (outputMultiIndex.Count < gradOutputShape.Length) outputMultiIndex.Add(0);
-            while (outputMultiIndex.Count > gradOutputShape.Length) outputMultiIndex.RemoveAt(outputMultiIndex.Count - 1);
-
-            int outputIdx = MultiToFlatIndex([.. outputMultiIndex], gradOutputShape, outputStrides);
-
-            // Map to mean index
-            var meanMultiIndex = new List<int>();
-            for (int d = 0; d < inputShape.Length; d++)
-            {
-                if (normalizedAxes.Contains(d))
-                    meanMultiIndex.Add(0);
-                else
-                    meanMultiIndex.Add(multiIndex[d]);
-            }
-            int meanIdx = MultiToFlatIndex([.. meanMultiIndex], meanShape, meanStrides);
+            // Map to output and mean indices using helper methods
+            int outputIdx = MapToReducedIndex(multiIndex, inputShape, gradOutputShape, normalizedAxes, outputStrides);
+            int meanIdx = MapToMeanIndex(multiIndex, inputShape, meanShape, normalizedAxes, meanStrides);
 
             // gradient = 2 * (x - mean) * gradOutput / N
             T diff = numOps.Subtract(inputData[i], meanData[meanIdx]);
@@ -5866,6 +5831,55 @@ public class CpuEngine : IEngine
             flatIndex += multiIndex[i] * strides[i];
         }
         return flatIndex;
+    }
+
+    /// <summary>
+    /// Maps a multi-index from input space to reduced output space for variance backward pass.
+    /// </summary>
+    private static int MapToReducedIndex(int[] multiIndex, int[] inputShape, int[] outputShape, int[] normalizedAxes, int[] outputStrides)
+    {
+        var outputMultiIndex = new List<int>();
+        int d2 = 0;
+        for (int d = 0; d < inputShape.Length; d++)
+        {
+            if (Array.IndexOf(normalizedAxes, d) >= 0)
+            {
+                if (d2 < outputShape.Length && outputShape[d2] == 1)
+                {
+                    outputMultiIndex.Add(0);
+                    d2++;
+                }
+            }
+            else
+            {
+                if (d2 < outputShape.Length)
+                {
+                    outputMultiIndex.Add(multiIndex[d]);
+                    d2++;
+                }
+            }
+        }
+        if (outputMultiIndex.Count == 0) outputMultiIndex.Add(0);
+        while (outputMultiIndex.Count < outputShape.Length) outputMultiIndex.Add(0);
+        while (outputMultiIndex.Count > outputShape.Length) outputMultiIndex.RemoveAt(outputMultiIndex.Count - 1);
+
+        return MultiToFlatIndex([.. outputMultiIndex], outputShape, outputStrides);
+    }
+
+    /// <summary>
+    /// Maps a multi-index from input space to mean tensor space for variance backward pass.
+    /// </summary>
+    private static int MapToMeanIndex(int[] multiIndex, int[] inputShape, int[] meanShape, int[] normalizedAxes, int[] meanStrides)
+    {
+        var meanMultiIndex = new List<int>();
+        for (int d = 0; d < inputShape.Length; d++)
+        {
+            if (Array.IndexOf(normalizedAxes, d) >= 0)
+                meanMultiIndex.Add(0);
+            else
+                meanMultiIndex.Add(multiIndex[d]);
+        }
+        return MultiToFlatIndex([.. meanMultiIndex], meanShape, meanStrides);
     }
 
     #endregion
