@@ -276,13 +276,10 @@ public class FlattenLayer<T> : LayerBase<T>
             else
             {
                 stack.Push((node, true));
-                if (node.Parents != null)
+                foreach (var parent in node.Parents)
                 {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
+                    if (!visited.Contains(parent))
+                        stack.Push((parent, false));
                 }
             }
         }
