@@ -23858,7 +23858,121 @@ public class GpuEngine : IEngine, IDisposable
 
     /// <inheritdoc/>
     public Tensor<T> TensorSoftmax<T>(Tensor<T> tensor, int axis)
-        => _cpuFallback.TensorSoftmax(tensor, axis);
+    {
+        if (tensor.Length >= _thresholds.VectorMultiply && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorSoftmaxGpuOpt((Tensor<float>)(object)tensor, axis);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorSoftmaxGpuOptDouble((Tensor<double>)(object)tensor, axis);
+        }
+        return _cpuFallback.TensorSoftmax(tensor, axis);
+    }
+
+    private Tensor<float> TensorSoftmaxGpuOpt(Tensor<float> tensor, int axis)
+    {
+        try
+        {
+            var shape = tensor.Shape;
+            axis = axis < 0 ? shape.Length + axis : axis;
+            var data = tensor.AsSpan().ToArray();
+            var result = new float[tensor.Length];
+
+            int outerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            int innerSize = 1;
+            for (int i = axis + 1; i < shape.Length; i++) innerSize *= shape[i];
+
+            System.Threading.Tasks.Parallel.For(0, outerSize * innerSize, idx =>
+            {
+                int o = idx / innerSize;
+                int inner = idx % innerSize;
+
+                // Find max for stability
+                float maxVal = float.MinValue;
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int srcIdx = (o * axisSize + a) * innerSize + inner;
+                    if (data[srcIdx] > maxVal) maxVal = data[srcIdx];
+                }
+
+                // Compute exp and sum
+                float sumExp = 0;
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int srcIdx = (o * axisSize + a) * innerSize + inner;
+                    float expVal = (float)Math.Exp(data[srcIdx] - maxVal);
+                    result[srcIdx] = expVal;
+                    sumExp += expVal;
+                }
+
+                // Normalize
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int srcIdx = (o * axisSize + a) * innerSize + inner;
+                    result[srcIdx] /= sumExp;
+                }
+            });
+
+            return new Tensor<float>(shape, new Vector<float>(result));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorSoftmax(tensor, axis);
+        }
+    }
+
+    private Tensor<double> TensorSoftmaxGpuOptDouble(Tensor<double> tensor, int axis)
+    {
+        try
+        {
+            var shape = tensor.Shape;
+            axis = axis < 0 ? shape.Length + axis : axis;
+            var data = tensor.AsSpan().ToArray();
+            var result = new double[tensor.Length];
+
+            int outerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            int innerSize = 1;
+            for (int i = axis + 1; i < shape.Length; i++) innerSize *= shape[i];
+
+            System.Threading.Tasks.Parallel.For(0, outerSize * innerSize, idx =>
+            {
+                int o = idx / innerSize;
+                int inner = idx % innerSize;
+
+                double maxVal = double.MinValue;
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int srcIdx = (o * axisSize + a) * innerSize + inner;
+                    if (data[srcIdx] > maxVal) maxVal = data[srcIdx];
+                }
+
+                double sumExp = 0;
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int srcIdx = (o * axisSize + a) * innerSize + inner;
+                    double expVal = Math.Exp(data[srcIdx] - maxVal);
+                    result[srcIdx] = expVal;
+                    sumExp += expVal;
+                }
+
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int srcIdx = (o * axisSize + a) * innerSize + inner;
+                    result[srcIdx] /= sumExp;
+                }
+            });
+
+            return new Tensor<double>(shape, new Vector<double>(result));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorSoftmax(tensor, axis);
+        }
+    }
 
     /// <inheritdoc/>
     public Tensor<T> TensorSoftmaxBackward<T>(Tensor<T> softmaxOutput, Tensor<T> outputGradient, int axis)
@@ -23866,7 +23980,116 @@ public class GpuEngine : IEngine, IDisposable
 
     /// <inheritdoc/>
     public Tensor<T> TensorLogSoftmax<T>(Tensor<T> tensor, int axis)
-        => _cpuFallback.TensorLogSoftmax(tensor, axis);
+    {
+        if (tensor.Length >= _thresholds.VectorMultiply && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorLogSoftmaxGpu((Tensor<float>)(object)tensor, axis);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorLogSoftmaxGpuDouble((Tensor<double>)(object)tensor, axis);
+        }
+        return _cpuFallback.TensorLogSoftmax(tensor, axis);
+    }
+
+    private Tensor<float> TensorLogSoftmaxGpu(Tensor<float> tensor, int axis)
+    {
+        try
+        {
+            var shape = tensor.Shape;
+            axis = axis < 0 ? shape.Length + axis : axis;
+            var data = tensor.AsSpan().ToArray();
+            var result = new float[tensor.Length];
+
+            int outerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            int innerSize = 1;
+            for (int i = axis + 1; i < shape.Length; i++) innerSize *= shape[i];
+
+            System.Threading.Tasks.Parallel.For(0, outerSize * innerSize, idx =>
+            {
+                int o = idx / innerSize;
+                int inner = idx % innerSize;
+
+                float maxVal = float.MinValue;
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int srcIdx = (o * axisSize + a) * innerSize + inner;
+                    if (data[srcIdx] > maxVal) maxVal = data[srcIdx];
+                }
+
+                float sumExp = 0;
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int srcIdx = (o * axisSize + a) * innerSize + inner;
+                    sumExp += (float)Math.Exp(data[srcIdx] - maxVal);
+                }
+
+                float logSumExp = maxVal + (float)Math.Log(sumExp);
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int srcIdx = (o * axisSize + a) * innerSize + inner;
+                    result[srcIdx] = data[srcIdx] - logSumExp;
+                }
+            });
+
+            return new Tensor<float>(shape, new Vector<float>(result));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorLogSoftmax(tensor, axis);
+        }
+    }
+
+    private Tensor<double> TensorLogSoftmaxGpuDouble(Tensor<double> tensor, int axis)
+    {
+        try
+        {
+            var shape = tensor.Shape;
+            axis = axis < 0 ? shape.Length + axis : axis;
+            var data = tensor.AsSpan().ToArray();
+            var result = new double[tensor.Length];
+
+            int outerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            int innerSize = 1;
+            for (int i = axis + 1; i < shape.Length; i++) innerSize *= shape[i];
+
+            System.Threading.Tasks.Parallel.For(0, outerSize * innerSize, idx =>
+            {
+                int o = idx / innerSize;
+                int inner = idx % innerSize;
+
+                double maxVal = double.MinValue;
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int srcIdx = (o * axisSize + a) * innerSize + inner;
+                    if (data[srcIdx] > maxVal) maxVal = data[srcIdx];
+                }
+
+                double sumExp = 0;
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int srcIdx = (o * axisSize + a) * innerSize + inner;
+                    sumExp += Math.Exp(data[srcIdx] - maxVal);
+                }
+
+                double logSumExp = maxVal + Math.Log(sumExp);
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int srcIdx = (o * axisSize + a) * innerSize + inner;
+                    result[srcIdx] = data[srcIdx] - logSumExp;
+                }
+            });
+
+            return new Tensor<double>(shape, new Vector<double>(result));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorLogSoftmax(tensor, axis);
+        }
+    }
 
     /// <inheritdoc/>
     public Tensor<T> TensorTopK<T>(Tensor<T> tensor, int k, int axis, out Tensor<int> indices)
