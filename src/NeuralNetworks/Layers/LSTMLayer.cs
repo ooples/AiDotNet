@@ -1611,6 +1611,11 @@ public class LSTMLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastHiddenState = null;
         _lastCellState = null;
+
+        // Clear per-time-step cached states to prevent stale state leakage between sequences
+        _cachedHiddenStates = null;
+        _cachedCellStates = null;
+
         Gradients.Clear();
     }
 
