@@ -284,12 +284,26 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Create flattened indices tensor for embedding lookup
         var flatIndices = new Tensor<T>([sequenceLength * batchSize]);
+        int vocabularySize = _embeddingTensor.Shape[0];
         int flatIdx = 0;
+
         for (int t = 0; t < sequenceLength; t++)
         {
             for (int b = 0; b < batchSize; b++)
             {
-                flatIndices[flatIdx++] = input[t, b, 0];
+                T indexValue = input[t, b, 0];
+                int index = Convert.ToInt32(indexValue);
+
+                // Validate index is within vocabulary bounds
+                if (index < 0 || index >= vocabularySize)
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(input),
+                        $"Input index {index} at position (sequence={t}, batch={b}) is out of range. " +
+                        $"Valid index range is [0, {vocabularySize - 1}] (vocabulary size: {vocabularySize}).");
+                }
+
+                flatIndices[flatIdx++] = indexValue;
             }
         }
 
