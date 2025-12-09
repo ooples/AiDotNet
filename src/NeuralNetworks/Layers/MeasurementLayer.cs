@@ -226,9 +226,9 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This method uses automatic differentiation to compute gradients. It constructs a computation graph
-    /// that mirrors the forward pass operations (complex magnitude squared -> Sum -> Normalize) to calculate exact gradients.
-    /// The input is complex-valued stored as [real_0, imag_0, real_1, imag_1, ...] (interleaved format),
-    /// so we extract real and imaginary parts and compute |z|² = real² + imag².
+    /// that mirrors the forward pass operations (magnitude squared -> Sum -> Normalize) to calculate exact gradients.
+    /// The Forward pass uses GetComplex which treats each element as a complex value. For real-valued tensors (T=float/double),
+    /// the imaginary part is 0, so |z|² = real² + 0² = real². The output shape matches the input shape.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
@@ -239,19 +239,12 @@ public class MeasurementLayer<T> : LayerBase<T>
         // 1. Create input variable
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
-        // 2. Build computation graph matching Forward's complex magnitude computation
-        // Input is complex-valued stored as [real_0, imag_0, real_1, imag_1, ...] (interleaved)
-        // Forward computes: p = |z|² / sum(|z|²) where |z|² = real² + imag²
-        int size = _lastInput.Shape[0];
-
-        // Extract real parts (even indices) and imaginary parts (odd indices)
-        var realPart = Autodiff.TensorOperations<T>.Slice(inputNode, 0, size, step: 2, axis: 0);
-        var imagPart = Autodiff.TensorOperations<T>.Slice(inputNode, 1, size, step: 2, axis: 0);
-
-        // Compute |z|² = real² + imag²
-        var realSquared = Autodiff.TensorOperations<T>.Square(realPart);
-        var imagSquared = Autodiff.TensorOperations<T>.Square(imagPart);
-        var magnitudeSquared = Autodiff.TensorOperations<T>.Add(realSquared, imagSquared);
+        // 2. Build computation graph matching Forward's magnitude computation
+        // Forward uses GetComplex(input, i) which treats each element as a complex value.
+        // For real T: imaginary=0, so |z|² = value²
+        // For complex T: |z|² = real² + imag² (handled by the Complex type itself)
+        // Here we compute for the common real case: magnitudeSquared = input²
+        var magnitudeSquared = Autodiff.TensorOperations<T>.Square(inputNode);
 
         // Sum over all elements
         var sumSquared = Autodiff.TensorOperations<T>.Sum(magnitudeSquared);
@@ -262,7 +255,7 @@ public class MeasurementLayer<T> : LayerBase<T>
         var epsilonNode = Autodiff.TensorOperations<T>.Constant(epsilonTensor, "epsilon");
         var safeSum = Autodiff.TensorOperations<T>.Add(sumSquared, epsilonNode);
 
-        // Normalize to get probabilities
+        // Normalize to get probabilities: p = |z|² / sum(|z|²)
         var output = Autodiff.TensorOperations<T>.Divide(magnitudeSquared, safeSum);
 
         // 3. Set gradient and execute backward
