@@ -281,6 +281,33 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Validate input tensor shape: must be 3D [Batch, Seq, InputSize]
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
+        }
+        if (input.Shape.Length != 3)
+        {
+            throw new ArgumentException(
+                $"AttentionLayer requires a 3D tensor with shape [Batch, Seq, InputSize]. " +
+                $"Got tensor with rank {input.Shape.Length}.",
+                nameof(input));
+        }
+        if (input.Shape[0] <= 0 || input.Shape[1] <= 0)
+        {
+            throw new ArgumentException(
+                $"AttentionLayer requires positive batch size and sequence length. " +
+                $"Got shape [{input.Shape[0]}, {input.Shape[1]}, {input.Shape[2]}].",
+                nameof(input));
+        }
+        if (input.Shape[2] != _inputSize)
+        {
+            throw new ArgumentException(
+                $"AttentionLayer input size mismatch. Expected InputSize={_inputSize}, " +
+                $"but got {input.Shape[2]} in shape [{input.Shape[0]}, {input.Shape[1]}, {input.Shape[2]}].",
+                nameof(input));
+        }
+
         _lastInput = input;
         _lastQueryInput = input;
         _lastKeyInput = input;
