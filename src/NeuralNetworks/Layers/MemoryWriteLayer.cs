@@ -161,6 +161,15 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastAttentionScores;
 
     /// <summary>
+    /// The write values tensor from the most recent forward pass (input to output weights).
+    /// </summary>
+    /// <remarks>
+    /// This field stores the write values tensor (result of values ⊙ attentionWeights) from the most
+    /// recent forward pass, which is needed during the backward pass for output weights gradient calculation.
+    /// </remarks>
+    private Tensor<T>? _lastWriteValues;
+
+    /// <summary>
     /// The gradient of the loss with respect to the query weights.
     /// </summary>
     /// <remarks>
@@ -446,6 +455,7 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Compute write values using element-wise multiplication
         var writeValues = Engine.TensorMultiply(values, attentionWeights);
+        _lastWriteValues = writeValues; // Cache for output weights gradient computation
 
         // Apply output transformation: writeValues × outputWeights + outputBias
         var projected = Engine.TensorMatMul(writeValues, _outputWeights);
@@ -659,14 +669,15 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastMemory == null || _lastOutput == null || _lastAttentionScores == null)
+        if (_lastInput == null || _lastMemory == null || _lastOutput == null || _lastAttentionScores == null || _lastWriteValues == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
 
-        // Output weights gradient: activationGradient^T × lastOutput
-        var activationGradientT = Engine.TensorTranspose(activationGradient);
-        _outputWeightsGradient = Engine.TensorMatMul(activationGradientT, _lastOutput);
+        // Output weights gradient: writeValues^T × activationGradient
+        // For Y = X × W, gradient ∂L/∂W = X^T × ∂L/∂Y where X is _lastWriteValues (input to output weights)
+        var lastWriteValuesT = Engine.TensorTranspose(_lastWriteValues);
+        _outputWeightsGradient = Engine.TensorMatMul(lastWriteValuesT, activationGradient);
 
         // Output bias gradient: sum across batch dimension
         _outputBiasGradient = activationGradient.Sum([0]);
@@ -940,6 +951,7 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastMemory = null;
         _lastOutput = null;
         _lastAttentionScores = null;
+        _lastWriteValues = null;
 
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;
