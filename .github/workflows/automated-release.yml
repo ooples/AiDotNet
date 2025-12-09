@@ -39,7 +39,7 @@ jobs:
       should_release: ${{ steps.version.outputs.should_release }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -226,7 +226,7 @@ jobs:
           - tests/AiDotNet.Tensors.Tests/AiDotNet.Tensors.Tests.csproj
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -280,7 +280,7 @@ jobs:
     if: needs.version-and-build.outputs.should_release == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
