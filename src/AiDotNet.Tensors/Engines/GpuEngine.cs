@@ -24198,6 +24198,16 @@ public class GpuEngine : IEngine, IDisposable
     {
         try
         {
+            // Input validation
+            if (string.IsNullOrWhiteSpace(subscripts))
+            {
+                return _cpuFallback.TensorEinsum(subscripts, tensors);
+            }
+            if (tensors is null || tensors.Length == 0)
+            {
+                throw new ArgumentException("Tensors array cannot be null or empty", nameof(tensors));
+            }
+
             // Parse subscripts: "ij,jk->ik" format
             var parts = subscripts.Replace(" ", "").Split(new[] { "->" }, StringSplitOptions.None);
             var inputSubscripts = parts[0].Split(',');
@@ -24219,7 +24229,7 @@ public class GpuEngine : IEngine, IDisposable
                 return _cpuFallback.TensorEinsum(subscripts, tensors);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or FormatException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or FormatException or IndexOutOfRangeException)
         {
             return _cpuFallback.TensorEinsum(subscripts, tensors);
         }
@@ -24382,6 +24392,16 @@ public class GpuEngine : IEngine, IDisposable
     {
         try
         {
+            // Input validation
+            if (string.IsNullOrWhiteSpace(subscripts))
+            {
+                return _cpuFallback.TensorEinsum(subscripts, tensors);
+            }
+            if (tensors is null || tensors.Length == 0)
+            {
+                throw new ArgumentException("Tensors array cannot be null or empty", nameof(tensors));
+            }
+
             var parts = subscripts.Replace(" ", "").Split(new[] { "->" }, StringSplitOptions.None);
             var inputSubscripts = parts[0].Split(',');
             var outputSubscript = parts.Length > 1 ? parts[1] : "";
@@ -24399,7 +24419,7 @@ public class GpuEngine : IEngine, IDisposable
                 return _cpuFallback.TensorEinsum(subscripts, tensors);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or FormatException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or FormatException or IndexOutOfRangeException)
         {
             return _cpuFallback.TensorEinsum(subscripts, tensors);
         }
@@ -25543,7 +25563,17 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var shape = tensor.Shape;
+            // Validate non-empty tensor
+            if (shape.Length == 0 || tensor.Length == 0)
+            {
+                return _cpuFallback.TensorArgMax(tensor, axis);
+            }
             axis = axis < 0 ? shape.Length + axis : axis;
+            // Validate axis is in bounds
+            if (axis < 0 || axis >= shape.Length)
+            {
+                return _cpuFallback.TensorArgMax(tensor, axis);
+            }
             var data = tensor.AsSpan().ToArray();
 
             int outerSize = 1;
@@ -25577,7 +25607,7 @@ public class GpuEngine : IEngine, IDisposable
             if (newShape.Length == 0) newShape = new[] { 1 };
             return new Tensor<float>(newShape, new Vector<float>(result));
         }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or IndexOutOfRangeException)
         {
             return _cpuFallback.TensorArgMax(tensor, axis);
         }
@@ -25588,7 +25618,17 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var shape = tensor.Shape;
+            // Validate non-empty tensor
+            if (shape.Length == 0 || tensor.Length == 0)
+            {
+                return _cpuFallback.TensorArgMax(tensor, axis);
+            }
             axis = axis < 0 ? shape.Length + axis : axis;
+            // Validate axis is in bounds
+            if (axis < 0 || axis >= shape.Length)
+            {
+                return _cpuFallback.TensorArgMax(tensor, axis);
+            }
             var data = tensor.AsSpan().ToArray();
 
             int outerSize = 1;
@@ -25622,7 +25662,7 @@ public class GpuEngine : IEngine, IDisposable
             if (newShape.Length == 0) newShape = new[] { 1 };
             return new Tensor<double>(newShape, new Vector<double>(result));
         }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or IndexOutOfRangeException)
         {
             return _cpuFallback.TensorArgMax(tensor, axis);
         }
@@ -25646,7 +25686,17 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var shape = tensor.Shape;
+            // Validate non-empty tensor
+            if (shape.Length == 0 || tensor.Length == 0)
+            {
+                return _cpuFallback.TensorArgMin(tensor, axis);
+            }
             axis = axis < 0 ? shape.Length + axis : axis;
+            // Validate axis is in bounds
+            if (axis < 0 || axis >= shape.Length)
+            {
+                return _cpuFallback.TensorArgMin(tensor, axis);
+            }
             var data = tensor.AsSpan().ToArray();
 
             int outerSize = 1;
@@ -25680,7 +25730,7 @@ public class GpuEngine : IEngine, IDisposable
             if (newShape.Length == 0) newShape = new[] { 1 };
             return new Tensor<float>(newShape, new Vector<float>(result));
         }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or IndexOutOfRangeException)
         {
             return _cpuFallback.TensorArgMin(tensor, axis);
         }
@@ -25691,7 +25741,17 @@ public class GpuEngine : IEngine, IDisposable
         try
         {
             var shape = tensor.Shape;
+            // Validate non-empty tensor
+            if (shape.Length == 0 || tensor.Length == 0)
+            {
+                return _cpuFallback.TensorArgMin(tensor, axis);
+            }
             axis = axis < 0 ? shape.Length + axis : axis;
+            // Validate axis is in bounds
+            if (axis < 0 || axis >= shape.Length)
+            {
+                return _cpuFallback.TensorArgMin(tensor, axis);
+            }
             var data = tensor.AsSpan().ToArray();
 
             int outerSize = 1;
@@ -25725,7 +25785,7 @@ public class GpuEngine : IEngine, IDisposable
             if (newShape.Length == 0) newShape = new[] { 1 };
             return new Tensor<double>(newShape, new Vector<double>(result));
         }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or IndexOutOfRangeException)
         {
             return _cpuFallback.TensorArgMin(tensor, axis);
         }
@@ -26765,11 +26825,19 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     int targetIdx = idxData[idx];
                     if (targetIdx < 0) targetIdx += axisSize;
-                    for (int inner = 0; inner < innerSize; inner++)
+                    // Bounds check: ensure targetIdx is valid
+                    if (targetIdx >= 0 && targetIdx < axisSize)
                     {
-                        int srcOffset = (o * indices.Length + idx) * innerSize + inner;
-                        int dstOffset = (o * axisSize + targetIdx) * innerSize + inner;
-                        result[dstOffset] = srcData[srcOffset];
+                        for (int inner = 0; inner < innerSize; inner++)
+                        {
+                            int srcOffset = (o * indices.Length + idx) * innerSize + inner;
+                            int dstOffset = (o * axisSize + targetIdx) * innerSize + inner;
+                            // Bounds check: ensure offsets are valid
+                            if (srcOffset < srcData.Length && dstOffset < result.Length)
+                            {
+                                result[dstOffset] = srcData[srcOffset];
+                            }
+                        }
                     }
                 }
             });
@@ -26805,11 +26873,19 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     int targetIdx = idxData[idx];
                     if (targetIdx < 0) targetIdx += axisSize;
-                    for (int inner = 0; inner < innerSize; inner++)
+                    // Bounds check: ensure targetIdx is valid
+                    if (targetIdx >= 0 && targetIdx < axisSize)
                     {
-                        int srcOffset = (o * indices.Length + idx) * innerSize + inner;
-                        int dstOffset = (o * axisSize + targetIdx) * innerSize + inner;
-                        result[dstOffset] = srcData[srcOffset];
+                        for (int inner = 0; inner < innerSize; inner++)
+                        {
+                            int srcOffset = (o * indices.Length + idx) * innerSize + inner;
+                            int dstOffset = (o * axisSize + targetIdx) * innerSize + inner;
+                            // Bounds check: ensure offsets are valid
+                            if (srcOffset < srcData.Length && dstOffset < result.Length)
+                            {
+                                result[dstOffset] = srcData[srcOffset];
+                            }
+                        }
                     }
                 }
             });
@@ -26862,11 +26938,19 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     int srcIdx = idxData[idx];
                     if (srcIdx < 0) srcIdx += axisSize;
-                    for (int inner = 0; inner < innerSize; inner++)
+                    // Bounds check: ensure srcIdx is valid
+                    if (srcIdx >= 0 && srcIdx < axisSize)
                     {
-                        int srcOffset = (o * axisSize + srcIdx) * innerSize + inner;
-                        int dstOffset = (o * indices.Length + idx) * innerSize + inner;
-                        result[dstOffset] = data[srcOffset];
+                        for (int inner = 0; inner < innerSize; inner++)
+                        {
+                            int srcOffset = (o * axisSize + srcIdx) * innerSize + inner;
+                            int dstOffset = (o * indices.Length + idx) * innerSize + inner;
+                            // Bounds check: ensure offsets are valid
+                            if (srcOffset < data.Length && dstOffset < result.Length)
+                            {
+                                result[dstOffset] = data[srcOffset];
+                            }
+                        }
                     }
                 }
             });
@@ -26906,11 +26990,19 @@ public class GpuEngine : IEngine, IDisposable
                 {
                     int srcIdx = idxData[idx];
                     if (srcIdx < 0) srcIdx += axisSize;
-                    for (int inner = 0; inner < innerSize; inner++)
+                    // Bounds check: ensure srcIdx is valid
+                    if (srcIdx >= 0 && srcIdx < axisSize)
                     {
-                        int srcOffset = (o * axisSize + srcIdx) * innerSize + inner;
-                        int dstOffset = (o * indices.Length + idx) * innerSize + inner;
-                        result[dstOffset] = data[srcOffset];
+                        for (int inner = 0; inner < innerSize; inner++)
+                        {
+                            int srcOffset = (o * axisSize + srcIdx) * innerSize + inner;
+                            int dstOffset = (o * indices.Length + idx) * innerSize + inner;
+                            // Bounds check: ensure offsets are valid
+                            if (srcOffset < data.Length && dstOffset < result.Length)
+                            {
+                                result[dstOffset] = data[srcOffset];
+                            }
+                        }
                     }
                 }
             });
