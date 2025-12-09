@@ -2741,15 +2741,43 @@ public interface IEngine
     /// <param name="outputHeight">Target grid height.</param>
     /// <param name="outputWidth">Target grid width.</param>
     /// <returns>Grid tensor of shape [batch, outputHeight, outputWidth, 2] in [-1, 1] normalized coords.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>IMPORTANT: Layout Note</b> - This method and <see cref="GridSample{T}"/> use NHWC layout
+    /// [batch, height, width, channels/coords], which differs from Conv2D, MaxPool2D, and other
+    /// spatial operations that use NCHW layout [batch, channels, height, width].
+    /// </para>
+    /// <para>
+    /// When using these methods with NCHW tensors, you must transpose:
+    /// <code>
+    /// // NCHW to NHWC before GridSample
+    /// var inputNHWC = input.Transpose([0, 2, 3, 1]);
+    /// var output = engine.GridSample(inputNHWC, grid);
+    /// // NHWC to NCHW after GridSample
+    /// var outputNCHW = output.Transpose([0, 3, 1, 2]);
+    /// </code>
+    /// </para>
+    /// </remarks>
     Tensor<T> AffineGrid<T>(Tensor<T> theta, int outputHeight, int outputWidth);
 
     /// <summary>
     /// Samples an input tensor using a normalized grid with bilinear interpolation.
     /// </summary>
     /// <typeparam name="T">Numeric type.</typeparam>
-    /// <param name="input">Input tensor [batch, height, width, channels].</param>
+    /// <param name="input">Input tensor [batch, height, width, channels] (NHWC format).</param>
     /// <param name="grid">Sampling grid [batch, outH, outW, 2] with coords in [-1, 1].</param>
-    /// <returns>Sampled output tensor [batch, outH, outW, channels].</returns>
+    /// <returns>Sampled output tensor [batch, outH, outW, channels] (NHWC format).</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>IMPORTANT: Layout Note</b> - This method uses NHWC layout [batch, height, width, channels],
+    /// which differs from Conv2D, MaxPool2D, and other spatial operations that use NCHW layout
+    /// [batch, channels, height, width]. Ensure inputs are transposed appropriately.
+    /// </para>
+    /// <para>
+    /// The grid coordinates are normalized to [-1, 1] range where (-1, -1) is the top-left corner
+    /// and (1, 1) is the bottom-right corner of the input tensor.
+    /// </para>
+    /// </remarks>
     Tensor<T> GridSample<T>(Tensor<T> input, Tensor<T> grid);
 
     /// <summary>
