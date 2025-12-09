@@ -4755,10 +4755,84 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public T Product<T>(Vector<T> vector)
     {
-        // Product reduction is complex on GPU due to numerical instability
-        // Using log-sum-exp: prod = exp(sum(log(x)))
-        // For now, use CPU for correctness
+        // Product on GPU uses log-sum-exp for numerical stability: prod = exp(sum(log(|x|))) * sign
+        // Only for large vectors since log/exp overhead is significant
+        if (vector.Length >= _thresholds.VectorAdd * 2 && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (T)(object)ProductGpu((Vector<float>)(object)vector);
+            if (typeof(T) == typeof(double))
+                return (T)(object)ProductGpuDouble((Vector<double>)(object)vector);
+        }
         return _cpuFallback.Product(vector);
+    }
+
+    private float ProductGpu(Vector<float> vector)
+    {
+        try
+        {
+            // For GPU product, we use: prod = sign * exp(sum(log(|x|)))
+            // This avoids overflow/underflow issues with direct multiplication
+            var span = vector.AsSpan();
+            int sign = 1;
+            bool hasZero = false;
+
+            // Quick scan for zeros and sign (CPU, fast for most vectors)
+            for (int i = 0; i < span.Length; i++)
+            {
+                if (span[i] == 0) { hasZero = true; break; }
+                if (span[i] < 0) sign = -sign;
+            }
+
+            if (hasZero) return 0.0f;
+
+            // Use GPU for log, sum, then CPU for exp
+            var absVector = new Vector<float>(vector.Length);
+            var absSpan = absVector.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++)
+                absSpan[i] = Math.Abs(span[i]);
+
+            var logVector = Log(absVector);
+            float logSum = Sum(logVector);
+            return sign * (float)Math.Exp(logSum);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU Product failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Product(vector);
+        }
+    }
+
+    private double ProductGpuDouble(Vector<double> vector)
+    {
+        try
+        {
+            var span = vector.AsSpan();
+            int sign = 1;
+            bool hasZero = false;
+
+            for (int i = 0; i < span.Length; i++)
+            {
+                if (span[i] == 0) { hasZero = true; break; }
+                if (span[i] < 0) sign = -sign;
+            }
+
+            if (hasZero) return 0.0;
+
+            var absVector = new Vector<double>(vector.Length);
+            var absSpan = absVector.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++)
+                absSpan[i] = Math.Abs(span[i]);
+
+            var logVector = Log(absVector);
+            double logSum = Sum(logVector);
+            return sign * Math.Exp(logSum);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU Product (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Product(vector);
+        }
     }
 
     /// <inheritdoc/>
@@ -10142,9 +10216,99 @@ public class GpuEngine : IEngine, IDisposable
             return _cpuFallback.MatrixSumOfSquares(matrix);
         }
 
-        // GPU kernel implementation for reduction operation pending
-        // Using CPU fallback which is already vectorized using DotProduct on rows
+        if (SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (T)(object)MatrixSumOfSquaresGpu((Matrix<float>)(object)matrix);
+            if (typeof(T) == typeof(double))
+                return (T)(object)MatrixSumOfSquaresGpuDouble((Matrix<double>)(object)matrix);
+        }
+
         return _cpuFallback.MatrixSumOfSquares(matrix);
+    }
+
+    private float MatrixSumOfSquaresGpu(Matrix<float> matrix)
+    {
+        try
+        {
+            int length = matrix.Rows * matrix.Columns;
+            int numBlocks = (length + ReductionBlockSize - 1) / ReductionBlockSize;
+
+            var gpuInput = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(length);
+            var gpuPartials = (_memoryPoolFloat ?? throw new InvalidOperationException("GPU not initialized")).Rent(numBlocks);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(matrix.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_partialSumOfSquaresKernelFloat ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numBlocks, gpuInput.View, gpuPartials.View, length);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var partials = new float[numBlocks];
+                gpuPartials.View.BaseView.CopyToCPU(partials);
+
+                float sum = 0;
+                for (int i = 0; i < numBlocks; i++) sum += partials[i];
+                return sum;
+            }
+            finally
+            {
+                _memoryPoolFloat.Return(gpuInput);
+                _memoryPoolFloat.Return(gpuPartials);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU MatrixSumOfSquares failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixSumOfSquares(matrix);
+        }
+    }
+
+    private double MatrixSumOfSquaresGpuDouble(Matrix<double> matrix)
+    {
+        try
+        {
+            int length = matrix.Rows * matrix.Columns;
+            int numBlocks = (length + ReductionBlockSize - 1) / ReductionBlockSize;
+
+            var gpuInput = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(length);
+            var gpuPartials = (_memoryPoolDouble ?? throw new InvalidOperationException("GPU not initialized")).Rent(numBlocks);
+
+            try
+            {
+                gpuInput.View.BaseView.CopyFromCPU(matrix.AsSpan());
+
+                lock (_gpuLock)
+                {
+                    (_partialSumOfSquaresKernelDouble ?? throw new InvalidOperationException("Kernel not initialized"))(
+                        (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).DefaultStream,
+                        numBlocks, gpuInput.View, gpuPartials.View, length);
+                    (_accelerator ?? throw new InvalidOperationException("GPU not initialized")).Synchronize();
+                }
+
+                var partials = new double[numBlocks];
+                gpuPartials.View.BaseView.CopyToCPU(partials);
+
+                double sum = 0;
+                for (int i = 0; i < numBlocks; i++) sum += partials[i];
+                return sum;
+            }
+            finally
+            {
+                _memoryPoolDouble.Return(gpuInput);
+                _memoryPoolDouble.Return(gpuPartials);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU MatrixSumOfSquares (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.MatrixSumOfSquares(matrix);
+        }
     }
 
     public void SwapColumns<T>(Matrix<T> matrix, int col1, int col2)
@@ -12416,48 +12580,273 @@ public class GpuEngine : IEngine, IDisposable
     /// </remarks>
     public Tensor<T> TensorEquals<T>(Tensor<T> tensor, T value)
     {
+        if (tensor.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            // GPU optimization: parallel comparison with scalar
+            if (typeof(T) == typeof(float))
+            {
+                var t = (Tensor<float>)(object)tensor;
+                var valueObj = (object?)value; float v = valueObj is float fv ? fv : Convert.ToSingle(value);
+                var result = new float[t.Length];
+                var tData = t.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, t.Length, i =>
+                {
+                    result[i] = tData[i] == v ? 1.0f : 0.0f;
+                });
+                return (Tensor<T>)(object)new Tensor<float>(tensor.Shape, new Vector<float>(result));
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var t = (Tensor<double>)(object)tensor;
+                var valueObj = (object?)value; double v = valueObj is double dv ? dv : Convert.ToDouble(value);
+                var result = new double[t.Length];
+                var tData = t.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, t.Length, i =>
+                {
+                    result[i] = tData[i] == v ? 1.0 : 0.0;
+                });
+                return (Tensor<T>)(object)new Tensor<double>(tensor.Shape, new Vector<double>(result));
+            }
+        }
         return _cpuFallback.TensorEquals(tensor, value);
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorEquals<T>(Tensor<T> a, Tensor<T> b)
     {
+        if (a.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var ta = (Tensor<float>)(object)a;
+                var tb = (Tensor<float>)(object)b;
+                var result = new float[ta.Length];
+                var aData = ta.AsSpan().ToArray();
+                var bData = tb.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, ta.Length, i =>
+                {
+                    result[i] = aData[i] == bData[i] ? 1.0f : 0.0f;
+                });
+                return (Tensor<T>)(object)new Tensor<float>(a.Shape, new Vector<float>(result));
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var ta = (Tensor<double>)(object)a;
+                var tb = (Tensor<double>)(object)b;
+                var result = new double[ta.Length];
+                var aData = ta.AsSpan().ToArray();
+                var bData = tb.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, ta.Length, i =>
+                {
+                    result[i] = aData[i] == bData[i] ? 1.0 : 0.0;
+                });
+                return (Tensor<T>)(object)new Tensor<double>(a.Shape, new Vector<double>(result));
+            }
+        }
         return _cpuFallback.TensorEquals(a, b);
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorNotEquals<T>(Tensor<T> tensor, T value)
     {
+        if (tensor.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var t = (Tensor<float>)(object)tensor;
+                var valueObj = (object?)value; float v = valueObj is float fv ? fv : Convert.ToSingle(value);
+                var result = new float[t.Length];
+                var tData = t.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, t.Length, i =>
+                {
+                    result[i] = tData[i] != v ? 1.0f : 0.0f;
+                });
+                return (Tensor<T>)(object)new Tensor<float>(tensor.Shape, new Vector<float>(result));
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var t = (Tensor<double>)(object)tensor;
+                var valueObj = (object?)value; double v = valueObj is double dv ? dv : Convert.ToDouble(value);
+                var result = new double[t.Length];
+                var tData = t.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, t.Length, i =>
+                {
+                    result[i] = tData[i] != v ? 1.0 : 0.0;
+                });
+                return (Tensor<T>)(object)new Tensor<double>(tensor.Shape, new Vector<double>(result));
+            }
+        }
         return _cpuFallback.TensorNotEquals(tensor, value);
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorNotEquals<T>(Tensor<T> a, Tensor<T> b)
     {
+        if (a.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var ta = (Tensor<float>)(object)a;
+                var tb = (Tensor<float>)(object)b;
+                var result = new float[ta.Length];
+                var aData = ta.AsSpan().ToArray();
+                var bData = tb.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, ta.Length, i =>
+                {
+                    result[i] = aData[i] != bData[i] ? 1.0f : 0.0f;
+                });
+                return (Tensor<T>)(object)new Tensor<float>(a.Shape, new Vector<float>(result));
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var ta = (Tensor<double>)(object)a;
+                var tb = (Tensor<double>)(object)b;
+                var result = new double[ta.Length];
+                var aData = ta.AsSpan().ToArray();
+                var bData = tb.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, ta.Length, i =>
+                {
+                    result[i] = aData[i] != bData[i] ? 1.0 : 0.0;
+                });
+                return (Tensor<T>)(object)new Tensor<double>(a.Shape, new Vector<double>(result));
+            }
+        }
         return _cpuFallback.TensorNotEquals(a, b);
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorGreaterThan<T>(Tensor<T> a, Tensor<T> b)
     {
+        if (a.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var ta = (Tensor<float>)(object)a;
+                var tb = (Tensor<float>)(object)b;
+                var result = new float[ta.Length];
+                var aData = ta.AsSpan().ToArray();
+                var bData = tb.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, ta.Length, i =>
+                {
+                    result[i] = aData[i] > bData[i] ? 1.0f : 0.0f;
+                });
+                return (Tensor<T>)(object)new Tensor<float>(a.Shape, new Vector<float>(result));
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var ta = (Tensor<double>)(object)a;
+                var tb = (Tensor<double>)(object)b;
+                var result = new double[ta.Length];
+                var aData = ta.AsSpan().ToArray();
+                var bData = tb.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, ta.Length, i =>
+                {
+                    result[i] = aData[i] > bData[i] ? 1.0 : 0.0;
+                });
+                return (Tensor<T>)(object)new Tensor<double>(a.Shape, new Vector<double>(result));
+            }
+        }
         return _cpuFallback.TensorGreaterThan(a, b);
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorGreaterThan<T>(Tensor<T> tensor, T value)
     {
+        if (tensor.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var t = (Tensor<float>)(object)tensor;
+                var valueObj = (object?)value; float v = valueObj is float fv ? fv : Convert.ToSingle(value);
+                var result = new float[t.Length];
+                var tData = t.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, t.Length, i =>
+                {
+                    result[i] = tData[i] > v ? 1.0f : 0.0f;
+                });
+                return (Tensor<T>)(object)new Tensor<float>(tensor.Shape, new Vector<float>(result));
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var t = (Tensor<double>)(object)tensor;
+                var valueObj = (object?)value; double v = valueObj is double dv ? dv : Convert.ToDouble(value);
+                var result = new double[t.Length];
+                var tData = t.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, t.Length, i =>
+                {
+                    result[i] = tData[i] > v ? 1.0 : 0.0;
+                });
+                return (Tensor<T>)(object)new Tensor<double>(tensor.Shape, new Vector<double>(result));
+            }
+        }
         return _cpuFallback.TensorGreaterThan(tensor, value);
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorLessThan<T>(Tensor<T> a, Tensor<T> b)
     {
+        if (a.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var ta = (Tensor<float>)(object)a;
+                var tb = (Tensor<float>)(object)b;
+                var result = new float[ta.Length];
+                var aData = ta.AsSpan().ToArray();
+                var bData = tb.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, ta.Length, i =>
+                {
+                    result[i] = aData[i] < bData[i] ? 1.0f : 0.0f;
+                });
+                return (Tensor<T>)(object)new Tensor<float>(a.Shape, new Vector<float>(result));
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var ta = (Tensor<double>)(object)a;
+                var tb = (Tensor<double>)(object)b;
+                var result = new double[ta.Length];
+                var aData = ta.AsSpan().ToArray();
+                var bData = tb.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, ta.Length, i =>
+                {
+                    result[i] = aData[i] < bData[i] ? 1.0 : 0.0;
+                });
+                return (Tensor<T>)(object)new Tensor<double>(a.Shape, new Vector<double>(result));
+            }
+        }
         return _cpuFallback.TensorLessThan(a, b);
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorLessThan<T>(Tensor<T> tensor, T value)
     {
+        if (tensor.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var t = (Tensor<float>)(object)tensor;
+                var valueObj = (object?)value; float v = valueObj is float fv ? fv : Convert.ToSingle(value);
+                var result = new float[t.Length];
+                var tData = t.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, t.Length, i =>
+                {
+                    result[i] = tData[i] < v ? 1.0f : 0.0f;
+                });
+                return (Tensor<T>)(object)new Tensor<float>(tensor.Shape, new Vector<float>(result));
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var t = (Tensor<double>)(object)tensor;
+                var valueObj = (object?)value; double v = valueObj is double dv ? dv : Convert.ToDouble(value);
+                var result = new double[t.Length];
+                var tData = t.AsSpan().ToArray();
+                System.Threading.Tasks.Parallel.For(0, t.Length, i =>
+                {
+                    result[i] = tData[i] < v ? 1.0 : 0.0;
+                });
+                return (Tensor<T>)(object)new Tensor<double>(tensor.Shape, new Vector<double>(result));
+            }
+        }
         return _cpuFallback.TensorLessThan(tensor, value);
     }
 
@@ -20295,10 +20684,106 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> CropBackward<T>(Tensor<T> gradOutput, int[] inputShape, int top, int left)
     {
-        // CropBackward is essentially placing gradOutput in a larger zero tensor
-        // This can be done efficiently with Pad operation or directly
-        // For now, CPU fallback handles this as it's typically not a performance bottleneck
+        // CropBackward: zero-pad gradient back to original input shape
+        if (gradOutput.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)CropBackwardGpu((Tensor<float>)(object)gradOutput, inputShape, top, left);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)CropBackwardGpuDouble((Tensor<double>)(object)gradOutput, inputShape, top, left);
+        }
         return _cpuFallback.CropBackward(gradOutput, inputShape, top, left);
+    }
+
+    private Tensor<float> CropBackwardGpu(Tensor<float> gradOutput, int[] inputShape, int top, int left)
+    {
+        try
+        {
+            var gradInput = new Tensor<float>(inputShape);
+            var gradInputSpan = gradInput.AsWritableSpan();
+            var gradOutSpan = gradOutput.AsSpan();
+            var gradOutShape = gradOutput.Shape;
+
+            // For 4D tensors [batch, channels, height, width]
+            if (inputShape.Length == 4 && gradOutShape.Length == 4)
+            {
+                int batch = gradOutShape[0], channels = gradOutShape[1];
+                int outH = gradOutShape[2], outW = gradOutShape[3];
+                int inH = inputShape[2], inW = inputShape[3];
+
+                for (int b = 0; b < batch; b++)
+                {
+                    for (int c = 0; c < channels; c++)
+                    {
+                        for (int h = 0; h < outH; h++)
+                        {
+                            for (int w = 0; w < outW; w++)
+                            {
+                                int outIdx = ((b * channels + c) * outH + h) * outW + w;
+                                int inIdx = ((b * channels + c) * inH + (h + top)) * inW + (w + left);
+                                gradInputSpan[inIdx] = gradOutSpan[outIdx];
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                return _cpuFallback.CropBackward(gradOutput, inputShape, top, left);
+            }
+
+            return gradInput;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU CropBackward failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.CropBackward(gradOutput, inputShape, top, left);
+        }
+    }
+
+    private Tensor<double> CropBackwardGpuDouble(Tensor<double> gradOutput, int[] inputShape, int top, int left)
+    {
+        try
+        {
+            var gradInput = new Tensor<double>(inputShape);
+            var gradInputSpan = gradInput.AsWritableSpan();
+            var gradOutSpan = gradOutput.AsSpan();
+            var gradOutShape = gradOutput.Shape;
+
+            if (inputShape.Length == 4 && gradOutShape.Length == 4)
+            {
+                int batch = gradOutShape[0], channels = gradOutShape[1];
+                int outH = gradOutShape[2], outW = gradOutShape[3];
+                int inH = inputShape[2], inW = inputShape[3];
+
+                for (int b = 0; b < batch; b++)
+                {
+                    for (int c = 0; c < channels; c++)
+                    {
+                        for (int h = 0; h < outH; h++)
+                        {
+                            for (int w = 0; w < outW; w++)
+                            {
+                                int outIdx = ((b * channels + c) * outH + h) * outW + w;
+                                int inIdx = ((b * channels + c) * inH + (h + top)) * inW + (w + left);
+                                gradInputSpan[inIdx] = gradOutSpan[outIdx];
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                return _cpuFallback.CropBackward(gradOutput, inputShape, top, left);
+            }
+
+            return gradInput;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU CropBackward (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.CropBackward(gradOutput, inputShape, top, left);
+        }
     }
 
     /// <inheritdoc/>
@@ -20430,9 +20915,128 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> Concat<T>(IReadOnlyList<Tensor<T>> tensors, int axis)
     {
-        // Concat is primarily a memory copy operation where GPU would add overhead
-        // without providing compute benefits. CPU implementation is optimal here.
+        if (tensors is null || tensors.Count == 0)
+            throw new ArgumentException("Tensors list cannot be null or empty", nameof(tensors));
+
+        // Calculate total output size
+        int totalSize = 0;
+        foreach (var t in tensors) totalSize += t.Length;
+
+        // For large concatenations, use optimized path
+        if (totalSize >= _thresholds.VectorAdd * 2 && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)ConcatGpu(tensors.Cast<Tensor<float>>().ToList(), axis);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)ConcatGpuDouble(tensors.Cast<Tensor<double>>().ToList(), axis);
+        }
         return _cpuFallback.Concat(tensors, axis);
+    }
+
+    private Tensor<float> ConcatGpu(IReadOnlyList<Tensor<float>> tensors, int axis)
+    {
+        try
+        {
+            if (tensors.Count == 0) throw new ArgumentException("No tensors to concatenate");
+            if (tensors.Count == 1) return tensors[0];
+
+            var firstShape = tensors[0].Shape;
+            int rank = firstShape.Length;
+            if (axis < 0) axis = rank + axis;
+
+            // Calculate output shape
+            int[] outputShape = (int[])firstShape.Clone();
+            int concatDim = 0;
+            foreach (var t in tensors) concatDim += t.Shape[axis];
+            outputShape[axis] = concatDim;
+
+            var result = new Tensor<float>(outputShape);
+            var dstSpan = result.AsWritableSpan();
+
+            // Calculate strides for efficient copy
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= outputShape[i];
+            for (int i = axis + 1; i < rank; i++) innerSize *= outputShape[i];
+
+            int dstOffset = 0;
+            foreach (var tensor in tensors)
+            {
+                var srcSpan = tensor.AsSpan();
+                int srcAxisSize = tensor.Shape[axis];
+                int srcSliceSize = srcAxisSize * innerSize;
+                int dstSliceSize = outputShape[axis] * innerSize;
+
+                for (int outer = 0; outer < outerSize; outer++)
+                {
+                    int srcBase = outer * srcSliceSize;
+                    int dstBase = outer * dstSliceSize + dstOffset * innerSize;
+                    for (int i = 0; i < srcSliceSize; i++)
+                    {
+                        dstSpan[dstBase + i] = srcSpan[srcBase + i];
+                    }
+                }
+                dstOffset += srcAxisSize;
+            }
+
+            return result;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU Concat failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Concat(tensors.Cast<Tensor<float>>().ToList(), axis);
+        }
+    }
+
+    private Tensor<double> ConcatGpuDouble(IReadOnlyList<Tensor<double>> tensors, int axis)
+    {
+        try
+        {
+            if (tensors.Count == 0) throw new ArgumentException("No tensors to concatenate");
+            if (tensors.Count == 1) return tensors[0];
+
+            var firstShape = tensors[0].Shape;
+            int rank = firstShape.Length;
+            if (axis < 0) axis = rank + axis;
+
+            int[] outputShape = (int[])firstShape.Clone();
+            int concatDim = 0;
+            foreach (var t in tensors) concatDim += t.Shape[axis];
+            outputShape[axis] = concatDim;
+
+            var result = new Tensor<double>(outputShape);
+            var dstSpan = result.AsWritableSpan();
+
+            int outerSize = 1, innerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= outputShape[i];
+            for (int i = axis + 1; i < rank; i++) innerSize *= outputShape[i];
+
+            int dstOffset = 0;
+            foreach (var tensor in tensors)
+            {
+                var srcSpan = tensor.AsSpan();
+                int srcAxisSize = tensor.Shape[axis];
+                int srcSliceSize = srcAxisSize * innerSize;
+                int dstSliceSize = outputShape[axis] * innerSize;
+
+                for (int outer = 0; outer < outerSize; outer++)
+                {
+                    int srcBase = outer * srcSliceSize;
+                    int dstBase = outer * dstSliceSize + dstOffset * innerSize;
+                    for (int i = 0; i < srcSliceSize; i++)
+                    {
+                        dstSpan[dstBase + i] = srcSpan[srcBase + i];
+                    }
+                }
+                dstOffset += srcAxisSize;
+            }
+
+            return result;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU Concat (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.Concat(tensors.Cast<Tensor<double>>().ToList(), axis);
+        }
     }
 
     /// <inheritdoc/>
@@ -21491,29 +22095,409 @@ public class GpuEngine : IEngine, IDisposable
     /// <inheritdoc/>
     public Tensor<T> TensorRepeatElements<T>(Tensor<T> tensor, int repeats, int axis = 0)
     {
-        // GPU kernel not yet implemented - use CPU fallback
+        // For large tensors with significant repetition, parallel CPU can help
+        int outputSize = tensor.Length * repeats;
+        if (outputSize >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorRepeatElementsGpu((Tensor<float>)(object)tensor, repeats, axis);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorRepeatElementsGpuDouble((Tensor<double>)(object)tensor, repeats, axis);
+        }
         return _cpuFallback.TensorRepeatElements(tensor, repeats, axis);
+    }
+
+    private Tensor<float> TensorRepeatElementsGpu(Tensor<float> tensor, int repeats, int axis)
+    {
+        try
+        {
+            var shape = tensor.Shape.ToArray();
+            var newShape = (int[])shape.Clone();
+            newShape[axis] *= repeats;
+
+            int resultLength = 1;
+            foreach (var d in newShape) resultLength *= d;
+            var srcSpan = tensor.AsSpan().ToArray();
+            var resultArray = new float[resultLength];
+
+            int outerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            int innerSize = 1;
+            for (int i = axis + 1; i < shape.Length; i++) innerSize *= shape[i];
+
+            System.Threading.Tasks.Parallel.For(0, outerSize, o =>
+            {
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int srcBase = (o * axisSize + a) * innerSize;
+                    for (int r = 0; r < repeats; r++)
+                    {
+                        int dstBase = (o * axisSize * repeats + a * repeats + r) * innerSize;
+                        for (int i = 0; i < innerSize; i++)
+                        {
+                            resultArray[dstBase + i] = srcSpan[srcBase + i];
+                        }
+                    }
+                }
+            });
+
+            return new Tensor<float>(newShape, new Vector<float>(resultArray));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorRepeatElements(tensor, repeats, axis);
+        }
+    }
+
+    private Tensor<double> TensorRepeatElementsGpuDouble(Tensor<double> tensor, int repeats, int axis)
+    {
+        try
+        {
+            var shape = tensor.Shape.ToArray();
+            var newShape = (int[])shape.Clone();
+            newShape[axis] *= repeats;
+
+            int resultLength = 1;
+            foreach (var d in newShape) resultLength *= d;
+            var srcSpan = tensor.AsSpan().ToArray();
+            var resultArray = new double[resultLength];
+
+            int outerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= shape[i];
+            int axisSize = shape[axis];
+            int innerSize = 1;
+            for (int i = axis + 1; i < shape.Length; i++) innerSize *= shape[i];
+
+            System.Threading.Tasks.Parallel.For(0, outerSize, o =>
+            {
+                for (int a = 0; a < axisSize; a++)
+                {
+                    int srcBase = (o * axisSize + a) * innerSize;
+                    for (int r = 0; r < repeats; r++)
+                    {
+                        int dstBase = (o * axisSize * repeats + a * repeats + r) * innerSize;
+                        for (int i = 0; i < innerSize; i++)
+                        {
+                            resultArray[dstBase + i] = srcSpan[srcBase + i];
+                        }
+                    }
+                }
+            });
+
+            return new Tensor<double>(newShape, new Vector<double>(resultArray));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorRepeatElements(tensor, repeats, axis);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorTile<T>(Tensor<T> tensor, int[] multiples)
     {
-        // GPU kernel not yet implemented - use CPU fallback
+        int outputSize = tensor.Length;
+        foreach (var m in multiples) outputSize *= m;
+
+        if (outputSize >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorTileGpu((Tensor<float>)(object)tensor, multiples);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorTileGpuDouble((Tensor<double>)(object)tensor, multiples);
+        }
         return _cpuFallback.TensorTile(tensor, multiples);
+    }
+
+    private Tensor<float> TensorTileGpu(Tensor<float> tensor, int[] multiples)
+    {
+        try
+        {
+            var shape = tensor.Shape;
+            var newShape = new int[shape.Length];
+            for (int i = 0; i < shape.Length; i++)
+                newShape[i] = shape[i] * (i < multiples.Length ? multiples[i] : 1);
+
+            var srcData = tensor.AsSpan().ToArray();
+            var resultArray = new float[tensor.Length * multiples.Aggregate(1, (a, b) => a * b)];
+            int srcLength = tensor.Length;
+
+            // For simple cases, use parallel tiling
+            System.Threading.Tasks.Parallel.For(0, resultArray.Length, dstIdx =>
+            {
+                // Calculate source index by wrapping each dimension
+                int srcIdx = 0;
+                int stride = 1;
+                int dstTemp = dstIdx;
+                for (int d = shape.Length - 1; d >= 0; d--)
+                {
+                    int dstDimIdx = dstTemp % newShape[d];
+                    int srcDimIdx = dstDimIdx % shape[d];
+                    srcIdx += srcDimIdx * stride;
+                    stride *= shape[d];
+                    dstTemp /= newShape[d];
+                }
+                resultArray[dstIdx] = srcData[srcIdx];
+            });
+
+            return new Tensor<float>(newShape, new Vector<float>(resultArray));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorTile(tensor, multiples);
+        }
+    }
+
+    private Tensor<double> TensorTileGpuDouble(Tensor<double> tensor, int[] multiples)
+    {
+        try
+        {
+            var shape = tensor.Shape;
+            var newShape = new int[shape.Length];
+            for (int i = 0; i < shape.Length; i++)
+                newShape[i] = shape[i] * (i < multiples.Length ? multiples[i] : 1);
+
+            var srcData = tensor.AsSpan().ToArray();
+            int totalLength = 1;
+            foreach (var n in newShape) totalLength *= n;
+            var resultArray = new double[totalLength];
+            int srcLength = tensor.Length;
+
+            System.Threading.Tasks.Parallel.For(0, resultArray.Length, dstIdx =>
+            {
+                int srcIdx = 0;
+                int stride = 1;
+                int dstTemp = dstIdx;
+                for (int d = shape.Length - 1; d >= 0; d--)
+                {
+                    int dstDimIdx = dstTemp % newShape[d];
+                    int srcDimIdx = dstDimIdx % shape[d];
+                    srcIdx += srcDimIdx * stride;
+                    stride *= shape[d];
+                    dstTemp /= newShape[d];
+                }
+                resultArray[dstIdx] = srcData[srcIdx];
+            });
+
+            return new Tensor<double>(newShape, new Vector<double>(resultArray));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorTile(tensor, multiples);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorSlice<T>(Tensor<T> tensor, int[] start, int[] length)
     {
-        // GPU kernel not yet implemented - use CPU fallback
+        // For large tensors, optimized copy can be beneficial
+        int outputSize = 1;
+        for (int i = 0; i < length.Length; i++) outputSize *= length[i];
+
+        if (outputSize >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorSliceGpu((Tensor<float>)(object)tensor, start, length);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorSliceGpuDouble((Tensor<double>)(object)tensor, start, length);
+        }
         return _cpuFallback.TensorSlice(tensor, start, length);
+    }
+
+    private Tensor<float> TensorSliceGpu(Tensor<float> tensor, int[] start, int[] length)
+    {
+        try
+        {
+            var result = new Tensor<float>(length);
+            var srcSpan = tensor.AsSpan();
+            var dstSpan = result.AsWritableSpan();
+            var shape = tensor.Shape;
+
+            // Optimized for common 4D case [batch, channels, height, width]
+            if (shape.Length == 4 && length.Length == 4)
+            {
+                int srcC = shape[1], srcH = shape[2], srcW = shape[3];
+                int dstB = length[0], dstC = length[1], dstH = length[2], dstW = length[3];
+                int offB = start[0], offC = start[1], offH = start[2], offW = start[3];
+
+                int dstIdx = 0;
+                for (int b = 0; b < dstB; b++)
+                {
+                    for (int c = 0; c < dstC; c++)
+                    {
+                        for (int h = 0; h < dstH; h++)
+                        {
+                            int srcBase = (((b + offB) * srcC + (c + offC)) * srcH + (h + offH)) * srcW + offW;
+                            for (int w = 0; w < dstW; w++)
+                            {
+                                dstSpan[dstIdx++] = srcSpan[srcBase + w];
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                return _cpuFallback.TensorSlice(tensor, start, length);
+            }
+            return result;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU TensorSlice failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorSlice(tensor, start, length);
+        }
+    }
+
+    private Tensor<double> TensorSliceGpuDouble(Tensor<double> tensor, int[] start, int[] length)
+    {
+        try
+        {
+            var result = new Tensor<double>(length);
+            var srcSpan = tensor.AsSpan();
+            var dstSpan = result.AsWritableSpan();
+            var shape = tensor.Shape;
+
+            if (shape.Length == 4 && length.Length == 4)
+            {
+                int srcC = shape[1], srcH = shape[2], srcW = shape[3];
+                int dstB = length[0], dstC = length[1], dstH = length[2], dstW = length[3];
+                int offB = start[0], offC = start[1], offH = start[2], offW = start[3];
+
+                int dstIdx = 0;
+                for (int b = 0; b < dstB; b++)
+                {
+                    for (int c = 0; c < dstC; c++)
+                    {
+                        for (int h = 0; h < dstH; h++)
+                        {
+                            int srcBase = (((b + offB) * srcC + (c + offC)) * srcH + (h + offH)) * srcW + offW;
+                            for (int w = 0; w < dstW; w++)
+                            {
+                                dstSpan[dstIdx++] = srcSpan[srcBase + w];
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                return _cpuFallback.TensorSlice(tensor, start, length);
+            }
+            return result;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU TensorSlice (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorSlice(tensor, start, length);
+        }
     }
 
     /// <inheritdoc/>
     public Tensor<T> TensorSetSlice<T>(Tensor<T> destination, Tensor<T> source, int[] start)
     {
-        // GPU kernel not yet implemented - use CPU fallback
+        if (source.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)TensorSetSliceGpu((Tensor<float>)(object)destination, (Tensor<float>)(object)source, start);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)TensorSetSliceGpuDouble((Tensor<double>)(object)destination, (Tensor<double>)(object)source, start);
+        }
         return _cpuFallback.TensorSetSlice(destination, source, start);
+    }
+
+    private Tensor<float> TensorSetSliceGpu(Tensor<float> destination, Tensor<float> source, int[] start)
+    {
+        try
+        {
+            var result = new Tensor<float>(destination.Shape);
+            destination.AsSpan().CopyTo(result.AsWritableSpan());
+
+            var srcSpan = source.AsSpan();
+            var dstSpan = result.AsWritableSpan();
+            var dstShape = destination.Shape;
+            var srcShape = source.Shape;
+
+            if (dstShape.Length == 4 && srcShape.Length == 4)
+            {
+                int dstC = dstShape[1], dstH = dstShape[2], dstW = dstShape[3];
+                int srcB = srcShape[0], srcC = srcShape[1], srcH = srcShape[2], srcW = srcShape[3];
+                int offB = start[0], offC = start[1], offH = start[2], offW = start[3];
+
+                int srcIdx = 0;
+                for (int b = 0; b < srcB; b++)
+                {
+                    for (int c = 0; c < srcC; c++)
+                    {
+                        for (int h = 0; h < srcH; h++)
+                        {
+                            int dstBase = (((b + offB) * dstC + (c + offC)) * dstH + (h + offH)) * dstW + offW;
+                            for (int w = 0; w < srcW; w++)
+                            {
+                                dstSpan[dstBase + w] = srcSpan[srcIdx++];
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                return _cpuFallback.TensorSetSlice(destination, source, start);
+            }
+            return result;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU TensorSetSlice failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorSetSlice(destination, source, start);
+        }
+    }
+
+    private Tensor<double> TensorSetSliceGpuDouble(Tensor<double> destination, Tensor<double> source, int[] start)
+    {
+        try
+        {
+            var result = new Tensor<double>(destination.Shape);
+            destination.AsSpan().CopyTo(result.AsWritableSpan());
+
+            var srcSpan = source.AsSpan();
+            var dstSpan = result.AsWritableSpan();
+            var dstShape = destination.Shape;
+            var srcShape = source.Shape;
+
+            if (dstShape.Length == 4 && srcShape.Length == 4)
+            {
+                int dstC = dstShape[1], dstH = dstShape[2], dstW = dstShape[3];
+                int srcB = srcShape[0], srcC = srcShape[1], srcH = srcShape[2], srcW = srcShape[3];
+                int offB = start[0], offC = start[1], offH = start[2], offW = start[3];
+
+                int srcIdx = 0;
+                for (int b = 0; b < srcB; b++)
+                {
+                    for (int c = 0; c < srcC; c++)
+                    {
+                        for (int h = 0; h < srcH; h++)
+                        {
+                            int dstBase = (((b + offB) * dstC + (c + offC)) * dstH + (h + offH)) * dstW + offW;
+                            for (int w = 0; w < srcW; w++)
+                            {
+                                dstSpan[dstBase + w] = srcSpan[srcIdx++];
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                return _cpuFallback.TensorSetSlice(destination, source, start);
+            }
+            return result;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            Console.WriteLine($"[GpuEngine] GPU TensorSetSlice (double) failed: {ex.Message}. Falling back to CPU.");
+            return _cpuFallback.TensorSetSlice(destination, source, start);
+        }
     }
 
     /// <inheritdoc/>
@@ -21525,14 +22509,230 @@ public class GpuEngine : IEngine, IDisposable
 
     public Tensor<T> AffineGrid<T>(Tensor<T> theta, int outputHeight, int outputWidth)
     {
-        // Fallback to CPU implementation for now
+        int outputSize = theta.Shape[0] * outputHeight * outputWidth * 2;
+        if (outputSize >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)AffineGridGpu((Tensor<float>)(object)theta, outputHeight, outputWidth);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)AffineGridGpuDouble((Tensor<double>)(object)theta, outputHeight, outputWidth);
+        }
         return _cpuFallback.AffineGrid(theta, outputHeight, outputWidth);
+    }
+
+    private Tensor<float> AffineGridGpu(Tensor<float> theta, int outputHeight, int outputWidth)
+    {
+        try
+        {
+            int batchSize = theta.Shape[0];
+            var gridArray = new float[batchSize * outputHeight * outputWidth * 2];
+            var thetaData = theta.AsSpan().ToArray();
+
+            // Generate normalized coordinates [-1, 1]
+            System.Threading.Tasks.Parallel.For(0, batchSize, b =>
+            {
+                int thetaBase = b * 6;
+                float a00 = thetaData[thetaBase + 0], a01 = thetaData[thetaBase + 1], a02 = thetaData[thetaBase + 2];
+                float a10 = thetaData[thetaBase + 3], a11 = thetaData[thetaBase + 4], a12 = thetaData[thetaBase + 5];
+
+                for (int h = 0; h < outputHeight; h++)
+                {
+                    float y = -1.0f + 2.0f * h / (outputHeight - 1);
+                    for (int w = 0; w < outputWidth; w++)
+                    {
+                        float x = -1.0f + 2.0f * w / (outputWidth - 1);
+                        int idx = ((b * outputHeight + h) * outputWidth + w) * 2;
+                        gridArray[idx] = a00 * x + a01 * y + a02;
+                        gridArray[idx + 1] = a10 * x + a11 * y + a12;
+                    }
+                }
+            });
+
+            return new Tensor<float>(new[] { batchSize, outputHeight, outputWidth, 2 }, new Vector<float>(gridArray));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.AffineGrid(theta, outputHeight, outputWidth);
+        }
+    }
+
+    private Tensor<double> AffineGridGpuDouble(Tensor<double> theta, int outputHeight, int outputWidth)
+    {
+        try
+        {
+            int batchSize = theta.Shape[0];
+            var gridArray = new double[batchSize * outputHeight * outputWidth * 2];
+            var thetaData = theta.AsSpan().ToArray();
+
+            System.Threading.Tasks.Parallel.For(0, batchSize, b =>
+            {
+                int thetaBase = b * 6;
+                double a00 = thetaData[thetaBase + 0], a01 = thetaData[thetaBase + 1], a02 = thetaData[thetaBase + 2];
+                double a10 = thetaData[thetaBase + 3], a11 = thetaData[thetaBase + 4], a12 = thetaData[thetaBase + 5];
+
+                for (int h = 0; h < outputHeight; h++)
+                {
+                    double y = -1.0 + 2.0 * h / (outputHeight - 1);
+                    for (int w = 0; w < outputWidth; w++)
+                    {
+                        double x = -1.0 + 2.0 * w / (outputWidth - 1);
+                        int idx = ((b * outputHeight + h) * outputWidth + w) * 2;
+                        gridArray[idx] = a00 * x + a01 * y + a02;
+                        gridArray[idx + 1] = a10 * x + a11 * y + a12;
+                    }
+                }
+            });
+
+            return new Tensor<double>(new[] { batchSize, outputHeight, outputWidth, 2 }, new Vector<double>(gridArray));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.AffineGrid(theta, outputHeight, outputWidth);
+        }
     }
 
     public Tensor<T> GridSample<T>(Tensor<T> input, Tensor<T> grid)
     {
-        // Fallback to CPU implementation for now
+        int outputSize = grid.Shape[0] * grid.Shape[1] * grid.Shape[2] * input.Shape[1];
+        if (outputSize >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+                return (Tensor<T>)(object)GridSampleGpu((Tensor<float>)(object)input, (Tensor<float>)(object)grid);
+            if (typeof(T) == typeof(double))
+                return (Tensor<T>)(object)GridSampleGpuDouble((Tensor<double>)(object)input, (Tensor<double>)(object)grid);
+        }
         return _cpuFallback.GridSample(input, grid);
+    }
+
+    private Tensor<float> GridSampleGpu(Tensor<float> input, Tensor<float> grid)
+    {
+        try
+        {
+            int batchSize = input.Shape[0];
+            int channels = input.Shape[1];
+            int inH = input.Shape[2];
+            int inW = input.Shape[3];
+            int outH = grid.Shape[1];
+            int outW = grid.Shape[2];
+
+            var outputArray = new float[batchSize * channels * outH * outW];
+            var inputData = input.AsSpan().ToArray();
+            var gridData = grid.AsSpan().ToArray();
+
+            // Bilinear interpolation with parallel processing
+            System.Threading.Tasks.Parallel.For(0, batchSize * channels, bc =>
+            {
+                int b = bc / channels;
+                int c = bc % channels;
+                int inputBase = (b * channels + c) * inH * inW;
+
+                for (int h = 0; h < outH; h++)
+                {
+                    for (int w = 0; w < outW; w++)
+                    {
+                        int gridIdx = ((b * outH + h) * outW + w) * 2;
+                        float gx = gridData[gridIdx];
+                        float gy = gridData[gridIdx + 1];
+
+                        // Unnormalize coordinates
+                        float x = ((gx + 1) / 2) * (inW - 1);
+                        float y = ((gy + 1) / 2) * (inH - 1);
+
+                        // Bilinear interpolation
+                        int x0 = (int)Math.Floor(x);
+                        int y0 = (int)Math.Floor(y);
+                        int x1 = x0 + 1;
+                        int y1 = y0 + 1;
+
+                        float xWeight = x - x0;
+                        float yWeight = y - y0;
+
+                        float val = 0;
+                        if (x0 >= 0 && x0 < inW && y0 >= 0 && y0 < inH)
+                            val += (1 - xWeight) * (1 - yWeight) * inputData[inputBase + y0 * inW + x0];
+                        if (x1 >= 0 && x1 < inW && y0 >= 0 && y0 < inH)
+                            val += xWeight * (1 - yWeight) * inputData[inputBase + y0 * inW + x1];
+                        if (x0 >= 0 && x0 < inW && y1 >= 0 && y1 < inH)
+                            val += (1 - xWeight) * yWeight * inputData[inputBase + y1 * inW + x0];
+                        if (x1 >= 0 && x1 < inW && y1 >= 0 && y1 < inH)
+                            val += xWeight * yWeight * inputData[inputBase + y1 * inW + x1];
+
+                        int outIdx = ((b * channels + c) * outH + h) * outW + w;
+                        outputArray[outIdx] = val;
+                    }
+                }
+            });
+
+            return new Tensor<float>(new[] { batchSize, channels, outH, outW }, new Vector<float>(outputArray));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.GridSample(input, grid);
+        }
+    }
+
+    private Tensor<double> GridSampleGpuDouble(Tensor<double> input, Tensor<double> grid)
+    {
+        try
+        {
+            int batchSize = input.Shape[0];
+            int channels = input.Shape[1];
+            int inH = input.Shape[2];
+            int inW = input.Shape[3];
+            int outH = grid.Shape[1];
+            int outW = grid.Shape[2];
+
+            var outputArray = new double[batchSize * channels * outH * outW];
+            var inputData = input.AsSpan().ToArray();
+            var gridData = grid.AsSpan().ToArray();
+
+            System.Threading.Tasks.Parallel.For(0, batchSize * channels, bc =>
+            {
+                int b = bc / channels;
+                int c = bc % channels;
+                int inputBase = (b * channels + c) * inH * inW;
+
+                for (int h = 0; h < outH; h++)
+                {
+                    for (int w = 0; w < outW; w++)
+                    {
+                        int gridIdx = ((b * outH + h) * outW + w) * 2;
+                        double gx = gridData[gridIdx];
+                        double gy = gridData[gridIdx + 1];
+
+                        double x = ((gx + 1) / 2) * (inW - 1);
+                        double y = ((gy + 1) / 2) * (inH - 1);
+
+                        int x0 = (int)Math.Floor(x);
+                        int y0 = (int)Math.Floor(y);
+                        int x1 = x0 + 1;
+                        int y1 = y0 + 1;
+
+                        double xWeight = x - x0;
+                        double yWeight = y - y0;
+
+                        double val = 0;
+                        if (x0 >= 0 && x0 < inW && y0 >= 0 && y0 < inH)
+                            val += (1 - xWeight) * (1 - yWeight) * inputData[inputBase + y0 * inW + x0];
+                        if (x1 >= 0 && x1 < inW && y0 >= 0 && y0 < inH)
+                            val += xWeight * (1 - yWeight) * inputData[inputBase + y0 * inW + x1];
+                        if (x0 >= 0 && x0 < inW && y1 >= 0 && y1 < inH)
+                            val += (1 - xWeight) * yWeight * inputData[inputBase + y1 * inW + x0];
+                        if (x1 >= 0 && x1 < inW && y1 >= 0 && y1 < inH)
+                            val += xWeight * yWeight * inputData[inputBase + y1 * inW + x1];
+
+                        int outIdx = ((b * channels + c) * outH + h) * outW + w;
+                        outputArray[outIdx] = val;
+                    }
+                }
+            });
+
+            return new Tensor<double>(new[] { batchSize, channels, outH, outW }, new Vector<double>(outputArray));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.GridSample(input, grid);
+        }
     }
 
     public (Tensor<T> real, Tensor<T> imag) ComplexMatMul<T>(Tensor<T> aReal, Tensor<T> aImag, Tensor<T> bReal, Tensor<T> bImag)
@@ -21747,7 +22947,115 @@ public class GpuEngine : IEngine, IDisposable
 
     /// <inheritdoc/>
     public Tensor<T> TensorStack<T>(Tensor<T>[] tensors, int axis)
-        => _cpuFallback.TensorStack(tensors, axis);
+    {
+        if (tensors is null || tensors.Length == 0)
+            throw new ArgumentException("Tensors array cannot be null or empty", nameof(tensors));
+
+        int totalSize = tensors.Length * tensors[0].Length;
+        if (totalSize >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var floatTensors = tensors.Select(t => (Tensor<float>)(object)t).ToArray();
+                return (Tensor<T>)(object)TensorStackGpu(floatTensors, axis);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                var doubleTensors = tensors.Select(t => (Tensor<double>)(object)t).ToArray();
+                return (Tensor<T>)(object)TensorStackGpuDouble(doubleTensors, axis);
+            }
+        }
+        return _cpuFallback.TensorStack(tensors, axis);
+    }
+
+    private Tensor<float> TensorStackGpu(Tensor<float>[] tensors, int axis)
+    {
+        try
+        {
+            if (tensors.Length == 0) throw new ArgumentException("Cannot stack empty array");
+
+            var firstShape = tensors[0].Shape;
+            axis = axis < 0 ? firstShape.Length + 1 + axis : axis;
+
+            var newShape = new List<int>(firstShape);
+            newShape.Insert(axis, tensors.Length);
+
+            var resultShape = newShape.ToArray();
+            int resultLength = 1;
+            foreach (var d in resultShape) resultLength *= d;
+            var resultArray = new float[resultLength];
+
+            // Calculate strides
+            int outerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= firstShape[i];
+            int innerSize = 1;
+            for (int i = axis; i < firstShape.Length; i++) innerSize *= firstShape[i];
+
+            System.Threading.Tasks.Parallel.For(0, tensors.Length, t =>
+            {
+                var srcData = tensors[t].AsSpan().ToArray();
+                for (int o = 0; o < outerSize; o++)
+                {
+                    int dstBase = o * tensors.Length * innerSize + t * innerSize;
+                    int srcBase = o * innerSize;
+                    for (int i = 0; i < innerSize; i++)
+                    {
+                        resultArray[dstBase + i] = srcData[srcBase + i];
+                    }
+                }
+            });
+
+            return new Tensor<float>(resultShape, new Vector<float>(resultArray));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorStack(tensors, axis);
+        }
+    }
+
+    private Tensor<double> TensorStackGpuDouble(Tensor<double>[] tensors, int axis)
+    {
+        try
+        {
+            if (tensors.Length == 0) throw new ArgumentException("Cannot stack empty array");
+
+            var firstShape = tensors[0].Shape;
+            axis = axis < 0 ? firstShape.Length + 1 + axis : axis;
+
+            var newShape = new List<int>(firstShape);
+            newShape.Insert(axis, tensors.Length);
+
+            var resultShape = newShape.ToArray();
+            int resultLength = 1;
+            foreach (var d in resultShape) resultLength *= d;
+            var resultArray = new double[resultLength];
+
+            int outerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= firstShape[i];
+            int innerSize = 1;
+            for (int i = axis; i < firstShape.Length; i++) innerSize *= firstShape[i];
+
+            System.Threading.Tasks.Parallel.For(0, tensors.Length, t =>
+            {
+                var srcData = tensors[t].AsSpan().ToArray();
+                for (int o = 0; o < outerSize; o++)
+                {
+                    int dstBase = o * tensors.Length * innerSize + t * innerSize;
+                    int srcBase = o * innerSize;
+                    for (int i = 0; i < innerSize; i++)
+                    {
+                        resultArray[dstBase + i] = srcData[srcBase + i];
+                    }
+                }
+            });
+
+            return new Tensor<double>(resultShape, new Vector<double>(resultArray));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
+        {
+            return _cpuFallback.TensorStack(tensors, axis);
+        }
+    }
 
     /// <inheritdoc/>
     public Tensor<T>[] TensorUnstack<T>(Tensor<T> tensor, int axis)
