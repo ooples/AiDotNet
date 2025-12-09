@@ -450,13 +450,13 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Transform path: transform = activation(input @ weights + bias)
         var transformLinear = input.MatrixMultiply(_transformWeights);
-        var transformWithBias = Engine.TensorAdd(transformLinear, _transformBias); // Broadcasting
+        var transformWithBias = Engine.TensorBroadcastAdd(transformLinear, _transformBias);
         var transformOutput = ApplyActivation(transformWithBias, _transformActivation, _vectorTransformActivation);
         _lastTransformOutput = transformOutput;
 
         // Gate path: gate = sigmoid(input @ weights + bias)
         var gateLinear = input.MatrixMultiply(_gateWeights);
-        var gateWithBias = Engine.TensorAdd(gateLinear, _gateBias); // Broadcasting
+        var gateWithBias = Engine.TensorBroadcastAdd(gateLinear, _gateBias);
         var gateOutput = ApplyActivation(gateWithBias, _gateActivation, _vectorGateActivation);
         _lastGateOutput = gateOutput;
 
