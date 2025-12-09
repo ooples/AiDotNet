@@ -339,11 +339,18 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         int batchSize = input.Shape[0];
 
         // Compute predictions with tensor matmul: reshape input and weights for batched matmul
-        var inputCapsulesFlat = input.Reshape([batchSize * _inputCapsules, _inputCapsuleDimension, 1]);
+        // Weights: [I, C, inDim, outDim] -> [I*C, inDim, outDim] -> tiled to [B*I*C, inDim, outDim]
         var weightsFlat = _weights.Reshape([_inputCapsules * _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
-        // Expand weights across batch
         var tiledWeights = Engine.TensorTile(weightsFlat, new[] { batchSize, 1, 1 });
-        var predictionsFlat = Engine.BatchMatMul(tiledWeights, inputCapsulesFlat); // [B*I*C, outDim, 1]
+
+        // Input: [B, I, inDim] -> need [B*I*C, inDim, 1] where each input capsule is replicated C times
+        // Expand input to [B, I, 1, inDim] then tile along class axis to [B, I, C, inDim]
+        var inputExpanded = input.Reshape([batchSize, _inputCapsules, 1, _inputCapsuleDimension]);
+        var inputTiled = Engine.TensorTile(inputExpanded, new[] { 1, 1, _numClasses, 1 });
+        var inputCapsulesFlat = inputTiled.Reshape([batchSize * _inputCapsules * _numClasses, _inputCapsuleDimension, 1]);
+
+        // Now both have matching batch dimensions: [B*I*C, inDim, outDim] @ [B*I*C, inDim, 1] = [B*I*C, outDim, 1]
+        var predictionsFlat = Engine.BatchMatMul(tiledWeights, inputCapsulesFlat);
         var predictions = predictionsFlat.Reshape([batchSize, _inputCapsules, _numClasses, _outputCapsuleDimension]);
 
         var couplings = new Tensor<T>([batchSize, _inputCapsules, _numClasses]);
