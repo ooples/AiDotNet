@@ -510,7 +510,10 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
+        // Fall back to manual backward when vector activation is used, since autodiff
+        // doesn't properly handle vector activation derivatives or bias gradient propagation
+        bool canUseAutodiff = UseAutodiff && VectorActivation == null;
+        return canUseAutodiff
             ? BackwardViaAutodiff(outputGradient)
             : BackwardManual(outputGradient);
     }
