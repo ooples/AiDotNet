@@ -5,9 +5,9 @@
 **Status**: GOOD - Most critical operations have GPU implementations
 
 **Summary**:
-- **File**: `src/AiDotNet.Tensors/Engines/GpuEngine.cs` (21,339 lines)
-- **GPU implementations**: 126 unique operations with GPU kernels
-- **CPU-only fallbacks**: 77 methods that still need GPU implementation
+- **File**: `src/AiDotNet.Tensors/Engines/GpuEngine.cs` (~24,000 lines)
+- **GPU implementations**: ~170 unique operations with GPU kernels
+- **CPU-only fallbacks**: 35 methods that still need GPU implementation
 - **Conditional fallbacks**: Many GPU-implemented methods correctly fall back to CPU for small tensors (below threshold) or unsupported types
 
 The GpuEngine class has comprehensive ILGPU infrastructure with most critical neural network operations having GPU implementations. The remaining CPU fallbacks are for specialized/less common operations.
