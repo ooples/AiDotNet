@@ -405,7 +405,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <returns>The Euclidean norm of the vector.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> The norm is the "length" of a vector in multi-dimensional space.
-    /// For a 2D vector [x,y], the norm is v(xÃƒÆ'Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½ + yÃƒÆ'Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½), which is the same as the Pythagorean theorem.
+    /// For a 2D vector [x,y], the norm is sqrt(x^2 + y^2), which is the same as the Pythagorean theorem.
     /// For higher dimensions, it's the square root of the sum of all squared components.</para>
     /// <para><b>Performance:</b> This method uses SIMD-accelerated dot product for float/double types
     /// via TensorPrimitives, providing 5-10x speedup for large vectors.</para>
