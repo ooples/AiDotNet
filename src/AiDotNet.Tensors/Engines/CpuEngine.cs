@@ -7674,7 +7674,7 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
-    public Tensor<T> TensorOneHot<T>(Tensor<T> indices, int depth)
+    public Tensor<T> TensorOneHot<T>(Tensor<int> indices, int depth)
     {
         if (indices == null) throw new ArgumentNullException(nameof(indices));
         if (depth <= 0) throw new ArgumentException("Depth must be positive", nameof(depth));
@@ -7686,7 +7686,7 @@ public class CpuEngine : IEngine
 
         for (int i = 0; i < numIndices; i++)
         {
-            int idx = Convert.ToInt32(numOps.ToDouble(indices.GetFlat(i)));
+            int idx = indices.GetFlat(i);
             if (idx >= 0 && idx < depth)
             {
                 result[i, idx] = numOps.One;
@@ -7697,7 +7697,7 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
-    public Tensor<T> TensorArgMax<T>(Tensor<T> tensor, int axis)
+    public Tensor<int> TensorArgMax<T>(Tensor<T> tensor, int axis)
     {
         if (tensor == null) throw new ArgumentNullException(nameof(tensor));
 
@@ -7709,7 +7709,7 @@ public class CpuEngine : IEngine
         // Build output shape (remove axis dimension)
         var outputShape = tensor.Shape.Where((_, i) => i != axis).ToArray();
         if (outputShape.Length == 0) outputShape = new[] { 1 };
-        var result = new Tensor<T>(outputShape);
+        var result = new Tensor<int>(outputShape);
 
         int outerSize = 1;
         for (int i = 0; i < axis; i++) outerSize *= tensor.Shape[i];
@@ -7738,14 +7738,14 @@ public class CpuEngine : IEngine
                 }
             }
 
-            result.SetFlat(flatIdx, numOps.FromDouble(maxIdx));
+            result.SetFlat(flatIdx, maxIdx);
         });
 
         return result;
     }
 
     /// <inheritdoc/>
-    public Tensor<T> TensorArgMin<T>(Tensor<T> tensor, int axis)
+    public Tensor<int> TensorArgMin<T>(Tensor<T> tensor, int axis)
     {
         if (tensor == null) throw new ArgumentNullException(nameof(tensor));
 
@@ -7757,7 +7757,7 @@ public class CpuEngine : IEngine
         // Build output shape (remove axis dimension)
         var outputShape = tensor.Shape.Where((_, i) => i != axis).ToArray();
         if (outputShape.Length == 0) outputShape = new[] { 1 };
-        var result = new Tensor<T>(outputShape);
+        var result = new Tensor<int>(outputShape);
 
         int outerSize = 1;
         for (int i = 0; i < axis; i++) outerSize *= tensor.Shape[i];
@@ -7786,7 +7786,7 @@ public class CpuEngine : IEngine
                 }
             }
 
-            result.SetFlat(flatIdx, numOps.FromDouble(minIdx));
+            result.SetFlat(flatIdx, minIdx);
         });
 
         return result;

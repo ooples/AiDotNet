@@ -3469,8 +3469,8 @@ public interface IEngine
     /// <summary>
     /// Creates a one-hot encoded tensor.
     /// </summary>
-    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
-    /// <param name="indices">The indices tensor (integer values).</param>
+    /// <typeparam name="T">The numeric type of the output tensor elements.</typeparam>
+    /// <param name="indices">The indices tensor (must be integer values).</param>
     /// <param name="depth">The number of classes (size of one-hot dimension).</param>
     /// <returns>A tensor with one-hot encoding.</returns>
     /// <remarks>
@@ -3478,26 +3478,39 @@ public interface IEngine
     /// For indices [0, 2, 1] and depth 3:
     /// [[1,0,0], [0,0,1], [0,1,0]]
     /// </para>
+    /// <para>
+    /// Note: This is a breaking API change. Indices must now be Tensor&lt;int&gt; for type safety.
+    /// </para>
     /// </remarks>
-    Tensor<T> TensorOneHot<T>(Tensor<T> indices, int depth);
+    Tensor<T> TensorOneHot<T>(Tensor<int> indices, int depth);
 
     /// <summary>
     /// Computes argmax along an axis.
     /// </summary>
-    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <typeparam name="T">The numeric type of input tensor elements.</typeparam>
     /// <param name="tensor">The input tensor.</param>
     /// <param name="axis">The axis along which to find the maximum index.</param>
-    /// <returns>A tensor containing the indices of maximum values.</returns>
-    Tensor<T> TensorArgMax<T>(Tensor<T> tensor, int axis);
+    /// <returns>A tensor containing the integer indices of maximum values.</returns>
+    /// <remarks>
+    /// <para>
+    /// Note: This is a breaking API change. Return type is now Tensor&lt;int&gt; for type safety.
+    /// </para>
+    /// </remarks>
+    Tensor<int> TensorArgMax<T>(Tensor<T> tensor, int axis);
 
     /// <summary>
     /// Computes argmin along an axis.
     /// </summary>
-    /// <typeparam name="T">The numeric type of tensor elements.</typeparam>
+    /// <typeparam name="T">The numeric type of input tensor elements.</typeparam>
     /// <param name="tensor">The input tensor.</param>
     /// <param name="axis">The axis along which to find the minimum index.</param>
-    /// <returns>A tensor containing the indices of minimum values.</returns>
-    Tensor<T> TensorArgMin<T>(Tensor<T> tensor, int axis);
+    /// <returns>A tensor containing the integer indices of minimum values.</returns>
+    /// <remarks>
+    /// <para>
+    /// Note: This is a breaking API change. Return type is now Tensor&lt;int&gt; for type safety.
+    /// </para>
+    /// </remarks>
+    Tensor<int> TensorArgMin<T>(Tensor<T> tensor, int axis);
 
     /// <summary>
     /// Computes binary cross-entropy loss element-wise.

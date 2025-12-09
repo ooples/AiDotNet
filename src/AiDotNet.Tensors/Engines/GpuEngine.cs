@@ -25483,19 +25483,19 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
-    public Tensor<T> TensorOneHot<T>(Tensor<T> indices, int depth)
+    public Tensor<T> TensorOneHot<T>(Tensor<int> indices, int depth)
     {
         if (indices.Length * depth >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
-                return (Tensor<T>)(object)TensorOneHotGpu((Tensor<float>)(object)indices, depth);
+                return (Tensor<T>)(object)TensorOneHotGpu(indices, depth);
             if (typeof(T) == typeof(double))
-                return (Tensor<T>)(object)TensorOneHotGpuDouble((Tensor<double>)(object)indices, depth);
+                return (Tensor<T>)(object)TensorOneHotGpuDouble(indices, depth);
         }
-        return _cpuFallback.TensorOneHot(indices, depth);
+        return _cpuFallback.TensorOneHot<T>(indices, depth);
     }
 
-    private Tensor<float> TensorOneHotGpu(Tensor<float> indices, int depth)
+    private Tensor<float> TensorOneHotGpu(Tensor<int> indices, int depth)
     {
         try
         {
@@ -25505,7 +25505,7 @@ public class GpuEngine : IEngine, IDisposable
 
             System.Threading.Tasks.Parallel.For(0, indices.Length, i =>
             {
-                int idx = (int)idxData[i];
+                int idx = idxData[i];
                 if (idx >= 0 && idx < depth)
                 {
                     result[i * depth + idx] = 1.0f;
@@ -25516,11 +25516,11 @@ public class GpuEngine : IEngine, IDisposable
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
         {
-            return _cpuFallback.TensorOneHot(indices, depth);
+            return _cpuFallback.TensorOneHot<float>(indices, depth);
         }
     }
 
-    private Tensor<double> TensorOneHotGpuDouble(Tensor<double> indices, int depth)
+    private Tensor<double> TensorOneHotGpuDouble(Tensor<int> indices, int depth)
     {
         try
         {
@@ -25530,7 +25530,7 @@ public class GpuEngine : IEngine, IDisposable
 
             System.Threading.Tasks.Parallel.For(0, indices.Length, i =>
             {
-                int idx = (int)idxData[i];
+                int idx = idxData[i];
                 if (idx >= 0 && idx < depth)
                 {
                     result[i * depth + idx] = 1.0;
@@ -25541,24 +25541,24 @@ public class GpuEngine : IEngine, IDisposable
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException)
         {
-            return _cpuFallback.TensorOneHot(indices, depth);
+            return _cpuFallback.TensorOneHot<double>(indices, depth);
         }
     }
 
     /// <inheritdoc/>
-    public Tensor<T> TensorArgMax<T>(Tensor<T> tensor, int axis)
+    public Tensor<int> TensorArgMax<T>(Tensor<T> tensor, int axis)
     {
         if (tensor.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
-                return (Tensor<T>)(object)TensorArgMaxGpu((Tensor<float>)(object)tensor, axis);
+                return TensorArgMaxGpu((Tensor<float>)(object)tensor, axis);
             if (typeof(T) == typeof(double))
-                return (Tensor<T>)(object)TensorArgMaxGpuDouble((Tensor<double>)(object)tensor, axis);
+                return TensorArgMaxGpuDouble((Tensor<double>)(object)tensor, axis);
         }
         return _cpuFallback.TensorArgMax(tensor, axis);
     }
 
-    private Tensor<float> TensorArgMaxGpu(Tensor<float> tensor, int axis)
+    private Tensor<int> TensorArgMaxGpu(Tensor<float> tensor, int axis)
     {
         try
         {
@@ -25583,7 +25583,7 @@ public class GpuEngine : IEngine, IDisposable
             for (int i = axis + 1; i < shape.Length; i++) innerSize *= shape[i];
 
             var resultSize = outerSize * innerSize;
-            var result = new float[resultSize];
+            var result = new int[resultSize];
 
             System.Threading.Tasks.Parallel.For(0, resultSize, idx =>
             {
@@ -25605,7 +25605,7 @@ public class GpuEngine : IEngine, IDisposable
 
             var newShape = shape.Where((_, i) => i != axis).ToArray();
             if (newShape.Length == 0) newShape = new[] { 1 };
-            return new Tensor<float>(newShape, new Vector<float>(result));
+            return new Tensor<int>(newShape, new Vector<int>(result));
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or IndexOutOfRangeException)
         {
@@ -25613,7 +25613,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
-    private Tensor<double> TensorArgMaxGpuDouble(Tensor<double> tensor, int axis)
+    private Tensor<int> TensorArgMaxGpuDouble(Tensor<double> tensor, int axis)
     {
         try
         {
@@ -25638,7 +25638,7 @@ public class GpuEngine : IEngine, IDisposable
             for (int i = axis + 1; i < shape.Length; i++) innerSize *= shape[i];
 
             var resultSize = outerSize * innerSize;
-            var result = new double[resultSize];
+            var result = new int[resultSize];
 
             System.Threading.Tasks.Parallel.For(0, resultSize, idx =>
             {
@@ -25660,7 +25660,7 @@ public class GpuEngine : IEngine, IDisposable
 
             var newShape = shape.Where((_, i) => i != axis).ToArray();
             if (newShape.Length == 0) newShape = new[] { 1 };
-            return new Tensor<double>(newShape, new Vector<double>(result));
+            return new Tensor<int>(newShape, new Vector<int>(result));
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or IndexOutOfRangeException)
         {
@@ -25669,19 +25669,19 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
-    public Tensor<T> TensorArgMin<T>(Tensor<T> tensor, int axis)
+    public Tensor<int> TensorArgMin<T>(Tensor<T> tensor, int axis)
     {
         if (tensor.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
-                return (Tensor<T>)(object)TensorArgMinGpu((Tensor<float>)(object)tensor, axis);
+                return TensorArgMinGpu((Tensor<float>)(object)tensor, axis);
             if (typeof(T) == typeof(double))
-                return (Tensor<T>)(object)TensorArgMinGpuDouble((Tensor<double>)(object)tensor, axis);
+                return TensorArgMinGpuDouble((Tensor<double>)(object)tensor, axis);
         }
         return _cpuFallback.TensorArgMin(tensor, axis);
     }
 
-    private Tensor<float> TensorArgMinGpu(Tensor<float> tensor, int axis)
+    private Tensor<int> TensorArgMinGpu(Tensor<float> tensor, int axis)
     {
         try
         {
@@ -25706,7 +25706,7 @@ public class GpuEngine : IEngine, IDisposable
             for (int i = axis + 1; i < shape.Length; i++) innerSize *= shape[i];
 
             var resultSize = outerSize * innerSize;
-            var result = new float[resultSize];
+            var result = new int[resultSize];
 
             System.Threading.Tasks.Parallel.For(0, resultSize, idx =>
             {
@@ -25728,7 +25728,7 @@ public class GpuEngine : IEngine, IDisposable
 
             var newShape = shape.Where((_, i) => i != axis).ToArray();
             if (newShape.Length == 0) newShape = new[] { 1 };
-            return new Tensor<float>(newShape, new Vector<float>(result));
+            return new Tensor<int>(newShape, new Vector<int>(result));
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or IndexOutOfRangeException)
         {
@@ -25736,7 +25736,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
-    private Tensor<double> TensorArgMinGpuDouble(Tensor<double> tensor, int axis)
+    private Tensor<int> TensorArgMinGpuDouble(Tensor<double> tensor, int axis)
     {
         try
         {
@@ -25761,7 +25761,7 @@ public class GpuEngine : IEngine, IDisposable
             for (int i = axis + 1; i < shape.Length; i++) innerSize *= shape[i];
 
             var resultSize = outerSize * innerSize;
-            var result = new double[resultSize];
+            var result = new int[resultSize];
 
             System.Threading.Tasks.Parallel.For(0, resultSize, idx =>
             {
@@ -25783,7 +25783,7 @@ public class GpuEngine : IEngine, IDisposable
 
             var newShape = shape.Where((_, i) => i != axis).ToArray();
             if (newShape.Length == 0) newShape = new[] { 1 };
-            return new Tensor<double>(newShape, new Vector<double>(result));
+            return new Tensor<int>(newShape, new Vector<int>(result));
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or OutOfMemoryException or IndexOutOfRangeException)
         {
