@@ -3178,7 +3178,7 @@ public interface IEngine
     /// Useful for sparse gradient accumulation in embeddings.
     /// </para>
     /// </remarks>
-    Tensor<T> TensorScatterAdd<T>(Tensor<T> destination, Tensor<T> indices, Tensor<T> updates, int axis = 0);
+    Tensor<T> TensorScatterAdd<T>(Tensor<T> destination, Tensor<int> indices, Tensor<T> updates, int axis = 0);
 
     /// <summary>
     /// Gathers values from a tensor along an axis using indices.
@@ -3194,7 +3194,7 @@ public interface IEngine
     /// Useful for index-based lookups without loops.
     /// </para>
     /// </remarks>
-    Tensor<T> TensorGather<T>(Tensor<T> source, Tensor<T> indices, int axis = 0);
+    Tensor<T> TensorGather<T>(Tensor<T> source, Tensor<int> indices, int axis = 0);
 
     /// <summary>
     /// Computes a cumulative sum along an axis.

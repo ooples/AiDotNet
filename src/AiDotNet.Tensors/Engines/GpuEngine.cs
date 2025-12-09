@@ -23384,25 +23384,25 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
-    public Tensor<T> TensorScatterAdd<T>(Tensor<T> destination, Tensor<T> indices, Tensor<T> updates, int axis = 0)
+    public Tensor<T> TensorScatterAdd<T>(Tensor<T> destination, Tensor<int> indices, Tensor<T> updates, int axis = 0)
     {
         if (destination.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
                 return (Tensor<T>)(object)TensorScatterAddGpu(
                     (Tensor<float>)(object)destination,
-                    (Tensor<float>)(object)indices,
+                    (indices),
                     (Tensor<float>)(object)updates, axis);
             if (typeof(T) == typeof(double))
                 return (Tensor<T>)(object)TensorScatterAddGpuDouble(
                     (Tensor<double>)(object)destination,
-                    (Tensor<double>)(object)indices,
+                    (indices),
                     (Tensor<double>)(object)updates, axis);
         }
         return _cpuFallback.TensorScatterAdd(destination, indices, updates, axis);
     }
 
-    private Tensor<float> TensorScatterAddGpu(Tensor<float> destination, Tensor<float> indices, Tensor<float> updates, int axis)
+    private Tensor<float> TensorScatterAddGpu(Tensor<float> destination, Tensor<int> indices, Tensor<float> updates, int axis)
     {
         try
         {
@@ -23455,7 +23455,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
-    private Tensor<double> TensorScatterAddGpuDouble(Tensor<double> destination, Tensor<double> indices, Tensor<double> updates, int axis)
+    private Tensor<double> TensorScatterAddGpuDouble(Tensor<double> destination, Tensor<int> indices, Tensor<double> updates, int axis)
     {
         try
         {
@@ -23508,23 +23508,23 @@ public class GpuEngine : IEngine, IDisposable
     }
 
     /// <inheritdoc/>
-    public Tensor<T> TensorGather<T>(Tensor<T> source, Tensor<T> indices, int axis = 0)
+    public Tensor<T> TensorGather<T>(Tensor<T> source, Tensor<int> indices, int axis = 0)
     {
         if (source.Length >= _thresholds.VectorAdd && SupportsGpu && _gpuHealthy)
         {
             if (typeof(T) == typeof(float))
                 return (Tensor<T>)(object)TensorGatherGpu(
                     (Tensor<float>)(object)source,
-                    (Tensor<float>)(object)indices, axis);
+                    (indices), axis);
             if (typeof(T) == typeof(double))
                 return (Tensor<T>)(object)TensorGatherGpuDouble(
                     (Tensor<double>)(object)source,
-                    (Tensor<double>)(object)indices, axis);
+                    (indices), axis);
         }
         return _cpuFallback.TensorGather(source, indices, axis);
     }
 
-    private Tensor<float> TensorGatherGpu(Tensor<float> source, Tensor<float> indices, int axis)
+    private Tensor<float> TensorGatherGpu(Tensor<float> source, Tensor<int> indices, int axis)
     {
         try
         {
@@ -23579,7 +23579,7 @@ public class GpuEngine : IEngine, IDisposable
         }
     }
 
-    private Tensor<double> TensorGatherGpuDouble(Tensor<double> source, Tensor<double> indices, int axis)
+    private Tensor<double> TensorGatherGpuDouble(Tensor<double> source, Tensor<int> indices, int axis)
     {
         try
         {

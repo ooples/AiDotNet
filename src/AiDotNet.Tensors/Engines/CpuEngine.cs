@@ -7121,7 +7121,7 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
-    public Tensor<T> TensorScatterAdd<T>(Tensor<T> destination, Tensor<T> indices, Tensor<T> updates, int axis = 0)
+    public Tensor<T> TensorScatterAdd<T>(Tensor<T> destination, Tensor<int> indices, Tensor<T> updates, int axis = 0)
     {
         if (destination == null) throw new ArgumentNullException(nameof(destination));
         if (indices == null) throw new ArgumentNullException(nameof(indices));
@@ -7137,7 +7137,7 @@ public class CpuEngine : IEngine
             int embeddingDim = destination.Shape[1];
             for (int i = 0; i < indices.Length; i++)
             {
-                int idx = Convert.ToInt32(numOps.ToDouble(indices.GetFlat(i)));
+                int idx = indices.GetFlat(i);
                 if (idx >= 0 && idx < destination.Shape[0])
                 {
                     for (int j = 0; j < embeddingDim; j++)
@@ -7156,7 +7156,7 @@ public class CpuEngine : IEngine
     }
 
     /// <inheritdoc/>
-    public Tensor<T> TensorGather<T>(Tensor<T> source, Tensor<T> indices, int axis = 0)
+    public Tensor<T> TensorGather<T>(Tensor<T> source, Tensor<int> indices, int axis = 0)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (indices == null) throw new ArgumentNullException(nameof(indices));
@@ -7172,7 +7172,7 @@ public class CpuEngine : IEngine
 
             Parallel.For(0, numIndices, i =>
             {
-                int idx = Convert.ToInt32(numOps.ToDouble(indices.GetFlat(i)));
+                int idx = indices.GetFlat(i);
                 if (idx >= 0 && idx < source.Shape[0])
                 {
                     for (int j = 0; j < embeddingDim; j++)
