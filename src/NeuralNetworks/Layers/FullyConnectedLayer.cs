@@ -369,6 +369,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     {
         _lastInput = input;
 
+
         // Compute output = input * weights^T + biases using Engine operations
         // input: [batchSize, inputSize]
         // weights: [outputSize, inputSize]
@@ -385,6 +386,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
 
         _lastOutput = ApplyActivation(biasedOutput);
         return _lastOutput;
+
     }
 
     /// <summary>
@@ -444,6 +446,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         // biasesGradient = sum(delta, axis=0)
         // inputGradient = delta * weights
 
+
         // Transpose delta: [batch, output] -> [output, batch]
         var deltaT = Engine.TensorTranspose(delta);
 
@@ -456,6 +459,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         // Input gradient: [batch, output] * [output, input] -> [batch, input]
         // weights is [output, input]
         var inputGradient = Engine.TensorMatMul(delta, _weights);
+
 
         return inputGradient;
     }
@@ -493,6 +497,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
         var weights = Autodiff.TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
 
+
         // Forward computation using autodiff ops
         // For each example: output = weights @ input + biases
         // In batch form: output = input @ weights.T + biases
@@ -509,6 +514,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             }
         }
         var biasNode = Autodiff.TensorOperations<T>.Variable(biasesBroadcast, "biases_broadcast", requiresGradient: true);
+
         var output = Autodiff.TensorOperations<T>.Add(matmul, biasNode);
 
         // Apply activation using autodiff
@@ -520,6 +526,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             return BackwardManual(outputGradient);
         }
         else if (ScalarActivation is ReLUActivation<T>)
+
         {
             activated = Autodiff.TensorOperations<T>.ReLU(output);
         }
@@ -536,6 +543,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             // Unsupported scalar activation - fall back to manual backward
             return BackwardManual(outputGradient);
         }
+
         else
         {
             activated = output;
@@ -588,6 +596,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         if (weights.Gradient == null)
             throw new InvalidOperationException("Gradient computation failed for weights.");
         if (biasNode.Gradient == null)
+
             throw new InvalidOperationException("Gradient computation failed for biases.");
         if (input.Gradient == null)
             throw new InvalidOperationException("Gradient computation failed for input.");
@@ -596,6 +605,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         // Sum bias gradients over batch dimension since biases are shared across batch
         // biasNode.Gradient shape: [batchSize, outputSize] -> _biasesGradient shape: [outputSize]
         _biasesGradient = biasNode.Gradient.SumOverAxis(0);
+
 
         return input.Gradient;
     }

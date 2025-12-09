@@ -1,4 +1,7 @@
 using System;
+#if NET8_0_OR_GREATER
+using System.Numerics.Tensors;
+#endif
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -911,7 +914,11 @@ public class DoubleOperations : INumericOperations<double>
     /// </summary>
     public void Clip(ReadOnlySpan<double> x, double min, double max, Span<double> destination)
     {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Clamp(x, min, max, destination);
+#else
         VectorizedOperationsFallback.Clip(this, x, min, max, destination);
+#endif
     }
 
     /// <summary>
