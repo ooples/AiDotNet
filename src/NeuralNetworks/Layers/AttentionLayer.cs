@@ -661,7 +661,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 3. Scores: Q @ K.T
         // Permute K: [B, S, A] -> [B, A, S]
         var KT = Autodiff.TensorOperations<T>.Permute(K, 0, 2, 1);
-        var scores = Autodiff.TensorOperations<T>.MatrixMultiply(Q, KT);
+        // Use BatchMatrixMultiply for 3D tensors [B, S_Q, A] @ [B, A, S_KV] -> [B, S_Q, S_KV]
+        var scores = Autodiff.TensorOperations<T>.BatchMatrixMultiply(Q, KT);
 
         // Scale
         T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(_attentionSize)));
@@ -681,7 +682,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var attentionWeights = Autodiff.TensorOperations<T>.Softmax(scaledScores);
 
         // Output: Weights @ V
-        var output = Autodiff.TensorOperations<T>.MatrixMultiply(attentionWeights, V);
+        // Use BatchMatrixMultiply for 3D tensors [B, S_Q, S_KV] @ [B, S_KV, A] -> [B, S_Q, A]
+        var output = Autodiff.TensorOperations<T>.BatchMatrixMultiply(attentionWeights, V);
 
         // Gradient
         output.Gradient = outputGradient;

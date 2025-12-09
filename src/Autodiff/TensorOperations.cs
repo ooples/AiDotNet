@@ -1000,6 +1000,66 @@ public static class TensorOperations<T>
             tape.RecordOperation(node);
         return node;
     }
+
+    /// <summary>
+    /// Performs batched matrix multiplication of two 3D computation nodes.
+    /// </summary>
+    /// <param name="a">The first 3D tensor with shape [Batch, M, K].</param>
+    /// <param name="b">The second 3D tensor with shape [Batch, K, N].</param>
+    /// <returns>A computation node representing the batched matrix multiplication with shape [Batch, M, N].</returns>
+    /// <remarks>
+    /// <para>
+    /// For 3D tensors, performs element-wise matrix multiplication across the batch dimension:
+    /// result[i] = a[i] @ b[i] for each batch index i.
+    /// </para>
+    /// <para><b>Gradient computation:</b>
+    /// - ∂(A·B)/∂A = gradOut·B^T (batch-wise)
+    /// - ∂(A·B)/∂B = A^T·gradOut (batch-wise)
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> BatchMatrixMultiply(ComputationNode<T> a, ComputationNode<T> b)
+    {
+        var engine = AiDotNetEngine.Current;
+        var result = engine.BatchMatMul(a.Value, b.Value);
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // For batched matmul C[i] = A[i] @ B[i]:
+            // ∂L/∂A[i] = ∂L/∂C[i] @ B[i]^T
+            // ∂L/∂B[i] = A[i]^T @ ∂L/∂C[i]
+            if (a.RequiresGradient)
+            {
+                // Transpose B along last two dims: [Batch, K, N] -> [Batch, N, K]
+                var bTransposed = b.Value.Transpose([0, 2, 1]);
+                var gradA = engine.BatchMatMul(gradient, bTransposed);
+                var existingGrad = a.Gradient;
+                a.Gradient = existingGrad == null ? gradA : engine.TensorAdd(existingGrad, gradA);
+            }
+            if (b.RequiresGradient)
+            {
+                // Transpose A along last two dims: [Batch, M, K] -> [Batch, K, M]
+                var aTransposed = a.Value.Transpose([0, 2, 1]);
+                var gradB = engine.BatchMatMul(aTransposed, gradient);
+                var existingGrad = b.Gradient;
+                b.Gradient = existingGrad == null ? gradB : engine.TensorAdd(existingGrad, gradB);
+            }
+        }
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient || b.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a, b },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        // Set JIT compiler metadata
+        node.OperationType = OperationType.MatMul;
+        node.OperationParams = null;
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+        return node;
+    }
+
     /// <summary>
     /// Transposes a 2D computation node (matrix).
     /// </summary>
