@@ -425,28 +425,25 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Xavier initialization for weights
+        // Xavier initialization for weights using vectorized operations
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_kernelSize * _kernelSize * _inputChannels + _outputChannels)));
-    
-        for (int h = 0; h < _outputHeight; h++)
-        {
-            for (int w = 0; w < _outputWidth; w++)
-            {
-                for (int oc = 0; oc < _outputChannels; oc++)
-                {
-                    for (int kh = 0; kh < _kernelSize; kh++)
-                    {
-                        for (int kw = 0; kw < _kernelSize; kw++)
-                        {
-                            for (int ic = 0; ic < _inputChannels; ic++)
-                            {
-                                _weights[h, w, oc, kh, kw, ic] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        T half = NumOps.FromDouble(0.5);
+
+        // Generate random values [0, 1) and transform to [-0.5, 0.5] * scale
+        int totalElements = _weights.Length;
+        var randomTensor = Tensor<T>.CreateRandom(totalElements, 1); // [0, 1]
+
+        // Create tensor filled with 0.5 for subtraction
+        var halfTensor = new Tensor<T>([totalElements]);
+        halfTensor.Fill(half);
+
+        // Transform to [-0.5, 0.5] * scale using Engine ops
+        var centeredTensor = Engine.TensorSubtract(randomTensor.Reshape([totalElements]), halfTensor);
+        var scaledTensor = Engine.TensorMultiplyScalar(centeredTensor, scale);
+
+        // Copy back to weights tensor (preserving shape)
+        var reshapedResult = scaledTensor.Reshape(_weights.Shape);
+        Array.Copy(reshapedResult.ToArray(), _weights.ToArray(), totalElements);
 
         // Initialize biases to zero
         _biases.Fill(NumOps.Zero);
@@ -807,20 +804,10 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        // Split parameters into weights and biases
+        // Split parameters into weights and biases using Vector.Slice
         int weightsLength = _weights.Length;
-        var weightsVector = new Vector<T>(weightsLength);
-        var biasesVector = new Vector<T>(_biases.Length);
-
-        for (int i = 0; i < weightsLength; i++)
-        {
-            weightsVector[i] = parameters[i];
-        }
-
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            biasesVector[i] = parameters[weightsLength + i];
-        }
+        var weightsVector = parameters.Slice(0, weightsLength);
+        var biasesVector = parameters.Slice(weightsLength, _biases.Length);
 
         // Convert vectors to tensors and assign
         _weights = Tensor<T>.FromVector(weightsVector, _weights.Shape);

@@ -21104,6 +21104,236 @@ public class GpuEngine : IEngine, IDisposable
         return _cpuFallback.GridSample(input, grid);
     }
 
+    public (Tensor<T> real, Tensor<T> imag) ComplexMatMul<T>(Tensor<T> aReal, Tensor<T> aImag, Tensor<T> bReal, Tensor<T> bImag)
+    {
+        // GPU kernel not yet implemented - use CPU fallback to ensure correctness
+        return _cpuFallback.ComplexMatMul(aReal, aImag, bReal, bImag);
+    }
+
+    public Tensor<T> ComplexMagnitudeSquared<T>(Tensor<T> real, Tensor<T> imag)
+    {
+        // GPU kernel not yet implemented - use CPU fallback to ensure correctness
+        return _cpuFallback.ComplexMagnitudeSquared(real, imag);
+    }
+
+    public (Tensor<T> real, Tensor<T> imag) ComplexNormalize<T>(Tensor<T> real, Tensor<T> imag)
+    {
+        // GPU kernel not yet implemented - use CPU fallback to ensure correctness
+        return _cpuFallback.ComplexNormalize(real, imag);
+    }
+
+    #endregion
+
+    #region Loop Elimination Operations (CPU Fallback)
+
+    /// <inheritdoc/>
+    public void TensorCopy<T>(Tensor<T> source, Tensor<T> destination)
+        => _cpuFallback.TensorCopy(source, destination);
+
+    /// <inheritdoc/>
+    public void TensorFill<T>(Tensor<T> tensor, T value)
+        => _cpuFallback.TensorFill(tensor, value);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorOuterProduct<T>(Tensor<T> a, Tensor<T> b)
+        => _cpuFallback.TensorOuterProduct(a, b);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorBatchOuterProduct<T>(Tensor<T> a, Tensor<T> b)
+        => _cpuFallback.TensorBatchOuterProduct(a, b);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorPermute<T>(Tensor<T> tensor, int[] axes)
+        => _cpuFallback.TensorPermute(tensor, axes);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorExpandDims<T>(Tensor<T> tensor, int axis)
+        => _cpuFallback.TensorExpandDims(tensor, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSqueeze<T>(Tensor<T> tensor, int axis = -1)
+        => _cpuFallback.TensorSqueeze(tensor, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorScatterAdd<T>(Tensor<T> destination, Tensor<T> indices, Tensor<T> updates, int axis = 0)
+        => _cpuFallback.TensorScatterAdd(destination, indices, updates, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorGather<T>(Tensor<T> source, Tensor<T> indices, int axis = 0)
+        => _cpuFallback.TensorGather(source, indices, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorCumSum<T>(Tensor<T> tensor, int axis)
+        => _cpuFallback.TensorCumSum(tensor, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorLogSumExp<T>(Tensor<T> tensor, int axis, bool keepDims = false)
+        => _cpuFallback.TensorLogSumExp(tensor, axis, keepDims);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorRandomUniform<T>(int[] shape)
+        => _cpuFallback.TensorRandomUniform<T>(shape);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorRandomNormal<T>(int[] shape, T mean, T stddev)
+        => _cpuFallback.TensorRandomNormal(shape, mean, stddev);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorEye<T>(int size)
+        => _cpuFallback.TensorEye<T>(size);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorDiag<T>(Tensor<T> diagonal)
+        => _cpuFallback.TensorDiag(diagonal);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorDiagonal<T>(Tensor<T> tensor)
+        => _cpuFallback.TensorDiagonal(tensor);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorEinsum<T>(string subscripts, params Tensor<T>[] tensors)
+        => _cpuFallback.TensorEinsum(subscripts, tensors);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorAddScalar<T>(Tensor<T> tensor, T scalar)
+        => _cpuFallback.TensorAddScalar(tensor, scalar);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSubtractScalar<T>(Tensor<T> tensor, T scalar)
+        => _cpuFallback.TensorSubtractScalar(tensor, scalar);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorDivideScalar<T>(Tensor<T> tensor, T scalar)
+        => _cpuFallback.TensorDivideScalar(tensor, scalar);
+
+    /// <inheritdoc/>
+    public Tensor<T> TanhDerivative<T>(Tensor<T> tanhOutput)
+        => _cpuFallback.TanhDerivative(tanhOutput);
+
+    /// <inheritdoc/>
+    public Tensor<T> SigmoidDerivative<T>(Tensor<T> sigmoidOutput)
+        => _cpuFallback.SigmoidDerivative(sigmoidOutput);
+
+    /// <inheritdoc/>
+    public Tensor<T> ReLUDerivative<T>(Tensor<T> input)
+        => _cpuFallback.ReLUDerivative(input);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorTriangularMask<T>(int size, bool upper = false, int diagonal = 0)
+        => _cpuFallback.TensorTriangularMask<T>(size, upper, diagonal);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSquash<T>(Tensor<T> tensor, int axis = -1)
+        => _cpuFallback.TensorSquash(tensor, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSquashBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> output, int axis = -1)
+        => _cpuFallback.TensorSquashBackward(gradOutput, input, output, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorNorm<T>(Tensor<T> tensor, int axis, bool keepDims = false)
+        => _cpuFallback.TensorNorm(tensor, axis, keepDims);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorNormalize<T>(Tensor<T> tensor, int axis, T epsilon)
+        => _cpuFallback.TensorNormalize(tensor, axis, epsilon);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorClip<T>(Tensor<T> tensor, T minValue, T maxValue)
+        => _cpuFallback.TensorClip(tensor, minValue, maxValue);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorConcatenate<T>(Tensor<T>[] tensors, int axis = 0)
+        => _cpuFallback.TensorConcatenate(tensors, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T>[] TensorSplit<T>(Tensor<T> tensor, int numSplits, int axis = 0)
+        => _cpuFallback.TensorSplit(tensor, numSplits, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorOneHot<T>(Tensor<T> indices, int depth)
+        => _cpuFallback.TensorOneHot(indices, depth);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorArgMax<T>(Tensor<T> tensor, int axis)
+        => _cpuFallback.TensorArgMax(tensor, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorArgMin<T>(Tensor<T> tensor, int axis)
+        => _cpuFallback.TensorArgMin(tensor, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorBinaryCrossEntropy<T>(Tensor<T> predictions, Tensor<T> targets, T epsilon)
+        => _cpuFallback.TensorBinaryCrossEntropy(predictions, targets, epsilon);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorBinaryCrossEntropyBackward<T>(Tensor<T> predictions, Tensor<T> targets, T epsilon)
+        => _cpuFallback.TensorBinaryCrossEntropyBackward(predictions, targets, epsilon);
+
+    /// <inheritdoc/>
+    public (Tensor<T> X, Tensor<T> Y) TensorMeshgrid<T>(Tensor<T> x, Tensor<T> y)
+        => _cpuFallback.TensorMeshgrid(x, y);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSliceAxis<T>(Tensor<T> tensor, int axis, int index)
+        => _cpuFallback.TensorSliceAxis(tensor, axis, index);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorLinspace<T>(T start, T end, int count)
+        => _cpuFallback.TensorLinspace(start, end, count);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorBatchMatMul<T>(Tensor<T> a, Tensor<T> b)
+        => _cpuFallback.TensorBatchMatMul(a, b);
+
+    /// <inheritdoc/>
+    public void TensorSetSliceAxis<T>(Tensor<T> destination, Tensor<T> source, int axis, int index)
+        => _cpuFallback.TensorSetSliceAxis(destination, source, axis, index);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSoftmax<T>(Tensor<T> tensor, int axis)
+        => _cpuFallback.TensorSoftmax(tensor, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSoftmaxBackward<T>(Tensor<T> softmaxOutput, Tensor<T> outputGradient, int axis)
+        => _cpuFallback.TensorSoftmaxBackward(softmaxOutput, outputGradient, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorLogSoftmax<T>(Tensor<T> tensor, int axis)
+        => _cpuFallback.TensorLogSoftmax(tensor, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorTopK<T>(Tensor<T> tensor, int k, int axis, out Tensor<int> indices)
+        => _cpuFallback.TensorTopK(tensor, k, axis, out indices);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorScatter<T>(Tensor<T> destination, Tensor<int> indices, Tensor<T> source, int axis)
+        => _cpuFallback.TensorScatter(destination, indices, source, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorIndexSelect<T>(Tensor<T> tensor, Tensor<int> indices, int axis)
+        => _cpuFallback.TensorIndexSelect(tensor, indices, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorStack<T>(Tensor<T>[] tensors, int axis)
+        => _cpuFallback.TensorStack(tensors, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T>[] TensorUnstack<T>(Tensor<T> tensor, int axis)
+        => _cpuFallback.TensorUnstack(tensor, axis);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorMap<T>(Tensor<T> tensor, Func<T, T> func)
+        => _cpuFallback.TensorMap(tensor, func);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorMaskedFill<T>(Tensor<T> tensor, Tensor<bool> mask, T value)
+        => _cpuFallback.TensorMaskedFill(tensor, mask, value);
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorWhere<T>(Tensor<bool> condition, Tensor<T> x, Tensor<T> y)
+        => _cpuFallback.TensorWhere(condition, x, y);
+
     #endregion
 }
 #endif

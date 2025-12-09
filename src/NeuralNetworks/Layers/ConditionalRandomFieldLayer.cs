@@ -178,23 +178,30 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
+        // VECTORIZED: Initialize parameters with scaled random values
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numClasses + _numClasses)));
+        T half = NumOps.FromDouble(0.5);
 
-        // Initialize transition matrix with scaled random values
-        for (int i = 0; i < _numClasses; i++)
-        {
-            for (int j = 0; j < _numClasses; j++)
-            {
-                _transitionMatrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            }
-        }
+        // Initialize transition matrix: (random - 0.5) * scale
+        var transRandom = Tensor<T>.CreateRandom(_transitionMatrix.Length, 1).Reshape(_transitionMatrix.Shape);
+        var transHalf = new Tensor<T>(_transitionMatrix.Shape);
+        transHalf.Fill(half);
+        var transCentered = Engine.TensorSubtract(transRandom, transHalf);
+        _transitionMatrix = Engine.TensorMultiplyScalar(transCentered, scale);
 
-        // Initialize start and end scores with scaled random values
-        for (int i = 0; i < _numClasses; i++)
-        {
-            _startScores[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            _endScores[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-        }
+        // Initialize start scores: (random - 0.5) * scale
+        var startRandom = Tensor<T>.CreateRandom(_startScores.Length, 1).Reshape(_startScores.Shape);
+        var startHalf = new Tensor<T>(_startScores.Shape);
+        startHalf.Fill(half);
+        var startCentered = Engine.TensorSubtract(startRandom, startHalf);
+        _startScores = Engine.TensorMultiplyScalar(startCentered, scale);
+
+        // Initialize end scores: (random - 0.5) * scale
+        var endRandom = Tensor<T>.CreateRandom(_endScores.Length, 1).Reshape(_endScores.Shape);
+        var endHalf = new Tensor<T>(_endScores.Shape);
+        endHalf.Fill(half);
+        var endCentered = Engine.TensorSubtract(endRandom, endHalf);
+        _endScores = Engine.TensorMultiplyScalar(endCentered, scale);
     }
 
     /// <summary>
@@ -238,91 +245,92 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
 
         var output = new Tensor<T>([batchSize, _sequenceLength, _numClasses]);
 
+        // === VECTORIZED: Apply activation to entire input ===
+        Tensor<T> sequenceScores;
+        if (UsingVectorActivation)
+        {
+            sequenceScores = ApplyActivation(input);
+        }
+        else if (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>))
+        {
+            sequenceScores = ApplyActivation(input);
+        }
+        else
+        {
+            sequenceScores = input;
+        }
+
+        // Process each batch item (Viterbi requires sequential time processing)
         for (int b = 0; b < batchSize; b++)
         {
-            var sequenceScores = new Matrix<T>(_sequenceLength, _numClasses);
+            // === VECTORIZED: Extract sequence for this batch item ===
+            var batchSeq = Engine.TensorSliceAxis(sequenceScores, 0, b); // [sequenceLength, numClasses]
 
-            // Apply optional feature transformation
-            for (int t = 0; t < _sequenceLength; t++)
-            {
-                var featureVector = new Vector<T>(_numClasses);
-                for (int c = 0; c < _numClasses; c++)
-                {
-                    featureVector[c] = input[b, t, c];
-                }
-
-                if (UsingVectorActivation)
-                {
-                    featureVector = VectorActivation!.Activate(featureVector);
-                }
-                else if (ScalarActivation != null)
-                {
-                    for (int c = 0; c < _numClasses; c++)
-                    {
-                        featureVector[c] = ScalarActivation.Activate(featureVector[c]);
-                    }
-                }
-
-                for (int c = 0; c < _numClasses; c++)
-                {
-                    sequenceScores[t, c] = featureVector[c];
-                }
-            }
-
-            // Viterbi algorithm
-            var viterbi = new Matrix<T>(_sequenceLength, _numClasses);
+            // === VECTORIZED Viterbi Algorithm ===
+            var viterbi = new Tensor<T>([_sequenceLength, _numClasses]);
             var backpointers = new Matrix<int>(_sequenceLength, _numClasses);
 
-            // Initialize first timestep
-            for (int c = 0; c < _numClasses; c++)
-            {
-                viterbi[0, c] = NumOps.Add(_startScores[c], sequenceScores[0, c]);
-            }
+            // VECTORIZED: Initialize first timestep - startScores + emissions[0]
+            var firstEmissions = Engine.TensorSliceAxis(batchSeq, 0, 0); // [numClasses]
+            var firstViterbi = Engine.TensorAdd(firstEmissions, _startScores);
+            Engine.TensorSetSliceAxis(viterbi, firstViterbi, 0, 0);
 
-            // Recursion
+            // Recursion over time (inherently sequential)
             for (int t = 1; t < _sequenceLength; t++)
             {
+                var currentEmissions = Engine.TensorSliceAxis(batchSeq, 0, t); // [numClasses]
+                var prevViterbi = Engine.TensorSliceAxis(viterbi, 0, t - 1); // [numClasses]
+
+                // For each current class, compute max over prev classes
+                // score[c] = max_prevC(viterbi[t-1, prevC] + transition[prevC, c]) + emissions[t, c]
+                // This can be done by broadcasting:
+                // prevViterbi: [numClasses, 1] + transition: [numClasses, numClasses] -> [numClasses, numClasses]
+                // Then max over axis 0
+
+                var prevExpanded = prevViterbi.Reshape([_numClasses, 1]); // [numClasses, 1]
+                var scoresWithTrans = Engine.TensorAdd(prevExpanded, _transitionMatrix); // [numClasses, numClasses]
+
+                // Get max over previous classes and store backpointers
+                var maxScores = new Tensor<T>([_numClasses]);
                 for (int c = 0; c < _numClasses; c++)
                 {
-                    T maxScore = NumOps.MinValue;
-                    int maxPrevClass = -1;
-
+                    T maxVal = NumOps.MinValue;
+                    int maxIdx = 0;
                     for (int prevC = 0; prevC < _numClasses; prevC++)
                     {
-                        T score = NumOps.Add(
-                            NumOps.Add(
-                                viterbi[t - 1, prevC],
-                                _transitionMatrix[prevC, c]
-                            ),
-                            sequenceScores[t, c]
-                        );
-
-                        if (NumOps.GreaterThan(score, maxScore))
+                        T val = scoresWithTrans[prevC, c];
+                        if (NumOps.GreaterThan(val, maxVal))
                         {
-                            maxScore = score;
-                            maxPrevClass = prevC;
+                            maxVal = val;
+                            maxIdx = prevC;
                         }
                     }
-
-                    viterbi[t, c] = maxScore;
-                    backpointers[t, c] = maxPrevClass;
+                    maxScores[c] = maxVal;
+                    backpointers[t, c] = maxIdx;
                 }
+
+                // Add emissions: maxScores + currentEmissions
+                var currentViterbi = Engine.TensorAdd(maxScores, currentEmissions);
+                Engine.TensorSetSliceAxis(viterbi, currentViterbi, 0, t);
             }
 
-            // Termination
+            // === VECTORIZED Termination ===
+            var lastViterbi = Engine.TensorSliceAxis(viterbi, 0, _sequenceLength - 1);
+            var finalScores = Engine.TensorAdd(lastViterbi, _endScores);
+
+            // Find argmax
             T maxFinalScore = NumOps.MinValue;
-            int maxFinalClass = -1;
+            int maxFinalClass = 0;
             for (int c = 0; c < _numClasses; c++)
             {
-                T finalScore = NumOps.Add(viterbi[_sequenceLength - 1, c], _endScores[c]);
-                if (NumOps.GreaterThan(finalScore, maxFinalScore))
+                if (NumOps.GreaterThan(finalScores[c], maxFinalScore))
                 {
-                    maxFinalScore = finalScore;
+                    maxFinalScore = finalScores[c];
                     maxFinalClass = c;
                 }
             }
 
-            // Backtracking
+            // Backtracking (inherently sequential)
             var bestPath = new int[_sequenceLength];
             bestPath[_sequenceLength - 1] = maxFinalClass;
             for (int t = _sequenceLength - 2; t >= 0; t--)
@@ -330,13 +338,11 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 bestPath[t] = backpointers[t + 1, bestPath[t + 1]];
             }
 
-            // Set output
+            // === VECTORIZED: Set one-hot output ===
+            // Create one-hot tensor for this batch
             for (int t = 0; t < _sequenceLength; t++)
             {
-                for (int c = 0; c < _numClasses; c++)
-                {
-                    output[b, t, c] = c == bestPath[t] ? NumOps.One : NumOps.Zero;
-                }
+                output[b, t, bestPath[t]] = NumOps.One;
             }
         }
 
@@ -395,84 +401,41 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
 
         int batchSize = _lastInput.Shape[0];
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        // === VECTORIZED Gradient Computation ===
+
+        // Input gradient starts as a copy of output gradient
+        var inputGradient = outputGradient.Clone();
+
+        // Start scores gradient: sum of gradients at t=0 over all batches
+        // outputGradient[:, 0, :] summed over batch
+        var firstTimestep = Engine.TensorSliceAxis(outputGradient, 1, 0); // [batchSize, numClasses]
+        _startScoresGradient = Engine.ReduceSum(firstTimestep, new[] { 0 }, keepDims: false);
+
+        // End scores gradient: sum of gradients at t=seqLen-1 over all batches
+        var lastTimestep = Engine.TensorSliceAxis(outputGradient, 1, _sequenceLength - 1); // [batchSize, numClasses]
+        _endScoresGradient = Engine.ReduceSum(lastTimestep, new[] { 0 }, keepDims: false);
+
+        // Transition matrix gradient: sum of gradients for all t > 0
+        // For simplicity, we sum all gradients across batch and time (except t=0), then broadcast
+        // A more accurate gradient would involve the actual paths, but this is an approximation
+        var allGradients = Engine.ReduceSum(outputGradient, new[] { 0, 1 }, keepDims: false); // [numClasses]
+
+        // Create transition gradient: outer product approximation
+        // Each transition gets the sum of class gradients
         _transitionMatrixGradient = new Tensor<T>([_numClasses, _numClasses]);
-        _transitionMatrixGradient.Fill(NumOps.Zero);
-        _startScoresGradient = new Tensor<T>([_numClasses]);
-        _startScoresGradient.Fill(NumOps.Zero);
-        _endScoresGradient = new Tensor<T>([_numClasses]);
-        _endScoresGradient.Fill(NumOps.Zero);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Compute gradients for transition matrix, start scores, and end scores
-            for (int t = 0; t < _sequenceLength; t++)
-            {
-                for (int c = 0; c < _numClasses; c++)
-                {
-                    T grad = outputGradient[b, t, c];
-
-                    if (t == 0)
-                    {
-                        _startScoresGradient[c] = NumOps.Add(_startScoresGradient[c], grad);
-                    }
-                    else if (t == _sequenceLength - 1)
-                    {
-                        _endScoresGradient[c] = NumOps.Add(_endScoresGradient[c], grad);
-                    }
-
-                    if (t > 0)
-                    {
-                        for (int prevC = 0; c < _numClasses; prevC++)
-                        {
-                            _transitionMatrixGradient[prevC, c] = NumOps.Add(_transitionMatrixGradient[prevC, c], grad);
-                        }
-                    }
-
-                    // Compute input gradient
-                    inputGradient[b, t, c] = grad;
-                }
-            }
-        }
+        var gradExpanded = allGradients.Reshape([1, _numClasses]);
+        var onesCol = new Tensor<T>([_numClasses, 1]);
+        onesCol.Fill(NumOps.One);
+        // transGrad[i, j] = sumGrad[j] for all i
+        var transGrad = Engine.TensorMultiply(onesCol, gradExpanded);
+        // Scale by (seqLen - 1) / seqLen to account for t=0 not having transitions
+        var scale = NumOps.FromDouble((_sequenceLength - 1.0) / _sequenceLength);
+        _transitionMatrixGradient = Engine.TensorMultiplyScalar(transGrad, scale);
 
         // Apply activation function gradient if applicable
-        if (UsingVectorActivation)
+        if (UsingVectorActivation || (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>)))
         {
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int t = 0; t < _sequenceLength; t++)
-                {
-                    var input = new Vector<T>(_numClasses);
-                    var grad = new Vector<T>(_numClasses);
-                    for (int c = 0; c < _numClasses; c++)
-                    {
-                        input[c] = _lastInput[b, t, c];
-                        grad[c] = inputGradient[b, t, c];
-                    }
-
-                    var derivativeMatrix = VectorActivation!.Derivative(input);
-                    var result = derivativeMatrix.Multiply(grad);
-
-                    for (int c = 0; c < _numClasses; c++)
-                    {
-                        inputGradient[b, t, c] = result[c];
-                    }
-                }
-            }
-        }
-        else if (ScalarActivation != null)
-        {
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int t = 0; t < _sequenceLength; t++)
-                {
-                    for (int c = 0; c < _numClasses; c++)
-                    {
-                        T derivative = ScalarActivation.Derivative(_lastInput[b, t, c]);
-                        inputGradient[b, t, c] = NumOps.Multiply(derivative, inputGradient[b, t, c]);
-                    }
-                }
-            }
+            inputGradient = ApplyActivationDerivative(_lastInput, inputGradient);
         }
 
         return inputGradient;
@@ -658,33 +621,20 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int totalParams = _numClasses * _numClasses + _numClasses * 2;
-        
+        int transSize = _numClasses * _numClasses;
+        int totalParams = transSize + _numClasses * 2;
+
         if (parameters.Length != totalParams)
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        
-        int index = 0;
-        
-        // Set transition matrix parameters
-        for (int i = 0; i < _numClasses; i++)
-        {
-            for (int j = 0; j < _numClasses; j++)
-            {
-                _transitionMatrix[i, j] = parameters[index++];
-            }
-        }
-        
-        // Set start scores
-        for (int i = 0; i < _numClasses; i++)
-        {
-            _startScores[i] = parameters[index++];
-        }
-        
-        // Set end scores
-        for (int i = 0; i < _numClasses; i++)
-        {
-            _endScores[i] = parameters[index++];
-        }
+
+        // VECTORIZED: Use Vector.Slice and Tensor.FromVector
+        var transVec = parameters.Slice(0, transSize);
+        var startVec = parameters.Slice(transSize, _numClasses);
+        var endVec = parameters.Slice(transSize + _numClasses, _numClasses);
+
+        _transitionMatrix = Tensor<T>.FromVector(transVec).Reshape(_transitionMatrix.Shape);
+        _startScores = Tensor<T>.FromVector(startVec).Reshape(_startScores.Shape);
+        _endScores = Tensor<T>.FromVector(endVec).Reshape(_endScores.Shape);
     }
 
     /// <summary>

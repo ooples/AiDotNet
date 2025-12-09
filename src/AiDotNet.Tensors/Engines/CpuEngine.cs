@@ -6139,6 +6139,81 @@ public class CpuEngine : IEngine
         return output;
     }
 
+    public (Tensor<T> real, Tensor<T> imag) ComplexMatMul<T>(Tensor<T> aReal, Tensor<T> aImag, Tensor<T> bReal, Tensor<T> bImag)
+    {
+        if (aReal == null || aImag == null || bReal == null || bImag == null)
+            throw new ArgumentNullException("ComplexMatMul inputs cannot be null");
+        var aShape = aReal.Shape;
+        var bShape = bReal.Shape;
+        if (aShape.Length != 2 || bShape.Length != 2 || aShape[1] != bShape[0])
+            throw new ArgumentException("ComplexMatMul expects shapes [M,K] x [K,N]");
+
+        int m = aShape[0];
+        int k = aShape[1];
+        int n = bShape[1];
+
+        var realOut = new Tensor<T>([m, n]);
+        var imagOut = new Tensor<T>([m, n]);
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        for (int i = 0; i < m; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                T realSum = numOps.Zero;
+                T imagSum = numOps.Zero;
+                for (int kk = 0; kk < k; kk++)
+                {
+                    var ar = aReal[i, kk];
+                    var ai = aImag[i, kk];
+                    var br = bReal[kk, j];
+                    var bi = bImag[kk, j];
+                    // (ar + i ai) * (br + i bi) = (ar*br - ai*bi) + i(ar*bi + ai*br)
+                    realSum = numOps.Add(realSum, numOps.Subtract(numOps.Multiply(ar, br), numOps.Multiply(ai, bi)));
+                    imagSum = numOps.Add(imagSum, numOps.Add(numOps.Multiply(ar, bi), numOps.Multiply(ai, br)));
+                }
+                realOut[i, j] = realSum;
+                imagOut[i, j] = imagSum;
+            }
+        }
+
+        return (realOut, imagOut);
+    }
+
+    public Tensor<T> ComplexMagnitudeSquared<T>(Tensor<T> real, Tensor<T> imag)
+    {
+        if (real == null || imag == null)
+            throw new ArgumentNullException("ComplexMagnitudeSquared inputs cannot be null");
+        if (!real.Shape.SequenceEqual(imag.Shape))
+            throw new ArgumentException("Real and imaginary parts must have the same shape");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var output = new Tensor<T>(real.Shape);
+        for (int idx = 0; idx < real.Length; idx++)
+        {
+            var r = real[idx];
+            var i = imag[idx];
+            output[idx] = numOps.Add(numOps.Multiply(r, r), numOps.Multiply(i, i));
+        }
+        return output;
+    }
+
+    public (Tensor<T> real, Tensor<T> imag) ComplexNormalize<T>(Tensor<T> real, Tensor<T> imag)
+    {
+        var magSq = ComplexMagnitudeSquared(real, imag);
+        var total = TensorSum(magSq);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (numOps.Equals(total, numOps.Zero))
+            return (real.Clone(), imag.Clone());
+        var denom = numOps.Sqrt(total);
+        var denomTensor = new Tensor<T>(magSq.Shape);
+        denomTensor.Fill(denom);
+        var realNorm = TensorDivide(real, denomTensor);
+        var imagNorm = TensorDivide(imag, denomTensor);
+        return (realNorm, imagNorm);
+    }
+
     /// <inheritdoc/>
     public Tensor<T> Crop<T>(Tensor<T> input, int top, int left, int height, int width)
     {
@@ -6819,6 +6894,1428 @@ public class CpuEngine : IEngine
             // Condition is true if not equal to zero
             bool isTrue = !numOps.Equals(condVal, numOps.Zero);
             result.SetFlat(i, isTrue ? x.GetFlat(i) : y.GetFlat(i));
+        });
+
+        return result;
+    }
+
+    #endregion
+
+    #region Loop Elimination Operations
+
+    /// <inheritdoc/>
+    public void TensorCopy<T>(Tensor<T> source, Tensor<T> destination)
+    {
+        if (source == null) throw new ArgumentNullException(nameof(source));
+        if (destination == null) throw new ArgumentNullException(nameof(destination));
+        if (source.Length != destination.Length)
+            throw new ArgumentException($"Tensor lengths must match. Got {source.Length} and {destination.Length}");
+
+        var sourceArray = source.ToArray();
+        var destArray = destination.ToArray();
+        Array.Copy(sourceArray, destArray, sourceArray.Length);
+    }
+
+    /// <inheritdoc/>
+    public void TensorFill<T>(Tensor<T> tensor, T value)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        tensor.Fill(value);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorOuterProduct<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+
+        // Flatten both tensors to 1D
+        int n = a.Length;
+        int m = b.Length;
+        var result = new Tensor<T>([n, m]);
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        Parallel.For(0, n, i =>
+        {
+            T ai = a.GetFlat(i);
+            for (int j = 0; j < m; j++)
+            {
+                result[i, j] = numOps.Multiply(ai, b.GetFlat(j));
+            }
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorBatchOuterProduct<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (a.Shape.Length != 2 || b.Shape.Length != 2)
+            throw new ArgumentException("Both tensors must be 2D [batch, features]");
+        if (a.Shape[0] != b.Shape[0])
+            throw new ArgumentException("Batch sizes must match");
+
+        int batch = a.Shape[0];
+        int n = a.Shape[1];
+        int m = b.Shape[1];
+        var result = new Tensor<T>([batch, n, m]);
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        Parallel.For(0, batch, bIdx =>
+        {
+            for (int i = 0; i < n; i++)
+            {
+                T ai = a[bIdx, i];
+                for (int j = 0; j < m; j++)
+                {
+                    result[bIdx, i, j] = numOps.Multiply(ai, b[bIdx, j]);
+                }
+            }
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorPermute<T>(Tensor<T> tensor, int[] axes)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (axes == null) throw new ArgumentNullException(nameof(axes));
+        if (axes.Length != tensor.Shape.Length)
+            throw new ArgumentException("Axes length must match tensor rank");
+
+        // Use tensor's built-in Transpose method
+        return tensor.Transpose(axes);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorExpandDims<T>(Tensor<T> tensor, int axis)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        // Normalize negative axis
+        int rank = tensor.Shape.Length;
+        if (axis < 0) axis = rank + 1 + axis;
+        if (axis < 0 || axis > rank)
+            throw new ArgumentOutOfRangeException(nameof(axis), "Axis out of range");
+
+        // Build new shape with 1 inserted at axis
+        var newShape = new int[rank + 1];
+        for (int i = 0; i < axis; i++)
+            newShape[i] = tensor.Shape[i];
+        newShape[axis] = 1;
+        for (int i = axis; i < rank; i++)
+            newShape[i + 1] = tensor.Shape[i];
+
+        return tensor.Reshape(newShape);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSqueeze<T>(Tensor<T> tensor, int axis = -1)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var shape = tensor.Shape.ToList();
+
+        if (axis == -1)
+        {
+            // Remove all singleton dimensions
+            shape = shape.Where(s => s != 1).ToList();
+            if (shape.Count == 0) shape.Add(1); // Keep at least one dimension
+        }
+        else
+        {
+            // Normalize axis
+            if (axis < 0) axis = shape.Count + axis;
+            if (axis < 0 || axis >= shape.Count)
+                throw new ArgumentOutOfRangeException(nameof(axis));
+            if (shape[axis] != 1)
+                throw new ArgumentException($"Cannot squeeze axis {axis} with size {shape[axis]} (must be 1)");
+            shape.RemoveAt(axis);
+            if (shape.Count == 0) shape.Add(1);
+        }
+
+        return tensor.Reshape(shape.ToArray());
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorScatterAdd<T>(Tensor<T> destination, Tensor<T> indices, Tensor<T> updates, int axis = 0)
+    {
+        if (destination == null) throw new ArgumentNullException(nameof(destination));
+        if (indices == null) throw new ArgumentNullException(nameof(indices));
+        if (updates == null) throw new ArgumentNullException(nameof(updates));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(destination.Shape);
+        TensorCopy(destination, result);
+
+        // Simple 1D scatter-add for now (most common use case: embeddings)
+        if (axis == 0 && destination.Shape.Length == 2)
+        {
+            int embeddingDim = destination.Shape[1];
+            for (int i = 0; i < indices.Length; i++)
+            {
+                int idx = Convert.ToInt32(numOps.ToDouble(indices.GetFlat(i)));
+                if (idx >= 0 && idx < destination.Shape[0])
+                {
+                    for (int j = 0; j < embeddingDim; j++)
+                    {
+                        result[idx, j] = numOps.Add(result[idx, j], updates[i, j]);
+                    }
+                }
+            }
+        }
+        else
+        {
+            throw new NotImplementedException("Scatter-add only implemented for axis=0 with 2D destination");
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorGather<T>(Tensor<T> source, Tensor<T> indices, int axis = 0)
+    {
+        if (source == null) throw new ArgumentNullException(nameof(source));
+        if (indices == null) throw new ArgumentNullException(nameof(indices));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Simple 1D gather for embedding lookups
+        if (axis == 0 && source.Shape.Length == 2)
+        {
+            int embeddingDim = source.Shape[1];
+            int numIndices = indices.Length;
+            var result = new Tensor<T>([numIndices, embeddingDim]);
+
+            Parallel.For(0, numIndices, i =>
+            {
+                int idx = Convert.ToInt32(numOps.ToDouble(indices.GetFlat(i)));
+                if (idx >= 0 && idx < source.Shape[0])
+                {
+                    for (int j = 0; j < embeddingDim; j++)
+                    {
+                        result[i, j] = source[idx, j];
+                    }
+                }
+            });
+
+            return result;
+        }
+        else
+        {
+            throw new NotImplementedException("Gather only implemented for axis=0 with 2D source");
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorCumSum<T>(Tensor<T> tensor, int axis)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        // Normalize axis
+        if (axis < 0) axis = tensor.Shape.Length + axis;
+
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= tensor.Shape[i];
+
+        int axisSize = tensor.Shape[axis];
+
+        int innerSize = 1;
+        for (int i = axis + 1; i < tensor.Shape.Length; i++) innerSize *= tensor.Shape[i];
+
+        Parallel.For(0, outerSize * innerSize, flatIdx =>
+        {
+            int outer = flatIdx / innerSize;
+            int inner = flatIdx % innerSize;
+
+            T cumSum = numOps.Zero;
+            for (int a = 0; a < axisSize; a++)
+            {
+                int srcIdx = (outer * axisSize + a) * innerSize + inner;
+                cumSum = numOps.Add(cumSum, tensor.GetFlat(srcIdx));
+                result.SetFlat(srcIdx, cumSum);
+            }
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorLogSumExp<T>(Tensor<T> tensor, int axis, bool keepDims = false)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Normalize axis
+        if (axis < 0) axis = tensor.Shape.Length + axis;
+
+        // Compute max along axis for numerical stability
+        var maxVals = ReduceMax(tensor, new[] { axis }, keepDims: true, out _);
+
+        // Compute exp(x - max)
+        var shifted = TensorSubtract(tensor, maxVals);
+        var expShifted = TensorExp(shifted);
+
+        // Sum along axis
+        var sumExp = ReduceSum(expShifted, new[] { axis }, keepDims: keepDims);
+
+        // log(sum) + max
+        var logSum = TensorLog(sumExp);
+
+        if (keepDims)
+        {
+            return TensorAdd(logSum, maxVals);
+        }
+        else
+        {
+            var maxSqueezed = TensorSqueeze(maxVals, axis);
+            return TensorAdd(logSum, maxSqueezed);
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorRandomUniform<T>(int[] shape)
+    {
+        if (shape == null) throw new ArgumentNullException(nameof(shape));
+        return Tensor<T>.CreateRandom(shape);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorRandomNormal<T>(int[] shape, T mean, T stddev)
+    {
+        if (shape == null) throw new ArgumentNullException(nameof(shape));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var random = new Random();
+        var result = new Tensor<T>(shape);
+        int totalElements = shape.Aggregate(1, (a, b) => a * b);
+
+        // Box-Muller transform for normal distribution
+        for (int i = 0; i < totalElements; i += 2)
+        {
+            double u1 = 1.0 - random.NextDouble();
+            double u2 = 1.0 - random.NextDouble();
+            double mag = Math.Sqrt(-2.0 * Math.Log(u1));
+            double z0 = mag * Math.Cos(2.0 * Math.PI * u2);
+            double z1 = mag * Math.Sin(2.0 * Math.PI * u2);
+
+            double meanD = numOps.ToDouble(mean);
+            double stdD = numOps.ToDouble(stddev);
+
+            result.SetFlat(i, numOps.FromDouble(z0 * stdD + meanD));
+            if (i + 1 < totalElements)
+                result.SetFlat(i + 1, numOps.FromDouble(z1 * stdD + meanD));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorEye<T>(int size)
+    {
+        if (size <= 0) throw new ArgumentException("Size must be positive", nameof(size));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>([size, size]);
+        result.Fill(numOps.Zero);
+
+        for (int i = 0; i < size; i++)
+        {
+            result[i, i] = numOps.One;
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorDiag<T>(Tensor<T> diagonal)
+    {
+        if (diagonal == null) throw new ArgumentNullException(nameof(diagonal));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = diagonal.Length;
+        var result = new Tensor<T>([n, n]);
+        result.Fill(numOps.Zero);
+
+        for (int i = 0; i < n; i++)
+        {
+            result[i, i] = diagonal.GetFlat(i);
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorDiagonal<T>(Tensor<T> tensor)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (tensor.Shape.Length != 2)
+            throw new ArgumentException("Tensor must be 2D");
+
+        int n = Math.Min(tensor.Shape[0], tensor.Shape[1]);
+        var result = new Tensor<T>([n]);
+
+        for (int i = 0; i < n; i++)
+        {
+            result[i] = tensor[i, i];
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorEinsum<T>(string subscripts, params Tensor<T>[] tensors)
+    {
+        if (subscripts == null) throw new ArgumentNullException(nameof(subscripts));
+        if (tensors == null || tensors.Length == 0) throw new ArgumentNullException(nameof(tensors));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Parse einsum notation
+        var parts = subscripts.Replace(" ", "").Split(new[] { "->" }, StringSplitOptions.None);
+        if (parts.Length != 2)
+            throw new ArgumentException("Einsum subscripts must contain '->'");
+
+        var inputSubscripts = parts[0].Split(new[] { ',' }, StringSplitOptions.None);
+        var outputSubscripts = parts[1];
+
+        if (inputSubscripts.Length != tensors.Length)
+            throw new ArgumentException($"Expected {inputSubscripts.Length} tensors but got {tensors.Length}");
+
+        // Handle common cases directly for efficiency
+        if (tensors.Length == 2)
+        {
+            // Batched matrix multiplication: bij,bjk->bik
+            if (subscripts == "bij,bjk->bik")
+            {
+                return BatchMatMul(tensors[0], tensors[1]);
+            }
+            // Matrix multiplication: ij,jk->ik
+            if (subscripts == "ij,jk->ik")
+            {
+                return TensorMatMul(tensors[0], tensors[1]);
+            }
+            // Batched outer product: bi,bj->bij
+            if (subscripts == "bi,bj->bij")
+            {
+                return TensorBatchOuterProduct(tensors[0], tensors[1]);
+            }
+            // Outer product: i,j->ij
+            if (subscripts == "i,j->ij")
+            {
+                return TensorOuterProduct(tensors[0], tensors[1]);
+            }
+            // Batched dot: bi,bi->b
+            if (subscripts == "bi,bi->b")
+            {
+                int batch = tensors[0].Shape[0];
+                int n = tensors[0].Shape[1];
+                var result = new Tensor<T>([batch]);
+                Parallel.For(0, batch, b =>
+                {
+                    T sum = numOps.Zero;
+                    for (int i = 0; i < n; i++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(tensors[0][b, i], tensors[1][b, i]));
+                    }
+                    result[b] = sum;
+                });
+                return result;
+            }
+        }
+
+        // General einsum implementation is complex - throw for unsupported patterns
+        throw new NotImplementedException($"Einsum pattern '{subscripts}' not implemented. Use specific tensor operations instead.");
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorAddScalar<T>(Tensor<T> tensor, T scalar)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+        int totalElements = tensor.Length;
+
+        Parallel.For(0, totalElements, i =>
+        {
+            result.SetFlat(i, numOps.Add(tensor.GetFlat(i), scalar));
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSubtractScalar<T>(Tensor<T> tensor, T scalar)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+        int totalElements = tensor.Length;
+
+        Parallel.For(0, totalElements, i =>
+        {
+            result.SetFlat(i, numOps.Subtract(tensor.GetFlat(i), scalar));
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorDivideScalar<T>(Tensor<T> tensor, T scalar)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+        int totalElements = tensor.Length;
+
+        Parallel.For(0, totalElements, i =>
+        {
+            result.SetFlat(i, numOps.Divide(tensor.GetFlat(i), scalar));
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TanhDerivative<T>(Tensor<T> tanhOutput)
+    {
+        if (tanhOutput == null) throw new ArgumentNullException(nameof(tanhOutput));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tanhOutput.Shape);
+        int totalElements = tanhOutput.Length;
+
+        // d/dx tanh(x) = 1 - tanh(x)^2, and we have tanhOutput = tanh(x)
+        Parallel.For(0, totalElements, i =>
+        {
+            T y = tanhOutput.GetFlat(i);
+            T y2 = numOps.Multiply(y, y);
+            result.SetFlat(i, numOps.Subtract(numOps.One, y2));
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> SigmoidDerivative<T>(Tensor<T> sigmoidOutput)
+    {
+        if (sigmoidOutput == null) throw new ArgumentNullException(nameof(sigmoidOutput));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(sigmoidOutput.Shape);
+        int totalElements = sigmoidOutput.Length;
+
+        // d/dx sigmoid(x) = sigmoid(x) * (1 - sigmoid(x)), and we have sigmoidOutput = sigmoid(x)
+        Parallel.For(0, totalElements, i =>
+        {
+            T y = sigmoidOutput.GetFlat(i);
+            T oneMinusY = numOps.Subtract(numOps.One, y);
+            result.SetFlat(i, numOps.Multiply(y, oneMinusY));
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ReLUDerivative<T>(Tensor<T> input)
+    {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(input.Shape);
+        int totalElements = input.Length;
+
+        Parallel.For(0, totalElements, i =>
+        {
+            T val = input.GetFlat(i);
+            bool positive = numOps.ToDouble(val) > 0;
+            result.SetFlat(i, positive ? numOps.One : numOps.Zero);
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorTriangularMask<T>(int size, bool upper = false, int diagonal = 0)
+    {
+        if (size <= 0) throw new ArgumentException("Size must be positive", nameof(size));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>([size, size]);
+
+        for (int i = 0; i < size; i++)
+        {
+            for (int j = 0; j < size; j++)
+            {
+                bool inMask = upper ? (j >= i + diagonal) : (j <= i + diagonal);
+                result[i, j] = inMask ? numOps.One : numOps.Zero;
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSquash<T>(Tensor<T> tensor, int axis = -1)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Normalize axis
+        if (axis < 0) axis = tensor.Shape.Length + axis;
+
+        // Compute squared norm along axis
+        var squared = TensorMultiply(tensor, tensor);
+        var normSquared = ReduceSum(squared, new[] { axis }, keepDims: true);
+
+        // Compute scale factor: ||v||^2 / (1 + ||v||^2)
+        var one = new Tensor<T>(normSquared.Shape);
+        one.Fill(numOps.One);
+        var denom = TensorAdd(one, normSquared);
+        var scale = TensorDivide(normSquared, denom);
+
+        // Compute ||v||
+        var norm = TensorSqrt(normSquared);
+        var epsilon = new Tensor<T>(norm.Shape);
+        epsilon.Fill(numOps.FromDouble(1e-8));
+        norm = TensorAdd(norm, epsilon);
+
+        // Normalize: v / ||v||
+        var normalized = TensorDivide(tensor, norm);
+
+        // Apply scale
+        return TensorMultiply(scale, normalized);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSquashBackward<T>(Tensor<T> gradOutput, Tensor<T> input, Tensor<T> output, int axis = -1)
+    {
+        if (gradOutput == null) throw new ArgumentNullException(nameof(gradOutput));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (output == null) throw new ArgumentNullException(nameof(output));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Normalize axis
+        if (axis < 0) axis = input.Shape.Length + axis;
+
+        // This is a simplified gradient - full implementation would require proper Jacobian
+        // For now, approximate with element-wise gradient scaling
+        var squared = TensorMultiply(input, input);
+        var normSquared = ReduceSum(squared, new[] { axis }, keepDims: true);
+        var one = new Tensor<T>(normSquared.Shape);
+        one.Fill(numOps.One);
+        var denom = TensorAdd(one, normSquared);
+        var scale = TensorDivide(one, denom);
+
+        return TensorMultiply(gradOutput, scale);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorNorm<T>(Tensor<T> tensor, int axis, bool keepDims = false)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        // Compute squared values
+        var squared = TensorMultiply(tensor, tensor);
+        // Sum along axis
+        var sumSquared = ReduceSum(squared, new[] { axis }, keepDims: keepDims);
+        // Square root
+        return TensorSqrt(sumSquared);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorNormalize<T>(Tensor<T> tensor, int axis, T epsilon)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        // Compute norm
+        var norm = TensorNorm(tensor, axis, keepDims: true);
+
+        // Add epsilon for numerical stability
+        var epsArray = new Tensor<T>(norm.Shape);
+        epsArray.Fill(epsilon);
+        norm = TensorAdd(norm, epsArray);
+
+        // Divide
+        return TensorDivide(tensor, norm);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorClip<T>(Tensor<T> tensor, T minValue, T maxValue)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        return TensorClamp(tensor, minValue, maxValue);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorConcatenate<T>(Tensor<T>[] tensors, int axis = 0)
+    {
+        if (tensors == null || tensors.Length == 0)
+            throw new ArgumentNullException(nameof(tensors));
+
+        return Tensor<T>.Concatenate(tensors, axis);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T>[] TensorSplit<T>(Tensor<T> tensor, int numSplits, int axis = 0)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (numSplits <= 0) throw new ArgumentException("Number of splits must be positive", nameof(numSplits));
+
+        // Normalize axis
+        if (axis < 0) axis = tensor.Shape.Length + axis;
+
+        int axisSize = tensor.Shape[axis];
+        if (axisSize % numSplits != 0)
+            throw new ArgumentException($"Cannot split axis of size {axisSize} into {numSplits} equal parts");
+
+        int splitSize = axisSize / numSplits;
+        var results = new Tensor<T>[numSplits];
+
+        for (int i = 0; i < numSplits; i++)
+        {
+            int start = i * splitSize;
+            results[i] = tensor.Slice(axis, start, start + splitSize);
+        }
+
+        return results;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorOneHot<T>(Tensor<T> indices, int depth)
+    {
+        if (indices == null) throw new ArgumentNullException(nameof(indices));
+        if (depth <= 0) throw new ArgumentException("Depth must be positive", nameof(depth));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int numIndices = indices.Length;
+        var result = new Tensor<T>([numIndices, depth]);
+        result.Fill(numOps.Zero);
+
+        for (int i = 0; i < numIndices; i++)
+        {
+            int idx = Convert.ToInt32(numOps.ToDouble(indices.GetFlat(i)));
+            if (idx >= 0 && idx < depth)
+            {
+                result[i, idx] = numOps.One;
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorArgMax<T>(Tensor<T> tensor, int axis)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Normalize axis
+        if (axis < 0) axis = tensor.Shape.Length + axis;
+
+        // Build output shape (remove axis dimension)
+        var outputShape = tensor.Shape.Where((_, i) => i != axis).ToArray();
+        if (outputShape.Length == 0) outputShape = new[] { 1 };
+        var result = new Tensor<T>(outputShape);
+
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= tensor.Shape[i];
+
+        int axisSize = tensor.Shape[axis];
+
+        int innerSize = 1;
+        for (int i = axis + 1; i < tensor.Shape.Length; i++) innerSize *= tensor.Shape[i];
+
+        Parallel.For(0, outerSize * innerSize, flatIdx =>
+        {
+            int outer = flatIdx / innerSize;
+            int inner = flatIdx % innerSize;
+
+            T maxVal = tensor.GetFlat((outer * axisSize) * innerSize + inner);
+            int maxIdx = 0;
+
+            for (int a = 1; a < axisSize; a++)
+            {
+                int srcIdx = (outer * axisSize + a) * innerSize + inner;
+                T val = tensor.GetFlat(srcIdx);
+                if (numOps.ToDouble(val) > numOps.ToDouble(maxVal))
+                {
+                    maxVal = val;
+                    maxIdx = a;
+                }
+            }
+
+            result.SetFlat(flatIdx, numOps.FromDouble(maxIdx));
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorArgMin<T>(Tensor<T> tensor, int axis)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Normalize axis
+        if (axis < 0) axis = tensor.Shape.Length + axis;
+
+        // Build output shape (remove axis dimension)
+        var outputShape = tensor.Shape.Where((_, i) => i != axis).ToArray();
+        if (outputShape.Length == 0) outputShape = new[] { 1 };
+        var result = new Tensor<T>(outputShape);
+
+        int outerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= tensor.Shape[i];
+
+        int axisSize = tensor.Shape[axis];
+
+        int innerSize = 1;
+        for (int i = axis + 1; i < tensor.Shape.Length; i++) innerSize *= tensor.Shape[i];
+
+        Parallel.For(0, outerSize * innerSize, flatIdx =>
+        {
+            int outer = flatIdx / innerSize;
+            int inner = flatIdx % innerSize;
+
+            T minVal = tensor.GetFlat((outer * axisSize) * innerSize + inner);
+            int minIdx = 0;
+
+            for (int a = 1; a < axisSize; a++)
+            {
+                int srcIdx = (outer * axisSize + a) * innerSize + inner;
+                T val = tensor.GetFlat(srcIdx);
+                if (numOps.ToDouble(val) < numOps.ToDouble(minVal))
+                {
+                    minVal = val;
+                    minIdx = a;
+                }
+            }
+
+            result.SetFlat(flatIdx, numOps.FromDouble(minIdx));
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorBinaryCrossEntropy<T>(Tensor<T> predictions, Tensor<T> targets, T epsilon)
+    {
+        if (predictions == null) throw new ArgumentNullException(nameof(predictions));
+        if (targets == null) throw new ArgumentNullException(nameof(targets));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(predictions.Shape);
+        int totalElements = predictions.Length;
+
+        Parallel.For(0, totalElements, i =>
+        {
+            T p = predictions.GetFlat(i);
+            T t = targets.GetFlat(i);
+
+            // Clip for numerical stability using comparisons
+            T upperBound = numOps.Subtract(numOps.One, epsilon);
+            double pVal = numOps.ToDouble(p);
+            double upperVal = numOps.ToDouble(upperBound);
+            double epsVal = numOps.ToDouble(epsilon);
+            T clippedUpper = pVal < upperVal ? p : upperBound;
+            double clippedUpperVal = numOps.ToDouble(clippedUpper);
+            T pClipped = clippedUpperVal > epsVal ? clippedUpper : epsilon;
+
+            // -[t * log(p) + (1-t) * log(1-p)]
+            T logP = numOps.Log(pClipped);
+            T log1MinusP = numOps.Log(numOps.Subtract(numOps.One, pClipped));
+            T oneMinusT = numOps.Subtract(numOps.One, t);
+
+            T loss = numOps.Negate(numOps.Add(
+                numOps.Multiply(t, logP),
+                numOps.Multiply(oneMinusT, log1MinusP)));
+
+            result.SetFlat(i, loss);
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorBinaryCrossEntropyBackward<T>(Tensor<T> predictions, Tensor<T> targets, T epsilon)
+    {
+        if (predictions == null) throw new ArgumentNullException(nameof(predictions));
+        if (targets == null) throw new ArgumentNullException(nameof(targets));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(predictions.Shape);
+        int totalElements = predictions.Length;
+
+        Parallel.For(0, totalElements, i =>
+        {
+            T p = predictions.GetFlat(i);
+            T t = targets.GetFlat(i);
+
+            // Clip for numerical stability using comparisons
+            T upperBound = numOps.Subtract(numOps.One, epsilon);
+            double pVal = numOps.ToDouble(p);
+            double upperVal = numOps.ToDouble(upperBound);
+            double epsVal = numOps.ToDouble(epsilon);
+            T clippedUpper = pVal < upperVal ? p : upperBound;
+            double clippedUpperVal = numOps.ToDouble(clippedUpper);
+            T pClipped = clippedUpperVal > epsVal ? clippedUpper : epsilon;
+
+            // Gradient: -t/p + (1-t)/(1-p)
+            T termA = numOps.Divide(t, pClipped);
+            T oneMinusP = numOps.Subtract(numOps.One, pClipped);
+            T oneMinusT = numOps.Subtract(numOps.One, t);
+            T termB = numOps.Divide(oneMinusT, oneMinusP);
+
+            T grad = numOps.Subtract(termB, termA);
+            result.SetFlat(i, grad);
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> X, Tensor<T> Y) TensorMeshgrid<T>(Tensor<T> x, Tensor<T> y)
+    {
+        if (x == null) throw new ArgumentNullException(nameof(x));
+        if (y == null) throw new ArgumentNullException(nameof(y));
+
+        int width = x.Length;
+        int height = y.Length;
+
+        var X = new Tensor<T>([height, width]);
+        var Y = new Tensor<T>([height, width]);
+
+        Parallel.For(0, height, row =>
+        {
+            T yVal = y.GetFlat(row);
+            for (int col = 0; col < width; col++)
+            {
+                X[row, col] = x.GetFlat(col);
+                Y[row, col] = yVal;
+            }
+        });
+
+        return (X, Y);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSliceAxis<T>(Tensor<T> tensor, int axis, int index)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (tensor.Rank != 3) throw new ArgumentException("TensorSliceAxis currently only supports 3D tensors.");
+
+        int dim0 = tensor.Shape[0];
+        int dim1 = tensor.Shape[1];
+        int dim2 = tensor.Shape[2];
+
+        Tensor<T> result;
+
+        switch (axis)
+        {
+            case 0:
+                // Slice along first axis: result[j,k] = tensor[index, j, k]
+                result = new Tensor<T>([dim1, dim2]);
+                Parallel.For(0, dim1, j =>
+                {
+                    for (int k = 0; k < dim2; k++)
+                    {
+                        result[j, k] = tensor[index, j, k];
+                    }
+                });
+                break;
+
+            case 1:
+                // Slice along second axis: result[i,k] = tensor[i, index, k]
+                result = new Tensor<T>([dim0, dim2]);
+                Parallel.For(0, dim0, i =>
+                {
+                    for (int k = 0; k < dim2; k++)
+                    {
+                        result[i, k] = tensor[i, index, k];
+                    }
+                });
+                break;
+
+            case 2:
+                // Slice along third axis: result[i,j] = tensor[i, j, index]
+                result = new Tensor<T>([dim0, dim1]);
+                Parallel.For(0, dim0, i =>
+                {
+                    for (int j = 0; j < dim1; j++)
+                    {
+                        result[i, j] = tensor[i, j, index];
+                    }
+                });
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(axis), "Axis must be 0, 1, or 2 for 3D tensors.");
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorLinspace<T>(T start, T end, int count)
+    {
+        if (count < 2) throw new ArgumentException("Count must be at least 2.", nameof(count));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>([count]);
+
+        T range = numOps.Subtract(end, start);
+        T divisor = numOps.FromDouble(count - 1);
+        T step = numOps.Divide(range, divisor);
+
+        Parallel.For(0, count, i =>
+        {
+            T value = numOps.Add(start, numOps.Multiply(numOps.FromDouble(i), step));
+            result.SetFlat(i, value);
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorBatchMatMul<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // a: [batch, M, K], b: [batch, K, N] or [K, N]
+        int batch = a.Shape[0];
+        int M = a.Shape[1];
+        int K = a.Shape[2];
+
+        bool broadcastB = b.Rank == 2;
+        int N = broadcastB ? b.Shape[1] : b.Shape[2];
+
+        if (!broadcastB && b.Shape[0] != batch)
+            throw new ArgumentException("Batch dimensions must match or b must be 2D for broadcasting.");
+
+        var result = new Tensor<T>([batch, M, N]);
+
+        Parallel.For(0, batch, batchIdx =>
+        {
+            for (int i = 0; i < M; i++)
+            {
+                for (int j = 0; j < N; j++)
+                {
+                    T sum = numOps.Zero;
+                    for (int k = 0; k < K; k++)
+                    {
+                        T aVal = a[batchIdx, i, k];
+                        T bVal = broadcastB ? b[k, j] : b[batchIdx, k, j];
+                        sum = numOps.Add(sum, numOps.Multiply(aVal, bVal));
+                    }
+                    result[batchIdx, i, j] = sum;
+                }
+            }
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public void TensorSetSliceAxis<T>(Tensor<T> destination, Tensor<T> source, int axis, int index)
+    {
+        if (destination == null) throw new ArgumentNullException(nameof(destination));
+        if (source == null) throw new ArgumentNullException(nameof(source));
+
+        // For 3D tensors
+        if (destination.Rank == 3)
+        {
+            int dim0 = destination.Shape[0];
+            int dim1 = destination.Shape[1];
+            int dim2 = destination.Shape[2];
+
+            switch (axis)
+            {
+                case 0:
+                    // Set destination[index, :, :] = source
+                    Parallel.For(0, dim1, j =>
+                    {
+                        for (int k = 0; k < dim2; k++)
+                        {
+                            destination[index, j, k] = source[j, k];
+                        }
+                    });
+                    break;
+
+                case 1:
+                    Parallel.For(0, dim0, i =>
+                    {
+                        for (int k = 0; k < dim2; k++)
+                        {
+                            destination[i, index, k] = source[i, k];
+                        }
+                    });
+                    break;
+
+                case 2:
+                    Parallel.For(0, dim0, i =>
+                    {
+                        for (int j = 0; j < dim1; j++)
+                        {
+                            destination[i, j, index] = source[i, j];
+                        }
+                    });
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(axis));
+            }
+        }
+        else
+        {
+            throw new NotSupportedException("TensorSetSliceAxis currently only supports 3D tensors.");
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSoftmax<T>(Tensor<T> tensor, int axis)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Normalize axis
+        if (axis < 0) axis = tensor.Rank + axis;
+
+        // Get max along axis for numerical stability
+        var maxValues = ReduceMax(tensor, new[] { axis }, keepDims: true, out _);
+
+        // Subtract max and exp
+        var shifted = TensorSubtract(tensor, maxValues);
+        var expValues = TensorExp(shifted);
+
+        // Sum along axis
+        var sumExp = ReduceSum(expValues, new[] { axis }, keepDims: true);
+
+        // Divide
+        return TensorDivide(expValues, sumExp);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorSoftmaxBackward<T>(Tensor<T> softmaxOutput, Tensor<T> outputGradient, int axis)
+    {
+        if (softmaxOutput == null) throw new ArgumentNullException(nameof(softmaxOutput));
+        if (outputGradient == null) throw new ArgumentNullException(nameof(outputGradient));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Normalize axis
+        if (axis < 0) axis = softmaxOutput.Rank + axis;
+
+        // Softmax backward: dy/dx = softmax * (grad - sum(softmax * grad))
+        // Element-wise: s * (g - sum(s * g))
+
+        // Compute s * g
+        var sg = TensorMultiply(softmaxOutput, outputGradient);
+
+        // Sum along axis
+        var sumSG = ReduceSum(sg, new[] { axis }, keepDims: true);
+
+        // grad - sum(s * g)
+        var diff = TensorSubtract(outputGradient, sumSG);
+
+        // s * diff
+        return TensorMultiply(softmaxOutput, diff);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorLogSoftmax<T>(Tensor<T> tensor, int axis)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        // log_softmax(x) = x - max(x) - log(sum(exp(x - max(x))))
+        // More numerically stable than log(softmax(x))
+
+        if (axis < 0) axis = tensor.Rank + axis;
+
+        var maxValues = ReduceMax(tensor, new[] { axis }, keepDims: true, out _);
+        var shifted = TensorSubtract(tensor, maxValues);
+        var expValues = TensorExp(shifted);
+        var sumExp = ReduceSum(expValues, new[] { axis }, keepDims: true);
+        var logSumExp = TensorLog(sumExp);
+
+        return TensorSubtract(shifted, logSumExp);
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorTopK<T>(Tensor<T> tensor, int k, int axis, out Tensor<int> indices)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (k <= 0) throw new ArgumentException("k must be positive.", nameof(k));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (axis < 0) axis = tensor.Rank + axis;
+
+        // For simplicity, handle 2D case: [batch, features]
+        if (tensor.Rank == 2 && axis == 1)
+        {
+            int batch = tensor.Shape[0];
+            int features = tensor.Shape[1];
+            k = Math.Min(k, features);
+
+            var resultValues = new Tensor<T>([batch, k]);
+            var indicesResult = new Tensor<int>([batch, k]);
+
+            Parallel.For(0, batch, b =>
+            {
+                // Extract row and sort with indices
+                var rowWithIndices = new (T value, int index)[features];
+                for (int i = 0; i < features; i++)
+                {
+                    rowWithIndices[i] = (tensor[b, i], i);
+                }
+
+                // Sort descending by value using GreaterThan
+                Array.Sort(rowWithIndices, (a, x) =>
+                {
+                    if (numOps.GreaterThan(x.value, a.value)) return 1;
+                    if (numOps.LessThan(x.value, a.value)) return -1;
+                    return 0;
+                });
+
+                // Take top-k
+                for (int i = 0; i < k; i++)
+                {
+                    resultValues[b, i] = rowWithIndices[i].value;
+                    indicesResult[b, i] = rowWithIndices[i].index;
+                }
+            });
+
+            indices = indicesResult;
+            return resultValues;
+        }
+        else
+        {
+            throw new NotSupportedException("TensorTopK currently only supports 2D tensors with axis=1.");
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorScatter<T>(Tensor<T> destination, Tensor<int> indices, Tensor<T> source, int axis)
+    {
+        if (destination == null) throw new ArgumentNullException(nameof(destination));
+        if (indices == null) throw new ArgumentNullException(nameof(indices));
+        if (source == null) throw new ArgumentNullException(nameof(source));
+
+        var result = destination.Clone();
+
+        // For 2D with axis=1: result[b, indices[b, i]] = source[b, i]
+        if (result.Rank == 2 && axis == 1)
+        {
+            int batch = result.Shape[0];
+            int numIndices = indices.Shape[1];
+
+            Parallel.For(0, batch, b =>
+            {
+                for (int i = 0; i < numIndices; i++)
+                {
+                    int idx = indices[b, i];
+                    result[b, idx] = source[b, i];
+                }
+            });
+        }
+        else
+        {
+            throw new NotSupportedException("TensorScatter currently only supports 2D tensors with axis=1.");
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorIndexSelect<T>(Tensor<T> tensor, Tensor<int> indices, int axis)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (indices == null) throw new ArgumentNullException(nameof(indices));
+
+        if (axis < 0) axis = tensor.Rank + axis;
+
+        // For 2D tensor with axis=0: select rows
+        if (tensor.Rank == 2 && axis == 0)
+        {
+            int numIndices = indices.Length;
+            int cols = tensor.Shape[1];
+            var result = new Tensor<T>([numIndices, cols]);
+
+            Parallel.For(0, numIndices, i =>
+            {
+                int idx = indices.GetFlat(i);
+                for (int j = 0; j < cols; j++)
+                {
+                    result[i, j] = tensor[idx, j];
+                }
+            });
+
+            return result;
+        }
+        else if (tensor.Rank == 2 && axis == 1)
+        {
+            int rows = tensor.Shape[0];
+            int numIndices = indices.Length;
+            var result = new Tensor<T>([rows, numIndices]);
+
+            Parallel.For(0, rows, i =>
+            {
+                for (int j = 0; j < numIndices; j++)
+                {
+                    int idx = indices.GetFlat(j);
+                    result[i, j] = tensor[i, idx];
+                }
+            });
+
+            return result;
+        }
+        else
+        {
+            throw new NotSupportedException("TensorIndexSelect currently only supports 2D tensors.");
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorStack<T>(Tensor<T>[] tensors, int axis)
+    {
+        if (tensors == null || tensors.Length == 0)
+            throw new ArgumentException("Tensors array must not be empty.", nameof(tensors));
+
+        int numTensors = tensors.Length;
+        var firstShape = tensors[0].Shape;
+
+        // Validate all tensors have same shape
+        for (int i = 1; i < numTensors; i++)
+        {
+            if (!tensors[i].Shape.SequenceEqual(firstShape))
+                throw new ArgumentException("All tensors must have the same shape.");
+        }
+
+        if (axis < 0) axis = firstShape.Length + 1 + axis;
+
+        // New shape: insert numTensors at axis position
+        var newShape = new int[firstShape.Length + 1];
+        for (int i = 0; i < axis; i++) newShape[i] = firstShape[i];
+        newShape[axis] = numTensors;
+        for (int i = axis; i < firstShape.Length; i++) newShape[i + 1] = firstShape[i];
+
+        var result = new Tensor<T>(newShape);
+
+        // Copy each tensor
+        Parallel.For(0, numTensors, t =>
+        {
+            var tensor = tensors[t];
+            int tensorSize = tensor.Length;
+            int sliceSize = 1;
+            for (int i = axis + 1; i < newShape.Length; i++) sliceSize *= newShape[i];
+
+            int outerSize = 1;
+            for (int i = 0; i < axis; i++) outerSize *= newShape[i];
+
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                int srcOffset = outer * sliceSize;
+                int dstOffset = (outer * numTensors + t) * sliceSize;
+                for (int inner = 0; inner < sliceSize; inner++)
+                {
+                    result.SetFlat(dstOffset + inner, tensor.GetFlat(srcOffset + inner));
+                }
+            }
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T>[] TensorUnstack<T>(Tensor<T> tensor, int axis)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
+        if (axis < 0) axis = tensor.Rank + axis;
+
+        int numSlices = tensor.Shape[axis];
+        var result = new Tensor<T>[numSlices];
+
+        // New shape: remove the axis dimension
+        var newShape = new int[tensor.Rank - 1];
+        for (int i = 0, j = 0; i < tensor.Rank; i++)
+        {
+            if (i != axis) newShape[j++] = tensor.Shape[i];
+        }
+
+        Parallel.For(0, numSlices, i =>
+        {
+            result[i] = TensorSliceAxis(tensor, axis, i);
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorMap<T>(Tensor<T> tensor, Func<T, T> func)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (func == null) throw new ArgumentNullException(nameof(func));
+
+        var result = new Tensor<T>(tensor.Shape);
+
+        Parallel.For(0, tensor.Length, i =>
+        {
+            result.SetFlat(i, func(tensor.GetFlat(i)));
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorMaskedFill<T>(Tensor<T> tensor, Tensor<bool> mask, T value)
+    {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+        if (mask == null) throw new ArgumentNullException(nameof(mask));
+
+        var result = tensor.Clone();
+
+        Parallel.For(0, tensor.Length, i =>
+        {
+            if (mask.GetFlat(i))
+            {
+                result.SetFlat(i, value);
+            }
+        });
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> TensorWhere<T>(Tensor<bool> condition, Tensor<T> x, Tensor<T> y)
+    {
+        if (condition == null) throw new ArgumentNullException(nameof(condition));
+        if (x == null) throw new ArgumentNullException(nameof(x));
+        if (y == null) throw new ArgumentNullException(nameof(y));
+
+        var result = new Tensor<T>(x.Shape);
+
+        Parallel.For(0, x.Length, i =>
+        {
+            result.SetFlat(i, condition.GetFlat(i) ? x.GetFlat(i) : y.GetFlat(i));
         });
 
         return result;

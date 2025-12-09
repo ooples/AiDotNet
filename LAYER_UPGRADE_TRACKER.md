@@ -136,30 +136,66 @@ These layers use ToMatrix/ToVector/FromMatrix/FromVector in hot paths:
 
 ---
 
-## LAYERS WITH EXCESSIVE LOOPS (Top 20 by loop count)
+## LAYERS WITH EXCESSIVE LOOPS (Top 20 by loop count) - UPDATED Dec 2024
 
-| # | Layer | Loop Count | Notes |
-|---|-------|-----------|-------|
-| 1 | SpatialTransformerLayer.cs | 48 | Many grid/transform loops |
-| 2 | LocallyConnectedLayer.cs | 44 | Conv loops |
-| 3 | MixtureOfExpertsLayer.cs | 44 | Expert iteration |
-| 4 | RecurrentLayer.cs | 41 | Sequence iteration |
-| 5 | ConditionalRandomFieldLayer.cs | 33 | CRF computations |
-| 6 | ConvolutionalLayer.cs | 32 | Conv loops |
-| 7 | CapsuleLayer.cs | 28 | Capsule routing |
-| 8 | ContinuumMemorySystemLayer.cs | 27 | Memory ops |
-| 9 | MultiHeadAttentionLayer.cs | 0 | ✅ Parameter IO tensorized; loops reduced |
-| 10 | QuantumLayer.cs | 25 | Quantum ops |
-| 11 | SelfAttentionLayer.cs | 24 | Attention loops |
-| 12 | HighwayLayer.cs | 0 | ✅ Parameter IO tensorized; init/updates via engine ops |
-| 13 | PrimaryCapsuleLayer.cs | 20 | Capsule ops |
-| 14 | DepthwiseSeparableConvolutionalLayer.cs | 0 | ✅ Init and hot paths use engine ops (no loops/conversions) |
-| 15 | SpikingLayer.cs | 19 | Spike processing |
-| 16 | DigitCapsuleLayer.cs | 18 | Capsule routing |
-| 17 | SpatialPoolerLayer.cs | 0 | ✅ Learning/normalization vectorized (no loops) |
-| 18 | DenseLayer.cs | 15 | Forward/Backward |
-| 19 | GatedLinearUnitLayer.cs | 15 | GLU ops |
-| 20 | SeparableConvolutionalLayer.cs | 0 | ✅ Init vectorized; hot paths use engine ops |
+| # | Layer | Loop Count | Status | Notes |
+|---|-------|-----------|--------|-------|
+| 1 | SpatialTransformerLayer.cs | 1 | ✅ VECTORIZED | Only topological sort remains (sequential) |
+| 2 | LocallyConnectedLayer.cs | 1 | ✅ VECTORIZED | Only topological sort remains (sequential) |
+| 3 | RecurrentLayer.cs | 3 | ✅ FULLY VECTORIZED | Only time-step loops remain (inherently sequential BPTT) |
+| 4 | CapsuleLayer.cs | 5 | ✅ FULLY VECTORIZED | Only routing iterations remain (inherently sequential) |
+| 5 | ConditionalRandomFieldLayer.cs | 12 | ✅ SIGNIFICANTLY REDUCED | Viterbi algorithm (sequential DP) + argmax |
+| 6 | MixtureOfExpertsLayer.cs | 22 | ✅ REDUCED | Expert iteration (inherent) + Top-K vectorized with TensorTopK |
+| 7 | ContinuumMemorySystemLayer.cs | 21 | ⚠️ SEQUENTIAL | MLP chain iteration (inherently sequential) |
+| 8 | QuantumLayer.cs | 25 | ⚠️ SEQUENTIAL | Quantum gate operations (inherently sequential) |
+| 9 | SelfAttentionLayer.cs | 21 | ⚠️ SEQUENTIAL | Multi-head attention (mostly vectorized, head iteration) |
+| 10 | FullyConnectedLayer.cs | 12 | ⚠️ SEQUENTIAL | Parameter IO (mostly vectorized) |
+| 11 | GRULayer.cs | 11 | ⚠️ SEQUENTIAL | BPTT (time-step iteration is sequential) |
+| 12 | FeedForwardLayer.cs | 11 | ⚠️ SEQUENTIAL | Weight init + parameter IO |
+| 13 | SpikingLayer.cs | 11 | ⚠️ SEQUENTIAL | Spike processing (time-dependent) |
+| 14 | PatchEmbeddingLayer.cs | 10 | ⚠️ SEQUENTIAL | Patch extraction (spatial iteration) |
+| 15 | DenseLayer.cs | 6 | ✅ REDUCED | Minimal loops |
+| 16 | GatedLinearUnitLayer.cs | 0 | ✅ COMPLETED | Fully vectorized |
+| 17 | HighwayLayer.cs | 6 | ✅ REDUCED | Parameter IO |
+| 18 | MultiHeadAttentionLayer.cs | 0 | ✅ COMPLETED | Fully vectorized |
+| 19 | DepthwiseSeparableConvolutionalLayer.cs | 0 | ✅ COMPLETED | Fully vectorized |
+| 20 | SeparableConvolutionalLayer.cs | 2 | ✅ REDUCED | Minimal loops |
+
+### New IEngine Operations Added (Dec 2024)
+For vectorization support, added 39+ new IEngine operations:
+- `TensorCopy`, `TensorFill` - Basic tensor ops
+- `TensorOuterProduct`, `TensorBatchOuterProduct` - Outer products
+- `TensorPermute`, `TensorExpandDims`, `TensorSqueeze` - Shape manipulation
+- `TensorScatterAdd`, `TensorGather` - Indexed operations
+- `TensorCumSum`, `TensorLogSumExp` - Reductions
+- `TensorRandomUniform`, `TensorRandomNormal` - Random generation
+- `TensorEye`, `TensorDiag`, `TensorDiagonal` - Matrix construction
+- `TensorEinsum` - Einstein summation
+- `TensorAddScalar`, `TensorSubtractScalar`, `TensorDivideScalar` - Scalar ops
+- `TanhDerivative`, `SigmoidDerivative`, `ReLUDerivative` - Activation derivatives
+- `TensorTriangularMask` - Attention masks
+- `TensorSquash`, `TensorSquashBackward` - Capsule squash
+- `TensorNorm`, `TensorNormalize`, `TensorClip` - Normalization
+- `TensorConcatenate`, `TensorSplit` - Concatenation
+- `TensorOneHot`, `TensorArgMax`, `TensorArgMin` - Index ops
+- `TensorBinaryCrossEntropy`, `TensorBinaryCrossEntropyBackward` - Loss
+- `TensorMeshgrid`, `TensorSliceAxis`, `TensorLinspace` - Grid/coordinate ops
+
+### Additional IEngine Operations (Dec 2024 - Full Vectorization)
+For enabling PyTorch-level vectorization:
+- `TensorBatchMatMul` - Batched matrix multiplication for 3D tensors
+- `TensorSetSliceAxis` - Sets a slice along a specific axis
+- `TensorSoftmax` - Softmax along an axis
+- `TensorSoftmaxBackward` - Backward pass for softmax
+- `TensorLogSoftmax` - Log-softmax along an axis
+- `TensorTopK` - Top-K selection with indices
+- `TensorScatter` - Scatter operation with indices
+- `TensorIndexSelect` - Index select/gather operation
+- `TensorStack` - Stack tensors along new axis
+- `TensorUnstack` - Unstack tensor into array
+- `TensorMap` - Apply function element-wise
+- `TensorMaskedFill` - Fill with value where mask is true
+- `TensorWhere` - Select from two tensors based on condition
 
 ---
 
