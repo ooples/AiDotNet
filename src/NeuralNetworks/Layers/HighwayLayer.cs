@@ -565,11 +565,11 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Create input variable node
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
-        // Create constant nodes for weights and biases (already Tensor<T>)
-        var transformWeightsNode = Autodiff.TensorOperations<T>.Constant(_transformWeights, "transform_weights");
-        var transformBiasNode = Autodiff.TensorOperations<T>.Constant(_transformBias, "transform_bias");
-        var gateWeightsNode = Autodiff.TensorOperations<T>.Constant(_gateWeights, "gate_weights");
-        var gateBiasNode = Autodiff.TensorOperations<T>.Constant(_gateBias, "gate_bias");
+        // Create variable nodes for weights and biases with gradient tracking
+        var transformWeightsNode = Autodiff.TensorOperations<T>.Variable(_transformWeights, "transform_weights", requiresGradient: true);
+        var transformBiasNode = Autodiff.TensorOperations<T>.Variable(_transformBias, "transform_bias", requiresGradient: true);
+        var gateWeightsNode = Autodiff.TensorOperations<T>.Variable(_gateWeights, "gate_weights", requiresGradient: true);
+        var gateBiasNode = Autodiff.TensorOperations<T>.Variable(_gateBias, "gate_bias", requiresGradient: true);
 
         // Step 1: Compute transform path: transform = activation(input @ weights + bias)
         var transformLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, transformWeightsNode);
@@ -651,6 +651,16 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 node.BackwardFunction(node.Gradient);
             }
         }
+
+        // Extract parameter gradients
+        if (transformWeightsNode.Gradient != null)
+            _transformWeightsGradient = transformWeightsNode.Gradient;
+        if (transformBiasNode.Gradient != null)
+            _transformBiasGradient = transformBiasNode.Gradient;
+        if (gateWeightsNode.Gradient != null)
+            _gateWeightsGradient = gateWeightsNode.Gradient;
+        if (gateBiasNode.Gradient != null)
+            _gateBiasGradient = gateBiasNode.Gradient;
 
         // Extract and return the input gradient
         if (inputNode.Gradient == null)
@@ -1052,11 +1062,11 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "highway_input");
         inputNodes.Add(inputNode);
 
-        // Create constant nodes for weights and biases (already Tensor<T>)
-        var transformWeightsNode = Autodiff.TensorOperations<T>.Constant(_transformWeights, "transform_weights");
-        var transformBiasNode = Autodiff.TensorOperations<T>.Constant(_transformBias, "transform_bias");
-        var gateWeightsNode = Autodiff.TensorOperations<T>.Constant(_gateWeights, "gate_weights");
-        var gateBiasNode = Autodiff.TensorOperations<T>.Constant(_gateBias, "gate_bias");
+        // Create variable nodes for weights and biases with gradient tracking
+        var transformWeightsNode = Autodiff.TensorOperations<T>.Variable(_transformWeights, "transform_weights", requiresGradient: true);
+        var transformBiasNode = Autodiff.TensorOperations<T>.Variable(_transformBias, "transform_bias", requiresGradient: true);
+        var gateWeightsNode = Autodiff.TensorOperations<T>.Variable(_gateWeights, "gate_weights", requiresGradient: true);
+        var gateBiasNode = Autodiff.TensorOperations<T>.Variable(_gateBias, "gate_bias", requiresGradient: true);
 
         // Step 1: Compute transform path: transform = activation(input @ weights + bias)
         var transformLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, transformWeightsNode);
