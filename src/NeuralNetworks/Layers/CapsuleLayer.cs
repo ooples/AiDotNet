@@ -728,9 +728,13 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             var normSq = Autodiff.TensorOperations<T>.Sum(s2, new int[] { 2 }, keepDims: true); // [B, O, 1]
             var norm = Autodiff.TensorOperations<T>.Sqrt(normSq);
 
+            // Create epsilon constant for numerical stability (prevent division by zero)
+            var epsilon = Autodiff.TensorOperations<T>.Constant(Tensor<T>.CreateDefault(new int[] { 1 }, NumOps.FromDouble(1e-8)));
             var one = Autodiff.TensorOperations<T>.Constant(Tensor<T>.CreateDefault(new int[] { 1 }, NumOps.One));
             var scale = Autodiff.TensorOperations<T>.Divide(normSq, Autodiff.TensorOperations<T>.Add(one, normSq));
-            var unitVec = Autodiff.TensorOperations<T>.Divide(withBias, norm);
+            // Use norm + epsilon as denominator to avoid division by zero when norm is zero
+            var stableNorm = Autodiff.TensorOperations<T>.Add(norm, epsilon);
+            var unitVec = Autodiff.TensorOperations<T>.Divide(withBias, stableNorm);
             
             output = Autodiff.TensorOperations<T>.ElementwiseMultiply(scale, unitVec);
 
@@ -1008,10 +1012,15 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             var squaredNorm = TensorOperations<T>.Sum(TensorOperations<T>.Square(withBias), [1]);
             var oneTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.One }));
             var oneNode = TensorOperations<T>.Constant(oneTensor, "One");
+            // Create epsilon constant for numerical stability (prevent division by zero)
+            var epsTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(1e-8) }));
+            var epsNode = TensorOperations<T>.Constant(epsTensor, "Epsilon");
             var normPlusOne = TensorOperations<T>.Add(squaredNorm, oneNode);
             var scaleFactor = TensorOperations<T>.Divide(squaredNorm, normPlusOne);
             var norm = TensorOperations<T>.Sqrt(squaredNorm);
-            var normalizedVec = TensorOperations<T>.Divide(withBias, norm);
+            // Use norm + epsilon as denominator to avoid division by zero when norm is zero
+            var stableNorm = TensorOperations<T>.Add(norm, epsNode);
+            var normalizedVec = TensorOperations<T>.Divide(withBias, stableNorm);
             output = TensorOperations<T>.ElementwiseMultiply(normalizedVec, scaleFactor);
 
             // Update couplings if not last iteration
