@@ -123,7 +123,12 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Cached output from the forward pass for use in the backward pass.
     /// </summary>
     private Tensor<T>? _lastOutput;
-    
+
+    /// <summary>
+    /// Cached attention context (pre-projection input) for computing output weights gradient.
+    /// </summary>
+    private Tensor<T>? _lastAttentionContext;
+
     /// <summary>
     /// Cached attention scores from the forward pass for use in the backward pass.
     /// </summary>
@@ -584,7 +589,10 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // [B, H, S, D] -> [B, S, H, D] -> [B, S, E]
         var context_transposed = context_4D.Transpose(new[] { 0, 2, 1, 3 });
         var context_flat = context_transposed.Reshape(batchSize * seqLengthQ, embeddingDimension);
-        
+
+        // Cache pre-projection context for weight gradient computation in backward pass
+        _lastAttentionContext = context_transposed.Reshape(batchSize, seqLengthQ, embeddingDimension);
+
         var output_flat = Engine.TensorMatMul(context_flat, _outputWeights);
         var output_reshaped = output_flat.Reshape(batchSize, seqLengthQ, embeddingDimension);
         
@@ -628,7 +636,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null || _lastAttentionScores == null)
+        if (_lastInput == null || _lastOutput == null || _lastAttentionScores == null || _lastAttentionContext == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
@@ -640,8 +648,9 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Compute attention output gradient using tensor transpose
         var attentionOutputGradient = activationGradient.Multiply(_outputWeights.Transpose([1, 0]));
 
-        // Compute output weights gradient - keep as Tensor<T> (no conversion)
-        _outputWeightsGradient = activationGradient.Transpose([0, 2, 1]).Multiply(_lastOutput).Sum([0]).Reshape([embeddingDimension, embeddingDimension]);
+        // Compute output weights gradient using pre-projection context (not post-activation output)
+        // Weight gradient = input^T @ gradient, where input is the pre-projection attention context
+        _outputWeightsGradient = _lastAttentionContext.Transpose([0, 2, 1]).Multiply(activationGradient).Sum([0]).Reshape([embeddingDimension, embeddingDimension]);
 
         // Compute output bias gradient - keep as Tensor<T> (no conversion)
         _outputBiasGradient = activationGradient.Sum([0, 1]);
@@ -912,6 +921,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
+        _lastAttentionContext = null;
         _lastAttentionScores = null;
         _lastHeadOutputs = null;  // Clear per-head output cache
 
