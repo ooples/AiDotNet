@@ -1,336 +1,371 @@
 # GPU Acceleration Implementation Tracker
 
-## CRITICAL ISSUE: GpuEngine CPU Fallbacks
+## Status Summary
 
-**Status**: CRITICAL - Most operations fall back to CPU, defeating the purpose of GPU acceleration
+**Status**: GOOD - Most critical operations have GPU implementations
 
 **Summary**:
-- **Total CPU fallback calls**: 524 instances
-- **Unique methods using CPU fallback**: 158 methods
 - **File**: `src/AiDotNet.Tensors/Engines/GpuEngine.cs` (21,339 lines)
+- **GPU implementations**: 122 unique operations with GPU kernels
+- **CPU-only fallbacks**: 81 methods that still need GPU implementation
+- **Conditional fallbacks**: Many GPU-implemented methods correctly fall back to CPU for small tensors (below threshold) or unsupported types
 
-The GpuEngine class has ILGPU infrastructure but the majority of tensor operations delegate to `_cpuFallback`, meaning users expecting GPU acceleration are NOT getting it for most operations.
+The GpuEngine class has comprehensive ILGPU infrastructure with most critical neural network operations having GPU implementations. The remaining CPU fallbacks are for specialized/less common operations.
 
 ---
 
-## Priority Classification
+## GPU Implementation Status
 
-### Priority 1: CRITICAL - Core Neural Network Operations
-These operations are used in every forward/backward pass and MUST be GPU accelerated:
-
-| # | Method | Status | Notes |
-|---|--------|--------|-------|
-| 1 | TensorMatMul | CPU FALLBACK | Matrix multiplication - most critical |
-| 2 | BatchMatMul | CPU FALLBACK | Batched matrix multiply - attention layers |
-| 3 | TensorAdd | CPU FALLBACK | Element-wise addition |
-| 4 | TensorSubtract | CPU FALLBACK | Element-wise subtraction |
-| 5 | TensorMultiply | CPU FALLBACK | Element-wise multiplication |
-| 6 | TensorMultiplyScalar | CPU FALLBACK | Scalar multiplication |
-| 7 | TensorDivide | CPU FALLBACK | Element-wise division |
-| 8 | TensorBroadcastAdd | CPU FALLBACK | Broadcast addition (bias add) |
-| 9 | Conv2D | CPU FALLBACK | 2D convolution - CNN backbone |
-| 10 | Conv2DBackwardInput | CPU FALLBACK | Conv gradient w.r.t input |
-| 11 | Conv2DBackwardKernel | CPU FALLBACK | Conv gradient w.r.t kernel |
-| 12 | MaxPool2D | CPU FALLBACK | Max pooling |
-| 13 | MaxPool2DBackward | CPU FALLBACK | Max pooling gradient |
-| 14 | AvgPool2D | CPU FALLBACK | Average pooling |
-| 15 | AvgPool2DBackward | CPU FALLBACK | Average pooling gradient |
-| 16 | Softmax | CPU FALLBACK | Softmax activation |
-| 17 | SoftmaxBackward | CPU FALLBACK | Softmax gradient |
-| 18 | BatchNorm | CPU FALLBACK | Batch normalization |
-| 19 | BatchNormBackward | CPU FALLBACK | Batch norm gradient |
-| 20 | LayerNorm | CPU FALLBACK | Layer normalization |
-| 21 | LayerNormBackward | CPU FALLBACK | Layer norm gradient |
-
-### Priority 2: HIGH - Activation Functions
-Used frequently in neural network layers:
+### Priority 1: CRITICAL - Core Neural Network Operations (ALL IMPLEMENTED ✓)
 
 | # | Method | Status | Notes |
 |---|--------|--------|-------|
-| 1 | ReLU | CPU FALLBACK | Most common activation |
-| 2 | Sigmoid | CPU FALLBACK | Gate activation |
-| 3 | Tanh | CPU FALLBACK | Recurrent networks |
-| 4 | GELU | CPU FALLBACK | Transformer activation |
-| 5 | Mish | CPU FALLBACK | Modern activation |
-| 6 | Swish | CPU FALLBACK | Self-gated activation |
-| 7 | ELU | CPU FALLBACK | Exponential linear unit |
+| 1 | TensorMatMul | ✓ GPU | Matrix multiplication |
+| 2 | BatchMatMul | ✓ GPU | Batched matrix multiply |
+| 3 | TensorAdd | ✓ GPU | Element-wise addition |
+| 4 | TensorSubtract | ✓ GPU | Element-wise subtraction |
+| 5 | TensorMultiply | ✓ GPU | Element-wise multiplication |
+| 6 | TensorMultiplyScalar | ✓ GPU | Scalar multiplication |
+| 7 | TensorDivide | ✓ GPU | Element-wise division |
+| 8 | TensorBroadcastAdd | ✓ GPU | Broadcast addition (bias add) |
+| 9 | Conv2D | ✓ GPU | 2D convolution |
+| 10 | Conv2DBackwardInput | ✓ GPU | Conv gradient w.r.t input |
+| 11 | Conv2DBackwardKernel | ✓ GPU | Conv gradient w.r.t kernel |
+| 12 | MaxPool2D | ✓ GPU | Max pooling |
+| 13 | MaxPool2DBackward | ✓ GPU | Max pooling gradient |
+| 14 | AvgPool2D | ✓ GPU | Average pooling |
+| 15 | AvgPool2DBackward | ✓ GPU | Average pooling gradient |
+| 16 | Softmax | ✓ GPU | Softmax activation |
+| 17 | SoftmaxBackward | ✓ GPU | Softmax gradient |
+| 18 | BatchNorm | ✓ GPU | Batch normalization |
+| 19 | BatchNormBackward | ✓ GPU | Batch norm gradient |
+| 20 | LayerNorm | ✓ GPU | Layer normalization |
+| 21 | LayerNormBackward | ✓ GPU | Layer norm gradient |
 
-### Priority 3: HIGH - Reduction Operations
-Used in loss computation and statistics:
-
-| # | Method | Status | Notes |
-|---|--------|--------|-------|
-| 1 | ReduceSum | CPU FALLBACK | Sum reduction |
-| 2 | ReduceMean | CPU FALLBACK | Mean reduction |
-| 3 | ReduceMax | CPU FALLBACK | Max reduction |
-| 4 | ReduceMeanBackward | CPU FALLBACK | Mean gradient |
-| 5 | ReduceMaxBackward | CPU FALLBACK | Max gradient |
-| 6 | ReduceVariance | CPU FALLBACK | Variance computation |
-| 7 | ReduceVarianceBackward | CPU FALLBACK | Variance gradient |
-| 8 | TensorSum | CPU FALLBACK | Tensor sum |
-| 9 | TensorMaxValue | CPU FALLBACK | Tensor max |
-| 10 | TensorMinValue | CPU FALLBACK | Tensor min |
-
-### Priority 4: MEDIUM - Specialized Convolutions
-Used in specific architectures:
+### Priority 2: HIGH - Activation Functions (ALL IMPLEMENTED ✓)
 
 | # | Method | Status | Notes |
 |---|--------|--------|-------|
-| 1 | DepthwiseConv2D | CPU FALLBACK | MobileNet/EfficientNet |
-| 2 | DepthwiseConv2DBackwardInput | CPU FALLBACK | Depthwise grad input |
-| 3 | DepthwiseConv2DBackwardKernel | CPU FALLBACK | Depthwise grad kernel |
-| 4 | ConvTranspose2D | CPU FALLBACK | Deconvolution/Upsampling |
-| 5 | ConvTranspose2DBackwardInput | CPU FALLBACK | TransConv grad input |
-| 6 | ConvTranspose2DBackwardKernel | CPU FALLBACK | TransConv grad kernel |
-| 7 | LocallyConnectedConv2D | CPU FALLBACK | Non-shared weights |
-| 8 | LocallyConnectedConv2DBackwardInput | CPU FALLBACK | LC grad input |
-| 9 | LocallyConnectedConv2DBackwardWeights | CPU FALLBACK | LC grad weights |
-| 10 | LocallyConnectedConv2DBackwardBias | CPU FALLBACK | LC grad bias |
+| 1 | ReLU | ✓ GPU | Most common activation |
+| 2 | Sigmoid | ✓ GPU | Gate activation |
+| 3 | Tanh | ✓ GPU | Recurrent networks |
+| 4 | GELU | ✓ GPU | Transformer activation |
+| 5 | Mish | ✓ GPU | Modern activation |
+| 6 | Swish | ✓ GPU | Self-gated activation |
+| 7 | ELU | ✓ GPU | Exponential linear unit |
 
-### Priority 5: MEDIUM - Embedding Operations
-Used in NLP models:
+### Priority 3: HIGH - Reduction Operations (MOSTLY IMPLEMENTED)
 
 | # | Method | Status | Notes |
 |---|--------|--------|-------|
-| 1 | TensorEmbeddingLookup | CPU FALLBACK | Embedding lookup |
-| 2 | TensorEmbeddingLookupBackward | CPU FALLBACK | Embedding gradient |
+| 1 | ReduceSum | ✓ GPU | Sum reduction |
+| 2 | ReduceMean | ✓ GPU | Mean reduction |
+| 3 | ReduceMax | ✓ GPU | Max reduction |
+| 4 | ReduceMeanBackward | ❌ CPU | Mean gradient - NEEDS GPU |
+| 5 | ReduceMaxBackward | ✓ GPU | Max gradient |
+| 6 | ReduceVariance | ❌ CPU | Variance computation - NEEDS GPU |
+| 7 | ReduceVarianceBackward | ❌ CPU | Variance gradient - NEEDS GPU |
+| 8 | TensorSum | ✓ GPU | Tensor sum |
+| 9 | TensorMaxValue | ✓ GPU | Tensor max |
+| 10 | TensorMinValue | ✓ GPU | Tensor min |
 
-### Priority 6: MEDIUM - Spatial Operations
-Used in image processing:
-
-| # | Method | Status | Notes |
-|---|--------|--------|-------|
-| 1 | Upsample | CPU FALLBACK | Bilinear/nearest upsampling |
-| 2 | UpsampleBackward | CPU FALLBACK | Upsample gradient |
-| 3 | Pad | CPU FALLBACK | Tensor padding |
-| 4 | Crop | CPU FALLBACK | Tensor cropping |
-| 5 | CropBackward | CPU FALLBACK | Crop gradient |
-| 6 | PixelShuffle | CPU FALLBACK | Sub-pixel conv |
-| 7 | PixelShuffleBackward | CPU FALLBACK | Pixel shuffle gradient |
-| 8 | GridSample | CPU FALLBACK | Spatial transformer |
-| 9 | AffineGrid | CPU FALLBACK | Affine grid generation |
-
-### Priority 7: MEDIUM - Alternative Softmax Variants
-Used in specialized attention mechanisms:
+### Priority 4: MEDIUM - Specialized Convolutions (ALL IMPLEMENTED ✓)
 
 | # | Method | Status | Notes |
 |---|--------|--------|-------|
-| 1 | Sparsemax | CPU FALLBACK | Sparse attention |
-| 2 | SparsemaxBackward | CPU FALLBACK | Sparsemax gradient |
-| 3 | GumbelSoftmax | CPU FALLBACK | Gumbel-softmax trick |
-| 4 | GumbelSoftmaxBackward | CPU FALLBACK | Gumbel gradient |
-| 5 | TaylorSoftmax | CPU FALLBACK | Taylor approximation |
-| 6 | TaylorSoftmaxBackward | CPU FALLBACK | Taylor gradient |
-| 7 | SphericalSoftmax | CPU FALLBACK | Spherical attention |
-| 8 | SphericalSoftmaxBackward | CPU FALLBACK | Spherical gradient |
+| 1 | DepthwiseConv2D | ✓ GPU | MobileNet/EfficientNet |
+| 2 | DepthwiseConv2DBackwardInput | ✓ GPU | Depthwise grad input |
+| 3 | DepthwiseConv2DBackwardKernel | ✓ GPU | Depthwise grad kernel |
+| 4 | ConvTranspose2D | ✓ GPU | Deconvolution/Upsampling |
+| 5 | ConvTranspose2DBackwardInput | ✓ GPU | TransConv grad input |
+| 6 | ConvTranspose2DBackwardKernel | ✓ GPU | TransConv grad kernel |
+| 7 | LocallyConnectedConv2D | ✓ GPU | Non-shared weights |
+| 8 | LocallyConnectedConv2DBackwardInput | ✓ GPU | LC grad input |
+| 9 | LocallyConnectedConv2DBackwardWeights | ✓ GPU | LC grad weights |
+| 10 | LocallyConnectedConv2DBackwardBias | ✓ GPU | LC grad bias |
 
-### Priority 8: LOWER - Math Operations
-Element-wise math operations:
-
-| # | Method | Status | Notes |
-|---|--------|--------|-------|
-| 1 | TensorExp | CPU FALLBACK | Exponential |
-| 2 | TensorLog | CPU FALLBACK | Logarithm |
-| 3 | TensorSqrt | CPU FALLBACK | Square root |
-| 4 | TensorPow | CPU FALLBACK | Power |
-| 5 | TensorAbs | CPU FALLBACK | Absolute value |
-| 6 | TensorNegate | CPU FALLBACK | Negation |
-| 7 | TensorClamp | CPU FALLBACK | Clamping |
-| 8 | Exp | CPU FALLBACK | Vector exp |
-| 9 | Log | CPU FALLBACK | Vector log |
-| 10 | Sqrt | CPU FALLBACK | Vector sqrt |
-| 11 | Power | CPU FALLBACK | Vector power |
-| 12 | Abs | CPU FALLBACK | Vector abs |
-| 13 | Sin | CPU FALLBACK | Sine |
-| 14 | Cos | CPU FALLBACK | Cosine |
-| 15 | Sinh | CPU FALLBACK | Hyperbolic sine |
-| 16 | Cosh | CPU FALLBACK | Hyperbolic cosine |
-| 17 | Asin | CPU FALLBACK | Arc sine |
-| 18 | Acos | CPU FALLBACK | Arc cosine |
-| 19 | Atan | CPU FALLBACK | Arc tangent |
-| 20 | Asinh | CPU FALLBACK | Arc hyperbolic sine |
-| 21 | Acosh | CPU FALLBACK | Arc hyperbolic cosine |
-| 22 | Atanh | CPU FALLBACK | Arc hyperbolic tangent |
-| 23 | Exp2 | CPU FALLBACK | 2^x |
-| 24 | Exp10 | CPU FALLBACK | 10^x |
-| 25 | ExpM1 | CPU FALLBACK | exp(x) - 1 |
-| 26 | Log1P | CPU FALLBACK | log(1 + x) |
-| 27 | Log2 | CPU FALLBACK | log base 2 |
-| 28 | Reciprocal | CPU FALLBACK | 1/x |
-| 29 | ReciprocalSqrt | CPU FALLBACK | 1/sqrt(x) |
-| 30 | Sign | CPU FALLBACK | Sign function |
-| 31 | Round | CPU FALLBACK | Rounding |
-| 32 | Floor | CPU FALLBACK | Floor |
-| 33 | Ceiling | CPU FALLBACK | Ceiling |
-| 34 | Truncate | CPU FALLBACK | Truncation |
-
-### Priority 9: LOWER - Vector/Matrix Operations
-Basic linear algebra:
+### Priority 5: MEDIUM - Embedding Operations (ALL IMPLEMENTED ✓)
 
 | # | Method | Status | Notes |
 |---|--------|--------|-------|
-| 1 | Add | CPU FALLBACK | Vector add |
-| 2 | Subtract | CPU FALLBACK | Vector subtract |
-| 3 | Multiply | CPU FALLBACK | Vector multiply |
-| 4 | Divide | CPU FALLBACK | Vector divide |
-| 5 | Max | CPU FALLBACK | Element-wise max |
-| 6 | Min | CPU FALLBACK | Element-wise min |
-| 7 | MaxMagnitude | CPU FALLBACK | Max by magnitude |
-| 8 | MinMagnitude | CPU FALLBACK | Min by magnitude |
-| 9 | Clamp | CPU FALLBACK | Clamping |
-| 10 | Lerp | CPU FALLBACK | Linear interpolation |
-| 11 | Negate | CPU FALLBACK | Negation |
-| 12 | Sum | CPU FALLBACK | Vector sum |
-| 13 | Mean | CPU FALLBACK | Vector mean |
-| 14 | Product | CPU FALLBACK | Vector product |
-| 15 | StdDev | CPU FALLBACK | Standard deviation |
-| 16 | Norm | CPU FALLBACK | Vector norm |
-| 17 | Distance | CPU FALLBACK | Vector distance |
-| 18 | DotProduct | CPU FALLBACK | Dot product |
-| 19 | CosineSimilarity | CPU FALLBACK | Cosine similarity |
-| 20 | OuterProduct | CPU FALLBACK | Outer product |
-| 21 | MatrixMultiply | CPU FALLBACK | Matrix multiply |
-| 22 | MatrixAdd | CPU FALLBACK | Matrix add |
-| 23 | MatrixSubtract | CPU FALLBACK | Matrix subtract |
-| 24 | MatrixMultiplyScalar | CPU FALLBACK | Matrix scalar mult |
-| 25 | MatrixTranspose | CPU FALLBACK | Matrix transpose |
-| 26 | MatrixVectorMultiply | CPU FALLBACK | Matrix-vector mult |
-| 27 | MatrixSumOfSquares | CPU FALLBACK | Matrix sum of squares |
-| 28 | GetColumn | CPU FALLBACK | Get matrix column |
-| 29 | GetRow | CPU FALLBACK | Get matrix row |
+| 1 | TensorEmbeddingLookup | ✓ GPU | Embedding lookup |
+| 2 | TensorEmbeddingLookupBackward | ✓ GPU | Embedding gradient |
 
-### Priority 10: LOWER - Tensor Manipulation
-Shape and indexing operations:
+### Priority 6: MEDIUM - Spatial Operations (MOSTLY IMPLEMENTED)
 
 | # | Method | Status | Notes |
 |---|--------|--------|-------|
-| 1 | TensorTranspose | CPU FALLBACK | Tensor transpose |
-| 2 | TensorSlice | CPU FALLBACK | Tensor slicing |
-| 3 | TensorSetSlice | CPU FALLBACK | Set tensor slice |
-| 4 | TensorRepeatElements | CPU FALLBACK | Repeat elements |
-| 5 | TensorTile | CPU FALLBACK | Tile tensor |
-| 6 | Concat | CPU FALLBACK | Concatenation |
-| 7 | TensorMax | CPU FALLBACK | Tensor max |
-| 8 | TensorMin | CPU FALLBACK | Tensor min |
-| 9 | TensorSumOfSquares | CPU FALLBACK | Sum of squares |
+| 1 | Upsample | ✓ GPU | Nearest neighbor upsampling |
+| 2 | UpsampleBackward | ✓ GPU | Upsample gradient |
+| 3 | Pad | ✓ GPU | Tensor padding |
+| 4 | Crop | ✓ GPU | Tensor cropping |
+| 5 | CropBackward | ❌ CPU | Crop gradient - NEEDS GPU |
+| 6 | PixelShuffle | ✓ GPU | Sub-pixel conv |
+| 7 | PixelShuffleBackward | ✓ GPU | Pixel shuffle gradient |
+| 8 | GridSample | ❌ CPU | Spatial transformer - NEEDS GPU |
+| 9 | AffineGrid | ❌ CPU | Affine grid generation - NEEDS GPU |
 
-### Priority 11: LOWER - Comparison Operations
-Boolean/comparison operations:
-
-| # | Method | Status | Notes |
-|---|--------|--------|-------|
-| 1 | TensorEquals | CPU FALLBACK | Equality check |
-| 2 | TensorNotEquals | CPU FALLBACK | Inequality check |
-| 3 | TensorGreaterThan | CPU FALLBACK | Greater than |
-| 4 | TensorLessThan | CPU FALLBACK | Less than |
-| 5 | TensorWhere | CPU FALLBACK | Conditional select |
-
-### Priority 12: LOWER - Utility Operations
-Utility and initialization:
+### Priority 7: MEDIUM - Alternative Softmax Variants (ALL IMPLEMENTED ✓)
 
 | # | Method | Status | Notes |
 |---|--------|--------|-------|
-| 1 | Fill | CPU FALLBACK | Fill with value |
-| 2 | FillZero<T> | CPU FALLBACK | Fill with zeros |
-| 3 | GenerateDropoutMask | CPU FALLBACK | Dropout mask |
-| 4 | GenerateGaussianNoise | CPU FALLBACK | Gaussian noise |
-| 5 | TensorAddMany | CPU FALLBACK | Add multiple tensors |
-| 6 | TensorMultiplyMany | CPU FALLBACK | Multiply multiple tensors |
+| 1 | Sparsemax | ✓ GPU | Sparse attention |
+| 2 | SparsemaxBackward | ✓ GPU | Sparsemax gradient |
+| 3 | GumbelSoftmax | ✓ GPU | Gumbel-softmax trick |
+| 4 | GumbelSoftmaxBackward | ✓ GPU | Gumbel gradient |
+| 5 | TaylorSoftmax | ✓ GPU | Taylor approximation |
+| 6 | TaylorSoftmaxBackward | ✓ GPU | Taylor gradient |
+| 7 | SphericalSoftmax | ✓ GPU | Spherical attention |
+| 8 | SphericalSoftmaxBackward | ✓ GPU | Spherical gradient |
 
-### Priority 13: SPECIALIZED - RBF/Complex Operations
-Specialized mathematical operations:
+### Priority 8: LOWER - Math Operations (ALL IMPLEMENTED ✓)
 
 | # | Method | Status | Notes |
 |---|--------|--------|-------|
-| 1 | RBFKernel | CPU FALLBACK | Radial basis function |
-| 2 | RBFKernelBackward | CPU FALLBACK | RBF gradient |
-| 3 | ComplexMatMul | CPU FALLBACK | Complex matrix mult |
-| 4 | ComplexMagnitudeSquared | CPU FALLBACK | Complex magnitude |
-| 5 | ComplexNormalize | CPU FALLBACK | Complex normalize |
-| 6 | ReduceLogVariance | CPU FALLBACK | Log variance |
-| 7 | ReduceLogVarianceBackward | CPU FALLBACK | Log variance gradient |
-| 8 | MaxPool2DWithIndices | CPU FALLBACK | Max pool with indices |
+| 1 | TensorExp | ✓ GPU | Exponential |
+| 2 | TensorLog | ✓ GPU | Logarithm |
+| 3 | TensorSqrt | ✓ GPU | Square root |
+| 4 | TensorPow | ✓ GPU | Power |
+| 5 | TensorAbs | ✓ GPU | Absolute value |
+| 6 | TensorNegate | ✓ GPU | Negation |
+| 7 | TensorClamp | ✓ GPU | Clamping |
+| 8 | Exp | ✓ GPU | Vector exp |
+| 9 | Log | ✓ GPU | Vector log |
+| 10 | Sqrt | ✓ GPU | Vector sqrt |
+| 11 | Power | ✓ GPU | Vector power |
+| 12 | Abs | ✓ GPU | Vector abs |
+| 13 | Sin | ✓ GPU | Sine |
+| 14 | Cos | ✓ GPU | Cosine |
+| 15 | Sinh | ✓ GPU | Hyperbolic sine |
+| 16 | Cosh | ✓ GPU | Hyperbolic cosine |
+| 17 | Asin | ✓ GPU | Arc sine |
+| 18 | Acos | ✓ GPU | Arc cosine |
+| 19 | Atan | ✓ GPU | Arc tangent |
+| 20 | Asinh | ✓ GPU | Arc hyperbolic sine |
+| 21 | Acosh | ✓ GPU | Arc hyperbolic cosine |
+| 22 | Atanh | ✓ GPU | Arc hyperbolic tangent |
+| 23 | Exp2 | ✓ GPU | 2^x |
+| 24 | Exp10 | ✓ GPU | 10^x |
+| 25 | ExpM1 | ✓ GPU | exp(x) - 1 |
+| 26 | Log1P | ✓ GPU | log(1 + x) |
+| 27 | Log2 | ✓ GPU | log base 2 |
+| 28 | Reciprocal | ✓ GPU | 1/x |
+| 29 | ReciprocalSqrt | ✓ GPU | 1/sqrt(x) |
+| 30 | Sign | ✓ GPU | Sign function |
+| 31 | Round | ✓ GPU | Rounding |
+| 32 | Floor | ✓ GPU | Floor |
+| 33 | Ceiling | ✓ GPU | Ceiling |
+| 34 | Truncate | ✓ GPU | Truncation |
+
+### Priority 9: LOWER - Vector/Matrix Operations (MOSTLY IMPLEMENTED)
+
+| # | Method | Status | Notes |
+|---|--------|--------|-------|
+| 1 | Add | ✓ GPU | Vector add |
+| 2 | Subtract | ✓ GPU | Vector subtract |
+| 3 | Multiply | ✓ GPU | Vector multiply |
+| 4 | Divide | ✓ GPU | Vector divide |
+| 5 | Max | ✓ GPU | Element-wise max |
+| 6 | Min | ✓ GPU | Element-wise min |
+| 7 | MaxMagnitude | ✓ GPU | Max by magnitude |
+| 8 | MinMagnitude | ✓ GPU | Min by magnitude |
+| 9 | Clamp | ✓ GPU | Clamping |
+| 10 | Lerp | ✓ GPU | Linear interpolation |
+| 11 | Negate | ✓ GPU | Negation |
+| 12 | Sum | ✓ GPU | Vector sum |
+| 13 | Mean | ✓ GPU | Vector mean |
+| 14 | Product | ❌ CPU | Vector product - NEEDS GPU |
+| 15 | StdDev | ✓ GPU | Standard deviation |
+| 16 | Norm | ✓ GPU | Vector norm |
+| 17 | Distance | ✓ GPU | Vector distance |
+| 18 | DotProduct | ✓ GPU | Dot product |
+| 19 | CosineSimilarity | ✓ GPU | Cosine similarity |
+| 20 | OuterProduct | ✓ GPU | Outer product |
+| 21 | MatrixMultiply | ✓ GPU | Matrix multiply |
+| 22 | MatrixAdd | ✓ GPU | Matrix add |
+| 23 | MatrixSubtract | ❌ CPU | Matrix subtract - NEEDS GPU |
+| 24 | MatrixMultiplyScalar | ✓ GPU | Matrix scalar mult |
+| 25 | MatrixTranspose | ✓ GPU | Matrix transpose |
+| 26 | MatrixVectorMultiply | ✓ GPU | Matrix-vector mult |
+| 27 | MatrixSumOfSquares | ❌ CPU | Matrix sum of squares - NEEDS GPU |
+
+### Priority 10: LOWER - Tensor Manipulation (PARTIAL)
+
+| # | Method | Status | Notes |
+|---|--------|--------|-------|
+| 1 | TensorTranspose | ✓ GPU | Tensor transpose |
+| 2 | TensorSlice | ❌ CPU | Tensor slicing - NEEDS GPU |
+| 3 | TensorSetSlice | ❌ CPU | Set tensor slice - NEEDS GPU |
+| 4 | TensorRepeatElements | ❌ CPU | Repeat elements - NEEDS GPU |
+| 5 | TensorTile | ❌ CPU | Tile tensor - NEEDS GPU |
+| 6 | Concat | ❌ CPU | Concatenation - NEEDS GPU |
+| 7 | TensorMax | ✓ GPU | Tensor max |
+| 8 | TensorMin | ✓ GPU | Tensor min |
+| 9 | TensorSumOfSquares | ✓ GPU | Sum of squares |
+
+### Priority 11: LOWER - Comparison Operations (ALL NEED GPU)
+
+| # | Method | Status | Notes |
+|---|--------|--------|-------|
+| 1 | TensorEquals | ❌ CPU | Equality check - NEEDS GPU |
+| 2 | TensorNotEquals | ❌ CPU | Inequality check - NEEDS GPU |
+| 3 | TensorGreaterThan | ❌ CPU | Greater than - NEEDS GPU |
+| 4 | TensorLessThan | ❌ CPU | Less than - NEEDS GPU |
+| 5 | TensorWhere | ❌ CPU | Conditional select - NEEDS GPU |
+
+### Priority 12: LOWER - Utility Operations (PARTIAL)
+
+| # | Method | Status | Notes |
+|---|--------|--------|-------|
+| 1 | Fill | ✓ GPU | Fill with value |
+| 2 | FillZero | ✓ GPU | Fill with zeros |
+| 3 | GenerateDropoutMask | ❌ CPU | Dropout mask - NEEDS GPU |
+| 4 | GenerateGaussianNoise | ❌ CPU | Gaussian noise - NEEDS GPU |
+| 5 | TensorAddMany | ✓ GPU | Add multiple tensors |
+| 6 | TensorMultiplyMany | ✓ GPU | Multiply multiple tensors |
+
+### Priority 13: SPECIALIZED - RBF/Complex Operations (PARTIAL)
+
+| # | Method | Status | Notes |
+|---|--------|--------|-------|
+| 1 | RBFKernel | ❌ CPU | Radial basis function - NEEDS GPU |
+| 2 | RBFKernelBackward | ❌ CPU | RBF gradient - NEEDS GPU |
+| 3 | ComplexMatMul | ❌ CPU | Complex matrix mult - NEEDS GPU |
+| 4 | ComplexMagnitudeSquared | ❌ CPU | Complex magnitude - NEEDS GPU |
+| 5 | ComplexNormalize | ❌ CPU | Complex normalize - NEEDS GPU |
+| 6 | ReduceLogVariance | ❌ CPU | Log variance - NEEDS GPU |
+| 7 | ReduceLogVarianceBackward | ❌ CPU | Log variance gradient - NEEDS GPU |
+| 8 | MaxPool2DWithIndices | ✓ GPU | Max pool with indices |
+
+---
+
+## Remaining CPU-Only Methods (81 total)
+
+Based on analysis, these methods have NO GPU implementation (only return _cpuFallback):
+
+### High Priority (Commonly Used)
+1. ReduceMeanBackward
+2. ReduceVariance
+3. ReduceVarianceBackward
+4. CropBackward
+5. GridSample
+6. AffineGrid
+7. Product
+8. MatrixSubtract
+9. MatrixSumOfSquares
+10. Conv2D (int[] parameters overload)
+
+### Medium Priority (Shape/Index Operations)
+11. TensorSlice
+12. TensorSetSlice
+13. TensorRepeatElements
+14. TensorTile
+15. Concat
+16. TensorWhere
+17. TensorPermute
+18. TensorExpandDims
+19. TensorSqueeze
+20. TensorStack
+21. TensorUnstack
+
+### Medium Priority (Comparison Operations)
+22. TensorEquals
+23. TensorNotEquals
+24. TensorGreaterThan
+25. TensorLessThan
+
+### Lower Priority (Specialized)
+26. RBFKernel
+27. RBFKernelBackward
+28. ComplexMatMul
+29. ComplexMagnitudeSquared
+30. ComplexNormalize
+31. ReduceLogVariance
+32. ReduceLogVarianceBackward
+33. GenerateDropoutMask
+34. GenerateGaussianNoise
+35. CopyVectorToTensor
+
+### Lower Priority (Extended Tensor Operations)
+36. TensorCopy
+37. TensorFill
+38. TensorOuterProduct
+39. TensorBatchOuterProduct
+40. TensorScatterAdd
+41. TensorGather
+42. TensorCumSum
+43. TensorLogSumExp
+44. TensorRandomUniform
+45. TensorRandomNormal
+46. TensorEye
+47. TensorDiag
+48. TensorDiagonal
+49. TensorEinsum
+50. TensorAddScalar
+51. TensorSubtractScalar
+52. TensorDivideScalar
+
+### Lower Priority (Activation Derivatives)
+53. TanhDerivative
+54. SigmoidDerivative
+55. ReLUDerivative
+
+### Lower Priority (Utility)
+56. TensorTriangularMask
+57. TensorSquash
+58. TensorSquashBackward
+59. TensorNorm
+60. TensorNormalize
+61. TensorClip
+62. TensorConcatenate
+63. TensorSplit
+64. TensorOneHot
+65. TensorArgMax
+66. TensorArgMin
+67. TensorBinaryCrossEntropy
+68. TensorBinaryCrossEntropyBackward
+69. TensorMeshgrid
+70. TensorSliceAxis
+71. TensorLinspace
+72. TensorBatchMatMul
+73. TensorSetSliceAxis
+74. TensorSoftmax
+75. TensorSoftmaxBackward
+76. TensorLogSoftmax
+77. TensorTopK
+78. TensorScatter
+79. TensorIndexSelect
+80. TensorMap
+81. TensorMaskedFill
 
 ---
 
 ## Implementation Progress
 
-### Completed GPU Implementations
-The following have some level of GPU implementation (using ILGPU accelerator):
-- Basic infrastructure (Context, Accelerator, Memory Pools)
-- Some kernel infrastructure exists but many operations still fall back
+### ✓ Completed GPU Implementations (122 operations)
+- All core neural network operations (matmul, conv, pool, norm, softmax)
+- All activation functions (ReLU, Sigmoid, Tanh, GELU, Mish, Swish, ELU)
+- All basic math operations (exp, log, sqrt, trig functions)
+- All basic vector/matrix operations (add, subtract, multiply, divide)
+- Most reduction operations (sum, mean, max)
+- All specialized convolutions (depthwise, transposed, locally connected)
+- Embedding operations
+- Alternative softmax variants
 
-### In Progress
-- None currently
-
-### Not Started
-- All 158 unique methods listed above
-
----
-
-## Implementation Guidelines
-
-### ILGPU Kernel Pattern
-```csharp
-// 1. Define kernel method (static, internal)
-internal static void MyKernel(Index1D index, ArrayView<float> input, ArrayView<float> output)
-{
-    output[index] = SomeOperation(input[index]);
-}
-
-// 2. Compile and cache kernel
-private Action<Index1D, ArrayView<float>, ArrayView<float>>? _myKernel;
-
-private void InitializeKernels()
-{
-    _myKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(MyKernel);
-}
-
-// 3. Use kernel in method
-public Tensor<T> MyOperation<T>(Tensor<T> input)
-{
-    // Type check and fallback
-    if (typeof(T) != typeof(float))
-        return _cpuFallback.MyOperation(input);
-
-    // GPU implementation
-    using var inputBuffer = _accelerator.Allocate1D<float>(input.Length);
-    using var outputBuffer = _accelerator.Allocate1D<float>(input.Length);
-
-    inputBuffer.CopyFromCPU(input.ToArray() as float[]);
-
-    _myKernel!(input.Length, inputBuffer.View, outputBuffer.View);
-    _accelerator.Synchronize();
-
-    var result = new float[input.Length];
-    outputBuffer.CopyToCPU(result);
-
-    return new Tensor<T>(input.Shape, new Vector<T>(result as T[]));
-}
-```
-
-### Performance Considerations
-1. **Minimum tensor size**: Only use GPU for tensors > threshold (e.g., 10,000 elements)
-2. **Memory transfer overhead**: Batch operations when possible
-3. **Type support**: Currently float is primary, double secondary
-4. **Thread safety**: Use `_gpuLock` for kernel launches
-
----
-
-## Testing Requirements
-
-For each implemented GPU operation:
-1. Verify numerical accuracy matches CPU implementation
-2. Test with various tensor shapes and sizes
-3. Benchmark against CPU to ensure speedup
-4. Test edge cases (empty tensors, single elements, etc.)
-5. Memory leak testing with repeated operations
+### ❌ Remaining CPU-Only (81 operations)
+- Comparison operations
+- Some tensor manipulation operations
+- Complex number operations
+- RBF kernel operations
+- Random number generation
+- Various utility functions
 
 ---
 
 ## Notes
 
-- This tracker was generated on December 2024
+- Last updated: December 2024
 - GpuEngine uses ILGPU library for GPU acceleration
 - Supports NVIDIA CUDA, AMD OpenCL, and Intel GPUs
-- Current implementation has ~260 `_accelerator.` calls but 524 `_cpuFallback` calls
+- GPU implementations use adaptive thresholds to fall back to CPU for small tensors
+- Type support: float and double for most operations
