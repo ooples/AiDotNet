@@ -338,20 +338,20 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         _lastInput = input;
         int batchSize = input.Shape[0];
 
-        // Compute predictions with tensor matmul: reshape input and weights for batched matmul
-        // Weights: [I, C, inDim, outDim] -> [I*C, inDim, outDim] -> tiled to [B*I*C, inDim, outDim]
-        var weightsFlat = _weights.Reshape([_inputCapsules * _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
-        var tiledWeights = Engine.TensorTile(weightsFlat, new[] { batchSize, 1, 1 });
+        // Compute predictions u_hat_ij = W_ij * u_i using elementwise multiply + reduce-sum
+        // This approach keeps all dimensions aligned and avoids BatchMatMul shape issues
 
-        // Input: [B, I, inDim] -> need [B*I*C, inDim, 1] where each input capsule is replicated C times
-        // Expand input to [B, I, 1, inDim] then tile along class axis to [B, I, C, inDim]
-        var inputExpanded = input.Reshape([batchSize, _inputCapsules, 1, _inputCapsuleDimension]);
-        var inputTiled = Engine.TensorTile(inputExpanded, new[] { 1, 1, _numClasses, 1 });
-        var inputCapsulesFlat = inputTiled.Reshape([batchSize * _inputCapsules * _numClasses, _inputCapsuleDimension, 1]);
+        // Input: [B, I, D_in] -> expand to [B, I, 1, D_in, 1] for broadcasting
+        var inputExpanded = input.Reshape([batchSize, _inputCapsules, 1, _inputCapsuleDimension, 1]);
 
-        // Now both have matching batch dimensions: [B*I*C, inDim, outDim] @ [B*I*C, inDim, 1] = [B*I*C, outDim, 1]
-        var predictionsFlat = Engine.BatchMatMul(tiledWeights, inputCapsulesFlat);
-        var predictions = predictionsFlat.Reshape([batchSize, _inputCapsules, _numClasses, _outputCapsuleDimension]);
+        // Weights: [I, C, D_in, D_out] -> expand to [1, I, C, D_in, D_out] for broadcasting
+        var weightsExpanded = _weights.Reshape([1, _inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
+
+        // Elementwise multiply broadcasts to [B, I, C, D_in, D_out]
+        var multiplied = Engine.TensorMultiply(weightsExpanded, inputExpanded);
+
+        // Sum over D_in (axis 3) to get predictions: [B, I, C, D_out]
+        var predictions = Engine.ReduceSum(multiplied, new[] { 3 }, keepDims: false);
 
         var couplings = new Tensor<T>([batchSize, _inputCapsules, _numClasses]);
         couplings.Fill(NumOps.Zero);
