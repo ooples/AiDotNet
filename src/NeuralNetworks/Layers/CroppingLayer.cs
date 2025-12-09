@@ -288,6 +288,15 @@ public class CroppingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Validate input is 4D tensor [batch, height, width, channels] as required for cropping indices
+        if (input.Rank != 4)
+        {
+            throw new ArgumentException(
+                $"CroppingLayer requires a 4D tensor with format [batch, height, width, channels]. " +
+                $"Got tensor with rank {input.Rank}.",
+                nameof(input));
+        }
+
         _lastInput = input; // Store for autodiff backward pass
         var cropped = Engine.Crop(input, _cropTop[1], _cropLeft[2], GetOutputShape()[1], GetOutputShape()[2]);
         return ApplyActivation(cropped);
