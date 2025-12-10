@@ -60,9 +60,13 @@ jobs:
           directory: ${{ github.workspace }}/src
         continue-on-error: true
 
-      - name: Upload SARIF results file
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        with:
-          sarif_file: results.sarif
-          category: codacy-security-scan
+      # Note: SARIF upload to GitHub Code Scanning is disabled because Codacy generates
+      # multi-run SARIF files which are no longer supported by GitHub Code Scanning.
+      # See: https://github.blog/changelog/2025-07-21-code-scanning-will-stop-combining-multiple-sarif-runs-uploaded-in-the-same-sarif-file/
+      # We rely on CodeQL (codeql.yml) for GitHub Code Scanning and Codacy for its own dashboard.
+      # - name: Upload SARIF results file
+      #   uses: github/codeql-action/upload-sarif@v4
+      #   if: always()
+      #   with:
+      #     sarif_file: results.sarif
+      #     category: codacy-security-scan
