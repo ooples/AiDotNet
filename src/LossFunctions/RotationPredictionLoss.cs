@@ -97,6 +97,9 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
             }
         }
 
+        // Cast through object is required for generic type conversion at runtime.
+        // The compiler cannot verify Tensor<T> -> TInput at compile time, so the
+        // intermediate cast to object is necessary to allow the unconstrained generic conversion.
         return ((TInput)(object)augmentedX, (TOutput)(object)augmentedY);
     }
 
