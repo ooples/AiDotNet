@@ -340,7 +340,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert - Check WAL
             var entries = wal.ReadLog();
-            Assert.Equal(7, entries.Count); // Begin + 2 AddNode + 2 edge operations + Commit + Checkpoint
+            Assert.Equal(4, entries.Count); // 2 AddNode + 1 AddEdge + 1 Checkpoint
 
             wal.Dispose();
         }

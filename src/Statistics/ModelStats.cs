@@ -439,7 +439,33 @@ public class ModelStats<T, TInput, TOutput>
         FeatureNames = inputs.FeatureNames ?? [];
         FeatureValues = inputs.FeatureValues ?? [];
 
-        CalculateModelStats(inputs);
+        // Only calculate statistics if we have actual data to analyze
+        // Skip calculation for empty ModelStats (placeholder objects)
+        if (!IsEmptyInput(inputs))
+        {
+            CalculateModelStats(inputs);
+        }
+    }
+
+    /// <summary>
+    /// Determines whether the input data is empty or uninitialized.
+    /// </summary>
+    /// <param name="inputs">The input data to check.</param>
+    /// <returns>True if the inputs are empty; otherwise, false.</returns>
+    private static bool IsEmptyInput(ModelStatsInputs<T, TInput, TOutput> inputs)
+    {
+        // Check if the XMatrix is empty based on its type
+        if (inputs.XMatrix is Matrix<T> matrix)
+        {
+            return matrix.Rows == 0 || matrix.Columns == 0;
+        }
+        else if (inputs.XMatrix is Tensor<T> tensor)
+        {
+            return tensor.Rank == 0 || tensor.Length == 0;
+        }
+
+        // For unknown types, assume not empty to maintain existing behavior
+        return false;
     }
 
     /// <summary>

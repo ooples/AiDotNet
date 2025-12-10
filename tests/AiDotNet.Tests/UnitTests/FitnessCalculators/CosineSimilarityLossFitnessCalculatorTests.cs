@@ -1,7 +1,9 @@
 using System;
+using AiDotNet.Enums;
 using AiDotNet.FitnessCalculators;
 using AiDotNet.Models;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators
@@ -202,14 +204,14 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
         [Fact]
         public void CalculateFitnessScore_WithModelEvaluationData_UsesValidationSet()
         {
-            // Arrange
-            var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Validation);
-            var evaluationData = new ModelEvaluationData<double, Vector<double>, Vector<double>>
+            // Arrange - Use Tensor types which are supported by ModelEvaluationData
+            var calculator = new CosineSimilarityLossFitnessCalculator<double, Tensor<double>, Tensor<double>>(DataSetType.Validation);
+            var evaluationData = new ModelEvaluationData<double, Tensor<double>, Tensor<double>>
             {
-                ValidationSet = new DataSetStats<double, Vector<double>, Vector<double>>
+                ValidationSet = new DataSetStats<double, Tensor<double>, Tensor<double>>
                 {
-                    Predicted = new Vector<double>(new double[] { 1.0, 2.0 }),
-                    Actual = new Vector<double>(new double[] { 1.0, 2.0 })
+                    Predicted = new Tensor<double>(new int[] { 1, 2 }, new Vector<double>(new double[] { 1.0, 2.0 })),
+                    Actual = new Tensor<double>(new int[] { 1, 2 }, new Vector<double>(new double[] { 1.0, 2.0 }))
                 }
             };
 
@@ -223,14 +225,14 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
         [Fact]
         public void CalculateFitnessScore_WithModelEvaluationDataAndTestSet_UsesTestSet()
         {
-            // Arrange
-            var calculator = new CosineSimilarityLossFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Testing);
-            var evaluationData = new ModelEvaluationData<double, Vector<double>, Vector<double>>
+            // Arrange - Use Tensor types which are supported by ModelEvaluationData
+            var calculator = new CosineSimilarityLossFitnessCalculator<double, Tensor<double>, Tensor<double>>(DataSetType.Testing);
+            var evaluationData = new ModelEvaluationData<double, Tensor<double>, Tensor<double>>
             {
-                TestSet = new DataSetStats<double, Vector<double>, Vector<double>>
+                TestSet = new DataSetStats<double, Tensor<double>, Tensor<double>>
                 {
-                    Predicted = new Vector<double>(new double[] { 1.0, 0.0 }),
-                    Actual = new Vector<double>(new double[] { 0.0, 1.0 })
+                    Predicted = new Tensor<double>(new int[] { 1, 2 }, new Vector<double>(new double[] { 1.0, 0.0 })),
+                    Actual = new Tensor<double>(new int[] { 1, 2 }, new Vector<double>(new double[] { 0.0, 1.0 }))
                 }
             };
 
@@ -297,12 +299,12 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             var result = calculator.CalculateFitnessScore(dataSet);
 
             // Assert
-            // Dot product = 0.5*0.6 + 0.8*0.7 + 0.1*0.2 = 0.3 + 0.56 + 0.02 = 0.88
-            // Norm predicted = sqrt(0.25 + 0.64 + 0.01) ≈ 0.9487
-            // Norm actual = sqrt(0.36 + 0.49 + 0.04) ≈ 0.9434
-            // Cosine similarity = 0.88 / (0.9487 * 0.9434) ≈ 0.984
-            // Loss = 1 - 0.984 ≈ 0.016
-            Assert.Equal(0.016242195912488764, result, 10);
+            // Dot product = 0.5*0.6 + 0.8*0.7 + 0.1*0.2 + 0.0*0.0 = 0.30 + 0.56 + 0.02 + 0.00 = 0.88
+            // Norm predicted = sqrt(0.5² + 0.8² + 0.1² + 0.0²) = sqrt(0.90) ≈ 0.9487
+            // Norm actual = sqrt(0.6² + 0.7² + 0.2² + 0.0²) = sqrt(0.89) ≈ 0.9434
+            // Cosine similarity = 0.88 / (0.9487 * 0.9434) ≈ 0.9833
+            // Loss = 1 - 0.9833 ≈ 0.0167
+            Assert.Equal(0.016744432707480161, result, 10);
         }
 
         [Fact]

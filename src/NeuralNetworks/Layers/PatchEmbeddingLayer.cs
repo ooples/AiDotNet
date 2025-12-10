@@ -226,8 +226,11 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         var patches = transposed.Reshape(batchSize, _numPatches, patchDim);
 
         // Projection: patches @ weights + bias
-        // [B, N, patchDim] @ [patchDim, embedDim] -> [B, N, embedDim]
-        var projected = Engine.TensorMatMul(patches, _projectionWeights);
+        // Reshape to 2D for TensorMatMul: [B*N, patchDim] @ [patchDim, embedDim] -> [B*N, embedDim]
+        var patchesFlat = patches.Reshape(batchSize * _numPatches, patchDim);
+        var projectedFlat = Engine.TensorMatMul(patchesFlat, _projectionWeights);
+        // Reshape back to 3D: [B, N, embedDim]
+        var projected = projectedFlat.Reshape(batchSize, _numPatches, _embeddingDim);
         
         // Add bias (broadcast)
         var biasBroadcast = _projectionBias.Reshape(1, 1, _embeddingDim);

@@ -95,10 +95,10 @@ jobs:
     - name: Build (Release)
       run: dotnet build --no-restore --configuration Release /p:EnforceCodeStyleInBuild=true
 
+    # Tests are REQUIRED to pass - this will fail the PR if tests fail
     - name: Run tests with coverage
       run: |
-        dotnet dotcover test --filter "Category!=GPU&Category!=Integration" --dcReportType=HTML --dcOutput=dotCover.Output.html --dcFilters="-:module=AiDotNetTests;-:module=AiDotNetTestConsole;-:module=AiDotNetBenchmarkTests"
-      continue-on-error: true
+        dotnet dotcover test --framework net8.0 --filter "Category!=GPU&Category!=Integration" --dcReportType=HTML --dcOutput=dotCover.Output.html --dcFilters="-:module=AiDotNetTests;-:module=AiDotNetTestConsole;-:module=AiDotNetBenchmarkTests"
 
     - name: End SonarCloud analysis
       env:

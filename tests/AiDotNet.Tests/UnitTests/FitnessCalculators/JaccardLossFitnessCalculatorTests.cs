@@ -1,7 +1,9 @@
 using System;
+using AiDotNet.Enums;
 using AiDotNet.FitnessCalculators;
 using AiDotNet.Models;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators
@@ -207,14 +209,14 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
         [Fact]
         public void CalculateFitnessScore_WithModelEvaluationData_UsesValidationSet()
         {
-            // Arrange
-            var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Validation);
-            var evaluationData = new ModelEvaluationData<double, Vector<double>, Vector<double>>
+            // Arrange - Use Tensor types which are supported by ModelEvaluationData
+            var calculator = new JaccardLossFitnessCalculator<double, Tensor<double>, Tensor<double>>(DataSetType.Validation);
+            var evaluationData = new ModelEvaluationData<double, Tensor<double>, Tensor<double>>
             {
-                ValidationSet = new DataSetStats<double, Vector<double>, Vector<double>>
+                ValidationSet = new DataSetStats<double, Tensor<double>, Tensor<double>>
                 {
-                    Predicted = new Vector<double>(new double[] { 1.0, 1.0, 0.0 }),
-                    Actual = new Vector<double>(new double[] { 1.0, 1.0, 0.0 })
+                    Predicted = new Tensor<double>(new int[] { 1, 3 }, new Vector<double>(new double[] { 1.0, 1.0, 0.0 })),
+                    Actual = new Tensor<double>(new int[] { 1, 3 }, new Vector<double>(new double[] { 1.0, 1.0, 0.0 }))
                 }
             };
 
@@ -228,14 +230,14 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
         [Fact]
         public void CalculateFitnessScore_WithModelEvaluationDataAndTestSet_UsesTestSet()
         {
-            // Arrange
-            var calculator = new JaccardLossFitnessCalculator<double, Vector<double>, Vector<double>>(DataSetType.Testing);
-            var evaluationData = new ModelEvaluationData<double, Vector<double>, Vector<double>>
+            // Arrange - Use Tensor types which are supported by ModelEvaluationData
+            var calculator = new JaccardLossFitnessCalculator<double, Tensor<double>, Tensor<double>>(DataSetType.Testing);
+            var evaluationData = new ModelEvaluationData<double, Tensor<double>, Tensor<double>>
             {
-                TestSet = new DataSetStats<double, Vector<double>, Vector<double>>
+                TestSet = new DataSetStats<double, Tensor<double>, Tensor<double>>
                 {
-                    Predicted = new Vector<double>(new double[] { 1.0, 0.0 }),
-                    Actual = new Vector<double>(new double[] { 0.0, 1.0 })
+                    Predicted = new Tensor<double>(new int[] { 1, 2 }, new Vector<double>(new double[] { 1.0, 0.0 })),
+                    Actual = new Tensor<double>(new int[] { 1, 2 }, new Vector<double>(new double[] { 0.0, 1.0 }))
                 }
             };
 

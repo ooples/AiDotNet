@@ -1,7 +1,9 @@
 using System;
+using AiDotNet.Enums;
 using AiDotNet.FitnessCalculators;
 using AiDotNet.Models;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.FitnessCalculators
@@ -133,24 +135,21 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             var calculator = new ContrastiveLossFitnessCalculator<double, Vector<double>, Vector<double>>(margin: 1.0);
             var dataSet = new DataSetStats<double, Vector<double>, Vector<double>>
             {
-                // Two pairs: first similar, second dissimilar
+                // Predicted is split in half: output1 = [1.0, 2.0], output2 = [3.0, 4.0]
+                // Actual is split in half: actual1 = [1.0, 2.0], actual2 = [1.0, 6.0]
+                // Similarity labels: actual1[0]==actual2[0] → similar, actual1[1]!=actual2[1] → dissimilar
                 Predicted = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 }),
-                Actual = new Vector<double>(new double[] { 1.0, 2.0, 5.0, 6.0 })
+                Actual = new Vector<double>(new double[] { 1.0, 2.0, 1.0, 6.0 })
             };
 
             // Act
             var result = calculator.CalculateFitnessScore(dataSet);
 
             // Assert
-            // Pair 1: [1.0, 2.0] vs [3.0, 4.0], actuals same (1.0, 2.0) so similar
-            // Distance = sqrt((1-3)² + (2-4)²) = sqrt(8) ≈ 2.828
-            // Loss for pair 1 = 2.828² ≈ 8.0
-
-            // Pair 2: [3.0, 4.0] vs [5.0, 6.0], actuals different so dissimilar
-            // Distance = sqrt((3-5)² + (4-6)²) = sqrt(8) ≈ 2.828
-            // Loss for pair 2 = max(0, 1.0 - 2.828)² = 0
-
-            // Average loss ≈ 4.0
+            // Distance between output1=[1,2] and output2=[3,4] = sqrt((1-3)² + (2-4)²) = sqrt(8) ≈ 2.828
+            // i=0: similar (1.0 == 1.0), loss = distance² = 8.0
+            // i=1: dissimilar (2.0 != 6.0), loss = max(0, 1.0 - 2.828)² = 0
+            // Average loss = (8.0 + 0) / 2 = 4.0
             Assert.True(result >= 3.9 && result <= 4.1);
         }
 
@@ -187,15 +186,16 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
         [Fact]
         public void CalculateFitnessScore_WithModelEvaluationData_UsesValidationSet()
         {
-            // Arrange
-            var calculator = new ContrastiveLossFitnessCalculator<double, Vector<double>, Vector<double>>(
+            // Arrange - Use Tensor types which are supported by ModelEvaluationData
+            // Note: ModelEvaluationData requires 2D tensors for proper matrix conversion
+            var calculator = new ContrastiveLossFitnessCalculator<double, Tensor<double>, Tensor<double>>(
                 dataSetType: DataSetType.Validation);
-            var evaluationData = new ModelEvaluationData<double, Vector<double>, Vector<double>>
+            var evaluationData = new ModelEvaluationData<double, Tensor<double>, Tensor<double>>
             {
-                ValidationSet = new DataSetStats<double, Vector<double>, Vector<double>>
+                ValidationSet = new DataSetStats<double, Tensor<double>, Tensor<double>>
                 {
-                    Predicted = new Vector<double>(new double[] { 1.0, 1.0 }),
-                    Actual = new Vector<double>(new double[] { 1.0, 1.0 })
+                    Predicted = new Tensor<double>(new int[] { 1, 2 }, new Vector<double>(new double[] { 1.0, 1.0 })),
+                    Actual = new Tensor<double>(new int[] { 1, 2 }, new Vector<double>(new double[] { 1.0, 1.0 }))
                 }
             };
 
@@ -209,15 +209,16 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
         [Fact]
         public void CalculateFitnessScore_WithModelEvaluationDataAndTestSet_UsesTestSet()
         {
-            // Arrange
-            var calculator = new ContrastiveLossFitnessCalculator<double, Vector<double>, Vector<double>>(
+            // Arrange - Use Tensor types which are supported by ModelEvaluationData
+            // Note: ModelEvaluationData requires 2D tensors for proper matrix conversion
+            var calculator = new ContrastiveLossFitnessCalculator<double, Tensor<double>, Tensor<double>>(
                 dataSetType: DataSetType.Testing);
-            var evaluationData = new ModelEvaluationData<double, Vector<double>, Vector<double>>
+            var evaluationData = new ModelEvaluationData<double, Tensor<double>, Tensor<double>>
             {
-                TestSet = new DataSetStats<double, Vector<double>, Vector<double>>
+                TestSet = new DataSetStats<double, Tensor<double>, Tensor<double>>
                 {
-                    Predicted = new Vector<double>(new double[] { 0.0, 5.0 }),
-                    Actual = new Vector<double>(new double[] { 1.0, 1.0 })
+                    Predicted = new Tensor<double>(new int[] { 1, 2 }, new Vector<double>(new double[] { 0.0, 5.0 })),
+                    Actual = new Tensor<double>(new int[] { 1, 2 }, new Vector<double>(new double[] { 1.0, 1.0 }))
                 }
             };
 
@@ -275,23 +276,22 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             var calculator = new ContrastiveLossFitnessCalculator<double, Vector<double>, Vector<double>>(margin: 1.0);
             var dataSet = new DataSetStats<double, Vector<double>, Vector<double>>
             {
-                // Same person faces should be close, different person faces should be far
+                // Predicted is split: output1 = [0.1, 0.2], output2 = [0.9, 0.8]
+                // Actual is split: actual1 = [1.0, 2.0], actual2 = [1.0, 3.0]
+                // Similarity: actual1[0]==actual2[0] → similar, actual1[1]!=actual2[1] → dissimilar
                 Predicted = new Vector<double>(new double[] { 0.1, 0.2, 0.9, 0.8 }),
-                Actual = new Vector<double>(new double[] { 1.0, 1.0, 2.0, 3.0 })
+                Actual = new Vector<double>(new double[] { 1.0, 2.0, 1.0, 3.0 })
             };
 
             // Act
             var result = calculator.CalculateFitnessScore(dataSet);
 
             // Assert
-            // Pair 1: similar (actuals both 1.0), embeddings [0.1, 0.2] vs [0.9, 0.8]
-            // Distance ≈ sqrt((0.8)² + (0.6)²) = 1.0, loss = 1.0
-
-            // Pair 2: dissimilar (actuals 2.0 vs 3.0), embeddings close
-            // Distance = 0.1, loss = max(0, 1.0 - 0.1)² = 0.81
-
-            // Average loss ≈ 0.905
-            Assert.True(result >= 0.85 && result <= 0.95);
+            // Distance between output1=[0.1,0.2] and output2=[0.9,0.8] = sqrt((0.8)² + (0.6)²) = 1.0
+            // i=0: similar (1.0 == 1.0), loss = distance² = 1.0
+            // i=1: dissimilar (2.0 != 3.0), loss = max(0, 1.0 - 1.0)² = 0
+            // Average loss = (1.0 + 0) / 2 = 0.5
+            Assert.True(result >= 0.45 && result <= 0.55);
         }
 
         [Fact]
