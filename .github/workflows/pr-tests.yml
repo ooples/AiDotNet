@@ -86,8 +86,10 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      # Restore the specific project (not solution-level) to ensure project.assets.json is generated
+      # This is required because solution-level restore may not generate assets files for all project/framework combinations
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore "${{ matrix.project }}"
 
       # Build with --framework net8.0 to avoid issues with .NET Framework targets on Linux
       # Some test projects target multiple frameworks (net8.0;net471;net462) but only net8.0 can build on Linux
