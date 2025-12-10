@@ -73,21 +73,22 @@ public class RBMLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The weights matrix represents the strength of connections between visible and hidden units.
-    /// Each element W[j,i] represents the connection strength between visible unit i and hidden unit j.
+    /// The weights tensor represents the strength of connections between visible and hidden units.
+    /// Shape is [hiddenUnits, visibleUnits]. Each element W[j,i] represents the connection strength
+    /// between visible unit i and hidden unit j.
     /// </para>
     /// <para><b>For Beginners:</b> Think of the weights as "connection strengths" between units.
-    /// 
-    /// The weight matrix:
+    ///
+    /// The weight tensor:
     /// - Has dimensions [hiddenUnits × visibleUnits]
     /// - Each weight shows how strongly a visible unit influences a hidden unit
     /// - Positive weights mean "these units tend to be active together"
     /// - Negative weights mean "when one unit is active, the other tends to be inactive"
-    /// 
+    ///
     /// During training, these weights are adjusted to capture patterns in your data.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weights;
+    private Tensor<T> _weights;
 
     /// <summary>
     /// Gets or sets the bias values for the visible units.
@@ -99,18 +100,18 @@ public class RBMLayer<T> : LayerBase<T>
     /// the marginal distribution of the visible units.
     /// </para>
     /// <para><b>For Beginners:</b> Think of visible biases as the "default preference" of each visible unit.
-    /// 
+    ///
     /// Visible biases:
     /// - One bias value per visible unit
     /// - Control how likely each visible unit is to be active by default
     /// - Positive bias: the unit prefers to be on (value of 1)
     /// - Negative bias: the unit prefers to be off (value of 0)
-    /// 
+    ///
     /// For example, if most images in your dataset have dark backgrounds (pixels mostly off),
     /// the biases for those background pixels would become negative during training.
     /// </para>
     /// </remarks>
-    private Vector<T> _visibleBiases;
+    private Tensor<T> _visibleBiases;
 
     /// <summary>
     /// Gets or sets the bias values for the hidden units.
@@ -122,37 +123,52 @@ public class RBMLayer<T> : LayerBase<T>
     /// the marginal distribution of the hidden units.
     /// </para>
     /// <para><b>For Beginners:</b> Think of hidden biases as the "default sensitivity" of each feature detector.
-    /// 
+    ///
     /// Hidden biases:
     /// - One bias value per hidden unit
     /// - Control how easily each feature detector activates
     /// - Positive bias: the detector is more sensitive (activates easily)
     /// - Negative bias: the detector is less sensitive (requires stronger evidence to activate)
-    /// 
+    ///
     /// These biases help the RBM learn features that occur with different frequencies in your data.
     /// </para>
     /// </remarks>
-    private Vector<T> _hiddenBiases;
+    private Tensor<T> _hiddenBiases;
+
+    /// <summary>
+    /// Gradient of the weights computed during backpropagation.
+    /// </summary>
+    private Tensor<T>? _weightsGradient;
+
+    /// <summary>
+    /// Gradient of the visible biases computed during backpropagation.
+    /// </summary>
+    private Tensor<T>? _visibleBiasesGradient;
+
+    /// <summary>
+    /// Gradient of the hidden biases computed during backpropagation.
+    /// </summary>
+    private Tensor<T>? _hiddenBiasesGradient;
 
     /// <summary>
     /// Stores the last input from the visible layer during training.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This field caches the original visible input vector from the most recent forward pass.
+    /// This field caches the original visible input tensor from the most recent forward pass.
     /// It is used during parameter updates in contrastive divergence training.
     /// </para>
     /// <para><b>For Beginners:</b> Think of this as saving the "before" snapshot of input data.
-    /// 
+    ///
     /// During training:
     /// - The RBM needs to compare the original input with a reconstructed version
     /// - This field stores the original input data (the "before" snapshot)
     /// - It's used in the "positive phase" of contrastive divergence training
-    /// 
+    ///
     /// This storage helps the RBM adjust its weights to make better reconstructions of the input data.
     /// </para>
     /// </remarks>
-    private Vector<T>? _lastVisibleInput;
+    private Tensor<T>? _lastVisibleInput;
 
     /// <summary>
     /// Stores the last output from the hidden layer during training.
@@ -163,17 +179,17 @@ public class RBMLayer<T> : LayerBase<T>
     /// It is used during parameter updates in contrastive divergence training.
     /// </para>
     /// <para><b>For Beginners:</b> Think of this as saving what patterns the RBM detected in the input.
-    /// 
+    ///
     /// During training:
     /// - The RBM activates hidden units based on the input
     /// - This field stores those activations (what features were detected)
     /// - It's used in the "positive phase" of contrastive divergence training
-    /// 
+    ///
     /// This storage helps the RBM learn which features are actually present in the data
     /// versus which ones it incorrectly generates on its own.
     /// </para>
     /// </remarks>
-    private Vector<T>? _lastHiddenOutput;
+    private Tensor<T>? _lastHiddenOutput;
 
     /// <summary>
     /// Stores the reconstructed visible layer activations during training.
@@ -184,17 +200,17 @@ public class RBMLayer<T> : LayerBase<T>
     /// It is used during parameter updates in contrastive divergence training.
     /// </para>
     /// <para><b>For Beginners:</b> Think of this as the RBM's attempt to recreate the original input.
-    /// 
+    ///
     /// During training:
     /// - After detecting features, the RBM tries to recreate the original input
     /// - This field stores that reconstruction (the "after" snapshot)
     /// - It's used in the "negative phase" of contrastive divergence training
-    /// 
+    ///
     /// The difference between the original input and this reconstruction guides
     /// how the RBM updates its weights to improve future reconstructions.
     /// </para>
     /// </remarks>
-    private Vector<T>? _reconstructedVisible;
+    private Tensor<T>? _reconstructedVisible;
 
     /// <summary>
     /// Stores the reconstructed hidden layer activations during training.
@@ -205,17 +221,17 @@ public class RBMLayer<T> : LayerBase<T>
     /// It is used during parameter updates in contrastive divergence training.
     /// </para>
     /// <para><b>For Beginners:</b> Think of this as what patterns the RBM detects in its own reconstruction.
-    /// 
+    ///
     /// During training:
     /// - After reconstructing the input, the RBM detects features in that reconstruction
     /// - This field stores those activations (what the RBM "thinks" should be in the data)
     /// - It's used in the "negative phase" of contrastive divergence training
-    /// 
+    ///
     /// The difference between these activations and the ones from the real data helps
     /// the RBM learn to distinguish real patterns from ones it incorrectly imagines.
     /// </para>
     /// </remarks>
-    private Vector<T>? _reconstructedHidden;
+    private Tensor<T>? _reconstructedHidden;
 
     /// <summary>
     /// Initializes a new instance of the RBMLayer class with scalar activation.
@@ -246,9 +262,9 @@ public class RBMLayer<T> : LayerBase<T>
     {
         _visibleUnits = visibleUnits;
         _hiddenUnits = hiddenUnits;
-        _weights = new Matrix<T>(_hiddenUnits, _visibleUnits);
-        _visibleBiases = new Vector<T>(_visibleUnits);
-        _hiddenBiases = new Vector<T>(_hiddenUnits);
+        _weights = new Tensor<T>([_hiddenUnits, _visibleUnits]);
+        _visibleBiases = new Tensor<T>([_visibleUnits]);
+        _hiddenBiases = new Tensor<T>([_hiddenUnits]);
 
         InitializeParameters();
     }
@@ -282,9 +298,9 @@ public class RBMLayer<T> : LayerBase<T>
     {
         _visibleUnits = visibleUnits;
         _hiddenUnits = hiddenUnits;
-        _weights = new Matrix<T>(_hiddenUnits, _visibleUnits);
-        _visibleBiases = new Vector<T>(_visibleUnits);
-        _hiddenBiases = new Vector<T>(_hiddenUnits);
+        _weights = new Tensor<T>([_hiddenUnits, _visibleUnits]);
+        _visibleBiases = new Tensor<T>([_visibleUnits]);
+        _hiddenBiases = new Tensor<T>([_hiddenUnits]);
 
         InitializeParameters();
     }
@@ -312,19 +328,17 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        for (int i = 0; i < _visibleUnits; i++)
-        {
-            _visibleBiases[i] = NumOps.Zero;
-            for (int j = 0; j < _hiddenUnits; j++)
-            {
-                _weights[j, i] = NumOps.FromDouble(Random.NextDouble() * 0.1 - 0.05);
-            }
-        }
+        // Initialize biases to zero using Fill
+        _visibleBiases.Fill(NumOps.Zero);
+        _hiddenBiases.Fill(NumOps.Zero);
 
-        for (int j = 0; j < _hiddenUnits; j++)
-        {
-            _hiddenBiases[j] = NumOps.Zero;
-        }
+        // Initialize weights with small random values using Engine operations
+        // Create random tensor [0, 1], scale to [0, 0.1], shift to [-0.05, 0.05]
+        var randomTensor = Tensor<T>.CreateRandom(_hiddenUnits, _visibleUnits);
+        var scaledTensor = Engine.TensorMultiplyScalar(randomTensor, NumOps.FromDouble(0.1));
+        var shiftTensor = new Tensor<T>([_hiddenUnits, _visibleUnits]);
+        shiftTensor.Fill(NumOps.FromDouble(0.05));
+        _weights = Engine.TensorSubtract(scaledTensor, shiftTensor);
     }
 
     /// <summary>
@@ -351,18 +365,21 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        Vector<T> visibleLayer = input.ToVector();
-    
+        // Flatten input to 1D tensor if needed
+        var visibleTensor = input.Shape.Length == 1
+            ? input
+            : input.Reshape([input.Length]);
+
         // Store the visible input for training
-        _lastVisibleInput = new Vector<T>(visibleLayer);
-    
-        // Compute hidden probabilities given visible
-        Vector<T> hiddenProbs = SampleHiddenGivenVisible(visibleLayer);
-    
+        _lastVisibleInput = visibleTensor;
+
+        // Compute hidden probabilities given visible using tensor operations
+        Tensor<T> hiddenProbs = SampleHiddenGivenVisibleTensor(visibleTensor);
+
         // Store the hidden output for training
-        _lastHiddenOutput = new Vector<T>(hiddenProbs);
-    
-        return Tensor<T>.FromVector(hiddenProbs);
+        _lastHiddenOutput = hiddenProbs;
+
+        return hiddenProbs;
     }
 
     /// <summary>
@@ -396,69 +413,79 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     public void TrainWithContrastiveDivergence(Vector<T> input, T learningRate, int kSteps = 1)
     {
+        // Delegate to tensor-based implementation
+        TrainWithContrastiveDivergenceTensor(new Tensor<T>([input.Length], input), learningRate, kSteps);
+    }
+
+    /// <summary>
+    /// Tensor-based contrastive divergence training - no type conversions in hot path.
+    /// </summary>
+    private void TrainWithContrastiveDivergenceTensor(Tensor<T> input, T learningRate, int kSteps = 1)
+    {
         // --- Positive phase (data-driven) ---
         // Compute hidden probabilities and samples given the input data
-        Vector<T> v0 = input;
-        Vector<T> h0Probs = SampleHiddenGivenVisible(v0);
-        Vector<T> h0Samples = SampleBinaryStates(h0Probs);
-    
+        Tensor<T> v0 = input;
+        Tensor<T> h0Probs = SampleHiddenGivenVisibleTensor(v0);
+        Tensor<T> h0Samples = SampleBinaryStatesTensor(h0Probs);
+
         // --- Negative phase (model-driven) ---
         // Reconstruct visible layer and resample hidden layer
-        Vector<T> vk = v0;
-        Vector<T> hkSamples = h0Samples;
-        Vector<T> vkProbs = Vector<T>.Empty();
-        Vector<T> hkProbs = Vector<T>.Empty();
-    
+        Tensor<T> vk = v0;
+        Tensor<T> hkSamples = h0Samples;
+        Tensor<T> vkProbs = new Tensor<T>([_visibleUnits]);
+        Tensor<T> hkProbs = new Tensor<T>([_hiddenUnits]);
+
         // Perform k steps of Gibbs sampling
         for (int step = 0; step < kSteps; step++)
         {
             // Sample v given h
-            vkProbs = SampleVisibleGivenHidden(hkSamples);
-            vk = SampleBinaryStates(vkProbs);
-        
+            vkProbs = SampleVisibleGivenHiddenTensor(hkSamples);
+            vk = SampleBinaryStatesTensor(vkProbs);
+
             // Sample h given v
-            hkProbs = SampleHiddenGivenVisible(vk);
-        
+            hkProbs = SampleHiddenGivenVisibleTensor(vk);
+
             // In the last step, we keep the probabilities instead of samples
             // for a more stable gradient estimate
             if (step < kSteps - 1)
             {
-                hkSamples = SampleBinaryStates(hkProbs);
+                hkSamples = SampleBinaryStatesTensor(hkProbs);
             }
             else
             {
                 hkSamples = hkProbs; // On the last step, use probabilities
             }
         }
-    
-        // --- Update weights and biases ---
-        // Update hidden biases: hBias += learningRate * (h0 - hk) (vectorized)
-        var hiddenBiasDiff = (Vector<T>)Engine.Subtract(h0Probs, hkProbs);
-        var hiddenBiasDelta = (Vector<T>)Engine.Multiply(hiddenBiasDiff, learningRate);
-        _hiddenBiases = (Vector<T>)Engine.Add(_hiddenBiases, hiddenBiasDelta);
 
-        // Update visible biases: vBias += learningRate * (v0 - vk) (vectorized)
-        var visibleBiasDiff = (Vector<T>)Engine.Subtract(v0, vkProbs);
-        var visibleBiasDelta = (Vector<T>)Engine.Multiply(visibleBiasDiff, learningRate);
-        _visibleBiases = (Vector<T>)Engine.Add(_visibleBiases, visibleBiasDelta);
+        // --- Update biases using Engine operations ---
+        // Update hidden biases: hBias += learningRate * (h0 - hk)
+        var hiddenBiasDiff = Engine.TensorSubtract(h0Probs, hkProbs);
+        var hiddenBiasDelta = Engine.TensorMultiplyScalar(hiddenBiasDiff, learningRate);
+        _hiddenBiases = Engine.TensorAdd(_hiddenBiases, hiddenBiasDelta);
 
-        // Update weights: W += learningRate * ((v0 * h0) - (vk * hk))
-        for (int j = 0; j < _hiddenUnits; j++)
-        {
-            for (int i = 0; i < _visibleUnits; i++)
-            {
-                // Positive phase correlation
-                T positiveGradient = NumOps.Multiply(v0[i], h0Probs[j]);
+        // Update visible biases: vBias += learningRate * (v0 - vk)
+        var visibleBiasDiff = Engine.TensorSubtract(v0, vkProbs);
+        var visibleBiasDelta = Engine.TensorMultiplyScalar(visibleBiasDiff, learningRate);
+        _visibleBiases = Engine.TensorAdd(_visibleBiases, visibleBiasDelta);
 
-                // Negative phase correlation
-                T negativeGradient = NumOps.Multiply(vk[i], hkProbs[j]);
+        // Update weights: W += learningRate * (outer(h0, v0) - outer(hk, vk))
+        // Positive phase: outer product of h0Probs and v0
+        var positiveOuter = ComputeOuterProductTensor(h0Probs, v0);
+        // Negative phase: outer product of hkProbs and vk
+        var negativeOuter = ComputeOuterProductTensor(hkProbs, vk);
+        // Weight gradient: positive - negative
+        var weightGradient = Engine.TensorSubtract(positiveOuter, negativeOuter);
+        var weightDelta = Engine.TensorMultiplyScalar(weightGradient, learningRate);
+        _weights = Engine.TensorAdd(_weights, weightDelta);
+    }
 
-                // Weight update
-                T weightDelta = NumOps.Multiply(learningRate,
-                    NumOps.Subtract(positiveGradient, negativeGradient));
-                _weights[j, i] = NumOps.Add(_weights[j, i], weightDelta);
-            }
-        }
+    /// <summary>
+    /// Computes the outer product of two vectors as a 2D tensor.
+    /// </summary>
+    private Tensor<T> ComputeOuterProduct(Vector<T> a, Vector<T> b)
+    {
+        // Delegate to tensor version
+        return ComputeOuterProductTensor(new Tensor<T>([a.Length], a), new Tensor<T>([b.Length], b));
     }
 
     /// <summary>
@@ -473,31 +500,27 @@ public class RBMLayer<T> : LayerBase<T>
     /// becomes 1; otherwise, it becomes 0.
     /// </para>
     /// <para><b>For Beginners:</b> This method adds randomness to make the RBM's behavior probabilistic.
-    /// 
+    ///
     /// For each probability value (e.g., 0.7):
     /// - Generate a random number between 0 and 1 (e.g., 0.4)
     /// - If the probability is higher than the random number (0.7 > 0.4), output 1
     /// - Otherwise, output 0
-    /// 
+    ///
     /// This stochastic (random) behavior is essential for RBMs because:
     /// - It prevents the RBM from getting stuck in fixed patterns
     /// - It allows exploration of different possible states
     /// - It models the inherent uncertainty in pattern recognition
-    /// 
+    ///
     /// For example, a unit with a 70% probability will be active roughly 70% of the time,
     /// but not always, creating a range of possible network states.
     /// </para>
     /// </remarks>
     private Vector<T> SampleBinaryStates(Vector<T> probabilities)
     {
-        Vector<T> samples = new Vector<T>(probabilities.Length);
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            double prob = Convert.ToDouble(probabilities[i]);
-            samples[i] = NumOps.FromDouble(Random.NextDouble() < prob ? 1.0 : 0.0);
-        }
-
-        return samples;
+        // Delegate to tensor version and convert back
+        var probTensor = new Tensor<T>([probabilities.Length], probabilities);
+        var samplesTensor = SampleBinaryStatesTensor(probTensor);
+        return new Vector<T>(samplesTensor.ToArray());
     }
 
     /// <summary>
@@ -538,18 +561,21 @@ public class RBMLayer<T> : LayerBase<T>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         // In RBM training, this is used for the reconstruction phase
-        Vector<T> hiddenLayer = outputGradient.ToVector();
-    
-        // Store the reconstructed hidden for training (usually this would be based on the reconstructed visible)
-        _reconstructedHidden = new Vector<T>(hiddenLayer);
-    
-        // Compute visible probabilities given hidden
-        Vector<T> visibleProbs = SampleVisibleGivenHidden(hiddenLayer);
-    
+        // Flatten to 1D if needed
+        var hiddenTensor = outputGradient.Shape.Length == 1
+            ? outputGradient
+            : outputGradient.Reshape([outputGradient.Length]);
+
+        // Store the reconstructed hidden for training
+        _reconstructedHidden = hiddenTensor;
+
+        // Compute visible probabilities given hidden using tensor operations
+        Tensor<T> visibleProbs = SampleVisibleGivenHiddenTensor(hiddenTensor);
+
         // Store the reconstructed visible for training
-        _reconstructedVisible = new Vector<T>(visibleProbs);
-    
-        return Tensor<T>.FromVector(visibleProbs);
+        _reconstructedVisible = visibleProbs;
+
+        return visibleProbs;
     }
 
     /// <summary>
@@ -559,18 +585,146 @@ public class RBMLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Specialized operations
-    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// This method uses automatic differentiation to compute gradients for the mean-field forward pass.
+    /// This enables discriminative fine-tuning of the RBM using standard backpropagation, distinct from
+    /// the Contrastive Divergence training used for generative learning.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // RBMLayer uses Contrastive Divergence for training, not standard backpropagation
-        // The manual implementation provides correct CD-k gradient estimation
-        // This is fundamentally different from standard autodiff and is correctly implemented
-        return BackwardManual(outputGradient);
+        if (_lastVisibleInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // 1. Create variables
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastVisibleInput, "input", requiresGradient: true);
+        var weightsNode = Autodiff.TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(_hiddenBiases, "hBias", requiresGradient: true);
+
+        // 2. Build graph (mean-field inference: sigmoid(W @ v + b))
+        // Reshape input [V] to [V, 1] for matrix multiply
+        var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, _visibleUnits, 1);
+        
+        // W @ v
+        var weighted = Autodiff.TensorOperations<T>.MatrixMultiply(weightsNode, inputReshaped);
+        
+        // Reshape to [H] to match bias
+        var weightedFlat = Autodiff.TensorOperations<T>.Reshape(weighted, _hiddenUnits);
+        
+        // Add bias
+        var preActivation = Autodiff.TensorOperations<T>.Add(weightedFlat, biasNode);
+        
+        // Sigmoid activation (RBM standard)
+        var output = Autodiff.TensorOperations<T>.Sigmoid(preActivation);
+
+        // 3. Set gradient
+        output.Gradient = outputGradient;
+
+        // 4. Inline topological sort
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((output, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // 5. Execute backward pass
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // 6. Store gradients
+        _weightsGradient = weightsNode.Gradient;
+        _hiddenBiasesGradient = biasNode.Gradient;
+        
+        // Visible biases are not involved in forward pass, so their gradient is zero for discriminative task
+        _visibleBiasesGradient = new Tensor<T>(_visibleBiases.Shape);
+        _visibleBiasesGradient.Fill(NumOps.Zero);
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
+
+    /// <summary>
+    /// Computes the probability of each hidden unit being active given the visible units (tensor-based).
+    /// </summary>
+    /// <param name="visible">The visible unit tensor (1D).</param>
+    /// <returns>A tensor of probabilities for each hidden unit.</returns>
+    private Tensor<T> SampleHiddenGivenVisibleTensor(Tensor<T> visible)
+    {
+        // Compute activations: W * visible + bias using Engine operations
+        var visibleReshaped = visible.Reshape([_visibleUnits, 1]);
+
+        // W @ visible using tensor matrix multiplication
+        var weightedTensor = Engine.TensorMatMul(_weights, visibleReshaped);
+        var weighted = weightedTensor.Reshape([_hiddenUnits]);
+
+        // Add bias
+        var activations = Engine.TensorAdd(weighted, _hiddenBiases);
+
+        // Apply sigmoid activation using Engine
+        return Engine.Sigmoid(activations);
+    }
+
+    /// <summary>
+    /// Computes the probability of each visible unit being active given the hidden units (tensor-based).
+    /// </summary>
+    /// <param name="hidden">The hidden unit tensor (1D).</param>
+    /// <returns>A tensor of probabilities for each visible unit.</returns>
+    private Tensor<T> SampleVisibleGivenHiddenTensor(Tensor<T> hidden)
+    {
+        // Compute activations: W^T * hidden + bias using Engine operations
+        var hiddenReshaped = hidden.Reshape([_hiddenUnits, 1]);
+
+        // W^T @ hidden using tensor matrix multiplication
+        var weightsTranspose = Engine.TensorTranspose(_weights);
+        var weightedTensor = Engine.TensorMatMul(weightsTranspose, hiddenReshaped);
+        var weighted = weightedTensor.Reshape([_visibleUnits]);
+
+        // Add bias
+        var activations = Engine.TensorAdd(weighted, _visibleBiases);
+
+        // Apply sigmoid activation using Engine
+        return Engine.Sigmoid(activations);
+    }
+
+    /// <summary>
+    /// Samples binary states from probability tensor using stochastic sampling.
+    /// </summary>
+    private Tensor<T> SampleBinaryStatesTensor(Tensor<T> probabilities)
+    {
+        // Create random tensor [0, 1] for comparison
+        var randomTensor = Tensor<T>.CreateRandom(probabilities.Length, 1).Reshape([probabilities.Length]);
+
+        // Use Engine.TensorGreaterThan to compare probabilities > random
+        return Engine.TensorGreaterThan(probabilities, randomTensor);
+    }
 
     /// <summary>
     /// Computes the probability of each hidden unit being active given the visible units.
@@ -584,38 +738,23 @@ public class RBMLayer<T> : LayerBase<T>
     /// plus the hidden bias, then applies the activation function to convert to a probability.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how strongly each pattern detector responds to the input.
-    /// 
+    ///
     /// For each hidden unit (pattern detector):
     /// - The RBM calculates a weighted sum of all visible units that connect to it
     /// - It adds the hidden unit's bias (default sensitivity)
     /// - It applies the activation function to convert to a probability between 0 and 1
     /// - The result tells how strongly this pattern is present in the input
-    /// 
+    ///
     /// For example, if a hidden unit detects "horizontal lines" in images, this method
     /// would calculate how confident the RBM is that horizontal lines are present in the input image.
     /// </para>
     /// </remarks>
     private Vector<T> SampleHiddenGivenVisible(Vector<T> visible)
     {
-        // Compute activations: W * visible + bias (vectorized)
-        var activations = Engine.MatrixVectorMultiply(_weights, visible);
-        activations = (Vector<T>)Engine.Add(activations, _hiddenBiases);
-
-        // Apply activation function element-wise
-        Vector<T> hiddenProbs = new Vector<T>(_hiddenUnits);
-        for (int j = 0; j < _hiddenUnits; j++)
-        {
-            if (ScalarActivation is not null)
-            {
-                hiddenProbs[j] = ScalarActivation.Activate(activations[j]);
-            }
-            else if (VectorActivation is not null)
-            {
-                hiddenProbs[j] = VectorActivation.Activate(new Vector<T>([activations[j]]))[0];
-            }
-        }
-
-        return hiddenProbs;
+        // Use tensor-based implementation and convert back
+        var visibleTensor = new Tensor<T>([visible.Length], visible);
+        var hiddenProbsTensor = SampleHiddenGivenVisibleTensor(visibleTensor);
+        return new Vector<T>(hiddenProbsTensor.ToArray());
     }
 
     /// <summary>
@@ -630,98 +769,78 @@ public class RBMLayer<T> : LayerBase<T>
     /// plus the visible bias, then applies the activation function to convert to a probability.
     /// </para>
     /// <para><b>For Beginners:</b> This method reconstructs the input based on detected patterns.
-    /// 
+    ///
     /// For each visible unit (input element):
     /// - The RBM calculates a weighted sum of all hidden units that connect to it
     /// - It adds the visible unit's bias (default preference)
     /// - It applies the activation function to convert to a probability between 0 and 1
     /// - The result is the RBM's "guess" at what this input value should be
-    /// 
+    ///
     /// For example, in an image recognition task, this would reconstruct the pixel values
     /// based on the patterns (features) that the RBM detected in the forward pass.
     /// </para>
     /// </remarks>
     private Vector<T> SampleVisibleGivenHidden(Vector<T> hidden)
     {
-        // Compute activations: W^T * hidden + bias (vectorized)
-        var weightsTranspose = Engine.MatrixTranspose(_weights);
-        var activations = Engine.MatrixVectorMultiply(weightsTranspose, hidden);
-        activations = (Vector<T>)Engine.Add(activations, _visibleBiases);
-
-        // Apply activation function element-wise
-        Vector<T> visibleProbs = new Vector<T>(_visibleUnits);
-        for (int i = 0; i < _visibleUnits; i++)
-        {
-            if (ScalarActivation is not null)
-            {
-                visibleProbs[i] = ScalarActivation.Activate(activations[i]);
-            }
-            else if (VectorActivation is not null)
-            {
-                visibleProbs[i] = VectorActivation.Activate(new Vector<T>([activations[i]]))[0];
-            }
-        }
-
-        return visibleProbs;
+        // Use tensor-based implementation and convert back
+        var hiddenTensor = new Tensor<T>([hidden.Length], hidden);
+        var visibleProbsTensor = SampleVisibleGivenHiddenTensor(hiddenTensor);
+        return new Vector<T>(visibleProbsTensor.ToArray());
     }
 
     /// <summary>
-    /// Updates the layer's parameters using contrastive divergence.
+    /// Updates the layer's parameters using either standard backpropagation or contrastive divergence.
     /// </summary>
     /// <param name="learningRate">The learning rate for parameter updates.</param>
     /// <remarks>
-    /// This method implements contrastive divergence with k=1 (CD-1) for training the RBM.
-    /// The steps are:
-    /// 1. Start with a visible vector v0 (input data)
-    /// 2. Compute hidden probabilities h0 given v0 and sample a hidden state
-    /// 3. Compute visible probabilities v1 given h0 and sample a visible state
-    /// 4. Compute hidden probabilities h1 given v1
-    /// 5. Update weights and biases using the difference between positive and negative phases
+    /// This method handles two training modes:
+    /// 1. Discriminative training (backprop): Uses gradients computed by BackwardViaAutodiff.
+    /// 2. Generative training (CD-k): Uses statistics from the Gibbs sampling chain.
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        // This would typically be done with stored input and output from the forward pass
-        // For a complete implementation, we would need to store:
-        // - v0: The original visible input from the forward pass
-        // - h0: The hidden activations from the forward pass
-        // - v1: The reconstructed visible activations from sampling given h0
-        // - h1: The hidden activations from the backward pass
-    
-        // Since these aren't readily available in the current implementation,
-        // we'll update the method signature to include what we need:
-        if (_lastVisibleInput != null && _lastHiddenOutput != null && 
+        // 1. Standard Backpropagation (Discriminative Fine-tuning)
+        if (_weightsGradient != null && _visibleBiasesGradient != null && _hiddenBiasesGradient != null)
+        {
+            _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightsGradient, learningRate));
+            _visibleBiases = Engine.TensorSubtract(_visibleBiases, Engine.TensorMultiplyScalar(_visibleBiasesGradient, learningRate));
+            _hiddenBiases = Engine.TensorSubtract(_hiddenBiases, Engine.TensorMultiplyScalar(_hiddenBiasesGradient, learningRate));
+            return;
+        }
+
+        // 2. Contrastive Divergence (Generative Training)
+        // This method updates parameters using stored values from forward/backward pass
+        if (_lastVisibleInput != null && _lastHiddenOutput != null &&
             _reconstructedVisible != null && _reconstructedHidden != null)
         {
-            // Compute the weight updates
-            for (int j = 0; j < _hiddenUnits; j++)
-            {
-                for (int i = 0; i < _visibleUnits; i++)
-                {
-                    // Positive phase: v0 * h0
-                    T positivePhase = NumOps.Multiply(_lastVisibleInput[i], _lastHiddenOutput[j]);
-                
-                    // Negative phase: v1 * h1
-                    T negativePhase = NumOps.Multiply(_reconstructedVisible[i], _reconstructedHidden[j]);
-                
-                    // Update: W += learningRate * (positivePhase - negativePhase)
-                    T delta = NumOps.Multiply(learningRate, NumOps.Subtract(positivePhase, negativePhase));
-                    _weights[j, i] = NumOps.Add(_weights[j, i], delta);
-                }
-            
-                // Update hidden biases: h_bias += learningRate * (h0 - h1)
-                T hiddenBiasDelta = NumOps.Multiply(learningRate, 
-                    NumOps.Subtract(_lastHiddenOutput[j], _reconstructedHidden[j]));
-                _hiddenBiases[j] = NumOps.Add(_hiddenBiases[j], hiddenBiasDelta);
-            }
-        
+            // Update weights using Engine operations: W += learningRate * (outer(h0, v0) - outer(h1, v1))
+            var positiveOuter = ComputeOuterProductTensor(_lastHiddenOutput, _lastVisibleInput);
+            var negativeOuter = ComputeOuterProductTensor(_reconstructedHidden, _reconstructedVisible);
+            var weightGradient = Engine.TensorSubtract(positiveOuter, negativeOuter);
+            var weightDelta = Engine.TensorMultiplyScalar(weightGradient, learningRate);
+            _weights = Engine.TensorAdd(_weights, weightDelta);
+
+            // Update hidden biases: h_bias += learningRate * (h0 - h1)
+            var hiddenBiasDiff = Engine.TensorSubtract(_lastHiddenOutput, _reconstructedHidden);
+            var hiddenBiasDelta = Engine.TensorMultiplyScalar(hiddenBiasDiff, learningRate);
+            _hiddenBiases = Engine.TensorAdd(_hiddenBiases, hiddenBiasDelta);
+
             // Update visible biases: v_bias += learningRate * (v0 - v1)
-            for (int i = 0; i < _visibleUnits; i++)
-            {
-                T visibleBiasDelta = NumOps.Multiply(learningRate, 
-                    NumOps.Subtract(_lastVisibleInput[i], _reconstructedVisible[i]));
-                _visibleBiases[i] = NumOps.Add(_visibleBiases[i], visibleBiasDelta);
-            }
+            var visibleBiasDiff = Engine.TensorSubtract(_lastVisibleInput, _reconstructedVisible);
+            var visibleBiasDelta = Engine.TensorMultiplyScalar(visibleBiasDiff, learningRate);
+            _visibleBiases = Engine.TensorAdd(_visibleBiases, visibleBiasDelta);
         }
+    }
+
+    /// <summary>
+    /// Computes the outer product of two tensors as a 2D tensor.
+    /// </summary>
+    private Tensor<T> ComputeOuterProductTensor(Tensor<T> a, Tensor<T> b)
+    {
+        // Use tensor matrix multiplication for outer product: outer(a, b) = a.reshape([n,1]) @ b.reshape([1,m])
+        var aReshaped = a.Reshape([a.Length, 1]);
+        var bReshaped = b.Reshape([1, b.Length]);
+        return Engine.TensorMatMul(aReshaped, bReshaped);
     }
 
     /// <summary>
@@ -751,32 +870,12 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Create a vector to hold all parameters
-        Vector<T> parameters = new Vector<T>(ParameterCount);
-    
-        // Copy weights
-        int index = 0;
-        for (int j = 0; j < _hiddenUnits; j++)
-        {
-            for (int i = 0; i < _visibleUnits; i++)
-            {
-                parameters[index++] = _weights[j, i];
-            }
-        }
-    
-        // Copy visible biases
-        for (int i = 0; i < _visibleUnits; i++)
-        {
-            parameters[index++] = _visibleBiases[i];
-        }
-    
-        // Copy hidden biases
-        for (int j = 0; j < _hiddenUnits; j++)
-        {
-            parameters[index++] = _hiddenBiases[j];
-        }
-    
-        return parameters;
+        // Use Vector.Concatenate for production-grade parameter extraction
+        return Vector<T>.Concatenate(
+            new Vector<T>(_weights.ToArray()),
+            new Vector<T>(_visibleBiases.ToArray()),
+            new Vector<T>(_hiddenBiases.ToArray())
+        );
     }
 
     /// <summary>
@@ -784,7 +883,7 @@ public class RBMLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method clears the cached data used during contrastive divergence training.
+    /// This method clears the cached data used during training (both CD and backprop).
     /// While RBMs don't maintain state between passes in the same way as recurrent networks,
     /// this implementation does cache intermediate values for training purposes.
     /// </para>
@@ -808,6 +907,11 @@ public class RBMLayer<T> : LayerBase<T>
         _lastHiddenOutput = null;
         _reconstructedVisible = null;
         _reconstructedHidden = null;
+
+        // Clear gradients from backpropagation
+        _weightsGradient = null;
+        _visibleBiasesGradient = null;
+        _hiddenBiasesGradient = null;
     }
 
     /// <summary>
@@ -838,19 +942,9 @@ public class RBMLayer<T> : LayerBase<T>
 
         var input = inputNodes[0];
 
-        // Convert weights to tensor [hiddenUnits, visibleUnits]
-        var weightsTensor = new Tensor<T>([_hiddenUnits, _visibleUnits]);
-        for (int j = 0; j < _hiddenUnits; j++)
-            for (int i = 0; i < _visibleUnits; i++)
-                weightsTensor[j, i] = _weights[j, i];
-
-        // Convert hidden biases to tensor [hiddenUnits]
-        var hiddenBiasTensor = new Tensor<T>([_hiddenUnits]);
-        for (int j = 0; j < _hiddenUnits; j++)
-            hiddenBiasTensor[j] = _hiddenBiases[j];
-
-        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "rbm_weights");
-        var biasNode = TensorOperations<T>.Constant(hiddenBiasTensor, "rbm_hidden_bias");
+        // Storage is already Tensor<T>, use directly
+        var weightsNode = TensorOperations<T>.Constant(_weights, "rbm_weights");
+        var biasNode = TensorOperations<T>.Constant(_hiddenBiases, "rbm_hidden_bias");
 
         // Reshape input to column vector for matrix multiplication
         var inputReshaped = TensorOperations<T>.Reshape(input, _visibleUnits, 1);

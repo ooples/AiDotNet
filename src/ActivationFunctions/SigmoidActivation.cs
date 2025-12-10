@@ -91,6 +91,21 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies the Sigmoid activation function to each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor to activate.</param>
+    /// <returns>A new tensor with the Sigmoid function applied to each element.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> A tensor is a multi-dimensional array or a container for data.
+    /// This method applies the Sigmoid function to every single value in that container,
+    /// regardless of its position or dimension.
+    /// </remarks>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        return Engine.Sigmoid(input);
+    }
+
+    /// <summary>
     /// Calculates the Jacobian matrix of the Sigmoid function for a vector input.
     /// </summary>
     /// <param name="input">The vector of input values.</param>
@@ -112,6 +127,23 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>
     {
         Vector<T> sigmoid = Activate(input);
         return Matrix<T>.CreateDiagonal(sigmoid.Transform(s => NumOps.Multiply(s, NumOps.Subtract(NumOps.One, s))));
+    }
+
+    /// <summary>
+    /// Calculates the derivative of the Sigmoid function for each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor to calculate the derivative for.</param>
+    /// <returns>A new tensor containing the derivatives of the Sigmoid function for each input element.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method calculates how sensitive each output value is to small changes
+    /// in the corresponding input value, for every value in the tensor. For Sigmoid, the derivative is
+    /// sigmoid(x) * (1 - sigmoid(x)).
+    /// </remarks>
+    public override Tensor<T> Derivative(Tensor<T> input)
+    {
+        var sigmoid = Activate(input);
+        var oneMinusSigmoid = Engine.TensorSubtract(Tensor<T>.CreateDefault(input.Shape, NumOps.One), sigmoid);
+        return Engine.TensorMultiply(sigmoid, oneMinusSigmoid);
     }
 
     /// <summary>

@@ -171,6 +171,7 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
                 warmupSteps: 10,
                 totalSteps: 100,
                 warmupInitLr: 0.0,
+                decayMode: LinearWarmupScheduler.DecayMode.Linear,
                 endLr: 0.001);
 
             // Warmup

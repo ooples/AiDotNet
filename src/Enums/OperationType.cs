@@ -246,6 +246,11 @@ public enum OperationType
     Reshape,
 
     /// <summary>
+    /// Permute tensor dimensions (general transpose).
+    /// </summary>
+    Permute,
+
+    /// <summary>
     /// Concatenate multiple tensors along an axis.
     /// </summary>
     Concat,

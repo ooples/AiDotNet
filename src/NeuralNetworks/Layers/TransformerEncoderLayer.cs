@@ -343,9 +343,15 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         var attention = _selfAttention.Forward(input);
-        var normalized1 = _norm1.Forward(input + attention);
+        // Residual connection: input + attention
+        var residual1 = Engine.TensorAdd(input, attention);
+        
+        var normalized1 = _norm1.Forward(residual1);
         var feedForward = _feedForward.Forward(normalized1);
-        var output = _norm2.Forward(normalized1 + feedForward);
+        
+        // Residual connection: normalized1 + feedForward
+        var residual2 = Engine.TensorAdd(normalized1, feedForward);
+        var output = _norm2.Forward(residual2);
 
         return output;
     }
@@ -399,24 +405,26 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Backward pass through the second normalization layer
         var dNorm2 = _norm2.Backward(outputGradient);
 
-        // Split the gradient for the residual connection
+        // Split the gradient for the residual connection (copy gradient to both paths)
         var dFeedForward = dNorm2;
-        var dNormalized1 = dNorm2;
+        var dNormalized1 = dNorm2; // Residual gradient flows directly
 
         // Backward pass through the feed-forward layer
         var dFeedForwardInput = _feedForward.Backward(dFeedForward);
-        dNormalized1 += dFeedForwardInput;
+        // Add gradients at the join point: dNormalized1 = dNorm2 + dFeedForwardInput
+        dNormalized1 = Engine.TensorAdd(dNormalized1, dFeedForwardInput);
 
         // Backward pass through the first normalization layer
         var dNorm1 = _norm1.Backward(dNormalized1);
 
         // Split the gradient for the residual connection
         var dAttention = dNorm1;
-        var dInput = dNorm1;
+        var dInput = dNorm1; // Residual gradient flows directly
 
         // Backward pass through the self-attention layer
         var dSelfAttentionInput = _selfAttention.Backward(dAttention);
-        dInput += dSelfAttentionInput;
+        // Add gradients at the join point: dInput = dNorm1 + dSelfAttentionInput
+        dInput = Engine.TensorAdd(dInput, dSelfAttentionInput);
 
         return dInput;
     }
@@ -436,48 +444,6 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // Composite layer - delegates to sublayers which use autodiff if enabled
         return BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
     }
 
     /// <summary>
@@ -804,11 +770,11 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (queryWeights == null || keyWeights == null || valueWeights == null || outputWeights == null)
             throw new InvalidOperationException("Attention weights not initialized.");
 
-        // Create constant nodes for projection weights using Tensor.FromMatrix
-        var wqNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(queryWeights), "Wq");
-        var wkNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(keyWeights), "Wk");
-        var wvNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(valueWeights), "Wv");
-        var woNode = TensorOperations<T>.Constant(Tensor<T>.FromMatrix(outputWeights), "Wo");
+        // Create constant nodes for projection weights (already Tensor<T>)
+        var wqNode = TensorOperations<T>.Constant(queryWeights, "Wq");
+        var wkNode = TensorOperations<T>.Constant(keyWeights, "Wk");
+        var wvNode = TensorOperations<T>.Constant(valueWeights, "Wv");
+        var woNode = TensorOperations<T>.Constant(outputWeights, "Wo");
 
         // Apply multi-head attention (self-attention: query, key, value all from same input)
         return TensorOperations<T>.MultiHeadAttention(
@@ -827,22 +793,15 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private ComputationNode<T> ApplyLayerNormGraph(LayerNormalizationLayer<T> normLayer, ComputationNode<T> input)
     {
-        // Get normalization parameters
-        var gamma = normLayer.GetGamma();
-        var beta = normLayer.GetBeta();
+        // Get normalization parameters directly as tensors
+        var gamma = normLayer.GetGammaTensor();
+        var beta = normLayer.GetBetaTensor();
         var normalizedShape = normLayer.GetNormalizedShape();
         var epsilon = Convert.ToDouble(normLayer.GetEpsilon());
 
         // Create constant nodes for gamma and beta
-        var gammaTensor = new Tensor<T>(new int[] { gamma.Length });
-        var betaTensor = new Tensor<T>(new int[] { beta.Length });
-        for (int i = 0; i < gamma.Length; i++)
-        {
-            gammaTensor[i] = gamma[i];
-            betaTensor[i] = beta[i];
-        }
-        var gammaNode = TensorOperations<T>.Constant(gammaTensor, "gamma");
-        var betaNode = TensorOperations<T>.Constant(betaTensor, "beta");
+        var gammaNode = TensorOperations<T>.Constant(gamma, "gamma");
+        var betaNode = TensorOperations<T>.Constant(beta, "beta");
 
         return TensorOperations<T>.LayerNorm(input, normalizedShape, gammaNode, betaNode, epsilon);
     }

@@ -55,7 +55,7 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// to enable gradient computation and weight updates during training.
     /// </para>
     /// </remarks>
-    public Tensor<T> NodeWeightsTensor => Tensor<T>.FromMatrix(_nodeWeights);
+    public Tensor<T> NodeWeightsTensor => Tensor<T>.FromRowMatrix(_nodeWeights);
 
     /// <summary>
     /// Initializes a new instance of the Hierarchical Softmax activation function.

@@ -79,7 +79,28 @@ public class StubGenerator<T> : IGenerator<T>
         if (string.IsNullOrWhiteSpace(prompt))
             throw new ArgumentException("Prompt cannot be null or empty", nameof(prompt));
 
-        return $"Generated response to: {prompt}";
+        // Return a simple query based on the prompt to simulate LLM reasoning
+        // Extract key terms and formulate a search query
+        if (prompt.Contains("next step", StringComparison.OrdinalIgnoreCase) ||
+            prompt.Contains("what should", StringComparison.OrdinalIgnoreCase))
+        {
+            // This is a multi-step reasoning prompt - generate a search query
+            // Extract the original query if present
+            var queryMatch = Regex.Match(prompt, @"Original Query:\s*(.+?)(\n|$)", RegexOptions.IgnoreCase);
+            if (queryMatch.Success)
+            {
+                var originalQuery = queryMatch.Groups[1].Value.Trim();
+                // Validate that the extracted query is not empty
+                if (!string.IsNullOrEmpty(originalQuery))
+                {
+                    return $"Search for more details about: {originalQuery}";
+                }
+            }
+            return "Search for relevant information";
+        }
+
+        // For other prompts (like summarization), return a brief summary
+        return "Summary of findings based on the provided context.";
     }
 
     /// <summary>

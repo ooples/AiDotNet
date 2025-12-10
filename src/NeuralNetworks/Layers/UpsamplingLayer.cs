@@ -182,29 +182,8 @@ public class UpsamplingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[1];
-        int inputHeight = input.Shape[2];
-        int inputWidth = input.Shape[3];
-        int outputHeight = inputHeight * _scaleFactor;
-        int outputWidth = inputWidth * _scaleFactor;
-        var output = new Tensor<T>([batchSize, channels, outputHeight, outputWidth]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < outputHeight; h++)
-                {
-                    for (int w = 0; w < outputWidth; w++)
-                    {
-                        int sourceH = h / _scaleFactor;
-                        int sourceW = w / _scaleFactor;
-                        output[b, c, h, w] = input[b, c, sourceH, sourceW];
-                    }
-                }
-            }
-        }
-        return output;
+
+        return Engine.Upsample(input, _scaleFactor, _scaleFactor);
     }
 
     /// <summary>
@@ -248,35 +227,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        int batchSize = _lastInput.Shape[0];
-        int channels = _lastInput.Shape[1];
-        int inputHeight = _lastInput.Shape[2];
-        int inputWidth = _lastInput.Shape[3];
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < inputHeight; h++)
-                {
-                    for (int w = 0; w < inputWidth; w++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int i = 0; i < _scaleFactor; i++)
-                        {
-                            for (int j = 0; j < _scaleFactor; j++)
-                            {
-                                int outputH = h * _scaleFactor + i;
-                                int outputW = w * _scaleFactor + j;
-                                sum = NumOps.Add(sum, outputGradient[b, c, outputH, outputW]);
-                            }
-                        }
-                        inputGradient[b, c, h, w] = sum;
-                    }
-                }
-            }
-        }
-        return inputGradient;
+        return Engine.UpsampleBackward(outputGradient, _lastInput.Shape, _scaleFactor, _scaleFactor);
     }
 
     /// <summary>
@@ -300,28 +251,14 @@ public class UpsamplingLayer<T> : LayerBase<T>
         // Apply upsampling operation
         var outputNode = Autodiff.TensorOperations<T>.Upsample(inputNode, _scaleFactor);
 
-        // Perform backward pass
+        // Perform backward pass with inline topological sort
         outputNode.Gradient = outputGradient;
-        var topoOrder = GetTopologicalOrder(outputNode);
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-    }
-
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
+        // Production-grade: Inline topological sort for backward pass
         var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
         var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
+        stack.Push((outputNode, false));
 
         while (stack.Count > 0)
         {
@@ -333,22 +270,34 @@ public class UpsamplingLayer<T> : LayerBase<T>
             if (processed)
             {
                 visited.Add(node);
-                result.Add(node);
+                topoOrder.Add(node);
             }
             else
             {
                 stack.Push((node, true));
-                foreach (var parent in node.Parents)
+                if (node.Parents != null)
                 {
-                    if (!visited.Contains(parent))
-                        stack.Push((parent, false));
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
                 }
             }
         }
 
-        return result;
-    }
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
 
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.

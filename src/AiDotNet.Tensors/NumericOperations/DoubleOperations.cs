@@ -881,7 +881,7 @@ public class DoubleOperations : INumericOperations<double>
     /// </summary>
 #if NET8_0_OR_GREATER
     public void Sqrt(ReadOnlySpan<double> x, Span<double> destination)
-        => System.Numerics.Tensors.TensorPrimitives.Sqrt(x, destination);
+        => System.Numerics.Tensors.TensorPrimitives.Sqrt<double>(x, destination);
 #else
     public void Sqrt(ReadOnlySpan<double> x, Span<double> destination)
         => VectorizedOperationsFallback.Sqrt(this, x, destination);
@@ -892,7 +892,7 @@ public class DoubleOperations : INumericOperations<double>
     /// </summary>
 #if NET8_0_OR_GREATER
     public void Abs(ReadOnlySpan<double> x, Span<double> destination)
-        => System.Numerics.Tensors.TensorPrimitives.Abs(x, destination);
+        => System.Numerics.Tensors.TensorPrimitives.Abs<double>(x, destination);
 #else
     public void Abs(ReadOnlySpan<double> x, Span<double> destination)
         => VectorizedOperationsFallback.Abs(this, x, destination);
@@ -903,7 +903,7 @@ public class DoubleOperations : INumericOperations<double>
     /// </summary>
 #if NET8_0_OR_GREATER
     public void Negate(ReadOnlySpan<double> x, Span<double> destination)
-        => System.Numerics.Tensors.TensorPrimitives.Negate(x, destination);
+        => System.Numerics.Tensors.TensorPrimitives.Negate<double>(x, destination);
 #else
     public void Negate(ReadOnlySpan<double> x, Span<double> destination)
         => VectorizedOperationsFallback.Negate(this, x, destination);
@@ -926,7 +926,7 @@ public class DoubleOperations : INumericOperations<double>
     /// </summary>
 #if NET8_0_OR_GREATER
     public void Pow(ReadOnlySpan<double> x, double power, Span<double> destination)
-        => System.Numerics.Tensors.TensorPrimitives.Pow(x, power, destination);
+        => System.Numerics.Tensors.TensorPrimitives.Pow<double>(x, power, destination);
 #else
     public void Pow(ReadOnlySpan<double> x, double power, Span<double> destination)
         => VectorizedOperationsFallback.Pow(this, x, power, destination);

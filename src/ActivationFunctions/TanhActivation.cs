@@ -87,6 +87,20 @@ public class TanhActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
+    /// Applies the tanh activation function to a tensor of input values.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>A tensor with tanh applied to each element.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method transforms an entire tensor of numbers at once using hardware
+    /// acceleration, making it much faster than processing each number separately.
+    /// </remarks>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        return Engine.Tanh(input);
+    }
+
+    /// <summary>
     /// Calculates the derivative of the tanh function for a single input value.
     /// </summary>
     /// <param name="input">The input value.</param>
@@ -112,6 +126,23 @@ public class TanhActivation<T> : ActivationFunctionBase<T>
     {
         T tanh = MathHelper.Tanh(input);
         return NumOps.Subtract(NumOps.One, NumOps.Multiply(tanh, tanh));
+    }
+
+    /// <summary>
+    /// Calculates the derivative of the tanh function for a tensor input.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>A tensor containing the derivative values.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method calculates how sensitive the tanh output is to changes in the input
+    /// for the entire tensor at once. The derivative is 1 - tanh^2(x).
+    /// </remarks>
+    public override Tensor<T> Derivative(Tensor<T> input)
+    {
+        var tanh = Activate(input);
+        var tanhSquared = Engine.TensorMultiply(tanh, tanh);
+        var one = Tensor<T>.CreateDefault(input.Shape, NumOps.One);
+        return Engine.TensorSubtract(one, tanhSquared);
     }
 
     /// <summary>

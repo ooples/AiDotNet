@@ -35,16 +35,16 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider
     int[] GetOutputShape();
 
     /// <summary>
-    /// Gets the weight matrix for layers that have trainable weights.
+    /// Gets the weight tensor for layers that have trainable weights.
     /// </summary>
-    /// <returns>The weight matrix, or null if the layer has no weights.</returns>
-    Matrix<T>? GetWeights();
+    /// <returns>The weight tensor, or null if the layer has no weights.</returns>
+    Tensor<T>? GetWeights();
 
     /// <summary>
-    /// Gets the bias vector for layers that have trainable biases.
+    /// Gets the bias tensor for layers that have trainable biases.
     /// </summary>
-    /// <returns>The bias vector, or null if the layer has no biases.</returns>
-    Vector<T>? GetBiases();
+    /// <returns>The bias tensor, or null if the layer has no biases.</returns>
+    Tensor<T>? GetBiases();
 
 
     /// <summary>

@@ -146,4 +146,40 @@ public interface IVectorActivationFunction<T>
     /// </para>
     /// </remarks>
     ComputationNode<T> ApplyToGraph(ComputationNode<T> input);
+
+    /// <summary>
+    /// Calculates the backward pass gradient for this activation function.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For .NET 8.0+, a default implementation is provided that computes the element-wise product
+    /// of the activation derivative and the incoming output gradient: inputGradient = derivative(input) * outputGradient.
+    /// For .NET Framework 4.7.1, implementers must provide this method explicitly.
+    /// </para>
+    /// <para>
+    /// This default behavior is appropriate for most element-wise activation functions where the
+    /// chain rule simplifies to element-wise multiplication. Implementations that require different
+    /// behavior (e.g., softmax, which has cross-element dependencies) should override this method.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> During backpropagation, we need to calculate how much each input
+    /// contributed to the final error. This is done by multiplying the derivative of the activation
+    /// function at each point by the gradient flowing back from the next layer. The default
+    /// implementation handles this automatically for most activation functions.
+    /// </para>
+    /// </remarks>
+    /// <param name="input">The input tensor that was used in the forward pass.</param>
+    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+#if NET8_0_OR_GREATER
+    Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
+    {
+        // Default implementation: element-wise product of derivative and output gradient
+        // inputGradient = derivative(input) ⊙ outputGradient (Hadamard product)
+        var derivative = Derivative(input);
+        return derivative.PointwiseMultiply(outputGradient);
+    }
+#else
+    Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient);
+#endif
 }

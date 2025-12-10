@@ -44,85 +44,85 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private T _lastGateBalanceLoss;
 
     /// <summary>
-    /// The weight matrix used to transform the input data.
+    /// The weight tensor used to transform the input data.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This matrix contains the learnable parameters that transform the input features. The dimensions are
+    /// This tensor contains the learnable parameters that transform the input features. The dimensions are
     /// [inputDimension, inputDimension] because highway layers maintain the same dimensionality for input and output.
     /// </para>
     /// <para><b>For Beginners:</b> These weights determine how the input data is transformed in the transform lane.
-    /// 
+    ///
     /// Think of these weights as:
     /// - Filters that extract and combine information from the input
     /// - Learnable parameters that are adjusted during training
     /// - The "processing" part of the highway layer
-    /// 
+    ///
     /// During training, these weights are adjusted to better recognize important patterns in your data.
     /// </para>
     /// </remarks>
-    private Matrix<T> _transformWeights;
+    private Tensor<T> _transformWeights;
 
     /// <summary>
-    /// The bias vector added to the transformed input.
+    /// The bias tensor added to the transformed input.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector contains the learnable bias parameters that are added to the transformed input. Adding a bias
+    /// This tensor contains the learnable bias parameters that are added to the transformed input. Adding a bias
     /// allows the layer to shift the activation function's output.
     /// </para>
     /// <para><b>For Beginners:</b> The transform bias is like a "default value" or "starting point" for each feature.
-    /// 
+    ///
     /// It helps the layer by:
     /// - Allowing outputs to be non-zero even when inputs are zero
     /// - Giving the model flexibility to fit data better
     /// - Providing an adjustable "baseline" for the transformation
-    /// 
+    ///
     /// It's like setting the initial position before fine-tuning.
     /// </para>
     /// </remarks>
-    private Vector<T> _transformBias;
+    private Tensor<T> _transformBias;
 
     /// <summary>
-    /// The weight matrix used to compute the gate values.
+    /// The weight tensor used to compute the gate values.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This matrix contains the learnable parameters that determine how much of the transformed output versus the
+    /// This tensor contains the learnable parameters that determine how much of the transformed output versus the
     /// original input should be used for each feature. The dimensions are [inputDimension, inputDimension].
     /// </para>
     /// <para><b>For Beginners:</b> These weights control the "traffic signals" of the highway layer.
-    /// 
+    ///
     /// The gate weights:
     /// - Determine which lane (transform or bypass) each piece of information should take
     /// - Learn which features are better left unchanged and which need transformation
     /// - Act as the decision-making mechanism of the highway layer
-    /// 
+    ///
     /// During training, these weights learn the optimal balance between preserving and transforming the input.
     /// </para>
     /// </remarks>
-    private Matrix<T> _gateWeights;
+    private Tensor<T> _gateWeights;
 
     /// <summary>
-    /// The bias vector added to the gate computation.
+    /// The bias tensor added to the gate computation.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector contains the learnable bias parameters that are added to the gate computation. Initially biased
+    /// This tensor contains the learnable bias parameters that are added to the gate computation. Initially biased
     /// negative to allow more information to flow through the transform lane during early training.
     /// </para>
     /// <para><b>For Beginners:</b> The gate bias controls the default behavior of the gates.
-    /// 
+    ///
     /// It helps the layer by:
     /// - Setting an initial preference for one lane over the other
     /// - Usually starts negative to favor the transform lane during early training
     /// - Gets adjusted during training to find the optimal balance
-    /// 
+    ///
     /// Think of it as setting the default position of the "traffic signals" before the network learns
     /// the best settings for each specific input pattern.
     /// </para>
     /// </remarks>
-    private Vector<T> _gateBias;
+    private Tensor<T> _gateBias;
 
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.
@@ -145,24 +145,34 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastGateOutput;
 
     /// <summary>
+    /// Stores the pre-activation transform values from the last forward pass.
+    /// </summary>
+    private Tensor<T>? _lastTransformPreActivation;
+
+    /// <summary>
+    /// Stores the pre-activation gate values from the last forward pass.
+    /// </summary>
+    private Tensor<T>? _lastGatePreActivation;
+
+    /// <summary>
     /// Stores the gradients for the transform weights calculated during the backward pass.
     /// </summary>
-    private Matrix<T>? _transformWeightsGradient;
+    private Tensor<T>? _transformWeightsGradient;
 
     /// <summary>
     /// Stores the gradients for the transform bias calculated during the backward pass.
     /// </summary>
-    private Vector<T>? _transformBiasGradient;
+    private Tensor<T>? _transformBiasGradient;
 
     /// <summary>
     /// Stores the gradients for the gate weights calculated during the backward pass.
     /// </summary>
-    private Matrix<T>? _gateWeightsGradient;
+    private Tensor<T>? _gateWeightsGradient;
 
     /// <summary>
     /// Stores the gradients for the gate bias calculated during the backward pass.
     /// </summary>
-    private Vector<T>? _gateBiasGradient;
+    private Tensor<T>? _gateBiasGradient;
 
     /// <summary>
     /// The element-wise activation function applied to the transform output.
@@ -299,10 +309,10 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastGateBalanceLoss = NumOps.Zero;
 
-        _transformWeights = new Matrix<T>(inputDimension, inputDimension);
-        _transformBias = new Vector<T>(inputDimension);
-        _gateWeights = new Matrix<T>(inputDimension, inputDimension);
-        _gateBias = new Vector<T>(inputDimension);
+        _transformWeights = new Tensor<T>([inputDimension, inputDimension]);
+        _transformBias = new Tensor<T>([inputDimension]);
+        _gateWeights = new Tensor<T>([inputDimension, inputDimension]);
+        _gateBias = new Tensor<T>([inputDimension]);
 
         _transformActivation = transformActivation ?? new TanhActivation<T>();
         _gateActivation = gateActivation ?? new SigmoidActivation<T>();
@@ -339,10 +349,10 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastGateBalanceLoss = NumOps.Zero;
 
-        _transformWeights = new Matrix<T>(inputDimension, inputDimension);
-        _transformBias = new Vector<T>(inputDimension);
-        _gateWeights = new Matrix<T>(inputDimension, inputDimension);
-        _gateBias = new Vector<T>(inputDimension);
+        _transformWeights = new Tensor<T>([inputDimension, inputDimension]);
+        _transformBias = new Tensor<T>([inputDimension]);
+        _gateWeights = new Tensor<T>([inputDimension, inputDimension]);
+        _gateBias = new Tensor<T>([inputDimension]);
 
         _vectorTransformActivation = transformActivation ?? new TanhActivation<T>();
         _vectorGateActivation = gateActivation ?? new SigmoidActivation<T>();
@@ -376,9 +386,10 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_transformWeights.Rows + _transformWeights.Columns)));
-        InitializeMatrix(_transformWeights, scale);
-        InitializeMatrix(_gateWeights, scale);
+        int inputDimension = _transformWeights.Shape[0];
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (inputDimension + inputDimension)));
+        InitializeTensor(_transformWeights, scale);
+        InitializeTensor(_gateWeights, scale);
 
         for (int i = 0; i < _transformBias.Length; i++)
         {
@@ -388,34 +399,34 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Initializes a matrix with scaled random values.
+    /// Initializes a 2D tensor with scaled random values.
     /// </summary>
-    /// <param name="matrix">The matrix to initialize.</param>
+    /// <param name="tensor">The tensor to initialize.</param>
     /// <param name="scale">The scale factor for the random values.</param>
     /// <remarks>
     /// <para>
-    /// This method fills the provided matrix with random values between -0.5 and 0.5, scaled by the provided scale factor.
+    /// This method fills the provided tensor with random values between -0.5 and 0.5, scaled by the provided scale factor.
     /// This type of initialization helps with training stability.
     /// </para>
-    /// <para><b>For Beginners:</b> This method fills a matrix with random starting values for weights.
-    /// 
+    /// <para><b>For Beginners:</b> This method fills a tensor with random starting values for weights.
+    ///
     /// The method:
     /// - Generates random numbers between -0.5 and 0.5
     /// - Multiplies them by a scale factor to control their size
-    /// - Fills each position in the matrix with these scaled random values
-    /// 
+    /// - Fills each position in the tensor with these scaled random values
+    ///
     /// Good initialization is important because it affects how quickly and how well the network learns.
     /// The scale factor is calculated based on the size of the layer to help maintain stable gradients
     /// during training.
     /// </para>
     /// </remarks>
-    private void InitializeMatrix(Matrix<T> matrix, T scale)
+    private void InitializeTensor(Tensor<T> tensor, T scale)
     {
-        for (int i = 0; i < matrix.Rows; i++)
+        for (int i = 0; i < tensor.Shape[0]; i++)
         {
-            for (int j = 0; j < matrix.Columns; j++)
+            for (int j = 0; j < tensor.Shape[1]; j++)
             {
-                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+                tensor[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
             }
         }
     }
@@ -446,19 +457,26 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        int batchSize = input.Shape[0];
-        int inputDimension = input.Shape[1];
 
-        var transformOutput = input.Multiply(_transformWeights).Add(_transformBias);
-        transformOutput = ApplyActivation(transformOutput, _transformActivation, _vectorTransformActivation);
+        // Transform path: transform = activation(input @ weights + bias)
+        var transformLinear = input.MatrixMultiply(_transformWeights);
+        var transformWithBias = Engine.TensorBroadcastAdd(transformLinear, _transformBias);
+        _lastTransformPreActivation = transformWithBias; // Store pre-activation for backward pass
+        var transformOutput = ApplyActivation(transformWithBias, _transformActivation, _vectorTransformActivation);
         _lastTransformOutput = transformOutput;
 
-        var gateOutput = input.Multiply(_gateWeights).Add(_gateBias);
-        gateOutput = ApplyActivation(gateOutput, _gateActivation, _vectorGateActivation);
+        // Gate path: gate = sigmoid(input @ weights + bias)
+        var gateLinear = input.MatrixMultiply(_gateWeights);
+        var gateWithBias = Engine.TensorBroadcastAdd(gateLinear, _gateBias);
+        _lastGatePreActivation = gateWithBias; // Store pre-activation for backward pass
+        var gateOutput = ApplyActivation(gateWithBias, _gateActivation, _vectorGateActivation);
         _lastGateOutput = gateOutput;
 
-        var output = gateOutput.ElementwiseMultiply(transformOutput)
-            .Add(input.ElementwiseMultiply(gateOutput.ElementwiseSubtract(Tensor<T>.CreateDefault(gateOutput.Shape, NumOps.One))));
+        // Highway output: output = gate * transform + (1 - gate) * input
+        // Rewritten as: output = gate * (transform - input) + input
+        var transformMinusInput = Engine.TensorSubtract(transformOutput, input);
+        var gatedDiff = Engine.TensorMultiply(gateOutput, transformMinusInput);
+        var output = Engine.TensorAdd(gatedDiff, input);
 
         _lastOutput = output;
         return output;
@@ -553,52 +571,116 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // For complex/composite layers, delegate to manual implementation
-        // Full autodiff requires implementing all sub-operations
-        return BackwardManual(outputGradient);
-    }
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
+        // Create input variable node
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Create variable nodes for weights and biases with gradient tracking
+        var transformWeightsNode = Autodiff.TensorOperations<T>.Variable(_transformWeights, "transform_weights", requiresGradient: true);
+        var transformBiasNode = Autodiff.TensorOperations<T>.Variable(_transformBias, "transform_bias", requiresGradient: true);
+        var gateWeightsNode = Autodiff.TensorOperations<T>.Variable(_gateWeights, "gate_weights", requiresGradient: true);
+        var gateBiasNode = Autodiff.TensorOperations<T>.Variable(_gateBias, "gate_bias", requiresGradient: true);
+
+        // Step 1: Compute transform path: transform = activation(input @ weights + bias)
+        var transformLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, transformWeightsNode);
+        var transformWithBias = Autodiff.TensorOperations<T>.Add(transformLinear, transformBiasNode);
+
+        // Apply transform activation (typically Tanh)
+        Autodiff.ComputationNode<T> transformOutput;
+        if (_transformActivation != null && _transformActivation.SupportsJitCompilation)
+        {
+            transformOutput = _transformActivation.ApplyToGraph(transformWithBias);
+        }
+        else
+        {
+            // Default to Tanh if no activation specified
+            transformOutput = Autodiff.TensorOperations<T>.Tanh(transformWithBias);
+        }
+
+        // Step 2: Compute gate path: gate = sigmoid(input @ weights + bias)
+        var gateLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, gateWeightsNode);
+        var gateWithBias = Autodiff.TensorOperations<T>.Add(gateLinear, gateBiasNode);
+
+        // Apply gate activation (typically Sigmoid)
+        Autodiff.ComputationNode<T> gateOutput;
+        if (_gateActivation != null && _gateActivation.SupportsJitCompilation)
+        {
+            gateOutput = _gateActivation.ApplyToGraph(gateWithBias);
+        }
+        else
+        {
+            // Default to Sigmoid if no activation specified
+            gateOutput = Autodiff.TensorOperations<T>.Sigmoid(gateWithBias);
+        }
+
+        // Step 3: Compute highway output: output = gate * transform + (1 - gate) * input
+        // Rewritten as: output = gate * (transform - input) + input
+        var transformMinusInput = Autodiff.TensorOperations<T>.Subtract(transformOutput, inputNode);
+        var gatedDiff = Autodiff.TensorOperations<T>.ElementwiseMultiply(gateOutput, transformMinusInput);
+        var outputNode = Autodiff.TensorOperations<T>.Add(gatedDiff, inputNode);
+
+        // Set the output gradient
+        outputNode.Gradient = outputGradient;
+
+        // Production-grade: Inline topological sort for backward pass
         var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
         var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
+        stack.Push((outputNode, false));
 
         while (stack.Count > 0)
         {
             var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
+            if (visited.Contains(node)) continue;
 
             if (processed)
             {
                 visited.Add(node);
-                result.Add(node);
+                topoOrder.Add(node);
             }
             else
             {
                 stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
+                if (node.Parents != null)
                 {
-                    if (!visited.Contains(parent))
+                    foreach (var parent in node.Parents)
                     {
-                        stack.Push((parent, false));
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
                     }
                 }
             }
         }
 
-        return result;
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract parameter gradients
+        if (transformWeightsNode.Gradient != null)
+            _transformWeightsGradient = transformWeightsNode.Gradient;
+        if (transformBiasNode.Gradient != null)
+            _transformBiasGradient = transformBiasNode.Gradient;
+        if (gateWeightsNode.Gradient != null)
+            _gateWeightsGradient = gateWeightsNode.Gradient;
+        if (gateBiasNode.Gradient != null)
+            _gateBiasGradient = gateBiasNode.Gradient;
+
+        // Extract and return the input gradient
+        if (inputNode.Gradient == null)
+            throw new InvalidOperationException("Gradient computation failed in automatic differentiation.");
+
+        return inputNode.Gradient;
     }
+
     /// <summary>
     /// Manual backward pass implementation using optimized gradient calculations.
     /// </summary>
@@ -606,27 +688,43 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null || _lastTransformOutput == null || _lastGateOutput == null)
+        if (_lastInput == null || _lastOutput == null || _lastTransformOutput == null || _lastGateOutput == null ||
+            _lastTransformPreActivation == null || _lastGatePreActivation == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int batchSize = _lastInput.Shape[0];
-        int inputDimension = _lastInput.Shape[1];
+        // dL/d(transform - input) = dL/dOutput * gate
+        // dL/dgate = dL/dOutput * (transform - input)
+        var transformMinusInput = Engine.TensorSubtract(_lastTransformOutput, _lastInput);
+        var gateGradient = Engine.TensorMultiply(outputGradient, transformMinusInput);
+        // Use pre-activation values for derivative computation (activation functions expect pre-activation inputs)
+        gateGradient = ApplyActivationDerivative(gateGradient, _lastGatePreActivation, _gateActivation, _vectorGateActivation);
 
-        var gateGradient = outputGradient.ElementwiseMultiply(_lastTransformOutput.ElementwiseSubtract(_lastInput));
-        gateGradient = ApplyActivationDerivative(gateGradient, _lastGateOutput, _gateActivation, _vectorGateActivation);
+        var transformGradient = Engine.TensorMultiply(outputGradient, _lastGateOutput);
+        // Use pre-activation values for derivative computation
+        transformGradient = ApplyActivationDerivative(transformGradient, _lastTransformPreActivation, _transformActivation, _vectorTransformActivation);
 
-        var transformGradient = outputGradient.ElementwiseMultiply(_lastGateOutput);
-        transformGradient = ApplyActivationDerivative(transformGradient, _lastTransformOutput, _transformActivation, _vectorTransformActivation);
+        // Compute weight gradients: dW = input^T @ gradient
+        var inputT = _lastInput.Transpose([1, 0]);
+        _gateWeightsGradient = inputT.MatrixMultiply(gateGradient);
+        _gateBiasGradient = gateGradient.Sum([0]);
 
-        _gateWeightsGradient = _lastInput.Transpose([1, 0]).Multiply(gateGradient).ToMatrix();
-        _gateBiasGradient = gateGradient.Sum([0]).ToVector();
+        _transformWeightsGradient = inputT.MatrixMultiply(transformGradient);
+        _transformBiasGradient = transformGradient.Sum([0]);
 
-        _transformWeightsGradient = _lastInput.Transpose([1, 0]).Multiply(transformGradient).ToMatrix();
-        _transformBiasGradient = transformGradient.Sum([0]).ToVector();
+        // Compute input gradient: dL/dInput = dL/dGateLinear @ W_gate^T + dL/dTransformLinear @ W_transform^T + dL/dOutput * (1 - gate)
+        var gateWeightsT = _gateWeights.Transpose([1, 0]);
+        var transformWeightsT = _transformWeights.Transpose([1, 0]);
 
-        var inputGradient = gateGradient.Multiply(_gateWeights.Transpose())
-            .Add(transformGradient.Multiply(_transformWeights.Transpose()))
-            .Add(outputGradient.ElementwiseMultiply(_lastGateOutput.ElementwiseSubtract(Tensor<T>.CreateDefault(_lastGateOutput.Shape, NumOps.One))));
+        var inputGradFromGate = gateGradient.MatrixMultiply(gateWeightsT);
+        var inputGradFromTransform = transformGradient.MatrixMultiply(transformWeightsT);
+
+        // (1 - gate) contribution
+        var ones = Tensor<T>.CreateDefault(_lastGateOutput.Shape, NumOps.One);
+        var oneMinusGate = Engine.TensorSubtract(ones, _lastGateOutput);
+        var bypassGradient = Engine.TensorMultiply(outputGradient, oneMinusGate);
+
+        var inputGradient = Engine.TensorAdd(inputGradFromGate, inputGradFromTransform);
+        inputGradient = Engine.TensorAdd(inputGradient, bypassGradient);
 
         return inputGradient;
     }
@@ -697,14 +795,20 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        if (_transformWeightsGradient == null || _transformBiasGradient == null || 
+        if (_transformWeightsGradient == null || _transformBiasGradient == null ||
             _gateWeightsGradient == null || _gateBiasGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _transformWeights = _transformWeights.Subtract(_transformWeightsGradient.Multiply(learningRate));
-        _transformBias = _transformBias.Subtract(_transformBiasGradient.Multiply(learningRate));
-        _gateWeights = _gateWeights.Subtract(_gateWeightsGradient.Multiply(learningRate));
-        _gateBias = _gateBias.Subtract(_gateBiasGradient.Multiply(learningRate));
+        // Use Engine operations for parameter updates
+        var scaledTransformWeightsGrad = Engine.TensorMultiplyScalar(_transformWeightsGradient, learningRate);
+        var scaledTransformBiasGrad = Engine.TensorMultiplyScalar(_transformBiasGradient, learningRate);
+        var scaledGateWeightsGrad = Engine.TensorMultiplyScalar(_gateWeightsGradient, learningRate);
+        var scaledGateBiasGrad = Engine.TensorMultiplyScalar(_gateBiasGradient, learningRate);
+
+        _transformWeights = Engine.TensorSubtract(_transformWeights, scaledTransformWeightsGrad);
+        _transformBias = Engine.TensorSubtract(_transformBias, scaledTransformBiasGrad);
+        _gateWeights = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
+        _gateBias = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
     }
 
     /// <summary>
@@ -732,46 +836,11 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _transformWeights.Rows * _transformWeights.Columns + 
-                          _transformBias.Length + 
-                          _gateWeights.Rows * _gateWeights.Columns + 
-                          _gateBias.Length;
-
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        // Copy transform weights parameters
-        for (int i = 0; i < _transformWeights.Rows; i++)
-        {
-            for (int j = 0; j < _transformWeights.Columns; j++)
-            {
-                parameters[index++] = _transformWeights[i, j];
-            }
-        }
-
-        // Copy transform bias parameters
-        for (int i = 0; i < _transformBias.Length; i++)
-        {
-            parameters[index++] = _transformBias[i];
-        }
-
-        // Copy gate weights parameters
-        for (int i = 0; i < _gateWeights.Rows; i++)
-        {
-            for (int j = 0; j < _gateWeights.Columns; j++)
-            {
-                parameters[index++] = _gateWeights[i, j];
-            }
-        }
-
-        // Copy gate bias parameters
-        for (int i = 0; i < _gateBias.Length; i++)
-        {
-            parameters[index++] = _gateBias[i];
-        }
-
-        return parameters;
+        return Vector<T>.Concatenate(
+            new Vector<T>(_transformWeights.ToArray()),
+            new Vector<T>(_transformBias.ToArray()),
+            new Vector<T>(_gateWeights.ToArray()),
+            new Vector<T>(_gateBias.ToArray()));
     }
 
     /// <summary>
@@ -802,10 +871,10 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int expectedLength = _transformWeights.Rows * _transformWeights.Columns + 
-                             _transformBias.Length + 
-                             _gateWeights.Rows * _gateWeights.Columns + 
-                             _gateBias.Length;
+        int transformWeightsSize = _transformWeights.Shape[0] * _transformWeights.Shape[1];
+        int gateWeightsSize = _gateWeights.Shape[0] * _gateWeights.Shape[1];
+        int expectedLength = transformWeightsSize + _transformBias.Length +
+                             gateWeightsSize + _gateBias.Length;
 
         if (parameters.Length != expectedLength)
         {
@@ -814,35 +883,16 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int index = 0;
 
-        // Set transform weights parameters
-        for (int i = 0; i < _transformWeights.Rows; i++)
-        {
-            for (int j = 0; j < _transformWeights.Columns; j++)
-            {
-                _transformWeights[i, j] = parameters[index++];
-            }
-        }
+        _transformWeights = new Tensor<T>(_transformWeights.Shape, parameters.Slice(index, transformWeightsSize));
+        index += transformWeightsSize;
 
-        // Set transform bias parameters
-        for (int i = 0; i < _transformBias.Length; i++)
-        {
-            _transformBias[i] = parameters[index++];
-        }
+        _transformBias = new Tensor<T>(_transformBias.Shape, parameters.Slice(index, _transformBias.Length));
+        index += _transformBias.Length;
 
-        // Set gate weights parameters
-        for (int i = 0; i < _gateWeights.Rows; i++)
-        {
-            for (int j = 0; j < _gateWeights.Columns; j++)
-            {
-                _gateWeights[i, j] = parameters[index++];
-            }
-        }
+        _gateWeights = new Tensor<T>(_gateWeights.Shape, parameters.Slice(index, gateWeightsSize));
+        index += gateWeightsSize;
 
-        // Set gate bias parameters
-        for (int i = 0; i < _gateBias.Length; i++)
-        {
-            _gateBias[i] = parameters[index++];
-        }
+        _gateBias = new Tensor<T>(_gateBias.Shape, parameters.Slice(index, _gateBias.Length));
     }
 
     /// <summary>
@@ -876,6 +926,8 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastOutput = null;
         _lastTransformOutput = null;
         _lastGateOutput = null;
+        _lastTransformPreActivation = null;
+        _lastGatePreActivation = null;
         _transformWeightsGradient = null;
         _transformBiasGradient = null;
         _gateWeightsGradient = null;
@@ -1027,15 +1079,11 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "highway_input");
         inputNodes.Add(inputNode);
 
-        // Create constant nodes for weights and biases
-        var transformWeightsNode = Autodiff.TensorOperations<T>.Constant(
-            Tensor<T>.FromMatrix(_transformWeights), "transform_weights");
-        var transformBiasNode = Autodiff.TensorOperations<T>.Constant(
-            Tensor<T>.FromVector(_transformBias), "transform_bias");
-        var gateWeightsNode = Autodiff.TensorOperations<T>.Constant(
-            Tensor<T>.FromMatrix(_gateWeights), "gate_weights");
-        var gateBiasNode = Autodiff.TensorOperations<T>.Constant(
-            Tensor<T>.FromVector(_gateBias), "gate_bias");
+        // Create variable nodes for weights and biases with gradient tracking
+        var transformWeightsNode = Autodiff.TensorOperations<T>.Variable(_transformWeights, "transform_weights", requiresGradient: true);
+        var transformBiasNode = Autodiff.TensorOperations<T>.Variable(_transformBias, "transform_bias", requiresGradient: true);
+        var gateWeightsNode = Autodiff.TensorOperations<T>.Variable(_gateWeights, "gate_weights", requiresGradient: true);
+        var gateBiasNode = Autodiff.TensorOperations<T>.Variable(_gateBias, "gate_bias", requiresGradient: true);
 
         // Step 1: Compute transform path: transform = activation(input @ weights + bias)
         var transformLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, transformWeightsNode);

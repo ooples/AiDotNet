@@ -405,7 +405,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <returns>The Euclidean norm of the vector.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> The norm is the "length" of a vector in multi-dimensional space.
-    /// For a 2D vector [x,y], the norm is v(xÃƒÆ'Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½ + yÃƒÆ'Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½), which is the same as the Pythagorean theorem.
+    /// For a 2D vector [x,y], the norm is sqrt(x^2 + y^2), which is the same as the Pythagorean theorem.
     /// For higher dimensions, it's the square root of the sum of all squared components.</para>
     /// <para><b>Performance:</b> This method uses SIMD-accelerated dot product for float/double types
     /// via TensorPrimitives, providing 5-10x speedup for large vectors.</para>
@@ -683,25 +683,6 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     public Vector<T> GetSegment(int startIndex, int length)
     {
         return GetSubVector(startIndex, length);
-    }
-
-    /// <summary>
-    /// Creates a new vector of the specified length with all elements set to the specified value.
-    /// </summary>
-    /// <param name="length">The length of the vector to create.</param>
-    /// <param name="value">The value to fill the vector with.</param>
-    /// <returns>A new vector filled with the specified value.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method creates a vector of a specific size where every element has the same value.
-    /// For example, CreateDefault(3, 5) creates a vector [5,5,5].</para>
-    /// <para><b>Performance:</b> This method uses SIMD-accelerated fill operation for float/double types,
-    /// providing 5-10x speedup for large vectors.</para>
-    /// </remarks>
-    public static new Vector<T> CreateDefault(int length, T value)
-    {
-        Vector<T> vector = new(length);
-        _numOps.Fill(vector.AsWritableSpan(), value);
-        return vector;
     }
 
     /// <summary>

@@ -306,7 +306,7 @@ public abstract class VectorBase<T>
     /// For example, CreateDefault(3, 5) would create the vector [5,5,5] - a vector of length 3
     /// where each element is 5.</para>
     /// </remarks>
-    public static VectorBase<T> CreateDefault(int length, T value)
+    public static Vector<T> CreateDefault(int length, T value)
     {
         Vector<T> vector = new(length);
         // Use vectorized Fill for SIMD acceleration
