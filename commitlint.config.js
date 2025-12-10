@@ -13,6 +13,8 @@ export default {
     (message) => /^Merge remote-tracking branch/.test(message),
     // Ignore legacy commit from Issue #373 implementation (before conventional commits)
     (message) => /^Implement comprehensive test coverage for RAG/.test(message),
+    // Ignore legacy commit from Issue #371 implementation (before conventional commits were enforced)
+    (message) => /^Implement comprehensive tests for RAG retrieval strategies/.test(message),
     // Ignore legacy commit from Issue #376 implementation (before conventional commits were enforced)
     (message) => /^Add comprehensive unit tests for specialized loss function/.test(message),
     // Ignore manual merge commits (e.g., "merge: resolve conflicts...")
