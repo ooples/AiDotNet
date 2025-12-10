@@ -1,5 +1,9 @@
 export default {
   extends: ['@commitlint/config-conventional'],
+  rules: {
+    // Allow longer body lines (default is 100, increase to 200 for detailed technical explanations)
+    'body-max-line-length': [1, 'always', 200],
+  },
   ignores: [
     // Only ignore GitHub auto-generated merge commits (PR merges)
     (message) => /^Merge pull request #\d+/.test(message),
@@ -9,6 +13,8 @@ export default {
     (message) => /^Merge remote-tracking branch/.test(message),
     // Ignore legacy commit from Issue #373 implementation (before conventional commits)
     (message) => /^Implement comprehensive test coverage for RAG/.test(message),
+    // Ignore legacy commit from Issue #376 implementation (before conventional commits were enforced)
+    (message) => /^Add comprehensive unit tests for specialized loss function/.test(message),
     // Ignore manual merge commits (e.g., "merge: resolve conflicts...")
     (message) => /^merge:/i.test(message),
     // Ignore general merge commits containing "Merge" followed by common patterns
