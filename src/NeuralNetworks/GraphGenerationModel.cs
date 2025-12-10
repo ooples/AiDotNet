@@ -6,27 +6,6 @@ using AiDotNet.NeuralNetworks.Layers;
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
-/// Type of graph generation approach.
-/// </summary>
-public enum GraphGenerationType
-{
-    /// <summary>
-    /// Variational autoencoder approach.
-    /// </summary>
-    VariationalAutoencoder = 0,
-
-    /// <summary>
-    /// Autoregressive generation.
-    /// </summary>
-    Autoregressive = 1,
-
-    /// <summary>
-    /// One-shot generation.
-    /// </summary>
-    OneShot = 2
-}
-
-/// <summary>
 /// Represents a Graph Generation Model using Variational Autoencoder (VAE) architecture.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -169,24 +148,30 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Initializes a new instance of the <see cref="GraphGenerationModel{T}"/> class.
     /// </summary>
-    /// <param name="inputFeatures">Number of input features per node.</param>
-    /// <param name="hiddenDim">Hidden dimension for encoder layers.</param>
-    /// <param name="latentDim">Dimension of latent space.</param>
+    /// <param name="inputFeatures">Number of input features per node (default: 16).</param>
+    /// <param name="hiddenDim">Hidden dimension for encoder layers (default: 32).</param>
+    /// <param name="latentDim">Dimension of latent space (default: 16).</param>
     /// <param name="numEncoderLayers">Number of GNN encoder layers (default: 2).</param>
+    /// <param name="maxNodes">Maximum number of nodes for graph generation (default: 100).</param>
+    /// <param name="generationType">Type of graph generation approach (default: VariationalAutoencoder).</param>
     /// <param name="klWeight">Weight for KL divergence term (default: 1.0).</param>
-    /// <param name="optimizer">Optional optimizer for training.</param>
-    /// <param name="lossFunction">Optional loss function for training.</param>
+    /// <param name="optimizer">Optional optimizer for training (default: AdamOptimizer).</param>
+    /// <param name="lossFunction">Optional loss function for training (default: BinaryCrossEntropyLoss).</param>
     /// <param name="maxGradNorm">Maximum gradient norm for clipping (default: 1.0).</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creating a graph generation model:
     ///
     /// ```csharp
-    /// // Create model for molecular generation
+    /// // Create model with all defaults
+    /// var model = new GraphGenerationModel&lt;double&gt;();
+    ///
+    /// // Create model for molecular generation with custom settings
     /// var model = new GraphGenerationModel&lt;double&gt;(
     ///     inputFeatures: 9,        // Atom features
     ///     hiddenDim: 32,           // Hidden layer size
     ///     latentDim: 16,           // Latent space dimension
     ///     numEncoderLayers: 2,     // 2 GNN encoder layers
+    ///     maxNodes: 50,            // Maximum 50 atoms per molecule
     ///     klWeight: 0.5);          // KL divergence weight
     ///
     /// // Train on molecular graphs
@@ -198,10 +183,12 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public GraphGenerationModel(
-        int inputFeatures,
-        int hiddenDim,
-        int latentDim,
+        int inputFeatures = 16,
+        int hiddenDim = 32,
+        int latentDim = 16,
         int numEncoderLayers = 2,
+        int maxNodes = 100,
+        GraphGenerationType generationType = GraphGenerationType.VariationalAutoencoder,
         double klWeight = 1.0,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
@@ -213,46 +200,13 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         LatentDim = latentDim;
         HiddenDim = hiddenDim;
         NumEncoderLayers = numEncoderLayers;
-        MaxNodes = 100; // Default value
+        MaxNodes = maxNodes;
         NumLayers = numEncoderLayers;
-        GenerationType = GraphGenerationType.VariationalAutoencoder;
+        GenerationType = generationType;
         KLWeight = klWeight;
 
         _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _random = new Random(42);
-
-        // Initialize variational layer weights
-        _meanWeights = new Tensor<T>([hiddenDim, latentDim]);
-        _logVarWeights = new Tensor<T>([hiddenDim, latentDim]);
-        InitializeVariationalWeights();
-
-        InitializeLayers();
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GraphGenerationModel{T}"/> class with explicit MaxNodes.
-    /// </summary>
-    public GraphGenerationModel(
-        int latentDim,
-        int hiddenDim,
-        int maxNodes,
-        int numLayers,
-        GraphGenerationType generationType = GraphGenerationType.VariationalAutoencoder)
-        : base(CreateArchitecture(latentDim, hiddenDim, latentDim, numLayers),
-               new BinaryCrossEntropyLoss<T>(),
-               1.0)
-    {
-        LatentDim = latentDim;
-        HiddenDim = hiddenDim;
-        MaxNodes = maxNodes;
-        NumLayers = numLayers;
-        NumEncoderLayers = numLayers;
-        GenerationType = generationType;
-        KLWeight = 1.0;
-
-        _lossFunction = new BinaryCrossEntropyLoss<T>();
-        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _random = new Random(42);
 
         // Initialize variational layer weights
@@ -1038,7 +992,13 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new GraphGenerationModel<T>(LatentDim, HiddenDim, MaxNodes, NumLayers, GenerationType);
+        return new GraphGenerationModel<T>(
+            inputFeatures: Architecture.InputSize,
+            hiddenDim: HiddenDim,
+            latentDim: LatentDim,
+            numEncoderLayers: NumLayers,
+            maxNodes: MaxNodes,
+            generationType: GenerationType);
     }
 
     #endregion

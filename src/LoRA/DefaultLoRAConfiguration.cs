@@ -2,7 +2,6 @@ using System;
 using AiDotNet.Interfaces;
 using AiDotNet.LoRA.Adapters;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.LoRA;
 
@@ -307,14 +306,11 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
             return CreateAdapter(layer);
         }
 
-        // NOTE: GraphConvolutionalLayer is intentionally excluded from LoRA adaptation
-        // because StandardLoRAAdapter does not implement IGraphConvolutionLayer<T>,
-        // which breaks type checks in GraphNeuralNetwork (SetAdjacencyMatrix, etc.).
-        // Future work: Create GraphLoRAAdapter<T> that implements IGraphConvolutionLayer<T>
-        // and delegates graph-specific methods to the wrapped layer.
-        if (layer is GraphConvolutionalLayer<T>)
+        // Graph convolutional layers - use specialized GraphConvolutionalLoRAAdapter
+        // which implements IGraphConvolutionLayer<T> and properly delegates graph methods
+        if (layer is IGraphConvolutionLayer<T>)
         {
-            return layer; // Return unwrapped for now
+            return new GraphConvolutionalLoRAAdapter<T>(layer, Rank, Alpha, FreezeBaseLayer);
         }
 
         // Capsule layers

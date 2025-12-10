@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines the contract for graph convolutional layers that process graph-structured data.
@@ -22,7 +22,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// which nodes are connected to which other nodes. That's what the adjacency matrix provides.
 /// </para>
 /// </remarks>
-public interface IGraphConvolutionLayer<T>
+public interface IGraphConvolutionLayer<T> : ILayer<T>
 {
     /// <summary>
     /// Sets the adjacency matrix that defines the graph structure.

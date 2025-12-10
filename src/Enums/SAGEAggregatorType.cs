@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Aggregation function type for GraphSAGE.
@@ -6,9 +6,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <remarks>
 /// <para><b>For Beginners:</b> These are different ways to combine information from neighbors.
 ///
-/// - Mean: Average all neighbor features (balanced, smooth)
-/// - MaxPool: Take the maximum value from neighbors (emphasizes outliers)
-/// - Sum: Add up all neighbor features (sensitive to number of neighbors)
+/// - **Mean**: Average all neighbor features (balanced, smooth)
+/// - **MaxPool**: Take the maximum value from neighbors (emphasizes outliers)
+/// - **Sum**: Add up all neighbor features (sensitive to number of neighbors)
 /// </para>
 /// </remarks>
 public enum SAGEAggregatorType

@@ -3,36 +3,6 @@ using AiDotNet.Helpers;
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
-/// Aggregation function types for PNA.
-/// </summary>
-public enum PNAAggregator
-{
-    /// <summary>Mean aggregation.</summary>
-    Mean,
-    /// <summary>Max aggregation.</summary>
-    Max,
-    /// <summary>Min aggregation.</summary>
-    Min,
-    /// <summary>Sum aggregation.</summary>
-    Sum,
-    /// <summary>Standard deviation aggregation.</summary>
-    StdDev
-}
-
-/// <summary>
-/// Scaler function types for PNA.
-/// </summary>
-public enum PNAScaler
-{
-    /// <summary>Identity scaler (no scaling).</summary>
-    Identity,
-    /// <summary>Amplification scaler.</summary>
-    Amplification,
-    /// <summary>Attenuation scaler.</summary>
-    Attenuation
-}
-
-/// <summary>
 /// Implements Principal Neighbourhood Aggregation (PNA) layer for powerful graph representation learning.
 /// </summary>
 /// <remarks>
