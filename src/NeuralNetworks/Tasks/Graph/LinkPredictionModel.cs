@@ -3,7 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.NeuralNetworks.Layers.Graph;
+using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 
@@ -166,8 +166,9 @@ public class LinkPredictionModel<T>
     /// <summary>
     /// Computes edge scores for given node pairs.
     /// </summary>
-    /// <param name="edges">Edge tensor of shape [num_edges, 2] where each row is [source, target].</param>
-    /// <returns>Edge scores of shape [num_edges].</returns>
+    /// <param name="edges">Edge tensor of shape [num_edges, 2] where each row is [source, target],
+    /// or [batch_size, num_edges, 2] for batched operation.</param>
+    /// <returns>Edge scores of shape [num_edges] or [batch_size, num_edges].</returns>
     /// <remarks>
     /// <para>
     /// After encoding nodes into embeddings with Forward(), this method scores specific edges.
@@ -200,22 +201,41 @@ public class LinkPredictionModel<T>
                 "Must call Forward() to compute node embeddings before predicting edges.");
         }
 
-        int batchSize = edges.Shape[0];
-        int numEdges = edges.Shape[1];
-        var scores = new Tensor<T>([batchSize, numEdges]);
-
-        for (int b = 0; b < batchSize; b++)
+        // Handle both [num_edges, 2] and [batch_size, num_edges, 2] formats
+        if (edges.Shape.Length == 2)
         {
+            // Shape [num_edges, 2] - non-batched
+            int numEdges = edges.Shape[0];
+            var scores = new Tensor<T>([numEdges]);
+
             for (int e = 0; e < numEdges; e++)
             {
-                int sourceIdx = Convert.ToInt32(NumOps.ToDouble(edges[b, e, 0]));
-                int targetIdx = Convert.ToInt32(NumOps.ToDouble(edges[b, e, 1]));
-
-                scores[b, e] = ComputeEdgeScore(sourceIdx, targetIdx);
+                int sourceIdx = Convert.ToInt32(NumOps.ToDouble(edges[e, 0]));
+                int targetIdx = Convert.ToInt32(NumOps.ToDouble(edges[e, 1]));
+                scores[e] = ComputeEdgeScore(sourceIdx, targetIdx);
             }
-        }
 
-        return scores;
+            return scores;
+        }
+        else
+        {
+            // Shape [batch_size, num_edges, 2] - batched
+            int batchSize = edges.Shape[0];
+            int numEdges = edges.Shape[1];
+            var scores = new Tensor<T>([batchSize, numEdges]);
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int e = 0; e < numEdges; e++)
+                {
+                    int sourceIdx = Convert.ToInt32(NumOps.ToDouble(edges[b, e, 0]));
+                    int targetIdx = Convert.ToInt32(NumOps.ToDouble(edges[b, e, 1]));
+                    scores[b, e] = ComputeEdgeScore(sourceIdx, targetIdx);
+                }
+            }
+
+            return scores;
+        }
     }
 
     /// <summary>
@@ -415,8 +435,8 @@ public class LinkPredictionModel<T>
                 history["val_auc"].Add(auc);
             }
 
-            // Simplified backward pass (full implementation would backprop through edge scoring)
-            var gradient = new Tensor<T>(_nodeEmbeddings!.Shape);
+            // Compute actual BCE gradients and backprop through encoder
+            var gradient = ComputeBCEGradients(posScores, negScores, task.TrainPosEdges, task.TrainNegEdges);
             Backward(gradient);
             UpdateParameters(learningRate);
         }
@@ -425,33 +445,181 @@ public class LinkPredictionModel<T>
         return history;
     }
 
+    /// <summary>
+    /// Computes BCE loss gradients and accumulates them to node embeddings.
+    /// For dot product decoder: d(score)/d(z_i) = z_j and d(score)/d(z_j) = z_i
+    /// BCE gradient w.r.t. score: sigmoid(score) - target
+    /// </summary>
+    private Tensor<T> ComputeBCEGradients(
+        Tensor<T> posScores,
+        Tensor<T> negScores,
+        Tensor<T> posEdges,
+        Tensor<T> negEdges)
+    {
+        if (_nodeEmbeddings == null)
+        {
+            throw new InvalidOperationException("Node embeddings not computed.");
+        }
+
+        var gradient = new Tensor<T>(_nodeEmbeddings.Shape);
+        bool is2D = posEdges.Shape.Length == 2;
+
+        // Process positive edges (target = 1, grad = sigmoid(score) - 1)
+        if (is2D)
+        {
+            int numPos = posEdges.Shape[0];
+            for (int e = 0; e < numPos; e++)
+            {
+                int srcIdx = Convert.ToInt32(NumOps.ToDouble(posEdges[e, 0]));
+                int tgtIdx = Convert.ToInt32(NumOps.ToDouble(posEdges[e, 1]));
+                double score = NumOps.ToDouble(posScores[e]);
+                double sigmoidGrad = 1.0 / (1.0 + Math.Exp(-score)) - 1.0; // sigmoid(s) - 1
+
+                AccumulateGradients(gradient, srcIdx, tgtIdx, sigmoidGrad);
+            }
+
+            // Process negative edges (target = 0, grad = sigmoid(score))
+            int numNeg = negEdges.Shape[0];
+            for (int e = 0; e < numNeg; e++)
+            {
+                int srcIdx = Convert.ToInt32(NumOps.ToDouble(negEdges[e, 0]));
+                int tgtIdx = Convert.ToInt32(NumOps.ToDouble(negEdges[e, 1]));
+                double score = NumOps.ToDouble(negScores[e]);
+                double sigmoidGrad = 1.0 / (1.0 + Math.Exp(-score)); // sigmoid(s) - 0
+
+                AccumulateGradients(gradient, srcIdx, tgtIdx, sigmoidGrad);
+            }
+        }
+        else
+        {
+            // Batched case
+            int batchSize = posEdges.Shape[0];
+            int numPos = posEdges.Shape[1];
+            int numNeg = negEdges.Shape[1];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int e = 0; e < numPos; e++)
+                {
+                    int srcIdx = Convert.ToInt32(NumOps.ToDouble(posEdges[b, e, 0]));
+                    int tgtIdx = Convert.ToInt32(NumOps.ToDouble(posEdges[b, e, 1]));
+                    double score = NumOps.ToDouble(posScores[b, e]);
+                    double sigmoidGrad = 1.0 / (1.0 + Math.Exp(-score)) - 1.0;
+
+                    AccumulateGradientsBatched(gradient, b, srcIdx, tgtIdx, sigmoidGrad);
+                }
+
+                for (int e = 0; e < numNeg; e++)
+                {
+                    int srcIdx = Convert.ToInt32(NumOps.ToDouble(negEdges[b, e, 0]));
+                    int tgtIdx = Convert.ToInt32(NumOps.ToDouble(negEdges[b, e, 1]));
+                    double score = NumOps.ToDouble(negScores[b, e]);
+                    double sigmoidGrad = 1.0 / (1.0 + Math.Exp(-score));
+
+                    AccumulateGradientsBatched(gradient, b, srcIdx, tgtIdx, sigmoidGrad);
+                }
+            }
+        }
+
+        return gradient;
+    }
+
+    private void AccumulateGradients(Tensor<T> gradient, int srcIdx, int tgtIdx, double lossGrad)
+    {
+        // For dot product: d(z_i·z_j)/d(z_i) = z_j, d(z_i·z_j)/d(z_j) = z_i
+        // Full grad = lossGrad * decoder_grad
+        var srcEmb = GetNodeEmbedding(srcIdx);
+        var tgtEmb = GetNodeEmbedding(tgtIdx);
+
+        bool is3D = gradient.Shape.Length == 3;
+
+        for (int d = 0; d < EmbeddingDim; d++)
+        {
+            T srcGrad = NumOps.FromDouble(lossGrad * NumOps.ToDouble(tgtEmb[d]));
+            T tgtGrad = NumOps.FromDouble(lossGrad * NumOps.ToDouble(srcEmb[d]));
+
+            if (is3D)
+            {
+                gradient[0, srcIdx, d] = NumOps.Add(gradient[0, srcIdx, d], srcGrad);
+                gradient[0, tgtIdx, d] = NumOps.Add(gradient[0, tgtIdx, d], tgtGrad);
+            }
+            else
+            {
+                gradient[srcIdx, d] = NumOps.Add(gradient[srcIdx, d], srcGrad);
+                gradient[tgtIdx, d] = NumOps.Add(gradient[tgtIdx, d], tgtGrad);
+            }
+        }
+    }
+
+    private void AccumulateGradientsBatched(Tensor<T> gradient, int batch, int srcIdx, int tgtIdx, double lossGrad)
+    {
+        var srcEmb = GetNodeEmbedding(srcIdx);
+        var tgtEmb = GetNodeEmbedding(tgtIdx);
+
+        for (int d = 0; d < EmbeddingDim; d++)
+        {
+            T srcGrad = NumOps.FromDouble(lossGrad * NumOps.ToDouble(tgtEmb[d]));
+            T tgtGrad = NumOps.FromDouble(lossGrad * NumOps.ToDouble(srcEmb[d]));
+
+            gradient[batch, srcIdx, d] = NumOps.Add(gradient[batch, srcIdx, d], srcGrad);
+            gradient[batch, tgtIdx, d] = NumOps.Add(gradient[batch, tgtIdx, d], tgtGrad);
+        }
+    }
+
     private double ComputeBCELoss(Tensor<T> posScores, Tensor<T> negScores)
     {
         double loss = 0.0;
-        int batchSize = posScores.Shape[0];
-        int numPos = posScores.Shape[1];
-        int numNeg = negScores.Shape[1];
 
-        // Loss for positive edges: -log(sigmoid(score))
-        for (int b = 0; b < batchSize; b++)
+        // Handle both 1D [num_edges] and 2D [batch_size, num_edges] scores
+        if (posScores.Shape.Length == 1)
         {
+            // 1D case: non-batched
+            int numPos = posScores.Shape[0];
+            int numNeg = negScores.Shape[0];
+
             for (int i = 0; i < numPos; i++)
             {
-                double score = NumOps.ToDouble(posScores[b, i]);
+                double score = NumOps.ToDouble(posScores[i]);
                 double sigmoid = 1.0 / (1.0 + Math.Exp(-score));
                 loss -= Math.Log(Math.Max(sigmoid, 1e-10));
             }
 
-            // Loss for negative edges: -log(1 - sigmoid(score))
             for (int i = 0; i < numNeg; i++)
             {
-                double score = NumOps.ToDouble(negScores[b, i]);
+                double score = NumOps.ToDouble(negScores[i]);
                 double sigmoid = 1.0 / (1.0 + Math.Exp(-score));
                 loss -= Math.Log(Math.Max(1.0 - sigmoid, 1e-10));
             }
-        }
 
-        return loss / (batchSize * (numPos + numNeg));
+            return (numPos + numNeg) > 0 ? loss / (numPos + numNeg) : 0.0;
+        }
+        else
+        {
+            // 2D case: batched
+            int batchSize = posScores.Shape[0];
+            int numPos = posScores.Shape[1];
+            int numNeg = negScores.Shape[1];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int i = 0; i < numPos; i++)
+                {
+                    double score = NumOps.ToDouble(posScores[b, i]);
+                    double sigmoid = 1.0 / (1.0 + Math.Exp(-score));
+                    loss -= Math.Log(Math.Max(sigmoid, 1e-10));
+                }
+
+                for (int i = 0; i < numNeg; i++)
+                {
+                    double score = NumOps.ToDouble(negScores[b, i]);
+                    double sigmoid = 1.0 / (1.0 + Math.Exp(-score));
+                    loss -= Math.Log(Math.Max(1.0 - sigmoid, 1e-10));
+                }
+            }
+
+            int totalSamples = batchSize * (numPos + numNeg);
+            return totalSamples > 0 ? loss / totalSamples : 0.0;
+        }
     }
 
     private double ComputeAUC(Tensor<T> posScores, Tensor<T> negScores)
@@ -460,21 +628,44 @@ public class LinkPredictionModel<T>
         int correctRankings = 0;
         int totalPairs = 0;
 
-        int batchSize = posScores.Shape[0];
-        int numPos = posScores.Shape[1];
-        int numNeg = negScores.Shape[1];
-
-        for (int b = 0; b < batchSize; b++)
+        // Handle both 1D [num_edges] and 2D [batch_size, num_edges] scores
+        if (posScores.Shape.Length == 1)
         {
+            // 1D case: non-batched
+            int numPos = posScores.Shape[0];
+            int numNeg = negScores.Shape[0];
+
             for (int i = 0; i < numPos; i++)
             {
                 for (int j = 0; j < numNeg; j++)
                 {
-                    if (NumOps.GreaterThan(posScores[b, i], negScores[b, j]))
+                    if (NumOps.GreaterThan(posScores[i], negScores[j]))
                     {
                         correctRankings++;
                     }
                     totalPairs++;
+                }
+            }
+        }
+        else
+        {
+            // 2D case: batched
+            int batchSize = posScores.Shape[0];
+            int numPos = posScores.Shape[1];
+            int numNeg = negScores.Shape[1];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int i = 0; i < numPos; i++)
+                {
+                    for (int j = 0; j < numNeg; j++)
+                    {
+                        if (NumOps.GreaterThan(posScores[b, i], negScores[b, j]))
+                        {
+                            correctRankings++;
+                        }
+                        totalPairs++;
+                    }
                 }
             }
         }

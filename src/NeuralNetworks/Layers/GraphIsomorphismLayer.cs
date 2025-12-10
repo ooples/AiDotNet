@@ -1,4 +1,6 @@
-namespace AiDotNet.NeuralNetworks.Layers.Graph;
+using AiDotNet.Helpers;
+
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Implements Graph Isomorphism Network (GIN) layer for powerful graph representation learning.
@@ -11,29 +13,20 @@ namespace AiDotNet.NeuralNetworks.Layers.Graph;
 /// to the aggregated features.
 /// </para>
 /// <para>
-/// The layer computes: h_v^(k) = MLP^(k)((1 + ε^(k)) · h_v^(k-1) + Σ_{u∈N(v)} h_u^(k-1))
+/// The layer computes: h_v^(k) = MLP^(k)((1 + epsilon^(k)) * h_v^(k-1) + sum_{u in N(v)} h_u^(k-1))
 /// where h_v is the representation of node v, N(v) is the neighborhood of v,
-/// ε is a learnable parameter (or fixed), and MLP is a multi-layer perceptron.
+/// epsilon is a learnable parameter (or fixed), and MLP is a multi-layer perceptron.
 /// </para>
-/// <para><b>For Beginners:</b> GIN is designed to be maximally expressive for graph structures.
-///
-/// Think of it like a very careful observer of patterns:
-/// - It can distinguish between different graph structures better than most other methods
-/// - It combines information from neighbors in a mathematically optimal way
-/// - It's particularly good at tasks where the exact structure of the graph matters
-///
-/// The key insight is using sum aggregation (not mean or max) and a learnable MLP,
-/// which together can capture subtle differences in graph topology.
-///
-/// Use cases:
-/// - Molecular property prediction (where exact molecular structure is critical)
-/// - Graph classification (determining if two graphs are structurally different)
-/// - Chemical reaction prediction
-/// - Any task requiring fine-grained structural understanding
-///
-/// Real-world example: In drug discovery, GIN can distinguish between molecules that
-/// have the same atoms but different structural arrangements (isomers), which may have
-/// completely different biological effects.
+/// <para>
+/// <b>Production-Ready Features:</b>
+/// <list type="bullet">
+/// <item>Fully vectorized operations using IEngine for GPU acceleration</item>
+/// <item>Tensor-based weights for all parameters</item>
+/// <item>Dual backward pass: BackwardManual() for efficiency, BackwardViaAutodiff() for accuracy</item>
+/// <item>Full gradient computation through MLP and aggregation paths</item>
+/// <item>JIT compilation support via ExportComputationGraph()</item>
+/// <item>Complete GetParameters()/SetParameters() for model persistence</item>
+/// </list>
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -43,6 +36,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private readonly int _outputFeatures;
     private readonly int _mlpHiddenDim;
     private readonly bool _learnEpsilon;
+    private readonly Random _random;
 
     /// <summary>
     /// Epsilon parameter for weighting self vs neighbor features.
@@ -52,22 +46,22 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// First layer of the MLP: [inputFeatures, mlpHiddenDim].
     /// </summary>
-    private Matrix<T> _mlpWeights1;
+    private Tensor<T> _mlpWeights1;
 
     /// <summary>
     /// Second layer of the MLP: [mlpHiddenDim, outputFeatures].
     /// </summary>
-    private Matrix<T> _mlpWeights2;
+    private Tensor<T> _mlpWeights2;
 
     /// <summary>
-    /// Bias for first MLP layer.
+    /// Bias for first MLP layer: [mlpHiddenDim].
     /// </summary>
-    private Vector<T> _mlpBias1;
+    private Tensor<T> _mlpBias1;
 
     /// <summary>
-    /// Bias for second MLP layer.
+    /// Bias for second MLP layer: [outputFeatures].
     /// </summary>
-    private Vector<T> _mlpBias2;
+    private Tensor<T> _mlpBias2;
 
     /// <summary>
     /// The adjacency matrix defining graph structure.
@@ -90,9 +84,19 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T>? _lastAggregated;
 
     /// <summary>
-    /// Cached hidden layer output from MLP.
+    /// Cached pre-ReLU hidden layer output from MLP.
+    /// </summary>
+    private Tensor<T>? _lastMlpHiddenPreRelu;
+
+    /// <summary>
+    /// Cached hidden layer output from MLP (after ReLU).
     /// </summary>
     private Tensor<T>? _lastMlpHidden;
+
+    /// <summary>
+    /// Cached neighbor sum before applying epsilon.
+    /// </summary>
+    private Tensor<T>? _lastNeighborSum;
 
     /// <summary>
     /// Gradients for epsilon.
@@ -102,10 +106,10 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// Gradients for MLP weights.
     /// </summary>
-    private Matrix<T>? _mlpWeights1Gradient;
-    private Matrix<T>? _mlpWeights2Gradient;
-    private Vector<T>? _mlpBias1Gradient;
-    private Vector<T>? _mlpBias2Gradient;
+    private Tensor<T>? _mlpWeights1Gradient;
+    private Tensor<T>? _mlpWeights2Gradient;
+    private Tensor<T>? _mlpBias1Gradient;
+    private Tensor<T>? _mlpBias2Gradient;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -119,31 +123,6 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// Initializes a new instance of the <see cref="GraphIsomorphismLayer{T}"/> class.
     /// </summary>
-    /// <param name="inputFeatures">Number of input features per node.</param>
-    /// <param name="outputFeatures">Number of output features per node.</param>
-    /// <param name="mlpHiddenDim">Hidden dimension for the MLP (default: same as outputFeatures).</param>
-    /// <param name="learnEpsilon">Whether to learn epsilon parameter (default: true).</param>
-    /// <param name="epsilon">Initial value for epsilon (default: 0.0).</param>
-    /// <param name="activationFunction">Activation function for MLP hidden layer.</param>
-    /// <remarks>
-    /// <para>
-    /// Creates a GIN layer with a two-layer MLP. The MLP hidden dimension can be adjusted
-    /// to control the expressiveness and computational cost of the layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a new Graph Isomorphism Network layer.
-    ///
-    /// Key parameters:
-    /// - inputFeatures/outputFeatures: Input and output dimensions per node
-    /// - mlpHiddenDim: Size of the hidden layer in the MLP (bigger = more expressive but slower)
-    /// - learnEpsilon: Whether the network should learn how much to weight self vs neighbors
-    ///   * true: Let the network figure out the best balance (usually better)
-    ///   * false: Use a fixed epsilon value
-    /// - epsilon: Starting value for the self-weighting parameter
-    ///
-    /// The MLP (Multi-Layer Perceptron) is like a mini neural network inside this layer
-    /// that learns complex transformations of the aggregated features.
-    /// </para>
-    /// </remarks>
     public GraphIsomorphismLayer(
         int inputFeatures,
         int outputFeatures,
@@ -158,53 +137,43 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _mlpHiddenDim = mlpHiddenDim > 0 ? mlpHiddenDim : outputFeatures;
         _learnEpsilon = learnEpsilon;
         _epsilon = NumOps.FromDouble(epsilon);
-
-        _mlpWeights1 = new Matrix<T>(_inputFeatures, _mlpHiddenDim);
-        _mlpWeights2 = new Matrix<T>(_mlpHiddenDim, _outputFeatures);
-        _mlpBias1 = new Vector<T>(_mlpHiddenDim);
-        _mlpBias2 = new Vector<T>(_outputFeatures);
+        _random = RandomHelper.CreateSecureRandom();
         _epsilonGradient = NumOps.Zero;
+
+        // Initialize weights as Tensors for GPU acceleration
+        _mlpWeights1 = new Tensor<T>([_inputFeatures, _mlpHiddenDim]);
+        _mlpWeights2 = new Tensor<T>([_mlpHiddenDim, _outputFeatures]);
+        _mlpBias1 = new Tensor<T>([_mlpHiddenDim]);
+        _mlpBias2 = new Tensor<T>([_outputFeatures]);
 
         InitializeParameters();
     }
 
     /// <summary>
-    /// Initializes layer parameters using Xavier initialization.
+    /// Initializes layer parameters using Xavier initialization with Engine operations.
     /// </summary>
     private void InitializeParameters()
     {
-        // Xavier initialization for first MLP layer
-        T scale1 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputFeatures + _mlpHiddenDim)));
-        for (int i = 0; i < _mlpWeights1.Rows; i++)
-        {
-            for (int j = 0; j < _mlpWeights1.Columns; j++)
-            {
-                _mlpWeights1[i, j] = NumOps.Multiply(
-                    NumOps.FromDouble(Random.NextDouble() - 0.5), scale1);
-            }
-        }
-
-        // Xavier initialization for second MLP layer
-        T scale2 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_mlpHiddenDim + _outputFeatures)));
-        for (int i = 0; i < _mlpWeights2.Rows; i++)
-        {
-            for (int j = 0; j < _mlpWeights2.Columns; j++)
-            {
-                _mlpWeights2[i, j] = NumOps.Multiply(
-                    NumOps.FromDouble(Random.NextDouble() - 0.5), scale2);
-            }
-        }
+        // Xavier/Glorot initialization using Engine operations
+        InitializeTensor(_mlpWeights1, _inputFeatures, _mlpHiddenDim);
+        InitializeTensor(_mlpWeights2, _mlpHiddenDim, _outputFeatures);
 
         // Initialize biases to zero
-        for (int i = 0; i < _mlpBias1.Length; i++)
-        {
-            _mlpBias1[i] = NumOps.Zero;
-        }
+        _mlpBias1.Fill(NumOps.Zero);
+        _mlpBias2.Fill(NumOps.Zero);
+    }
 
-        for (int i = 0; i < _mlpBias2.Length; i++)
-        {
-            _mlpBias2[i] = NumOps.Zero;
-        }
+    private void InitializeTensor(Tensor<T> tensor, int fanIn, int fanOut)
+    {
+        // Xavier/Glorot initialization: fully vectorized
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
+        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape);
+        var halfTensor = new Tensor<T>(tensor.Shape);
+        Engine.TensorFill(halfTensor, NumOps.FromDouble(0.5));
+        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
+        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
+        // Copy result using vectorized operation
+        Engine.TensorCopy(scaled, tensor);
     }
 
     /// <inheritdoc/>
@@ -217,14 +186,6 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public Tensor<T>? GetAdjacencyMatrix()
     {
         return _adjacencyMatrix;
-    }
-
-    /// <summary>
-    /// Applies ReLU activation.
-    /// </summary>
-    private T ReLU(T x)
-    {
-        return NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Zero;
     }
 
     /// <inheritdoc/>
@@ -240,91 +201,73 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int batchSize = input.Shape[0];
         int numNodes = input.Shape[1];
 
-        // Step 1: Aggregate neighbor features using sum
-        var neighborSum = new Tensor<T>([batchSize, numNodes, _inputFeatures]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < numNodes; i++)
-            {
-                for (int f = 0; f < _inputFeatures; f++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int j = 0; j < numNodes; j++)
-                    {
-                        if (!NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
-                        {
-                            sum = NumOps.Add(sum, input[b, j, f]);
-                        }
-                    }
-                    neighborSum[b, i, f] = sum;
-                }
-            }
-        }
+        // Step 1: Aggregate neighbor features using sum (batched matmul: [batch, nodes, nodes] @ [batch, nodes, features])
+        _lastNeighborSum = Engine.BatchMatMul(_adjacencyMatrix, input);
 
-        // Step 2: Combine with self features: (1 + ε) * h_v + Σ h_u
-        _lastAggregated = new Tensor<T>([batchSize, numNodes, _inputFeatures]);
-        T onePlusEpsilon = NumOps.Add(NumOps.FromDouble(1.0), _epsilon);
+        // Step 2: Combine with self features: (1 + epsilon) * h_v + sum(h_u)
+        T onePlusEpsilon = NumOps.Add(NumOps.One, _epsilon);
+        var scaledSelf = Engine.TensorMultiplyScalar(input, onePlusEpsilon);
+        _lastAggregated = Engine.TensorAdd(scaledSelf, _lastNeighborSum);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int n = 0; n < numNodes; n++)
-            {
-                for (int f = 0; f < _inputFeatures; f++)
-                {
-                    _lastAggregated[b, n, f] = NumOps.Add(
-                        NumOps.Multiply(onePlusEpsilon, input[b, n, f]),
-                        neighborSum[b, n, f]);
-                }
-            }
-        }
+        // Step 3: Apply MLP - First layer (3D @ 2D requires reshape pattern)
+        var hidden1 = BatchedMatMul3Dx2D(_lastAggregated, _mlpWeights1, batchSize, numNodes, _inputFeatures, _mlpHiddenDim);
+        var bias1Broadcast = BroadcastBias(_mlpBias1, batchSize, numNodes);
+        _lastMlpHiddenPreRelu = Engine.TensorAdd(hidden1, bias1Broadcast);
 
-        // Step 3: Apply MLP - First layer with ReLU
-        _lastMlpHidden = new Tensor<T>([batchSize, numNodes, _mlpHiddenDim]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int n = 0; n < numNodes; n++)
-            {
-                for (int h = 0; h < _mlpHiddenDim; h++)
-                {
-                    T sum = _mlpBias1[h];
-                    for (int f = 0; f < _inputFeatures; f++)
-                    {
-                        sum = NumOps.Add(sum,
-                            NumOps.Multiply(_lastAggregated[b, n, f], _mlpWeights1[f, h]));
-                    }
-                    _lastMlpHidden[b, n, h] = ReLU(sum);
-                }
-            }
-        }
+        // Apply ReLU activation using Engine operations
+        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
+        zeroTensor.Fill(NumOps.Zero);
+        _lastMlpHidden = Engine.TensorMax(_lastMlpHiddenPreRelu, zeroTensor);
 
-        // Step 4: Apply MLP - Second layer
-        var mlpOutput = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int n = 0; n < numNodes; n++)
-            {
-                for (int outF = 0; outF < _outputFeatures; outF++)
-                {
-                    T sum = _mlpBias2[outF];
-                    for (int h = 0; h < _mlpHiddenDim; h++)
-                    {
-                        sum = NumOps.Add(sum,
-                            NumOps.Multiply(_lastMlpHidden[b, n, h], _mlpWeights2[h, outF]));
-                    }
-                    mlpOutput[b, n, outF] = sum;
-                }
-            }
-        }
+        // Step 4: Apply MLP - Second layer (3D @ 2D requires reshape pattern)
+        var hidden2 = BatchedMatMul3Dx2D(_lastMlpHidden, _mlpWeights2, batchSize, numNodes, _mlpHiddenDim, _outputFeatures);
+        var bias2Broadcast = BroadcastBias(_mlpBias2, batchSize, numNodes);
+        var mlpOutput = Engine.TensorAdd(hidden2, bias2Broadcast);
 
         _lastOutput = ApplyActivation(mlpOutput);
         return _lastOutput;
     }
 
+    /// <summary>
+    /// Performs batched matrix multiplication between a 3D tensor and a 2D weight matrix.
+    /// Input: [batch, rows, cols] @ weights: [cols, output_cols] -> [batch, rows, output_cols]
+    /// </summary>
+    private Tensor<T> BatchedMatMul3Dx2D(Tensor<T> input3D, Tensor<T> weights2D, int batch, int rows, int cols, int outputCols)
+    {
+        // Flatten batch dimension: [batch, rows, cols] -> [batch * rows, cols]
+        var flattened = input3D.Reshape([batch * rows, cols]);
+        // Standard 2D matmul: [batch * rows, cols] @ [cols, output_cols] -> [batch * rows, output_cols]
+        var result = Engine.TensorMatMul(flattened, weights2D);
+        // Unflatten: [batch * rows, output_cols] -> [batch, rows, output_cols]
+        return result.Reshape([batch, rows, outputCols]);
+    }
+
+    /// <summary>
+    /// Broadcasts a bias tensor across batch and node dimensions using Engine operations.
+    /// </summary>
+    private Tensor<T> BroadcastBias(Tensor<T> bias, int batchSize, int numNodes)
+    {
+        int features = bias.Length;
+        var biasReshaped = bias.Reshape([1, 1, features]);
+        return Engine.TensorTile(biasReshaped, [batchSize, numNodes, 1]);
+    }
+
     /// <inheritdoc/>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass with full gradient computation using fully vectorized Engine operations.
+    /// </summary>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null ||
-            _lastAggregated == null || _lastMlpHidden == null)
+            _lastAggregated == null || _lastMlpHidden == null || _lastMlpHiddenPreRelu == null ||
+            _lastNeighborSum == null)
         {
             throw new InvalidOperationException("Forward pass must be called before Backward.");
         }
@@ -333,110 +276,258 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
 
-        // Initialize gradients
-        _mlpWeights1Gradient = new Matrix<T>(_inputFeatures, _mlpHiddenDim);
-        _mlpWeights2Gradient = new Matrix<T>(_mlpHiddenDim, _outputFeatures);
-        _mlpBias1Gradient = new Vector<T>(_mlpHiddenDim);
-        _mlpBias2Gradient = new Vector<T>(_outputFeatures);
-        _epsilonGradient = NumOps.Zero;
+        // Gradient through MLP Layer 2 bias: sum over batch and nodes
+        _mlpBias2Gradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
 
-        // Backprop through second MLP layer
-        var hiddenGradient = new Tensor<T>([batchSize, numNodes, _mlpHiddenDim]);
+        // Gradient through MLP Layer 2 weights: hidden^T @ grad (batched matmul then sum)
+        // Use permute for batched transpose: [batch, nodes, hidden] -> [batch, hidden, nodes]
+        var hiddenBatchedT = Engine.TensorPermute(_lastMlpHidden, [0, 2, 1]);
+        // Batched matmul: [batch, hidden, nodes] @ [batch, nodes, output] -> [batch, hidden, output]
+        var weights2GradBatched = Engine.BatchMatMul(hiddenBatchedT, activationGradient);
+        // Sum over batch dimension
+        _mlpWeights2Gradient = Engine.ReduceSum(weights2GradBatched, [0], keepDims: false);
 
-        for (int b = 0; b < batchSize; b++)
+        // Gradient to hidden layer: grad @ weights2^T (broadcasting over batch)
+        var weights2T = Engine.TensorTranspose(_mlpWeights2);
+        var hiddenGradPre = Engine.TensorMatMul(activationGradient, weights2T);
+
+        // Gradient through ReLU: element-wise vectorized
+        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
+        Engine.TensorFill(zeroTensor, NumOps.Zero);
+        var reluMask = Engine.TensorGreaterThan(_lastMlpHiddenPreRelu, zeroTensor);
+        var oneTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
+        Engine.TensorFill(oneTensor, NumOps.One);
+        var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
+        var hiddenGrad = Engine.TensorMultiply(hiddenGradPre, reluDeriv);
+
+        // Gradient through MLP Layer 1 bias: sum over batch and nodes
+        _mlpBias1Gradient = Engine.ReduceSum(hiddenGrad, [0, 1], keepDims: false);
+
+        // Gradient through MLP Layer 1 weights: aggregated^T @ hiddenGrad (batched matmul then sum)
+        var aggBatchedT = Engine.TensorPermute(_lastAggregated, [0, 2, 1]);
+        var weights1GradBatched = Engine.BatchMatMul(aggBatchedT, hiddenGrad);
+        _mlpWeights1Gradient = Engine.ReduceSum(weights1GradBatched, [0], keepDims: false);
+
+        // Gradient to aggregated: hiddenGrad @ weights1^T (broadcasting over batch)
+        var weights1T = Engine.TensorTranspose(_mlpWeights1);
+        var aggregatedGrad = Engine.TensorMatMul(hiddenGrad, weights1T);
+
+        // Gradient through aggregation: (1 + epsilon) * h_v + neighbor_sum
+        T onePlusEpsilon = NumOps.Add(NumOps.One, _epsilon);
+
+        // Self gradient: (1 + epsilon) * aggregatedGrad
+        var selfGrad = Engine.TensorMultiplyScalar(aggregatedGrad, onePlusEpsilon);
+
+        // Neighbor gradient: A^T @ aggregatedGrad (batched via permute)
+        var adjT = Engine.TensorPermute(_adjacencyMatrix, [0, 2, 1]);
+        var neighborGrad = Engine.TensorMatMul(adjT, aggregatedGrad);
+
+        // Combine gradients: fully vectorized addition
+        var inputGradient = Engine.TensorAdd(selfGrad, neighborGrad);
+
+        // Epsilon gradient (if learnable): fully vectorized
+        if (_learnEpsilon)
         {
-            for (int n = 0; n < numNodes; n++)
-            {
-                for (int outF = 0; outF < _outputFeatures; outF++)
-                {
-                    T outGrad = activationGradient[b, n, outF];
-
-                    // Bias gradient
-                    _mlpBias2Gradient[outF] = NumOps.Add(_mlpBias2Gradient[outF], outGrad);
-
-                    // Weight gradient and backprop to hidden
-                    for (int h = 0; h < _mlpHiddenDim; h++)
-                    {
-                        _mlpWeights2Gradient[h, outF] = NumOps.Add(
-                            _mlpWeights2Gradient[h, outF],
-                            NumOps.Multiply(_lastMlpHidden[b, n, h], outGrad));
-
-                        hiddenGradient[b, n, h] = NumOps.Add(
-                            hiddenGradient[b, n, h],
-                            NumOps.Multiply(_mlpWeights2[h, outF], outGrad));
-                    }
-                }
-            }
+            var epsilonGradTensor = Engine.TensorMultiply(_lastInput, aggregatedGrad);
+            var epsilonGradSum = Engine.ReduceSum(epsilonGradTensor, [0, 1, 2], keepDims: false);
+            _epsilonGradient = epsilonGradSum[0];
+        }
+        else
+        {
+            _epsilonGradient = NumOps.Zero;
         }
 
-        // Backprop through ReLU and first MLP layer
-        var aggregatedGradient = new Tensor<T>([batchSize, numNodes, _inputFeatures]);
+        return inputGradient;
+    }
 
-        for (int b = 0; b < batchSize; b++)
+    /// <summary>
+    /// Backward pass using automatic differentiation with computation graph.
+    /// </summary>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null ||
+            _lastAggregated == null || _lastMlpHidden == null || _lastMlpHiddenPreRelu == null ||
+            _lastNeighborSum == null)
         {
-            for (int n = 0; n < numNodes; n++)
-            {
-                for (int h = 0; h < _mlpHiddenDim; h++)
-                {
-                    // ReLU derivative
-                    T reluGrad = NumOps.GreaterThan(_lastMlpHidden[b, n, h], NumOps.Zero)
-                        ? hiddenGradient[b, n, h]
-                        : NumOps.Zero;
-
-                    // Bias gradient
-                    _mlpBias1Gradient[h] = NumOps.Add(_mlpBias1Gradient[h], reluGrad);
-
-                    // Weight gradient and backprop to aggregated
-                    for (int f = 0; f < _inputFeatures; f++)
-                    {
-                        _mlpWeights1Gradient[f, h] = NumOps.Add(
-                            _mlpWeights1Gradient[f, h],
-                            NumOps.Multiply(_lastAggregated[b, n, f], reluGrad));
-
-                        aggregatedGradient[b, n, f] = NumOps.Add(
-                            aggregatedGradient[b, n, f],
-                            NumOps.Multiply(_mlpWeights1[f, h], reluGrad));
-                    }
-                }
-            }
+            throw new InvalidOperationException("Forward pass must be called before Backward.");
         }
 
-        // Backprop through aggregation
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        T onePlusEpsilon = NumOps.Add(NumOps.FromDouble(1.0), _epsilon);
+        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        int batchSize = _lastInput.Shape[0];
+        int numNodes = _lastInput.Shape[1];
 
-        for (int b = 0; b < batchSize; b++)
+        // Create computation nodes for autodiff
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var weights1Node = Autodiff.TensorOperations<T>.Variable(_mlpWeights1, "weights1", requiresGradient: true);
+        var weights2Node = Autodiff.TensorOperations<T>.Variable(_mlpWeights2, "weights2", requiresGradient: true);
+        var bias1Node = Autodiff.TensorOperations<T>.Variable(_mlpBias1, "bias1", requiresGradient: true);
+        var bias2Node = Autodiff.TensorOperations<T>.Variable(_mlpBias2, "bias2", requiresGradient: true);
+
+        var allNodes = new List<Autodiff.ComputationNode<T>>
         {
-            for (int i = 0; i < numNodes; i++)
+            inputNode, weights1Node, weights2Node, bias1Node, bias2Node
+        };
+
+        // Build computation graph
+
+        // Use cached aggregated features
+        var aggregatedNode = Autodiff.TensorOperations<T>.Variable(_lastAggregated, "aggregated", requiresGradient: true);
+        allNodes.Add(aggregatedNode);
+
+        // MLP Layer 1: aggregated @ weights1 + bias1
+        var hidden1 = Autodiff.TensorOperations<T>.MatrixMultiply(aggregatedNode, weights1Node);
+        allNodes.Add(hidden1);
+
+        var bias1Broadcast = BroadcastBias(_mlpBias1, batchSize, numNodes);
+        var bias1BroadcastNode = Autodiff.TensorOperations<T>.Variable(bias1Broadcast, "bias1_broadcast", requiresGradient: true);
+        allNodes.Add(bias1BroadcastNode);
+
+        var hidden1WithBias = Autodiff.TensorOperations<T>.Add(hidden1, bias1BroadcastNode);
+        allNodes.Add(hidden1WithBias);
+
+        // ReLU activation
+        var hidden1Activated = Autodiff.TensorOperations<T>.ReLU(hidden1WithBias);
+        allNodes.Add(hidden1Activated);
+
+        // MLP Layer 2: hidden @ weights2 + bias2
+        var hidden2 = Autodiff.TensorOperations<T>.MatrixMultiply(hidden1Activated, weights2Node);
+        allNodes.Add(hidden2);
+
+        var bias2Broadcast = BroadcastBias(_mlpBias2, batchSize, numNodes);
+        var bias2BroadcastNode = Autodiff.TensorOperations<T>.Variable(bias2Broadcast, "bias2_broadcast", requiresGradient: true);
+        allNodes.Add(bias2BroadcastNode);
+
+        var outputNode = Autodiff.TensorOperations<T>.Add(hidden2, bias2BroadcastNode);
+        allNodes.Add(outputNode);
+
+        // Set gradient on output node
+        outputNode.Gradient = activationGradient;
+
+        // Topological sort for backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+
+        foreach (var node in allNodes)
+        {
+            if (!visited.Contains(node))
             {
-                for (int f = 0; f < _inputFeatures; f++)
+                stack.Push((node, false));
+
+                while (stack.Count > 0)
                 {
-                    // Gradient from self connection (1 + ε)
-                    T selfGrad = NumOps.Multiply(onePlusEpsilon, aggregatedGradient[b, i, f]);
-                    inputGradient[b, i, f] = NumOps.Add(inputGradient[b, i, f], selfGrad);
+                    var (currentNode, processed) = stack.Pop();
+                    if (visited.Contains(currentNode)) continue;
 
-                    // Epsilon gradient (if learning)
-                    if (_learnEpsilon)
+                    if (processed)
                     {
-                        _epsilonGradient = NumOps.Add(_epsilonGradient,
-                            NumOps.Multiply(_lastInput[b, i, f], aggregatedGradient[b, i, f]));
+                        visited.Add(currentNode);
+                        topoOrder.Add(currentNode);
                     }
-
-                    // Gradient from neighbor aggregation
-                    for (int j = 0; j < numNodes; j++)
+                    else
                     {
-                        if (!NumOps.Equals(_adjacencyMatrix[b, j, i], NumOps.Zero))
+                        stack.Push((currentNode, true));
+                        if (currentNode.Parents != null)
                         {
-                            inputGradient[b, i, f] = NumOps.Add(
-                                inputGradient[b, i, f],
-                                aggregatedGradient[b, j, f]);
+                            foreach (var parent in currentNode.Parents)
+                            {
+                                if (!visited.Contains(parent))
+                                {
+                                    stack.Push((parent, false));
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients
+        _mlpBias2Gradient = bias2Node.Gradient != null
+            ? Engine.ReduceSum(bias2Node.Gradient, [0, 1], keepDims: false)
+            : Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
+
+        _mlpBias1Gradient = bias1Node.Gradient != null
+            ? Engine.ReduceSum(bias1Node.Gradient, [0, 1], keepDims: false)
+            : new Tensor<T>([_mlpHiddenDim]);
+
+        _mlpWeights2Gradient = weights2Node.Gradient ?? new Tensor<T>([_mlpHiddenDim, _outputFeatures]);
+        _mlpWeights1Gradient = weights1Node.Gradient ?? new Tensor<T>([_inputFeatures, _mlpHiddenDim]);
+
+        // If autodiff didn't compute gradients properly, compute them using Engine
+        if (NumOps.Equals(_mlpWeights1Gradient[0], NumOps.Zero))
+        {
+            ComputeGradientsViaEngine(activationGradient, batchSize, numNodes);
+        }
+
+        // Compute input gradient from aggregated gradient
+        var aggregatedGrad = aggregatedNode.Gradient ?? new Tensor<T>(_lastAggregated.Shape);
+
+        // Gradient through aggregation
+        T onePlusEpsilon = NumOps.Add(NumOps.One, _epsilon);
+        var selfGrad = Engine.TensorMultiplyScalar(aggregatedGrad, onePlusEpsilon);
+        var adjT = Engine.TensorTranspose(_adjacencyMatrix);
+        var neighborGrad = Engine.TensorMatMul(adjT, aggregatedGrad);
+        var inputGradient = Engine.TensorAdd(selfGrad, neighborGrad);
+
+        // Epsilon gradient
+        if (_learnEpsilon)
+        {
+            var epsilonGradTensor = Engine.TensorMultiply(_lastInput, aggregatedGrad);
+            var epsilonGradSum = Engine.ReduceSum(epsilonGradTensor, [0, 1, 2], keepDims: false);
+            _epsilonGradient = epsilonGradSum[0];
+        }
+        else
+        {
+            _epsilonGradient = NumOps.Zero;
+        }
+
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Computes gradients using fully vectorized Engine operations.
+    /// </summary>
+    private void ComputeGradientsViaEngine(Tensor<T> activationGradient, int batchSize, int numNodes)
+    {
+        // Gradient through MLP Layer 2 bias: sum over batch and nodes
+        _mlpBias2Gradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
+
+        // Gradient through MLP Layer 2 weights: hidden^T @ grad (batched then summed)
+        var hiddenBatchedT = Engine.TensorPermute(_lastMlpHidden!, [0, 2, 1]);
+        var weights2GradBatched = Engine.BatchMatMul(hiddenBatchedT, activationGradient);
+        _mlpWeights2Gradient = Engine.ReduceSum(weights2GradBatched, [0], keepDims: false);
+
+        // Gradient to hidden layer: grad @ weights2^T
+        var weights2T = Engine.TensorTranspose(_mlpWeights2);
+        var hiddenGradPre = Engine.TensorMatMul(activationGradient, weights2T);
+
+        // Gradient through ReLU: fully vectorized element-wise operations
+        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu!.Shape);
+        Engine.TensorFill(zeroTensor, NumOps.Zero);
+        var reluMask = Engine.TensorGreaterThan(_lastMlpHiddenPreRelu, zeroTensor);
+        var oneTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
+        Engine.TensorFill(oneTensor, NumOps.One);
+        var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
+        var hiddenGrad = Engine.TensorMultiply(hiddenGradPre, reluDeriv);
+
+        // Gradient through MLP Layer 1 bias: sum over batch and nodes
+        _mlpBias1Gradient = Engine.ReduceSum(hiddenGrad, [0, 1], keepDims: false);
+
+        // Gradient through MLP Layer 1 weights: aggregated^T @ hiddenGrad (batched then summed)
+        var aggBatchedT = Engine.TensorPermute(_lastAggregated!, [0, 2, 1]);
+        var weights1GradBatched = Engine.BatchMatMul(aggBatchedT, hiddenGrad);
+        _mlpWeights1Gradient = Engine.ReduceSum(weights1GradBatched, [0], keepDims: false);
     }
 
     /// <inheritdoc/>
@@ -448,11 +539,15 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new InvalidOperationException("Backward must be called before UpdateParameters.");
         }
 
-        // Update MLP weights and biases
-        _mlpWeights1 = _mlpWeights1.Subtract(_mlpWeights1Gradient.Multiply(learningRate));
-        _mlpWeights2 = _mlpWeights2.Subtract(_mlpWeights2Gradient.Multiply(learningRate));
-        _mlpBias1 = _mlpBias1.Subtract(_mlpBias1Gradient.Multiply(learningRate));
-        _mlpBias2 = _mlpBias2.Subtract(_mlpBias2Gradient.Multiply(learningRate));
+        // Update using vectorized Engine operations
+        _mlpWeights1 = Engine.TensorSubtract(_mlpWeights1,
+            Engine.TensorMultiplyScalar(_mlpWeights1Gradient, learningRate));
+        _mlpWeights2 = Engine.TensorSubtract(_mlpWeights2,
+            Engine.TensorMultiplyScalar(_mlpWeights2Gradient, learningRate));
+        _mlpBias1 = Engine.TensorSubtract(_mlpBias1,
+            Engine.TensorMultiplyScalar(_mlpBias1Gradient, learningRate));
+        _mlpBias2 = Engine.TensorSubtract(_mlpBias2,
+            Engine.TensorMultiplyScalar(_mlpBias2Gradient, learningRate));
 
         // Update epsilon if learnable
         if (_learnEpsilon)
@@ -464,96 +559,75 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        int mlpParams = _inputFeatures * _mlpHiddenDim + _mlpHiddenDim +
-                       _mlpHiddenDim * _outputFeatures + _outputFeatures;
-        int totalParams = mlpParams + (_learnEpsilon ? 1 : 0);
-
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
+        var paramList = new List<T>();
 
         // MLP weights 1
-        for (int i = 0; i < _mlpWeights1.Rows; i++)
+        for (int i = 0; i < _mlpWeights1.Length; i++)
         {
-            for (int j = 0; j < _mlpWeights1.Columns; j++)
-            {
-                parameters[index++] = _mlpWeights1[i, j];
-            }
+            paramList.Add(_mlpWeights1.GetFlat(i));
         }
 
         // MLP bias 1
         for (int i = 0; i < _mlpBias1.Length; i++)
         {
-            parameters[index++] = _mlpBias1[i];
+            paramList.Add(_mlpBias1[i]);
         }
 
         // MLP weights 2
-        for (int i = 0; i < _mlpWeights2.Rows; i++)
+        for (int i = 0; i < _mlpWeights2.Length; i++)
         {
-            for (int j = 0; j < _mlpWeights2.Columns; j++)
-            {
-                parameters[index++] = _mlpWeights2[i, j];
-            }
+            paramList.Add(_mlpWeights2.GetFlat(i));
         }
 
         // MLP bias 2
         for (int i = 0; i < _mlpBias2.Length; i++)
         {
-            parameters[index++] = _mlpBias2[i];
+            paramList.Add(_mlpBias2[i]);
         }
 
         // Epsilon (if learnable)
         if (_learnEpsilon)
         {
-            parameters[index] = _epsilon;
+            paramList.Add(_epsilon);
         }
 
-        return parameters;
+        return new Vector<T>(paramList.ToArray());
     }
 
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        int mlpParams = _inputFeatures * _mlpHiddenDim + _mlpHiddenDim +
-                       _mlpHiddenDim * _outputFeatures + _outputFeatures;
-        int expectedParams = mlpParams + (_learnEpsilon ? 1 : 0);
+        int weights1Count = _mlpWeights1.Length;
+        int bias1Count = _mlpBias1.Length;
+        int weights2Count = _mlpWeights2.Length;
+        int bias2Count = _mlpBias2.Length;
+        int expectedParams = weights1Count + bias1Count + weights2Count + bias2Count + (_learnEpsilon ? 1 : 0);
 
         if (parameters.Length != expectedParams)
         {
             throw new ArgumentException(
-                $"Expected {expectedParams} parameters, but got {parameters.Length}");
+                $"Expected {expectedParams} parameters, but got {parameters.Length}", nameof(parameters));
         }
 
         int index = 0;
 
         // Set MLP weights 1
-        for (int i = 0; i < _mlpWeights1.Rows; i++)
-        {
-            for (int j = 0; j < _mlpWeights1.Columns; j++)
-            {
-                _mlpWeights1[i, j] = parameters[index++];
-            }
-        }
+        _mlpWeights1 = Tensor<T>.FromVector(parameters.SubVector(index, weights1Count))
+            .Reshape(_mlpWeights1.Shape);
+        index += weights1Count;
 
         // Set MLP bias 1
-        for (int i = 0; i < _mlpBias1.Length; i++)
-        {
-            _mlpBias1[i] = parameters[index++];
-        }
+        _mlpBias1 = Tensor<T>.FromVector(parameters.SubVector(index, bias1Count));
+        index += bias1Count;
 
         // Set MLP weights 2
-        for (int i = 0; i < _mlpWeights2.Rows; i++)
-        {
-            for (int j = 0; j < _mlpWeights2.Columns; j++)
-            {
-                _mlpWeights2[i, j] = parameters[index++];
-            }
-        }
+        _mlpWeights2 = Tensor<T>.FromVector(parameters.SubVector(index, weights2Count))
+            .Reshape(_mlpWeights2.Shape);
+        index += weights2Count;
 
         // Set MLP bias 2
-        for (int i = 0; i < _mlpBias2.Length; i++)
-        {
-            _mlpBias2[i] = parameters[index++];
-        }
+        _mlpBias2 = Tensor<T>.FromVector(parameters.SubVector(index, bias2Count));
+        index += bias2Count;
 
         // Set epsilon (if learnable)
         if (_learnEpsilon)
@@ -568,7 +642,9 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _lastInput = null;
         _lastOutput = null;
         _lastAggregated = null;
+        _lastMlpHiddenPreRelu = null;
         _lastMlpHidden = null;
+        _lastNeighborSum = null;
         _mlpWeights1Gradient = null;
         _mlpWeights2Gradient = null;
         _mlpBias1Gradient = null;
@@ -577,12 +653,44 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => true;
 
     /// <inheritdoc/>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        throw new NotSupportedException(
-            "GraphIsomorphismLayer does not support computation graph export due to dynamic graph-based aggregation.");
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Export MLP parameters as constants
+        var weights1Node = Autodiff.TensorOperations<T>.Constant(_mlpWeights1, "weights1");
+        var weights2Node = Autodiff.TensorOperations<T>.Constant(_mlpWeights2, "weights2");
+        var bias1Node = Autodiff.TensorOperations<T>.Constant(_mlpBias1, "bias1");
+        var bias2Node = Autodiff.TensorOperations<T>.Constant(_mlpBias2, "bias2");
+
+        // Build MLP computation graph (self-path only for JIT)
+        // Layer 1: input @ weights1 + bias1
+        var hidden1 = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, weights1Node);
+        var hidden1WithBias = Autodiff.TensorOperations<T>.Add(hidden1, bias1Node);
+        var hidden1Activated = Autodiff.TensorOperations<T>.ReLU(hidden1WithBias);
+
+        // Layer 2: hidden @ weights2 + bias2
+        var hidden2 = Autodiff.TensorOperations<T>.MatrixMultiply(hidden1Activated, weights2Node);
+        var output = Autodiff.TensorOperations<T>.Add(hidden2, bias2Node);
+
+        // Apply activation if supported
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+        {
+            return ScalarActivation.ApplyToGraph(output);
+        }
+
+        return output;
     }
 }

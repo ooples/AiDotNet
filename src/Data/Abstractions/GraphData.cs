@@ -104,8 +104,18 @@ public class GraphData<T>
 
     /// <summary>
     /// Number of edges in the graph.
+    /// Handles both [2, num_edges] and [num_edges, 2] EdgeIndex formats.
     /// </summary>
-    public int NumEdges => EdgeIndex.Shape[0];
+    public int NumEdges
+    {
+        get
+        {
+            if (EdgeIndex.Shape.Length < 2) return 0;
+            // If shape is [2, X], then X is num_edges (COO format with source/target rows)
+            // If shape is [X, 2], then X is num_edges (edge list format with [src, tgt] pairs)
+            return EdgeIndex.Shape[0] == 2 ? EdgeIndex.Shape[1] : EdgeIndex.Shape[0];
+        }
+    }
 
     /// <summary>
     /// Number of node features.

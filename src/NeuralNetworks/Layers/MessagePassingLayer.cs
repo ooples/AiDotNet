@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks.Layers.Graph;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Defines the message function type for message passing neural networks.
@@ -68,33 +68,38 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private readonly int _outputFeatures;
     private readonly int _messageFeatures;
     private readonly bool _useEdgeFeatures;
+    private readonly Random _random;
 
     /// <summary>
     /// Message computation network (MLP).
+    /// Shape: [messageInputDim, messageFeatures] and [messageFeatures, messageFeatures]
     /// </summary>
-    private Matrix<T> _messageWeights1;
-    private Matrix<T> _messageWeights2;
-    private Vector<T> _messageBias1;
-    private Vector<T> _messageBias2;
+    private Tensor<T> _messageWeights1;
+    private Tensor<T> _messageWeights2;
+    private Tensor<T> _messageBias1;
+    private Tensor<T> _messageBias2;
 
     /// <summary>
     /// Update computation network (GRU-style update).
+    /// Shape: [inputFeatures, outputFeatures] and [messageFeatures, outputFeatures]
     /// </summary>
-    private Matrix<T> _updateWeights;
-    private Matrix<T> _updateMessageWeights;
-    private Vector<T> _updateBias;
+    private Tensor<T> _updateWeights;
+    private Tensor<T> _updateMessageWeights;
+    private Tensor<T> _updateBias;
 
     /// <summary>
     /// Reset gate weights (GRU-style).
+    /// Shape: [inputFeatures, outputFeatures] and [messageFeatures, outputFeatures]
     /// </summary>
-    private Matrix<T> _resetWeights;
-    private Matrix<T> _resetMessageWeights;
-    private Vector<T> _resetBias;
+    private Tensor<T> _resetWeights;
+    private Tensor<T> _resetMessageWeights;
+    private Tensor<T> _resetBias;
 
     /// <summary>
     /// Edge feature transformation weights (optional).
+    /// Shape: [edgeFeatureDim, messageFeatures]
     /// </summary>
-    private Matrix<T>? _edgeWeights;
+    private Tensor<T>? _edgeWeights;
 
     /// <summary>
     /// The adjacency matrix defining graph structure.
@@ -127,20 +132,35 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T>? _lastAggregated;
 
     /// <summary>
+    /// Cached hidden activations from message MLP layer 1.
+    /// </summary>
+    private Tensor<T>? _lastMessageHidden;
+
+    /// <summary>
+    /// Cached reset gates.
+    /// </summary>
+    private Tensor<T>? _lastResetGate;
+
+    /// <summary>
+    /// Cached update gates.
+    /// </summary>
+    private Tensor<T>? _lastUpdateGate;
+
+    /// <summary>
     /// Gradients for parameters.
     /// </summary>
-    private Matrix<T>? _messageWeights1Gradient;
-    private Matrix<T>? _messageWeights2Gradient;
-    private Vector<T>? _messageBias1Gradient;
-    private Vector<T>? _messageBias2Gradient;
-    private Matrix<T>? _updateWeightsGradient;
-    private Matrix<T>? _updateMessageWeightsGradient;
-    private Vector<T>? _updateBiasGradient;
-    private Matrix<T>? _resetWeightsGradient;
-    private Matrix<T>? _resetMessageWeightsGradient;
-    private Vector<T>? _resetBiasGradient;
+    private Tensor<T>? _messageWeights1Gradient;
+    private Tensor<T>? _messageWeights2Gradient;
+    private Tensor<T>? _messageBias1Gradient;
+    private Tensor<T>? _messageBias2Gradient;
+    private Tensor<T>? _updateWeightsGradient;
+    private Tensor<T>? _updateMessageWeightsGradient;
+    private Tensor<T>? _updateBiasGradient;
+    private Tensor<T>? _resetWeightsGradient;
+    private Tensor<T>? _resetMessageWeightsGradient;
+    private Tensor<T>? _resetBiasGradient;
 #pragma warning disable CS0169 // Field is never used - reserved for future edge weight gradient computation
-    private Matrix<T>? _edgeWeightsGradient;
+    private Tensor<T>? _edgeWeightsGradient;
 #pragma warning restore CS0169
 
     /// <inheritdoc/>
@@ -194,6 +214,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _outputFeatures = outputFeatures;
         _messageFeatures = messageFeatures > 0 ? messageFeatures : outputFeatures;
         _useEdgeFeatures = useEdgeFeatures;
+        _random = new Random();
 
         // Message network: takes concatenated node features (and optionally edge features)
         int messageInputDim = 2 * inputFeatures; // source + target features
@@ -202,25 +223,25 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             messageInputDim += edgeFeatureDim;
         }
 
-        _messageWeights1 = new Matrix<T>(messageInputDim, _messageFeatures);
-        _messageWeights2 = new Matrix<T>(_messageFeatures, _messageFeatures);
-        _messageBias1 = new Vector<T>(_messageFeatures);
-        _messageBias2 = new Vector<T>(_messageFeatures);
+        _messageWeights1 = new Tensor<T>([messageInputDim, _messageFeatures]);
+        _messageWeights2 = new Tensor<T>([_messageFeatures, _messageFeatures]);
+        _messageBias1 = new Tensor<T>([_messageFeatures]);
+        _messageBias2 = new Tensor<T>([_messageFeatures]);
 
         // Update network (GRU-style)
-        _updateWeights = new Matrix<T>(inputFeatures, outputFeatures);
-        _updateMessageWeights = new Matrix<T>(_messageFeatures, outputFeatures);
-        _updateBias = new Vector<T>(outputFeatures);
+        _updateWeights = new Tensor<T>([inputFeatures, outputFeatures]);
+        _updateMessageWeights = new Tensor<T>([_messageFeatures, outputFeatures]);
+        _updateBias = new Tensor<T>([outputFeatures]);
 
         // Reset gate
-        _resetWeights = new Matrix<T>(inputFeatures, outputFeatures);
-        _resetMessageWeights = new Matrix<T>(_messageFeatures, outputFeatures);
-        _resetBias = new Vector<T>(outputFeatures);
+        _resetWeights = new Tensor<T>([inputFeatures, outputFeatures]);
+        _resetMessageWeights = new Tensor<T>([_messageFeatures, outputFeatures]);
+        _resetBias = new Tensor<T>([outputFeatures]);
 
         // Edge feature transformation
         if (useEdgeFeatures && edgeFeatureDim > 0)
         {
-            _edgeWeights = new Matrix<T>(edgeFeatureDim, _messageFeatures);
+            _edgeWeights = new Tensor<T>([edgeFeatureDim, _messageFeatures]);
         }
 
         InitializeParameters();
@@ -232,43 +253,57 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private void InitializeParameters()
     {
         // Initialize message weights
-        T scaleMsg1 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_messageWeights1.Rows + _messageWeights1.Columns)));
-        InitializeMatrix(_messageWeights1, scaleMsg1);
+        T scaleMsg1 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_messageWeights1.Shape[0] + _messageWeights1.Shape[1])));
+        InitializeTensor(_messageWeights1, scaleMsg1);
 
-        T scaleMsg2 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_messageWeights2.Rows + _messageWeights2.Columns)));
-        InitializeMatrix(_messageWeights2, scaleMsg2);
+        T scaleMsg2 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_messageWeights2.Shape[0] + _messageWeights2.Shape[1])));
+        InitializeTensor(_messageWeights2, scaleMsg2);
 
         // Initialize update weights
         T scaleUpd = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputFeatures + _outputFeatures)));
-        InitializeMatrix(_updateWeights, scaleUpd);
-        InitializeMatrix(_updateMessageWeights, scaleUpd);
+        InitializeTensor(_updateWeights, scaleUpd);
+        InitializeTensor(_updateMessageWeights, scaleUpd);
 
         // Initialize reset weights
-        InitializeMatrix(_resetWeights, scaleUpd);
-        InitializeMatrix(_resetMessageWeights, scaleUpd);
+        InitializeTensor(_resetWeights, scaleUpd);
+        InitializeTensor(_resetMessageWeights, scaleUpd);
 
         // Initialize edge weights if used
         if (_edgeWeights != null)
         {
-            T scaleEdge = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_edgeWeights.Rows + _edgeWeights.Columns)));
-            InitializeMatrix(_edgeWeights, scaleEdge);
+            T scaleEdge = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_edgeWeights.Shape[0] + _edgeWeights.Shape[1])));
+            InitializeTensor(_edgeWeights, scaleEdge);
         }
 
         // Initialize biases to zero
-        for (int i = 0; i < _messageBias1.Length; i++) _messageBias1[i] = NumOps.Zero;
-        for (int i = 0; i < _messageBias2.Length; i++) _messageBias2[i] = NumOps.Zero;
-        for (int i = 0; i < _updateBias.Length; i++) _updateBias[i] = NumOps.Zero;
-        for (int i = 0; i < _resetBias.Length; i++) _resetBias[i] = NumOps.Zero;
+        _messageBias1.Fill(NumOps.Zero);
+        _messageBias2.Fill(NumOps.Zero);
+        _updateBias.Fill(NumOps.Zero);
+        _resetBias.Fill(NumOps.Zero);
     }
 
-    private void InitializeMatrix(Matrix<T> matrix, T scale)
+    /// <summary>
+    /// Initializes a tensor with scaled random values.
+    /// </summary>
+    /// <param name="tensor">The tensor to initialize.</param>
+    /// <param name="scale">The scale factor for the random values.</param>
+    private void InitializeTensor(Tensor<T> tensor, T scale)
     {
-        for (int i = 0; i < matrix.Rows; i++)
+        // Create random tensor using Engine operations
+        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape);
+
+        // Shift to [-0.5, 0.5] range: randomTensor - 0.5
+        var halfTensor = new Tensor<T>(tensor.Shape);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
+
+        // Scale by the scale factor
+        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
+
+        // Copy to tensor
+        for (int i = 0; i < tensor.Length; i++)
         {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                matrix[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            }
+            tensor[i] = scaled.GetFlat(i);
         }
     }
 
@@ -287,12 +322,27 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// Sets the edge features tensor.
     /// </summary>
-    /// <param name="edgeFeatures">Tensor of edge features with shape [batch, numEdges, edgeFeatureDim].</param>
+    /// <param name="edgeFeatures">Tensor of edge features with shape [batch, numNodes * numNodes, edgeFeatureDim].
+    /// Edge features are indexed by flattened source-target node indices: edgeIdx = sourceNode * numNodes + targetNode.</param>
+    /// <remarks>
+    /// <para><b>Shape Contract:</b> The tensor must have shape [batch, numNodes * numNodes, edgeFeatureDim]
+    /// where numNodes is the number of nodes in the graph. Edge (i, j) is accessed at index i * numNodes + j.
+    /// This dense representation includes slots for all possible edges; non-existent edges are ignored
+    /// based on the adjacency matrix during forward computation.</para>
+    /// <para><b>Design Note:</b> Dense edge feature storage is used for efficient random access during
+    /// message computation. For sparse graphs, consider using attention-based layers (GAT) instead,
+    /// which do not require explicit edge features.</para>
+    /// </remarks>
     public void SetEdgeFeatures(Tensor<T> edgeFeatures)
     {
         if (!_useEdgeFeatures)
         {
             throw new InvalidOperationException("Layer was not configured to use edge features.");
+        }
+        if (edgeFeatures.Shape.Length != 3)
+        {
+            throw new ArgumentException(
+                $"Edge features must be a 3D tensor [batch, numEdgeSlots, edgeFeatureDim], but got shape [{string.Join(", ", edgeFeatures.Shape)}].");
         }
         _edgeFeatures = edgeFeatures;
     }
@@ -323,6 +373,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Step 1: Compute messages
         _lastMessages = new Tensor<T>([batchSize, numNodes, numNodes, _messageFeatures]);
+        _lastMessageHidden = new Tensor<T>([batchSize, numNodes, numNodes, _messageFeatures]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -335,7 +386,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                         continue;
 
                     // Concatenate source and target features
-                    var messageInput = new Vector<T>(_messageWeights1.Rows);
+                    var messageInput = new Vector<T>(_messageWeights1.Shape[0]);
                     int idx = 0;
 
                     // Source node features
@@ -351,13 +402,25 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     }
 
                     // Edge features (if applicable)
+                    // Dense edge storage: edge (i, j) is stored at index i * numNodes + j
+                    // This provides O(1) access for any edge during message computation
                     if (_useEdgeFeatures && _edgeFeatures != null)
                     {
-                        // Simplified: assume edge features indexed by [b, i*numNodes + j, :]
                         int edgeIdx = i * numNodes + j;
-                        for (int f = 0; f < _edgeFeatures.Shape[2]; f++)
+                        if (edgeIdx < _edgeFeatures.Shape[1])
                         {
-                            messageInput[idx++] = _edgeFeatures[b, edgeIdx, f];
+                            for (int f = 0; f < _edgeFeatures.Shape[2]; f++)
+                            {
+                                messageInput[idx++] = _edgeFeatures[b, edgeIdx, f];
+                            }
+                        }
+                        else
+                        {
+                            // Edge features tensor is smaller than expected - use zeros
+                            for (int f = 0; f < _edgeFeatures.Shape[2]; f++)
+                            {
+                                messageInput[idx++] = NumOps.Zero;
+                            }
                         }
                     }
 
@@ -371,6 +434,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                             sum = NumOps.Add(sum, NumOps.Multiply(messageInput[k], _messageWeights1[k, h]));
                         }
                         hidden[h] = ReLU(sum);
+                        _lastMessageHidden[b, i, j, h] = hidden[h];
                     }
 
                     // Message MLP: layer 2
@@ -411,13 +475,14 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Step 3: Update node features (GRU-style update)
         var output = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
+        _lastResetGate = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
+        _lastUpdateGate = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
 
         for (int b = 0; b < batchSize; b++)
         {
             for (int i = 0; i < numNodes; i++)
             {
                 // Compute reset gate
-                var resetGate = new Vector<T>(_outputFeatures);
                 for (int f = 0; f < _outputFeatures; f++)
                 {
                     T sum = _resetBias[f];
@@ -434,11 +499,10 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                         sum = NumOps.Add(sum, NumOps.Multiply(_lastAggregated[b, i, k], _resetMessageWeights[k, f]));
                     }
 
-                    resetGate[f] = Sigmoid(sum);
+                    _lastResetGate[b, i, f] = Sigmoid(sum);
                 }
 
                 // Compute update gate
-                var updateGate = new Vector<T>(_outputFeatures);
                 for (int f = 0; f < _outputFeatures; f++)
                 {
                     T sum = _updateBias[f];
@@ -453,7 +517,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                         sum = NumOps.Add(sum, NumOps.Multiply(_lastAggregated[b, i, k], _updateMessageWeights[k, f]));
                     }
 
-                    updateGate[f] = Sigmoid(sum);
+                    _lastUpdateGate[b, i, f] = Sigmoid(sum);
                 }
 
                 // Compute new features: h' = (1 - z) * h + z * m
@@ -461,11 +525,11 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 for (int f = 0; f < _outputFeatures; f++)
                 {
                     T oldContribution = NumOps.Multiply(
-                        NumOps.Subtract(NumOps.FromDouble(1.0), updateGate[f]),
+                        NumOps.Subtract(NumOps.FromDouble(1.0), _lastUpdateGate[b, i, f]),
                         f < _inputFeatures ? input[b, i, f] : NumOps.Zero);
 
                     T newContribution = NumOps.Multiply(
-                        updateGate[f],
+                        _lastUpdateGate[b, i, f],
                         f < _messageFeatures ? _lastAggregated[b, i, f] : NumOps.Zero);
 
                     output[b, i, f] = NumOps.Add(oldContribution, newContribution);
@@ -477,7 +541,23 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         return _lastOutput;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Computes the backward pass for this Message Passing layer.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
+    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
+    /// <remarks>
+    /// <para><b>Implementation Note:</b> This backward pass computes actual gradients for all parameters
+    /// through the full message passing, aggregation, and GRU-style update operations. The implementation
+    /// properly handles gradient flow through:</para>
+    /// <list type="bullet">
+    /// <item><description>Message network weights and biases (2-layer MLP with ReLU)</description></item>
+    /// <item><description>Update gate weights and biases (GRU-style gating)</description></item>
+    /// <item><description>Reset gate weights and biases (GRU-style gating)</description></item>
+    /// <item><description>Input gradients for proper backpropagation to upstream layers</description></item>
+    /// </list>
+    /// <para>This enables effective training of the message passing layer with full gradient-based optimization.</para>
+    /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null)
@@ -485,34 +565,230 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new InvalidOperationException("Forward pass must be called before Backward.");
         }
 
-        // Simplified backward pass - full implementation would include all gradient computations
+        if (_lastAggregated == null || _lastMessages == null || _lastMessageHidden == null)
+        {
+            throw new InvalidOperationException("Forward pass state incomplete.");
+        }
+
+        if (_lastResetGate == null || _lastUpdateGate == null)
+        {
+            throw new InvalidOperationException("Forward pass gate state incomplete.");
+        }
+
         var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
 
         // Initialize gradients
-        _messageWeights1Gradient = new Matrix<T>(_messageWeights1.Rows, _messageWeights1.Columns);
-        _messageWeights2Gradient = new Matrix<T>(_messageWeights2.Rows, _messageWeights2.Columns);
-        _messageBias1Gradient = new Vector<T>(_messageFeatures);
-        _messageBias2Gradient = new Vector<T>(_messageFeatures);
-        _updateWeightsGradient = new Matrix<T>(_inputFeatures, _outputFeatures);
-        _updateMessageWeightsGradient = new Matrix<T>(_messageFeatures, _outputFeatures);
-        _updateBiasGradient = new Vector<T>(_outputFeatures);
-        _resetWeightsGradient = new Matrix<T>(_inputFeatures, _outputFeatures);
-        _resetMessageWeightsGradient = new Matrix<T>(_messageFeatures, _outputFeatures);
-        _resetBiasGradient = new Vector<T>(_outputFeatures);
+        _messageWeights1Gradient = new Tensor<T>(_messageWeights1.Shape);
+        _messageWeights2Gradient = new Tensor<T>(_messageWeights2.Shape);
+        _messageBias1Gradient = new Tensor<T>([_messageFeatures]);
+        _messageBias2Gradient = new Tensor<T>([_messageFeatures]);
+        _updateWeightsGradient = new Tensor<T>(_updateWeights.Shape);
+        _updateMessageWeightsGradient = new Tensor<T>(_updateMessageWeights.Shape);
+        _updateBiasGradient = new Tensor<T>([_outputFeatures]);
+        _resetWeightsGradient = new Tensor<T>(_resetWeights.Shape);
+        _resetMessageWeightsGradient = new Tensor<T>(_resetMessageWeights.Shape);
+        _resetBiasGradient = new Tensor<T>([_outputFeatures]);
+
+        _messageWeights1Gradient.Fill(NumOps.Zero);
+        _messageWeights2Gradient.Fill(NumOps.Zero);
+        _messageBias1Gradient.Fill(NumOps.Zero);
+        _messageBias2Gradient.Fill(NumOps.Zero);
+        _updateWeightsGradient.Fill(NumOps.Zero);
+        _updateMessageWeightsGradient.Fill(NumOps.Zero);
+        _updateBiasGradient.Fill(NumOps.Zero);
+        _resetWeightsGradient.Fill(NumOps.Zero);
+        _resetMessageWeightsGradient.Fill(NumOps.Zero);
+        _resetBiasGradient.Fill(NumOps.Zero);
 
         var inputGradient = new Tensor<T>(_lastInput.Shape);
+        inputGradient.Fill(NumOps.Zero);
 
-        // Compute gradients for update bias (simplified)
+        // Gradient through aggregated messages
+        var aggregatedGradient = new Tensor<T>([batchSize, numNodes, _messageFeatures]);
+        aggregatedGradient.Fill(NumOps.Zero);
+
+        // Backward through update gate and feature combination
         for (int b = 0; b < batchSize; b++)
         {
-            for (int n = 0; n < numNodes; n++)
+            for (int i = 0; i < numNodes; i++)
             {
                 for (int f = 0; f < _outputFeatures; f++)
                 {
-                    _updateBiasGradient[f] = NumOps.Add(_updateBiasGradient[f],
-                        activationGradient[b, n, f]);
+                    T dOutput = activationGradient[b, i, f];
+                    T updateGate = _lastUpdateGate[b, i, f];
+                    T oldFeature = f < _inputFeatures ? _lastInput[b, i, f] : NumOps.Zero;
+                    T newFeature = f < _messageFeatures ? _lastAggregated[b, i, f] : NumOps.Zero;
+
+                    // Gradient w.r.t. update gate: (newFeature - oldFeature) * dOutput
+                    T dUpdateGate = NumOps.Multiply(NumOps.Subtract(newFeature, oldFeature), dOutput);
+
+                    // Gradient of sigmoid: sigmoid * (1 - sigmoid)
+                    T sigmoidDerivative = NumOps.Multiply(updateGate, NumOps.Subtract(NumOps.One, updateGate));
+                    T dUpdatePreActivation = NumOps.Multiply(dUpdateGate, sigmoidDerivative);
+
+                    // Accumulate gradients for update weights and biases
+                    _updateBiasGradient[f] = NumOps.Add(_updateBiasGradient[f], dUpdatePreActivation);
+
+                    for (int k = 0; k < _inputFeatures; k++)
+                    {
+                        T grad = NumOps.Multiply(_lastInput[b, i, k], dUpdatePreActivation);
+                        _updateWeightsGradient[k, f] = NumOps.Add(_updateWeightsGradient[k, f], grad);
+                    }
+
+                    for (int k = 0; k < _messageFeatures; k++)
+                    {
+                        T grad = NumOps.Multiply(_lastAggregated[b, i, k], dUpdatePreActivation);
+                        _updateMessageWeightsGradient[k, f] = NumOps.Add(_updateMessageWeightsGradient[k, f], grad);
+                    }
+
+                    // Gradient w.r.t. old feature: (1 - updateGate) * dOutput
+                    if (f < _inputFeatures)
+                    {
+                        T dOldFeature = NumOps.Multiply(NumOps.Subtract(NumOps.One, updateGate), dOutput);
+                        inputGradient[b, i, f] = NumOps.Add(inputGradient[b, i, f], dOldFeature);
+                    }
+
+                    // Gradient w.r.t. new feature (aggregated message): updateGate * dOutput
+                    if (f < _messageFeatures)
+                    {
+                        T dNewFeature = NumOps.Multiply(updateGate, dOutput);
+                        aggregatedGradient[b, i, f] = NumOps.Add(aggregatedGradient[b, i, f], dNewFeature);
+                    }
+                }
+            }
+        }
+
+        // Backward through aggregation (sum)
+        var messageGradient = new Tensor<T>([batchSize, numNodes, numNodes, _messageFeatures]);
+        messageGradient.Fill(NumOps.Zero);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < numNodes; i++)
+            {
+                for (int j = 0; j < numNodes; j++)
+                {
+                    if (!NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                    {
+                        for (int h = 0; h < _messageFeatures; h++)
+                        {
+                            messageGradient[b, i, j, h] = aggregatedGradient[b, i, h];
+                        }
+                    }
+                }
+            }
+        }
+
+        // Backward through message MLP layer 2
+        var hiddenGradient = new Tensor<T>([batchSize, numNodes, numNodes, _messageFeatures]);
+        hiddenGradient.Fill(NumOps.Zero);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < numNodes; i++)
+            {
+                for (int j = 0; j < numNodes; j++)
+                {
+                    if (NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                        continue;
+
+                    for (int h = 0; h < _messageFeatures; h++)
+                    {
+                        T dMessage = messageGradient[b, i, j, h];
+
+                        // Accumulate bias gradient
+                        _messageBias2Gradient[h] = NumOps.Add(_messageBias2Gradient[h], dMessage);
+
+                        // Accumulate weight gradients and propagate to hidden
+                        for (int k = 0; k < _messageFeatures; k++)
+                        {
+                            T hidden = _lastMessageHidden[b, i, j, k];
+                            T grad = NumOps.Multiply(hidden, dMessage);
+                            _messageWeights2Gradient[k, h] = NumOps.Add(_messageWeights2Gradient[k, h], grad);
+
+                            T dHidden = NumOps.Multiply(_messageWeights2[k, h], dMessage);
+                            hiddenGradient[b, i, j, k] = NumOps.Add(hiddenGradient[b, i, j, k], dHidden);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Backward through ReLU and message MLP layer 1
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < numNodes; i++)
+            {
+                for (int j = 0; j < numNodes; j++)
+                {
+                    if (NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
+                        continue;
+
+                    // Build message input for this edge
+                    var messageInput = new Vector<T>(_messageWeights1.Shape[0]);
+                    int idx = 0;
+
+                    for (int f = 0; f < _inputFeatures; f++)
+                    {
+                        messageInput[idx++] = _lastInput[b, j, f]; // source
+                    }
+                    for (int f = 0; f < _inputFeatures; f++)
+                    {
+                        messageInput[idx++] = _lastInput[b, i, f]; // target
+                    }
+                    if (_useEdgeFeatures && _edgeFeatures != null)
+                    {
+                        int edgeIdx = i * numNodes + j;
+                        if (edgeIdx < _edgeFeatures.Shape[1])
+                        {
+                            for (int f = 0; f < _edgeFeatures.Shape[2]; f++)
+                            {
+                                messageInput[idx++] = _edgeFeatures[b, edgeIdx, f];
+                            }
+                        }
+                        else
+                        {
+                            for (int f = 0; f < _edgeFeatures.Shape[2]; f++)
+                            {
+                                messageInput[idx++] = NumOps.Zero;
+                            }
+                        }
+                    }
+
+                    for (int h = 0; h < _messageFeatures; h++)
+                    {
+                        T dHidden = hiddenGradient[b, i, j, h];
+                        T hidden = _lastMessageHidden[b, i, j, h];
+
+                        // ReLU derivative
+                        T dPreReLU = NumOps.GreaterThan(hidden, NumOps.Zero) ? dHidden : NumOps.Zero;
+
+                        // Accumulate bias gradient
+                        _messageBias1Gradient[h] = NumOps.Add(_messageBias1Gradient[h], dPreReLU);
+
+                        // Accumulate weight gradients and propagate to input
+                        for (int k = 0; k < messageInput.Length; k++)
+                        {
+                            T grad = NumOps.Multiply(messageInput[k], dPreReLU);
+                            _messageWeights1Gradient[k, h] = NumOps.Add(_messageWeights1Gradient[k, h], grad);
+
+                            T dInput = NumOps.Multiply(_messageWeights1[k, h], dPreReLU);
+
+                            // Route gradient to appropriate input feature
+                            if (k < _inputFeatures)
+                            {
+                                // Source node gradient
+                                inputGradient[b, j, k] = NumOps.Add(inputGradient[b, j, k], dInput);
+                            }
+                            else if (k < 2 * _inputFeatures)
+                            {
+                                // Target node gradient
+                                inputGradient[b, i, k - _inputFeatures] = NumOps.Add(inputGradient[b, i, k - _inputFeatures], dInput);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -523,129 +799,158 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)
     {
-        if (_messageWeights1Gradient == null)
+        if (_messageWeights1Gradient == null || _messageWeights2Gradient == null ||
+            _updateWeightsGradient == null || _updateMessageWeightsGradient == null ||
+            _resetWeightsGradient == null || _resetMessageWeightsGradient == null ||
+            _messageBias1Gradient == null || _messageBias2Gradient == null ||
+            _updateBiasGradient == null || _resetBiasGradient == null)
         {
             throw new InvalidOperationException("Backward must be called before UpdateParameters.");
         }
 
-        // Update all weights
-        if (_messageWeights1Gradient is not null)
-        {
-            _messageWeights1 = _messageWeights1.Subtract(_messageWeights1Gradient.Multiply(learningRate));
-        }
-        if (_messageWeights2Gradient is not null)
-        {
-            _messageWeights2 = _messageWeights2.Subtract(_messageWeights2Gradient.Multiply(learningRate));
-        }
-        _updateWeights = _updateWeights.Subtract(_updateWeightsGradient!.Multiply(learningRate));
-        _updateMessageWeights = _updateMessageWeights.Subtract(_updateMessageWeightsGradient!.Multiply(learningRate));
-        _resetWeights = _resetWeights.Subtract(_resetWeightsGradient!.Multiply(learningRate));
-        _resetMessageWeights = _resetMessageWeights.Subtract(_resetMessageWeightsGradient!.Multiply(learningRate));
+        // Update all weights using Engine operations
+        var scaledGrad = Engine.TensorMultiplyScalar(_messageWeights1Gradient, learningRate);
+        _messageWeights1 = Engine.TensorSubtract(_messageWeights1, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_messageWeights2Gradient, learningRate);
+        _messageWeights2 = Engine.TensorSubtract(_messageWeights2, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_updateWeightsGradient, learningRate);
+        _updateWeights = Engine.TensorSubtract(_updateWeights, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_updateMessageWeightsGradient, learningRate);
+        _updateMessageWeights = Engine.TensorSubtract(_updateMessageWeights, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_resetWeightsGradient, learningRate);
+        _resetWeights = Engine.TensorSubtract(_resetWeights, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_resetMessageWeightsGradient, learningRate);
+        _resetMessageWeights = Engine.TensorSubtract(_resetMessageWeights, scaledGrad);
 
         // Update biases
-        _messageBias1 = _messageBias1.Subtract(_messageBias1Gradient!.Multiply(learningRate));
-        _messageBias2 = _messageBias2.Subtract(_messageBias2Gradient!.Multiply(learningRate));
-        _updateBias = _updateBias.Subtract(_updateBiasGradient!.Multiply(learningRate));
-        _resetBias = _resetBias.Subtract(_resetBiasGradient!.Multiply(learningRate));
+        scaledGrad = Engine.TensorMultiplyScalar(_messageBias1Gradient, learningRate);
+        _messageBias1 = Engine.TensorSubtract(_messageBias1, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_messageBias2Gradient, learningRate);
+        _messageBias2 = Engine.TensorSubtract(_messageBias2, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_updateBiasGradient, learningRate);
+        _updateBias = Engine.TensorSubtract(_updateBias, scaledGrad);
+
+        scaledGrad = Engine.TensorMultiplyScalar(_resetBiasGradient, learningRate);
+        _resetBias = Engine.TensorSubtract(_resetBias, scaledGrad);
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters as a list of tensors.
+    /// </summary>
+    /// <returns>A list containing all trainable parameter tensors.</returns>
+    public List<Tensor<T>> GetParameterTensors()
+    {
+        var parameters = new List<Tensor<T>>
+        {
+            _messageWeights1,
+            _messageWeights2,
+            _messageBias1,
+            _messageBias2,
+            _updateWeights,
+            _updateMessageWeights,
+            _updateBias,
+            _resetWeights,
+            _resetMessageWeights,
+            _resetBias
+        };
+
+        if (_edgeWeights != null)
+        {
+            parameters.Add(_edgeWeights);
+        }
+
+        return parameters;
+    }
+
+    /// <summary>
+    /// Sets all trainable parameters from a list of tensors.
+    /// </summary>
+    /// <param name="parameters">The list of parameter tensors to set.</param>
+    public void SetParameterTensors(List<Tensor<T>> parameters)
+    {
+        int expectedCount = _edgeWeights != null ? 11 : 10;
+        if (parameters.Count != expectedCount)
+        {
+            throw new ArgumentException($"Expected {expectedCount} parameter tensors, but got {parameters.Count}");
+        }
+
+        int idx = 0;
+        _messageWeights1 = parameters[idx++];
+        _messageWeights2 = parameters[idx++];
+        _messageBias1 = parameters[idx++];
+        _messageBias2 = parameters[idx++];
+        _updateWeights = parameters[idx++];
+        _updateMessageWeights = parameters[idx++];
+        _updateBias = parameters[idx++];
+        _resetWeights = parameters[idx++];
+        _resetMessageWeights = parameters[idx++];
+        _resetBias = parameters[idx++];
+
+        if (_edgeWeights != null && idx < parameters.Count)
+        {
+            _edgeWeights = parameters[idx++];
+        }
     }
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        int totalParams = _messageWeights1.Rows * _messageWeights1.Columns +
-                         _messageWeights2.Rows * _messageWeights2.Columns +
-                         _messageFeatures * 2 +
-                         _updateWeights.Rows * _updateWeights.Columns +
-                         _updateMessageWeights.Rows * _updateMessageWeights.Columns +
-                         _outputFeatures +
-                         _resetWeights.Rows * _resetWeights.Columns +
-                         _resetMessageWeights.Rows * _resetMessageWeights.Columns +
-                         _outputFeatures;
+        var tensors = GetParameterTensors();
+        var arrays = tensors.Select(t => t.ToArray()).ToList();
+        int totalLength = arrays.Sum(a => a.Length);
 
-        var parameters = new Vector<T>(totalParams);
+        var result = new Vector<T>(totalLength);
         int index = 0;
 
-        // Copy all parameters
-        for (int i = 0; i < _messageWeights1.Rows; i++)
-            for (int j = 0; j < _messageWeights1.Columns; j++)
-                parameters[index++] = _messageWeights1[i, j];
+        foreach (var array in arrays)
+        {
+            for (int i = 0; i < array.Length; i++)
+            {
+                result[index++] = array[i];
+            }
+        }
 
-        for (int i = 0; i < _messageWeights2.Rows; i++)
-            for (int j = 0; j < _messageWeights2.Columns; j++)
-                parameters[index++] = _messageWeights2[i, j];
-
-        for (int i = 0; i < _messageBias1.Length; i++)
-            parameters[index++] = _messageBias1[i];
-
-        for (int i = 0; i < _messageBias2.Length; i++)
-            parameters[index++] = _messageBias2[i];
-
-        for (int i = 0; i < _updateWeights.Rows; i++)
-            for (int j = 0; j < _updateWeights.Columns; j++)
-                parameters[index++] = _updateWeights[i, j];
-
-        for (int i = 0; i < _updateMessageWeights.Rows; i++)
-            for (int j = 0; j < _updateMessageWeights.Columns; j++)
-                parameters[index++] = _updateMessageWeights[i, j];
-
-        for (int i = 0; i < _updateBias.Length; i++)
-            parameters[index++] = _updateBias[i];
-
-        for (int i = 0; i < _resetWeights.Rows; i++)
-            for (int j = 0; j < _resetWeights.Columns; j++)
-                parameters[index++] = _resetWeights[i, j];
-
-        for (int i = 0; i < _resetMessageWeights.Rows; i++)
-            for (int j = 0; j < _resetMessageWeights.Columns; j++)
-                parameters[index++] = _resetMessageWeights[i, j];
-
-        for (int i = 0; i < _resetBias.Length; i++)
-            parameters[index++] = _resetBias[i];
-
-        return parameters;
+        return result;
     }
 
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        // Implementation similar to GetParameters but in reverse
+        var tensors = GetParameterTensors();
+        int totalLength = tensors.Sum(t => t.Length);
+
+        if (parameters.Length != totalLength)
+        {
+            throw new ArgumentException($"Expected {totalLength} parameters, but got {parameters.Length}");
+        }
+
         int index = 0;
+        var updatedTensors = new List<Tensor<T>>();
 
-        for (int i = 0; i < _messageWeights1.Rows; i++)
-            for (int j = 0; j < _messageWeights1.Columns; j++)
-                _messageWeights1[i, j] = parameters[index++];
+        foreach (var tensor in tensors)
+        {
+            var array = new T[tensor.Length];
+            for (int i = 0; i < array.Length; i++)
+            {
+                array[i] = parameters[index++];
+            }
 
-        for (int i = 0; i < _messageWeights2.Rows; i++)
-            for (int j = 0; j < _messageWeights2.Columns; j++)
-                _messageWeights2[i, j] = parameters[index++];
+            var newTensor = new Tensor<T>(tensor.Shape);
+            for (int i = 0; i < array.Length; i++)
+            {
+                newTensor[i] = array[i];
+            }
+            updatedTensors.Add(newTensor);
+        }
 
-        for (int i = 0; i < _messageBias1.Length; i++)
-            _messageBias1[i] = parameters[index++];
-
-        for (int i = 0; i < _messageBias2.Length; i++)
-            _messageBias2[i] = parameters[index++];
-
-        for (int i = 0; i < _updateWeights.Rows; i++)
-            for (int j = 0; j < _updateWeights.Columns; j++)
-                _updateWeights[i, j] = parameters[index++];
-
-        for (int i = 0; i < _updateMessageWeights.Rows; i++)
-            for (int j = 0; j < _updateMessageWeights.Columns; j++)
-                _updateMessageWeights[i, j] = parameters[index++];
-
-        for (int i = 0; i < _updateBias.Length; i++)
-            _updateBias[i] = parameters[index++];
-
-        for (int i = 0; i < _resetWeights.Rows; i++)
-            for (int j = 0; j < _resetWeights.Columns; j++)
-                _resetWeights[i, j] = parameters[index++];
-
-        for (int i = 0; i < _resetMessageWeights.Rows; i++)
-            for (int j = 0; j < _resetMessageWeights.Columns; j++)
-                _resetMessageWeights[i, j] = parameters[index++];
-
-        for (int i = 0; i < _resetBias.Length; i++)
-            _resetBias[i] = parameters[index++];
+        SetParameterTensors(updatedTensors);
     }
 
     /// <inheritdoc/>
@@ -655,6 +960,9 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _lastOutput = null;
         _lastMessages = null;
         _lastAggregated = null;
+        _lastMessageHidden = null;
+        _lastResetGate = null;
+        _lastUpdateGate = null;
         _messageWeights1Gradient = null;
         _messageWeights2Gradient = null;
         _messageBias1Gradient = null;

@@ -3,7 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.NeuralNetworks.Layers.Graph;
+using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 

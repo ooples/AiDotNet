@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks.Layers.Graph;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Aggregation function type for GraphSAGE.

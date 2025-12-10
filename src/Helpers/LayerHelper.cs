@@ -1,4 +1,4 @@
-using AiDotNet.NeuralNetworks.Layers.Graph;
+using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Helpers;
 

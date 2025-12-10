@@ -1,4 +1,4 @@
-using AiDotNet.NeuralNetworks.Layers.Graph;
+using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -529,18 +529,16 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         var current = nodeFeatures;
         foreach (var layer in Layers)
         {
-            if (layer is GraphConvolutionalLayer<T> graphLayer)
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
             {
-                current = graphLayer.Forward(current, adjacencyMatrix);
-            }
-            else if (layer is ILayer<T> standardLayer)
-            {
-                // Handle non-graph layers (e.g., Dense, Activation)
-                current = standardLayer.Forward(current);
+                // Use the SetAdjacencyMatrix/Forward pattern for all graph layers
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+                current = layer.Forward(current);
             }
             else
             {
-                throw new InvalidOperationException($"Unsupported layer type: {layer.GetType().Name}");
+                // Handle non-graph layers (e.g., Dense, Activation)
+                current = layer.Forward(current);
             }
 
             // Ensure the output maintains the expected shape
@@ -687,7 +685,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         for (int i = 0; i < Layers.Count; i++)
         {
             // Skip graph-specific layers if this is a standard prediction
-            if (Layers[i] is GraphConvolutionalLayer<T>)
+            if (Layers[i] is IGraphConvolutionLayer<T>)
             {
                 // For graph layers, we need adjacency information which is not available
                 // Just pass through without modification for standard prediction
@@ -888,8 +886,8 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "LayerCount", Layers.Count },
-                { "GraphLayerCount", Layers.Count(l => l is GraphConvolutionalLayer<T>) },
-                { "StandardLayerCount", Layers.Count(l => !(l is GraphConvolutionalLayer<T>)) },
+                { "GraphLayerCount", Layers.Count(l => l is IGraphConvolutionLayer<T>) },
+                { "StandardLayerCount", Layers.Count(l => !(l is IGraphConvolutionLayer<T>)) },
                 { "ParameterCount", GetParameterCount() },
                 { "ActivationTypes", string.Join(", ", GetActivationTypes()) }
             },

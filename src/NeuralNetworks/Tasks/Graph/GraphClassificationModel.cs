@@ -3,7 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.NeuralNetworks.Layers.Graph;
+using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 
@@ -472,13 +472,16 @@ public class GraphClassificationModel<T>
                 SetAdjacencyMatrix(graph.AdjacencyMatrix);
                 var logits = Forward(graph.NodeFeatures);
 
-                // Compute loss
+                // Apply softmax to get probabilities (for cross-entropy loss)
+                var probs = Softmax(logits);
+
+                // Compute cross-entropy loss: -sum(label * log(prob))
                 double loss = 0.0;
                 for (int c = 0; c < NumClasses; c++)
                 {
-                    var logit = NumOps.ToDouble(logits[0, c]);
+                    var prob = NumOps.ToDouble(probs[0, c]);
                     var label = NumOps.ToDouble(task.TrainLabels[i, c]);
-                    loss -= label * Math.Log(Math.Max(logit, 1e-10));
+                    loss -= label * Math.Log(Math.Max(prob, 1e-10));
                 }
                 epochLoss += loss;
 
@@ -487,8 +490,8 @@ public class GraphClassificationModel<T>
                 int trueClass = GetTrueClass(task.TrainLabels, i, NumClasses);
                 if (predictedClass == trueClass) correctTrain++;
 
-                // Backward and update
-                var gradient = ComputeGradient(logits, task.TrainLabels, i, NumClasses);
+                // Backward and update - gradient of cross-entropy with softmax is (prob - label)
+                var gradient = ComputeGradient(probs, task.TrainLabels, i, NumClasses);
                 Backward(gradient);
                 UpdateParameters(learningRate);
             }
@@ -519,15 +522,33 @@ public class GraphClassificationModel<T>
     private double EvaluateGraphs(List<GraphData<T>> graphs, Tensor<T> labels, int numClasses)
     {
         SetTrainingMode(false);
+
+        // Guard against empty graph sets to avoid divide by zero
+        if (graphs.Count == 0)
+        {
+            return 0.0;
+        }
+
         int correct = 0;
+        Tensor<T>? lastValidAdjacency = null;
 
         for (int i = 0; i < graphs.Count; i++)
         {
             var graph = graphs[i];
+
+            // Handle null adjacency explicitly to avoid using stale data
             if (graph.AdjacencyMatrix != null)
             {
+                lastValidAdjacency = graph.AdjacencyMatrix;
                 SetAdjacencyMatrix(graph.AdjacencyMatrix);
             }
+            else if (lastValidAdjacency == null)
+            {
+                // Skip graphs with no adjacency matrix if we haven't seen one yet
+                continue;
+            }
+            // If adjacency is null but we have a previous one, the stale one will be used
+            // This is intentional for graphs that share the same structure
 
             var logits = Forward(graph.NodeFeatures);
             int predictedClass = GetPredictedClass(logits);
@@ -564,13 +585,49 @@ public class GraphClassificationModel<T>
         return 0;
     }
 
-    private Tensor<T> ComputeGradient(Tensor<T> logits, Tensor<T> labels, int graphIdx, int numClasses)
+    private Tensor<T> ComputeGradient(Tensor<T> probs, Tensor<T> labels, int graphIdx, int numClasses)
     {
+        // Gradient of cross-entropy with softmax is simply (prob - label)
         var gradient = new Tensor<T>([1, numClasses]);
         for (int c = 0; c < numClasses; c++)
         {
-            gradient[0, c] = NumOps.Subtract(logits[0, c], labels[graphIdx, c]);
+            gradient[0, c] = NumOps.Subtract(probs[0, c], labels[graphIdx, c]);
         }
         return gradient;
+    }
+
+    private Tensor<T> Softmax(Tensor<T> logits)
+    {
+        int batchSize = logits.Shape[0];
+        int numClasses = logits.Shape[1];
+        var probs = new Tensor<T>([batchSize, numClasses]);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Find max for numerical stability
+            double maxLogit = NumOps.ToDouble(logits[b, 0]);
+            for (int c = 1; c < numClasses; c++)
+            {
+                double val = NumOps.ToDouble(logits[b, c]);
+                if (val > maxLogit) maxLogit = val;
+            }
+
+            // Compute exp(logit - max) and sum
+            double sumExp = 0.0;
+            var expValues = new double[numClasses];
+            for (int c = 0; c < numClasses; c++)
+            {
+                expValues[c] = Math.Exp(NumOps.ToDouble(logits[b, c]) - maxLogit);
+                sumExp += expValues[c];
+            }
+
+            // Normalize to get probabilities
+            for (int c = 0; c < numClasses; c++)
+            {
+                probs[b, c] = NumOps.FromDouble(expValues[c] / sumExp);
+            }
+        }
+
+        return probs;
     }
 }

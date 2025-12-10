@@ -88,7 +88,19 @@ public class OGBDatasetLoader<T> : IGraphDataLoader<T>
     public int BatchSize { get; }
 
     /// <inheritdoc/>
-    public bool HasNext => _loadedGraphs != null && _currentIndex < _loadedGraphs.Count;
+    public bool HasNext
+    {
+        get
+        {
+            // Ensure dataset is loaded before checking HasNext
+            // This aligns with the XML example that shows checking HasNext before GetNextBatch
+            if (_loadedGraphs == null)
+            {
+                LoadDataset();
+            }
+            return _currentIndex < _loadedGraphs!.Count;
+        }
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="OGBDatasetLoader{T}"/> class.
@@ -300,11 +312,15 @@ public class OGBDatasetLoader<T> : IGraphDataLoader<T>
             // Small molecules: 10-30 atoms
             int numAtoms = random.Next(10, 31);
 
+            // Create edge connectivity first to know actual edge count
+            var edgeIndex = CreateBondConnectivity(numAtoms, random);
+            int numEdges = edgeIndex.Shape[0]; // Actual number of edges
+
             graphs.Add(new GraphData<T>
             {
                 NodeFeatures = CreateAtomFeatures(numAtoms),
-                EdgeIndex = CreateBondConnectivity(numAtoms, random),
-                EdgeFeatures = CreateBondFeatures(numAtoms * 2, random), // ~2 bonds per atom
+                EdgeIndex = edgeIndex,
+                EdgeFeatures = CreateBondFeatures(numEdges, random), // Match actual edge count
                 GraphLabel = CreateMockGraphLabel(1, 2) // Binary classification
             });
         }
@@ -315,21 +331,44 @@ public class OGBDatasetLoader<T> : IGraphDataLoader<T>
     private GraphData<T> CreateMockLargeGraph()
     {
         // For node-level tasks like ogbn-arxiv
+        // Use smaller mock sizes to avoid memory issues, real OGB loading would stream data
         int numNodes = _datasetName switch
         {
-            "ogbn-arxiv" => 169343,
-            "ogbn-products" => 2449029,
-            "ogbn-proteins" => 132534,
-            _ => 10000
+            "ogbn-arxiv" => 1000,      // Mock: 1K nodes (real: 169K)
+            "ogbn-products" => 1000,    // Mock: 1K nodes (real: 2.4M)
+            "ogbn-proteins" => 1000,    // Mock: 1K nodes (real: 132K)
+            _ => 1000
         };
 
+        // Estimate ~5 edges per node for sparse connectivity
+        int numEdges = numNodes * 5;
+
+        // For large graphs, do NOT create dense adjacency matrix (would be O(n^2) memory)
+        // Instead, use sparse EdgeIndex representation which is O(E)
+        // Real OGB datasets use sparse representations exclusively
         return new GraphData<T>
         {
             NodeFeatures = new Tensor<T>([numNodes, 128]),
-            AdjacencyMatrix = new Tensor<T>([1, numNodes, numNodes]),
-            EdgeIndex = new Tensor<T>([numNodes * 5, 2]), // Sparse
+            AdjacencyMatrix = null, // Sparse graphs use EdgeIndex, not dense adjacency
+            EdgeIndex = CreateSparseEdgeIndex(numNodes, numEdges),
             NodeLabels = CreateMockGraphLabels(numNodes, GetNumClasses())
         };
+    }
+
+    private Tensor<T> CreateSparseEdgeIndex(int numNodes, int numEdges)
+    {
+        var edgeIndex = new Tensor<T>([numEdges, 2]);
+        var random = new Random(42);
+
+        for (int i = 0; i < numEdges; i++)
+        {
+            int src = random.Next(numNodes);
+            int dst = random.Next(numNodes);
+            edgeIndex[i, 0] = NumOps.FromDouble(src);
+            edgeIndex[i, 1] = NumOps.FromDouble(dst);
+        }
+
+        return edgeIndex;
     }
 
     private Tensor<T> CreateAtomFeatures(int numAtoms)

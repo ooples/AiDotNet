@@ -2,7 +2,7 @@ using System;
 using AiDotNet.Interfaces;
 using AiDotNet.LoRA.Adapters;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.NeuralNetworks.Layers.Graph;
+using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.LoRA;
 

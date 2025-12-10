@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks.Layers.Graph;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Defines the contract for graph convolutional layers that process graph-structured data.

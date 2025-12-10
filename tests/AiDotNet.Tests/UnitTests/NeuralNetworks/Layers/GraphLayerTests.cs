@@ -1,7 +1,7 @@
 using System;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NeuralNetworks.Layers.Graph;
+using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
