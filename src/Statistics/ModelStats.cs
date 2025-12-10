@@ -528,7 +528,7 @@ public class ModelStats<T, TInput, TOutput>
         // Calculate all statistical metrics using the converted data types
         CorrelationMatrix = StatisticsHelper<T>.CalculateCorrelationMatrix(matrix, _options);
         CovarianceMatrix = StatisticsHelper<T>.CalculateCovarianceMatrix(matrix);
-        VIFList = StatisticsHelper<T>.CalculateVIF(matrix, _options);
+        VIFList = StatisticsHelper<T>.CalculateVIF(CorrelationMatrix, _options);
         ConditionNumber = StatisticsHelper<T>.CalculateConditionNumber(matrix, _options);
         LogPointwisePredictiveDensity = StatisticsHelper<T>.CalculateLogPointwisePredictiveDensity(actual, predicted);
 
@@ -569,7 +569,20 @@ public class ModelStats<T, TInput, TOutput>
         CosineSimilarity = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Cosine);
         JaccardSimilarity = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Jaccard);
         HammingDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Hamming);
-        MahalanobisDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Mahalanobis, CovarianceMatrix);
+
+        // Mahalanobis distance requires vector dimensions to match covariance matrix dimensions
+        // Skip calculation if dimensions don't match (covariance is feature x feature, not sample x sample)
+        try
+        {
+            if (CovarianceMatrix.Rows == actual.Length && CovarianceMatrix.Columns == actual.Length)
+            {
+                MahalanobisDistance = StatisticsHelper<T>.CalculateDistance(actual, predicted, DistanceMetricType.Mahalanobis, CovarianceMatrix);
+            }
+        }
+        catch (ArgumentException)
+        {
+            // Silently skip Mahalanobis distance calculation when dimensions don't match
+        }
     }
 
     /// <summary>

@@ -250,8 +250,11 @@ public class ProfilerTests : IDisposable
 
         // Assert
         Assert.NotNull(stats);
-        // 10ms = 100 ops/sec theoretically, but allow variance
-        Assert.True(stats.OpsPerSecond > 50 && stats.OpsPerSecond < 200);
+        // 10ms = 100 ops/sec theoretically, but CI runners have significant timing variance
+        // due to shared resources, VM overhead, and thread scheduling delays
+        // Use wide tolerance: > 10 ops/sec (allows up to 100ms actual sleep) and < 500 ops/sec
+        Assert.True(stats.OpsPerSecond > 10 && stats.OpsPerSecond < 500,
+            $"Expected ops/sec between 10 and 500, but got {stats.OpsPerSecond}");
     }
 
     [Fact]

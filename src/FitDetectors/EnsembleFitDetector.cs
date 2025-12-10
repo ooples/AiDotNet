@@ -133,12 +133,12 @@ public class EnsembleFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// </list>
     /// </para>
     /// <para>
-    /// The mapping from average to fit type uses these thresholds:
+    /// The mapping from average to fit type uses these thresholds (lower enum values indicate better fit):
     /// <list type="bullet">
-    /// <item><description>= 1.5: Very Poor Fit</description></item>
-    /// <item><description>= 2.5: Poor Fit</description></item>
-    /// <item><description>= 3.5: Moderate Fit</description></item>
-    /// <item><description>> 3.5: Good Fit</description></item>
+    /// <item><description>&lt;= 0.5: Good Fit (GoodFit=0)</description></item>
+    /// <item><description>&lt;= 2.5: Moderate Fit</description></item>
+    /// <item><description>&lt;= 5.5: Poor Fit</description></item>
+    /// <item><description>&gt; 5.5: Very Poor Fit</description></item>
     /// </list>
     /// </para>
     /// </remarks>
@@ -156,14 +156,16 @@ public class EnsembleFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
 
         var averageFitType = weightedSum / totalWeight;
 
-        if (averageFitType <= 1.5)
-            return FitType.VeryPoorFit;
-        else if (averageFitType <= 2.5)
-            return FitType.PoorFit;
-        else if (averageFitType <= 3.5)
-            return FitType.Moderate;
-        else
+        // FitType enum: GoodFit=0, Overfit=1, Underfit=2, etc.
+        // Lower values indicate better fit, so thresholds should reflect this
+        if (averageFitType <= 0.5)
             return FitType.GoodFit;
+        else if (averageFitType <= 2.5)
+            return FitType.Moderate;
+        else if (averageFitType <= 5.5)
+            return FitType.PoorFit;
+        else
+            return FitType.VeryPoorFit;
     }
 
     /// <summary>
