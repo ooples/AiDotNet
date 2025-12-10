@@ -144,7 +144,9 @@ public static class ConversionsHelper
             {
                 throw new InvalidOperationException("Cannot extract scalar from empty tensor.");
             }
-            return tensor[0];
+            // Create zero indices for all dimensions to get the first element
+            var indices = new int[tensor.Rank];
+            return tensor[indices];
         }
 
         throw new InvalidOperationException($"Cannot convert {typeof(TOutput).Name} to scalar of type {typeof(T).Name}. Expected T, Vector<T>, Matrix<T>, or Tensor<T>.");
