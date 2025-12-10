@@ -101,16 +101,16 @@ namespace AiDotNetTests.UnitTests.Interpretability
 
             Matrix<double> inputs = new Matrix<double>(8, 2);
             // Set up predictions to create different TPR/precision between groups
-            // Group 0: 3 predicted positive out of 3 actual positive (TPR=1.0, Precision=0.75)
-            inputs[0, 0] = 0.6; inputs[0, 1] = 0; // predict 1
-            inputs[1, 0] = 0.6; inputs[1, 1] = 0; // predict 1
-            inputs[2, 0] = 0.6; inputs[2, 1] = 0; // predict 1
-            inputs[3, 0] = 0.6; inputs[3, 1] = 0; // predict 1
-            // Group 1: 1 predicted positive out of 2 actual positive (TPR=0.5, Precision=1.0)
-            inputs[4, 0] = 0.6; inputs[4, 1] = 1; // predict 1
-            inputs[5, 0] = 0.6; inputs[5, 1] = 1; // predict 1
-            inputs[6, 0] = 0.4; inputs[6, 1] = 1; // predict 0
-            inputs[7, 0] = 0.4; inputs[7, 1] = 1; // predict 0
+            // Group 0: predictions [1,1,0,0], actuals [1,1,1,0] -> TPR=2/3, Precision=2/2=1.0
+            inputs[0, 0] = 0.6; inputs[0, 1] = 0; // predict 1, actual=1 → TP
+            inputs[1, 0] = 0.6; inputs[1, 1] = 0; // predict 1, actual=1 → TP
+            inputs[2, 0] = 0.4; inputs[2, 1] = 0; // predict 0, actual=1 → FN
+            inputs[3, 0] = 0.4; inputs[3, 1] = 0; // predict 0, actual=0 → TN
+            // Group 1: predictions [1,1,0,0], actuals [1,0,0,0] -> TPR=1/1=1.0, Precision=1/2=0.5
+            inputs[4, 0] = 0.6; inputs[4, 1] = 1; // predict 1, actual=1 → TP
+            inputs[5, 0] = 0.6; inputs[5, 1] = 1; // predict 1, actual=0 → FP
+            inputs[6, 0] = 0.4; inputs[6, 1] = 1; // predict 0, actual=0 → TN
+            inputs[7, 0] = 0.4; inputs[7, 1] = 1; // predict 0, actual=0 → TN
 
             // Group 0: actuals [1,1,1,0], predictions [1,1,0,0] -> TPR=2/3, Precision=2/2=1.0
             // Group 1: actuals [1,0,0,0], predictions [1,1,0,0] -> TPR=1/1=1.0, Precision=1/2=0.5

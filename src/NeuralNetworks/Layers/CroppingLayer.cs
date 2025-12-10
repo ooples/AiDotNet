@@ -298,7 +298,17 @@ public class CroppingLayer<T> : LayerBase<T>
         }
 
         _lastInput = input; // Store for autodiff backward pass
-        var cropped = Engine.Crop(input, _cropTop[1], _cropLeft[2], GetOutputShape()[1], GetOutputShape()[2]);
+
+        // Convert from NHWC [batch, height, width, channels] to NCHW [batch, channels, height, width]
+        // Required because Engine.Crop expects NCHW format
+        var inputNCHW = input.Transpose([0, 3, 1, 2]);
+
+        // Perform crop on NCHW format
+        var croppedNCHW = Engine.Crop(inputNCHW, _cropTop[1], _cropLeft[2], GetOutputShape()[1], GetOutputShape()[2]);
+
+        // Convert back from NCHW to NHWC [batch, height, width, channels]
+        var cropped = croppedNCHW.Transpose([0, 2, 3, 1]);
+
         return ApplyActivation(cropped);
     }
 
@@ -343,8 +353,18 @@ public class CroppingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var inputShape = GetInputShape();
-        var inputGradient = Engine.CropBackward(outputGradient, inputShape, _cropTop[1], _cropLeft[2]);
+        // Convert outputGradient from NHWC to NCHW (same as forward pass)
+        var outputGradientNCHW = outputGradient.Transpose([0, 3, 1, 2]);
+
+        // Convert input shape from NHWC to NCHW for CropBackward
+        var inputShapeNHWC = GetInputShape();
+        var inputShapeNCHW = new int[] { inputShapeNHWC[0], inputShapeNHWC[3], inputShapeNHWC[1], inputShapeNHWC[2] };
+
+        var inputGradientNCHW = Engine.CropBackward(outputGradientNCHW, inputShapeNCHW, _cropTop[1], _cropLeft[2]);
+
+        // Convert back from NCHW to NHWC
+        var inputGradient = inputGradientNCHW.Transpose([0, 2, 3, 1]);
+
         return ApplyActivationDerivative(_lastInput, inputGradient);
     }
 
@@ -370,8 +390,18 @@ public class CroppingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var inputShape = GetInputShape();
-        var inputGradient = Engine.CropBackward(outputGradient, inputShape, _cropTop[1], _cropLeft[2]);
+        // Convert outputGradient from NHWC to NCHW (same as forward pass)
+        var outputGradientNCHW = outputGradient.Transpose([0, 3, 1, 2]);
+
+        // Convert input shape from NHWC to NCHW for CropBackward
+        var inputShapeNHWC = GetInputShape();
+        var inputShapeNCHW = new int[] { inputShapeNHWC[0], inputShapeNHWC[3], inputShapeNHWC[1], inputShapeNHWC[2] };
+
+        var inputGradientNCHW = Engine.CropBackward(outputGradientNCHW, inputShapeNCHW, _cropTop[1], _cropLeft[2]);
+
+        // Convert back from NCHW to NHWC
+        var inputGradient = inputGradientNCHW.Transpose([0, 2, 3, 1]);
+
         return ApplyActivationDerivative(_lastInput, inputGradient);
     }
    
