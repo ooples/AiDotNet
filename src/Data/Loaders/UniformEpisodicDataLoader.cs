@@ -162,8 +162,8 @@ public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderB
     protected override MetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
     {
         // Step 1: Randomly select nWay unique classes
-        var selectedClasses = AvailableClasses
-            .OrderBy(_ => Random.Next())
+        var selectedClasses = _availableClasses
+            .OrderBy(_ => RandomInstance.Next())
             .Take(NWay)
             .ToArray();
 
@@ -181,7 +181,7 @@ public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderB
 
             // Step 3: Sample (kShot + queryShots) examples and shuffle
             var sampledIndices = classIndices
-                .OrderBy(_ => Random.Next())
+                .OrderBy(_ => RandomInstance.Next())
                 .Take(KShot + QueryShots)
                 .ToList();
 

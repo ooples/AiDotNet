@@ -32,55 +32,13 @@ namespace AiDotNet.Interfaces;
 /// aggregate information from neighbors during message passing.
 /// </para>
 /// </remarks>
-public interface IGraphDataLoader<T>
+public interface IGraphDataLoader<T> : IDataLoader<T>, IBatchIterable<GraphData<T>>
 {
     /// <summary>
     /// Gets the number of graphs in the dataset (1 for single-graph datasets like citation networks).
     /// </summary>
     int NumGraphs { get; }
 
-    /// <summary>
-    /// Gets the batch size (number of graphs per batch).
-    /// </summary>
-    int BatchSize { get; }
-
-    /// <summary>
-    /// Gets whether the data loader has more batches available.
-    /// </summary>
-    bool HasNext { get; }
-
-    /// <summary>
-    /// Loads and returns the next graph or batch of graphs.
-    /// </summary>
-    /// <returns>A GraphData instance containing the loaded graph(s).</returns>
-    GraphData<T> GetNextBatch();
-
-    /// <summary>
-    /// Resets the data loader to the beginning of the dataset.
-    /// </summary>
-    void Reset();
-}
-
-/// <summary>
-/// Extended interface for graph data loaders with full IDataLoader composition.
-/// </summary>
-/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-/// <remarks>
-/// <para>
-/// This interface extends the base IGraphDataLoader with additional capabilities:
-/// - Async loading and unloading
-/// - Progress tracking through ICountable
-/// - Node/edge/graph property accessors
-/// - Task creation methods for different graph learning tasks
-/// </para>
-/// <para><b>For Beginners:</b> Use this interface when you need:
-/// - Full lifecycle management (LoadAsync/Unload)
-/// - Direct access to graph properties (NodeFeatures, AdjacencyMatrix, etc.)
-/// - Built-in task creation (node classification, graph classification, link prediction)
-/// </para>
-/// </remarks>
-public interface IGraphDataLoaderEx<T> : IGraphDataLoader<T>, IDataLoader<T>, IBatchIterable<GraphData<T>>
-{
     /// <summary>
     /// Gets the node feature tensor of shape [numNodes, numFeatures].
     /// </summary>

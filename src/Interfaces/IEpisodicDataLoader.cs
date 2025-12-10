@@ -34,45 +34,7 @@ namespace AiDotNet.Interfaces;
 /// The episodic data loader creates these mini-tasks for training.
 /// </para>
 /// </remarks>
-public interface IEpisodicDataLoader<T, TInput, TOutput>
-{
-    /// <summary>
-    /// Gets the next meta-learning task (support set + query set).
-    /// </summary>
-    /// <returns>A MetaLearningTask with support and query sets.</returns>
-    /// <remarks>
-    /// <para>
-    /// Each call returns a new randomly sampled task with:
-    /// - N randomly selected classes from available classes
-    /// - K support examples per class
-    /// - QueryShots query examples per class
-    /// </para>
-    /// </remarks>
-    MetaLearningTask<T, TInput, TOutput> GetNextTask();
-}
-
-/// <summary>
-/// Extended interface for episodic data loaders with full IDataLoader composition.
-/// </summary>
-/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-/// <typeparam name="TInput">The input data type for tasks.</typeparam>
-/// <typeparam name="TOutput">The output data type for tasks.</typeparam>
-/// <remarks>
-/// <para>
-/// This interface extends the base IEpisodicDataLoader with additional capabilities:
-/// - Async loading and unloading via IDataLoader
-/// - Progress tracking through ICountable
-/// - Batch iteration via IBatchIterable
-/// - N-way K-shot configuration accessors
-/// </para>
-/// <para><b>For Beginners:</b> Use this interface when you need:
-/// - Full lifecycle management (LoadAsync/Unload)
-/// - Direct access to N-way K-shot configuration
-/// - Batch task sampling with progress tracking
-/// </para>
-/// </remarks>
-public interface IEpisodicDataLoaderEx<T, TInput, TOutput> :
-    IEpisodicDataLoader<T, TInput, TOutput>,
+public interface IEpisodicDataLoader<T, TInput, TOutput> :
     IDataLoader<T>,
     IBatchIterable<MetaLearningTask<T, TInput, TOutput>>
 {
@@ -95,6 +57,20 @@ public interface IEpisodicDataLoaderEx<T, TInput, TOutput> :
     /// Gets the total number of available classes in the dataset.
     /// </summary>
     int AvailableClasses { get; }
+
+    /// <summary>
+    /// Gets the next meta-learning task (support set + query set).
+    /// </summary>
+    /// <returns>A MetaLearningTask with support and query sets.</returns>
+    /// <remarks>
+    /// <para>
+    /// Each call returns a new randomly sampled task with:
+    /// - N randomly selected classes from available classes
+    /// - K support examples per class
+    /// - QueryShots query examples per class
+    /// </para>
+    /// </remarks>
+    MetaLearningTask<T, TInput, TOutput> GetNextTask();
 
     /// <summary>
     /// Gets multiple meta-learning tasks as a batch.

@@ -1,9 +1,9 @@
 // Polyfills for .NET Framework 4.7.1 to support modern C# features
 
-#if !NET5_0_OR_GREATER
-
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+
+#if !NET5_0_OR_GREATER
 
 namespace System.Collections.Generic
 {
@@ -141,10 +141,16 @@ namespace System.Collections.Generic
     }
 }
 
+#endif
+
+// The following polyfills are available for ALL frameworks
+// They provide a consistent API that works the same way on both .NET Framework and modern .NET
+
 namespace System
 {
     /// <summary>
     /// Polyfills for Math methods missing from .NET Framework.
+    /// Available for all frameworks - delegates to standard library on modern .NET.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> Some Math methods like Clamp and Log2 don't exist in .NET Framework.
@@ -161,7 +167,11 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Log2(double value)
         {
+#if NET5_0_OR_GREATER
+            return Math.Log2(value);
+#else
             return Math.Log(value) / Math.Log(2.0);
+#endif
         }
 
         /// <summary>
@@ -174,9 +184,13 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int Clamp(int value, int min, int max)
         {
+#if NET5_0_OR_GREATER
+            return Math.Clamp(value, min, max);
+#else
             if (value < min) return min;
             if (value > max) return max;
             return value;
+#endif
         }
 
         /// <summary>
@@ -189,9 +203,13 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float Clamp(float value, float min, float max)
         {
+#if NET5_0_OR_GREATER
+            return Math.Clamp(value, min, max);
+#else
             if (value < min) return min;
             if (value > max) return max;
             return value;
+#endif
         }
 
         /// <summary>
@@ -204,14 +222,19 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Clamp(double value, double min, double max)
         {
+#if NET5_0_OR_GREATER
+            return Math.Clamp(value, min, max);
+#else
             if (value < min) return min;
             if (value > max) return max;
             return value;
+#endif
         }
     }
 
     /// <summary>
     /// Extension methods for Array to add missing methods from newer .NET versions.
+    /// Available for all frameworks.
     /// </summary>
     public static class ArrayPolyfill
     {
@@ -223,10 +246,14 @@ namespace System
         /// <param name="value">The value to fill with.</param>
         public static void Fill<T>(T[] array, T value)
         {
+#if NET5_0_OR_GREATER
+            Array.Fill(array, value);
+#else
             for (int i = 0; i < array.Length; i++)
             {
                 array[i] = value;
             }
+#endif
         }
 
         /// <summary>
@@ -239,12 +266,77 @@ namespace System
         /// <param name="count">The number of elements to fill.</param>
         public static void Fill<T>(T[] array, T value, int startIndex, int count)
         {
+#if NET5_0_OR_GREATER
+            Array.Fill(array, value, startIndex, count);
+#else
             for (int i = startIndex; i < startIndex + count && i < array.Length; i++)
             {
                 array[i] = value;
             }
+#endif
         }
     }
 }
 
+namespace System.IO
+{
+    /// <summary>
+    /// Polyfills for File methods missing from .NET Framework.
+    /// Available for all frameworks - delegates to standard library on modern .NET.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Some async File methods like ReadAllLinesAsync don't exist in .NET Framework.
+    /// This class provides these methods so code can work across all .NET versions.
+    /// </para>
+    /// </remarks>
+    public static class FilePolyfill
+    {
+        /// <summary>
+        /// Asynchronously reads all lines from a file.
+        /// </summary>
+        /// <param name="path">The path to the file.</param>
+        /// <param name="cancellationToken">A cancellation token.</param>
+        /// <returns>A task that represents the asynchronous read operation, containing all lines.</returns>
+        public static async Threading.Tasks.Task<string[]> ReadAllLinesAsync(
+            string path,
+            Threading.CancellationToken cancellationToken = default)
+        {
+#if NET5_0_OR_GREATER
+            return await File.ReadAllLinesAsync(path, cancellationToken);
+#else
+            var lines = new System.Collections.Generic.List<string>();
+            using (var reader = new StreamReader(path))
+            {
+                string? line;
+                while ((line = await reader.ReadLineAsync()) is not null)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    lines.Add(line);
+                }
+            }
+            return lines.ToArray();
 #endif
+        }
+
+        /// <summary>
+        /// Asynchronously reads all text from a file.
+        /// </summary>
+        /// <param name="path">The path to the file.</param>
+        /// <param name="cancellationToken">A cancellation token.</param>
+        /// <returns>A task that represents the asynchronous read operation, containing all text.</returns>
+        public static async Threading.Tasks.Task<string> ReadAllTextAsync(
+            string path,
+            Threading.CancellationToken cancellationToken = default)
+        {
+#if NET5_0_OR_GREATER
+            return await File.ReadAllTextAsync(path, cancellationToken);
+#else
+            using (var reader = new StreamReader(path))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return await reader.ReadToEndAsync();
+            }
+#endif
+        }
+    }
+}

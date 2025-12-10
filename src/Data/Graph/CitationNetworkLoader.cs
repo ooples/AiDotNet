@@ -1,7 +1,10 @@
 using AiDotNet.Data.Structures;
+using AiDotNet.DataLoading.Base;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using System.IO.Compression;
+using System.Net.Http;
 
 namespace AiDotNet.Data.Graph;
 
@@ -52,14 +55,25 @@ namespace AiDotNet.Data.Graph;
 /// - Even unlabeled papers can be classified based on what they cite
 /// </para>
 /// </remarks>
-public class CitationNetworkLoader<T> : IGraphDataLoader<T>
+public class CitationNetworkLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly CitationDataset _dataset;
     private readonly string _dataPath;
+    private readonly bool _autoDownload;
     private GraphData<T>? _loadedGraph;
-    private bool _hasLoaded;
+    private int _batchSize = 1;
+    private int _currentBatchIndex;
+    private int _numClasses;
+
+    // Standard download URLs for citation network datasets
+    private static readonly Dictionary<CitationDataset, string> DatasetUrls = new()
+    {
+        [CitationDataset.Cora] = "https://linqs-data.soe.ucsc.edu/public/lbc/cora.tgz",
+        [CitationDataset.CiteSeer] = "https://linqs-data.soe.ucsc.edu/public/lbc/citeseer.tgz",
+        [CitationDataset.PubMed] = "https://linqs-data.soe.ucsc.edu/public/Pubmed-Diabetes.tgz"
+    };
 
     /// <summary>
     /// Available citation network datasets.
@@ -77,169 +91,623 @@ public class CitationNetworkLoader<T> : IGraphDataLoader<T>
     }
 
     /// <inheritdoc/>
+    public override string Name => $"CitationNetwork({_dataset})";
+
+    /// <inheritdoc/>
+    public override string Description => $"Citation network loader for {_dataset} dataset";
+
+    /// <inheritdoc/>
+    public override int TotalCount => NumNodes;
+
+    /// <inheritdoc/>
     public int NumGraphs => 1; // Single large graph
 
     /// <inheritdoc/>
-    public int BatchSize => 1;
+    public override int BatchSize
+    {
+        get => _batchSize;
+        set => _batchSize = Math.Max(1, value);
+    }
 
     /// <inheritdoc/>
-    public bool HasNext => !_hasLoaded;
+    public bool HasNext => _currentBatchIndex == 0;
+
+    /// <inheritdoc/>
+    public Tensor<T> NodeFeatures
+    {
+        get
+        {
+            EnsureLoaded();
+            return _loadedGraph?.NodeFeatures ?? throw new InvalidOperationException("Graph not loaded");
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> AdjacencyMatrix
+    {
+        get
+        {
+            EnsureLoaded();
+            return _loadedGraph?.AdjacencyMatrix ?? throw new InvalidOperationException("Graph not loaded");
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> EdgeIndex
+    {
+        get
+        {
+            EnsureLoaded();
+            return _loadedGraph?.EdgeIndex ?? throw new InvalidOperationException("Graph not loaded");
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T>? NodeLabels
+    {
+        get
+        {
+            EnsureLoaded();
+            return _loadedGraph?.NodeLabels;
+        }
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T>? GraphLabels => null; // Citation networks use node labels, not graph labels
+
+    /// <inheritdoc/>
+    public int NumNodeFeatures
+    {
+        get
+        {
+            EnsureLoaded();
+            return _loadedGraph?.NumNodeFeatures ?? 0;
+        }
+    }
+
+    /// <inheritdoc/>
+    public int NumNodes
+    {
+        get
+        {
+            EnsureLoaded();
+            return _loadedGraph?.NumNodes ?? 0;
+        }
+    }
+
+    /// <inheritdoc/>
+    public int NumEdges
+    {
+        get
+        {
+            EnsureLoaded();
+            return _loadedGraph?.NumEdges ?? 0;
+        }
+    }
+
+    /// <inheritdoc/>
+    public int NumClasses
+    {
+        get
+        {
+            EnsureLoaded();
+            return _numClasses;
+        }
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CitationNetworkLoader{T}"/> class.
     /// </summary>
     /// <param name="dataset">Which citation dataset to load.</param>
-    /// <param name="dataPath">Path to the dataset files (optional, will download if not found).</param>
+    /// <param name="dataPath">Path to the dataset files. If null, uses default cache directory.</param>
+    /// <param name="autoDownload">Whether to automatically download the dataset if not found locally.</param>
     /// <remarks>
     /// <para>
-    /// The loader expects data files in the following format:
-    /// - {dataset}.content: Node features and labels
-    /// - {dataset}.cites: Edge list
+    /// The loader expects data files in the standard Planetoid format:
+    /// - {dataset}.content: Tab-separated file with paper_id, word features, class_label
+    /// - {dataset}.cites: Tab-separated file with cited_paper_id, citing_paper_id
     /// </para>
     /// <para><b>For Beginners:</b> Using this loader:
     ///
     /// ```csharp
-    /// // Load Cora dataset
-    /// var loader = new CitationNetworkLoader<double>(
-    ///     CitationNetworkLoader<double>.CitationDataset.Cora,
-    ///     "path/to/data");
+    /// // Load Cora dataset (auto-downloads if not present)
+    /// var loader = new CitationNetworkLoader&lt;double&gt;(
+    ///     CitationNetworkLoader&lt;double&gt;.CitationDataset.Cora,
+    ///     autoDownload: true);
+    ///
+    /// // Load the data
+    /// await loader.LoadAsync();
     ///
     /// // Get the graph
     /// var graph = loader.GetNextBatch();
     ///
     /// // Access data
-    /// Console.WriteLine($"Nodes: {graph.NumNodes}");
-    /// Console.WriteLine($"Edges: {graph.NumEdges}");
-    /// Console.WriteLine($"Features per node: {graph.NumNodeFeatures}");
+    /// Console.WriteLine($"Nodes: {loader.NumNodes}");
+    /// Console.WriteLine($"Edges: {loader.NumEdges}");
+    /// Console.WriteLine($"Features per node: {loader.NumNodeFeatures}");
     ///
     /// // Create node classification task
     /// var task = loader.CreateNodeClassificationTask();
     /// ```
     /// </para>
     /// </remarks>
-    public CitationNetworkLoader(CitationDataset dataset, string? dataPath = null)
+    public CitationNetworkLoader(CitationDataset dataset, string? dataPath = null, bool autoDownload = true)
     {
         _dataset = dataset;
         _dataPath = dataPath ?? GetDefaultDataPath();
-        _hasLoaded = false;
+        _autoDownload = autoDownload;
     }
 
     /// <inheritdoc/>
     public GraphData<T> GetNextBatch()
     {
-        if (_loadedGraph == null)
+        EnsureLoaded();
+
+        if (!HasNext)
         {
-            LoadDataset();
+            throw new InvalidOperationException("No more batches available. Call Reset() to start over.");
         }
 
-        _hasLoaded = true;
+        _currentBatchIndex++;
         return _loadedGraph!;
     }
 
     /// <inheritdoc/>
-    public void Reset()
+    public bool TryGetNextBatch(out GraphData<T> batch)
     {
-        _hasLoaded = false;
+        if (!HasNext)
+        {
+            batch = default!;
+            return false;
+        }
+
+        batch = GetNextBatch();
+        return true;
+    }
+
+    /// <inheritdoc/>
+    protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
+    {
+        string datasetDir = Path.Combine(_dataPath, _dataset.ToString().ToLowerInvariant());
+
+        // Ensure data exists (download if needed)
+        await EnsureDataExistsAsync(datasetDir, cancellationToken);
+
+        // Parse the dataset files
+        _loadedGraph = await ParseDatasetFilesAsync(datasetDir, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    protected override void UnloadDataCore()
+    {
+        _loadedGraph = null;
+    }
+
+    /// <inheritdoc/>
+    protected override void OnReset()
+    {
+        _currentBatchIndex = 0;
     }
 
     /// <summary>
-    /// Creates a node classification task from the loaded citation network.
+    /// Ensures the dataset files exist locally, downloading if necessary.
     /// </summary>
-    /// <param name="trainRatio">Fraction of nodes for training (default: 0.1)</param>
-    /// <param name="valRatio">Fraction of nodes for validation (default: 0.1)</param>
-    /// <returns>Node classification task with train/val/test splits.</returns>
-    /// <remarks>
-    /// <para>
-    /// Standard splits for citation networks:
-    /// - Train: 10% (few labeled papers)
-    /// - Validation: 10%
-    /// - Test: 80%
-    ///
-    /// This is semi-supervised learning: most nodes are unlabeled.
-    /// </para>
-    /// <para><b>For Beginners:</b> Why so few training labels?
-    ///
-    /// Citation networks test semi-supervised learning:
-    /// - In real research, labeling papers is expensive (requires expert knowledge)
-    /// - We typically have few labeled examples
-    /// - Graph structure helps: papers citing each other often share topics
-    ///
-    /// Example with 2,708 papers (Cora):
-    /// - ~270 labeled for training (10%)
-    /// - ~270 for validation
-    /// - ~2,168 for testing
-    ///
-    /// The GNN uses citation connections to propagate label information from the
-    /// 270 labeled papers to classify the remaining 2,168 unlabeled papers!
-    /// </para>
-    /// </remarks>
-    public NodeClassificationTask<T> CreateNodeClassificationTask(
-        double trainRatio = 0.1,
-        double valRatio = 0.1)
+    private async Task EnsureDataExistsAsync(string datasetDir, CancellationToken cancellationToken)
     {
-        if (_loadedGraph == null)
+        string contentFile = GetContentFilePath(datasetDir);
+        string citesFile = GetCitesFilePath(datasetDir);
+
+        if (File.Exists(contentFile) && File.Exists(citesFile))
         {
-            LoadDataset();
+            return; // Data already exists
         }
 
-        var graph = _loadedGraph!;
-        int numNodes = graph.NumNodes;
-
-        // Create random split
-        var indices = Enumerable.Range(0, numNodes).OrderBy(_ => Guid.NewGuid()).ToArray();
-        int trainSize = (int)(numNodes * trainRatio);
-        int valSize = (int)(numNodes * valRatio);
-
-        var trainIndices = indices.Take(trainSize).ToArray();
-        var valIndices = indices.Skip(trainSize).Take(valSize).ToArray();
-        var testIndices = indices.Skip(trainSize + valSize).ToArray();
-
-        // Count number of classes
-        int numClasses = CountClasses(graph.NodeLabels!);
-
-        return new NodeClassificationTask<T>
+        if (!_autoDownload)
         {
-            Graph = graph,
-            Labels = graph.NodeLabels!,
-            TrainIndices = trainIndices,
-            ValIndices = valIndices,
-            TestIndices = testIndices,
-            NumClasses = numClasses,
-            IsMultiLabel = false
-        };
+            throw new FileNotFoundException(
+                $"Dataset files not found at {datasetDir}. " +
+                $"Either provide the data files or set autoDownload=true to download automatically.");
+        }
+
+        // Download and extract the dataset
+        await DownloadAndExtractDatasetAsync(datasetDir, cancellationToken);
+
+        // Verify files exist after extraction
+        if (!File.Exists(contentFile))
+        {
+            throw new InvalidOperationException(
+                $"Failed to find {Path.GetFileName(contentFile)} after extraction. " +
+                "The dataset format may have changed.");
+        }
+
+        if (!File.Exists(citesFile))
+        {
+            throw new InvalidOperationException(
+                $"Failed to find {Path.GetFileName(citesFile)} after extraction. " +
+                "The dataset format may have changed.");
+        }
     }
 
-    private void LoadDataset()
+    /// <summary>
+    /// Downloads and extracts the dataset from the standard source.
+    /// </summary>
+    private async Task DownloadAndExtractDatasetAsync(string datasetDir, CancellationToken cancellationToken)
     {
-        // This is a simplified loader. Full implementation would:
-        // 1. Check if files exist locally
-        // 2. Download from standard sources if needed
-        // 3. Parse .content and .cites files
-        // 4. Build adjacency matrix
-        // 5. Create node features and labels
+        Directory.CreateDirectory(datasetDir);
 
-        var (numNodes, numFeatures, numClasses) = GetDatasetStats();
+        string url = DatasetUrls[_dataset];
+        string tempFile = Path.Combine(Path.GetTempPath(), $"{_dataset}_{Guid.NewGuid()}.tgz");
 
-        _loadedGraph = new GraphData<T>
+        try
         {
-            NodeFeatures = CreateMockNodeFeatures(numNodes, numFeatures),
-            AdjacencyMatrix = CreateMockAdjacency(numNodes),
-            EdgeIndex = CreateMockEdgeIndex(numNodes),
-            NodeLabels = CreateMockLabels(numNodes, numClasses)
-        };
+            // Download the archive
+            using (var httpClient = new HttpClient())
+            {
+                httpClient.Timeout = TimeSpan.FromMinutes(10);
+
+                using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                response.EnsureSuccessStatusCode();
+
+                using var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None);
+                await response.Content.CopyToAsync(fileStream);
+            }
+
+            // Extract the archive
+            await ExtractTarGzAsync(tempFile, datasetDir, cancellationToken);
+        }
+        finally
+        {
+            // Clean up temp file
+            if (File.Exists(tempFile))
+            {
+                try { File.Delete(tempFile); }
+                catch { /* Ignore cleanup errors */ }
+            }
+        }
     }
 
-    private (int numNodes, int numFeatures, int numClasses) GetDatasetStats()
+    /// <summary>
+    /// Extracts a .tar.gz archive to the specified directory.
+    /// </summary>
+    private async Task ExtractTarGzAsync(string archivePath, string destinationDir, CancellationToken cancellationToken)
     {
-        return _dataset switch
+        using var fileStream = new FileStream(archivePath, FileMode.Open, FileAccess.Read);
+        using var gzipStream = new GZipStream(fileStream, CompressionMode.Decompress);
+
+        // Read tar entries
+        await ExtractTarAsync(gzipStream, destinationDir, cancellationToken);
+    }
+
+    /// <summary>
+    /// Extracts a tar archive from a stream.
+    /// </summary>
+    private async Task ExtractTarAsync(Stream tarStream, string destinationDir, CancellationToken cancellationToken)
+    {
+        byte[] buffer = new byte[512];
+        while (true)
         {
-            CitationDataset.Cora => (2708, 1433, 7),
-            CitationDataset.CiteSeer => (3312, 3703, 6),
-            CitationDataset.PubMed => (19717, 500, 3),
-            _ => throw new ArgumentException($"Unknown dataset: {_dataset}")
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Read header
+            int bytesRead = await ReadExactAsync(tarStream, buffer, 0, 512, cancellationToken);
+            if (bytesRead == 0 || buffer.All(b => b == 0))
+            {
+                break; // End of archive
+            }
+
+            // Parse header
+            string fileName = System.Text.Encoding.ASCII.GetString(buffer, 0, 100).TrimEnd('\0');
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                break;
+            }
+
+            // Parse file size (octal, bytes 124-135)
+            string sizeStr = System.Text.Encoding.ASCII.GetString(buffer, 124, 11).TrimEnd('\0', ' ');
+            long fileSize = string.IsNullOrEmpty(sizeStr) ? 0 : Convert.ToInt64(sizeStr, 8);
+
+            // Check if directory (type flag at byte 156)
+            char typeFlag = (char)buffer[156];
+            bool isDirectory = typeFlag == '5' || fileName.EndsWith("/");
+
+            // Normalize path
+            string destPath = Path.Combine(destinationDir, fileName.Replace('/', Path.DirectorySeparatorChar));
+
+            if (isDirectory)
+            {
+                Directory.CreateDirectory(destPath);
+            }
+            else if (fileSize > 0)
+            {
+                // Ensure parent directory exists
+                string? parentDir = Path.GetDirectoryName(destPath);
+                if (parentDir is not null)
+                {
+                    Directory.CreateDirectory(parentDir);
+                }
+
+                // Extract file
+                using var outputStream = new FileStream(destPath, FileMode.Create, FileAccess.Write);
+                long remaining = fileSize;
+                byte[] fileBuffer = new byte[Math.Min(65536, fileSize)];
+
+                while (remaining > 0)
+                {
+                    int toRead = (int)Math.Min(fileBuffer.Length, remaining);
+                    bytesRead = await ReadExactAsync(tarStream, fileBuffer, 0, toRead, cancellationToken);
+                    if (bytesRead == 0)
+                    {
+                        throw new InvalidOperationException("Unexpected end of tar stream");
+                    }
+                    await outputStream.WriteAsync(fileBuffer, 0, bytesRead, cancellationToken);
+                    remaining -= bytesRead;
+                }
+            }
+
+            // Skip padding to 512-byte boundary
+            int padding = (int)((512 - (fileSize % 512)) % 512);
+            if (padding > 0)
+            {
+                byte[] paddingBuffer = new byte[padding];
+                await ReadExactAsync(tarStream, paddingBuffer, 0, padding, cancellationToken);
+            }
+        }
+    }
+
+    private static async Task<int> ReadExactAsync(Stream stream, byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+    {
+        int totalRead = 0;
+        while (totalRead < count)
+        {
+            int bytesRead = await stream.ReadAsync(buffer, offset + totalRead, count - totalRead, cancellationToken);
+            if (bytesRead == 0)
+            {
+                break;
+            }
+            totalRead += bytesRead;
+        }
+        return totalRead;
+    }
+
+    /// <summary>
+    /// Parses the dataset files and builds the graph structure.
+    /// </summary>
+    private async Task<GraphData<T>> ParseDatasetFilesAsync(string datasetDir, CancellationToken cancellationToken)
+    {
+        string contentFile = GetContentFilePath(datasetDir);
+        string citesFile = GetCitesFilePath(datasetDir);
+
+        // Parse content file to get node features, labels, and paper ID mapping
+        var (paperIdToIndex, features, labels, classLabels) = await ParseContentFileAsync(contentFile, cancellationToken);
+
+        // Parse cites file to get edges
+        var edges = await ParseCitesFileAsync(citesFile, paperIdToIndex, cancellationToken);
+
+        int numNodes = features.Count;
+        int numFeatures = features[0].Length;
+        _numClasses = classLabels.Count;
+
+        // Build node features tensor
+        var nodeFeatures = new Tensor<T>([numNodes, numFeatures]);
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numFeatures; j++)
+            {
+                nodeFeatures[i, j] = NumOps.FromDouble(features[i][j]);
+            }
+        }
+
+        // Build edge index tensor (COO format)
+        var edgeIndex = new Tensor<T>([edges.Count, 2]);
+        for (int i = 0; i < edges.Count; i++)
+        {
+            edgeIndex[i, 0] = NumOps.FromDouble(edges[i].source);
+            edgeIndex[i, 1] = NumOps.FromDouble(edges[i].target);
+        }
+
+        // Build adjacency matrix
+        var adjacencyMatrix = new Tensor<T>([1, numNodes, numNodes]);
+        foreach (var edge in edges)
+        {
+            adjacencyMatrix[0, edge.source, edge.target] = NumOps.One;
+        }
+
+        // Build one-hot encoded labels
+        var nodeLabels = new Tensor<T>([numNodes, _numClasses]);
+        for (int i = 0; i < numNodes; i++)
+        {
+            nodeLabels[i, labels[i]] = NumOps.One;
+        }
+
+        return new GraphData<T>
+        {
+            NodeFeatures = nodeFeatures,
+            AdjacencyMatrix = adjacencyMatrix,
+            EdgeIndex = edgeIndex,
+            NodeLabels = nodeLabels
         };
     }
 
+    /// <summary>
+    /// Parses the content file to extract node features and labels.
+    /// </summary>
+    /// <returns>Tuple of (paper ID to index mapping, feature vectors, label indices, unique class labels).</returns>
+    private async Task<(Dictionary<string, int> paperIdToIndex, List<double[]> features, List<int> labels, List<string> classLabels)>
+        ParseContentFileAsync(string contentFile, CancellationToken cancellationToken)
+    {
+        var paperIdToIndex = new Dictionary<string, int>();
+        var features = new List<double[]>();
+        var labels = new List<int>();
+        var classLabelToIndex = new Dictionary<string, int>();
+        var classLabels = new List<string>();
+
+        string[] lines = await FilePolyfill.ReadAllLinesAsync(contentFile, cancellationToken);
+
+        foreach (string line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            string[] parts = line.Split('\t');
+            if (parts.Length < 3)
+            {
+                // Try space/comma separation
+                parts = line.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
+            }
+
+            if (parts.Length < 3)
+            {
+                continue; // Skip malformed lines
+            }
+
+            string paperId = parts[0];
+            string classLabel = parts[^1]; // Last element is the class label
+
+            // Features are everything between paper ID and class label
+            var featureValues = new double[parts.Length - 2];
+            for (int i = 1; i < parts.Length - 1; i++)
+            {
+                if (double.TryParse(parts[i], out double value))
+                {
+                    featureValues[i - 1] = value;
+                }
+            }
+
+            // Map paper ID to index
+            int nodeIndex = paperIdToIndex.Count;
+            paperIdToIndex[paperId] = nodeIndex;
+
+            // Map class label to index
+            if (!classLabelToIndex.TryGetValue(classLabel, out int labelIndex))
+            {
+                labelIndex = classLabelToIndex.Count;
+                classLabelToIndex[classLabel] = labelIndex;
+                classLabels.Add(classLabel);
+            }
+
+            features.Add(featureValues);
+            labels.Add(labelIndex);
+        }
+
+        return (paperIdToIndex, features, labels, classLabels);
+    }
+
+    /// <summary>
+    /// Parses the cites file to extract edges.
+    /// </summary>
+    private async Task<List<(int source, int target)>> ParseCitesFileAsync(
+        string citesFile,
+        Dictionary<string, int> paperIdToIndex,
+        CancellationToken cancellationToken)
+    {
+        var edges = new List<(int source, int target)>();
+
+        string[] lines = await FilePolyfill.ReadAllLinesAsync(citesFile, cancellationToken);
+
+        foreach (string line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            string[] parts = line.Split(new[] { '\t', ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2)
+            {
+                continue; // Skip malformed lines
+            }
+
+            string citedPaperId = parts[0];
+            string citingPaperId = parts[1];
+
+            // Only add edge if both papers exist in our node set
+            if (paperIdToIndex.TryGetValue(citedPaperId, out int citedIndex) &&
+                paperIdToIndex.TryGetValue(citingPaperId, out int citingIndex))
+            {
+                // Add edge in both directions (undirected graph)
+                edges.Add((citingIndex, citedIndex));
+                edges.Add((citedIndex, citingIndex));
+            }
+        }
+
+        return edges;
+    }
+
+    /// <summary>
+    /// Gets the path to the content file for the current dataset.
+    /// </summary>
+    private string GetContentFilePath(string datasetDir)
+    {
+        string datasetName = _dataset.ToString().ToLowerInvariant();
+
+        // Try different possible locations and naming conventions
+        string[] possiblePaths = _dataset switch
+        {
+            CitationDataset.PubMed => new[]
+            {
+                Path.Combine(datasetDir, "Pubmed-Diabetes", "data", "Pubmed-Diabetes.NODE.paper.tab"),
+                Path.Combine(datasetDir, "data", "Pubmed-Diabetes.NODE.paper.tab"),
+                Path.Combine(datasetDir, "Pubmed-Diabetes.content"),
+                Path.Combine(datasetDir, "pubmed.content")
+            },
+            _ => new[]
+            {
+                Path.Combine(datasetDir, datasetName, $"{datasetName}.content"),
+                Path.Combine(datasetDir, $"{datasetName}.content")
+            }
+        };
+
+        foreach (string path in possiblePaths)
+        {
+            if (File.Exists(path))
+            {
+                return path;
+            }
+        }
+
+        return possiblePaths[0]; // Return first option as default for error messages
+    }
+
+    /// <summary>
+    /// Gets the path to the cites file for the current dataset.
+    /// </summary>
+    private string GetCitesFilePath(string datasetDir)
+    {
+        string datasetName = _dataset.ToString().ToLowerInvariant();
+
+        // Try different possible locations and naming conventions
+        string[] possiblePaths = _dataset switch
+        {
+            CitationDataset.PubMed => new[]
+            {
+                Path.Combine(datasetDir, "Pubmed-Diabetes", "data", "Pubmed-Diabetes.DIRECTED.cites.tab"),
+                Path.Combine(datasetDir, "data", "Pubmed-Diabetes.DIRECTED.cites.tab"),
+                Path.Combine(datasetDir, "Pubmed-Diabetes.cites"),
+                Path.Combine(datasetDir, "pubmed.cites")
+            },
+            _ => new[]
+            {
+                Path.Combine(datasetDir, datasetName, $"{datasetName}.cites"),
+                Path.Combine(datasetDir, $"{datasetName}.cites")
+            }
+        };
+
+        foreach (string path in possiblePaths)
+        {
+            if (File.Exists(path))
+            {
+                return path;
+            }
+        }
+
+        return possiblePaths[0]; // Return first option as default for error messages
+    }
+
+    /// <summary>
+    /// Gets the default data cache path.
+    /// </summary>
     private string GetDefaultDataPath()
     {
         return Path.Combine(
@@ -249,96 +717,140 @@ public class CitationNetworkLoader<T> : IGraphDataLoader<T>
             "citation_networks");
     }
 
-    private Tensor<T> CreateMockNodeFeatures(int numNodes, int numFeatures)
+    /// <inheritdoc/>
+    public NodeClassificationTask<T> CreateNodeClassificationTask(
+        double trainRatio = 0.1,
+        double valRatio = 0.1,
+        int? seed = null)
     {
-        // In real implementation, load from {dataset}.content file
-        var features = new Tensor<T>([numNodes, numFeatures]);
-        var random = new Random(42);
+        EnsureLoaded();
 
-        for (int i = 0; i < numNodes; i++)
+        var graph = _loadedGraph!;
+        int numNodes = graph.NumNodes;
+
+        // Create random split
+        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+        var indices = Enumerable.Range(0, numNodes).OrderBy(_ => random.Next()).ToArray();
+        int trainSize = (int)(numNodes * trainRatio);
+        int valSize = (int)(numNodes * valRatio);
+
+        var trainIndices = indices.Take(trainSize).ToArray();
+        var valIndices = indices.Skip(trainSize).Take(valSize).ToArray();
+        var testIndices = indices.Skip(trainSize + valSize).ToArray();
+
+        return new NodeClassificationTask<T>
         {
-            for (int j = 0; j < numFeatures; j++)
+            Graph = graph,
+            Labels = graph.NodeLabels!,
+            TrainIndices = trainIndices,
+            ValIndices = valIndices,
+            TestIndices = testIndices,
+            NumClasses = _numClasses,
+            IsMultiLabel = false
+        };
+    }
+
+    /// <inheritdoc/>
+    public GraphClassificationTask<T> CreateGraphClassificationTask(
+        double trainRatio = 0.8,
+        double valRatio = 0.1,
+        int? seed = null)
+    {
+        // Citation networks are single-graph datasets used for node classification
+        // Graph classification doesn't make sense here
+        throw new NotSupportedException(
+            "Citation networks are single-graph datasets designed for node classification, " +
+            "not graph classification. Use CreateNodeClassificationTask() instead.");
+    }
+
+    /// <inheritdoc/>
+    public LinkPredictionTask<T> CreateLinkPredictionTask(
+        double trainRatio = 0.85,
+        double negativeRatio = 1.0,
+        int? seed = null)
+    {
+        EnsureLoaded();
+
+        var graph = _loadedGraph!;
+        var random = seed.HasValue ? new Random(seed.Value) : new Random();
+
+        // Get all edges from edge index
+        var allEdges = new List<(int src, int dst)>();
+        var existingEdgeSet = new HashSet<(int, int)>();
+
+        for (int i = 0; i < graph.EdgeIndex.Shape[0]; i++)
+        {
+            int src = NumOps.ToInt32(graph.EdgeIndex[i, 0]);
+            int dst = NumOps.ToInt32(graph.EdgeIndex[i, 1]);
+
+            // Store unique edges (avoid counting both directions)
+            if (src < dst)
             {
-                // Sparse binary features (bag-of-words)
-                features[i, j] = random.NextDouble() < 0.05
-                    ? NumOps.FromDouble(1.0)
-                    : NumOps.Zero;
+                allEdges.Add((src, dst));
+                existingEdgeSet.Add((src, dst));
             }
         }
 
-        return features;
-    }
+        // Shuffle and split edges
+        var shuffledEdges = allEdges.OrderBy(_ => random.Next()).ToArray();
+        int trainSize = (int)(shuffledEdges.Length * trainRatio);
+        int valSize = (int)(shuffledEdges.Length * (1 - trainRatio) / 2);
 
-    private Tensor<T> CreateMockAdjacency(int numNodes)
-    {
-        // In real implementation, build from {dataset}.cites file
-        var adj = new Tensor<T>([1, numNodes, numNodes]);
-        var random = new Random(42);
+        var trainEdges = shuffledEdges.Take(trainSize).ToArray();
+        var valEdges = shuffledEdges.Skip(trainSize).Take(valSize).ToArray();
+        var testEdges = shuffledEdges.Skip(trainSize + valSize).ToArray();
 
-        // Create sparse random graph structure
-        for (int i = 0; i < numNodes; i++)
+        // Generate negative edges (non-existing edges)
+        var negativeEdges = new List<(int, int)>();
+        int numNegative = (int)(allEdges.Count * negativeRatio);
+
+        while (negativeEdges.Count < numNegative)
         {
-            // Each node cites ~5 others on average (citation networks are sparse)
-            int numCitations = random.Next(2, 8);
-            for (int c = 0; c < numCitations; c++)
+            int src = random.Next(graph.NumNodes);
+            int dst = random.Next(graph.NumNodes);
+
+            // Ensure src < dst for consistency and avoid self-loops
+            if (src > dst)
             {
-                int target = random.Next(numNodes);
-                if (target != i) // No self-loops
-                {
-                    adj[0, i, target] = NumOps.FromDouble(1.0);
-                }
+                (src, dst) = (dst, src);
+            }
+
+            if (src != dst && !existingEdgeSet.Contains((src, dst)))
+            {
+                negativeEdges.Add((src, dst));
+                existingEdgeSet.Add((src, dst)); // Prevent duplicates
             }
         }
 
-        return adj;
+        // Split negative edges
+        var shuffledNegative = negativeEdges.OrderBy(_ => random.Next()).ToArray();
+        int negTrainSize = (int)(shuffledNegative.Length * trainRatio);
+        int negValSize = (int)(shuffledNegative.Length * (1 - trainRatio) / 2);
+
+        return new LinkPredictionTask<T>
+        {
+            Graph = graph,
+            TrainPosEdges = ConvertEdgesToTensor(trainEdges),
+            TrainNegEdges = ConvertEdgesToTensor(shuffledNegative.Take(negTrainSize).ToArray()),
+            ValPosEdges = ConvertEdgesToTensor(valEdges),
+            ValNegEdges = ConvertEdgesToTensor(shuffledNegative.Skip(negTrainSize).Take(negValSize).ToArray()),
+            TestPosEdges = ConvertEdgesToTensor(testEdges),
+            TestNegEdges = ConvertEdgesToTensor(shuffledNegative.Skip(negTrainSize + negValSize).ToArray()),
+            NegativeSamplingRatio = negativeRatio
+        };
     }
 
-    private Tensor<T> CreateMockEdgeIndex(int numNodes)
+    /// <summary>
+    /// Converts an array of edge tuples to a tensor of shape [num_edges, 2].
+    /// </summary>
+    private Tensor<T> ConvertEdgesToTensor((int src, int dst)[] edges)
     {
-        // In real implementation, parse from {dataset}.cites
-        var edges = new List<(int, int)>();
-        var random = new Random(42);
-
-        for (int i = 0; i < numNodes; i++)
+        var tensor = new Tensor<T>([edges.Length, 2]);
+        for (int i = 0; i < edges.Length; i++)
         {
-            int numCitations = random.Next(2, 8);
-            for (int c = 0; c < numCitations; c++)
-            {
-                int target = random.Next(numNodes);
-                if (target != i)
-                {
-                    edges.Add((i, target));
-                }
-            }
+            tensor[i, 0] = NumOps.FromDouble(edges[i].src);
+            tensor[i, 1] = NumOps.FromDouble(edges[i].dst);
         }
-
-        var edgeIndex = new Tensor<T>([edges.Count, 2]);
-        for (int i = 0; i < edges.Count; i++)
-        {
-            edgeIndex[i, 0] = NumOps.FromDouble(edges[i].Item1);
-            edgeIndex[i, 1] = NumOps.FromDouble(edges[i].Item2);
-        }
-
-        return edgeIndex;
-    }
-
-    private Tensor<T> CreateMockLabels(int numNodes, int numClasses)
-    {
-        // One-hot encoded labels
-        var labels = new Tensor<T>([numNodes, numClasses]);
-        var random = new Random(42);
-
-        for (int i = 0; i < numNodes; i++)
-        {
-            int classIdx = random.Next(numClasses);
-            labels[i, classIdx] = NumOps.FromDouble(1.0);
-        }
-
-        return labels;
-    }
-
-    private int CountClasses(Tensor<T> labels)
-    {
-        return labels.Shape[1]; // One-hot encoded
+        return tensor;
     }
 }
