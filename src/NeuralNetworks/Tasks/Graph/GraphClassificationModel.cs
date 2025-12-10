@@ -189,47 +189,11 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
         }
         else
         {
-            // Create default graph classification layers: GNN stack + classifier head
-            Layers.AddRange(CreateDefaultGraphClassificationLayers());
+            // Create default graph classification layers using LayerHelper
+            // Note: Pooling is handled separately in Forward, not as a layer
+            Layers.AddRange(LayerHelper<T>.CreateDefaultGraphClassificationLayers(
+                Architecture, HiddenDim, EmbeddingDim, NumGnnLayers, DropoutRate));
         }
-    }
-
-    /// <summary>
-    /// Creates default layers for graph classification.
-    /// </summary>
-    private List<ILayer<T>> CreateDefaultGraphClassificationLayers()
-    {
-        var layers = new List<ILayer<T>>();
-        var reluActivation = new ReLUActivation<T>();
-
-        // GNN layers for node-level processing
-        // First GCN layer: input_features -> hidden_dim
-        layers.Add(new GraphConvolutionalLayer<T>(InputFeatures, HiddenDim, (IActivationFunction<T>?)null));
-        layers.Add(new ActivationLayer<T>([HiddenDim], (IActivationFunction<T>)reluActivation));
-        if (DropoutRate > 0)
-        {
-            layers.Add(new DropoutLayer<T>(DropoutRate));
-        }
-
-        // Additional GNN layers: hidden_dim -> hidden_dim
-        for (int i = 1; i < NumGnnLayers - 1; i++)
-        {
-            layers.Add(new GraphConvolutionalLayer<T>(HiddenDim, HiddenDim, (IActivationFunction<T>?)null));
-            layers.Add(new ActivationLayer<T>([HiddenDim], (IActivationFunction<T>)reluActivation));
-            if (DropoutRate > 0)
-            {
-                layers.Add(new DropoutLayer<T>(DropoutRate));
-            }
-        }
-
-        // Final GNN layer: hidden_dim -> embedding_dim
-        layers.Add(new GraphConvolutionalLayer<T>(HiddenDim, EmbeddingDim, (IActivationFunction<T>?)null));
-
-        // Note: Pooling is handled separately in Forward, not as a layer
-        // After pooling, we add classifier layers
-        // These would be applied to the pooled graph embedding
-
-        return layers;
     }
 
     /// <summary>

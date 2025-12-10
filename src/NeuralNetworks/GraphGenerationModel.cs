@@ -218,7 +218,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Creates the encoder architecture.
+    /// Creates the encoder architecture without layers (layers are created in InitializeLayers).
     /// </summary>
     private static NeuralNetworkArchitecture<T> CreateArchitecture(
         int inputFeatures,
@@ -226,29 +226,14 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         int latentDim,
         int numEncoderLayers)
     {
-        var layers = new List<ILayer<T>>();
-
-        int currentInputDim = inputFeatures;
-
-        // Add GCN encoder layers
-        for (int i = 0; i < numEncoderLayers; i++)
-        {
-            var gcnLayer = new GraphConvolutionalLayer<T>(
-                inputFeatures: currentInputDim,
-                outputFeatures: hiddenDim,
-                activationFunction: new ReLUActivation<T>());
-
-            layers.Add(gcnLayer);
-            currentInputDim = hiddenDim;
-        }
-
+        // Create architecture without layers - layers will be created in InitializeLayers
+        // using LayerHelper for consistency with other models
         return new NeuralNetworkArchitecture<T>(
             InputType.OneDimensional,
             NeuralNetworkTaskType.Generative,
             NetworkComplexity.Simple,
             inputSize: inputFeatures,
-            outputSize: latentDim,
-            layers: layers);
+            outputSize: hiddenDim); // Output is hiddenDim since variational layer projects to latentDim
     }
 
     /// <summary>
@@ -256,14 +241,16 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override void InitializeLayers()
     {
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultGNNLayers(Architecture));
+            // Create default graph generation encoder layers using LayerHelper
+            Layers.AddRange(LayerHelper<T>.CreateDefaultGraphGenerationLayers(
+                Architecture, HiddenDim, NumEncoderLayers));
         }
     }
 

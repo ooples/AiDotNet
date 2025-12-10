@@ -175,42 +175,10 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
         }
         else
         {
-            // Create default link prediction encoder layers
-            Layers.AddRange(CreateDefaultLinkPredictionLayers());
+            // Create default link prediction encoder layers using LayerHelper
+            Layers.AddRange(LayerHelper<T>.CreateDefaultLinkPredictionLayers(
+                Architecture, HiddenDim, EmbeddingDim, NumLayers, DropoutRate));
         }
-    }
-
-    /// <summary>
-    /// Creates default layers for link prediction encoder.
-    /// </summary>
-    private List<ILayer<T>> CreateDefaultLinkPredictionLayers()
-    {
-        var layers = new List<ILayer<T>>();
-        var reluActivation = new ReLUActivation<T>();
-
-        // First GCN layer: input_features -> hidden_dim
-        layers.Add(new GraphConvolutionalLayer<T>(InputFeatures, HiddenDim, (IActivationFunction<T>?)null));
-        layers.Add(new ActivationLayer<T>([HiddenDim], (IActivationFunction<T>)reluActivation));
-        if (DropoutRate > 0)
-        {
-            layers.Add(new DropoutLayer<T>(DropoutRate));
-        }
-
-        // Additional intermediate layers
-        for (int i = 1; i < NumLayers - 1; i++)
-        {
-            layers.Add(new GraphConvolutionalLayer<T>(HiddenDim, HiddenDim, (IActivationFunction<T>?)null));
-            layers.Add(new ActivationLayer<T>([HiddenDim], (IActivationFunction<T>)reluActivation));
-            if (DropoutRate > 0)
-            {
-                layers.Add(new DropoutLayer<T>(DropoutRate));
-            }
-        }
-
-        // Final layer: hidden_dim -> embedding_dim
-        layers.Add(new GraphConvolutionalLayer<T>(HiddenDim, EmbeddingDim, (IActivationFunction<T>?)null));
-
-        return layers;
     }
 
     /// <summary>

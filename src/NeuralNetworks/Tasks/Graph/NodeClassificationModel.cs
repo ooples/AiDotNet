@@ -148,46 +148,10 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
         }
         else
         {
-            // Create default node classification layers: GCN -> ReLU -> Dropout -> GCN
-            Layers.AddRange(CreateDefaultNodeClassificationLayers());
+            // Create default node classification layers using LayerHelper
+            Layers.AddRange(LayerHelper<T>.CreateDefaultNodeClassificationLayers(
+                Architecture, HiddenDim, NumLayers, DropoutRate));
         }
-    }
-
-    /// <summary>
-    /// Creates default layers for node classification.
-    /// </summary>
-    private List<ILayer<T>> CreateDefaultNodeClassificationLayers()
-    {
-        var layers = new List<ILayer<T>>();
-        var reluActivation = new ReLUActivation<T>();
-
-        // First GCN layer: input_features -> hidden_dim
-        layers.Add(new GraphConvolutionalLayer<T>(InputFeatures, HiddenDim, (IActivationFunction<T>?)null));
-
-        // ReLU activation
-        layers.Add(new ActivationLayer<T>([HiddenDim], (IActivationFunction<T>)reluActivation));
-
-        // Dropout for regularization
-        if (DropoutRate > 0)
-        {
-            layers.Add(new DropoutLayer<T>(DropoutRate));
-        }
-
-        // Additional intermediate layers
-        for (int i = 1; i < NumLayers - 1; i++)
-        {
-            layers.Add(new GraphConvolutionalLayer<T>(HiddenDim, HiddenDim, (IActivationFunction<T>?)null));
-            layers.Add(new ActivationLayer<T>([HiddenDim], (IActivationFunction<T>)reluActivation));
-            if (DropoutRate > 0)
-            {
-                layers.Add(new DropoutLayer<T>(DropoutRate));
-            }
-        }
-
-        // Final GCN layer: hidden_dim -> num_classes
-        layers.Add(new GraphConvolutionalLayer<T>(HiddenDim, NumClasses, (IActivationFunction<T>?)null));
-
-        return layers;
     }
 
     /// <summary>
