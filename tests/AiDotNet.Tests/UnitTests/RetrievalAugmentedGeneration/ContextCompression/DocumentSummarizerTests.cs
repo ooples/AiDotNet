@@ -289,7 +289,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
 
             // Assert
             Assert.Single(result);
-            Assert.True(result[0].Content.Length <= maxLength);
+            Assert.True(result[0].Content.Length <= maxLength,
+                $"Result length {result[0].Content.Length} should be <= {maxLength}");
         }
 
         [Fact]

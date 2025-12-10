@@ -164,7 +164,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
             // Assert
             if (result.Any())
             {
-                var sentenceCount = result[0].Content.Split('.', StringSplitOptions.RemoveEmptyEntries).Length;
+                var sentenceCount = result[0].Content.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries).Length;
                 Assert.True(sentenceCount <= maxSentences,
                     $"Result should have at most {maxSentences} sentences, got {sentenceCount}");
             }

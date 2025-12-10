@@ -563,19 +563,23 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.ContextCompressio
         public void Compress_WithDifferentQueries_ProducesDifferentResults()
         {
             // Arrange
-            var compressor = new AutoCompressor<double>(maxOutputLength: 300, compressionRatio: 0.5);
-            var documents = CreateSampleDocuments();
-            var query1 = "machine learning neural";
-            var query2 = "weather sunny outdoor";
+            // Use a single document with distinct sentences for each query
+            // This ensures the query affects which sentence is prioritized
+            var compressor = new AutoCompressor<double>(maxOutputLength: 100, compressionRatio: 0.3);
+            var documents = new List<Document<double>>
+            {
+                new Document<double>("mixed", "Machine learning algorithms power modern AI. Weather forecasting uses complex models. Data science combines statistics and programming.")
+            };
+            var query1 = "machine learning AI";
+            var query2 = "weather forecasting";
 
             // Act
             var result1 = compressor.Compress(documents, query1);
             var result2 = compressor.Compress(documents, query2);
 
             // Assert
-            var content1 = string.Join(" ", result1.Select(d => d.Content));
-            var content2 = string.Join(" ", result2.Select(d => d.Content));
-            Assert.NotEqual(content1, content2);
+            // Different queries should prioritize different sentences
+            Assert.NotEqual(result1[0].Content, result2[0].Content);
         }
 
         [Fact]
