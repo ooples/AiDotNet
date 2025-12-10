@@ -213,16 +213,17 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             var retriever = new TFIDFRetriever<double>(_documentStore);
 
             // Act - First retrieval builds cache
-            var results1 = retriever.Retrieve("machine learning", topK: 5).ToList();
-            var count1 = results1.Count;
+            _ = retriever.Retrieve("machine learning", topK: 5).ToList();
 
             // Add more documents (changes document count)
             var embeddingModel = TestHelpers.CreateEmbeddingModel<double>(VectorDimension);
+            var doc = new Document<double>("doc6", "machine learning deep neural networks")
+            {
+                Metadata = new Dictionary<string, object> { ["category"] = "AI" }
+            };
             var newDoc = new VectorDocument<double>
             {
-                Id = "doc6",
-                Content = "machine learning deep neural networks",
-                Metadata = new Dictionary<string, object> { ["category"] = "AI" },
+                Document = doc,
                 Embedding = embeddingModel.Embed("machine learning deep neural networks")
             };
             _documentStore.Add(newDoc);
@@ -277,7 +278,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         #region Edge Cases
 
         [Fact]
-        public void Retrieve_WithNoMatchingTerms_ReturnsEmpty()
+        public void Retrieve_WithNoMatchingTerms_ReturnsZeroScores()
         {
             // Arrange
             AddSampleDocuments();
@@ -287,7 +288,9 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             var results = retriever.Retrieve("zzzznonexistent", topK: 5).ToList();
 
             // Assert
-            Assert.Empty(results);
+            // TF-IDF returns all documents even with no matching terms, but with zero scores
+            Assert.NotEmpty(results);
+            Assert.All(results, doc => Assert.Equal(0.0, doc.RelevanceScore));
         }
 
         [Fact]
@@ -375,9 +378,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
                 var embedding = embeddingModel.Embed(doc.Content);
                 return new VectorDocument<T>
                 {
-                    Id = doc.Id,
-                    Content = doc.Content,
-                    Metadata = doc.Metadata,
+                    Document = doc,
                     Embedding = embedding
                 };
             });

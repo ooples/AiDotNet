@@ -120,23 +120,23 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         #region TopK Validation Tests (RetrieverBase)
 
         [Fact]
-        public void Retrieve_WithZeroTopK_ThrowsArgumentException()
+        public void Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var retriever = new VectorRetriever<double>(_documentStore, _embeddingModel);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => retriever.Retrieve("test query", 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => retriever.Retrieve("test query", 0));
         }
 
         [Fact]
-        public void Retrieve_WithNegativeTopK_ThrowsArgumentException()
+        public void Retrieve_WithNegativeTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var retriever = new VectorRetriever<double>(_documentStore, _embeddingModel);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => retriever.Retrieve("test query", -1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => retriever.Retrieve("test query", -1));
         }
 
         #endregion
@@ -320,9 +320,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
                 var embedding = _embeddingModel.Embed(doc.Content);
                 return new VectorDocument<double>
                 {
-                    Id = doc.Id,
-                    Content = doc.Content,
-                    Metadata = doc.Metadata,
+                    Document = doc,
                     Embedding = embedding
                 };
             });

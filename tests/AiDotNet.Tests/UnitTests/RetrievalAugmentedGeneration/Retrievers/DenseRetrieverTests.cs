@@ -197,9 +197,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
                 var embedding = floatEmbedding.Embed(doc.Content);
                 return new VectorDocument<float>
                 {
-                    Id = doc.Id,
-                    Content = doc.Content,
-                    Metadata = doc.Metadata,
+                    Document = doc,
                     Embedding = embedding
                 };
             });
@@ -227,9 +225,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
                 var embedding = _embeddingModel.Embed(doc.Content);
                 return new VectorDocument<double>
                 {
-                    Id = doc.Id,
-                    Content = doc.Content,
-                    Metadata = doc.Metadata,
+                    Document = doc,
                     Embedding = embedding
                 };
             });

@@ -184,8 +184,6 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
             // Act
             var hybridResults = retriever.Retrieve("machine learning", topK: 5).ToList();
-            var denseResults = denseRetriever.Retrieve("machine learning", topK: 5).ToList();
-            var sparseResults = sparseRetriever.Retrieve("machine learning", topK: 5).ToList();
 
             // Assert
             Assert.NotEmpty(hybridResults);
@@ -357,9 +355,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
                 var embedding = embeddingModel.Embed(doc.Content);
                 return new VectorDocument<T>
                 {
-                    Id = doc.Id,
-                    Content = doc.Content,
-                    Metadata = doc.Metadata,
+                    Document = doc,
                     Embedding = embedding
                 };
             });

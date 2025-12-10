@@ -279,7 +279,13 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             var docs = new List<Document<double>>
             {
                 new Document<double>("doc1", "machine machine machine learning"),
-                new Document<double>("doc2", "machine learning")
+                new Document<double>("doc2", "machine learning"),
+                // Add documents without "machine" to ensure IDF stays positive
+                // (BM25 IDF is negative when term appears in more than half the documents)
+                // For positive IDF: df < N/2, so with 2 docs containing "machine", we need N > 4
+                new Document<double>("doc3", "deep neural networks"),
+                new Document<double>("doc4", "artificial intelligence systems"),
+                new Document<double>("doc5", "data science algorithms")
             };
             AddDocumentsToStore(store, docs);
 
@@ -363,9 +369,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
                 var embedding = embeddingModel.Embed(doc.Content);
                 return new VectorDocument<T>
                 {
-                    Id = doc.Id,
-                    Content = doc.Content,
-                    Metadata = doc.Metadata,
+                    Document = doc,
                     Embedding = embedding
                 };
             });

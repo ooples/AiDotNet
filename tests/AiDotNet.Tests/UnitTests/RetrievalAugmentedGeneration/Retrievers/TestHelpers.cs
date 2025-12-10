@@ -51,7 +51,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
     {
         private readonly Dictionary<string, VectorDocument<T>> _documents = new();
         private readonly int _vectorDimension;
-        private static readonly INumericOperations<T> NumOps = AiDotNet.Helpers.MathHelper.GetNumericOperations<T>();
+        private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
         public int DocumentCount => _documents.Count;
         public int VectorDimension => _vectorDimension;
@@ -68,7 +68,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             if (vectorDocument.Embedding == null || vectorDocument.Embedding.Length != _vectorDimension)
                 throw new ArgumentException($"Embedding must have dimension {_vectorDimension}");
 
-            _documents[vectorDocument.Id] = vectorDocument;
+            _documents[vectorDocument.Document.Id] = vectorDocument;
         }
 
         public void AddBatch(IEnumerable<VectorDocument<T>> vectorDocuments)
@@ -96,10 +96,14 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
                 .Select(vd =>
                 {
                     var similarity = CosineSimilarity(queryVector, vd.Embedding);
-                    var doc = new Document<T>(vd.Id, vd.Content, vd.Metadata)
+                    // Normalize cosine similarity from [-1, 1] to [0, 1] range
+                    var normalizedScore = NumOps.Divide(
+                        NumOps.Add(similarity, NumOps.One),
+                        NumOps.FromDouble(2.0));
+                    var doc = new Document<T>(vd.Document.Id, vd.Document.Content, vd.Document.Metadata)
                     {
                         Embedding = vd.Embedding,
-                        RelevanceScore = similarity,
+                        RelevanceScore = normalizedScore,
                         HasRelevanceScore = true
                     };
                     return doc;
@@ -114,7 +118,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         {
             if (_documents.TryGetValue(documentId, out var vd))
             {
-                return new Document<T>(vd.Id, vd.Content, vd.Metadata) { Embedding = vd.Embedding };
+                return new Document<T>(vd.Document.Id, vd.Document.Content, vd.Document.Metadata) { Embedding = vd.Embedding };
             }
             return null;
         }
@@ -132,7 +136,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         public IEnumerable<Document<T>> GetAll()
         {
             return _documents.Values.Select(vd =>
-                new Document<T>(vd.Id, vd.Content, vd.Metadata) { Embedding = vd.Embedding }
+                new Document<T>(vd.Document.Id, vd.Document.Content, vd.Document.Metadata) { Embedding = vd.Embedding }
             ).ToList();
         }
 
@@ -143,7 +147,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
             foreach (var filter in filters)
             {
-                if (!document.Metadata.TryGetValue(filter.Key, out var value))
+                if (!document.Document.Metadata.TryGetValue(filter.Key, out var value))
                     return false;
                 if (!filter.Value.Equals(value))
                     return false;
@@ -184,7 +188,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
     /// </summary>
     internal class StubEmbeddingModel<T> : IEmbeddingModel<T>
     {
-        private static readonly INumericOperations<T> NumOps = AiDotNet.Helpers.MathHelper.GetNumericOperations<T>();
+        private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
         public int EmbeddingDimension { get; }
         public int MaxTokens { get; } = 512;

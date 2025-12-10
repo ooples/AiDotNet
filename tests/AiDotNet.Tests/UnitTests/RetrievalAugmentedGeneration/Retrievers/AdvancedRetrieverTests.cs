@@ -94,13 +94,13 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         }
 
         [Fact]
-        public void Retrieve_WithZeroTopK_ThrowsArgumentException()
+        public void Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var retriever = new MultiVectorRetriever<double>(_documentStore, 3, "max");
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => retriever.Retrieve("test", 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => retriever.Retrieve("test", 0));
         }
     }
 
@@ -203,13 +203,13 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         }
 
         [Fact]
-        public void Retrieve_WithZeroTopK_ThrowsArgumentException()
+        public void Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var retriever = new ParentDocumentRetriever<double>(_documentStore, _embeddingModel, 256, 2048, true);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => retriever.Retrieve("test", 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => retriever.Retrieve("test", 0));
         }
 
         [Fact]
@@ -238,6 +238,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             // Assert
             // Should work even with limited chunks
             Assert.NotNull(results);
+            Assert.NotEmpty(results);
         }
 
         private void AddChunkedDocuments()
@@ -267,9 +268,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
                 var embedding = _embeddingModel.Embed(doc.Content);
                 return new VectorDocument<double>
                 {
-                    Id = doc.Id,
-                    Content = doc.Content,
-                    Metadata = doc.Metadata,
+                    Document = doc,
                     Embedding = embedding
                 };
             });
@@ -277,11 +276,13 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             _documentStore.AddBatch(vectorDocs);
 
             // Also add parent document
+            var parentDoc = new Document<double>("parent1", "machine learning algorithms and deep neural networks combined content")
+            {
+                Metadata = new Dictionary<string, object>()
+            };
             var parent = new VectorDocument<double>
             {
-                Id = "parent1",
-                Content = "machine learning algorithms and deep neural networks combined content",
-                Metadata = new Dictionary<string, object>(),
+                Document = parentDoc,
                 Embedding = _embeddingModel.Embed("machine learning algorithms and deep neural networks combined content")
             };
             _documentStore.Add(parent);
@@ -365,13 +366,13 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         }
 
         [Fact]
-        public void Retrieve_WithZeroTopK_ThrowsArgumentException()
+        public void Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var retriever = new ColBERTRetriever<double>(_documentStore, "model.onnx", 512, 32);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => retriever.Retrieve("test", 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => retriever.Retrieve("test", 0));
         }
 
         [Fact]
@@ -463,13 +464,13 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         }
 
         [Fact]
-        public void Retrieve_WithZeroTopK_ThrowsArgumentException()
+        public void Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var retriever = new GraphRetriever<double>(_documentStore, _embeddingModel);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => retriever.Retrieve("test", 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => retriever.Retrieve("test", 0));
         }
 
         [Fact]
@@ -512,6 +513,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
 
             // Assert
             Assert.NotNull(results);
+            // Results may be empty if query entities don't match document content,
+            // but the retrieval should complete without errors
         }
 
         [Fact]
@@ -523,7 +526,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
             var filters = new Dictionary<string, object> { ["category"] = "AI" };
 
             // Act
-            var results = retriever.Retrieve("machine", topK: 10, filters).ToList();
+            var results = retriever.Retrieve("machine", 10, filters).ToList();
 
             // Assert
             Assert.All(results, doc =>
@@ -555,9 +558,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
                 var embedding = _embeddingModel.Embed(doc.Content);
                 return new VectorDocument<double>
                 {
-                    Id = doc.Id,
-                    Content = doc.Content,
-                    Metadata = doc.Metadata,
+                    Document = doc,
                     Embedding = embedding
                 };
             });
