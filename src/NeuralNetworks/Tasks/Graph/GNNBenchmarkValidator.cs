@@ -1,4 +1,4 @@
-using AiDotNet.Data.Abstractions;
+using AiDotNet.Data.Structures;
 using AiDotNet.Data.Graph;
 using AiDotNet.LinearAlgebra;
 

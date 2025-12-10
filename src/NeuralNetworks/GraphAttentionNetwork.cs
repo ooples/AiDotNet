@@ -88,13 +88,11 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T>? _cachedAdjacencyMatrix;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="GraphAttentionNetwork{T}"/> class with specified parameters.
+    /// Initializes a new instance of the <see cref="GraphAttentionNetwork{T}"/> class with specified architecture.
     /// </summary>
-    /// <param name="inputFeatures">Number of input features per node.</param>
-    /// <param name="hiddenDim">Hidden dimension size for intermediate layers.</param>
-    /// <param name="outputFeatures">Number of output features (classes for classification).</param>
-    /// <param name="numHeads">Number of attention heads per layer (default: 8).</param>
-    /// <param name="numLayers">Number of GAT layers (default: 2).</param>
+    /// <param name="architecture">The neural network architecture defining the structure of the network.</param>
+    /// <param name="numHeads">Number of attention heads per layer (default: 8). Used only when creating default layers.</param>
+    /// <param name="numLayers">Number of GAT layers (default: 2). Used only when creating default layers.</param>
     /// <param name="dropoutRate">Dropout rate for attention coefficients (default: 0.6).</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
@@ -103,14 +101,19 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// <para><b>For Beginners:</b> Creating a GAT network:
     ///
     /// ```csharp
-    /// // Create a GAT for node classification on citation network
-    /// var gat = new GraphAttentionNetwork&lt;double&gt;(
-    ///     inputFeatures: 1433,    // Cora has 1433 word features
-    ///     hiddenDim: 64,          // 64-dimensional hidden representations
-    ///     outputFeatures: 7,      // 7 paper categories
-    ///     numHeads: 8,            // 8 attention heads
-    ///     numLayers: 2,           // 2 GAT layers
-    ///     dropoutRate: 0.6);      // 60% dropout for regularization
+    /// // Create architecture for node classification
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+    ///     InputType.OneDimensional,
+    ///     NeuralNetworkTaskType.MultiClassClassification,
+    ///     NetworkComplexity.Simple,
+    ///     inputSize: 1433,    // Cora has 1433 word features
+    ///     outputSize: 7);     // 7 paper categories
+    ///
+    /// // Create GAT with default layers
+    /// var gat = new GraphAttentionNetwork&lt;double&gt;(architecture);
+    ///
+    /// // Or create with custom layers by adding them to architecture
+    /// var gatCustom = new GraphAttentionNetwork&lt;double&gt;(architectureWithCustomLayers);
     ///
     /// // Train on graph data
     /// gat.TrainOnGraph(nodeFeatures, adjacencyMatrix, labels, epochs: 200);
@@ -118,73 +121,26 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public GraphAttentionNetwork(
-        int inputFeatures,
-        int hiddenDim,
-        int outputFeatures,
+        NeuralNetworkArchitecture<T> architecture,
         int numHeads = 8,
         int numLayers = 2,
         double dropoutRate = 0.6,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0)
-        : base(CreateArchitecture(inputFeatures, hiddenDim, outputFeatures, numHeads, numLayers, dropoutRate),
+        : base(architecture,
                lossFunction ?? new CrossEntropyLoss<T>(),
                maxGradNorm)
     {
         NumHeads = numHeads;
         DropoutRate = dropoutRate;
-        HiddenDim = hiddenDim;
+        HiddenDim = 64; // Default hidden dimension
         NumLayers = numLayers;
 
         _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
-    }
-
-    /// <summary>
-    /// Creates the neural network architecture for GAT with the specified parameters.
-    /// </summary>
-    private static NeuralNetworkArchitecture<T> CreateArchitecture(
-        int inputFeatures,
-        int hiddenDim,
-        int outputFeatures,
-        int numHeads,
-        int numLayers,
-        double dropoutRate)
-    {
-        var layers = new List<ILayer<T>>();
-
-        int currentInputDim = inputFeatures;
-
-        // Add GAT layers
-        for (int i = 0; i < numLayers; i++)
-        {
-            bool isLastLayer = (i == numLayers - 1);
-            int outputDim = isLastLayer ? outputFeatures : hiddenDim;
-            int heads = isLastLayer ? 1 : numHeads; // Single head for final layer
-
-            var gatLayer = new GraphAttentionLayer<T>(
-                inputFeatures: currentInputDim,
-                outputFeatures: outputDim,
-                numHeads: heads,
-                dropoutRate: dropoutRate,
-                activationFunction: isLastLayer ? null : new LeakyReLUActivation<T>(0.2));
-
-            layers.Add(gatLayer);
-
-            // Update input dimension for next layer
-            // Non-final layers: output is averaged across heads, so output dim = hiddenDim
-            currentInputDim = outputDim;
-        }
-
-        return new NeuralNetworkArchitecture<T>(
-            InputType.OneDimensional,
-            NeuralNetworkTaskType.MultiClassClassification,
-            NetworkComplexity.Simple,
-            inputSize: inputFeatures,
-            outputSize: outputFeatures,
-            layers: layers);
     }
 
     /// <summary>
@@ -199,7 +155,8 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultGNNLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultGraphAttentionLayers(
+                Architecture, NumHeads, NumLayers, DropoutRate));
         }
     }
 
@@ -848,32 +805,11 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A new GraphAttentionNetwork instance.</returns>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        // Get the input and output features from first/last layer
-        int inputFeatures = 0;
-        int outputFeatures = 0;
-
-        if (Layers.Count > 0)
-        {
-            var firstLayer = Layers[0];
-            if (firstLayer is IGraphConvolutionLayer<T> graphLayer)
-            {
-                inputFeatures = graphLayer.InputFeatures;
-            }
-
-            var lastLayer = Layers[^1];
-            if (lastLayer is IGraphConvolutionLayer<T> lastGraphLayer)
-            {
-                outputFeatures = lastGraphLayer.OutputFeatures;
-            }
-        }
-
         return new GraphAttentionNetwork<T>(
-            inputFeatures,
-            HiddenDim,
-            outputFeatures,
-            NumHeads,
-            NumLayers,
-            DropoutRate);
+            architecture: Architecture,
+            numHeads: NumHeads,
+            numLayers: NumLayers,
+            dropoutRate: DropoutRate);
     }
 
     #endregion

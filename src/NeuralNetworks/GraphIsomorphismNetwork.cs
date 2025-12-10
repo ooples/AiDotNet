@@ -94,15 +94,13 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T>? _cachedAdjacencyMatrix;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="GraphIsomorphismNetwork{T}"/> class with specified parameters.
+    /// Initializes a new instance of the <see cref="GraphIsomorphismNetwork{T}"/> class with specified architecture.
     /// </summary>
-    /// <param name="inputFeatures">Number of input features per node.</param>
-    /// <param name="hiddenDim">Hidden dimension size for intermediate layers.</param>
-    /// <param name="outputFeatures">Number of output features (classes for classification).</param>
-    /// <param name="mlpHiddenDim">Hidden dimension for MLP within GIN layers (default: same as hiddenDim).</param>
-    /// <param name="numLayers">Number of GIN layers (default: 5, recommended for graph classification).</param>
-    /// <param name="learnEpsilon">Whether to learn epsilon parameter (default: true).</param>
-    /// <param name="initialEpsilon">Initial value for epsilon (default: 0.0).</param>
+    /// <param name="architecture">The neural network architecture defining the structure of the network.</param>
+    /// <param name="mlpHiddenDim">Hidden dimension for MLP within GIN layers (default: 64). Used only when creating default layers.</param>
+    /// <param name="numLayers">Number of GIN layers (default: 5). Used only when creating default layers.</param>
+    /// <param name="learnEpsilon">Whether to learn epsilon parameter (default: true). Used only when creating default layers.</param>
+    /// <param name="initialEpsilon">Initial value for epsilon (default: 0.0). Used only when creating default layers.</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
     /// <param name="maxGradNorm">Maximum gradient norm for clipping (default: 1.0).</param>
@@ -110,91 +108,47 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     /// <para><b>For Beginners:</b> Creating a GIN network:
     ///
     /// ```csharp
-    /// // Create GIN for molecular property prediction
-    /// var gin = new GraphIsomorphismNetwork&lt;double&gt;(
-    ///     inputFeatures: 9,        // Atom features (type, charge, etc.)
-    ///     hiddenDim: 64,           // 64-dimensional hidden representations
-    ///     outputFeatures: 2,       // Binary classification
-    ///     numLayers: 5,            // 5 GIN layers (standard for molecules)
-    ///     learnEpsilon: true);     // Learn optimal self-weighting
+    /// // Create architecture for molecular property prediction
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+    ///     InputType.OneDimensional,
+    ///     NeuralNetworkTaskType.MultiClassClassification,
+    ///     NetworkComplexity.Simple,
+    ///     inputSize: 9,        // Atom features
+    ///     outputSize: 2);      // Binary classification
+    ///
+    /// // Create GIN with default layers
+    /// var gin = new GraphIsomorphismNetwork&lt;double&gt;(architecture);
+    ///
+    /// // Or create with custom layers by adding them to architecture
+    /// var ginCustom = new GraphIsomorphismNetwork&lt;double&gt;(architectureWithCustomLayers);
     ///
     /// // Train on molecular graphs
     /// gin.TrainOnGraphs(molecules, adjacencyMatrices, labels, epochs: 100);
-    ///
-    /// // Classify new molecules
-    /// var predictions = gin.Forward(newMolecule, newAdjacency);
     /// ```
     /// </para>
     /// </remarks>
     public GraphIsomorphismNetwork(
-        int inputFeatures,
-        int hiddenDim,
-        int outputFeatures,
-        int mlpHiddenDim = -1,
+        NeuralNetworkArchitecture<T> architecture,
+        int mlpHiddenDim = 64,
         int numLayers = 5,
         bool learnEpsilon = true,
         double initialEpsilon = 0.0,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0)
-        : base(CreateArchitecture(inputFeatures, hiddenDim, outputFeatures, mlpHiddenDim, numLayers, learnEpsilon, initialEpsilon),
+        : base(architecture,
                lossFunction ?? new CrossEntropyLoss<T>(),
                maxGradNorm)
     {
         LearnEpsilon = learnEpsilon;
         InitialEpsilon = initialEpsilon;
-        MlpHiddenDim = mlpHiddenDim > 0 ? mlpHiddenDim : hiddenDim;
+        MlpHiddenDim = mlpHiddenDim;
         NumLayers = numLayers;
 
         _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
-    }
-
-    /// <summary>
-    /// Creates the neural network architecture for GIN with the specified parameters.
-    /// </summary>
-    private static NeuralNetworkArchitecture<T> CreateArchitecture(
-        int inputFeatures,
-        int hiddenDim,
-        int outputFeatures,
-        int mlpHiddenDim,
-        int numLayers,
-        bool learnEpsilon,
-        double initialEpsilon)
-    {
-        var layers = new List<ILayer<T>>();
-
-        int currentInputDim = inputFeatures;
-        int actualMlpHiddenDim = mlpHiddenDim > 0 ? mlpHiddenDim : hiddenDim;
-
-        // Add GIN layers
-        for (int i = 0; i < numLayers; i++)
-        {
-            bool isLastLayer = (i == numLayers - 1);
-            int outputDim = isLastLayer ? outputFeatures : hiddenDim;
-
-            var ginLayer = new GraphIsomorphismLayer<T>(
-                inputFeatures: currentInputDim,
-                outputFeatures: outputDim,
-                mlpHiddenDim: actualMlpHiddenDim,
-                learnEpsilon: learnEpsilon,
-                epsilon: initialEpsilon,
-                activationFunction: isLastLayer ? null : new ReLUActivation<T>());
-
-            layers.Add(ginLayer);
-
-            currentInputDim = outputDim;
-        }
-
-        return new NeuralNetworkArchitecture<T>(
-            InputType.OneDimensional,
-            NeuralNetworkTaskType.MultiClassClassification,
-            NetworkComplexity.Simple,
-            inputSize: inputFeatures,
-            outputSize: outputFeatures,
-            layers: layers);
     }
 
     /// <summary>
@@ -209,7 +163,8 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultGNNLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultGraphIsomorphismLayers(
+                Architecture, MlpHiddenDim, NumLayers, LearnEpsilon, InitialEpsilon));
         }
     }
 
@@ -995,18 +950,12 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        int inputFeatures = 0;
-        int outputFeatures = 0;
-
-        if (Layers.Count > 0)
-        {
-            if (Layers[0] is IGraphConvolutionLayer<T> firstLayer)
-                inputFeatures = firstLayer.InputFeatures;
-            if (Layers[^1] is IGraphConvolutionLayer<T> lastLayer)
-                outputFeatures = lastLayer.OutputFeatures;
-        }
-
-        return new GraphIsomorphismNetwork<T>(inputFeatures, MlpHiddenDim, outputFeatures, MlpHiddenDim, NumLayers, LearnEpsilon, InitialEpsilon);
+        return new GraphIsomorphismNetwork<T>(
+            architecture: Architecture,
+            mlpHiddenDim: MlpHiddenDim,
+            numLayers: NumLayers,
+            learnEpsilon: LearnEpsilon,
+            initialEpsilon: InitialEpsilon);
     }
 
     #endregion

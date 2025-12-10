@@ -1,6 +1,6 @@
 using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.Data.Abstractions;
+namespace AiDotNet.Data.Structures;
 
 /// <summary>
 /// Represents a link prediction task where the goal is to predict missing or future edges.

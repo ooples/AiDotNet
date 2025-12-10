@@ -1313,6 +1313,184 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates default layers for a GraphSAGE (Graph Sample and Aggregate) Network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="aggregatorType">The type of aggregation function (default: Mean).</param>
+    /// <param name="numLayers">Number of GraphSAGE layers (default: 2).</param>
+    /// <param name="normalize">Whether to apply L2 normalization (default: true).</param>
+    /// <returns>A collection of layers configured for GraphSAGE processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GraphSAGE learns to aggregate neighbor information for inductive learning.
+    /// It can generalize to new, unseen nodes by learning aggregation functions.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGraphSAGELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        SAGEAggregatorType aggregatorType = SAGEAggregatorType.Mean,
+        int numLayers = 2,
+        bool normalize = true)
+    {
+        if (architecture.CalculatedInputSize <= 0 || architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("The network must have valid input and output dimensions.");
+        }
+
+        int inputSize = architecture.CalculatedInputSize;
+        int outputSize = architecture.OutputSize;
+        int hiddenSize = 64;
+
+        int currentInputDim = inputSize;
+
+        // Add GraphSAGE layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            bool isLastLayer = (i == numLayers - 1);
+            int outputDim = isLastLayer ? outputSize : hiddenSize;
+
+            yield return new GraphSAGELayer<T>(
+                inputFeatures: currentInputDim,
+                outputFeatures: outputDim,
+                aggregatorType: aggregatorType,
+                normalize: normalize && !isLastLayer,
+                activationFunction: isLastLayer ? null : new ReLUActivation<T>());
+
+            currentInputDim = outputDim;
+        }
+
+        // Add final activation based on task type
+        if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SigmoidActivation<T>() as IVectorActivationFunction<T>);
+        }
+        else if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for a Graph Attention Network (GAT).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="numHeads">Number of attention heads per layer (default: 8).</param>
+    /// <param name="numLayers">Number of GAT layers (default: 2).</param>
+    /// <param name="dropoutRate">Dropout rate for attention coefficients (default: 0.6).</param>
+    /// <returns>A collection of layers configured for GAT processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GAT uses attention mechanisms to learn which neighbors are most important
+    /// for each node, allowing dynamic weighting of neighbor contributions.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGraphAttentionLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numHeads = 8,
+        int numLayers = 2,
+        double dropoutRate = 0.6)
+    {
+        if (architecture.CalculatedInputSize <= 0 || architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("The network must have valid input and output dimensions.");
+        }
+
+        int inputSize = architecture.CalculatedInputSize;
+        int outputSize = architecture.OutputSize;
+        int hiddenSize = 64;
+
+        int currentInputDim = inputSize;
+
+        // Add GAT layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            bool isLastLayer = (i == numLayers - 1);
+            int outputDim = isLastLayer ? outputSize : hiddenSize;
+            int heads = isLastLayer ? 1 : numHeads;
+
+            yield return new GraphAttentionLayer<T>(
+                inputFeatures: currentInputDim,
+                outputFeatures: outputDim,
+                numHeads: heads,
+                dropoutRate: dropoutRate,
+                activationFunction: isLastLayer ? null : new LeakyReLUActivation<T>(0.2));
+
+            currentInputDim = outputDim;
+        }
+
+        // Add final activation based on task type
+        if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SigmoidActivation<T>() as IVectorActivationFunction<T>);
+        }
+        else if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for a Graph Isomorphism Network (GIN).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="mlpHiddenDim">Hidden dimension for MLP within GIN layers (default: 64).</param>
+    /// <param name="numLayers">Number of GIN layers (default: 5).</param>
+    /// <param name="learnEpsilon">Whether to learn epsilon parameter (default: true).</param>
+    /// <param name="initialEpsilon">Initial value for epsilon (default: 0.0).</param>
+    /// <returns>A collection of layers configured for GIN processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GIN is provably as powerful as the Weisfeiler-Lehman graph isomorphism test,
+    /// making it optimal for distinguishing graph structures.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGraphIsomorphismLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int mlpHiddenDim = 64,
+        int numLayers = 5,
+        bool learnEpsilon = true,
+        double initialEpsilon = 0.0)
+    {
+        if (architecture.CalculatedInputSize <= 0 || architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("The network must have valid input and output dimensions.");
+        }
+
+        int inputSize = architecture.CalculatedInputSize;
+        int outputSize = architecture.OutputSize;
+        int hiddenSize = 64;
+
+        int currentInputDim = inputSize;
+
+        // Add GIN layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            bool isLastLayer = (i == numLayers - 1);
+            int outputDim = isLastLayer ? outputSize : hiddenSize;
+
+            yield return new GraphIsomorphismLayer<T>(
+                inputFeatures: currentInputDim,
+                outputFeatures: outputDim,
+                mlpHiddenDim: mlpHiddenDim,
+                learnEpsilon: learnEpsilon,
+                epsilon: initialEpsilon,
+                activationFunction: isLastLayer ? null : new ReLUActivation<T>());
+
+            currentInputDim = outputDim;
+        }
+
+        // Add final activation based on task type
+        if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SigmoidActivation<T>() as IVectorActivationFunction<T>);
+        }
+        else if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+        }
+    }
+
+    /// <summary>
     /// Creates a default Gated Recurrent Unit (GRU) neural network layer configuration.
     /// </summary>
     /// <param name="architecture">The neural network architecture specification.</param>

@@ -1187,23 +1187,77 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureReasoning(ReasoningConfig? config = null);
 
     /// <summary>
+    /// Configures the data loader for providing training data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A data loader handles loading data from various sources (files, databases, memory, URLs)
+    /// and provides it in a format suitable for model training.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Instead of passing raw arrays or matrices directly to BuildAsync,
+    /// you can configure a data loader that handles loading your data for you. This is useful when:
+    /// - Your data comes from a file (CSV, JSON, etc.)
+    /// - Your data needs to be downloaded from the internet
+    /// - You want automatic batching and shuffling
+    /// - You want train/validation/test splitting handled for you
+    ///
+    /// Example:
+    /// <code>
+    /// // Load data from CSV
+    /// var loader = DataLoaders.FromCsv("housing.csv", labelColumn: "price");
+    ///
+    /// var result = await builder
+    ///     .ConfigureDataLoader(loader)
+    ///     .ConfigureModel(model)
+    ///     .BuildAsync();  // Uses data from the loader
+    /// </code>
+    ///
+    /// You can also use simple in-memory loaders for arrays:
+    /// <code>
+    /// var loader = DataLoaders.FromArrays(features, labels);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="dataLoader">The data loader that provides training data.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataLoader(IDataLoader<T> dataLoader);
+
+    /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method is used when you've configured a meta-learner using ConfigureMetaLearning().
-    /// It performs meta-training across many tasks to create a model that can rapidly adapt
-    /// to new tasks with just a few examples.
+    /// This method is used when you've configured a meta-learner using ConfigureMetaLearning(),
+    /// or when you've configured a data loader using ConfigureDataLoader().
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> Use this method when you've configured meta-learning and agent assistance.
-    /// Unlike BuildAsync(x, y) which trains on one dataset, this trains your model to be good
-    /// at learning NEW tasks quickly. The training data comes from the episodic data loader
-    /// you configured in your meta-learner.
+    /// When a data loader is configured:
+    /// - The loader's LoadAsync() is called to load data
+    /// - Features and Labels are extracted from the loader
+    /// - Training proceeds using the loaded data
+    /// </para>
+    /// <para>
+    /// When meta-learning is configured:
+    /// - It performs meta-training across many tasks to create a model that can rapidly adapt
+    ///   to new tasks with just a few examples.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Use this method when you've configured either:
+    /// - A data loader (via ConfigureDataLoader) - the loader provides the training data
+    /// - Meta-learning (via ConfigureMetaLearning) - trains your model to learn NEW tasks quickly
+    ///
+    /// Example with data loader:
+    /// <code>
+    /// var result = await builder
+    ///     .ConfigureDataLoader(DataLoaders.FromCsv("data.csv", labelColumn: "target"))
+    ///     .ConfigureModel(model)
+    ///     .BuildAsync();
+    /// </code>
     /// </para>
     /// </remarks>
-    /// <returns>A task that represents the asynchronous operation, containing the meta-trained model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
+    /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if neither ConfigureDataLoader nor ConfigureMetaLearning has been called.</exception>
     Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync();
 
     /// <summary>

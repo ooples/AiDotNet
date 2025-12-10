@@ -1,6 +1,6 @@
 using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.Data.Abstractions;
+namespace AiDotNet.Data.Structures;
 
 /// <summary>
 /// Represents a node classification task where the goal is to predict labels for individual nodes.

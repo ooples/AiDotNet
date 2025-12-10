@@ -1,6 +1,6 @@
 using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.Data.Abstractions;
+namespace AiDotNet.Data.Structures;
 
 /// <summary>
 /// Represents a graph generation task where the goal is to generate new valid graphs.

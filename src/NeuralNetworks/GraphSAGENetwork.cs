@@ -99,14 +99,12 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
     private Tensor<T>? _cachedAdjacencyMatrix;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="GraphSAGENetwork{T}"/> class with specified parameters.
+    /// Initializes a new instance of the <see cref="GraphSAGENetwork{T}"/> class with specified architecture.
     /// </summary>
-    /// <param name="inputFeatures">Number of input features per node.</param>
-    /// <param name="hiddenDim">Hidden dimension size for intermediate layers.</param>
-    /// <param name="outputFeatures">Number of output features (classes for classification).</param>
-    /// <param name="aggregatorType">Type of aggregation function (default: Mean).</param>
-    /// <param name="numLayers">Number of GraphSAGE layers (default: 2).</param>
-    /// <param name="normalize">Whether to apply L2 normalization (default: true).</param>
+    /// <param name="architecture">The neural network architecture defining the structure of the network.</param>
+    /// <param name="aggregatorType">Type of aggregation function (default: Mean). Used only when creating default layers.</param>
+    /// <param name="numLayers">Number of GraphSAGE layers (default: 2). Used only when creating default layers.</param>
+    /// <param name="normalize">Whether to apply L2 normalization (default: true). Used only when creating default layers.</param>
     /// <param name="dropoutRate">Dropout rate applied during training (default: 0.0).</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
@@ -115,27 +113,28 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
     /// <para><b>For Beginners:</b> Creating a GraphSAGE network:
     ///
     /// ```csharp
-    /// // Create GraphSAGE for node classification on social network
-    /// var sage = new GraphSAGENetwork&lt;double&gt;(
-    ///     inputFeatures: 128,      // User profile features
-    ///     hiddenDim: 64,           // 64-dimensional hidden representations
-    ///     outputFeatures: 5,       // 5 user categories
-    ///     aggregatorType: SAGEAggregatorType.Mean,
-    ///     numLayers: 2,            // 2 GraphSAGE layers
-    ///     normalize: true);        // L2 normalization for stability
+    /// // Create architecture for node classification
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+    ///     InputType.OneDimensional,
+    ///     NeuralNetworkTaskType.MultiClassClassification,
+    ///     NetworkComplexity.Simple,
+    ///     inputSize: 128,     // User profile features
+    ///     outputSize: 5);     // 5 user categories
+    ///
+    /// // Create GraphSAGE with default layers
+    /// var sage = new GraphSAGENetwork&lt;double&gt;(architecture);
+    ///
+    /// // Or create with custom layers by adding them to architecture:
+    /// architecture.Layers.Add(new GraphSAGELayer&lt;double&gt;(...));
+    /// var sageCustom = new GraphSAGENetwork&lt;double&gt;(architecture);
     ///
     /// // Train on graph data
     /// sage.TrainOnGraph(nodeFeatures, adjacencyMatrix, labels, epochs: 200);
-    ///
-    /// // Classify new users (inductive inference)
-    /// var predictions = sage.Forward(newUserFeatures, newAdjacency);
     /// ```
     /// </para>
     /// </remarks>
     public GraphSAGENetwork(
-        int inputFeatures,
-        int hiddenDim,
-        int outputFeatures,
+        NeuralNetworkArchitecture<T> architecture,
         SAGEAggregatorType aggregatorType = SAGEAggregatorType.Mean,
         int numLayers = 2,
         bool normalize = true,
@@ -143,13 +142,13 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0)
-        : base(CreateArchitecture(inputFeatures, hiddenDim, outputFeatures, aggregatorType, numLayers, normalize),
+        : base(architecture,
                lossFunction ?? new CrossEntropyLoss<T>(),
                maxGradNorm)
     {
         AggregatorType = aggregatorType;
         Normalize = normalize;
-        HiddenDim = hiddenDim;
+        HiddenDim = 64; // Default hidden dimension
         NumLayers = numLayers;
         DropoutRate = dropoutRate;
 
@@ -157,48 +156,6 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
-    }
-
-    /// <summary>
-    /// Creates the neural network architecture for GraphSAGE with the specified parameters.
-    /// </summary>
-    private static NeuralNetworkArchitecture<T> CreateArchitecture(
-        int inputFeatures,
-        int hiddenDim,
-        int outputFeatures,
-        SAGEAggregatorType aggregatorType,
-        int numLayers,
-        bool normalize)
-    {
-        var layers = new List<ILayer<T>>();
-
-        int currentInputDim = inputFeatures;
-
-        // Add GraphSAGE layers
-        for (int i = 0; i < numLayers; i++)
-        {
-            bool isLastLayer = (i == numLayers - 1);
-            int outputDim = isLastLayer ? outputFeatures : hiddenDim;
-
-            var sageLayer = new GraphSAGELayer<T>(
-                inputFeatures: currentInputDim,
-                outputFeatures: outputDim,
-                aggregatorType: aggregatorType,
-                normalize: normalize && !isLastLayer, // Don't normalize final layer output
-                activationFunction: isLastLayer ? null : new ReLUActivation<T>());
-
-            layers.Add(sageLayer);
-
-            currentInputDim = outputDim;
-        }
-
-        return new NeuralNetworkArchitecture<T>(
-            InputType.OneDimensional,
-            NeuralNetworkTaskType.MultiClassClassification,
-            NetworkComplexity.Simple,
-            inputSize: inputFeatures,
-            outputSize: outputFeatures,
-            layers: layers);
     }
 
     /// <summary>
@@ -213,7 +170,8 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultGNNLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultGraphSAGELayers(
+                Architecture, AggregatorType, NumLayers, Normalize));
         }
     }
 
@@ -944,18 +902,12 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        int inputFeatures = 0;
-        int outputFeatures = 0;
-
-        if (Layers.Count > 0)
-        {
-            if (Layers[0] is IGraphConvolutionLayer<T> firstLayer)
-                inputFeatures = firstLayer.InputFeatures;
-            if (Layers[^1] is IGraphConvolutionLayer<T> lastLayer)
-                outputFeatures = lastLayer.OutputFeatures;
-        }
-
-        return new GraphSAGENetwork<T>(inputFeatures, HiddenDim, outputFeatures, AggregatorType, NumLayers, Normalize, DropoutRate);
+        return new GraphSAGENetwork<T>(
+            architecture: Architecture,
+            aggregatorType: AggregatorType,
+            numLayers: NumLayers,
+            normalize: Normalize,
+            dropoutRate: DropoutRate);
     }
 
     #endregion

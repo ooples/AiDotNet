@@ -1,6 +1,6 @@
 using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.Data.Abstractions;
+namespace AiDotNet.Data.Structures;
 
 /// <summary>
 /// Represents a graph classification task where the goal is to classify entire graphs.

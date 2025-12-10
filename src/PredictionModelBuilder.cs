@@ -51,6 +51,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IFullModel<T, TInput, TOutput>? _model;
     private IOptimizer<T, TInput, TOutput>? _optimizer;
     private IDataPreprocessor<T, TInput, TOutput>? _dataPreprocessor;
+    private IDataLoader<T>? _dataLoader;
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
@@ -554,6 +555,40 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataPreprocessor(IDataPreprocessor<T, TInput, TOutput> dataPreprocessor)
     {
         _dataPreprocessor = dataPreprocessor;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the data loader for providing training data.
+    /// </summary>
+    /// <param name="dataLoader">The data loader that provides training data.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> A data loader handles loading your data from various sources
+    /// (files, databases, memory, URLs) and provides it in a format suitable for model training.
+    ///
+    /// You can use:
+    /// - IInputOutputDataLoader for standard supervised learning (features + labels)
+    /// - IGraphDataLoader for graph neural networks
+    /// - IEpisodicDataLoader for meta-learning
+    ///
+    /// Example:
+    /// <code>
+    /// // Simple in-memory data
+    /// var loader = DataLoaders.FromArrays(features, labels);
+    ///
+    /// // Or graph data
+    /// var graphLoader = new CitationNetworkLoader("cora");
+    ///
+    /// var result = await builder
+    ///     .ConfigureDataLoader(loader)
+    ///     .ConfigureModel(model)
+    ///     .BuildAsync();
+    /// </code>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataLoader(IDataLoader<T> dataLoader)
+    {
+        _dataLoader = dataLoader;
         return this;
     }
 

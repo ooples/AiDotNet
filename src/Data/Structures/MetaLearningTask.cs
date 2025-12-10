@@ -1,7 +1,7 @@
 
 using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.Data.Abstractions;
+namespace AiDotNet.Data.Structures;
 
 /// <summary>
 /// Represents a single meta-learning task for few-shot learning, containing support and query sets.
