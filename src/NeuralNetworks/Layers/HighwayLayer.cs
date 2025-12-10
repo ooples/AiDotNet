@@ -145,6 +145,16 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastGateOutput;
 
     /// <summary>
+    /// Stores the pre-activation transform values from the last forward pass.
+    /// </summary>
+    private Tensor<T>? _lastTransformPreActivation;
+
+    /// <summary>
+    /// Stores the pre-activation gate values from the last forward pass.
+    /// </summary>
+    private Tensor<T>? _lastGatePreActivation;
+
+    /// <summary>
     /// Stores the gradients for the transform weights calculated during the backward pass.
     /// </summary>
     private Tensor<T>? _transformWeightsGradient;
@@ -451,12 +461,14 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Transform path: transform = activation(input @ weights + bias)
         var transformLinear = input.MatrixMultiply(_transformWeights);
         var transformWithBias = Engine.TensorBroadcastAdd(transformLinear, _transformBias);
+        _lastTransformPreActivation = transformWithBias; // Store pre-activation for backward pass
         var transformOutput = ApplyActivation(transformWithBias, _transformActivation, _vectorTransformActivation);
         _lastTransformOutput = transformOutput;
 
         // Gate path: gate = sigmoid(input @ weights + bias)
         var gateLinear = input.MatrixMultiply(_gateWeights);
         var gateWithBias = Engine.TensorBroadcastAdd(gateLinear, _gateBias);
+        _lastGatePreActivation = gateWithBias; // Store pre-activation for backward pass
         var gateOutput = ApplyActivation(gateWithBias, _gateActivation, _vectorGateActivation);
         _lastGateOutput = gateOutput;
 
@@ -676,17 +688,20 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null || _lastTransformOutput == null || _lastGateOutput == null)
+        if (_lastInput == null || _lastOutput == null || _lastTransformOutput == null || _lastGateOutput == null ||
+            _lastTransformPreActivation == null || _lastGatePreActivation == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         // dL/d(transform - input) = dL/dOutput * gate
         // dL/dgate = dL/dOutput * (transform - input)
         var transformMinusInput = Engine.TensorSubtract(_lastTransformOutput, _lastInput);
         var gateGradient = Engine.TensorMultiply(outputGradient, transformMinusInput);
-        gateGradient = ApplyActivationDerivative(gateGradient, _lastGateOutput, _gateActivation, _vectorGateActivation);
+        // Use pre-activation values for derivative computation (activation functions expect pre-activation inputs)
+        gateGradient = ApplyActivationDerivative(gateGradient, _lastGatePreActivation, _gateActivation, _vectorGateActivation);
 
         var transformGradient = Engine.TensorMultiply(outputGradient, _lastGateOutput);
-        transformGradient = ApplyActivationDerivative(transformGradient, _lastTransformOutput, _transformActivation, _vectorTransformActivation);
+        // Use pre-activation values for derivative computation
+        transformGradient = ApplyActivationDerivative(transformGradient, _lastTransformPreActivation, _transformActivation, _vectorTransformActivation);
 
         // Compute weight gradients: dW = input^T @ gradient
         var inputT = _lastInput.Transpose([1, 0]);
@@ -911,6 +926,8 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastOutput = null;
         _lastTransformOutput = null;
         _lastGateOutput = null;
+        _lastTransformPreActivation = null;
+        _lastGatePreActivation = null;
         _transformWeightsGradient = null;
         _transformBiasGradient = null;
         _gateWeightsGradient = null;

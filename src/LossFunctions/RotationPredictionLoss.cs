@@ -306,6 +306,10 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
             outputY = augmentedY;
         }
 
-        return ((TInput)(object)augmentedX, (TOutput)outputY);
+        // Cast through object is required for generic type conversion at runtime
+        // The compiler cannot verify Matrix<T> -> TInput at compile time
+        TInput resultX = (TInput)(object)augmentedX;
+        TOutput resultY = (TOutput)outputY;
+        return (resultX, resultY);
     }
 }
