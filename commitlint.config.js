@@ -17,6 +17,8 @@ export default {
     (message) => /^Implement comprehensive tests for RAG retrieval strategies/.test(message),
     // Ignore legacy commit from Issue #376 implementation (before conventional commits were enforced)
     (message) => /^Add comprehensive unit tests for specialized loss function/.test(message),
+    // Ignore legacy commit from Issue #369 implementation (before conventional commits were enforced)
+    (message) => /^Add comprehensive test coverage for RAG context compression/.test(message),
     // Ignore manual merge commits (e.g., "merge: resolve conflicts...")
     (message) => /^merge:/i.test(message),
     // Ignore general merge commits containing "Merge" followed by common patterns
