@@ -47,7 +47,7 @@ public static class EnumHelper
         foreach (var member in members)
         {
             //use the member name to get an instance of enumerated type.
-            if (Enum.TryParse(member.Name, out T enumType) && !string.IsNullOrEmpty(ignoreName) && member.Name != ignoreName)
+            if (Enum.TryParse(member.Name, out T enumType) && (string.IsNullOrEmpty(ignoreName) || member.Name != ignoreName))
             {
                 result.Add(enumType);
             }
