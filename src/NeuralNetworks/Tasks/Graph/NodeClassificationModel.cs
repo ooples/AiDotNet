@@ -1,14 +1,15 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Data.Structures;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 
 /// <summary>
-/// Implements a complete model for node classification tasks on graphs.
+/// Implements a complete neural network model for node classification tasks on graphs.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
@@ -32,15 +33,15 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// **Example architecture:**
 /// ```
 /// Input: [num_nodes, input_features]
-///   ↓
+///   |
 /// GCN Layer 1: [num_nodes, hidden_dim]
-///   ↓
+///   |
 /// Activation (ReLU)
-///   ↓
+///   |
 /// Dropout
-///   ↓
+///   |
 /// GCN Layer 2: [num_nodes, num_classes]
-///   ↓
+///   |
 /// Softmax: [num_nodes, num_classes] (probabilities)
 /// ```
 ///
@@ -50,53 +51,143 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// - Graph structure helps propagate label information
 /// </para>
 /// </remarks>
-public class NodeClassificationModel<T>
+public class NodeClassificationModel<T> : NeuralNetworkBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    private readonly List<ILayer<T>> _layers;
-    private readonly IGraphConvolutionLayer<T> _firstGraphLayer;
-    private Tensor<T>? _adjacencyMatrix;
-    private bool _isTrainingMode;
+    private readonly ILossFunction<T> _lossFunction;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private Tensor<T>? _cachedAdjacencyMatrix;
 
     /// <summary>
     /// Gets the number of input features per node.
     /// </summary>
-    public int InputFeatures { get; private set; }
+    public int InputFeatures { get; }
 
     /// <summary>
     /// Gets the number of output classes.
     /// </summary>
-    public int NumClasses { get; private set; }
+    public int NumClasses { get; }
+
+    /// <summary>
+    /// Gets the hidden dimension size.
+    /// </summary>
+    public int HiddenDim { get; }
+
+    /// <summary>
+    /// Gets the number of graph layers.
+    /// </summary>
+    public int NumLayers { get; }
+
+    /// <summary>
+    /// Gets the dropout rate for regularization.
+    /// </summary>
+    public double DropoutRate { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NodeClassificationModel{T}"/> class.
     /// </summary>
-    /// <param name="layers">List of layers including graph convolutional layers.</param>
-    /// <param name="inputFeatures">Number of input features per node.</param>
-    /// <param name="numClasses">Number of classification classes.</param>
+    /// <param name="architecture">The neural network architecture defining input/output sizes and layers.</param>
+    /// <param name="hiddenDim">Hidden dimension for intermediate layers (default: 64).</param>
+    /// <param name="numLayers">Number of graph convolutional layers (default: 2).</param>
+    /// <param name="dropoutRate">Dropout rate for regularization (default: 0.5).</param>
+    /// <param name="optimizer">Optional optimizer for training.</param>
+    /// <param name="lossFunction">Optional loss function for training.</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default: 1.0).</param>
     /// <remarks>
-    /// <para>
-    /// Typical layer configuration:
-    /// 1. Graph convolutional layer (GCN, GAT, GraphSAGE, etc.)
-    /// 2. Activation function (ReLU, LeakyReLU)
-    /// 3. Dropout (for regularization)
-    /// 4. Additional graph conv layers as needed
-    /// 5. Final layer projects to num_classes dimensions
+    /// <para><b>For Beginners:</b> Creating a node classification model:
+    ///
+    /// ```csharp
+    /// // Create architecture for Cora citation network
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+    ///     InputType.OneDimensional,
+    ///     NeuralNetworkTaskType.MultiClassClassification,
+    ///     NetworkComplexity.Simple,
+    ///     inputSize: 1433,    // Cora has 1433 word features
+    ///     outputSize: 7);     // 7 paper categories
+    ///
+    /// // Create model with default layers
+    /// var model = new NodeClassificationModel&lt;double&gt;(architecture);
+    ///
+    /// // Train on node classification task
+    /// var history = model.TrainOnTask(task, epochs: 200, learningRate: 0.01);
+    /// ```
     /// </para>
     /// </remarks>
     public NodeClassificationModel(
-        List<ILayer<T>> layers,
-        int inputFeatures,
-        int numClasses)
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenDim = 64,
+        int numLayers = 2,
+        double dropoutRate = 0.5,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), maxGradNorm)
     {
-        _layers = layers ?? throw new ArgumentNullException(nameof(layers));
-        InputFeatures = inputFeatures;
-        NumClasses = numClasses;
+        InputFeatures = architecture.InputSize;
+        NumClasses = architecture.OutputSize;
+        HiddenDim = hiddenDim;
+        NumLayers = numLayers;
+        DropoutRate = dropoutRate;
 
-        // Find first graph layer to set adjacency matrix
-        _firstGraphLayer = layers.OfType<IGraphConvolutionLayer<T>>().FirstOrDefault()
-            ?? throw new ArgumentException("Model must contain at least one graph convolutional layer.");
+        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Initializes the layers of the neural network based on the provided architecture.
+    /// </summary>
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
+        }
+        else
+        {
+            // Create default node classification layers: GCN -> ReLU -> Dropout -> GCN
+            Layers.AddRange(CreateDefaultNodeClassificationLayers());
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for node classification.
+    /// </summary>
+    private List<ILayer<T>> CreateDefaultNodeClassificationLayers()
+    {
+        var layers = new List<ILayer<T>>();
+        var reluActivation = new ReLUActivation<T>();
+
+        // First GCN layer: input_features -> hidden_dim
+        layers.Add(new GraphConvolutionalLayer<T>(InputFeatures, HiddenDim, (IActivationFunction<T>?)null));
+
+        // ReLU activation
+        layers.Add(new ActivationLayer<T>([HiddenDim], (IActivationFunction<T>)reluActivation));
+
+        // Dropout for regularization
+        if (DropoutRate > 0)
+        {
+            layers.Add(new DropoutLayer<T>(DropoutRate));
+        }
+
+        // Additional intermediate layers
+        for (int i = 1; i < NumLayers - 1; i++)
+        {
+            layers.Add(new GraphConvolutionalLayer<T>(HiddenDim, HiddenDim, (IActivationFunction<T>?)null));
+            layers.Add(new ActivationLayer<T>([HiddenDim], (IActivationFunction<T>)reluActivation));
+            if (DropoutRate > 0)
+            {
+                layers.Add(new DropoutLayer<T>(DropoutRate));
+            }
+        }
+
+        // Final GCN layer: hidden_dim -> num_classes
+        layers.Add(new GraphConvolutionalLayer<T>(HiddenDim, NumClasses, (IActivationFunction<T>?)null));
+
+        return layers;
     }
 
     /// <summary>
@@ -108,79 +199,72 @@ public class NodeClassificationModel<T>
     /// Call this before training or inference to provide the graph structure.
     /// All graph convolutional layers in the model will use this adjacency matrix.
     /// </para>
-    /// <para><b>For Beginners:</b> The adjacency matrix tells the model which nodes are connected.
-    ///
-    /// For a graph with 4 nodes:
-    /// ```
-    /// Node connections:
-    /// 0 -- 1
-    /// |    |
-    /// 2 -- 3
-    ///
-    /// Adjacency matrix:
-    /// [0 1 1 0]
-    /// [1 0 0 1]
-    /// [1 0 0 1]
-    /// [0 1 1 0]
-    /// ```
-    /// Where A[i,j] = 1 means nodes i and j are connected.
-    /// </para>
     /// </remarks>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
-        _adjacencyMatrix = adjacencyMatrix;
+        _cachedAdjacencyMatrix = adjacencyMatrix;
 
-        // Set adjacency matrix for all graph layers
-        foreach (var layer in _layers.OfType<IGraphConvolutionLayer<T>>())
+        foreach (var layer in Layers)
         {
-            layer.SetAdjacencyMatrix(adjacencyMatrix);
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+            {
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+            }
         }
     }
 
-    /// <inheritdoc/>
-    public Tensor<T> Forward(Tensor<T> input)
+    /// <summary>
+    /// Performs a forward pass through the network.
+    /// </summary>
+    /// <param name="nodeFeatures">Node feature tensor.</param>
+    /// <returns>Output predictions for all nodes.</returns>
+    public Tensor<T> Forward(Tensor<T> nodeFeatures)
     {
-        if (_adjacencyMatrix == null)
+        if (_cachedAdjacencyMatrix is null)
         {
             throw new InvalidOperationException(
                 "Adjacency matrix must be set before forward pass. Call SetAdjacencyMatrix() first.");
         }
 
-        var current = input;
-        foreach (var layer in _layers)
+        var current = nodeFeatures;
+        foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
         return current;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Performs a backward pass through the network.
+    /// </summary>
+    /// <param name="outputGradient">Gradient of loss with respect to output.</param>
+    /// <returns>Gradient with respect to input.</returns>
     public Tensor<T> Backward(Tensor<T> outputGradient)
     {
         var currentGradient = outputGradient;
-        for (int i = _layers.Count - 1; i >= 0; i--)
+        for (int i = Layers.Count - 1; i >= 0; i--)
         {
-            currentGradient = _layers[i].Backward(currentGradient);
+            currentGradient = Layers[i].Backward(currentGradient);
         }
         return currentGradient;
     }
 
-    /// <inheritdoc/>
-    public void UpdateParameters(T learningRate)
+    /// <summary>
+    /// Updates the parameters of all layers in the network.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters for the network.</param>
+    public override void UpdateParameters(Vector<T> parameters)
     {
-        foreach (var layer in _layers)
+        int index = 0;
+        foreach (var layer in Layers)
         {
-            layer.UpdateParameters(learningRate);
-        }
-    }
-
-    /// <inheritdoc/>
-    public void SetTrainingMode(bool isTraining)
-    {
-        _isTrainingMode = isTraining;
-        foreach (var layer in _layers)
-        {
-            layer.SetTrainingMode(isTraining);
+            int layerParamCount = layer.ParameterCount;
+            if (layerParamCount > 0)
+            {
+                var layerParams = parameters.SubVector(index, layerParamCount);
+                layer.SetParameters(layerParams);
+                index += layerParamCount;
+            }
         }
     }
 
@@ -192,16 +276,6 @@ public class NodeClassificationModel<T>
     /// <param name="learningRate">Learning rate for optimization.</param>
     /// <returns>Training history with loss and accuracy per epoch.</returns>
     /// <remarks>
-    /// <para>
-    /// Training procedure:
-    /// 1. Set adjacency matrix from task graph
-    /// 2. For each epoch:
-    ///    - Forward pass through all nodes
-    ///    - Compute loss only on training nodes
-    ///    - Backward pass
-    ///    - Update parameters
-    ///    - Evaluate on validation nodes
-    /// </para>
     /// <para><b>For Beginners:</b> Semi-supervised training is special:
     ///
     /// - **All nodes participate in message passing**
@@ -212,26 +286,19 @@ public class NodeClassificationModel<T>
     ///
     /// - **Test nodes benefit from training nodes**
     ///   Graph structure lets label information flow through the network
-    ///
-    /// This is like learning in school:
-    /// - Some students get answers (training nodes)
-    /// - They help friends (neighbors) understand
-    /// - Friends share with their friends (message passing)
-    /// - Eventually everyone learns (test nodes get correct labels)
     /// </para>
     /// </remarks>
-    public Dictionary<string, List<double>> Train(
+    public Dictionary<string, List<double>> TrainOnTask(
         NodeClassificationTask<T> task,
         int epochs,
-        T learningRate)
+        double learningRate = 0.01)
     {
-        if (task.Graph.AdjacencyMatrix == null)
+        if (task.Graph.AdjacencyMatrix is null)
         {
             throw new ArgumentException("Task graph must have an adjacency matrix.");
         }
 
         SetAdjacencyMatrix(task.Graph.AdjacencyMatrix);
-        SetTrainingMode(true);
 
         var history = new Dictionary<string, List<double>>
         {
@@ -240,48 +307,46 @@ public class NodeClassificationModel<T>
             ["val_accuracy"] = new List<double>()
         };
 
+        var lr = NumOps.FromDouble(learningRate);
+
         for (int epoch = 0; epoch < epochs; epoch++)
         {
+            // Set all layers to training mode
+            foreach (var layer in Layers)
+            {
+                layer.SetTrainingMode(true);
+            }
+
             // Forward pass on all nodes
             var logits = Forward(task.Graph.NodeFeatures);
 
-            // Compute loss on training nodes only
-            double totalLoss = 0.0;
-            int correct = 0;
-
-            foreach (var nodeIdx in task.TrainIndices)
-            {
-                // Cross-entropy loss for this node
-                for (int c = 0; c < task.NumClasses; c++)
-                {
-                    var logit = NumOps.ToDouble(logits[nodeIdx, c]);
-                    var label = NumOps.ToDouble(task.Labels[nodeIdx, c]);
-                    totalLoss -= label * Math.Log(Math.Max(logit, 1e-10));
-                }
-
-                // Accuracy
-                int predictedClass = GetPredictedClass(logits, nodeIdx, task.NumClasses);
-                int trueClass = GetTrueClass(task.Labels, nodeIdx, task.NumClasses);
-                if (predictedClass == trueClass) correct++;
-            }
-
-            double avgLoss = totalLoss / task.TrainIndices.Length;
-            double trainAcc = (double)correct / task.TrainIndices.Length;
+            // Compute loss and accuracy on training nodes
+            var (loss, trainAcc) = ComputeLossAndAccuracy(logits, task.Labels, task.TrainIndices, task.NumClasses);
 
             // Validation accuracy
             double valAcc = EvaluateAccuracy(logits, task.Labels, task.ValIndices, task.NumClasses);
 
-            history["train_loss"].Add(avgLoss);
+            history["train_loss"].Add(loss);
             history["train_accuracy"].Add(trainAcc);
             history["val_accuracy"].Add(valAcc);
 
-            // Backward pass and update
+            // Compute gradient and backward pass
             var gradient = ComputeGradient(logits, task.Labels, task.TrainIndices, task.NumClasses);
             Backward(gradient);
-            UpdateParameters(learningRate);
+
+            // Update parameters
+            foreach (var layer in Layers)
+            {
+                layer.UpdateParameters(lr);
+            }
         }
 
-        SetTrainingMode(false);
+        // Set layers back to inference mode
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(false);
+        }
+
         return history;
     }
 
@@ -290,20 +355,54 @@ public class NodeClassificationModel<T>
     /// </summary>
     /// <param name="task">The node classification task.</param>
     /// <returns>Test accuracy.</returns>
-    public double Evaluate(NodeClassificationTask<T> task)
+    public double EvaluateOnTask(NodeClassificationTask<T> task)
     {
-        if (task.Graph.AdjacencyMatrix != null)
+        if (task.Graph.AdjacencyMatrix is not null)
         {
             SetAdjacencyMatrix(task.Graph.AdjacencyMatrix);
         }
 
-        SetTrainingMode(false);
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(false);
+        }
+
         var logits = Forward(task.Graph.NodeFeatures);
         return EvaluateAccuracy(logits, task.Labels, task.TestIndices, task.NumClasses);
     }
 
+    private (double loss, double accuracy) ComputeLossAndAccuracy(
+        Tensor<T> logits, Tensor<T> labels, int[] indices, int numClasses)
+    {
+        double totalLoss = 0.0;
+        int correct = 0;
+
+        foreach (var nodeIdx in indices)
+        {
+            // Cross-entropy loss for this node
+            for (int c = 0; c < numClasses; c++)
+            {
+                var logit = NumOps.ToDouble(logits[nodeIdx, c]);
+                var label = NumOps.ToDouble(labels[nodeIdx, c]);
+                totalLoss -= label * Math.Log(Math.Max(logit, 1e-10));
+            }
+
+            // Accuracy
+            int predictedClass = GetPredictedClass(logits, nodeIdx, numClasses);
+            int trueClass = GetTrueClass(labels, nodeIdx, numClasses);
+            if (predictedClass == trueClass) correct++;
+        }
+
+        double avgLoss = indices.Length > 0 ? totalLoss / indices.Length : 0.0;
+        double accuracy = indices.Length > 0 ? (double)correct / indices.Length : 0.0;
+
+        return (avgLoss, accuracy);
+    }
+
     private double EvaluateAccuracy(Tensor<T> logits, Tensor<T> labels, int[] indices, int numClasses)
     {
+        if (indices.Length == 0) return 0.0;
+
         int correct = 0;
         foreach (var nodeIdx in indices)
         {
@@ -342,15 +441,163 @@ public class NodeClassificationModel<T>
     private Tensor<T> ComputeGradient(Tensor<T> logits, Tensor<T> labels, int[] trainIndices, int numClasses)
     {
         var gradient = new Tensor<T>(logits.Shape);
+        var scale = NumOps.Divide(NumOps.One, NumOps.FromDouble(trainIndices.Length));
 
         foreach (var nodeIdx in trainIndices)
         {
             for (int c = 0; c < numClasses; c++)
             {
-                gradient[nodeIdx, c] = NumOps.Subtract(logits[nodeIdx, c], labels[nodeIdx, c]);
+                var diff = NumOps.Subtract(logits[nodeIdx, c], labels[nodeIdx, c]);
+                gradient[nodeIdx, c] = NumOps.Multiply(scale, diff);
             }
         }
 
         return gradient;
     }
+
+    /// <summary>
+    /// Gets all parameters as a vector.
+    /// </summary>
+    public override Vector<T> GetParameters()
+    {
+        var allParams = new List<T>();
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                allParams.Add(layerParams[i]);
+            }
+        }
+        return new Vector<T>([.. allParams]);
+    }
+
+    #region Abstract Method Implementations
+
+    /// <summary>
+    /// Makes a prediction using the trained network.
+    /// </summary>
+    /// <param name="input">The input tensor containing node features.</param>
+    /// <returns>The prediction tensor with class probabilities for each node.</returns>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        if (_cachedAdjacencyMatrix is null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Predict.");
+        }
+
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(false);
+        }
+
+        return Forward(input);
+    }
+
+    /// <summary>
+    /// Trains the network on a single batch of data.
+    /// </summary>
+    /// <param name="input">The input node features.</param>
+    /// <param name="expectedOutput">The expected output (labels).</param>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (_cachedAdjacencyMatrix is null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Train.");
+        }
+
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(true);
+        }
+
+        var predictions = Forward(input);
+
+        var flattenedPredictions = predictions.ToVector();
+        var flattenedExpected = expectedOutput.ToVector();
+
+        LastLoss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
+
+        var outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
+        var gradOutput = Tensor<T>.FromVector(outputGradients);
+
+        if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
+        {
+            gradOutput = gradOutput.Reshape(predictions.Shape);
+        }
+
+        Backward(gradOutput);
+
+        Vector<T> parameterGradients = GetParameterGradients();
+        Vector<T> currentParameters = GetParameters();
+        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
+
+        UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Gets metadata about this model for serialization and identification.
+    /// </summary>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = ModelType.GraphNeuralNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                ["NetworkType"] = "NodeClassificationModel",
+                ["InputFeatures"] = InputFeatures,
+                ["NumClasses"] = NumClasses,
+                ["HiddenDim"] = HiddenDim,
+                ["NumLayers"] = NumLayers,
+                ["DropoutRate"] = DropoutRate
+            }
+        };
+    }
+
+    /// <summary>
+    /// Serializes network-specific data to a binary writer.
+    /// </summary>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(InputFeatures);
+        writer.Write(NumClasses);
+        writer.Write(HiddenDim);
+        writer.Write(NumLayers);
+        writer.Write(DropoutRate);
+
+        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
+        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
+    }
+
+    /// <summary>
+    /// Deserializes network-specific data from a binary reader.
+    /// </summary>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _ = reader.ReadInt32(); // InputFeatures
+        _ = reader.ReadInt32(); // NumClasses
+        _ = reader.ReadInt32(); // HiddenDim
+        _ = reader.ReadInt32(); // NumLayers
+        _ = reader.ReadDouble(); // DropoutRate
+
+        _ = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
+        _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
+    }
+
+    /// <summary>
+    /// Creates a new instance of this network type for cloning or deserialization.
+    /// </summary>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new NodeClassificationModel<T>(
+            architecture: Architecture,
+            hiddenDim: HiddenDim,
+            numLayers: NumLayers,
+            dropoutRate: DropoutRate);
+    }
+
+    #endregion
 }

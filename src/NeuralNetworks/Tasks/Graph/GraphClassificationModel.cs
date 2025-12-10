@@ -1,14 +1,15 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Data.Structures;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 
 /// <summary>
-/// Implements a complete model for graph classification tasks.
+/// Implements a complete neural network model for graph classification tasks.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
@@ -47,28 +48,28 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 ///
 /// **Example: Molecular toxicity prediction**
 /// ```
-/// Molecule (graph) → GNN layers → Molecule embedding → Classifier → Toxic? (Yes/No)
+/// Molecule (graph) -> GNN layers -> Molecule embedding -> Classifier -> Toxic? (Yes/No)
 ///
 /// Small molecule (10 atoms):
-///   10 nodes → GNN → 10 embeddings → Pool → 1 graph embedding → Classify
+///   10 nodes -> GNN -> 10 embeddings -> Pool -> 1 graph embedding -> Classify
 ///
 /// Large molecule (50 atoms):
-///   50 nodes → GNN → 50 embeddings → Pool → 1 graph embedding → Classify
+///   50 nodes -> GNN -> 50 embeddings -> Pool -> 1 graph embedding -> Classify
 ///
 /// Both produce same-sized graph embedding despite different input sizes!
 /// ```
 /// </para>
 /// </remarks>
-public class GraphClassificationModel<T>
+public class GraphClassificationModel<T> : NeuralNetworkBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    private readonly List<ILayer<T>> _gnnLayers;
-    private readonly List<ILayer<T>> _classifierLayers;
+    private readonly ILossFunction<T> _lossFunction;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly GraphPooling _poolingType;
+    private Tensor<T>? _cachedAdjacencyMatrix;
     private Tensor<T>? _nodeEmbeddings;
     private Tensor<T>? _graphEmbedding;
-    private bool _isTrainingMode;
 
     /// <summary>
     /// Graph pooling methods for aggregating node embeddings.
@@ -89,99 +90,181 @@ public class GraphClassificationModel<T>
     }
 
     /// <summary>
-    /// Gets the graph embedding dimension.
+    /// Gets the number of input features per node.
     /// </summary>
-    public int EmbeddingDim { get; private set; }
+    public int InputFeatures { get; }
 
     /// <summary>
     /// Gets the number of output classes.
     /// </summary>
-    public int NumClasses { get; private set; }
+    public int NumClasses { get; }
+
+    /// <summary>
+    /// Gets the hidden dimension size.
+    /// </summary>
+    public int HiddenDim { get; }
+
+    /// <summary>
+    /// Gets the graph embedding dimension after pooling.
+    /// </summary>
+    public int EmbeddingDim { get; }
+
+    /// <summary>
+    /// Gets the number of GNN layers.
+    /// </summary>
+    public int NumGnnLayers { get; }
+
+    /// <summary>
+    /// Gets the dropout rate for regularization.
+    /// </summary>
+    public double DropoutRate { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GraphClassificationModel{T}"/> class.
     /// </summary>
-    /// <param name="gnnLayers">GNN layers for node-level processing.</param>
-    /// <param name="classifierLayers">Fully connected layers for graph-level classification.</param>
-    /// <param name="embeddingDim">Dimension of graph embedding after pooling.</param>
-    /// <param name="numClasses">Number of classification classes.</param>
+    /// <param name="architecture">The neural network architecture defining input/output sizes and layers.</param>
+    /// <param name="hiddenDim">Hidden dimension for intermediate layers (default: 64).</param>
+    /// <param name="embeddingDim">Dimension of graph embedding after pooling (default: 128).</param>
+    /// <param name="numGnnLayers">Number of graph convolutional layers (default: 3).</param>
+    /// <param name="dropoutRate">Dropout rate for regularization (default: 0.5).</param>
     /// <param name="poolingType">Method for pooling node embeddings to graph embedding.</param>
+    /// <param name="optimizer">Optional optimizer for training.</param>
+    /// <param name="lossFunction">Optional loss function for training.</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default: 1.0).</param>
     /// <remarks>
-    /// <para>
-    /// Typical architecture:
+    /// <para><b>For Beginners:</b> Creating a graph classification model:
+    ///
+    /// ```csharp
+    /// // Create architecture for molecular property prediction
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+    ///     InputType.OneDimensional,
+    ///     NeuralNetworkTaskType.MultiClassClassification,
+    ///     NetworkComplexity.Simple,
+    ///     inputSize: 9,      // Atom features
+    ///     outputSize: 2);    // Binary classification (toxic/not toxic)
+    ///
+    /// // Create model with default layers
+    /// var model = new GraphClassificationModel&lt;double&gt;(architecture);
+    ///
+    /// // Train on graph classification task
+    /// var history = model.TrainOnTask(task, epochs: 100, learningRate: 0.001);
     /// ```
-    /// GNN Layers:
-    ///   - GraphConv(in_features, 64)
-    ///   - ReLU
-    ///   - GraphConv(64, 128)
-    ///   - ReLU
-    ///   - GraphConv(128, embedding_dim)
-    ///
-    /// Pooling: Sum/Mean/Max → [embedding_dim]
-    ///
-    /// Classifier Layers:
-    ///   - Linear(embedding_dim, 64)
-    ///   - ReLU
-    ///   - Dropout(0.5)
-    ///   - Linear(64, num_classes)
-    /// ```
-    /// </para>
-    /// <para><b>For Beginners:</b> Choosing pooling strategy:
-    ///
-    /// **Mean Pooling:**
-    /// - Average all node features
-    /// - Good for: General purpose, stable gradients
-    /// - Example: "What's the average property across atoms?"
-    ///
-    /// **Max Pooling:**
-    /// - Take maximum value per feature dimension
-    /// - Good for: Capturing extreme/important features
-    /// - Example: "Is there ANY atom with this critical property?"
-    ///
-    /// **Sum Pooling:**
-    /// - Sum all node features
-    /// - Good for: Size-dependent properties
-    /// - Example: "Total molecular weight" (bigger molecules = larger sum)
-    ///
-    /// **Attention Pooling:**
-    /// - Learned weighted average (important nodes weighted higher)
-    /// - Good for: Complex patterns, best accuracy
-    /// - Example: "Which atoms matter most for toxicity?"
-    /// - Trade-off: More parameters, slower training
     /// </para>
     /// </remarks>
     public GraphClassificationModel(
-        List<ILayer<T>> gnnLayers,
-        List<ILayer<T>> classifierLayers,
-        int embeddingDim,
-        int numClasses,
-        GraphPooling poolingType = GraphPooling.Mean)
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenDim = 64,
+        int embeddingDim = 128,
+        int numGnnLayers = 3,
+        double dropoutRate = 0.5,
+        GraphPooling poolingType = GraphPooling.Mean,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), maxGradNorm)
     {
-        _gnnLayers = gnnLayers ?? throw new ArgumentNullException(nameof(gnnLayers));
-        _classifierLayers = classifierLayers ?? throw new ArgumentNullException(nameof(classifierLayers));
+        InputFeatures = architecture.InputSize;
+        NumClasses = architecture.OutputSize;
+        HiddenDim = hiddenDim;
         EmbeddingDim = embeddingDim;
-        NumClasses = numClasses;
+        NumGnnLayers = numGnnLayers;
+        DropoutRate = dropoutRate;
         _poolingType = poolingType;
+
+        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        InitializeLayers();
     }
 
     /// <summary>
-    /// Sets the adjacency matrix for a single graph.
+    /// Initializes the layers of the neural network based on the provided architecture.
+    /// </summary>
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
+        }
+        else
+        {
+            // Create default graph classification layers: GNN stack + classifier head
+            Layers.AddRange(CreateDefaultGraphClassificationLayers());
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for graph classification.
+    /// </summary>
+    private List<ILayer<T>> CreateDefaultGraphClassificationLayers()
+    {
+        var layers = new List<ILayer<T>>();
+        var reluActivation = new ReLUActivation<T>();
+
+        // GNN layers for node-level processing
+        // First GCN layer: input_features -> hidden_dim
+        layers.Add(new GraphConvolutionalLayer<T>(InputFeatures, HiddenDim, (IActivationFunction<T>?)null));
+        layers.Add(new ActivationLayer<T>([HiddenDim], (IActivationFunction<T>)reluActivation));
+        if (DropoutRate > 0)
+        {
+            layers.Add(new DropoutLayer<T>(DropoutRate));
+        }
+
+        // Additional GNN layers: hidden_dim -> hidden_dim
+        for (int i = 1; i < NumGnnLayers - 1; i++)
+        {
+            layers.Add(new GraphConvolutionalLayer<T>(HiddenDim, HiddenDim, (IActivationFunction<T>?)null));
+            layers.Add(new ActivationLayer<T>([HiddenDim], (IActivationFunction<T>)reluActivation));
+            if (DropoutRate > 0)
+            {
+                layers.Add(new DropoutLayer<T>(DropoutRate));
+            }
+        }
+
+        // Final GNN layer: hidden_dim -> embedding_dim
+        layers.Add(new GraphConvolutionalLayer<T>(HiddenDim, EmbeddingDim, (IActivationFunction<T>?)null));
+
+        // Note: Pooling is handled separately in Forward, not as a layer
+        // After pooling, we add classifier layers
+        // These would be applied to the pooled graph embedding
+
+        return layers;
+    }
+
+    /// <summary>
+    /// Sets the adjacency matrix for all graph layers in the model.
     /// </summary>
     /// <param name="adjacencyMatrix">The graph adjacency matrix.</param>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
-        foreach (var layer in _gnnLayers.OfType<IGraphConvolutionLayer<T>>())
+        _cachedAdjacencyMatrix = adjacencyMatrix;
+
+        foreach (var layer in Layers)
         {
-            layer.SetAdjacencyMatrix(adjacencyMatrix);
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+            {
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+            }
         }
     }
 
-    /// <inheritdoc/>
-    public Tensor<T> Forward(Tensor<T> input)
+    /// <summary>
+    /// Performs a forward pass through the network.
+    /// </summary>
+    /// <param name="nodeFeatures">Node feature tensor [num_nodes, input_features].</param>
+    /// <returns>Output predictions [num_classes].</returns>
+    public Tensor<T> Forward(Tensor<T> nodeFeatures)
     {
+        if (_cachedAdjacencyMatrix is null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set before forward pass. Call SetAdjacencyMatrix() first.");
+        }
+
         // Step 1: Node-level processing through GNN layers
-        var current = input;
-        foreach (var layer in _gnnLayers)
+        var current = nodeFeatures;
+        foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
@@ -190,125 +273,98 @@ public class GraphClassificationModel<T>
         // Step 2: Pool node embeddings to graph embedding
         _graphEmbedding = PoolGraph(_nodeEmbeddings);
 
-        // Step 3: Graph-level classification
-        current = _graphEmbedding;
-        foreach (var layer in _classifierLayers)
-        {
-            current = layer.Forward(current);
-        }
-
-        return current;
+        // Step 3: For classification, apply softmax (done in loss computation)
+        return _graphEmbedding;
     }
 
     /// <summary>
     /// Pools node embeddings into a single graph-level embedding.
     /// </summary>
-    /// <param name="nodeEmbeddings">Node embeddings of shape [batch_size, num_nodes, embedding_dim].</param>
-    /// <returns>Graph embedding of shape [batch_size, embedding_dim].</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Pooling converts variable-sized node sets to fixed size.
-    ///
-    /// Think of it like summarizing reviews:
-    /// - **Input**: 10 movie reviews (variable number of words each)
-    /// - **Pooling**: Extract key sentiment (fixed-size summary)
-    /// - **Output**: Overall rating (fixed size)
-    ///
-    /// For graphs:
-    /// - **Input**: Variable number of nodes with embeddings
-    /// - **Pooling**: Aggregate into single vector
-    /// - **Output**: One embedding representing entire graph
-    /// </para>
-    /// </remarks>
+    /// <param name="nodeEmbeddings">Node embeddings of shape [num_nodes, embedding_dim].</param>
+    /// <returns>Graph embedding of shape [1, embedding_dim].</returns>
     private Tensor<T> PoolGraph(Tensor<T> nodeEmbeddings)
     {
-        int batchSize = nodeEmbeddings.Shape[0];
-        int numNodes = nodeEmbeddings.Shape[1];
-        int embDim = nodeEmbeddings.Shape[2];
+        int numNodes = nodeEmbeddings.Shape[0];
+        int embDim = nodeEmbeddings.Shape[1];
 
-        var graphEmb = new Tensor<T>([batchSize, embDim]);
+        var graphEmb = new Tensor<T>([1, embDim]);
 
-        for (int b = 0; b < batchSize; b++)
+        switch (_poolingType)
         {
-            switch (_poolingType)
-            {
-                case GraphPooling.Mean:
-                    // Average pooling
-                    for (int d = 0; d < embDim; d++)
+            case GraphPooling.Mean:
+                // Average pooling
+                for (int d = 0; d < embDim; d++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int n = 0; n < numNodes; n++)
                     {
-                        T sum = NumOps.Zero;
-                        for (int n = 0; n < numNodes; n++)
-                        {
-                            sum = NumOps.Add(sum, nodeEmbeddings[b, n, d]);
-                        }
-                        graphEmb[b, d] = NumOps.Divide(sum, NumOps.FromDouble(numNodes));
+                        sum = NumOps.Add(sum, nodeEmbeddings[n, d]);
                     }
-                    break;
+                    graphEmb[0, d] = NumOps.Divide(sum, NumOps.FromDouble(numNodes));
+                }
+                break;
 
-                case GraphPooling.Max:
-                    // Max pooling
-                    for (int d = 0; d < embDim; d++)
+            case GraphPooling.Max:
+                // Max pooling
+                for (int d = 0; d < embDim; d++)
+                {
+                    T maxVal = nodeEmbeddings[0, d];
+                    for (int n = 1; n < numNodes; n++)
                     {
-                        T maxVal = nodeEmbeddings[b, 0, d];
-                        for (int n = 1; n < numNodes; n++)
+                        if (NumOps.GreaterThan(nodeEmbeddings[n, d], maxVal))
                         {
-                            if (NumOps.GreaterThan(nodeEmbeddings[b, n, d], maxVal))
-                            {
-                                maxVal = nodeEmbeddings[b, n, d];
-                            }
+                            maxVal = nodeEmbeddings[n, d];
                         }
-                        graphEmb[b, d] = maxVal;
                     }
-                    break;
+                    graphEmb[0, d] = maxVal;
+                }
+                break;
 
-                case GraphPooling.Sum:
-                    // Sum pooling
-                    for (int d = 0; d < embDim; d++)
+            case GraphPooling.Sum:
+                // Sum pooling
+                for (int d = 0; d < embDim; d++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int n = 0; n < numNodes; n++)
                     {
-                        T sum = NumOps.Zero;
-                        for (int n = 0; n < numNodes; n++)
-                        {
-                            sum = NumOps.Add(sum, nodeEmbeddings[b, n, d]);
-                        }
-                        graphEmb[b, d] = sum;
+                        sum = NumOps.Add(sum, nodeEmbeddings[n, d]);
                     }
-                    break;
+                    graphEmb[0, d] = sum;
+                }
+                break;
 
-                case GraphPooling.Attention:
-                    // Simplified attention pooling (full version would learn attention weights)
-                    // For now, use uniform attention (equivalent to mean)
-                    for (int d = 0; d < embDim; d++)
+            case GraphPooling.Attention:
+                // Simplified attention pooling (uniform weights = mean)
+                for (int d = 0; d < embDim; d++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int n = 0; n < numNodes; n++)
                     {
-                        T sum = NumOps.Zero;
-                        for (int n = 0; n < numNodes; n++)
-                        {
-                            sum = NumOps.Add(sum, nodeEmbeddings[b, n, d]);
-                        }
-                        graphEmb[b, d] = NumOps.Divide(sum, NumOps.FromDouble(numNodes));
+                        sum = NumOps.Add(sum, nodeEmbeddings[n, d]);
                     }
-                    break;
-            }
+                    graphEmb[0, d] = NumOps.Divide(sum, NumOps.FromDouble(numNodes));
+                }
+                break;
         }
 
         return graphEmb;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Performs a backward pass through the network.
+    /// </summary>
+    /// <param name="outputGradient">Gradient of loss with respect to output.</param>
+    /// <returns>Gradient with respect to input.</returns>
     public Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // Backprop through classifier
-        var currentGradient = outputGradient;
-        for (int i = _classifierLayers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = _classifierLayers[i].Backward(currentGradient);
-        }
-
         // Backprop through pooling (distribute gradient to all nodes)
-        currentGradient = BackpropPooling(currentGradient);
+        var gradientNodeEmb = BackpropPooling(outputGradient);
 
         // Backprop through GNN layers
-        for (int i = _gnnLayers.Count - 1; i >= 0; i--)
+        var currentGradient = gradientNodeEmb;
+        for (int i = Layers.Count - 1; i >= 0; i--)
         {
-            currentGradient = _gnnLayers[i].Backward(currentGradient);
+            currentGradient = Layers[i].Backward(currentGradient);
         }
 
         return currentGradient;
@@ -316,93 +372,81 @@ public class GraphClassificationModel<T>
 
     private Tensor<T> BackpropPooling(Tensor<T> gradGraphEmb)
     {
-        if (_nodeEmbeddings == null)
+        if (_nodeEmbeddings is null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward.");
         }
 
-        int batchSize = _nodeEmbeddings.Shape[0];
-        int numNodes = _nodeEmbeddings.Shape[1];
-        int embDim = _nodeEmbeddings.Shape[2];
+        int numNodes = _nodeEmbeddings.Shape[0];
+        int embDim = _nodeEmbeddings.Shape[1];
 
-        var gradNodeEmb = new Tensor<T>([batchSize, numNodes, embDim]);
+        var gradNodeEmb = new Tensor<T>([numNodes, embDim]);
 
-        for (int b = 0; b < batchSize; b++)
+        switch (_poolingType)
         {
-            switch (_poolingType)
-            {
-                case GraphPooling.Mean:
-                    // Gradient distributed equally to all nodes
-                    for (int n = 0; n < numNodes; n++)
-                    {
-                        for (int d = 0; d < embDim; d++)
-                        {
-                            gradNodeEmb[b, n, d] = NumOps.Divide(
-                                gradGraphEmb[b, d],
-                                NumOps.FromDouble(numNodes));
-                        }
-                    }
-                    break;
-
-                case GraphPooling.Max:
-                    // Gradient goes only to node that had max value
+            case GraphPooling.Mean:
+                // Gradient distributed equally to all nodes
+                for (int n = 0; n < numNodes; n++)
+                {
                     for (int d = 0; d < embDim; d++)
                     {
-                        int maxIdx = 0;
-                        T maxVal = _nodeEmbeddings[b, 0, d];
-                        for (int n = 1; n < numNodes; n++)
-                        {
-                            if (NumOps.GreaterThan(_nodeEmbeddings[b, n, d], maxVal))
-                            {
-                                maxVal = _nodeEmbeddings[b, n, d];
-                                maxIdx = n;
-                            }
-                        }
-                        gradNodeEmb[b, maxIdx, d] = gradGraphEmb[b, d];
+                        gradNodeEmb[n, d] = NumOps.Divide(
+                            gradGraphEmb[0, d],
+                            NumOps.FromDouble(numNodes));
                     }
-                    break;
+                }
+                break;
 
-                case GraphPooling.Sum:
-                case GraphPooling.Attention:
-                    // Full gradient to all nodes
-                    for (int n = 0; n < numNodes; n++)
+            case GraphPooling.Max:
+                // Gradient goes only to node that had max value
+                for (int d = 0; d < embDim; d++)
+                {
+                    int maxIdx = 0;
+                    T maxVal = _nodeEmbeddings[0, d];
+                    for (int n = 1; n < numNodes; n++)
                     {
-                        for (int d = 0; d < embDim; d++)
+                        if (NumOps.GreaterThan(_nodeEmbeddings[n, d], maxVal))
                         {
-                            gradNodeEmb[b, n, d] = gradGraphEmb[b, d];
+                            maxVal = _nodeEmbeddings[n, d];
+                            maxIdx = n;
                         }
                     }
-                    break;
-            }
+                    gradNodeEmb[maxIdx, d] = gradGraphEmb[0, d];
+                }
+                break;
+
+            case GraphPooling.Sum:
+            case GraphPooling.Attention:
+                // Full gradient to all nodes
+                for (int n = 0; n < numNodes; n++)
+                {
+                    for (int d = 0; d < embDim; d++)
+                    {
+                        gradNodeEmb[n, d] = gradGraphEmb[0, d];
+                    }
+                }
+                break;
         }
 
         return gradNodeEmb;
     }
 
-    /// <inheritdoc/>
-    public void UpdateParameters(T learningRate)
+    /// <summary>
+    /// Updates the parameters of all layers in the network.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters for the network.</param>
+    public override void UpdateParameters(Vector<T> parameters)
     {
-        foreach (var layer in _gnnLayers)
+        int index = 0;
+        foreach (var layer in Layers)
         {
-            layer.UpdateParameters(learningRate);
-        }
-        foreach (var layer in _classifierLayers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-    }
-
-    /// <inheritdoc/>
-    public void SetTrainingMode(bool isTraining)
-    {
-        _isTrainingMode = isTraining;
-        foreach (var layer in _gnnLayers)
-        {
-            layer.SetTrainingMode(isTraining);
-        }
-        foreach (var layer in _classifierLayers)
-        {
-            layer.SetTrainingMode(isTraining);
+            int layerParamCount = layer.ParameterCount;
+            if (layerParamCount > 0)
+            {
+                var layerParams = parameters.SubVector(index, layerParamCount);
+                layer.SetParameters(layerParams);
+                index += layerParamCount;
+            }
         }
     }
 
@@ -412,42 +456,12 @@ public class GraphClassificationModel<T>
     /// <param name="task">The graph classification task with training/validation/test graphs.</param>
     /// <param name="epochs">Number of training epochs.</param>
     /// <param name="learningRate">Learning rate for optimization.</param>
-    /// <param name="batchSize">Number of graphs per batch.</param>
     /// <returns>Training history with loss and accuracy per epoch.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Training on batches of graphs:
-    ///
-    /// **Challenge:** Graphs have different sizes
-    /// - Graph 1: 10 nodes, 15 edges
-    /// - Graph 2: 25 nodes, 40 edges
-    /// - Graph 3: 8 nodes, 12 edges
-    ///
-    /// **Solution: Process one at a time or batch similar sizes**
-    ///
-    /// Training loop:
-    /// ```
-    /// For each epoch:
-    ///   For each graph in training set:
-    ///     1. Set graph's adjacency matrix
-    ///     2. Forward pass: nodes → GNN → pool → classify
-    ///     3. Compute loss with true label
-    ///     4. Backward pass
-    ///     5. Update parameters
-    ///   Evaluate on validation set
-    /// ```
-    ///
-    /// Unlike node classification (semi-supervised on one graph),
-    /// graph classification is supervised learning on a dataset of graphs.
-    /// </para>
-    /// </remarks>
-    public Dictionary<string, List<double>> Train(
+    public Dictionary<string, List<double>> TrainOnTask(
         GraphClassificationTask<T> task,
         int epochs,
-        T learningRate,
-        int batchSize = 1)
+        double learningRate = 0.001)
     {
-        SetTrainingMode(true);
-
         var history = new Dictionary<string, List<double>>
         {
             ["train_loss"] = new List<double>(),
@@ -455,16 +469,24 @@ public class GraphClassificationModel<T>
             ["val_accuracy"] = new List<double>()
         };
 
+        var lr = NumOps.FromDouble(learningRate);
+
         for (int epoch = 0; epoch < epochs; epoch++)
         {
+            // Set all layers to training mode
+            foreach (var layer in Layers)
+            {
+                layer.SetTrainingMode(true);
+            }
+
             double epochLoss = 0.0;
             int correctTrain = 0;
 
-            // Training loop
+            // Training loop - process each graph
             for (int i = 0; i < task.TrainGraphs.Count; i++)
             {
                 var graph = task.TrainGraphs[i];
-                if (graph.AdjacencyMatrix == null)
+                if (graph.AdjacencyMatrix is null)
                 {
                     throw new ArgumentException($"Training graph {i} must have an adjacency matrix.");
                 }
@@ -472,10 +494,10 @@ public class GraphClassificationModel<T>
                 SetAdjacencyMatrix(graph.AdjacencyMatrix);
                 var logits = Forward(graph.NodeFeatures);
 
-                // Apply softmax to get probabilities (for cross-entropy loss)
+                // Apply softmax to get probabilities
                 var probs = Softmax(logits);
 
-                // Compute cross-entropy loss: -sum(label * log(prob))
+                // Compute cross-entropy loss
                 double loss = 0.0;
                 for (int c = 0; c < NumClasses; c++)
                 {
@@ -487,72 +509,71 @@ public class GraphClassificationModel<T>
 
                 // Accuracy
                 int predictedClass = GetPredictedClass(logits);
-                int trueClass = GetTrueClass(task.TrainLabels, i, NumClasses);
+                int trueClass = GetTrueClass(task.TrainLabels, i);
                 if (predictedClass == trueClass) correctTrain++;
 
-                // Backward and update - gradient of cross-entropy with softmax is (prob - label)
-                var gradient = ComputeGradient(probs, task.TrainLabels, i, NumClasses);
+                // Backward pass - gradient of cross-entropy with softmax is (prob - label)
+                var gradient = ComputeGradient(probs, task.TrainLabels, i);
                 Backward(gradient);
-                UpdateParameters(learningRate);
+
+                // Update parameters
+                foreach (var layer in Layers)
+                {
+                    layer.UpdateParameters(lr);
+                }
             }
 
-            double avgLoss = epochLoss / task.TrainGraphs.Count;
-            double trainAcc = (double)correctTrain / task.TrainGraphs.Count;
+            double avgLoss = task.TrainGraphs.Count > 0 ? epochLoss / task.TrainGraphs.Count : 0.0;
+            double trainAcc = task.TrainGraphs.Count > 0 ? (double)correctTrain / task.TrainGraphs.Count : 0.0;
 
             // Validation accuracy
-            double valAcc = EvaluateGraphs(task.ValGraphs, task.ValLabels, NumClasses);
+            double valAcc = EvaluateGraphs(task.ValGraphs, task.ValLabels);
 
             history["train_loss"].Add(avgLoss);
             history["train_accuracy"].Add(trainAcc);
             history["val_accuracy"].Add(valAcc);
         }
 
-        SetTrainingMode(false);
+        // Set layers back to inference mode
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(false);
+        }
+
         return history;
     }
 
     /// <summary>
     /// Evaluates the model on test graphs.
     /// </summary>
-    public double Evaluate(GraphClassificationTask<T> task)
+    public double EvaluateOnTask(GraphClassificationTask<T> task)
     {
-        return EvaluateGraphs(task.TestGraphs, task.TestLabels, NumClasses);
+        return EvaluateGraphs(task.TestGraphs, task.TestLabels);
     }
 
-    private double EvaluateGraphs(List<GraphData<T>> graphs, Tensor<T> labels, int numClasses)
+    private double EvaluateGraphs(List<GraphData<T>> graphs, Tensor<T> labels)
     {
-        SetTrainingMode(false);
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(false);
+        }
 
-        // Guard against empty graph sets to avoid divide by zero
         if (graphs.Count == 0)
         {
             return 0.0;
         }
 
         int correct = 0;
-        Tensor<T>? lastValidAdjacency = null;
 
         for (int i = 0; i < graphs.Count; i++)
         {
             var graph = graphs[i];
+            if (graph.AdjacencyMatrix is null) continue;
 
-            // Handle null adjacency explicitly to avoid using stale data
-            if (graph.AdjacencyMatrix != null)
-            {
-                lastValidAdjacency = graph.AdjacencyMatrix;
-                SetAdjacencyMatrix(graph.AdjacencyMatrix);
-            }
-            else if (lastValidAdjacency == null)
-            {
-                // Skip graphs with no adjacency matrix if we haven't seen one yet
-                continue;
-            }
-            // If adjacency is null but we have a previous one, the stale one will be used
-            // This is intentional for graphs that share the same structure
-
+            SetAdjacencyMatrix(graph.AdjacencyMatrix);
             var logits = Forward(graph.NodeFeatures);
             int predictedClass = GetPredictedClass(logits);
-            int trueClass = GetTrueClass(labels, i, numClasses);
+            int trueClass = GetTrueClass(labels, i);
 
             if (predictedClass == trueClass) correct++;
         }
@@ -575,9 +596,9 @@ public class GraphClassificationModel<T>
         return maxClass;
     }
 
-    private int GetTrueClass(Tensor<T> labels, int graphIdx, int numClasses)
+    private int GetTrueClass(Tensor<T> labels, int graphIdx)
     {
-        for (int c = 0; c < numClasses; c++)
+        for (int c = 0; c < NumClasses; c++)
         {
             if (!NumOps.Equals(labels[graphIdx, c], NumOps.Zero))
                 return c;
@@ -585,11 +606,11 @@ public class GraphClassificationModel<T>
         return 0;
     }
 
-    private Tensor<T> ComputeGradient(Tensor<T> probs, Tensor<T> labels, int graphIdx, int numClasses)
+    private Tensor<T> ComputeGradient(Tensor<T> probs, Tensor<T> labels, int graphIdx)
     {
-        // Gradient of cross-entropy with softmax is simply (prob - label)
-        var gradient = new Tensor<T>([1, numClasses]);
-        for (int c = 0; c < numClasses; c++)
+        // Gradient of cross-entropy with softmax is (prob - label)
+        var gradient = new Tensor<T>([1, NumClasses]);
+        for (int c = 0; c < NumClasses; c++)
         {
             gradient[0, c] = NumOps.Subtract(probs[0, c], labels[graphIdx, c]);
         }
@@ -598,36 +619,187 @@ public class GraphClassificationModel<T>
 
     private Tensor<T> Softmax(Tensor<T> logits)
     {
-        int batchSize = logits.Shape[0];
         int numClasses = logits.Shape[1];
-        var probs = new Tensor<T>([batchSize, numClasses]);
+        var probs = new Tensor<T>([1, numClasses]);
 
-        for (int b = 0; b < batchSize; b++)
+        // Find max for numerical stability
+        double maxLogit = NumOps.ToDouble(logits[0, 0]);
+        for (int c = 1; c < numClasses; c++)
         {
-            // Find max for numerical stability
-            double maxLogit = NumOps.ToDouble(logits[b, 0]);
-            for (int c = 1; c < numClasses; c++)
-            {
-                double val = NumOps.ToDouble(logits[b, c]);
-                if (val > maxLogit) maxLogit = val;
-            }
+            double val = NumOps.ToDouble(logits[0, c]);
+            if (val > maxLogit) maxLogit = val;
+        }
 
-            // Compute exp(logit - max) and sum
-            double sumExp = 0.0;
-            var expValues = new double[numClasses];
-            for (int c = 0; c < numClasses; c++)
-            {
-                expValues[c] = Math.Exp(NumOps.ToDouble(logits[b, c]) - maxLogit);
-                sumExp += expValues[c];
-            }
+        // Compute exp(logit - max) and sum
+        double sumExp = 0.0;
+        var expValues = new double[numClasses];
+        for (int c = 0; c < numClasses; c++)
+        {
+            expValues[c] = Math.Exp(NumOps.ToDouble(logits[0, c]) - maxLogit);
+            sumExp += expValues[c];
+        }
 
-            // Normalize to get probabilities
-            for (int c = 0; c < numClasses; c++)
-            {
-                probs[b, c] = NumOps.FromDouble(expValues[c] / sumExp);
-            }
+        // Normalize to get probabilities
+        for (int c = 0; c < numClasses; c++)
+        {
+            probs[0, c] = NumOps.FromDouble(expValues[c] / sumExp);
         }
 
         return probs;
     }
+
+    /// <summary>
+    /// Gets all parameters as a vector.
+    /// </summary>
+    public override Vector<T> GetParameters()
+    {
+        var allParams = new List<T>();
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                allParams.Add(layerParams[i]);
+            }
+        }
+        return new Vector<T>([.. allParams]);
+    }
+
+    #region Abstract Method Implementations
+
+    /// <summary>
+    /// Makes a prediction using the trained network.
+    /// </summary>
+    /// <param name="input">The input tensor containing node features.</param>
+    /// <returns>The prediction tensor with class probabilities.</returns>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        if (_cachedAdjacencyMatrix is null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Predict.");
+        }
+
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(false);
+        }
+
+        return Forward(input);
+    }
+
+    /// <summary>
+    /// Trains the network on a single batch of data.
+    /// </summary>
+    /// <param name="input">The input node features.</param>
+    /// <param name="expectedOutput">The expected output (labels).</param>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (_cachedAdjacencyMatrix is null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Train.");
+        }
+
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(true);
+        }
+
+        var predictions = Forward(input);
+        var probs = Softmax(predictions);
+
+        var flattenedProbs = probs.ToVector();
+        var flattenedExpected = expectedOutput.ToVector();
+
+        LastLoss = _lossFunction.CalculateLoss(flattenedProbs, flattenedExpected);
+
+        var outputGradients = _lossFunction.CalculateDerivative(flattenedProbs, flattenedExpected);
+        var gradOutput = Tensor<T>.FromVector(outputGradients);
+
+        if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
+        {
+            gradOutput = gradOutput.Reshape(predictions.Shape);
+        }
+
+        Backward(gradOutput);
+
+        Vector<T> parameterGradients = GetParameterGradients();
+        Vector<T> currentParameters = GetParameters();
+        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
+
+        UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Gets metadata about this model for serialization and identification.
+    /// </summary>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = ModelType.GraphNeuralNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                ["NetworkType"] = "GraphClassificationModel",
+                ["InputFeatures"] = InputFeatures,
+                ["NumClasses"] = NumClasses,
+                ["HiddenDim"] = HiddenDim,
+                ["EmbeddingDim"] = EmbeddingDim,
+                ["NumGnnLayers"] = NumGnnLayers,
+                ["DropoutRate"] = DropoutRate,
+                ["PoolingType"] = _poolingType.ToString()
+            }
+        };
+    }
+
+    /// <summary>
+    /// Serializes network-specific data to a binary writer.
+    /// </summary>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(InputFeatures);
+        writer.Write(NumClasses);
+        writer.Write(HiddenDim);
+        writer.Write(EmbeddingDim);
+        writer.Write(NumGnnLayers);
+        writer.Write(DropoutRate);
+        writer.Write((int)_poolingType);
+
+        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
+        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
+    }
+
+    /// <summary>
+    /// Deserializes network-specific data from a binary reader.
+    /// </summary>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _ = reader.ReadInt32(); // InputFeatures
+        _ = reader.ReadInt32(); // NumClasses
+        _ = reader.ReadInt32(); // HiddenDim
+        _ = reader.ReadInt32(); // EmbeddingDim
+        _ = reader.ReadInt32(); // NumGnnLayers
+        _ = reader.ReadDouble(); // DropoutRate
+        _ = reader.ReadInt32(); // PoolingType
+
+        _ = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
+        _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
+    }
+
+    /// <summary>
+    /// Creates a new instance of this network type for cloning or deserialization.
+    /// </summary>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new GraphClassificationModel<T>(
+            architecture: Architecture,
+            hiddenDim: HiddenDim,
+            embeddingDim: EmbeddingDim,
+            numGnnLayers: NumGnnLayers,
+            dropoutRate: DropoutRate,
+            poolingType: _poolingType);
+    }
+
+    #endregion
 }

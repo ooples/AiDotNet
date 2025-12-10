@@ -2,7 +2,7 @@ using AiDotNet.Data.Structures;
 using AiDotNet.Data.Graph;
 using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.NeuralNetworks.Tasks.Graph;
+namespace AiDotNet.Validation;
 
 /// <summary>
 /// Validates GNN implementations against expected benchmarks and behaviors.

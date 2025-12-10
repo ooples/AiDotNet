@@ -1,14 +1,15 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Data.Structures;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 
 /// <summary>
-/// Implements a complete model for link prediction tasks on graphs.
+/// Implements a complete neural network model for link prediction tasks on graphs.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
@@ -34,9 +35,9 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 ///    Input: Node pair (i, j)
 ///    Compute: score = f(embedding[i], embedding[j])
 ///    Common functions:
-///    - Dot product: z_i · z_j
+///    - Dot product: z_i * z_j
 ///    - Concatenation + MLP: MLP([z_i || z_j])
-///    - Distance-based: -||z_i - z_j||²
+///    - Distance-based: -||z_i - z_j||^2
 ///    ```
 ///
 /// 3. **Train**: Learn to score existing edges high, non-existing edges low
@@ -47,114 +48,204 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// - Encode users as embeddings using friend network
 /// - For user pair (Alice, Bob):
 ///   * Compute score from their embeddings
-///   * High score → Likely to be friends
-///   * Low score → Unlikely to be friends
+///   * High score -> Likely to be friends
+///   * Low score -> Unlikely to be friends
 /// ```
 /// </para>
 /// </remarks>
-public class LinkPredictionModel<T>
+public class LinkPredictionModel<T> : NeuralNetworkBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    private readonly List<ILayer<T>> _encoderLayers;
-    private readonly LinkPredictionDecoder _decoder;
-    private Tensor<T>? _adjacencyMatrix;
-    private Tensor<T>? _nodeEmbeddings; // Cached after forward pass
-    private bool _isTrainingMode;
+    private readonly ILossFunction<T> _lossFunction;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly LinkPredictionDecoder _decoderType;
+    private Tensor<T>? _cachedAdjacencyMatrix;
+    private Tensor<T>? _nodeEmbeddings;
 
     /// <summary>
     /// Decoder types for combining node embeddings into edge scores.
     /// </summary>
     public enum LinkPredictionDecoder
     {
-        /// <summary>Dot product: score = z_i · z_j</summary>
+        /// <summary>Dot product: score = z_i * z_j</summary>
         DotProduct,
 
-        /// <summary>Cosine similarity: score = (z_i · z_j) / (||z_i|| ||z_j||)</summary>
+        /// <summary>Cosine similarity: score = (z_i * z_j) / (||z_i|| ||z_j||)</summary>
         CosineSimilarity,
 
-        /// <summary>Element-wise product: score = sum(z_i ⊙ z_j)</summary>
+        /// <summary>Element-wise product: score = sum(z_i * z_j)</summary>
         Hadamard,
 
-        /// <summary>L2 distance: score = -||z_i - z_j||²</summary>
+        /// <summary>L2 distance: score = -||z_i - z_j||^2</summary>
         Distance
     }
 
     /// <summary>
+    /// Gets the number of input features per node.
+    /// </summary>
+    public int InputFeatures { get; }
+
+    /// <summary>
     /// Gets the embedding dimension.
     /// </summary>
-    public int EmbeddingDim { get; private set; }
+    public int EmbeddingDim { get; }
+
+    /// <summary>
+    /// Gets the hidden dimension size.
+    /// </summary>
+    public int HiddenDim { get; }
+
+    /// <summary>
+    /// Gets the number of GNN layers.
+    /// </summary>
+    public int NumLayers { get; }
+
+    /// <summary>
+    /// Gets the dropout rate for regularization.
+    /// </summary>
+    public double DropoutRate { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LinkPredictionModel{T}"/> class.
     /// </summary>
-    /// <param name="encoderLayers">GNN layers that encode nodes into embeddings.</param>
-    /// <param name="embeddingDim">Dimension of node embeddings.</param>
-    /// <param name="decoder">Method for combining node embeddings into edge scores.</param>
+    /// <param name="architecture">The neural network architecture defining input/output sizes and layers.</param>
+    /// <param name="hiddenDim">Hidden dimension for intermediate layers (default: 64).</param>
+    /// <param name="embeddingDim">Dimension of node embeddings (default: 32).</param>
+    /// <param name="numLayers">Number of graph convolutional layers (default: 2).</param>
+    /// <param name="dropoutRate">Dropout rate for regularization (default: 0.5).</param>
+    /// <param name="decoderType">Method for combining node embeddings into edge scores.</param>
+    /// <param name="optimizer">Optional optimizer for training.</param>
+    /// <param name="lossFunction">Optional loss function for training.</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default: 1.0).</param>
     /// <remarks>
-    /// <para>
-    /// Typical encoder configuration:
-    /// 1. Graph convolutional layer (GCN, GAT, GraphSAGE)
-    /// 2. Activation (ReLU)
-    /// 3. Dropout
-    /// 4. Additional graph conv layers
-    /// 5. Final layer outputs embeddings of dimension embeddingDim
-    /// </para>
-    /// <para><b>For Beginners:</b> Choosing a decoder:
+    /// <para><b>For Beginners:</b> Creating a link prediction model:
     ///
-    /// - **Dot Product**: Simple, fast, assumes similarity in embedding space
-    ///   * Good for: Large graphs, initial experiments
-    ///   * Limitation: Can't capture complex relationships
+    /// ```csharp
+    /// // Create architecture for friend prediction
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+    ///     InputType.OneDimensional,
+    ///     NeuralNetworkTaskType.BinaryClassification,
+    ///     NetworkComplexity.Simple,
+    ///     inputSize: 128,    // User features
+    ///     outputSize: 1);    // Edge score
     ///
-    /// - **Cosine Similarity**: Normalized dot product
-    ///   * Good for: When embedding magnitudes vary
-    ///   * Handles: Different node degrees better
+    /// // Create model with default layers
+    /// var model = new LinkPredictionModel&lt;double&gt;(architecture);
     ///
-    /// - **Hadamard**: Element-wise multiplication
-    ///   * Good for: Capturing feature interactions
-    ///   * More expressive than dot product
-    ///
-    /// - **Distance**: Negative squared L2 distance
-    ///   * Good for: Embedding space as metric space
-    ///   * Similar nodes close, dissimilar far apart
+    /// // Train on link prediction task
+    /// var history = model.TrainOnTask(task, epochs: 100, learningRate: 0.01);
+    /// ```
     /// </para>
     /// </remarks>
     public LinkPredictionModel(
-        List<ILayer<T>> encoderLayers,
-        int embeddingDim,
-        LinkPredictionDecoder decoder = LinkPredictionDecoder.DotProduct)
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenDim = 64,
+        int embeddingDim = 32,
+        int numLayers = 2,
+        double dropoutRate = 0.5,
+        LinkPredictionDecoder decoderType = LinkPredictionDecoder.DotProduct,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 1.0)
+        : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), maxGradNorm)
     {
-        _encoderLayers = encoderLayers ?? throw new ArgumentNullException(nameof(encoderLayers));
+        InputFeatures = architecture.InputSize;
         EmbeddingDim = embeddingDim;
-        _decoder = decoder;
+        HiddenDim = hiddenDim;
+        NumLayers = numLayers;
+        DropoutRate = dropoutRate;
+        _decoderType = decoderType;
+
+        _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        InitializeLayers();
     }
 
     /// <summary>
-    /// Sets the adjacency matrix for all graph layers in the encoder.
+    /// Initializes the layers of the neural network based on the provided architecture.
+    /// </summary>
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
+        }
+        else
+        {
+            // Create default link prediction encoder layers
+            Layers.AddRange(CreateDefaultLinkPredictionLayers());
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for link prediction encoder.
+    /// </summary>
+    private List<ILayer<T>> CreateDefaultLinkPredictionLayers()
+    {
+        var layers = new List<ILayer<T>>();
+        var reluActivation = new ReLUActivation<T>();
+
+        // First GCN layer: input_features -> hidden_dim
+        layers.Add(new GraphConvolutionalLayer<T>(InputFeatures, HiddenDim, (IActivationFunction<T>?)null));
+        layers.Add(new ActivationLayer<T>([HiddenDim], (IActivationFunction<T>)reluActivation));
+        if (DropoutRate > 0)
+        {
+            layers.Add(new DropoutLayer<T>(DropoutRate));
+        }
+
+        // Additional intermediate layers
+        for (int i = 1; i < NumLayers - 1; i++)
+        {
+            layers.Add(new GraphConvolutionalLayer<T>(HiddenDim, HiddenDim, (IActivationFunction<T>?)null));
+            layers.Add(new ActivationLayer<T>([HiddenDim], (IActivationFunction<T>)reluActivation));
+            if (DropoutRate > 0)
+            {
+                layers.Add(new DropoutLayer<T>(DropoutRate));
+            }
+        }
+
+        // Final layer: hidden_dim -> embedding_dim
+        layers.Add(new GraphConvolutionalLayer<T>(HiddenDim, EmbeddingDim, (IActivationFunction<T>?)null));
+
+        return layers;
+    }
+
+    /// <summary>
+    /// Sets the adjacency matrix for all graph layers in the model.
     /// </summary>
     /// <param name="adjacencyMatrix">The graph adjacency matrix.</param>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
-        _adjacencyMatrix = adjacencyMatrix;
+        _cachedAdjacencyMatrix = adjacencyMatrix;
 
-        foreach (var layer in _encoderLayers.OfType<IGraphConvolutionLayer<T>>())
+        foreach (var layer in Layers)
         {
-            layer.SetAdjacencyMatrix(adjacencyMatrix);
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+            {
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+            }
         }
     }
 
-    /// <inheritdoc/>
-    public Tensor<T> Forward(Tensor<T> input)
+    /// <summary>
+    /// Performs a forward pass through the encoder network.
+    /// </summary>
+    /// <param name="nodeFeatures">Node feature tensor [num_nodes, input_features].</param>
+    /// <returns>Node embeddings [num_nodes, embedding_dim].</returns>
+    public Tensor<T> Forward(Tensor<T> nodeFeatures)
     {
-        if (_adjacencyMatrix == null)
+        if (_cachedAdjacencyMatrix is null)
         {
             throw new InvalidOperationException(
                 "Adjacency matrix must be set before forward pass. Call SetAdjacencyMatrix() first.");
         }
 
         // Encode: Pass through GNN layers to get node embeddings
-        var current = input;
-        foreach (var layer in _encoderLayers)
+        var current = nodeFeatures;
+        foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
@@ -166,93 +257,40 @@ public class LinkPredictionModel<T>
     /// <summary>
     /// Computes edge scores for given node pairs.
     /// </summary>
-    /// <param name="edges">Edge tensor of shape [num_edges, 2] where each row is [source, target],
-    /// or [batch_size, num_edges, 2] for batched operation.</param>
-    /// <returns>Edge scores of shape [num_edges] or [batch_size, num_edges].</returns>
-    /// <remarks>
-    /// <para>
-    /// After encoding nodes into embeddings with Forward(), this method scores specific edges.
-    /// Higher scores indicate higher likelihood of edge existence.
-    /// </para>
-    /// <para><b>For Beginners:</b> Edge scoring process:
-    ///
-    /// ```
-    /// For edge (node_i, node_j):
-    /// 1. Get embeddings: z_i = nodeEmbeddings[i], z_j = nodeEmbeddings[j]
-    /// 2. Compute score using decoder:
-    ///    - Dot product: z_i · z_j
-    ///    - Cosine: (z_i · z_j) / (||z_i|| ||z_j||)
-    ///    - Hadamard: sum(z_i ⊙ z_j)
-    ///    - Distance: -||z_i - z_j||²
-    /// 3. Return score
-    /// ```
-    ///
-    /// During training:
-    /// - Positive edges (exist): Want high scores
-    /// - Negative edges (don't exist): Want low scores
-    /// - Use binary cross-entropy loss
-    /// </para>
-    /// </remarks>
+    /// <param name="edges">Edge tensor of shape [num_edges, 2] where each row is [source, target].</param>
+    /// <returns>Edge scores of shape [num_edges].</returns>
     public Tensor<T> PredictEdges(Tensor<T> edges)
     {
-        if (_nodeEmbeddings == null)
+        if (_nodeEmbeddings is null)
         {
             throw new InvalidOperationException(
                 "Must call Forward() to compute node embeddings before predicting edges.");
         }
 
-        // Handle both [num_edges, 2] and [batch_size, num_edges, 2] formats
-        if (edges.Shape.Length == 2)
+        int numEdges = edges.Shape[0];
+        var scores = new Tensor<T>([numEdges]);
+
+        for (int e = 0; e < numEdges; e++)
         {
-            // Shape [num_edges, 2] - non-batched
-            int numEdges = edges.Shape[0];
-            var scores = new Tensor<T>([numEdges]);
-
-            for (int e = 0; e < numEdges; e++)
-            {
-                int sourceIdx = Convert.ToInt32(NumOps.ToDouble(edges[e, 0]));
-                int targetIdx = Convert.ToInt32(NumOps.ToDouble(edges[e, 1]));
-                scores[e] = ComputeEdgeScore(sourceIdx, targetIdx);
-            }
-
-            return scores;
+            int sourceIdx = Convert.ToInt32(NumOps.ToDouble(edges[e, 0]));
+            int targetIdx = Convert.ToInt32(NumOps.ToDouble(edges[e, 1]));
+            scores[e] = ComputeEdgeScore(sourceIdx, targetIdx);
         }
-        else
-        {
-            // Shape [batch_size, num_edges, 2] - batched
-            int batchSize = edges.Shape[0];
-            int numEdges = edges.Shape[1];
-            var scores = new Tensor<T>([batchSize, numEdges]);
 
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int e = 0; e < numEdges; e++)
-                {
-                    int sourceIdx = Convert.ToInt32(NumOps.ToDouble(edges[b, e, 0]));
-                    int targetIdx = Convert.ToInt32(NumOps.ToDouble(edges[b, e, 1]));
-                    scores[b, e] = ComputeEdgeScore(sourceIdx, targetIdx);
-                }
-            }
-
-            return scores;
-        }
+        return scores;
     }
 
-    /// <summary>
-    /// Computes the score for a single edge between two nodes.
-    /// </summary>
     private T ComputeEdgeScore(int sourceIdx, int targetIdx)
     {
-        if (_nodeEmbeddings == null)
+        if (_nodeEmbeddings is null)
         {
             throw new InvalidOperationException("Node embeddings not computed.");
         }
 
-        // Get embeddings for source and target nodes
         var sourceEmb = GetNodeEmbedding(sourceIdx);
         var targetEmb = GetNodeEmbedding(targetIdx);
 
-        return _decoder switch
+        return _decoderType switch
         {
             LinkPredictionDecoder.DotProduct => DotProduct(sourceEmb, targetEmb),
             LinkPredictionDecoder.CosineSimilarity => CosineSimilarity(sourceEmb, targetEmb),
@@ -264,15 +302,12 @@ public class LinkPredictionModel<T>
 
     private Vector<T> GetNodeEmbedding(int nodeIdx)
     {
-        if (_nodeEmbeddings == null) throw new InvalidOperationException("Embeddings not computed.");
+        if (_nodeEmbeddings is null) throw new InvalidOperationException("Embeddings not computed.");
 
         var embedding = new Vector<T>(EmbeddingDim);
         for (int i = 0; i < EmbeddingDim; i++)
         {
-            // Handle both 2D and 3D embedding tensors
-            embedding[i] = _nodeEmbeddings.Shape.Length == 3
-                ? _nodeEmbeddings[0, nodeIdx, i]
-                : _nodeEmbeddings[nodeIdx, i];
+            embedding[i] = _nodeEmbeddings[nodeIdx, i];
         }
         return embedding;
     }
@@ -330,33 +365,37 @@ public class LinkPredictionModel<T>
         return NumOps.Sqrt(sumSquares);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Performs a backward pass through the network.
+    /// </summary>
+    /// <param name="outputGradient">Gradient of loss with respect to output.</param>
+    /// <returns>Gradient with respect to input.</returns>
     public Tensor<T> Backward(Tensor<T> outputGradient)
     {
         var currentGradient = outputGradient;
-        for (int i = _encoderLayers.Count - 1; i >= 0; i--)
+        for (int i = Layers.Count - 1; i >= 0; i--)
         {
-            currentGradient = _encoderLayers[i].Backward(currentGradient);
+            currentGradient = Layers[i].Backward(currentGradient);
         }
         return currentGradient;
     }
 
-    /// <inheritdoc/>
-    public void UpdateParameters(T learningRate)
+    /// <summary>
+    /// Updates the parameters of all layers in the network.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters for the network.</param>
+    public override void UpdateParameters(Vector<T> parameters)
     {
-        foreach (var layer in _encoderLayers)
+        int index = 0;
+        foreach (var layer in Layers)
         {
-            layer.UpdateParameters(learningRate);
-        }
-    }
-
-    /// <inheritdoc/>
-    public void SetTrainingMode(bool isTraining)
-    {
-        _isTrainingMode = isTraining;
-        foreach (var layer in _encoderLayers)
-        {
-            layer.SetTrainingMode(isTraining);
+            int layerParamCount = layer.ParameterCount;
+            if (layerParamCount > 0)
+            {
+                var layerParams = parameters.SubVector(index, layerParamCount);
+                layer.SetParameters(layerParams);
+                index += layerParamCount;
+            }
         }
     }
 
@@ -367,45 +406,17 @@ public class LinkPredictionModel<T>
     /// <param name="epochs">Number of training epochs.</param>
     /// <param name="learningRate">Learning rate for optimization.</param>
     /// <returns>Training history with loss and metrics per epoch.</returns>
-    /// <remarks>
-    /// <para>
-    /// Training uses binary cross-entropy loss:
-    /// - Positive edges (exist): Target = 1
-    /// - Negative edges (don't exist): Target = 0
-    ///
-    /// The model learns to assign high scores to positive edges and low scores to negative edges.
-    /// </para>
-    /// <para><b>For Beginners:</b> Link prediction training:
-    ///
-    /// **Each training step:**
-    /// 1. Encode all nodes using current graph structure
-    /// 2. Score positive and negative edge examples
-    /// 3. Compute loss: BCE(positive_scores, 1) + BCE(negative_scores, 0)
-    /// 4. Backpropagate gradients
-    /// 5. Update encoder parameters
-    ///
-    /// **Evaluation metrics:**
-    /// - **AUC** (Area Under ROC Curve): Ranking quality
-    ///   * 1.0 = Perfect ranking (all positives scored higher than negatives)
-    ///   * 0.5 = Random guessing
-    ///
-    /// - **Accuracy**: Classification with threshold 0.5
-    ///   * score > 0.5 → Predict edge exists
-    ///   * score ≤ 0.5 → Predict edge doesn't exist
-    /// </para>
-    /// </remarks>
-    public Dictionary<string, List<double>> Train(
+    public Dictionary<string, List<double>> TrainOnTask(
         LinkPredictionTask<T> task,
         int epochs,
-        T learningRate)
+        double learningRate = 0.01)
     {
-        if (task.Graph.AdjacencyMatrix == null)
+        if (task.Graph.AdjacencyMatrix is null)
         {
             throw new ArgumentException("Task graph must have an adjacency matrix.");
         }
 
         SetAdjacencyMatrix(task.Graph.AdjacencyMatrix);
-        SetTrainingMode(true);
 
         var history = new Dictionary<string, List<double>>
         {
@@ -413,8 +424,16 @@ public class LinkPredictionModel<T>
             ["val_auc"] = new List<double>()
         };
 
+        var lr = NumOps.FromDouble(learningRate);
+
         for (int epoch = 0; epoch < epochs; epoch++)
         {
+            // Set all layers to training mode
+            foreach (var layer in Layers)
+            {
+                layer.SetTrainingMode(true);
+            }
+
             // Encode nodes
             Forward(task.Graph.NodeFeatures);
 
@@ -435,90 +454,84 @@ public class LinkPredictionModel<T>
                 history["val_auc"].Add(auc);
             }
 
-            // Compute actual BCE gradients and backprop through encoder
+            // Compute gradients and backpropagate
             var gradient = ComputeBCEGradients(posScores, negScores, task.TrainPosEdges, task.TrainNegEdges);
             Backward(gradient);
-            UpdateParameters(learningRate);
+
+            // Update parameters
+            foreach (var layer in Layers)
+            {
+                layer.UpdateParameters(lr);
+            }
         }
 
-        SetTrainingMode(false);
+        // Set layers back to inference mode
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(false);
+        }
+
         return history;
     }
 
     /// <summary>
-    /// Computes BCE loss gradients and accumulates them to node embeddings.
-    /// For dot product decoder: d(score)/d(z_i) = z_j and d(score)/d(z_j) = z_i
-    /// BCE gradient w.r.t. score: sigmoid(score) - target
+    /// Evaluates the model on test edges.
     /// </summary>
+    public double EvaluateOnTask(LinkPredictionTask<T> task)
+    {
+        if (task.Graph.AdjacencyMatrix is not null)
+        {
+            SetAdjacencyMatrix(task.Graph.AdjacencyMatrix);
+        }
+
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(false);
+        }
+
+        Forward(task.Graph.NodeFeatures);
+
+        var testPosScores = PredictEdges(task.TestPosEdges);
+        var testNegScores = PredictEdges(task.TestNegEdges);
+
+        return ComputeAUC(testPosScores, testNegScores);
+    }
+
     private Tensor<T> ComputeBCEGradients(
         Tensor<T> posScores,
         Tensor<T> negScores,
         Tensor<T> posEdges,
         Tensor<T> negEdges)
     {
-        if (_nodeEmbeddings == null)
+        if (_nodeEmbeddings is null)
         {
             throw new InvalidOperationException("Node embeddings not computed.");
         }
 
         var gradient = new Tensor<T>(_nodeEmbeddings.Shape);
-        bool is2D = posEdges.Shape.Length == 2;
+        int numPos = posEdges.Shape[0];
+        int numNeg = negEdges.Shape[0];
 
         // Process positive edges (target = 1, grad = sigmoid(score) - 1)
-        if (is2D)
+        for (int e = 0; e < numPos; e++)
         {
-            int numPos = posEdges.Shape[0];
-            for (int e = 0; e < numPos; e++)
-            {
-                int srcIdx = Convert.ToInt32(NumOps.ToDouble(posEdges[e, 0]));
-                int tgtIdx = Convert.ToInt32(NumOps.ToDouble(posEdges[e, 1]));
-                double score = NumOps.ToDouble(posScores[e]);
-                double sigmoidGrad = 1.0 / (1.0 + Math.Exp(-score)) - 1.0; // sigmoid(s) - 1
+            int srcIdx = Convert.ToInt32(NumOps.ToDouble(posEdges[e, 0]));
+            int tgtIdx = Convert.ToInt32(NumOps.ToDouble(posEdges[e, 1]));
+            double score = NumOps.ToDouble(posScores[e]);
+            double sigmoidGrad = 1.0 / (1.0 + Math.Exp(-score)) - 1.0;
 
-                AccumulateGradients(gradient, srcIdx, tgtIdx, sigmoidGrad);
-            }
-
-            // Process negative edges (target = 0, grad = sigmoid(score))
-            int numNeg = negEdges.Shape[0];
-            for (int e = 0; e < numNeg; e++)
-            {
-                int srcIdx = Convert.ToInt32(NumOps.ToDouble(negEdges[e, 0]));
-                int tgtIdx = Convert.ToInt32(NumOps.ToDouble(negEdges[e, 1]));
-                double score = NumOps.ToDouble(negScores[e]);
-                double sigmoidGrad = 1.0 / (1.0 + Math.Exp(-score)); // sigmoid(s) - 0
-
-                AccumulateGradients(gradient, srcIdx, tgtIdx, sigmoidGrad);
-            }
+            AccumulateGradients(gradient, srcIdx, tgtIdx, sigmoidGrad);
         }
-        else
+
+        // Process negative edges (target = 0, grad = sigmoid(score))
+        for (int e = 0; e < numNeg; e++)
         {
-            // Batched case
-            int batchSize = posEdges.Shape[0];
-            int numPos = posEdges.Shape[1];
-            int numNeg = negEdges.Shape[1];
+            int srcIdx = Convert.ToInt32(NumOps.ToDouble(negEdges[e, 0]));
+            int tgtIdx = Convert.ToInt32(NumOps.ToDouble(negEdges[e, 1]));
+            double score = NumOps.ToDouble(negScores[e]);
+            double sigmoidGrad = 1.0 / (1.0 + Math.Exp(-score));
 
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int e = 0; e < numPos; e++)
-                {
-                    int srcIdx = Convert.ToInt32(NumOps.ToDouble(posEdges[b, e, 0]));
-                    int tgtIdx = Convert.ToInt32(NumOps.ToDouble(posEdges[b, e, 1]));
-                    double score = NumOps.ToDouble(posScores[b, e]);
-                    double sigmoidGrad = 1.0 / (1.0 + Math.Exp(-score)) - 1.0;
-
-                    AccumulateGradientsBatched(gradient, b, srcIdx, tgtIdx, sigmoidGrad);
-                }
-
-                for (int e = 0; e < numNeg; e++)
-                {
-                    int srcIdx = Convert.ToInt32(NumOps.ToDouble(negEdges[b, e, 0]));
-                    int tgtIdx = Convert.ToInt32(NumOps.ToDouble(negEdges[b, e, 1]));
-                    double score = NumOps.ToDouble(negScores[b, e]);
-                    double sigmoidGrad = 1.0 / (1.0 + Math.Exp(-score));
-
-                    AccumulateGradientsBatched(gradient, b, srcIdx, tgtIdx, sigmoidGrad);
-                }
-            }
+            AccumulateGradients(gradient, srcIdx, tgtIdx, sigmoidGrad);
         }
 
         return gradient;
@@ -526,33 +539,6 @@ public class LinkPredictionModel<T>
 
     private void AccumulateGradients(Tensor<T> gradient, int srcIdx, int tgtIdx, double lossGrad)
     {
-        // For dot product: d(z_i·z_j)/d(z_i) = z_j, d(z_i·z_j)/d(z_j) = z_i
-        // Full grad = lossGrad * decoder_grad
-        var srcEmb = GetNodeEmbedding(srcIdx);
-        var tgtEmb = GetNodeEmbedding(tgtIdx);
-
-        bool is3D = gradient.Shape.Length == 3;
-
-        for (int d = 0; d < EmbeddingDim; d++)
-        {
-            T srcGrad = NumOps.FromDouble(lossGrad * NumOps.ToDouble(tgtEmb[d]));
-            T tgtGrad = NumOps.FromDouble(lossGrad * NumOps.ToDouble(srcEmb[d]));
-
-            if (is3D)
-            {
-                gradient[0, srcIdx, d] = NumOps.Add(gradient[0, srcIdx, d], srcGrad);
-                gradient[0, tgtIdx, d] = NumOps.Add(gradient[0, tgtIdx, d], tgtGrad);
-            }
-            else
-            {
-                gradient[srcIdx, d] = NumOps.Add(gradient[srcIdx, d], srcGrad);
-                gradient[tgtIdx, d] = NumOps.Add(gradient[tgtIdx, d], tgtGrad);
-            }
-        }
-    }
-
-    private void AccumulateGradientsBatched(Tensor<T> gradient, int batch, int srcIdx, int tgtIdx, double lossGrad)
-    {
         var srcEmb = GetNodeEmbedding(srcIdx);
         var tgtEmb = GetNodeEmbedding(tgtIdx);
 
@@ -561,115 +547,204 @@ public class LinkPredictionModel<T>
             T srcGrad = NumOps.FromDouble(lossGrad * NumOps.ToDouble(tgtEmb[d]));
             T tgtGrad = NumOps.FromDouble(lossGrad * NumOps.ToDouble(srcEmb[d]));
 
-            gradient[batch, srcIdx, d] = NumOps.Add(gradient[batch, srcIdx, d], srcGrad);
-            gradient[batch, tgtIdx, d] = NumOps.Add(gradient[batch, tgtIdx, d], tgtGrad);
+            gradient[srcIdx, d] = NumOps.Add(gradient[srcIdx, d], srcGrad);
+            gradient[tgtIdx, d] = NumOps.Add(gradient[tgtIdx, d], tgtGrad);
         }
     }
 
     private double ComputeBCELoss(Tensor<T> posScores, Tensor<T> negScores)
     {
         double loss = 0.0;
+        int numPos = posScores.Shape[0];
+        int numNeg = negScores.Shape[0];
 
-        // Handle both 1D [num_edges] and 2D [batch_size, num_edges] scores
-        if (posScores.Shape.Length == 1)
+        for (int i = 0; i < numPos; i++)
         {
-            // 1D case: non-batched
-            int numPos = posScores.Shape[0];
-            int numNeg = negScores.Shape[0];
-
-            for (int i = 0; i < numPos; i++)
-            {
-                double score = NumOps.ToDouble(posScores[i]);
-                double sigmoid = 1.0 / (1.0 + Math.Exp(-score));
-                loss -= Math.Log(Math.Max(sigmoid, 1e-10));
-            }
-
-            for (int i = 0; i < numNeg; i++)
-            {
-                double score = NumOps.ToDouble(negScores[i]);
-                double sigmoid = 1.0 / (1.0 + Math.Exp(-score));
-                loss -= Math.Log(Math.Max(1.0 - sigmoid, 1e-10));
-            }
-
-            return (numPos + numNeg) > 0 ? loss / (numPos + numNeg) : 0.0;
+            double score = NumOps.ToDouble(posScores[i]);
+            double sigmoid = 1.0 / (1.0 + Math.Exp(-score));
+            loss -= Math.Log(Math.Max(sigmoid, 1e-10));
         }
-        else
+
+        for (int i = 0; i < numNeg; i++)
         {
-            // 2D case: batched
-            int batchSize = posScores.Shape[0];
-            int numPos = posScores.Shape[1];
-            int numNeg = negScores.Shape[1];
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int i = 0; i < numPos; i++)
-                {
-                    double score = NumOps.ToDouble(posScores[b, i]);
-                    double sigmoid = 1.0 / (1.0 + Math.Exp(-score));
-                    loss -= Math.Log(Math.Max(sigmoid, 1e-10));
-                }
-
-                for (int i = 0; i < numNeg; i++)
-                {
-                    double score = NumOps.ToDouble(negScores[b, i]);
-                    double sigmoid = 1.0 / (1.0 + Math.Exp(-score));
-                    loss -= Math.Log(Math.Max(1.0 - sigmoid, 1e-10));
-                }
-            }
-
-            int totalSamples = batchSize * (numPos + numNeg);
-            return totalSamples > 0 ? loss / totalSamples : 0.0;
+            double score = NumOps.ToDouble(negScores[i]);
+            double sigmoid = 1.0 / (1.0 + Math.Exp(-score));
+            loss -= Math.Log(Math.Max(1.0 - sigmoid, 1e-10));
         }
+
+        return (numPos + numNeg) > 0 ? loss / (numPos + numNeg) : 0.0;
     }
 
     private double ComputeAUC(Tensor<T> posScores, Tensor<T> negScores)
     {
-        // Simplified AUC: fraction of (pos, neg) pairs correctly ranked
         int correctRankings = 0;
         int totalPairs = 0;
+        int numPos = posScores.Shape[0];
+        int numNeg = negScores.Shape[0];
 
-        // Handle both 1D [num_edges] and 2D [batch_size, num_edges] scores
-        if (posScores.Shape.Length == 1)
+        for (int i = 0; i < numPos; i++)
         {
-            // 1D case: non-batched
-            int numPos = posScores.Shape[0];
-            int numNeg = negScores.Shape[0];
-
-            for (int i = 0; i < numPos; i++)
+            for (int j = 0; j < numNeg; j++)
             {
-                for (int j = 0; j < numNeg; j++)
+                if (NumOps.GreaterThan(posScores[i], negScores[j]))
                 {
-                    if (NumOps.GreaterThan(posScores[i], negScores[j]))
-                    {
-                        correctRankings++;
-                    }
-                    totalPairs++;
+                    correctRankings++;
                 }
-            }
-        }
-        else
-        {
-            // 2D case: batched
-            int batchSize = posScores.Shape[0];
-            int numPos = posScores.Shape[1];
-            int numNeg = negScores.Shape[1];
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int i = 0; i < numPos; i++)
-                {
-                    for (int j = 0; j < numNeg; j++)
-                    {
-                        if (NumOps.GreaterThan(posScores[b, i], negScores[b, j]))
-                        {
-                            correctRankings++;
-                        }
-                        totalPairs++;
-                    }
-                }
+                totalPairs++;
             }
         }
 
         return totalPairs > 0 ? (double)correctRankings / totalPairs : 0.5;
     }
+
+    /// <summary>
+    /// Gets all parameters as a vector.
+    /// </summary>
+    public override Vector<T> GetParameters()
+    {
+        var allParams = new List<T>();
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                allParams.Add(layerParams[i]);
+            }
+        }
+        return new Vector<T>([.. allParams]);
+    }
+
+    #region Abstract Method Implementations
+
+    /// <summary>
+    /// Makes a prediction using the trained network.
+    /// </summary>
+    /// <param name="input">The input tensor containing node features.</param>
+    /// <returns>The node embeddings tensor.</returns>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        if (_cachedAdjacencyMatrix is null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Predict.");
+        }
+
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(false);
+        }
+
+        return Forward(input);
+    }
+
+    /// <summary>
+    /// Trains the network on a single batch of data.
+    /// </summary>
+    /// <param name="input">The input node features.</param>
+    /// <param name="expectedOutput">The expected output (edge scores).</param>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (_cachedAdjacencyMatrix is null)
+        {
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Train.");
+        }
+
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(true);
+        }
+
+        var predictions = Forward(input);
+
+        var flattenedPredictions = predictions.ToVector();
+        var flattenedExpected = expectedOutput.ToVector();
+
+        LastLoss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
+
+        var outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
+        var gradOutput = Tensor<T>.FromVector(outputGradients);
+
+        if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
+        {
+            gradOutput = gradOutput.Reshape(predictions.Shape);
+        }
+
+        Backward(gradOutput);
+
+        Vector<T> parameterGradients = GetParameterGradients();
+        Vector<T> currentParameters = GetParameters();
+        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
+
+        UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Gets metadata about this model for serialization and identification.
+    /// </summary>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = ModelType.GraphNeuralNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                ["NetworkType"] = "LinkPredictionModel",
+                ["InputFeatures"] = InputFeatures,
+                ["EmbeddingDim"] = EmbeddingDim,
+                ["HiddenDim"] = HiddenDim,
+                ["NumLayers"] = NumLayers,
+                ["DropoutRate"] = DropoutRate,
+                ["DecoderType"] = _decoderType.ToString()
+            }
+        };
+    }
+
+    /// <summary>
+    /// Serializes network-specific data to a binary writer.
+    /// </summary>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(InputFeatures);
+        writer.Write(EmbeddingDim);
+        writer.Write(HiddenDim);
+        writer.Write(NumLayers);
+        writer.Write(DropoutRate);
+        writer.Write((int)_decoderType);
+
+        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
+        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
+    }
+
+    /// <summary>
+    /// Deserializes network-specific data from a binary reader.
+    /// </summary>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _ = reader.ReadInt32(); // InputFeatures
+        _ = reader.ReadInt32(); // EmbeddingDim
+        _ = reader.ReadInt32(); // HiddenDim
+        _ = reader.ReadInt32(); // NumLayers
+        _ = reader.ReadDouble(); // DropoutRate
+        _ = reader.ReadInt32(); // DecoderType
+
+        _ = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
+        _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
+    }
+
+    /// <summary>
+    /// Creates a new instance of this network type for cloning or deserialization.
+    /// </summary>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new LinkPredictionModel<T>(
+            architecture: Architecture,
+            hiddenDim: HiddenDim,
+            embeddingDim: EmbeddingDim,
+            numLayers: NumLayers,
+            dropoutRate: DropoutRate,
+            decoderType: _decoderType);
+    }
+
+    #endregion
 }
