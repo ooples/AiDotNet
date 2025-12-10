@@ -398,7 +398,7 @@ public abstract class VectorBase<T>
     /// <para><b>For Beginners:</b> Similar to the other Transform method, but this one also gives you
     /// the position (index) of each element as you transform it. This is useful when the transformation
     /// depends on where the element is located in the vector. For example, you might want to multiply
-    /// each element by its position: [1,2,3] would become [1ÃƒÂ¯Ã‚Â¿Ã‚Â½0, 2ÃƒÂ¯Ã‚Â¿Ã‚Â½1, 3ÃƒÂ¯Ã‚Â¿Ã‚Â½2] = [0,2,6].</para>
+    /// each element by its position: [1,2,3] would become [1*0, 2*1, 3*2] = [0,2,6].</para>
     /// </remarks>
     public virtual VectorBase<TResult> Transform<TResult>(Func<T, int, TResult> function)
     {
