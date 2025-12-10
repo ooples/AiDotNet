@@ -1,4 +1,5 @@
 using AiDotNet.Data.Abstractions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -77,6 +78,8 @@ namespace AiDotNet.Data.Graph;
 /// </remarks>
 public class MolecularDatasetLoader<T> : IGraphDataLoader<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly MolecularDataset _dataset;
     private readonly string _dataPath;
     private readonly int _batchSize;

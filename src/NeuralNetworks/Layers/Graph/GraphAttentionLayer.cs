@@ -640,4 +640,14 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _attentionWeightsGradient = null;
         _biasGradient = null;
     }
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "GraphAttentionLayer does not support computation graph export due to dynamic attention mechanisms.");
+    }
 }

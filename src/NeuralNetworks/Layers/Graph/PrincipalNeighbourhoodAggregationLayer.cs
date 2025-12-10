@@ -603,7 +603,6 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                          _bias.Length;
 
         var parameters = new Vector<T>(totalParams);
-        int index = 0;
 
         // Copy all parameters (implementation details omitted for brevity)
         return parameters;
@@ -629,5 +628,15 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         _postAggregationBias2Gradient = null;
         _selfWeightsGradient = null;
         _biasGradient = null;
+    }
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "PrincipalNeighbourhoodAggregationLayer does not support computation graph export due to multiple dynamic aggregators.");
     }
 }

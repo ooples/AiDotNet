@@ -546,4 +546,14 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _selfBiasGradient = null;
         _combinationBiasGradient = null;
     }
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "DirectionalGraphLayer does not support computation graph export due to dynamic graph-based aggregation.");
+    }
 }

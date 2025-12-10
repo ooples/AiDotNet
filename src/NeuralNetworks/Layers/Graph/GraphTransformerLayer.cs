@@ -107,7 +107,9 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// </summary>
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput;
+#pragma warning disable CS0414 // Field is assigned but never used - reserved for future backward pass implementation
     private Tensor<T>? _lastAttentionScores;
+#pragma warning restore CS0414
     private Tensor<T>? _lastAttentionWeights;
 
     /// <inheritdoc/>
@@ -597,5 +599,15 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _lastOutput = null;
         _lastAttentionScores = null;
         _lastAttentionWeights = null;
+    }
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "GraphTransformerLayer does not support computation graph export due to dynamic self-attention mechanisms.");
     }
 }

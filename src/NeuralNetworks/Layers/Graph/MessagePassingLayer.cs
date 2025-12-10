@@ -139,7 +139,9 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Matrix<T>? _resetWeightsGradient;
     private Matrix<T>? _resetMessageWeightsGradient;
     private Vector<T>? _resetBiasGradient;
+#pragma warning disable CS0169 // Field is never used - reserved for future edge weight gradient computation
     private Matrix<T>? _edgeWeightsGradient;
+#pragma warning restore CS0169
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -527,8 +529,14 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Update all weights
-        _messageWeights1 = _messageWeights1.Subtract(_messageWeights1Gradient.Multiply(learningRate));
-        _messageWeights2 = _messageWeights2.Subtract(_messageWeights2Gradient.Multiply(learningRate));
+        if (_messageWeights1Gradient is not null)
+        {
+            _messageWeights1 = _messageWeights1.Subtract(_messageWeights1Gradient.Multiply(learningRate));
+        }
+        if (_messageWeights2Gradient is not null)
+        {
+            _messageWeights2 = _messageWeights2.Subtract(_messageWeights2Gradient.Multiply(learningRate));
+        }
         _updateWeights = _updateWeights.Subtract(_updateWeightsGradient!.Multiply(learningRate));
         _updateMessageWeights = _updateMessageWeights.Subtract(_updateMessageWeightsGradient!.Multiply(learningRate));
         _resetWeights = _resetWeights.Subtract(_resetWeightsGradient!.Multiply(learningRate));
@@ -657,5 +665,15 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _resetWeightsGradient = null;
         _resetMessageWeightsGradient = null;
         _resetBiasGradient = null;
+    }
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "MessagePassingLayer does not support computation graph export due to dynamic message computation.");
     }
 }

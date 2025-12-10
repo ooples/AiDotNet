@@ -1,4 +1,5 @@
 using AiDotNet.Data.Abstractions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
@@ -49,8 +50,10 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// - Graph structure helps propagate label information
 /// </para>
 /// </remarks>
-public class NodeClassificationModel<T> : IModel<T, Tensor<T>, Tensor<T>>
+public class NodeClassificationModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly List<ILayer<T>> _layers;
     private readonly IGraphConvolutionLayer<T> _firstGraphLayer;
     private Tensor<T>? _adjacencyMatrix;

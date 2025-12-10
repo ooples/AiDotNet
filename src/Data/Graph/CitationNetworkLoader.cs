@@ -1,4 +1,5 @@
 using AiDotNet.Data.Abstractions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -53,6 +54,8 @@ namespace AiDotNet.Data.Graph;
 /// </remarks>
 public class CitationNetworkLoader<T> : IGraphDataLoader<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly CitationDataset _dataset;
     private readonly string _dataPath;
     private GraphData<T>? _loadedGraph;

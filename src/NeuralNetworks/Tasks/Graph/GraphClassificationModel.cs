@@ -1,4 +1,5 @@
 using AiDotNet.Data.Abstractions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
@@ -58,8 +59,10 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// ```
 /// </para>
 /// </remarks>
-public class GraphClassificationModel<T> : IModel<T, Tensor<T>, Tensor<T>>
+public class GraphClassificationModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly List<ILayer<T>> _gnnLayers;
     private readonly List<ILayer<T>> _classifierLayers;
     private readonly GraphPooling _poolingType;

@@ -475,4 +475,14 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         _lastInput = null;
         _lastOutput = null;
     }
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "HeterogeneousGraphLayer does not support computation graph export due to type-specific transformations.");
+    }
 }

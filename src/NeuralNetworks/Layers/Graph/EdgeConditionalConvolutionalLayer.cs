@@ -33,7 +33,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
 {
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
-    private readonly int _edgeFeatures;
+    private readonly int _edgeFeaturesCount;
     private readonly int _edgeNetworkHiddenDim;
 
     /// <summary>
@@ -128,7 +128,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
     {
         _inputFeatures = inputFeatures;
         _outputFeatures = outputFeatures;
-        _edgeFeatures = edgeFeatures;
+        _edgeFeaturesCount = edgeFeatures;
         _edgeNetworkHiddenDim = edgeNetworkHiddenDim;
 
         // Edge network: maps edge features to transformation weights
@@ -150,7 +150,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
     private void InitializeParameters()
     {
         // Xavier initialization for edge network
-        T scale1 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_edgeFeatures + _edgeNetworkHiddenDim)));
+        T scale1 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_edgeFeaturesCount + _edgeNetworkHiddenDim)));
         InitializeMatrix(_edgeNetworkWeights1, scale1);
 
         T scale2 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_edgeNetworkHiddenDim + _inputFeatures * _outputFeatures)));
@@ -249,7 +249,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
                     for (int h = 0; h < _edgeNetworkHiddenDim; h++)
                     {
                         T sum = _edgeNetworkBias1[h];
-                        for (int f = 0; f < _edgeFeatures; f++)
+                        for (int f = 0; f < _edgeFeaturesCount; f++)
                         {
                             sum = NumOps.Add(sum,
                                 NumOps.Multiply(_edgeFeatures[b, edgeIdx, f],
@@ -346,7 +346,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         int numNodes = _lastInput.Shape[1];
 
         // Initialize gradients
-        _edgeNetworkWeights1Gradient = new Matrix<T>(_edgeFeatures, _edgeNetworkHiddenDim);
+        _edgeNetworkWeights1Gradient = new Matrix<T>(_edgeFeaturesCount, _edgeNetworkHiddenDim);
         _edgeNetworkWeights2Gradient = new Matrix<T>(_edgeNetworkHiddenDim, _inputFeatures * _outputFeatures);
         _edgeNetworkBias1Gradient = new Vector<T>(_edgeNetworkHiddenDim);
         _edgeNetworkBias2Gradient = new Vector<T>(_inputFeatures * _outputFeatures);
@@ -482,5 +482,15 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         _edgeNetworkBias2Gradient = null;
         _selfWeightsGradient = null;
         _biasGradient = null;
+    }
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "EdgeConditionalConvolutionalLayer does not support computation graph export due to dynamic edge-based weight generation.");
     }
 }

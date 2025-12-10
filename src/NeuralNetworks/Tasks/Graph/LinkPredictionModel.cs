@@ -1,4 +1,5 @@
 using AiDotNet.Data.Abstractions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
@@ -51,8 +52,10 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// ```
 /// </para>
 /// </remarks>
-public class LinkPredictionModel<T> : IModel<T, Tensor<T>, Tensor<T>>
+public class LinkPredictionModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly List<ILayer<T>> _encoderLayers;
     private readonly LinkPredictionDecoder _decoder;
     private Tensor<T>? _adjacencyMatrix;
@@ -205,8 +208,8 @@ public class LinkPredictionModel<T> : IModel<T, Tensor<T>, Tensor<T>>
         {
             for (int e = 0; e < numEdges; e++)
             {
-                int sourceIdx = NumOps.ToInt(edges[b, e, 0]);
-                int targetIdx = NumOps.ToInt(edges[b, e, 1]);
+                int sourceIdx = Convert.ToInt32(NumOps.ToDouble(edges[b, e, 0]));
+                int targetIdx = Convert.ToInt32(NumOps.ToDouble(edges[b, e, 1]));
 
                 scores[b, e] = ComputeEdgeScore(sourceIdx, targetIdx);
             }
