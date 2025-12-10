@@ -122,7 +122,8 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
     /// </remarks>
     public AdaMaxOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        AdaMaxOptimizerOptions<T, TInput, TOutput>? options = null)
+        AdaMaxOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
         : base(model, options ?? new())
     {
         _options = options ?? new AdaMaxOptimizerOptions<T, TInput, TOutput>();
@@ -252,26 +253,33 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
             _t = 0;
         }
 
-        var newCoefficients = new Vector<T>(parameters.Length);
-        var beta1 = NumOps.FromDouble(_options.Beta1);
-        var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
-        var beta2 = NumOps.FromDouble(_options.Beta2);
+        // === Vectorized AdaMax Update using IEngine (Phase B: US-GPU-015) ===
+        T beta1 = NumOps.FromDouble(_options.Beta1);
+        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        T beta2 = NumOps.FromDouble(_options.Beta2);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            // Update biased first moment estimate
-            _m[i] = NumOps.Add(NumOps.Multiply(beta1, _m[i]), NumOps.Multiply(oneMinusBeta1, gradient[i]));
+        // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
+        var mScaled = (Vector<T>)Engine.Multiply(_m, beta1);
+        var gradScaled = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
+        _m = (Vector<T>)Engine.Add(mScaled, gradScaled);
 
-            // Update the exponentially weighted infinity norm
-            _u[i] = MathHelper.Max(NumOps.Multiply(beta2, _u[i]), NumOps.Abs(gradient[i]));
+        // Update exponentially weighted infinity norm: u = max(beta2 * u, |gradient|)
+        // Fully vectorized using IEngine (Phase B: US-GPU-015)
+        var uScaled = (Vector<T>)Engine.Multiply(_u, beta2);
+        var absGradient = (Vector<T>)Engine.Abs(gradient);
+        _u = (Vector<T>)Engine.Max(uScaled, absGradient);
 
-            // Compute the learning rate
-            var alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+        // Compute bias-corrected learning rate
+        T alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
 
-            // Update parameters
-            var update = NumOps.Divide(NumOps.Multiply(alpha, _m[i]), _u[i]);
-            newCoefficients[i] = NumOps.Subtract(parameters[i], update);
-        }
+        // Update parameters: params = params - (alpha * m) / (u + epsilon)
+        // Add epsilon to prevent 0/0 division when gradients are always zero
+        T epsilon = NumOps.FromDouble(1e-8);
+        var epsilonVec = Vector<T>.CreateDefault(_u.Length, epsilon);
+        var uSafe = (Vector<T>)Engine.Add(_u, epsilonVec);
+        var alphaMScaled = (Vector<T>)Engine.Multiply(_m, alpha);
+        var update = (Vector<T>)Engine.Divide(alphaMScaled, uSafe);
+        var newCoefficients = (Vector<T>)Engine.Subtract(parameters, update);
 
         return currentSolution.WithParameters(newCoefficients);
     }
@@ -302,26 +310,32 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
 
         _t++;
 
-        var updatedParams = new Vector<T>(parameters.Length);
-        var beta1 = NumOps.FromDouble(_options.Beta1);
-        var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
-        var beta2 = NumOps.FromDouble(_options.Beta2);
+        // === Vectorized AdaMax Update using IEngine (Phase B: US-GPU-015) ===
+        T beta1 = NumOps.FromDouble(_options.Beta1);
+        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        T beta2 = NumOps.FromDouble(_options.Beta2);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            // Update biased first moment estimate
-            _m[i] = NumOps.Add(NumOps.Multiply(beta1, _m[i]), NumOps.Multiply(oneMinusBeta1, gradient[i]));
+        // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
+        var mScaled = (Vector<T>)Engine.Multiply(_m, beta1);
+        var gradScaled = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
+        _m = (Vector<T>)Engine.Add(mScaled, gradScaled);
 
-            // Update the exponentially weighted infinity norm
-            _u[i] = MathHelper.Max(NumOps.Multiply(beta2, _u[i]), NumOps.Abs(gradient[i]));
+        // Update exponentially weighted infinity norm: u = max(beta2 * u, |gradient|)
+        var uScaled = (Vector<T>)Engine.Multiply(_u, beta2);
+        var absGradient = (Vector<T>)Engine.Abs(gradient);
+        _u = (Vector<T>)Engine.Max(uScaled, absGradient);
 
-            // Compute the learning rate
-            var alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+        // Compute bias-corrected learning rate
+        T alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
 
-            // Update parameters
-            var update = NumOps.Divide(NumOps.Multiply(alpha, _m[i]), _u[i]);
-            updatedParams[i] = NumOps.Subtract(parameters[i], update);
-        }
+        // Update parameters: params = params - (alpha * m) / (u + epsilon)
+        // Add epsilon to prevent 0/0 division when gradients are always zero
+        T epsilon = NumOps.FromDouble(1e-8);
+        var epsilonVec = Vector<T>.CreateDefault(_u.Length, epsilon);
+        var uSafe = (Vector<T>)Engine.Add(_u, epsilonVec);
+        var alphaMScaled = (Vector<T>)Engine.Multiply(_m, alpha);
+        var update = (Vector<T>)Engine.Divide(alphaMScaled, uSafe);
+        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
 
         return updatedParams;
     }
@@ -363,21 +377,20 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
                 "AdaMax optimizer state is not initialized. ReverseUpdate must be called after UpdateParameters.");
         }
 
-        var original = new T[updatedParameters.Length];
+        // === Vectorized Reverse AdaMax Update using IEngine (Phase B: US-GPU-015) ===
+        // Recalculate the bias-corrected learning rate (same for all elements)
+        T alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+        var alphaVec = Vector<T>.CreateDefault(updatedParameters.Length, alpha);
 
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            // Recalculate the learning rate
-            var alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+        // Recalculate the update that was applied: update = (alpha * m) / (u + epsilon)
+        T epsilon = NumOps.FromDouble(1e-8);
+        var epsilonVec = Vector<T>.CreateDefault(_u.Length, epsilon);
+        var uSafe = (Vector<T>)Engine.Add(_u, epsilonVec);
+        var alphaTimes_m = (Vector<T>)Engine.Multiply(alphaVec, _m);
+        var update = (Vector<T>)Engine.Divide(alphaTimes_m, uSafe);
 
-            // Recalculate the update that was applied
-            var update = NumOps.Divide(NumOps.Multiply(alpha, _m[i]), _u[i]);
-
-            // Reverse: original = updated + update
-            original[i] = NumOps.Add(updatedParameters[i], update);
-        }
-
-        return new Vector<T>(original);
+        // Reverse: original = updated + update
+        return (Vector<T>)Engine.Add(updatedParameters, update);
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -48,10 +48,16 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
     /// <inheritdoc/>
     public (TInput augmentedX, TOutput augmentedY) CreateTask<TInput, TOutput>(TInput input)
     {
+        // Handle Matrix<T> input by treating it as flattened images
+        if (input is Matrix<T> matrixInput)
+        {
+            return CreateTaskFromMatrix<TInput, TOutput>(matrixInput);
+        }
+
         if (input is not Tensor<T> tensorInput)
         {
             throw new NotSupportedException(
-                $"RotationPredictionLoss only supports Tensor<T> input, but received {typeof(TInput)}");
+                $"RotationPredictionLoss only supports Tensor<T> or Matrix<T> input, but received {typeof(TInput)}");
         }
 
         // Validate input shape (should be [N, H, W] or [N, H, W, C])
@@ -91,6 +97,9 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
             }
         }
 
+        // Cast through object is required for generic type conversion at runtime.
+        // The compiler cannot verify Tensor<T> -> TInput at compile time, so the
+        // intermediate cast to object is necessary to allow the unconstrained generic conversion.
         return ((TInput)(object)augmentedX, (TOutput)(object)augmentedY);
     }
 
@@ -193,5 +202,117 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Creates a rotation prediction task from Matrix input (treats each row as a flattened image).
+    /// </summary>
+    /// <remarks>
+    /// For Matrix input, this method treats each row as a flattened square image
+    /// and performs 2D rotations by reshaping to square, rotating, and flattening back.
+    /// For example, a Matrix with rows of 784 elements is treated as 28x28 images.
+    /// </remarks>
+    private (TInput augmentedX, TOutput augmentedY) CreateTaskFromMatrix<TInput, TOutput>(Matrix<T> input)
+    {
+        int numImages = input.Rows;
+        int flattenedSize = input.Columns;
+
+        // Determine if this is a square image (e.g., 28*28=784)
+        int imageSize = (int)Math.Sqrt(flattenedSize);
+        if (imageSize * imageSize != flattenedSize)
+        {
+            throw new ArgumentException(
+                $"Matrix input must have square image dimensions. " +
+                $"Got {flattenedSize} elements which is not a perfect square.");
+        }
+
+        // Create augmented data with rotations
+        int totalAugmented = numImages * 4;
+        var augmentedX = new Matrix<T>(totalAugmented, flattenedSize);
+        var augmentedY = new Matrix<T>(totalAugmented, 4);  // 4-class one-hot encoding (consistent with tensor path)
+
+        int outputIdx = 0;
+        for (int imgIdx = 0; imgIdx < numImages; imgIdx++)
+        {
+            for (int rotationClass = 0; rotationClass < 4; rotationClass++)
+            {
+                // Perform rotation on the flattened image
+                for (int flatIdx = 0; flatIdx < flattenedSize; flatIdx++)
+                {
+                    // Convert flat index to 2D coordinates
+                    int i = flatIdx / imageSize;
+                    int j = flatIdx % imageSize;
+
+                    // Apply rotation transformation
+                    int srcI = i;
+                    int srcJ = j;
+
+                    switch (rotationClass)
+                    {
+                        case 0: // 0 degrees - no rotation
+                            srcI = i;
+                            srcJ = j;
+                            break;
+                        case 1: // 90 degrees clockwise
+                            srcI = imageSize - 1 - j;
+                            srcJ = i;
+                            break;
+                        case 2: // 180 degrees
+                            srcI = imageSize - 1 - i;
+                            srcJ = imageSize - 1 - j;
+                            break;
+                        case 3: // 270 degrees clockwise
+                            srcI = j;
+                            srcJ = imageSize - 1 - i;
+                            break;
+                    }
+
+                    // Get source value from original image
+                    int srcFlatIdx = srcI * imageSize + srcJ;
+                    augmentedX[outputIdx, flatIdx] = input[imgIdx, srcFlatIdx];
+                }
+
+                // Assign rotation label (one-hot encoding, consistent with tensor path)
+                for (int classIdx = 0; classIdx < 4; classIdx++)
+                {
+                    augmentedY[outputIdx, classIdx] = (classIdx == rotationClass) ? NumOps.One : NumOps.Zero;
+                }
+                outputIdx++;
+            }
+        }
+
+        // Handle output type conversion
+        // If TOutput is Vector<T>, convert one-hot Matrix to class indices Vector
+        // If TOutput is Matrix<T>, use the one-hot Matrix directly
+        object outputY;
+        if (typeof(TOutput) == typeof(Vector<T>))
+        {
+            // Convert one-hot Matrix to class index Vector
+            var classIndices = new Vector<T>(totalAugmented);
+            for (int i = 0; i < totalAugmented; i++)
+            {
+                // Find the class with value 1 (the rotation class)
+                for (int c = 0; c < 4; c++)
+                {
+                    // Check if this is the 1 in the one-hot encoding
+                    if (NumOps.Equals(augmentedY[i, c], NumOps.One))
+                    {
+                        classIndices[i] = NumOps.FromDouble(c);
+                        break;
+                    }
+                }
+            }
+            outputY = classIndices;
+        }
+        else
+        {
+            outputY = augmentedY;
+        }
+
+        // Cast through object is required for generic type conversion at runtime
+        // The compiler cannot verify Matrix<T> -> TInput at compile time
+        TInput resultX = (TInput)(object)augmentedX;
+        TOutput resultY = (TOutput)outputY;
+        return (resultX, resultY);
     }
 }

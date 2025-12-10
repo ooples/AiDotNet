@@ -393,7 +393,7 @@ public class MeyerWavelet<T> : IWaveletFunction<T>
     /// <returns>The result of applying the polynomial function to the input.</returns>
     /// <remarks>
     /// <para>
-    /// This static method implements a specific polynomial function v(x) = x²(3-2x) that is used
+    /// This static method implements a specific polynomial function v(x) = xÂ²(3-2x) that is used
     /// in the frequency domain definitions of the Meyer wavelet filters. This function creates
     /// a smooth transition from 0 to 1 as x goes from 0 to 1, with zero derivatives at both endpoints.
     /// </para>

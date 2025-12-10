@@ -58,7 +58,7 @@ public class DistillationStrategyFactoryTests
                 DistillationStrategyType.FeatureBased,
                 featureWeight: 0.7));
 
-        Assert.Contains("FeatureBased", exception.Message);
+        Assert.Contains("FeatureDistillationStrategy", exception.Message);
     }
 
     [Fact]
@@ -161,14 +161,14 @@ public class DistillationStrategyFactoryTests
     [Fact]
     public void FluentBuilder_FeatureBased_ConfiguresFeatureWeight()
     {
-        // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>
-            .Configure(DistillationStrategyType.FeatureBased)
-            .WithFeatureWeight(0.8)
-            .Build();
+        // Arrange & Act & Assert
+        var exception = Assert.Throws<NotSupportedException>(() =>
+            DistillationStrategyFactory<double>
+                .Configure(DistillationStrategyType.FeatureBased)
+                .WithFeatureWeight(0.8)
+                .Build());
 
-        // Assert
-        Assert.IsType<FeatureDistillationStrategy<double>>(strategy);
+        Assert.Contains("FeatureDistillationStrategy", exception.Message);
     }
 
     [Fact]

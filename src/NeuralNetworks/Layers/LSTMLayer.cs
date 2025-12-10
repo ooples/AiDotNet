@@ -1,3 +1,6 @@
+using AiDotNet.Autodiff;
+
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -370,24 +373,17 @@ public class LSTMLayer<T> : LayerBase<T>
     /// <summary>
     /// The cell state from the last forward pass.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the cell state from the most recent forward pass. The cell state is the main memory
-    /// component of the LSTM, capable of retaining information over long sequences. This field is reset when
-    /// ResetState is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the long-term memory of the LSTM at each time step.
-    /// 
-    /// The cell state:
-    /// - Is the LSTM's main memory component
-    /// - Can hold information for long sequences
-    /// - Is carefully controlled by the gates
-    /// 
-    /// Think of it as the LSTM's long-term memory that can preserve important
-    /// information even as new inputs are processed.
-    /// </para>
-    /// </remarks>
     private Tensor<T>? _lastCellState;
+
+    /// <summary>
+    /// Cached hidden states for all time steps (Batch, Time, Hidden).
+    /// </summary>
+    private Tensor<T>? _cachedHiddenStates;
+
+    /// <summary>
+    /// Cached cell states for all time steps (Batch, Time, Hidden).
+    /// </summary>
+    private Tensor<T>? _cachedCellStates;
 
     /// <summary>
     /// The sigmoid activation function for element-wise operations.
@@ -569,7 +565,8 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public LSTMLayer(int inputSize, int hiddenSize, int[] inputShape,
         IActivationFunction<T>? activation = null,
-        IActivationFunction<T>? recurrentActivation = null)
+        IActivationFunction<T>? recurrentActivation = null,
+        IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, hiddenSize), activation ?? new TanhActivation<T>())
     {
         _inputSize = inputSize;
@@ -633,7 +630,8 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public LSTMLayer(int inputSize, int hiddenSize, int[] inputShape,
         IVectorActivationFunction<T>? activation = null,
-        IVectorActivationFunction<T>? recurrentActivation = null)
+        IVectorActivationFunction<T>? recurrentActivation = null,
+        IEngine? engine = null)
         : base(inputShape, CalculateOutputShape(inputShape, hiddenSize), activation ?? new TanhActivation<T>())
     {
         _inputSize = inputSize;
@@ -722,7 +720,7 @@ public class LSTMLayer<T> : LayerBase<T>
     private void InitializeWeights()
     {
         // Xavier/Glorot initialization
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputSize + _hiddenSize)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (_inputSize + _hiddenSize))));
 
         InitializeWeight(_weightsFi, scale);
         InitializeWeight(_weightsIi, scale);
@@ -751,21 +749,28 @@ public class LSTMLayer<T> : LayerBase<T>
     /// convergence.
     /// </para>
     /// <para><b>For Beginners:</b> This method fills a weight tensor with smart random values.
-    /// 
+    ///
     /// When initializing weights:
     /// - Each value is set to a small random number
     /// - The numbers are centered around zero (between -0.5 and 0.5) then scaled
     /// - The scale factor adjusts the range based on the network size
-    /// 
+    ///
     /// This approach helps the network start learning effectively from the beginning.
     /// </para>
     /// </remarks>
     private void InitializeWeight(Tensor<T> weight, T scale)
     {
-        for (int i = 0; i < weight.Length; i++)
-        {
-            weight[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-        }
+        // Create random tensor using Tensor<T>.CreateRandom [0, 1]
+        var randomTensor = Tensor<T>.CreateRandom(weight.Shape[0], weight.Shape[1]);
+
+        // Shift to [-0.5, 0.5] range: random - 0.5
+        var halfTensor = new Tensor<T>(weight.Shape);
+        halfTensor.Fill(NumOps.FromDouble(0.5));
+        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
+
+        // Scale by the scale factor and copy to weight tensor
+        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
+        Array.Copy(scaled.ToArray(), weight.ToArray(), weight.Length);
     }
 
     /// <summary>
@@ -779,21 +784,19 @@ public class LSTMLayer<T> : LayerBase<T>
     /// issues that would cause problems with all-zero weights.
     /// </para>
     /// <para><b>For Beginners:</b> This method sets all values in a bias tensor to zero.
-    /// 
+    ///
     /// Unlike weights, which need random values:
     /// - Biases can start at zero
     /// - During training, they'll adjust as needed
     /// - Starting at zero is a neutral position
-    /// 
+    ///
     /// Think of biases like the "default settings" that get adjusted during training.
     /// </para>
     /// </remarks>
     private void InitializeBias(Tensor<T> bias)
     {
-        for (int i = 0; i < bias.Length; i++)
-        {
-            bias[i] = NumOps.Zero;
-        }
+        // Use tensor Fill method to initialize bias with zeros
+        bias.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -827,78 +830,70 @@ public class LSTMLayer<T> : LayerBase<T>
         int timeSteps = input.Shape[1];
 
         var output = new Tensor<T>([batchSize, timeSteps, _hiddenSize]);
-        _lastHiddenState = new Tensor<T>([batchSize, _hiddenSize]);
-        _lastCellState = new Tensor<T>([batchSize, _hiddenSize]);
+        
+        _cachedHiddenStates = new Tensor<T>([batchSize, timeSteps, _hiddenSize]);
+        _cachedCellStates = new Tensor<T>([batchSize, timeSteps, _hiddenSize]);
+        
+        var currentH = new Tensor<T>([batchSize, _hiddenSize]);
+        var currentC = new Tensor<T>([batchSize, _hiddenSize]);
+
+        // Pre-transpose weights for efficiency
+        var WfiT = Engine.TensorTranspose(_weightsFi);
+        var WiiT = Engine.TensorTranspose(_weightsIi);
+        var WciT = Engine.TensorTranspose(_weightsCi);
+        var WoiT = Engine.TensorTranspose(_weightsOi);
+        var WfhT = Engine.TensorTranspose(_weightsFh);
+        var WihT = Engine.TensorTranspose(_weightsIh);
+        var WchT = Engine.TensorTranspose(_weightsCh);
+        var WohT = Engine.TensorTranspose(_weightsOh);
 
         for (int t = 0; t < timeSteps; t++)
         {
             var xt = input.GetSlice(t);
-            (_lastHiddenState, _lastCellState) = LSTMCell(xt, _lastHiddenState, _lastCellState);
-            output.SetSlice(t, _lastHiddenState);
+
+            // Forget Gate - using Engine.TensorAdd for bias addition
+            var f = Engine.TensorMatMul(xt, WfiT);
+            f = Engine.TensorAdd(f, Engine.TensorMatMul(currentH, WfhT));
+            f = Engine.TensorAdd(f, _biasF);
+            f = Engine.Sigmoid(f);
+
+            // Input Gate
+            var i = Engine.TensorMatMul(xt, WiiT);
+            i = Engine.TensorAdd(i, Engine.TensorMatMul(currentH, WihT));
+            i = Engine.TensorAdd(i, _biasI);
+            i = Engine.Sigmoid(i);
+
+            // Cell Candidate
+            var c_tilde = Engine.TensorMatMul(xt, WciT);
+            c_tilde = Engine.TensorAdd(c_tilde, Engine.TensorMatMul(currentH, WchT));
+            c_tilde = Engine.TensorAdd(c_tilde, _biasC);
+            c_tilde = Engine.Tanh(c_tilde);
+
+            // Output Gate
+            var o = Engine.TensorMatMul(xt, WoiT);
+            o = Engine.TensorAdd(o, Engine.TensorMatMul(currentH, WohT));
+            o = Engine.TensorAdd(o, _biasO);
+            o = Engine.Sigmoid(o);
+
+            // Update Cell State
+            var f_prevC = Engine.TensorMultiply(f, currentC);
+            var i_cTilde = Engine.TensorMultiply(i, c_tilde);
+            currentC = Engine.TensorAdd(f_prevC, i_cTilde);
+
+            // Update Hidden State
+            var tanhC = Engine.Tanh(currentC);
+            currentH = Engine.TensorMultiply(o, tanhC);
+
+            // Store results
+            output.SetSlice(t, currentH);
+            _cachedHiddenStates.SetSlice(t, currentH);
+            _cachedCellStates.SetSlice(t, currentC);
         }
+        
+        _lastHiddenState = currentH;
+        _lastCellState = currentC;
 
         return output;
-    }
-
-    /// <summary>
-    /// Implements a single LSTM cell computation for one time step.
-    /// </summary>
-    /// <param name="xt">The input at the current time step.</param>
-    /// <param name="prevH">The hidden state from the previous time step.</param>
-    /// <param name="prevC">The cell state from the previous time step.</param>
-    /// <returns>A tuple containing the new hidden state and cell state.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the core LSTM cell computation for a single time step. It calculates the
-    /// forget gate, input gate, cell state candidate, and output gate, then uses these to update the cell state
-    /// and hidden state. The computations can use either element-wise activation functions or vector activation
-    /// functions, depending on how the layer was configured.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method processes a single time step through the LSTM cell.
-    /// 
-    /// An LSTM cell works through these steps:
-    /// 1. Forget gate (f): Decides what information to throw away from the cell state
-    /// 2. Input gate (i): Decides what new information to store in the cell state
-    /// 3. Cell candidate (c): Creates new values that could be added to the state
-    /// 4. Cell state update: Updates the old cell state into the new cell state
-    /// 5. Output gate (o): Decides what parts of the cell state to output
-    /// 6. Hidden state update: Creates the new hidden state based on the cell state
-    /// 
-    /// For example, when processing a word in a sentence, the LSTM might:
-    /// - Forget information that's no longer relevant
-    /// - Add important details about the new word
-    /// - Update its internal understanding
-    /// - Output information needed for the next steps
-    /// </para>
-    /// </remarks>
-    private (Tensor<T> hiddenState, Tensor<T> cellState) LSTMCell(Tensor<T> xt, Tensor<T> prevH, Tensor<T> prevC)
-    {
-        var f = xt.MatrixMultiply(_weightsFi).Add(prevH.MatrixMultiply(_weightsFh)).Add(_biasF);
-        var i = xt.MatrixMultiply(_weightsIi).Add(prevH.MatrixMultiply(_weightsIh)).Add(_biasI);
-        var c = xt.MatrixMultiply(_weightsCi).Add(prevH.MatrixMultiply(_weightsCh)).Add(_biasC);
-        var o = xt.MatrixMultiply(_weightsOi).Add(prevH.MatrixMultiply(_weightsOh)).Add(_biasO);
-
-        if (_useVectorActivation)
-        {
-            f = _sigmoidVectorActivation!.Activate(f);
-            i = _sigmoidVectorActivation!.Activate(i);
-            c = _tanhVectorActivation!.Activate(c);
-            o = _sigmoidVectorActivation!.Activate(o);
-        }
-        else
-        {
-            f = f.Transform((x, _) => _sigmoidActivation!.Activate(x));
-            i = i.Transform((x, _) => _sigmoidActivation!.Activate(x));
-            c = c.Transform((x, _) => _tanhActivation!.Activate(x));
-            o = o.Transform((x, _) => _sigmoidActivation!.Activate(x));
-        }
-
-        var newC = f.ElementwiseMultiply(prevC).Add(i.ElementwiseMultiply(c));
-        var newH = o.ElementwiseMultiply(_useVectorActivation 
-            ? _tanhVectorActivation!.Activate(newC) 
-            : newC.Transform((x, _) => _tanhActivation!.Activate(x)));
-
-        return (newH, newC);
     }
 
    /// <summary>
@@ -954,7 +949,7 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastHiddenState == null || _lastCellState == null)
+        if (_lastInput == null || _cachedHiddenStates == null || _cachedCellStates == null)
         {
             throw new InvalidOperationException("Backward pass called before forward pass.");
         }
@@ -982,8 +977,9 @@ public class LSTMLayer<T> : LayerBase<T>
         {
             var dh = outputGradient.GetSlice(t).Add(dNextH);
             var xt = _lastInput.GetSlice(t);
-            var prevH = t > 0 ? _lastHiddenState.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
-            var prevC = t > 0 ? _lastCellState.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
+            // Use cached states
+            var prevH = t > 0 ? _cachedHiddenStates.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
+            var prevC = t > 0 ? _cachedCellStates.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
 
             var (dxt, dprevH, dprevC, dWfi, dWii, dWci, dWoi, dWfh, dWih, dWch, dWoh, dbf, dbi, dbc, dbo) =
                 BackwardStep(dh, dNextC, xt, prevH, prevC);
@@ -1128,8 +1124,35 @@ public class LSTMLayer<T> : LayerBase<T>
             // Set gradient at output and propagate backward
             newH.Gradient = gradSlice;
 
-            // Perform topological sort and backward pass
-            var topoOrder = GetTopologicalOrder(newH);
+            // Perform topological sort and backward pass (inlined)
+            var visited = new HashSet<Autodiff.ComputationNode<T>>();
+            var topoOrder = new List<Autodiff.ComputationNode<T>>();
+            var topoStack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+            topoStack.Push((newH, false));
+
+            while (topoStack.Count > 0)
+            {
+                var (currentNode, processed) = topoStack.Pop();
+                if (visited.Contains(currentNode)) continue;
+
+                if (processed)
+                {
+                    visited.Add(currentNode);
+                    topoOrder.Add(currentNode);
+                }
+                else
+                {
+                    topoStack.Push((currentNode, true));
+                    foreach (var parent in currentNode.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                        {
+                            topoStack.Push((parent, false));
+                        }
+                    }
+                }
+            }
+
             for (int idx = topoOrder.Count - 1; idx >= 0; idx--)
             {
                 var node = topoOrder[idx];
@@ -1168,48 +1191,6 @@ public class LSTMLayer<T> : LayerBase<T>
         };
 
         return inputGradient;
-    }
-
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
     }
 
     /// <summary>
@@ -1358,48 +1339,50 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
+        // Use Engine operations for GPU/CPU acceleration
         foreach (var kvp in Gradients)
         {
             var paramName = kvp.Key;
             var gradient = kvp.Value;
+            var scaledGradient = Engine.TensorMultiplyScalar(gradient, learningRate);
 
             switch (paramName)
             {
                 case "weightsFi":
-                    _weightsFi = _weightsFi.Subtract(gradient.Multiply(learningRate));
+                    _weightsFi = Engine.TensorSubtract(_weightsFi, scaledGradient);
                     break;
                 case "weightsIi":
-                    _weightsIi = _weightsIi.Subtract(gradient.Multiply(learningRate));
+                    _weightsIi = Engine.TensorSubtract(_weightsIi, scaledGradient);
                     break;
                 case "weightsCi":
-                    _weightsCi = _weightsCi.Subtract(gradient.Multiply(learningRate));
+                    _weightsCi = Engine.TensorSubtract(_weightsCi, scaledGradient);
                     break;
                 case "weightsOi":
-                    _weightsOi = _weightsOi.Subtract(gradient.Multiply(learningRate));
+                    _weightsOi = Engine.TensorSubtract(_weightsOi, scaledGradient);
                     break;
                 case "weightsFh":
-                    _weightsFh = _weightsFh.Subtract(gradient.Multiply(learningRate));
+                    _weightsFh = Engine.TensorSubtract(_weightsFh, scaledGradient);
                     break;
                 case "weightsIh":
-                    _weightsIh = _weightsIh.Subtract(gradient.Multiply(learningRate));
+                    _weightsIh = Engine.TensorSubtract(_weightsIh, scaledGradient);
                     break;
                 case "weightsCh":
-                    _weightsCh = _weightsCh.Subtract(gradient.Multiply(learningRate));
+                    _weightsCh = Engine.TensorSubtract(_weightsCh, scaledGradient);
                     break;
                 case "weightsOh":
-                    _weightsOh = _weightsOh.Subtract(gradient.Multiply(learningRate));
+                    _weightsOh = Engine.TensorSubtract(_weightsOh, scaledGradient);
                     break;
                 case "biasF":
-                    _biasF = _biasF.Subtract(gradient.Multiply(learningRate));
+                    _biasF = Engine.TensorSubtract(_biasF, scaledGradient);
                     break;
                 case "biasI":
-                    _biasI = _biasI.Subtract(gradient.Multiply(learningRate));
+                    _biasI = Engine.TensorSubtract(_biasI, scaledGradient);
                     break;
                 case "biasC":
-                    _biasC = _biasC.Subtract(gradient.Multiply(learningRate));
+                    _biasC = Engine.TensorSubtract(_biasC, scaledGradient);
                     break;
                 case "biasO":
-                    _biasO = _biasO.Subtract(gradient.Multiply(learningRate));
+                    _biasO = Engine.TensorSubtract(_biasO, scaledGradient);
                     break;
             }
         }
@@ -1504,61 +1487,21 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int totalParams = _weightsFi.Length + _weightsIi.Length + _weightsCi.Length + _weightsOi.Length +
-                          _weightsFh.Length + _weightsIh.Length + _weightsCh.Length + _weightsOh.Length +
-                          _biasF.Length + _biasI.Length + _biasC.Length + _biasO.Length;
-    
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-    
-        // Copy weights parameters
-        CopyTensorToVector(_weightsFi, parameters, ref index);
-        CopyTensorToVector(_weightsIi, parameters, ref index);
-        CopyTensorToVector(_weightsCi, parameters, ref index);
-        CopyTensorToVector(_weightsOi, parameters, ref index);
-        CopyTensorToVector(_weightsFh, parameters, ref index);
-        CopyTensorToVector(_weightsIh, parameters, ref index);
-        CopyTensorToVector(_weightsCh, parameters, ref index);
-        CopyTensorToVector(_weightsOh, parameters, ref index);
-    
-        // Copy bias parameters
-        CopyTensorToVector(_biasF, parameters, ref index);
-        CopyTensorToVector(_biasI, parameters, ref index);
-        CopyTensorToVector(_biasC, parameters, ref index);
-        CopyTensorToVector(_biasO, parameters, ref index);
-    
-        return parameters;
-    }
-
-    /// <summary>
-    /// Copies values from a tensor to a vector.
-    /// </summary>
-    /// <param name="tensor">The source tensor.</param>
-    /// <param name="vector">The destination vector.</param>
-    /// <param name="startIndex">The starting index in the vector.</param>
-    /// <remarks>
-    /// <para>
-    /// This helper method copies all values from a tensor to a section of a vector, starting at the specified index.
-    /// The index is updated to point to the position after the last copied value, allowing multiple tensors to be
-    /// copied sequentially into the same vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method copies values from a multi-dimensional array to a simple list.
-    /// 
-    /// When transferring values:
-    /// - Each value from the tensor is placed in the vector
-    /// - The values are copied in a specific order
-    /// - The index keeps track of the current position in the vector
-    /// 
-    /// This is used when collecting all parameters into a single list for saving or optimization.
-    /// </para>
-    /// </remarks>
-    private void CopyTensorToVector(Tensor<T> tensor, Vector<T> vector, ref int startIndex)
-    {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            vector[startIndex++] = tensor[i];
-        }
+        // Use Vector.Concatenate for production-grade parameter extraction
+        return Vector<T>.Concatenate(
+            new Vector<T>(_weightsFi.ToArray()),
+            new Vector<T>(_weightsIi.ToArray()),
+            new Vector<T>(_weightsCi.ToArray()),
+            new Vector<T>(_weightsOi.ToArray()),
+            new Vector<T>(_weightsFh.ToArray()),
+            new Vector<T>(_weightsIh.ToArray()),
+            new Vector<T>(_weightsCh.ToArray()),
+            new Vector<T>(_weightsOh.ToArray()),
+            new Vector<T>(_biasF.ToArray()),
+            new Vector<T>(_biasI.ToArray()),
+            new Vector<T>(_biasC.ToArray()),
+            new Vector<T>(_biasO.ToArray())
+        );
     }
 
     /// <summary>
@@ -1586,62 +1529,54 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int totalParams = _weightsFi.Length + _weightsIi.Length + _weightsCi.Length + _weightsOi.Length +
-                          _weightsFh.Length + _weightsIh.Length + _weightsCh.Length + _weightsOh.Length +
-                          _biasF.Length + _biasI.Length + _biasC.Length + _biasO.Length;
-    
+        int inputWeightSize = _hiddenSize * _inputSize;
+        int hiddenWeightSize = _hiddenSize * _hiddenSize;
+        int biasSize = _hiddenSize;
+
+        int totalParams = inputWeightSize * 4 + hiddenWeightSize * 4 + biasSize * 4;
+
         if (parameters.Length != totalParams)
         {
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
-    
-        int index = 0;
-    
-        // Set weights parameters
-        CopyVectorToTensor(parameters, _weightsFi, ref index);
-        CopyVectorToTensor(parameters, _weightsIi, ref index);
-        CopyVectorToTensor(parameters, _weightsCi, ref index);
-        CopyVectorToTensor(parameters, _weightsOi, ref index);
-        CopyVectorToTensor(parameters, _weightsFh, ref index);
-        CopyVectorToTensor(parameters, _weightsIh, ref index);
-        CopyVectorToTensor(parameters, _weightsCh, ref index);
-        CopyVectorToTensor(parameters, _weightsOh, ref index);
-    
-        // Set bias parameters
-        CopyVectorToTensor(parameters, _biasF, ref index);
-        CopyVectorToTensor(parameters, _biasI, ref index);
-        CopyVectorToTensor(parameters, _biasC, ref index);
-        CopyVectorToTensor(parameters, _biasO, ref index);
-    }
 
-    /// <summary>
-    /// Copies values from a vector to a tensor.
-    /// </summary>
-    /// <param name="vector">The source vector.</param>
-    /// <param name="tensor">The destination tensor.</param>
-    /// <param name="startIndex">The starting index in the vector.</param>
-    /// <remarks>
-    /// <para>
-    /// This helper method copies values from a section of a vector to a tensor, starting at the specified index
-    /// in the vector. The index is updated to point to the position after the last copied value, allowing multiple
-    /// tensors to be populated sequentially from the same vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method copies values from a simple list to a multi-dimensional array.
-    /// 
-    /// When transferring values:
-    /// - Each value from the vector is placed in the tensor
-    /// - The values are copied in a specific order
-    /// - The index keeps track of the current position in the vector
-    /// 
-    /// This is used when loading parameters from a saved model or after optimization.
-    /// </para>
-    /// </remarks>
-    private void CopyVectorToTensor(Vector<T> vector, Tensor<T> tensor, ref int startIndex)
-    {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = vector[startIndex++];
-        }
+        int idx = 0;
+
+        // Use Tensor.FromVector for production-grade parameter setting
+        _weightsFi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), [_hiddenSize, _inputSize]);
+        idx += inputWeightSize;
+
+        _weightsIi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), [_hiddenSize, _inputSize]);
+        idx += inputWeightSize;
+
+        _weightsCi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), [_hiddenSize, _inputSize]);
+        idx += inputWeightSize;
+
+        _weightsOi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), [_hiddenSize, _inputSize]);
+        idx += inputWeightSize;
+
+        _weightsFh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), [_hiddenSize, _hiddenSize]);
+        idx += hiddenWeightSize;
+
+        _weightsIh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), [_hiddenSize, _hiddenSize]);
+        idx += hiddenWeightSize;
+
+        _weightsCh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), [_hiddenSize, _hiddenSize]);
+        idx += hiddenWeightSize;
+
+        _weightsOh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), [_hiddenSize, _hiddenSize]);
+        idx += hiddenWeightSize;
+
+        _biasF = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), [_hiddenSize]);
+        idx += biasSize;
+
+        _biasI = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), [_hiddenSize]);
+        idx += biasSize;
+
+        _biasC = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), [_hiddenSize]);
+        idx += biasSize;
+
+        _biasO = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), [_hiddenSize]);
     }
 
     /// <summary>
@@ -1676,6 +1611,154 @@ public class LSTMLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastHiddenState = null;
         _lastCellState = null;
+
+        // Clear per-time-step cached states to prevent stale state leakage between sequences
+        _cachedHiddenStates = null;
+        _cachedCellStates = null;
+
         Gradients.Clear();
+    }
+
+    /// <summary>
+    /// Exports the LSTM layer's single time-step computation as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the hidden state at one time step.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method exports a single LSTM cell computation for JIT compilation.
+    /// The graph computes: h_t, c_t = LSTMCell(x_t, h_{t-1}, c_{t-1})
+    /// using the standard LSTM equations with forget, input, output gates and cell candidate.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_weightsFi == null || _weightsIi == null || _weightsCi == null || _weightsOi == null)
+            throw new InvalidOperationException("LSTM weights not initialized. Call Initialize() first.");
+
+        if (_weightsFh == null || _weightsIh == null || _weightsCh == null || _weightsOh == null)
+            throw new InvalidOperationException("LSTM recurrent weights not initialized. Call Initialize() first.");
+
+        if (_biasF == null || _biasI == null || _biasC == null || _biasO == null)
+            throw new InvalidOperationException("LSTM biases not initialized. Call Initialize() first.");
+
+        // Create placeholders for single time-step inputs
+        // x_t shape: [batchSize, inputSize]
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, _inputSize });
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "x_t");
+
+        // h_{t-1} shape: [batchSize, hiddenSize]
+        var prevHiddenPlaceholder = new Tensor<T>(new int[] { 1, _hiddenSize });
+        var prevHiddenNode = TensorOperations<T>.Variable(prevHiddenPlaceholder, "h_prev");
+
+        // c_{t-1} shape: [batchSize, hiddenSize]
+        var prevCellPlaceholder = new Tensor<T>(new int[] { 1, _hiddenSize });
+        var prevCellNode = TensorOperations<T>.Variable(prevCellPlaceholder, "c_prev");
+
+        // Create weight and bias nodes
+        var weightsFiNode = TensorOperations<T>.Variable(_weightsFi, "W_fi");
+        var weightsIiNode = TensorOperations<T>.Variable(_weightsIi, "W_ii");
+        var weightsCiNode = TensorOperations<T>.Variable(_weightsCi, "W_ci");
+        var weightsOiNode = TensorOperations<T>.Variable(_weightsOi, "W_oi");
+
+        var weightsFhNode = TensorOperations<T>.Variable(_weightsFh, "W_fh");
+        var weightsIhNode = TensorOperations<T>.Variable(_weightsIh, "W_ih");
+        var weightsChNode = TensorOperations<T>.Variable(_weightsCh, "W_ch");
+        var weightsOhNode = TensorOperations<T>.Variable(_weightsOh, "W_oh");
+
+        var biasFNode = TensorOperations<T>.Variable(_biasF, "b_f");
+        var biasINode = TensorOperations<T>.Variable(_biasI, "b_i");
+        var biasCNode = TensorOperations<T>.Variable(_biasC, "b_c");
+        var biasONode = TensorOperations<T>.Variable(_biasO, "b_o");
+
+        // Add inputs to the list
+        inputNodes.Add(inputNode);
+        inputNodes.Add(prevHiddenNode);
+        inputNodes.Add(prevCellNode);
+        inputNodes.Add(weightsFiNode);
+        inputNodes.Add(weightsIiNode);
+        inputNodes.Add(weightsCiNode);
+        inputNodes.Add(weightsOiNode);
+        inputNodes.Add(weightsFhNode);
+        inputNodes.Add(weightsIhNode);
+        inputNodes.Add(weightsChNode);
+        inputNodes.Add(weightsOhNode);
+        inputNodes.Add(biasFNode);
+        inputNodes.Add(biasINode);
+        inputNodes.Add(biasCNode);
+        inputNodes.Add(biasONode);
+
+        // Build LSTM computation graph (single time step)
+        // Forget gate: f_t = sigmoid(W_fi @ x_t + W_fh @ h_{t-1} + b_f)
+        var weightsFiT = TensorOperations<T>.Transpose(weightsFiNode);
+        var weightsFhT = TensorOperations<T>.Transpose(weightsFhNode);
+        var f_input = TensorOperations<T>.MatrixMultiply(inputNode, weightsFiT);
+        var f_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, weightsFhT);
+        var f_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(f_input, f_hidden), biasFNode);
+        var f_t = TensorOperations<T>.Sigmoid(f_preact);
+
+        // Input gate: i_t = sigmoid(W_ii @ x_t + W_ih @ h_{t-1} + b_i)
+        var weightsIiT = TensorOperations<T>.Transpose(weightsIiNode);
+        var weightsIhT = TensorOperations<T>.Transpose(weightsIhNode);
+        var i_input = TensorOperations<T>.MatrixMultiply(inputNode, weightsIiT);
+        var i_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, weightsIhT);
+        var i_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(i_input, i_hidden), biasINode);
+        var i_t = TensorOperations<T>.Sigmoid(i_preact);
+
+        // Cell candidate: c_tilde = tanh(W_ci @ x_t + W_ch @ h_{t-1} + b_c)
+        var weightsCiT = TensorOperations<T>.Transpose(weightsCiNode);
+        var weightsChT = TensorOperations<T>.Transpose(weightsChNode);
+        var c_input = TensorOperations<T>.MatrixMultiply(inputNode, weightsCiT);
+        var c_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, weightsChT);
+        var c_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(c_input, c_hidden), biasCNode);
+        var c_tilde = TensorOperations<T>.Tanh(c_preact);
+
+        // Output gate: o_t = sigmoid(W_oi @ x_t + W_oh @ h_{t-1} + b_o)
+        var weightsOiT = TensorOperations<T>.Transpose(weightsOiNode);
+        var weightsOhT = TensorOperations<T>.Transpose(weightsOhNode);
+        var o_input = TensorOperations<T>.MatrixMultiply(inputNode, weightsOiT);
+        var o_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, weightsOhT);
+        var o_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(o_input, o_hidden), biasONode);
+        var o_t = TensorOperations<T>.Sigmoid(o_preact);
+
+        // Cell state: c_t = f_t ⊙ c_{t-1} + i_t ⊙ c_tilde
+        var forget_gated = TensorOperations<T>.ElementwiseMultiply(f_t, prevCellNode);
+        var input_gated = TensorOperations<T>.ElementwiseMultiply(i_t, c_tilde);
+        var c_t = TensorOperations<T>.Add(forget_gated, input_gated);
+
+        // Hidden state: h_t = o_t ⊙ tanh(c_t)
+        var c_t_tanh = TensorOperations<T>.Tanh(c_t);
+        var h_t = TensorOperations<T>.ElementwiseMultiply(o_t, c_t_tanh);
+
+        return h_t;
+    }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// True for LSTM layers, as single time-step JIT compilation is supported.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Converts a Matrix to a 2D Tensor for use in computation graphs.
+    /// </summary>
+    private static Tensor<T> MatrixToTensor(Matrix<T> matrix)
+    {
+        // Use Matrix.ToArray() and Tensor.FromVector with reshape for production-grade conversion
+        var data = matrix.ToArray();
+        return Tensor<T>.FromVector(new Vector<T>(data), [matrix.Rows, matrix.Columns]);
+    }
+
+    /// <summary>
+    /// Converts a Vector to a 1D Tensor for use in computation graphs.
+    /// </summary>
+    private static Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        return Tensor<T>.FromVector(vector);
     }
 }

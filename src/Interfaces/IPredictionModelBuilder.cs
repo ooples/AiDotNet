@@ -2,6 +2,10 @@ using AiDotNet.Models.Results;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
 using AiDotNet.Models;
+using AiDotNet.Reasoning.Models;
+using AiDotNet.RetrievalAugmentedGeneration.Graph;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Tokenization.Configuration;
 
 namespace AiDotNet.Interfaces;
 
@@ -342,31 +346,52 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// RAG enhances text generation by retrieving relevant documents from a knowledge base
     /// and using them as context for generating grounded, factual answers.
-    ///
+    /// </para>
+    /// <para>
+    /// <b>Graph RAG:</b> When graphStore or knowledgeGraph is provided, enables knowledge graph-based
+    /// retrieval that finds related entities and their relationships, providing richer context than
+    /// vector similarity alone. If documentStore is also provided, hybrid retrieval combines both
+    /// vector search and graph traversal.
+    /// </para>
+    /// <para>
     /// <b>For Beginners:</b> RAG is like giving your AI access to a library before answering questions.
     /// Instead of relying only on what it learned during training, it can:
-    /// 1. Search a document collection for relevant information
-    /// 2. Read the relevant documents
-    /// 3. Generate an answer based on those documents
-    /// 4. Cite its sources
-    ///
-    /// This makes answers more accurate, up-to-date, and traceable to source materials.
-    /// 
-    /// RAG operations (GenerateAnswer, RetrieveDocuments) are performed during inference via PredictionModelResult,
-    /// not during model building.
+    /// <list type="number">
+    /// <item><description>Search a document collection for relevant information</description></item>
+    /// <item><description>Read the relevant documents</description></item>
+    /// <item><description>Generate an answer based on those documents</description></item>
+    /// <item><description>Cite its sources</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Graph RAG Example:</b> If you ask about "Paris", Graph RAG can find not just documents
+    /// mentioning Paris, but also related concepts like France, Eiffel Tower, and Seine River
+    /// by traversing the knowledge graph.
+    /// </para>
+    /// <para>
+    /// RAG operations (GenerateAnswer, RetrieveDocuments, GraphQuery, etc.) are performed during
+    /// inference via PredictionModelResult, not during model building.
+    /// </para>
     /// </remarks>
-    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, RAG won't be available.</param>
+    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, standard RAG won't be available.</param>
     /// <param name="reranker">Optional reranker for improving document ranking quality. Default provided if retriever is set.</param>
     /// <param name="generator">Optional generator for producing grounded answers. Default provided if retriever is set.</param>
     /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
+    /// <param name="graphStore">Optional graph storage backend for Graph RAG (e.g., MemoryGraphStore, FileGraphStore).</param>
+    /// <param name="knowledgeGraph">Optional pre-configured knowledge graph. If null but graphStore is provided, a new one is created.</param>
+    /// <param name="documentStore">Optional document store for hybrid vector + graph retrieval.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
         IRetriever<T>? retriever = null,
         IReranker<T>? reranker = null,
         IGenerator<T>? generator = null,
-        IEnumerable<IQueryProcessor>? queryProcessors = null);
+        IEnumerable<IQueryProcessor>? queryProcessors = null,
+        IGraphStore<T>? graphStore = null,
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IDocumentStore<T>? documentStore = null);
 
     /// <summary>
     /// Configures AI agent assistance during model building and inference.
@@ -561,6 +586,62 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="crossValidator">The cross-validation strategy to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator);
+
+    /// <summary>
+    /// Configures an AutoML model for automatic machine learning optimization.
+    /// </summary>
+    /// <param name="autoMLModel">The AutoML model instance to use for hyperparameter search and model selection.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AutoML (Automated Machine Learning) automatically searches for the best
+    /// model and hyperparameters for your problem. Instead of manually trying different models and settings,
+    /// AutoML does this for you.
+    /// </para>
+    /// <para>
+    /// When you configure an AutoML model:
+    /// - The Build() method will run the AutoML search process
+    /// - AutoML will try different models and hyperparameters
+    /// - The best model found will be returned as your trained model
+    /// - You can configure search time limits, candidate models, and optimization metrics
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var autoML = new BayesianOptimizationAutoML&lt;double, double[][], double[]&gt;();
+    /// autoML.SetTimeLimit(TimeSpan.FromMinutes(30));
+    /// autoML.SetCandidateModels(new[] { ModelType.RandomForest, ModelType.GradientBoosting });
+    ///
+    /// var builder = new PredictionModelBuilder&lt;double, double[][], double[]&gt;()
+    ///     .ConfigureAutoML(autoML)
+    ///     .Build(trainingData, trainingLabels);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
+
+    /// <summary>
+    /// Configures the environment for reinforcement learning.
+    /// </summary>
+    /// <param name="environment">The RL environment to use for training.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> When training reinforcement learning agents, you need an environment
+    /// for the agent to interact with. This is like setting up a simulation or game for the agent
+    /// to learn from. Common environments include CartPole (balancing a pole), Atari games,
+    /// robotic simulations, etc.
+    ///
+    /// After configuring an environment, use BuildAsync(episodes) to train an RL agent.
+    ///
+    /// Example:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureEnvironment(new CartPoleEnvironment&lt;double&gt;())
+    ///     .ConfigureModel(new DQNAgent&lt;double&gt;())
+    ///     .BuildAsync(episodes: 1000);
+    /// </code>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureEnvironment(ReinforcementLearning.Interfaces.IEnvironment<T> environment);
 
     /// <summary>
     /// Configures knowledge distillation for training a smaller student model from a larger teacher model.
@@ -780,6 +861,330 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="config">The export configuration (optional, uses CPU/ONNX if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null);
+
+    /// <summary>
+    /// Configures tokenization for text-based input processing.
+    /// </summary>
+    /// <remarks>
+    /// Tokenization is the process of breaking text into smaller pieces (tokens) that can be processed
+    /// by machine learning models. This is essential for NLP and text-based models.
+    ///
+    /// <b>For Beginners:</b> Tokenization converts human-readable text into numbers that AI models understand.
+    ///
+    /// Different tokenization strategies include:
+    /// - BPE (Byte Pair Encoding): Used by GPT models, learns subword units from data
+    /// - WordPiece: Used by BERT, splits unknown words into known subwords
+    /// - SentencePiece: Language-independent tokenization used by many multilingual models
+    ///
+    /// Example:
+    /// <code>
+    /// var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 32000);
+    /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    ///     .ConfigureTokenizer(tokenizer)
+    ///     .ConfigureModel(new TransformerModel())
+    ///     .BuildAsync(trainingData, labels);
+    /// </code>
+    /// </remarks>
+    /// <param name="tokenizer">The tokenizer to use for text processing. If null, no tokenizer is configured.</param>
+    /// <param name="config">Optional tokenization configuration. If null, default settings are used.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizer(ITokenizer? tokenizer = null, TokenizationConfig? config = null);
+
+    /// <summary>
+    /// Configures tokenization using a pretrained tokenizer from HuggingFace Hub.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is the easiest and most type-safe way to use industry-standard tokenizers.
+    /// Using the enum ensures you always specify a valid model name.
+    ///
+    /// Simply call without parameters for sensible defaults:
+    /// <code>
+    /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    ///     .ConfigureTokenizerFromPretrained()  // Uses BertBaseUncased by default
+    ///     .ConfigureModel(new BertModel())
+    ///     .BuildAsync(trainingData, labels);
+    /// </code>
+    ///
+    /// Or specify a model using the enum:
+    /// <code>
+    /// builder.ConfigureTokenizerFromPretrained(PretrainedTokenizerModel.Gpt2)
+    /// </code>
+    ///
+    /// Available models include:
+    /// - BertBaseUncased: BERT tokenizer for English text (default)
+    /// - Gpt2, Gpt2Medium, Gpt2Large: GPT-2 tokenizers for text generation
+    /// - RobertaBase, RobertaLarge: RoBERTa tokenizers (improved BERT)
+    /// - T5Small, T5Base, T5Large: T5 tokenizers for text-to-text tasks
+    /// - DistilBertBaseUncased: Faster, smaller BERT
+    /// - CodeBertBase: For code understanding tasks
+    /// </remarks>
+    /// <param name="model">The pretrained tokenizer model to use. Defaults to BertBaseUncased.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(PretrainedTokenizerModel model = PretrainedTokenizerModel.BertBaseUncased, TokenizationConfig? config = null);
+
+    /// <summary>
+    /// Configures tokenization using a pretrained tokenizer from a custom HuggingFace model name or local path.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Use this overload when you need to specify a custom model name or path
+    /// that isn't in the PretrainedTokenizerModel enum. For common models, prefer the enum-based overload
+    /// for type safety.
+    ///
+    /// Example with custom model:
+    /// <code>
+    /// // Use a custom or community model from HuggingFace
+    /// builder.ConfigureTokenizerFromPretrained("sentence-transformers/all-MiniLM-L6-v2")
+    /// </code>
+    ///
+    /// If null or empty, defaults to "bert-base-uncased".
+    /// </remarks>
+    /// <param name="modelNameOrPath">The HuggingFace model name or local path. Defaults to "bert-base-uncased" if not specified.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(string? modelNameOrPath = null, TokenizationConfig? config = null);
+
+    /// <summary>
+    /// Asynchronously configures the tokenizer by loading a pretrained model from HuggingFace Hub.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the async version of ConfigureTokenizerFromPretrained.
+    /// Use this when you want to avoid blocking the thread while downloading tokenizer files
+    /// from HuggingFace Hub. This is especially important in UI applications or web servers.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Async configuration
+    /// await builder.ConfigureTokenizerFromPretrainedAsync(PretrainedTokenizerModel.BertBaseUncased);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The pretrained tokenizer model to use.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <returns>A task that completes with the builder instance for method chaining.</returns>
+    Task<IPredictionModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(PretrainedTokenizerModel model = PretrainedTokenizerModel.BertBaseUncased, TokenizationConfig? config = null);
+
+    /// <summary>
+    /// Asynchronously configures the tokenizer by loading a pretrained model from HuggingFace Hub using a model name or path.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the async version that accepts a custom model name or path.
+    /// Use this when loading custom or community models without blocking the thread.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Async configuration with custom model
+    /// await builder.ConfigureTokenizerFromPretrainedAsync("sentence-transformers/all-MiniLM-L6-v2");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="modelNameOrPath">The HuggingFace model name or local path. Defaults to "bert-base-uncased" if not specified.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <returns>A task that completes with the builder instance for method chaining.</returns>
+    Task<IPredictionModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(string? modelNameOrPath = null, TokenizationConfig? config = null);
+
+    /// <summary>
+    /// Enables GPU acceleration for training and inference with optional configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> GPU acceleration makes your model train 10-100x faster on large datasets
+    /// by using your graphics card (GPU) for parallel computation. It automatically uses GPU for large
+    /// operations and CPU for small ones, with zero code changes required.
+    /// </para>
+    /// <para>
+    /// Benefits:
+    /// - 10-100x faster training for large neural networks
+    /// - Automatic size-based routing (GPU for large ops, CPU for small)
+    /// - Supports NVIDIA (CUDA) and AMD/Intel (OpenCL) GPUs
+    /// - Automatic CPU fallback if GPU unavailable
+    /// - Works transparently with existing models
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Enable with defaults (recommended)
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureGpuAcceleration()
+    ///     .BuildAsync(data, labels);
+    ///
+    /// // Or with aggressive settings for high-end GPUs
+    /// builder.ConfigureGpuAcceleration(GpuAccelerationConfig.Aggressive());
+    ///
+    /// // Or CPU-only for debugging
+    /// builder.ConfigureGpuAcceleration(GpuAccelerationConfig.CpuOnly());
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="config">GPU acceleration configuration (optional, uses defaults if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureGpuAcceleration(GpuAccelerationConfig? config = null);
+
+    /// <summary>
+    /// Configures Just-In-Time (JIT) compilation for neural network forward and backward passes.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> JIT compilation is an optimization technique that converts your neural network's
+    /// operations into highly optimized native code at runtime, similar to how modern browsers optimize JavaScript.
+    /// </para>
+    /// <para>
+    /// Benefits:
+    /// - 2-10x faster inference through operation fusion and vectorization
+    /// - Reduced memory allocations during forward/backward passes
+    /// - Automatic optimization of computation graphs
+    /// - Zero code changes required - just enable the config
+    /// </para>
+    /// <para>
+    /// JIT compilation works by:
+    /// 1. Analyzing your neural network's computation graph
+    /// 2. Fusing compatible operations together (e.g., MatMul + Bias + ReLU)
+    /// 3. Generating optimized native code using System.Reflection.Emit
+    /// 4. Caching compiled code for subsequent runs
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// // Enable JIT with defaults (recommended)
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureJitCompilation()
+    ///     .BuildAsync(data, labels);
+    ///
+    /// // Or with custom settings
+    /// builder.ConfigureJitCompilation(new JitCompilationConfig
+    /// {
+    ///     Enabled = true,
+    ///     CompilerOptions = new JitCompilerOptions
+    ///     {
+    ///         EnableOperationFusion = true,
+    ///         EnableVectorization = true
+    ///     }
+    /// });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="config">JIT compilation configuration (optional, enables with defaults if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(AiDotNet.Configuration.JitCompilationConfig? config = null);
+
+    /// <summary>
+    /// Configures inference-time optimizations for faster predictions.
+    /// </summary>
+    /// <param name="config">Inference optimization configuration (optional, uses defaults if null).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Inference optimization makes your model's predictions faster and more efficient.
+    ///
+    /// Key features enabled:
+    /// - <b>KV Cache:</b> Speeds up transformer/attention models by 2-10x
+    /// - <b>Batching:</b> Groups predictions for higher throughput
+    /// - <b>Speculative Decoding:</b> Speeds up text generation by 1.5-3x
+    ///
+    /// Example:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, ...&gt;()
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
+    ///     .BuildAsync(x, y);
+    ///
+    /// // Or with custom settings:
+    /// var config = new InferenceOptimizationConfig
+    /// {
+    ///     EnableKVCache = true,
+    ///     MaxBatchSize = 64,
+    ///     EnableSpeculativeDecoding = true
+    /// };
+    ///
+    /// var result = await builder
+    ///     .ConfigureInferenceOptimizations(config)
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null);
+
+    /// <summary>
+    /// Configures mixed-precision training for faster neural network training with reduced memory usage.
+    /// </summary>
+    /// <param name="config">Mixed precision configuration (optional, uses defaults if null).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixed-precision training is a powerful optimization technique that uses
+    /// both 16-bit (half precision) and 32-bit (full precision) floating-point numbers during training.
+    /// This provides:
+    /// - **Up to 50% memory savings** allowing larger batch sizes or bigger models
+    /// - **2-3x faster training** on modern GPUs with Tensor Cores (NVIDIA Volta+)
+    /// - **Maintained accuracy** through careful precision management and loss scaling
+    ///
+    /// <b>Requirements:</b>
+    /// - Type parameter T must be float (FP32)
+    /// - Requires gradient-based optimizers (SGD, Adam, etc.)
+    /// - Best suited for neural networks with large parameter counts
+    ///
+    /// Example:
+    /// <code>
+    /// // Enable with default settings (recommended)
+    /// var result = await new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    ///     .ConfigureModel(network)
+    ///     .ConfigureOptimizer(optimizer)
+    ///     .ConfigureMixedPrecision()  // Enable mixed-precision
+    ///     .BuildAsync(trainingData, labels);
+    ///
+    /// // Or with custom configuration
+    /// builder.ConfigureMixedPrecision(MixedPrecisionConfig.Conservative());
+    /// </code>
+    /// </para>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null);
+
+    /// <summary>
+    /// Configures advanced reasoning capabilities for the model using Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency strategies.
+    /// </summary>
+    /// <param name="config">The reasoning configuration (optional, uses defaults if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Reasoning capabilities make AI models "think step by step" instead of
+    /// giving quick answers that might be wrong. Just like a student showing their work on a math test,
+    /// reasoning strategies help the AI:
+    /// - Break down complex problems into manageable steps
+    /// - Explore multiple solution approaches
+    /// - Verify and refine its answers
+    /// - Provide transparent, explainable reasoning
+    ///
+    /// After building your model, use the reasoning methods on PredictionModelResult:
+    /// - ReasonAsync(): Solve problems with configurable reasoning strategies
+    /// - QuickReasonAsync(): Fast answers for simple problems
+    /// - DeepReasonAsync(): Thorough analysis for complex problems
+    ///
+    /// Example:
+    /// <code>
+    /// // Configure reasoning during model building
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig)
+    ///     .ConfigureReasoning()
+    ///     .BuildAsync(data, labels);
+    ///
+    /// // Use reasoning on the trained model
+    /// var reasoningResult = await result.ReasonAsync(
+    ///     "Explain why this prediction was made and what factors contributed most?",
+    ///     ReasoningMode.ChainOfThought
+    /// );
+    /// Console.WriteLine(reasoningResult.FinalAnswer);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureReasoning(ReasoningConfig? config = null);
 
     /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.

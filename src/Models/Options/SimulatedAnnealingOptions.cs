@@ -103,7 +103,7 @@ public class SimulatedAnnealingOptions<T, TInput, TOutput> : OptimizationAlgorit
     /// 
     /// The default value of 0.995 means:
     /// - After each iteration, the temperature is multiplied by 0.995
-    /// - This creates a gradual cooling effect (temperature after n iterations = InitialTemperature × 0.995n)
+    /// - This creates a gradual cooling effect (temperature after n iterations = InitialTemperature Ã— 0.995n)
     /// 
     /// Think of it like this:
     /// - Values closer to 1.0 (e.g., 0.999): Very slow cooling, more thorough exploration
@@ -114,9 +114,9 @@ public class SimulatedAnnealingOptions<T, TInput, TOutput> : OptimizationAlgorit
     /// - Decrease it (further from 1, e.g., 0.99) when you need faster results and have simpler problems
     /// 
     /// For example, with InitialTemperature=100 and CoolingRate=0.995:
-    /// - After 100 iterations: Temperature ˜ 60.6
-    /// - After 500 iterations: Temperature ˜ 8.2
-    /// - After 1000 iterations: Temperature ˜ 0.7
+    /// - After 100 iterations: Temperature Ëœ 60.6
+    /// - After 500 iterations: Temperature Ëœ 8.2
+    /// - After 1000 iterations: Temperature Ëœ 0.7
     /// </para>
     /// </remarks>
     public double CoolingRate { get; set; } = 0.995;

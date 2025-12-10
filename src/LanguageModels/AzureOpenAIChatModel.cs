@@ -176,7 +176,7 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override async Task<string> GenerateAsyncCore(string prompt)
+    protected override async Task<string> GenerateAsyncCore(string prompt, CancellationToken cancellationToken)
     {
         // Build the Azure OpenAI endpoint URL
         var url = $"{_endpoint}/openai/deployments/{_deploymentName}/chat/completions?api-version={_apiVersion}";
@@ -209,8 +209,8 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
         };
         request.Headers.Add("api-key", _apiKey);
 
-        // Make the API call
-        using var response = await HttpClient.SendAsync(request);
+        // Make the API call with cancellation support
+        using var response = await HttpClient.SendAsync(request, cancellationToken);
 
         // Check for errors
         if (!response.IsSuccessStatusCode)

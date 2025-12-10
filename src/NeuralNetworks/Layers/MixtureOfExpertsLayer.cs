@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -482,6 +484,12 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Validate input tensor is 2D (batch_size x features)
+        if (input.Shape.Length != 2)
+            throw new ArgumentException(
+                $"Input tensor must be 2D (batch_size x features). Got {input.Shape.Length}D tensor with shape [{string.Join(", ", input.Shape)}].",
+                nameof(input));
+
         // Cache input for backward pass
         _lastInput = input;
 
@@ -761,21 +769,22 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        var allParameters = new List<T>();
+        // Use Vector<T>.Concatenate for production-grade parameter collection
+        var paramVectors = new List<Vector<T>>();
 
         // Add router parameters
         if (_router.ParameterCount > 0)
         {
-            allParameters.AddRange(_router.GetParameters().ToArray());
+            paramVectors.Add(_router.GetParameters());
         }
 
         // Add expert parameters
         foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
         {
-            allParameters.AddRange(expert.GetParameters().ToArray());
+            paramVectors.Add(expert.GetParameters());
         }
 
-        return new Vector<T>(allParameters.ToArray());
+        return paramVectors.Count > 0 ? Vector<T>.Concatenate(paramVectors.ToArray()) : new Vector<T>(0);
     }
 
     /// <summary>
@@ -813,29 +822,20 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 nameof(parameters));
         }
 
+        // Use Vector.Slice for production-grade parameter distribution
         int offset = 0;
 
         // Set router parameters
         if (_router.ParameterCount > 0)
         {
-            var routerParams = new List<T>();
-            for (int i = 0; i < _router.ParameterCount; i++)
-            {
-                routerParams.Add(parameters[offset + i]);
-            }
-            _router.SetParameters(new Vector<T>(routerParams.ToArray()));
+            _router.SetParameters(parameters.Slice(offset, _router.ParameterCount));
             offset += _router.ParameterCount;
         }
 
         // Set expert parameters
         foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
         {
-            var expertParams = new List<T>();
-            for (int i = 0; i < expert.ParameterCount; i++)
-            {
-                expertParams.Add(parameters[offset + i]);
-            }
-            expert.SetParameters(new Vector<T>(expertParams.ToArray()));
+            expert.SetParameters(parameters.Slice(offset, expert.ParameterCount));
             offset += expert.ParameterCount;
         }
     }
@@ -1058,68 +1058,46 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int batchSize = _lastInput.Shape[0];
         int numExperts = _experts.Count;
 
-        // Compute token fractions: proportion of tokens routed to each expert
-        var tokenCounts = new T[numExperts];
-        var probabilityMass = new T[numExperts];
+        // VECTORIZED: Use Engine operations for probability mass computation
+        // Sum routing weights along batch dimension to get probability mass per expert
+        var probMassTensor = Engine.ReduceSum(_lastRoutingWeights, new[] { 0 }, keepDims: false);
+        var probMassVec = probMassTensor.ToVector();
 
-        for (int i = 0; i < numExperts; i++)
+        // VECTORIZED: Compute token counts using tensor operations
+        T threshold = NumOps.FromDouble(0.01);
+
+        Tensor<T> tokenCountsTensor;
+        if (_topK > 0 && _lastTopKIndices != null)
         {
-            T tokenCount = NumOps.Zero;
-            T probMass = NumOps.Zero;
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                var weight = _lastRoutingWeights[b, i];
-
-                // Count token assignment
-                // For Top-K: count if expert is in top-K
-                // For soft routing: count if weight > threshold
-                if (_topK > 0)
-                {
-                    if (IsExpertActive(b, i))
-                    {
-                        tokenCount = NumOps.Add(tokenCount, NumOps.One);
-                    }
-                }
-                else
-                {
-                    // Soft routing: count if weight is significant (> 0.01)
-                    if (NumOps.GreaterThan(weight, NumOps.FromDouble(0.01)))
-                    {
-                        tokenCount = NumOps.Add(tokenCount, NumOps.One);
-                    }
-                }
-
-                // Accumulate probability mass
-                probMass = NumOps.Add(probMass, weight);
-            }
-
-            tokenCounts[i] = tokenCount;
-            probabilityMass[i] = probMass;
+            // For Top-K, sparse weights are already zero for inactive experts
+            // Count non-zero entries per expert (column-wise)
+            var isActive = Engine.TensorGreaterThan(_lastRoutingWeights, NumOps.Zero);
+            // Convert boolean-like comparison result to counts
+            tokenCountsTensor = Engine.ReduceSum(isActive, new[] { 0 }, keepDims: false);
         }
-
-        // Normalize to get fractions
-        T totalTokens = NumOps.Zero;
-        T totalProbMass = NumOps.Zero;
-
-        for (int i = 0; i < numExperts; i++)
+        else
         {
-            totalTokens = NumOps.Add(totalTokens, tokenCounts[i]);
-            totalProbMass = NumOps.Add(totalProbMass, probabilityMass[i]);
+            // For dense routing, count where weight > threshold
+            var isActive = Engine.TensorGreaterThan(_lastRoutingWeights, threshold);
+            tokenCountsTensor = Engine.ReduceSum(isActive, new[] { 0 }, keepDims: false);
         }
+        var tokenCountVec = tokenCountsTensor.ToVector();
 
-        // Compute load balancing loss: numExperts * sum(token_frac_i * prob_frac_i)
-        T loss = NumOps.Zero;
+        // VECTORIZED: Normalize to get fractions using Vector operations
 
-        for (int i = 0; i < numExperts; i++)
-        {
-            T tokenFraction = NumOps.Divide(tokenCounts[i],
-                NumOps.GreaterThan(totalTokens, NumOps.Zero) ? totalTokens : NumOps.One);
-            T probFraction = NumOps.Divide(probabilityMass[i],
-                NumOps.GreaterThan(totalProbMass, NumOps.Zero) ? totalProbMass : NumOps.One);
+        T totalTokens = tokenCountVec.Sum();
+        T totalProbMass = probMassVec.Sum();
 
-            loss = NumOps.Add(loss, NumOps.Multiply(tokenFraction, probFraction));
-        }
+        // VECTORIZED: Compute load balancing loss using vector operations
+        T safeTokenTotal = NumOps.GreaterThan(totalTokens, NumOps.Zero) ? totalTokens : NumOps.One;
+        T safeProbTotal = NumOps.GreaterThan(totalProbMass, NumOps.Zero) ? totalProbMass : NumOps.One;
+
+        var tokenFractions = (Vector<T>)Engine.Divide(tokenCountVec, safeTokenTotal);
+        var probFractions = (Vector<T>)Engine.Divide(probMassVec, safeProbTotal);
+
+        // Element-wise multiply and sum
+        var products = (Vector<T>)Engine.Multiply(tokenFractions, probFractions);
+        T loss = products.Sum();
 
         loss = NumOps.Multiply(NumOps.FromDouble(numExperts), loss);
 
@@ -1233,32 +1211,24 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             diagnostics["load_balance_loss"] = Convert.ToDouble(loadBalanceLoss).ToString("F6");
         }
 
-        // Compute usage variance
-        T meanTokens = NumOps.Zero;
-        for (int i = 0; i < numExperts; i++)
-        {
-            meanTokens = NumOps.Add(meanTokens, tokenCounts[i]);
-        }
-        meanTokens = NumOps.Divide(meanTokens, NumOps.FromDouble(numExperts));
+        // VECTORIZED: Compute usage variance using Vector operations
+        var tokenCountVec = new Vector<T>(tokenCounts);
+        T meanTokens = NumOps.Divide(tokenCountVec.Sum(), NumOps.FromDouble(numExperts));
 
-        T variance = NumOps.Zero;
-        for (int i = 0; i < numExperts; i++)
-        {
-            var diff = NumOps.Subtract(tokenCounts[i], meanTokens);
-            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-        }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(numExperts));
+        // Compute variance: E[(X - mean)^2]
+        var meanVec = Engine.Fill(numExperts, meanTokens);
+        var diffs = Engine.Subtract(tokenCountVec, meanVec);
+        var diffsSquared = Engine.Multiply(diffs, diffs);
+        T variance = NumOps.Divide(Engine.Sum(diffsSquared), NumOps.FromDouble(numExperts));
         diagnostics["usage_variance"] = Convert.ToDouble(variance).ToString("F6");
 
-        // Compute max/min ratio
+        // Compute max/min ratio (diagnostics - use indexed access)
         T maxTokens = tokenCounts[0];
         T minTokens = tokenCounts[0];
         for (int i = 1; i < numExperts; i++)
         {
-            if (NumOps.GreaterThan(tokenCounts[i], maxTokens))
-                maxTokens = tokenCounts[i];
-            if (NumOps.LessThan(tokenCounts[i], minTokens))
-                minTokens = tokenCounts[i];
+            if (NumOps.GreaterThan(tokenCounts[i], maxTokens)) maxTokens = tokenCounts[i];
+            if (NumOps.LessThan(tokenCounts[i], minTokens)) minTokens = tokenCounts[i];
         }
 
         T maxMinRatio = NumOps.GreaterThan(minTokens, NumOps.Zero)
@@ -1331,38 +1301,23 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T> ApplySoftmax(Tensor<T> logits)
     {
-        int batchSize = logits.Shape[0];
-        int numExperts = logits.Shape[1];
-        var softmax = new Tensor<T>(logits.Shape);
+        // Fully vectorized softmax using tensor operations
+        // logits shape: [batchSize, numExperts]
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Find max for numerical stability
-            T maxLogit = logits[b, 0];
-            for (int i = 1; i < numExperts; i++)
-            {
-                if (NumOps.GreaterThan(logits[b, i], maxLogit))
-                {
-                    maxLogit = logits[b, i];
-                }
-            }
+        // Step 1: Find max per row for numerical stability (axis=1)
+        var maxPerRow = Engine.ReduceMax(logits, new[] { 1 }, keepDims: true, out _); // [batchSize, 1]
 
-            // Compute exp(logit - max) and sum
-            T expSum = NumOps.Zero;
-            var expValues = new T[numExperts];
-            for (int i = 0; i < numExperts; i++)
-            {
-                var exp = NumOps.Exp(NumOps.Subtract(logits[b, i], maxLogit));
-                expValues[i] = exp;
-                expSum = NumOps.Add(expSum, exp);
-            }
+        // Step 2: Subtract max for numerical stability - use broadcasting
+        var shiftedLogits = Engine.TensorSubtract<T>(logits, maxPerRow); // [batchSize, numExperts]
 
-            // Normalize to get probabilities
-            for (int i = 0; i < numExperts; i++)
-            {
-                softmax[b, i] = NumOps.Divide(expValues[i], expSum);
-            }
-        }
+        // Step 3: Apply exp element-wise
+        var expValues = Engine.TensorExp(shiftedLogits); // [batchSize, numExperts]
+
+        // Step 4: Sum exp values per row
+        var expSum = Engine.ReduceSum(expValues, new[] { 1 }, keepDims: true); // [batchSize, 1]
+
+        // Step 5: Normalize - divide each row by its sum (with broadcasting)
+        var softmax = Engine.TensorDivide<T>(expValues, expSum); // [batchSize, numExperts]
 
         return softmax;
     }
@@ -1403,37 +1358,32 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int batchSize = weights.Shape[0];
         int numExperts = weights.Shape[1];
 
-        var sparseWeights = new Tensor<T>(weights.Shape);
-        var topKIndices = new int[batchSize, k];
+        // VECTORIZED: Use TensorTopK to get top-k values and indices
+        var topKValues = Engine.TensorTopK(weights, k, axis: 1, out Tensor<int> topKIndicesTensor);
+        // topKValues shape: [batchSize, k]
+        // topKIndicesTensor shape: [batchSize, k]
 
+        // VECTORIZED: Compute row sums for normalization
+        var sumPerRow = Engine.ReduceSum(topKValues, new[] { 1 }, keepDims: true); // [batchSize, 1]
+
+        // VECTORIZED: Normalize top-k values
+        var normalizedTopK = Engine.TensorDivide(topKValues, sumPerRow); // [batchSize, k]
+
+        // VECTORIZED: Scatter normalized values back to full expert dimension
+        // Create zero tensor for sparse weights
+        var sparseWeights = new Tensor<T>(weights.Shape);
+        sparseWeights.Fill(NumOps.Zero);
+
+        // Use TensorScatter to place normalized values at correct positions
+        sparseWeights = Engine.TensorScatter(sparseWeights, topKIndicesTensor, normalizedTopK, axis: 1);
+
+        // Convert topKIndicesTensor to int[,] for backward compatibility
+        var topKIndices = new int[batchSize, k];
         for (int b = 0; b < batchSize; b++)
         {
-            // Get all weights for this batch item
-            var batchWeights = new (T weight, int index)[numExperts];
-            for (int i = 0; i < numExperts; i++)
-            {
-                batchWeights[i] = (weights[b, i], i);
-            }
-
-            // Sort by weight descending and take top K
-            var topK = batchWeights
-                .OrderByDescending(w => w.weight, new NumericComparer())
-                .Take(k)
-                .ToArray();
-
-            // Store indices and weights
-            T weightSum = NumOps.Zero;
             for (int i = 0; i < k; i++)
             {
-                topKIndices[b, i] = topK[i].index;
-                weightSum = NumOps.Add(weightSum, topK[i].weight);
-            }
-
-            // Normalize the top-K weights to sum to 1
-            for (int i = 0; i < k; i++)
-            {
-                int expertIdx = topK[i].index;
-                sparseWeights[b, expertIdx] = NumOps.Divide(topK[i].weight, weightSum);
+                topKIndices[b, i] = topKIndicesTensor[b, i];
             }
         }
 
@@ -1477,41 +1427,27 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentException("Must have at least one expert output.", nameof(expertOutputs));
         }
 
-        int batchSize = expertOutputs[0].Shape[0];
+        // Initialize combined output with zeros
         var combined = new Tensor<T>(expertOutputs[0].Shape);
+        combined.Fill(NumOps.Zero);
 
-        for (int b = 0; b < batchSize; b++)
+        // Vectorized: For each expert, multiply its output by routing weights and accumulate
+        // expertOutputs[i] shape: [batchSize, outputDim]
+        // routingWeights shape: [batchSize, numExperts]
+        // We need weight for expert i: routingWeights[:, i] with shape [batchSize, 1] for broadcasting
+
+        for (int i = 0; i < expertOutputs.Count; i++)
         {
-            for (int i = 0; i < expertOutputs.Count; i++)
-            {
-                var weight = routingWeights[b, i];
+            var expertOutput = expertOutputs[i];
 
-                // Skip if weight is zero (common with Top-K routing)
-                if (NumOps.Equals(weight, NumOps.Zero))
-                {
-                    continue;
-                }
+            // Extract routing weight for expert i as a column tensor [batchSize, 1]
+            var weightColumn = Engine.TensorSlice(routingWeights, new[] { 0, i }, new[] { routingWeights.Shape[0], 1 });
 
-                // Add weighted expert output
-                var expertOutput = expertOutputs[i];
-                for (int j = 1; j < combined.Shape.Length; j++)
-                {
-                    // This is simplified - in practice, you'd need to handle multi-dimensional properly
-                    var idx = new int[combined.Shape.Length];
-                    idx[0] = b;
-                    // Add remaining dimensions handling here based on your tensor implementation
-                }
+            // Multiply expert output by weight (broadcasts across output dimensions)
+            var weightedOutput = Engine.TensorMultiply(expertOutput, weightColumn);
 
-                // Simplified version: weight entire expert output for this batch item
-                if (expertOutput.Shape.Length == 2)
-                {
-                    for (int j = 0; j < expertOutput.Shape[1]; j++)
-                    {
-                        var weightedValue = NumOps.Multiply(expertOutput[b, j], weight);
-                        combined[b, j] = NumOps.Add(combined[b, j], weightedValue);
-                    }
-                }
-            }
+            // Accumulate
+            combined = Engine.TensorAdd(combined, weightedOutput);
         }
 
         return combined;
@@ -1571,60 +1507,29 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int batchSize = outputGradient.Shape[0];
         int numExperts = expertOutputs.Count;
 
-        // Gradient with respect to routing weights (before softmax derivative)
+        // VECTORIZED: Compute weight gradients using tensor operations
+        // d(loss)/d(weight_i) = sum_j(d(loss)/d(output_j) * expertOutput_i_j)
+        // This is the element-wise product followed by sum over output dimension
         var weightGradients = new Tensor<T>(new int[] { batchSize, numExperts });
 
-        for (int b = 0; b < batchSize; b++)
+        for (int i = 0; i < numExperts; i++)
         {
-            for (int i = 0; i < numExperts; i++)
+            var expertOutput = expertOutputs[i];
+            if (expertOutput.Shape.Length == 2)
             {
-                // Compute: d(loss)/d(weight_i) = sum(d(loss)/d(output) * expertOutput_i)
-                T grad = NumOps.Zero;
+                // Element-wise multiply outputGradient with expertOutput, then sum over output dim
+                var product = Engine.TensorMultiply(outputGradient, expertOutput);
+                var summed = Engine.ReduceSum(product, new[] { 1 }, keepDims: false); // [batchSize]
 
-                var expertOutput = expertOutputs[i];
-                if (expertOutput.Shape.Length == 2)
-                {
-                    for (int j = 0; j < expertOutput.Shape[1]; j++)
-                    {
-                        grad = NumOps.Add(grad,
-                            NumOps.Multiply(outputGradient[b, j], expertOutput[b, j]));
-                    }
-                }
-
-                weightGradients[b, i] = grad;
+                // Store in weightGradients column
+                Engine.TensorSetSliceAxis(weightGradients, summed.Reshape([batchSize, 1]), 1, i);
             }
         }
 
-        // Apply softmax derivative (Jacobian)
-        // For softmax: d(weight_i)/d(logit_j) = weight_i * (δ_ij - weight_j)
-        // where δ_ij is 1 if i == j, else 0
-        var logitGradients = new Tensor<T>(routingLogits.Shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < numExperts; i++)
-            {
-                T logitGrad = NumOps.Zero;
-
-                for (int j = 0; j < numExperts; j++)
-                {
-                    // Diagonal: weight_i * (1 - weight_i)
-                    // Off-diagonal: -weight_i * weight_j
-                    T jacobian = (i == j)
-                        ? NumOps.Multiply(
-                            routingWeights[b, i],
-                            NumOps.Subtract(NumOps.One, routingWeights[b, i]))
-                        : NumOps.Negate(NumOps.Multiply(
-                            routingWeights[b, i],
-                            routingWeights[b, j]));
-
-                    logitGrad = NumOps.Add(logitGrad,
-                        NumOps.Multiply(weightGradients[b, j], jacobian));
-                }
-
-                logitGradients[b, i] = logitGrad;
-            }
-        }
+        // VECTORIZED: Apply softmax backward using Engine operation
+        // The softmax backward formula is: grad_logits = softmax * (grad_weights - sum(grad_weights * softmax))
+        // This is equivalent to the full Jacobian application
+        var logitGradients = Engine.TensorSoftmaxBackward(routingWeights, weightGradients, axis: 1);
 
         return logitGradients;
     }
@@ -1656,21 +1561,13 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T> WeightGradientByRouting(Tensor<T> outputGradient, Tensor<T> routingWeights, int expertIndex)
     {
-        int batchSize = outputGradient.Shape[0];
-        var weightedGradient = new Tensor<T>(outputGradient.Shape);
+        // Vectorized: Extract routing weights for this expert as a column [batchSize, 1]
+        var weightColumn = Engine.TensorSlice(routingWeights, new[] { 0, expertIndex }, new[] { routingWeights.Shape[0], 1 });
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            var weight = routingWeights[b, expertIndex];
-
-            if (outputGradient.Shape.Length == 2)
-            {
-                for (int j = 0; j < outputGradient.Shape[1]; j++)
-                {
-                    weightedGradient[b, j] = NumOps.Multiply(outputGradient[b, j], weight);
-                }
-            }
-        }
+        // Multiply gradient by weight (broadcasts across output dimensions)
+        // outputGradient shape: [batchSize, outputDim]
+        // weightColumn shape: [batchSize, 1] -> broadcasts to [batchSize, outputDim]
+        var weightedGradient = Engine.TensorMultiply(outputGradient, weightColumn);
 
         return weightedGradient;
     }
@@ -1775,4 +1672,88 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     #endregion
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        // Check that all components support JIT
+        if (!_router.SupportsJitCompilation)
+            throw new NotSupportedException("MoE router does not support JIT compilation.");
+
+        foreach (var expert in _experts)
+        {
+            if (!expert.SupportsJitCompilation)
+                throw new NotSupportedException($"Expert does not support JIT compilation.");
+        }
+
+        // MixtureOfExpertsLayer JIT uses soft routing with TopK selection:
+        // 1. Router computes routing logits for each expert
+        // 2. TopKSoftmax selects top-K experts with differentiable routing weights
+        // 3. Each expert processes the input
+        // 4. Outputs are weighted by routing weights and summed
+
+        var input = inputNodes[0];
+
+        // Get routing logits from router
+        var routingLogits = _router.ExportComputationGraph(inputNodes);
+
+        // Apply TopKSoftmax for differentiable expert selection
+        var routingWeights = TensorOperations<T>.TopKSoftmax(routingLogits, _topK);
+
+        // Process through each expert and compute weighted sum
+        ComputationNode<T>? output = null;
+        int numExperts = _experts.Count;
+
+        for (int i = 0; i < numExperts; i++)
+        {
+            // Get expert output
+            var expertOutput = _experts[i].ExportComputationGraph(inputNodes);
+
+            // Get routing weight for this expert (slice from routing weights)
+            var expertWeight = TensorOperations<T>.Slice(routingWeights, i, 1, axis: -1);
+
+            // Weight the expert output
+            var weightedOutput = TensorOperations<T>.ElementwiseMultiply(expertOutput, expertWeight);
+
+            // Accumulate outputs
+            if (output == null)
+            {
+                output = weightedOutput;
+            }
+            else
+            {
+                output = TensorOperations<T>.Add(output, weightedOutput);
+            }
+        }
+
+        // Apply layer activation
+        output = ApplyActivationToGraph(output!);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> if both the router and all experts support JIT compilation; otherwise, <c>false</c>.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for MoE uses TopKSoftmax for differentiable expert selection.
+    /// The routing is performed by the router network, and the selected experts'
+    /// outputs are weighted by the softmax-normalized routing scores.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation =>
+        _router.SupportsJitCompilation && _experts.All(e => e.SupportsJitCompilation);
+
 }

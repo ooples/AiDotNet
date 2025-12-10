@@ -2,6 +2,7 @@ global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
 using AiDotNet.Data.Abstractions;
 using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Graph;
 using AiDotNet.Interpretability;
 using AiDotNet.Serialization;
 using AiDotNet.Agents;
@@ -13,6 +14,13 @@ using AiDotNet.Deployment.TensorRT;
 using AiDotNet.Deployment.Mobile.CoreML;
 using AiDotNet.Deployment.Mobile.TensorFlowLite;
 using AiDotNet.Deployment.Runtime;
+using AiDotNet.Reasoning;
+using AiDotNet.Reasoning.Models;
+using AiDotNet.LanguageModels;
+using AiDotNet.Enums;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Tokenization.Configuration;
+using AiDotNet.Tokenization.Models;
 
 namespace AiDotNet.Models.Results;
 
@@ -186,6 +194,32 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal IFairnessEvaluator<T>? FairnessEvaluator { get; private set; }
 
     /// <summary>
+    /// Gets or sets the tokenizer used for text processing.
+    /// </summary>
+    /// <value>An implementation of ITokenizer for encoding/decoding text, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The tokenizer converts text into tokens (numbers) that the model can process.
+    ///
+    /// When working with text-based models:
+    /// - Text must be tokenized before being fed into the model
+    /// - The tokenizer stores the vocabulary mapping between tokens and IDs
+    /// - Use the Tokenize() method to convert text to tokens for inference
+    ///
+    /// Example usage:
+    /// <code>
+    /// var result = modelResult.Tokenize("Hello world");
+    /// // result contains token IDs, attention masks, etc.
+    /// </code>
+    /// </para>
+    /// </remarks>
+    internal ITokenizer? Tokenizer { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the tokenization configuration.
+    /// </summary>
+    internal TokenizationConfig? TokenizationConfig { get; private set; }
+
+    /// <summary>
     /// Gets or sets the retriever used for RAG document retrieval during inference.
     /// </summary>
     /// <value>An implementation of IRetriever&lt;T&gt; for retrieving documents, or null if RAG is not configured.</value>
@@ -208,6 +242,53 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     /// <value>Query processors for preprocessing queries, or null if not configured.</value>
     internal IEnumerable<IQueryProcessor>? QueryProcessors { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the knowledge graph for graph-enhanced retrieval.
+    /// </summary>
+    /// <value>A knowledge graph containing entities and relationships, or null if Graph RAG is not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The knowledge graph stores entities (like people, places, concepts) and their
+    /// relationships. When you query the model, it can traverse these relationships to find related context
+    /// that pure vector similarity might miss.
+    /// </para>
+    /// <para>
+    /// This property is excluded from JSON serialization because it contains runtime infrastructure
+    /// (graph store, file handles) that should be reconfigured when the model is loaded.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal KnowledgeGraph<T>? KnowledgeGraph { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the graph store backend for persistent graph storage.
+    /// </summary>
+    /// <value>The graph storage backend, or null if Graph RAG is not configured.</value>
+    /// <remarks>
+    /// <para>
+    /// This property is excluded from JSON serialization because it represents runtime storage
+    /// infrastructure (file handles, WAL) that must be reconfigured when the model is loaded.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal IGraphStore<T>? GraphStore { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the hybrid graph retriever for combined vector + graph retrieval.
+    /// </summary>
+    /// <value>A hybrid retriever combining vector similarity with graph traversal, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The hybrid retriever first finds similar documents using vector search,
+    /// then expands the context by traversing the knowledge graph to find related entities. This provides
+    /// richer context than pure vector search alone.
+    /// </para>
+    /// <para>
+    /// This property is excluded from JSON serialization because it contains references to
+    /// runtime infrastructure (knowledge graph, document store) that must be reconfigured when loaded.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal HybridGraphRetriever<T>? HybridGraphRetriever { get; private set; }
 
     /// <summary>
     /// Gets or sets the meta-learner used for few-shot adaptation and fine-tuning.
@@ -347,6 +428,56 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal DeploymentConfiguration? DeploymentConfiguration { get; private set; }
 
     /// <summary>
+    /// Gets the JIT-compiled prediction function for accelerated inference.
+    /// </summary>
+    /// <value>A compiled function for fast predictions, or null if JIT compilation was not enabled or not supported.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is an optimized, pre-compiled version of your model's prediction logic.
+    ///
+    /// When JIT compilation is enabled and the model supports it:
+    /// - The model's computation graph is compiled to fast native code during building
+    /// - This compiled function is stored here
+    /// - Predict() automatically uses it for 5-10x faster predictions
+    ///
+    /// If this is null:
+    /// - JIT was not enabled during model building, OR
+    /// - The model doesn't support JIT compilation (e.g., layer-based neural networks)
+    /// - Predictions use the normal execution path (still works, just not JIT-accelerated)
+    ///
+    /// The JIT-compiled function takes an array of Tensor&lt;T&gt; inputs and returns an array of Tensor&lt;T&gt; outputs,
+    /// matching the model's computation graph structure.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]  // Don't serialize - will need to be recompiled after deserialization
+    private Func<Tensor<T>[], Tensor<T>[]>? JitCompiledFunction { get; set; }
+    private AiDotNet.Configuration.InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }
+
+    /// <summary>
+    /// Gets the reasoning configuration for advanced Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency reasoning.
+    /// </summary>
+    /// <value>Reasoning configuration for advanced reasoning capabilities, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This configuration enables advanced reasoning capabilities that make AI
+    /// models "think step by step" instead of giving quick answers that might be wrong.
+    ///
+    /// When reasoning is configured:
+    /// - Use ReasonAsync() to solve complex problems with step-by-step reasoning
+    /// - Use QuickReasonAsync() for fast answers to simple problems
+    /// - Use DeepReasonAsync() for thorough analysis of complex problems
+    ///
+    /// The reasoning configuration controls:
+    /// - How many reasoning steps to take
+    /// - Whether to explore multiple solution paths (Tree-of-Thoughts)
+    /// - Whether to verify answers with multiple attempts (Self-Consistency)
+    /// - Step verification and refinement options
+    ///
+    /// If null, reasoning features were not configured. You can still use reasoning by providing
+    /// configuration directly to ReasonAsync(), but you must have agent configuration set up.
+    /// </para>
+    /// </remarks>
+    internal ReasoningConfig? ReasoningConfig { get; private set; }
+
+    /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
     /// </summary>
     /// <param name="model">The underlying model used for making predictions.</param>
@@ -402,6 +533,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="agentConfig">Optional agent configuration used during model building.</param>
     /// <param name="agentRecommendation">Optional agent recommendations from model building.</param>
     /// <param name="deploymentConfiguration">Optional deployment configuration for export, caching, versioning, A/B testing, and telemetry.</param>
+    /// <param name="knowledgeGraph">Optional knowledge graph for graph-enhanced retrieval.</param>
+    /// <param name="graphStore">Optional graph store backend for persistent storage.</param>
+    /// <param name="hybridGraphRetriever">Optional hybrid retriever for combined vector + graph search.</param>
     public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo,
         IBiasDetector<T>? biasDetector = null,
@@ -414,7 +548,13 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         CrossValidationResult<T, TInput, TOutput>? crossValidationResult = null,
         AgentConfiguration<T>? agentConfig = null,
         AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null,
-        DeploymentConfiguration? deploymentConfiguration = null)
+        DeploymentConfiguration? deploymentConfiguration = null,
+        Func<Tensor<T>[], Tensor<T>[]>? jitCompiledFunction = null,
+        AiDotNet.Configuration.InferenceOptimizationConfig? inferenceOptimizationConfig = null,
+        ReasoningConfig? reasoningConfig = null,
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IGraphStore<T>? graphStore = null,
+        HybridGraphRetriever<T>? hybridGraphRetriever = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
@@ -431,6 +571,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         AgentConfig = agentConfig;
         AgentRecommendation = agentRecommendation;
         DeploymentConfiguration = deploymentConfiguration;
+        JitCompiledFunction = jitCompiledFunction;
+        InferenceOptimizationConfig = inferenceOptimizationConfig;
+        ReasoningConfig = reasoningConfig;
+        KnowledgeGraph = knowledgeGraph;
+        GraphStore = graphStore;
+        HybridGraphRetriever = hybridGraphRetriever;
     }
 
     /// <summary>
@@ -447,6 +593,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
     /// <param name="agentConfig">Optional agent configuration for AI assistance during inference.</param>
     /// <param name="deploymentConfiguration">Optional deployment configuration for export, caching, versioning, A/B testing, and telemetry.</param>
+    /// <param name="knowledgeGraph">Optional knowledge graph for graph-enhanced retrieval.</param>
+    /// <param name="graphStore">Optional graph store backend for persistent storage.</param>
+    /// <param name="hybridGraphRetriever">Optional hybrid retriever for combined vector + graph search.</param>
     /// <remarks>
     /// <para>
     /// This constructor is used when a model has been trained using meta-learning (e.g., MAML, Reptile, SEAL).
@@ -484,7 +633,11 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IGenerator<T>? ragGenerator = null,
         IEnumerable<IQueryProcessor>? queryProcessors = null,
         AgentConfiguration<T>? agentConfig = null,
-        DeploymentConfiguration? deploymentConfiguration = null)
+        DeploymentConfiguration? deploymentConfiguration = null,
+        ReasoningConfig? reasoningConfig = null,
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IGraphStore<T>? graphStore = null,
+        HybridGraphRetriever<T>? hybridGraphRetriever = null)
     {
         Model = metaLearner.BaseModel;
         MetaLearner = metaLearner;
@@ -499,6 +652,10 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         QueryProcessors = queryProcessors;
         AgentConfig = agentConfig;
         DeploymentConfiguration = deploymentConfiguration;
+        ReasoningConfig = reasoningConfig;
+        KnowledgeGraph = knowledgeGraph;
+        GraphStore = graphStore;
+        HybridGraphRetriever = hybridGraphRetriever;
 
         // Create placeholder OptimizationResult and NormalizationInfo for consistency
         OptimizationResult = new OptimizationResult<T, TInput, TOutput>();
@@ -610,7 +767,28 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         var (normalizedNewData, _) = NormalizationInfo.Normalizer.NormalizeInput(newData);
-        var normalizedPredictions = Model.Predict(normalizedNewData);
+
+        // Use JIT-compiled function if available for 5-10x faster predictions
+        TOutput normalizedPredictions;
+        if (JitCompiledFunction != null && normalizedNewData is Tensor<T> inputTensor)
+        {
+            // JIT PATH: Use compiled function for accelerated inference
+            var jitResult = JitCompiledFunction(new[] { inputTensor });
+            if (jitResult != null && jitResult.Length > 0 && jitResult[0] is TOutput output)
+            {
+                normalizedPredictions = output;
+            }
+            else
+            {
+                // Fallback to model if JIT result is unexpected
+                normalizedPredictions = Model.Predict(normalizedNewData);
+            }
+        }
+        else
+        {
+            // NORMAL PATH: Use model's standard prediction
+            normalizedPredictions = Model.Predict(normalizedNewData);
+        }
 
         return NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, NormalizationInfo.YParams);
     }
@@ -996,7 +1174,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // Create new result with updated optimization result
         // Preserve all configuration properties to ensure deployment behavior, model adaptation,
-        // and training history are maintained across parameter updates
+        // training history, and Graph RAG configuration are maintained across parameter updates
         return new PredictionModelResult<T, TInput, TOutput>(
             updatedOptimizationResult,
             NormalizationInfo,
@@ -1010,7 +1188,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             crossValidationResult: CrossValidationResult,
             agentConfig: AgentConfig,
             agentRecommendation: AgentRecommendation,
-            deploymentConfiguration: DeploymentConfiguration);
+            deploymentConfiguration: DeploymentConfiguration,
+            jitCompiledFunction: null, // JIT compilation is parameter-specific, don't copy
+            inferenceOptimizationConfig: InferenceOptimizationConfig,
+            knowledgeGraph: KnowledgeGraph,
+            graphStore: GraphStore,
+            hybridGraphRetriever: HybridGraphRetriever);
     }
 
     /// <summary>
@@ -1097,7 +1280,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var clonedNormalizationInfo = NormalizationInfo.DeepCopy();
 
         // Preserve all configuration properties to ensure deployment behavior, model adaptation,
-        // and training history are maintained across deep copy
+        // training history, and Graph RAG configuration are maintained across deep copy
         return new PredictionModelResult<T, TInput, TOutput>(
             clonedOptimizationResult,
             clonedNormalizationInfo,
@@ -1111,7 +1294,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             crossValidationResult: CrossValidationResult,
             agentConfig: AgentConfig,
             agentRecommendation: AgentRecommendation,
-            deploymentConfiguration: DeploymentConfiguration);
+            deploymentConfiguration: DeploymentConfiguration,
+            jitCompiledFunction: null, // JIT compilation is model-specific, don't copy
+            inferenceOptimizationConfig: InferenceOptimizationConfig,
+            knowledgeGraph: KnowledgeGraph,
+            graphStore: GraphStore,
+            hybridGraphRetriever: HybridGraphRetriever);
     }
 
     /// <summary>
@@ -1536,6 +1724,285 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// Queries the knowledge graph to find related nodes by entity name or label.
+    /// </summary>
+    /// <param name="query">The search query (entity name or partial match).</param>
+    /// <param name="topK">Maximum number of results to return.</param>
+    /// <returns>Collection of matching graph nodes.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when Graph RAG is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method searches the knowledge graph for entities matching your query.
+    /// Unlike vector search which finds similar documents, this finds entities by name or label.
+    ///
+    /// Example:
+    /// <code>
+    /// var nodes = result.QueryKnowledgeGraph("Einstein", topK: 5);
+    /// foreach (var node in nodes)
+    /// {
+    ///     Console.WriteLine($"{node.Label}: {node.Id}");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IEnumerable<GraphNode<T>> QueryKnowledgeGraph(string query, int topK = 10)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or empty", nameof(query));
+
+        return KnowledgeGraph.FindRelatedNodes(query, topK);
+    }
+
+    /// <summary>
+    /// Retrieves results using hybrid vector + graph search for enhanced context retrieval.
+    /// </summary>
+    /// <param name="queryEmbedding">The query embedding vector.</param>
+    /// <param name="topK">Number of initial candidates from vector search.</param>
+    /// <param name="expansionDepth">How many hops to traverse in the graph (0 = no expansion).</param>
+    /// <param name="maxResults">Maximum total results to return.</param>
+    /// <returns>List of retrieval results with scores and source information.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when hybrid retriever is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method combines the best of both worlds:
+    /// 1. First, it finds similar documents using vector similarity (like traditional RAG)
+    /// 2. Then, it expands the context by traversing the knowledge graph to find related entities
+    ///
+    /// For example, searching for "photosynthesis" might:
+    /// - Find documents about photosynthesis via vector search
+    /// - Then traverse the graph to also include chlorophyll, plants, carbon dioxide
+    ///
+    /// This provides richer, more complete context than vector search alone.
+    /// </para>
+    /// </remarks>
+    public List<RetrievalResult<T>> HybridRetrieve(
+        Vector<T> queryEmbedding,
+        int topK = 5,
+        int expansionDepth = 1,
+        int maxResults = 10)
+    {
+        if (HybridGraphRetriever == null)
+        {
+            throw new InvalidOperationException(
+                "Hybrid graph retriever not configured. Configure Graph RAG with a document store using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (queryEmbedding == null || queryEmbedding.Length == 0)
+            throw new ArgumentException("Query embedding cannot be null or empty", nameof(queryEmbedding));
+
+        return HybridGraphRetriever.Retrieve(queryEmbedding, topK, expansionDepth, maxResults);
+    }
+
+    /// <summary>
+    /// Traverses the knowledge graph starting from a node using breadth-first search.
+    /// </summary>
+    /// <param name="startNodeId">The ID of the starting node.</param>
+    /// <param name="maxDepth">Maximum traversal depth.</param>
+    /// <returns>Collection of nodes reachable from the starting node in BFS order.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when knowledge graph is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method explores the graph starting from a specific entity,
+    /// discovering all connected entities up to a specified depth.
+    ///
+    /// Example: Starting from "Paris", depth=2 might find:
+    /// - Depth 1: France, Eiffel Tower, Seine River
+    /// - Depth 2: Europe, Iron, Water
+    ///
+    /// This is useful for understanding the context around a specific entity.
+    /// </para>
+    /// </remarks>
+    public IEnumerable<GraphNode<T>> TraverseGraph(string startNodeId, int maxDepth = 2)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(startNodeId))
+            throw new ArgumentException("Start node ID cannot be null or empty", nameof(startNodeId));
+
+        return KnowledgeGraph.BreadthFirstTraversal(startNodeId, maxDepth);
+    }
+
+    /// <summary>
+    /// Finds the shortest path between two nodes in the knowledge graph.
+    /// </summary>
+    /// <param name="startNodeId">The ID of the starting node.</param>
+    /// <param name="endNodeId">The ID of the target node.</param>
+    /// <returns>List of node IDs representing the path, or empty list if no path exists.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when knowledge graph is not configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method finds how two entities are connected.
+    ///
+    /// Example: Finding the path between "Einstein" and "Princeton University" might return:
+    /// ["einstein", "worked_at_princeton", "princeton_university"]
+    ///
+    /// This is useful for understanding the relationships between concepts.
+    /// </para>
+    /// </remarks>
+    public List<string> FindPathInGraph(string startNodeId, string endNodeId)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(startNodeId))
+            throw new ArgumentException("Start node ID cannot be null or empty", nameof(startNodeId));
+        if (string.IsNullOrWhiteSpace(endNodeId))
+            throw new ArgumentException("End node ID cannot be null or empty", nameof(endNodeId));
+
+        return KnowledgeGraph.FindShortestPath(startNodeId, endNodeId);
+    }
+
+    /// <summary>
+    /// Gets all edges (relationships) connected to a node in the knowledge graph.
+    /// </summary>
+    /// <param name="nodeId">The ID of the node to query.</param>
+    /// <param name="direction">The direction of edges to retrieve.</param>
+    /// <returns>Collection of edges connected to the node.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when knowledge graph is not configured.</exception>
+    /// <exception cref="ArgumentException">Thrown when nodeId is null or empty.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method finds all relationships connected to an entity.
+    ///
+    /// Example: Getting edges for "Einstein" might return:
+    /// - Outgoing: STUDIED→Physics, WORKED_AT→Princeton, BORN_IN→Germany
+    /// - Incoming: INFLUENCED_BY→Newton
+    /// </para>
+    /// </remarks>
+    public IEnumerable<GraphEdge<T>> GetNodeRelationships(string nodeId, EdgeDirection direction = EdgeDirection.Both)
+    {
+        if (KnowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(nodeId))
+            throw new ArgumentException("Node ID cannot be null or empty", nameof(nodeId));
+
+        var result = new List<GraphEdge<T>>();
+
+        if (direction == EdgeDirection.Outgoing || direction == EdgeDirection.Both)
+        {
+            result.AddRange(KnowledgeGraph.GetOutgoingEdges(nodeId));
+        }
+
+        if (direction == EdgeDirection.Incoming || direction == EdgeDirection.Both)
+        {
+            result.AddRange(KnowledgeGraph.GetIncomingEdges(nodeId));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Attaches Graph RAG components to a PredictionModelResult instance.
+    /// </summary>
+    /// <param name="knowledgeGraph">The knowledge graph to attach.</param>
+    /// <param name="graphStore">The graph store backend to attach.</param>
+    /// <param name="hybridGraphRetriever">The hybrid retriever to attach.</param>
+    /// <remarks>
+    /// This method is internal and used by PredictionModelBuilder when loading/deserializing models.
+    /// Graph RAG components cannot be serialized (they contain file handles, WAL references, etc.),
+    /// so the builder automatically reattaches them when loading a model that was configured with Graph RAG.
+    /// Users should use PredictionModelBuilder.LoadModel() which handles this automatically.
+    /// </remarks>
+    internal void AttachGraphComponents(
+        KnowledgeGraph<T>? knowledgeGraph = null,
+        IGraphStore<T>? graphStore = null,
+        HybridGraphRetriever<T>? hybridGraphRetriever = null)
+    {
+        KnowledgeGraph = knowledgeGraph;
+        GraphStore = graphStore;
+        HybridGraphRetriever = hybridGraphRetriever;
+    }
+
+    /// <summary>
+    /// Attaches tokenization components to the model result.
+    /// </summary>
+    /// <param name="tokenizer">The tokenizer to attach.</param>
+    /// <param name="config">Optional tokenization configuration.</param>
+    /// <remarks>
+    /// This method is internal and used by PredictionModelBuilder during model construction.
+    /// </remarks>
+    internal void AttachTokenizer(
+        ITokenizer? tokenizer,
+        TokenizationConfig? config = null)
+    {
+        Tokenizer = tokenizer;
+        TokenizationConfig = config;
+    }
+
+    /// <summary>
+    /// Tokenizes text using the configured tokenizer.
+    /// </summary>
+    /// <param name="text">The text to tokenize.</param>
+    /// <returns>The tokenization result containing token IDs, attention mask, etc.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no tokenizer is configured.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method converts your text into the format the model needs.
+    ///
+    /// Example:
+    /// <code>
+    /// var result = modelResult.Tokenize("Hello, how are you?");
+    /// // result.TokenIds contains [101, 7592, 1010, 2129, 2024, 2017, 1029, 102]
+    /// // result.AttentionMask contains [1, 1, 1, 1, 1, 1, 1, 1]
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public TokenizationResult Tokenize(string text)
+    {
+        if (Tokenizer == null)
+            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in PredictionModelBuilder.");
+
+        var options = TokenizationConfig?.ToEncodingOptions();
+        return Tokenizer.Encode(text, options);
+    }
+
+    /// <summary>
+    /// Tokenizes multiple texts in a batch.
+    /// </summary>
+    /// <param name="texts">The texts to tokenize.</param>
+    /// <returns>A list of tokenization results.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no tokenizer is configured.</exception>
+    public List<TokenizationResult> TokenizeBatch(List<string> texts)
+    {
+        if (Tokenizer == null)
+            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in PredictionModelBuilder.");
+
+        var options = TokenizationConfig?.ToEncodingOptions();
+        return Tokenizer.EncodeBatch(texts, options);
+    }
+
+    /// <summary>
+    /// Decodes token IDs back into text.
+    /// </summary>
+    /// <param name="tokenIds">The token IDs to decode.</param>
+    /// <param name="skipSpecialTokens">Whether to skip special tokens in the output.</param>
+    /// <returns>The decoded text.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no tokenizer is configured.</exception>
+    public string Detokenize(List<int> tokenIds, bool skipSpecialTokens = true)
+    {
+        if (Tokenizer == null)
+            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in PredictionModelBuilder.");
+
+        return Tokenizer.Decode(tokenIds, skipSpecialTokens);
+    }
+
+    /// <summary>
+    /// Gets whether a tokenizer is configured for this model.
+    /// </summary>
+    public bool HasTokenizer => Tokenizer != null;
+
+    /// <summary>
     /// Saves the prediction model result's current state to a stream.
     /// </summary>
     /// <param name="stream">The stream to write the model state to.</param>
@@ -1869,4 +2336,356 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         return runtime;
     }
+
+    #region Reasoning Methods
+
+    /// <summary>
+    /// Solves a problem using advanced reasoning strategies like Chain-of-Thought, Tree-of-Thoughts, or Self-Consistency.
+    /// </summary>
+    /// <param name="problem">The problem or question to solve.</param>
+    /// <param name="mode">The reasoning mode to use (default: Auto selects based on problem complexity).</param>
+    /// <param name="config">Optional reasoning configuration (uses pre-configured settings if null).</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A complete reasoning result with answer, steps, and metrics.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method uses advanced AI reasoning to solve problems step by step,
+    /// just like how a human would "show their work" on a complex problem.
+    ///
+    /// **What it does:**
+    /// - Breaks down the problem into logical steps
+    /// - Can explore multiple solution paths (Tree-of-Thoughts)
+    /// - Can verify answers with multiple attempts (Self-Consistency)
+    /// - Returns detailed reasoning chain for transparency
+    ///
+    /// **Reasoning modes:**
+    /// - Auto: Automatically selects the best strategy
+    /// - ChainOfThought: Step-by-step linear reasoning
+    /// - TreeOfThoughts: Explores multiple paths, backtracks if needed
+    /// - SelfConsistency: Solves multiple times, uses majority voting
+    ///
+    /// **Example:**
+    /// <code>
+    /// var result = await modelResult.ReasonAsync(
+    ///     "If a train travels 60 mph for 2.5 hours, how far does it go?",
+    ///     ReasoningMode.ChainOfThought
+    /// );
+    /// Console.WriteLine(result.FinalAnswer);  // "150 miles"
+    /// Console.WriteLine(result.ReasoningChain);  // Shows step-by-step work
+    /// </code>
+    ///
+    /// **Requirements:**
+    /// - Agent configuration must be set (ConfigureAgentAssistance during building)
+    /// - API key for LLM provider (OpenAI, Anthropic, etc.)
+    /// </para>
+    /// </remarks>
+    public async Task<ReasoningResult<T>> ReasonAsync(
+        string problem,
+        ReasoningMode mode = ReasoningMode.Auto,
+        ReasoningConfig? config = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (AgentConfig == null || !AgentConfig.IsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building " +
+                "to set up the LLM provider and API key required for reasoning capabilities.");
+        }
+
+        // Use stored config if none provided
+        var effectiveConfig = config ?? ReasoningConfig ?? new ReasoningConfig();
+
+        // Create chat model from agent config
+        var chatModel = CreateChatModelFromAgentConfig();
+
+        // Create internal Reasoner and delegate
+        var reasoner = new Reasoner<T>(chatModel);
+        return await reasoner.SolveAsync(problem, mode, effectiveConfig, cancellationToken);
+    }
+
+    /// <summary>
+    /// Quickly solves a problem with minimal reasoning overhead for fast answers.
+    /// </summary>
+    /// <param name="problem">The problem or question to solve.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The final answer as a string.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this for simple problems where you need a fast answer
+    /// without detailed reasoning steps. It's optimized for speed over thoroughness.
+    ///
+    /// **When to use:**
+    /// - Simple math problems
+    /// - Quick factual questions
+    /// - When speed matters more than detailed explanation
+    ///
+    /// **Example:**
+    /// <code>
+    /// string answer = await modelResult.QuickReasonAsync("What is 15% of 240?");
+    /// Console.WriteLine(answer);  // "36"
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public async Task<string> QuickReasonAsync(
+        string problem,
+        CancellationToken cancellationToken = default)
+    {
+        if (AgentConfig == null || !AgentConfig.IsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
+        }
+
+        var chatModel = CreateChatModelFromAgentConfig();
+        var reasoner = new Reasoner<T>(chatModel);
+        return await reasoner.QuickSolveAsync(problem, cancellationToken);
+    }
+
+    /// <summary>
+    /// Performs deep, thorough reasoning on a complex problem using extensive exploration and verification.
+    /// </summary>
+    /// <param name="problem">The complex problem to analyze.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A comprehensive reasoning result with extensive exploration.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this for complex problems that need careful analysis.
+    /// It explores multiple approaches, verifies reasoning, and provides high-confidence answers.
+    ///
+    /// **What it does:**
+    /// - Uses Tree-of-Thoughts to explore multiple solution paths
+    /// - Applies verification at each step
+    /// - Uses self-refinement to improve answers
+    /// - Takes longer but produces more reliable results
+    ///
+    /// **When to use:**
+    /// - Complex multi-step problems
+    /// - Important decisions requiring high confidence
+    /// - Problems with multiple valid approaches
+    /// - When you need to understand all possibilities
+    ///
+    /// **Example:**
+    /// <code>
+    /// var result = await modelResult.DeepReasonAsync(
+    ///     "Design an algorithm to find the shortest path in a weighted graph"
+    /// );
+    /// // Result includes multiple explored approaches and verification
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public async Task<ReasoningResult<T>> DeepReasonAsync(
+        string problem,
+        CancellationToken cancellationToken = default)
+    {
+        if (AgentConfig == null || !AgentConfig.IsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
+        }
+
+        var chatModel = CreateChatModelFromAgentConfig();
+        var reasoner = new Reasoner<T>(chatModel);
+        return await reasoner.DeepSolveAsync(problem, cancellationToken);
+    }
+
+    /// <summary>
+    /// Solves a problem multiple times using different approaches and returns the consensus answer.
+    /// </summary>
+    /// <param name="problem">The problem to solve.</param>
+    /// <param name="numAttempts">Number of independent solving attempts (default: 5).</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The consensus result with voting statistics.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method solves the same problem multiple times independently
+    /// and picks the most common answer. It's like asking 5 experts and going with the majority.
+    ///
+    /// **How it works:**
+    /// - Solves the problem N times independently
+    /// - Each attempt may use slightly different reasoning
+    /// - Uses majority voting to pick the final answer
+    /// - Reports confidence based on agreement level
+    ///
+    /// **When to use:**
+    /// - Math problems where errors are common
+    /// - When you need high confidence in the answer
+    /// - Problems where reasoning paths can vary
+    ///
+    /// **Example:**
+    /// <code>
+    /// var result = await modelResult.ReasonWithConsensusAsync(
+    ///     "What is the derivative of x^3?",
+    ///     numAttempts: 5
+    /// );
+    /// // If 4 out of 5 attempts say "3x^2", that's the answer
+    /// Console.WriteLine($"Consensus: {result.Metrics["consensus_ratio"]:P0}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public async Task<ReasoningResult<T>> ReasonWithConsensusAsync(
+        string problem,
+        int numAttempts = 5,
+        CancellationToken cancellationToken = default)
+    {
+        if (AgentConfig == null || !AgentConfig.IsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
+        }
+
+        var chatModel = CreateChatModelFromAgentConfig();
+        var reasoner = new Reasoner<T>(chatModel);
+        return await reasoner.SolveWithConsensusAsync(problem, numAttempts, cancellationToken);
+    }
+
+    /// <summary>
+    /// Creates a chat model from the agent configuration.
+    /// </summary>
+    private IChatModel<T> CreateChatModelFromAgentConfig()
+    {
+        if (AgentConfig == null)
+            throw new InvalidOperationException("Agent configuration is required.");
+
+        var apiKey = AgentKeyResolver.ResolveApiKey(
+            AgentConfig.ApiKey,
+            AgentConfig,
+            AgentConfig.Provider);
+
+        return AgentConfig.Provider switch
+        {
+            LLMProvider.OpenAI => new OpenAIChatModel<T>(apiKey),
+            LLMProvider.Anthropic => new AnthropicChatModel<T>(apiKey),
+            LLMProvider.AzureOpenAI => new AzureOpenAIChatModel<T>(
+                AgentConfig.AzureEndpoint ?? throw new InvalidOperationException("Azure endpoint required"),
+                apiKey,
+                AgentConfig.AzureDeployment ?? "gpt-4"),
+            _ => throw new ArgumentException($"Unknown provider: {AgentConfig.Provider}")
+        };
+    }
+
+    #endregion
+
+    #region IJitCompilable Implementation
+
+    /// <summary>
+    /// Gets whether the underlying model currently supports JIT compilation.
+    /// </summary>
+    /// <value>Returns true if the wrapped model implements IJitCompilable and supports JIT, false otherwise.</value>
+    /// <remarks>
+    /// <para>
+    /// This property delegates to the wrapped model's SupportsJitCompilation property if the model
+    /// implements IJitCompilable. If the model does not implement this interface or does not support
+    /// JIT compilation, this returns false.
+    /// </para>
+    /// <para><b>For Beginners:</b> Whether you can use JIT compilation depends on the type of model you trained.
+    ///
+    /// Models that support JIT compilation (SupportsJitCompilation = true):
+    /// - Linear regression models
+    /// - Polynomial regression models
+    /// - Ridge/Lasso regression models
+    /// - Models using differentiable operations
+    ///
+    /// Models that do NOT support JIT (SupportsJitCompilation = false):
+    /// - Decision trees
+    /// - Random forests
+    /// - Gradient boosted trees
+    /// - Models using discrete logic
+    ///
+    /// If your model supports JIT:
+    /// - Predictions will be 5-10x faster
+    /// - The computation graph is compiled to optimized native code
+    /// - You get this speedup automatically when calling Predict()
+    ///
+    /// If your model doesn't support JIT:
+    /// - Predictions still work normally
+    /// - No JIT acceleration, but still optimized for the model type
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when Model is null.</exception>
+    public bool SupportsJitCompilation
+    {
+        get
+        {
+            if (Model == null)
+            {
+                throw new InvalidOperationException("Model is not initialized.");
+            }
+
+            // Check if the model implements IJitCompilable and supports JIT
+            if (Model is IJitCompilable<T> jitModel)
+            {
+                return jitModel.SupportsJitCompilation;
+            }
+
+            // Model doesn't implement IJitCompilable
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Exports the underlying model's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the model's prediction.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when Model is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the underlying model does not support JIT compilation.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to the wrapped model's ExportComputationGraph method if the model
+    /// implements IJitCompilable and supports JIT compilation. If the model does not implement
+    /// this interface or does not support JIT, this throws NotSupportedException.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method creates a "recipe" of your model's calculations for JIT compilation.
+    ///
+    /// If your model supports JIT (SupportsJitCompilation = true):
+    /// - This method creates a computation graph from your model
+    /// - The graph represents all the mathematical operations your model performs
+    /// - The JIT compiler uses this to create fast optimized code
+    ///
+    /// If your model doesn't support JIT (SupportsJitCompilation = false):
+    /// - This method will throw an exception
+    /// - Check SupportsJitCompilation before calling this
+    /// - Decision trees, random forests, etc. cannot export computation graphs
+    ///
+    /// You typically don't call this method directly. It's used internally by:
+    /// - PredictionModelBuilder when building models with JIT enabled
+    /// - The prediction pipeline to compile models for faster inference
+    ///
+    /// Example of what happens inside:
+    /// - Linear model: Creates graph with MatMul(X, Coefficients) + Intercept
+    /// - Neural network: Creates graph with all layers and activations
+    /// - Decision tree: Throws exception - cannot create computation graph
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Autodiff.ComputationNode<T> ExportComputationGraph(List<AiDotNet.Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        // Check if the model implements IJitCompilable
+        if (Model is IJitCompilable<T> jitModel)
+        {
+            // Check if it actually supports JIT before delegating
+            if (!jitModel.SupportsJitCompilation)
+            {
+                throw new NotSupportedException(
+                    $"The underlying model type ({Model.GetType().Name}) does not support JIT compilation. " +
+                    "Check SupportsJitCompilation property before calling ExportComputationGraph.");
+            }
+
+            // Delegate to the wrapped model
+            return jitModel.ExportComputationGraph(inputNodes);
+        }
+
+        // Model doesn't implement IJitCompilable at all
+        throw new NotSupportedException(
+            $"The underlying model type ({Model.GetType().Name}) does not implement IJitCompilable<T>. " +
+            "JIT compilation is only supported for models that use differentiable computation graphs, such as " +
+            "linear models, polynomial models, and neural networks. Tree-based models (decision trees, random forests, " +
+            "gradient boosting) cannot be JIT compiled due to their discrete branching logic.");
+    }
+
+    #endregion
 }

@@ -90,7 +90,7 @@ public class ModifiedHuberLossFitnessCalculator<T, TInput, TOutput> : FitnessCal
     /// A lower score means better performance (0 would be perfect).
     /// 
     /// The formula is:
-    /// - If z * y = -1: loss = max(0, 1 - z * y)²
+    /// - If z * y = -1: loss = max(0, 1 - z * y)Â²
     /// - If z * y < -1: loss = -4 * z * y
     /// where z is the prediction and y is the actual value.
     /// 

@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
 
@@ -228,5 +228,267 @@ public class InferenceController : ControllerBase
     {
         var metrics = _requestBatcher.GetPerformanceMetrics();
         return Ok(metrics);
+    }
+
+    /// <summary>
+    /// Performs text generation using speculative decoding for accelerated inference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Speculative decoding uses a smaller draft model to propose candidate tokens,
+    /// which are then verified by the target model. This can significantly speed up
+    /// inference for large language models.
+    /// </para>
+    /// <para><b>For Beginners:</b> Instead of generating one token at a time (slow),
+    /// this endpoint uses a fast draft model to guess multiple tokens at once.
+    /// The main model then verifies these guesses in parallel, accepting correct ones
+    /// and regenerating incorrect ones. This typically provides 2-3x speedup.
+    /// </para>
+    /// </remarks>
+    /// <param name="modelName">The name of the target model to use for generation</param>
+    /// <param name="request">The speculative decoding request</param>
+    /// <returns>Generated tokens and statistics</returns>
+    /// <response code="200">Generation completed successfully</response>
+    /// <response code="400">Invalid request format</response>
+    /// <response code="404">Model not found</response>
+    /// <response code="501">Speculative decoding not supported for this model</response>
+    [HttpPost("generate/{modelName}")]
+    [ProducesResponseType(typeof(SpeculativeDecodingResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status501NotImplemented)]
+    public IActionResult GenerateWithSpeculativeDecoding(string modelName, [FromBody] SpeculativeDecodingRequest request)
+    {
+        var sw = Stopwatch.StartNew();
+
+        try
+        {
+            _logger.LogDebug("Received speculative decoding request for model '{ModelName}'", modelName);
+
+            // Validate request
+            if (request.InputTokens == null || request.InputTokens.Length == 0)
+            {
+                return BadRequest(new SpeculativeDecodingResponse
+                {
+                    Error = "InputTokens array is required and cannot be empty",
+                    RequestId = request.RequestId
+                });
+            }
+
+            if (request.MaxNewTokens <= 0)
+            {
+                return BadRequest(new SpeculativeDecodingResponse
+                {
+                    Error = "MaxNewTokens must be greater than 0",
+                    RequestId = request.RequestId
+                });
+            }
+
+            // Check if model exists
+            var modelInfo = _modelRepository.GetModelInfo(modelName);
+            if (modelInfo == null)
+            {
+                _logger.LogWarning("Model '{ModelName}' not found", modelName);
+                return NotFound(new SpeculativeDecodingResponse
+                {
+                    Error = $"Model '{modelName}' not found",
+                    RequestId = request.RequestId
+                });
+            }
+
+            // Speculative decoding requires text generation capability which
+            // depends on the model architecture. Currently, IServableModel only
+            // supports vector-to-vector predictions. This endpoint documents
+            // the API contract for when text generation models are supported.
+            //
+            // For full speculative decoding support, models need to implement:
+            // - Token-level forward pass (logits for each position)
+            // - Vocabulary mapping (token IDs to embeddings)
+            // - Draft model integration
+            //
+            // This is planned for a future release with transformer model support.
+
+            sw.Stop();
+
+            return StatusCode(501, new SpeculativeDecodingResponse
+            {
+                Error = "Speculative decoding is not yet implemented for REST API serving. " +
+                        "This feature requires transformer/LLM model architecture support.\n\n" +
+                        "Current status:\n" +
+                        "- SpeculativeDecoder<T> class is available for programmatic use\n" +
+                        "- TreeSpeculativeDecoder<T> supports tree-based speculation\n" +
+                        "- REST API integration planned for LLM serving release\n\n" +
+                        "For programmatic speculative decoding, see:\n" +
+                        "- AiDotNet.Inference.SpeculativeDecoding.SpeculativeDecoder<T>\n" +
+                        "- AiDotNet.Inference.SpeculativeDecoding.TreeSpeculativeDecoder<T>",
+                RequestId = request.RequestId,
+                ProcessingTimeMs = sw.ElapsedMilliseconds
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error during speculative decoding for model '{ModelName}'", modelName);
+            sw.Stop();
+            return StatusCode(500, new SpeculativeDecodingResponse
+            {
+                Error = $"An unexpected error occurred: {ex.Message}",
+                RequestId = request.RequestId,
+                ProcessingTimeMs = sw.ElapsedMilliseconds
+            });
+        }
+    }
+
+    /// <summary>
+    /// Applies LoRA (Low-Rank Adaptation) fine-tuning to a loaded model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// LoRA enables efficient fine-tuning by adding small adapter layers that learn
+    /// task-specific adjustments without modifying the original model weights.
+    /// This dramatically reduces memory and compute requirements.
+    /// </para>
+    /// <para><b>For Beginners:</b> LoRA lets you customize a pre-trained model
+    /// for your specific use case using much less memory than traditional fine-tuning.
+    /// The original model weights stay frozen while small "adapter" layers learn
+    /// the adjustments needed. Typical parameter reduction: 100x or more!
+    /// </para>
+    /// </remarks>
+    /// <param name="request">The LoRA fine-tuning request</param>
+    /// <returns>Fine-tuning results and statistics</returns>
+    /// <response code="200">Fine-tuning completed successfully</response>
+    /// <response code="400">Invalid request format</response>
+    /// <response code="404">Model not found</response>
+    /// <response code="501">LoRA fine-tuning not supported for this model</response>
+    [HttpPost("finetune/lora")]
+    [ProducesResponseType(typeof(LoRAFineTuneResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status501NotImplemented)]
+    public IActionResult FineTuneWithLoRA([FromBody] LoRAFineTuneRequest request)
+    {
+        var sw = Stopwatch.StartNew();
+
+        try
+        {
+            _logger.LogDebug("Received LoRA fine-tuning request for model '{ModelName}'", request.ModelName);
+
+            // Validate request
+            if (string.IsNullOrWhiteSpace(request.ModelName))
+            {
+                return BadRequest(new LoRAFineTuneResponse
+                {
+                    Success = false,
+                    Error = "ModelName is required",
+                    RequestId = request.RequestId
+                });
+            }
+
+            if (request.TrainingFeatures == null || request.TrainingFeatures.Length == 0)
+            {
+                return BadRequest(new LoRAFineTuneResponse
+                {
+                    Success = false,
+                    Error = "TrainingFeatures array is required and cannot be empty",
+                    RequestId = request.RequestId,
+                    ModelName = request.ModelName
+                });
+            }
+
+            if (request.TrainingLabels == null || request.TrainingLabels.Length == 0)
+            {
+                return BadRequest(new LoRAFineTuneResponse
+                {
+                    Success = false,
+                    Error = "TrainingLabels array is required and cannot be empty",
+                    RequestId = request.RequestId,
+                    ModelName = request.ModelName
+                });
+            }
+
+            if (request.TrainingFeatures.Length != request.TrainingLabels.Length)
+            {
+                return BadRequest(new LoRAFineTuneResponse
+                {
+                    Success = false,
+                    Error = "TrainingFeatures and TrainingLabels must have the same length",
+                    RequestId = request.RequestId,
+                    ModelName = request.ModelName
+                });
+            }
+
+            if (request.Rank <= 0)
+            {
+                return BadRequest(new LoRAFineTuneResponse
+                {
+                    Success = false,
+                    Error = "Rank must be greater than 0",
+                    RequestId = request.RequestId,
+                    ModelName = request.ModelName
+                });
+            }
+
+            // Check if model exists
+            var modelInfo = _modelRepository.GetModelInfo(request.ModelName);
+            if (modelInfo == null)
+            {
+                _logger.LogWarning("Model '{ModelName}' not found", request.ModelName);
+                return NotFound(new LoRAFineTuneResponse
+                {
+                    Success = false,
+                    Error = $"Model '{request.ModelName}' not found",
+                    RequestId = request.RequestId,
+                    ModelName = request.ModelName
+                });
+            }
+
+            // LoRA fine-tuning through REST API requires:
+            // - Access to model internals (layer structure)
+            // - Training loop implementation
+            // - Gradient computation and backpropagation
+            //
+            // The current IServableModel interface encapsulates prediction only,
+            // not training. For fine-tuning support, models need to expose:
+            // - GetLayers() to identify adaptable layers
+            // - Training API (forward, backward, update)
+            //
+            // LoRA adapters are available programmatically via:
+            // - AiDotNet.LoRA.Adapters namespace (30+ adapter types)
+            // - ILoRAConfiguration for selective layer adaptation
+            // - PredictionModelBuilder.ConfigureLoRA() for model configuration
+
+            sw.Stop();
+
+            return StatusCode(501, new LoRAFineTuneResponse
+            {
+                Success = false,
+                Error = "LoRA fine-tuning is not yet implemented for REST API serving. " +
+                        "This feature requires training API support in the serving layer.\n\n" +
+                        "Current status:\n" +
+                        "- 30+ LoRA adapter types available (Standard, QLoRA, DoRA, etc.)\n" +
+                        "- ILoRAConfiguration for selective layer adaptation\n" +
+                        "- PredictionModelBuilder.ConfigureLoRA() for programmatic use\n" +
+                        "- REST API fine-tuning planned for future release\n\n" +
+                        "For programmatic LoRA fine-tuning, see:\n" +
+                        "- AiDotNet.LoRA.Adapters namespace\n" +
+                        "- AiDotNet.Interfaces.ILoRAAdapter<T>\n" +
+                        "- PredictionModelBuilder<T, TInput, TOutput>.ConfigureLoRA()",
+                RequestId = request.RequestId,
+                ModelName = request.ModelName,
+                ProcessingTimeMs = sw.ElapsedMilliseconds
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error during LoRA fine-tuning for model '{ModelName}'", request.ModelName);
+            sw.Stop();
+            return StatusCode(500, new LoRAFineTuneResponse
+            {
+                Success = false,
+                Error = $"An unexpected error occurred: {ex.Message}",
+                RequestId = request.RequestId,
+                ModelName = request.ModelName,
+                ProcessingTimeMs = sw.ElapsedMilliseconds
+            });
+        }
     }
 }

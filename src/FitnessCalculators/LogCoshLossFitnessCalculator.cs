@@ -83,7 +83,7 @@ public class LogCoshLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculato
     /// 
     /// The formula is: log(cosh(x)) where x is the difference between predicted and actual values.
     /// This creates a function that:
-    /// - Is approximately x²/2 for small x (like MSE)
+    /// - Is approximately xÂ²/2 for small x (like MSE)
     /// - Is approximately |x| - log(2) for large x (like MAE)
     /// 
     /// This method uses the NeuralNetworkHelper to do the actual Log-Cosh Loss calculation,

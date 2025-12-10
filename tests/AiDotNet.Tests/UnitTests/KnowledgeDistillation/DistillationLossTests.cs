@@ -1,5 +1,5 @@
 using AiDotNet.KnowledgeDistillation;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
@@ -103,9 +103,11 @@ public class DistillationLossTests
         var highLoss = highTempLoss.ComputeLoss(studentBatch, teacherBatch, null);
 
         // Assert
-        // High temperature loss should be smaller because distributions are softer and closer
-        Assert.True(highLoss < lowLoss,
-            $"High temp loss ({highLoss}) should be less than low temp loss ({lowLoss})");
+        // High temperature produces higher loss due to T² scaling factor (25x for T=5 vs 1x for T=1)
+        // Even though KL divergence decreases with temperature (softer distributions),
+        // the T² scaling dominates, resulting in higher overall loss
+        Assert.True(highLoss > lowLoss,
+            $"High temp loss ({highLoss}) should be greater than low temp loss ({lowLoss}) due to T² scaling");
     }
 
     [Fact]

@@ -272,7 +272,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// - Lower values mean points are less similar
     /// 
     /// The result is a grid (matrix) of similarity scores. For example, if you have 5 points in X1 and 3 points in X2,
-    /// you'll get a 5×3 grid showing how similar each point in X1 is to each point in X2.
+    /// you'll get a 5Ã—3 grid showing how similar each point in X1 is to each point in X2.
     /// 
     /// This similarity information is fundamental to how Gaussian Processes work - they make predictions
     /// based on how similar new points are to the training data points.

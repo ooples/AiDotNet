@@ -11,7 +11,7 @@ namespace AiDotNet.Interfaces;
 /// This interface defines what all layers must be able to do, regardless of their specific type.
 /// Think of it as a checklist of abilities that every layer must have to work within our neural network.
 /// </remarks>
-public interface ILayer<T>
+public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider
 {
     /// <summary>
     /// Gets the shape (dimensions) of the input data expected by this layer.
@@ -19,7 +19,7 @@ public interface ILayer<T>
     /// <returns>An array of integers representing the input dimensions.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> This tells us what size and shape of data this layer expects to receive.
-    /// For example, if processing images, this might be [3, 28, 28] for 28×28 pixel images with 3 color channels.
+    /// For example, if processing images, this might be [3, 28, 28] for 28Ã—28 pixel images with 3 color channels.
     /// </remarks>
     int[] GetInputShape();
 
@@ -33,6 +33,19 @@ public interface ILayer<T>
     /// For example, a pooling layer might reduce the dimensions from [3, 28, 28] to [3, 14, 14].
     /// </remarks>
     int[] GetOutputShape();
+
+    /// <summary>
+    /// Gets the weight tensor for layers that have trainable weights.
+    /// </summary>
+    /// <returns>The weight tensor, or null if the layer has no weights.</returns>
+    Tensor<T>? GetWeights();
+
+    /// <summary>
+    /// Gets the bias tensor for layers that have trainable biases.
+    /// </summary>
+    /// <returns>The bias tensor, or null if the layer has no biases.</returns>
+    Tensor<T>? GetBiases();
+
 
     /// <summary>
     /// Processes input data through the layer during the forward pass.
@@ -105,8 +118,8 @@ public interface ILayer<T>
     /// <b>For Beginners:</b> This tells you how many adjustable values this layer has.
     /// 
     /// For example:
-    /// - A dense layer with 10 inputs and 5 outputs has 10×5=50 weights plus 5 biases = 55 parameters
-    /// - A convolutional layer with 16 3×3 filters has 16×3×3=144 weights plus 16 biases = 160 parameters
+    /// - A dense layer with 10 inputs and 5 outputs has 10Ã—5=50 weights plus 5 biases = 55 parameters
+    /// - A convolutional layer with 16 3Ã—3 filters has 16Ã—3Ã—3=144 weights plus 16 biases = 160 parameters
     /// - A pooling layer has 0 parameters (it just selects values, no weights to adjust)
     /// 
     /// More parameters means the layer can learn more complex patterns, but also requires more data to train effectively.

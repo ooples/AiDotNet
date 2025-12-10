@@ -69,7 +69,7 @@ namespace AiDotNet.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
-public interface IAuxiliaryLossLayer<T> : IDiagnosticsProvider<T>
+public interface IAuxiliaryLossLayer<T> : IDiagnosticsProvider
 {
     /// <summary>
     /// Computes the auxiliary loss for this layer based on the most recent forward pass.

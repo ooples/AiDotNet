@@ -1,0 +1,24 @@
+# CodeQL configuration to speed up security scans
+# Excludes test code and examples from analysis
+
+name: "AiDotNet CodeQL Config"
+
+# Exclude paths that don't need security analysis
+paths-ignore:
+  - 'tests/**'
+  - 'AiDotNetTests/**'
+  - 'AiDotNetTestConsole/**'
+  - 'AiDotNetBenchmarkTests/**'
+  - 'examples/**'
+  - 'docs/**'
+  - '**/*.md'
+  - '**/*.txt'
+  - '**/*.json'
+  - '**/*.xml'
+
+# Only analyze C# (explicitly, don't auto-detect)
+languages:
+  - csharp
+
+# Query configuration is now in workflow file to avoid conflicts
+# Using security-and-quality (faster than security-extended)

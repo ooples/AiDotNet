@@ -69,7 +69,7 @@ public class DropoutLayer<T> : LayerBase<T>
     /// When some neurons are turned off:
     /// - The total signal would be weaker (reduced by the dropout percentage)
     /// - To compensate, we make the remaining neurons stronger
-    /// - If we drop 50% of neurons, we make the remaining ones 2� stronger
+    /// - If we drop 50% of neurons, we make the remaining ones 2 × stronger
     /// 
     /// The formula is simple: scale = 1 / (1 - dropout_rate)
     /// 
@@ -244,24 +244,14 @@ public class DropoutLayer<T> : LayerBase<T>
         if (!IsTrainingMode)
             return input;
 
-        _dropoutMask = new Tensor<T>(input.Shape);
-        var output = new Tensor<T>(input.Shape);
+        // Generate dropout mask using tensor ops to avoid vector conversions
+        var random = Tensor<T>.CreateRandom(input.Shape);
+        var threshold = Tensor<T>.CreateDefault(input.Shape, _dropoutRate);
+        var keepMask = Engine.TensorGreaterThan(random, threshold);
+        _dropoutMask = Engine.TensorMultiplyScalar(keepMask, _scale);
 
-        for (int i = 0; i < input.Length; i++)
-        {
-            if (Random.NextDouble() > Convert.ToDouble(_dropoutRate))
-            {
-                _dropoutMask[i] = _scale;
-                output[i] = NumOps.Multiply(input[i], _scale);
-            }
-            else
-            {
-                _dropoutMask[i] = NumOps.Zero;
-                output[i] = NumOps.Zero;
-            }
-        }
-
-        return output;
+        // Apply mask using Engine for GPU/CPU accelerated element-wise multiplication
+        return Engine.TensorMultiply(input, _dropoutMask);
     }
 
     /// <summary>
@@ -316,14 +306,8 @@ public class DropoutLayer<T> : LayerBase<T>
         if (!IsTrainingMode)
             return outputGradient;
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-
-        for (int i = 0; i < outputGradient.Length; i++)
-        {
-            inputGradient[i] = NumOps.Multiply(outputGradient[i], _dropoutMask[i]);
-        }
-
-        return inputGradient;
+        // Use Engine for GPU/CPU accelerated element-wise multiplication
+        return Engine.TensorMultiply(outputGradient, _dropoutMask);
     }
 
     /// <summary>
@@ -356,8 +340,37 @@ public class DropoutLayer<T> : LayerBase<T>
         // Set the gradient at the output
         output.Gradient = outputGradient;
 
-        // Perform topological sort and backward pass
-        var topoOrder = GetTopologicalOrder(output);
+        // Production-grade: Inline topological sort for backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((output, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+                continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
 
         // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)
@@ -369,49 +382,10 @@ public class DropoutLayer<T> : LayerBase<T>
             }
         }
 
-        return input.Gradient!;
-    }
+        if (input.Gradient == null)
+            throw new InvalidOperationException("Input gradient was not computed during backward pass.");
 
-    /// <summary>
-    /// Gets the topological order of nodes in the computation graph.
-    /// </summary>
-    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
-    {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
-
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((root, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-            {
-                continue;
-            }
-
-            if (processed)
-            {
-                visited.Add(node);
-                result.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        return result;
+        return input.Gradient;
     }
 
     /// <summary>
@@ -526,4 +500,58 @@ public class DropoutLayer<T> : LayerBase<T>
         _lastInput = null;
         _dropoutMask = null;
     }
+
+    /// <summary>
+    /// Exports the dropout layer's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The input node unchanged (identity function during inference).</returns>
+    /// <remarks>
+    /// <para>
+    /// During inference, dropout is disabled and acts as an identity function (pass-through).
+    /// The method validates inputs and creates a symbolic input node with proper batch dimension.
+    /// </para>
+    /// <para><b>For Beginners:</b> Dropout only works during training, not during inference.
+    ///
+    /// When making predictions (inference), dropout doesn't do anything - it just passes
+    /// the data through unchanged. This is because:
+    /// - During training: Dropout randomly turns off neurons to prevent overfitting
+    /// - During inference: We want to use all neurons for best predictions
+    ///
+    /// For JIT compilation (used for fast inference), dropout is just an identity operation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Dropout is identity during inference (JIT is for inference, not training)
+        // Create symbolic input node (shape definition only, batch size adapts at runtime)
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        return inputNode; // Identity function
+    }
+
+    /// <summary>
+    /// Gets whether this dropout layer supports JIT compilation.
+    /// </summary>
+    /// <value>Always returns true since dropout is identity during inference.</value>
+    /// <remarks>
+    /// <para>
+    /// Dropout layers always support JIT compilation because they are identity functions
+    /// during inference (they pass data through unchanged).
+    /// </para>
+    /// <para><b>For Beginners:</b> Dropout layers can always be JIT compiled.
+    ///
+    /// This is because during inference (when JIT is used), dropout doesn't do anything special -
+    /// it just passes the data through. There's nothing complex to compile.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
 }

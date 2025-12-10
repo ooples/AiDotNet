@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LoRA;
@@ -99,7 +100,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var input = new Tensor<double>(new[] { 1, 10 });
             for (int i = 0; i < 10; i++)
             {
-                input[i] = 1.0;
+                input[0, i] = 1.0;
             }
 
             // Act
@@ -108,7 +109,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             // Assert - Output should be near zero because B is initialized to zero
             for (int i = 0; i < output.Length; i++)
             {
-                Assert.True(Math.Abs(output[i]) < 1e-10);
+                Assert.True(Math.Abs(output.GetFlat(i)) < 1e-10);
             }
         }
 
@@ -195,14 +196,14 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var input = new Tensor<double>(new[] { 1, 10 });
             for (int i = 0; i < 10; i++)
             {
-                input[i] = 1.0;
+                input[0, i] = 1.0;
             }
             layer.Forward(input);
 
             var outputGradient = new Tensor<double>(new[] { 1, 5 });
             for (int i = 0; i < 5; i++)
             {
-                outputGradient[i] = 0.1;
+                outputGradient[0, i] = 0.1;
             }
             layer.Backward(outputGradient);
 
@@ -328,14 +329,14 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var input = new Tensor<double>(new[] { 1, 10 });
             for (int i = 0; i < 10; i++)
             {
-                input[i] = 1.0;
+                input[0, i] = 1.0;
             }
             layer.Forward(input);
 
             var outputGradient = new Tensor<double>(new[] { 1, 5 });
             for (int i = 0; i < 5; i++)
             {
-                outputGradient[i] = 0.1;
+                outputGradient[0, i] = 0.1;
             }
 
             // Act

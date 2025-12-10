@@ -1,3 +1,5 @@
+
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -29,12 +31,7 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
     /// The weights to apply to each sample.
     /// </summary>
     private readonly Vector<T> _weights;
-    
-    /// <summary>
-    /// Small value to prevent numerical instability with log(0).
-    /// </summary>
-    private readonly T _epsilon;
-    
+
     /// <summary>
     /// Initializes a new instance of the WeightedCrossEntropyLoss class.
     /// </summary>
@@ -42,7 +39,6 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
     public WeightedCrossEntropyLoss(Vector<T>? weights = null)
     {
         _weights = weights ?? new Vector<T>(1) { NumOps.One };
-        _epsilon = NumOps.FromDouble(1e-15);
     }
     
     /// <summary>
@@ -69,16 +65,13 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
         T loss = NumOps.Zero;
         for (int i = 0; i < predicted.Length; i++)
         {
-            // Clamp values to prevent log(0)
-            T p = MathHelper.Clamp(predicted[i], _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
-            
             // -weight * [y*log(p) + (1-y)*log(1-p)]
-            loss = NumOps.Add(loss, NumOps.Multiply(weights[i], 
+            loss = NumOps.Add(loss, NumOps.Multiply(weights[i],
                 NumOps.Add(
-                    NumOps.Multiply(actual[i], NumOps.Log(p)),
+                    NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(predicted[i], NumericalStabilityHelper.SmallEpsilon)),
                     NumOps.Multiply(
                         NumOps.Subtract(NumOps.One, actual[i]),
-                        NumOps.Log(NumOps.Subtract(NumOps.One, p))
+                        NumericalStabilityHelper.SafeLog(NumOps.Subtract(NumOps.One, predicted[i]), NumericalStabilityHelper.SmallEpsilon)
                     )
                 )
             ));
@@ -111,15 +104,14 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
-            // Clamp values to prevent division by zero
-            T p = MathHelper.Clamp(predicted[i], _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
-            
             // weight * [(p - y)/(p*(1-p))]
+            T denominator = NumOps.Multiply(predicted[i], NumOps.Subtract(NumOps.One, predicted[i]));
             derivative[i] = NumOps.Multiply(
                 weights[i],
-                NumOps.Divide(
-                    NumOps.Subtract(p, actual[i]),
-                    NumOps.Multiply(p, NumOps.Subtract(NumOps.One, p))
+                NumericalStabilityHelper.SafeDiv(
+                    NumOps.Subtract(predicted[i], actual[i]),
+                    denominator,
+                    NumericalStabilityHelper.SmallEpsilon
                 )
             );
         }
