@@ -89,7 +89,7 @@ public class MeanSquaredErrorFitnessCalculator<T, TInput, TOutput> : FitnessCalc
     /// 
     /// A lower score means better performance (0 would be perfect).
     /// 
-    /// The formula is: MSE = (1/n) * S(predicted - actual)²
+    /// The formula is: MSE = (1/n) * S(predicted - actual)Â²
     /// where n is the number of predictions and S means "sum of".
     /// 
     /// This method simply retrieves the pre-calculated MSE from the dataSet's ErrorStats property,

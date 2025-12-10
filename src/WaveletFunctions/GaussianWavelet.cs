@@ -109,7 +109,7 @@ public class GaussianWavelet<T> : IWaveletFunction<T>
     /// <remarks>
     /// <para>
     /// This method computes the value of the Gaussian function (bell curve) at the given input point.
-    /// The Gaussian function is defined as e^(-x²/2s²), where s is the standard deviation parameter.
+    /// The Gaussian function is defined as e^(-xÂ²/2sÂ²), where s is the standard deviation parameter.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates the height of the bell curve at a specific point.
     /// 
@@ -247,7 +247,7 @@ public class GaussianWavelet<T> : IWaveletFunction<T>
     /// <remarks>
     /// <para>
     /// This method computes the first derivative of the Gaussian function at the given input point.
-    /// The derivative is proportional to -x/s² multiplied by the Gaussian function itself. This
+    /// The derivative is proportional to -x/sÂ² multiplied by the Gaussian function itself. This
     /// derivative highlights points where the signal changes rapidly, making it useful for edge detection.
     /// </para>
     /// <para><b>For Beginners:</b> This helper method calculates how quickly the Gaussian curve is changing at a specific point.

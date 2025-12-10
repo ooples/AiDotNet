@@ -8,8 +8,8 @@ namespace AiDotNet.Interfaces;
 /// <b>For Beginners:</b> This interface defines a method for "filling in the gaps" between known data points.
 /// 
 /// Imagine you have a few data points:
-/// - You know that at 9:00 AM, the temperature was 65°F
-/// - You know that at 12:00 PM, the temperature was 75°F
+/// - You know that at 9:00 AM, the temperature was 65Â°F
+/// - You know that at 12:00 PM, the temperature was 75Â°F
 /// - But you don't have a measurement for 10:30 AM
 /// 
 /// Interpolation helps you make a reasonable guess about that missing value.

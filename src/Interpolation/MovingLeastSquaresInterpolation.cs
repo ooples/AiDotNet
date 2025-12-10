@@ -191,7 +191,7 @@ public class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
     /// are closer have more influence (higher weight), while points that are farther away have
     /// less influence (lower weight). Points beyond the smoothing length have no influence at all.
     /// 
-    /// The specific weight function used here is w = (1 - (d/h)²) for d &lt; h, and w = 0 for d = h,
+    /// The specific weight function used here is w = (1 - (d/h)Â²) for d &lt; h, and w = 0 for d = h,
     /// where d is the distance and h is the smoothing length.
     /// </remarks>
     /// <param name="distance">The distance from the target point to a data point.</param>

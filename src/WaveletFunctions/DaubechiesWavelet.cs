@@ -115,7 +115,7 @@ public class DaubechiesWavelet<T> : IWaveletFunction<T>
     /// Instead, they're defined implicitly through their scaling coefficients and a
     /// recursive relationship called the two-scale relation:
     /// 
-    /// f(t) = S h_k · f(2t-k)
+    /// f(t) = S h_k Â· f(2t-k)
     /// 
     /// This method approximates the wavelet value using:
     /// 1. The cascade algorithm to compute the scaling function values
@@ -160,7 +160,7 @@ public class DaubechiesWavelet<T> : IWaveletFunction<T>
     /// when no explicit formula exists.
     /// 
     /// The scaling function satisfies a two-scale relation:
-    /// f(t) = S h_k · f(2t-k)
+    /// f(t) = S h_k Â· f(2t-k)
     /// 
     /// This is a recursive definition, which makes exact calculation challenging.
     /// The cascade algorithm solves this by:
@@ -300,7 +300,7 @@ public class DaubechiesWavelet<T> : IWaveletFunction<T>
     /// For Daubechies wavelets, these coefficients are derived from the scaling coefficients using
     /// the quadrature mirror filter relationship:
     /// 
-    /// g[n] = (-1)^n · h[L-1-n]
+    /// g[n] = (-1)^n Â· h[L-1-n]
     /// 
     /// Where:
     /// - g[n] are the wavelet coefficients
@@ -373,7 +373,7 @@ public class DaubechiesWavelet<T> : IWaveletFunction<T>
     /// using the quadrature mirror filter relationship.
     /// 
     /// The formula used is:
-    /// g[n] = (-1)^n · h[L-1-n]
+    /// g[n] = (-1)^n Â· h[L-1-n]
     /// 
     /// Where:
     /// - g[n] are the wavelet coefficients

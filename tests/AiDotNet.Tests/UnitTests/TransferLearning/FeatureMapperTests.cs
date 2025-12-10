@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TransferLearning.FeatureMapping;
 using AiDotNet.LinearAlgebra;
 using Xunit;

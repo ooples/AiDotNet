@@ -342,7 +342,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         Vector<T> xTy = xT * y;
 
         _regressionCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _arimaOptions.DecompositionType);
-        _intercept = NumOps.Divide(y.Sum(), NumOps.FromDouble(y.Length));
+        _intercept = NumOps.Divide(Engine.Sum(y), NumOps.FromDouble(y.Length));
     }
 
     /// <summary>
@@ -621,14 +621,9 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private T ComputeLogLikelihood(Vector<T> modelResiduals)
     {
-        T sumSquaredResiduals = NumOps.Zero;
-        foreach (T residual in modelResiduals)
-        {
-            sumSquaredResiduals = NumOps.Add(sumSquaredResiduals, NumOps.Multiply(residual, residual));
-        }
-
+        T sumSquaredResiduals = Engine.DotProduct(modelResiduals, modelResiduals);
         T variance = NumOps.Divide(sumSquaredResiduals, NumOps.FromDouble(modelResiduals.Length));
-        T logLikelihood = NumOps.Multiply(NumOps.FromDouble(-0.5 * modelResiduals.Length), 
+        T logLikelihood = NumOps.Multiply(NumOps.FromDouble(-0.5 * modelResiduals.Length),
             NumOps.Add(NumOps.Log(NumOps.Multiply(NumOps.FromDouble(2 * Math.PI), variance)), NumOps.One));
 
         return logLikelihood;

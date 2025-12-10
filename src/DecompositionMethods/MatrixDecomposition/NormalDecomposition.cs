@@ -86,6 +86,7 @@ public class NormalDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public override Vector<T> Solve(Vector<T> b)
     {
+        // VECTORIZED: Uses matrix transpose and multiplication operations which are already vectorized
         var aTb = A.Transpose().Multiply(b);
         return _choleskyDecomposition.Solve(aTb);
     }

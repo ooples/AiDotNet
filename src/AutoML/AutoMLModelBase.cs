@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -737,6 +738,240 @@ namespace AiDotNet.AutoML
             SetCandidateModels(modelTypes);
         }
 
+        /// <summary>
+        /// Gets the default loss function for gradient computation.
+        /// </summary>
+        /// <remarks>
+        /// AutoML delegates to the best model found during search. If no best model exists yet,
+        /// returns Mean Squared Error as a sensible default.
+        /// </remarks>
+        public virtual ILossFunction<T> DefaultLossFunction =>
+            BestModel is not null && BestModel != null
+                ? BestModel.DefaultLossFunction
+                : new MeanSquaredErrorLoss<T>();
+
+        /// <summary>
+        /// Computes gradients by delegating to the best model.
+        /// </summary>
+        public virtual Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+        {
+            if (BestModel is null || BestModel == null)
+                throw new InvalidOperationException(
+                    "Cannot compute gradients before AutoML search has found a best model. Call Search() first.");
+
+            return BestModel.ComputeGradients(input, target, lossFunction);
+        }
+
+        /// <summary>
+        /// Applies gradients by delegating to the best model.
+        /// </summary>
+        public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+        {
+            if (BestModel is null || BestModel == null)
+                throw new InvalidOperationException(
+                    "Cannot apply gradients before AutoML search has found a best model. Call Search() first.");
+
+            BestModel.ApplyGradients(gradients, learningRate);
+        }
+
         #endregion
+        #region IJitCompilable Implementation
+
+        /// <summary>
+        /// Gets whether this model currently supports JIT compilation.
+        /// </summary>
+        /// <value>True if the best model found supports JIT compilation, false otherwise.</value>
+        /// <remarks>
+        /// <para>
+        /// AutoML models delegate JIT compilation support to their best model.
+        /// If no best model has been found yet, JIT compilation is not supported.
+        /// </para>
+        /// <para><b>For Beginners:</b> AutoML models can only be JIT compiled if the best model they found supports it.
+        ///
+        /// Since AutoML searches across multiple model types, JIT support depends on:
+        /// - Whether a best model has been selected
+        /// - Whether that specific model supports JIT compilation
+        ///
+        /// Before running SearchAsync, this will return false.
+        /// After finding a best model, it delegates to that model's JIT support.
+        /// </para>
+        /// </remarks>
+        public virtual bool SupportsJitCompilation
+        {
+            get
+            {
+                if (BestModel is null || BestModel == null)
+                    return false;
+
+                return BestModel.SupportsJitCompilation;
+            }
+        }
+
+        /// <summary>
+        /// Exports the computation graph for JIT compilation by delegating to the best model.
+        /// </summary>
+        /// <param name="inputNodes">List to populate with input computation nodes.</param>
+        /// <returns>The output computation node representing the model's prediction.</returns>
+        /// <remarks>
+        /// <para>
+        /// AutoML models delegate graph export to their best model found during search.
+        /// The graph structure and complexity depends on the specific best model type.
+        /// </para>
+        /// <para><b>For Beginners:</b> This creates a computation graph from the best model found.
+        ///
+        /// AutoML itself doesn't have a fixed computation structure since it tries multiple model types.
+        /// Instead, it delegates to the best model it found:
+        /// - If the best model is a neural network, you get a neural network graph
+        /// - If it's a regression model, you get a regression graph
+        /// - And so on
+        ///
+        /// This only works after SearchAsync has found and selected a best model.
+        /// </para>
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when no best model exists (SearchAsync not called yet).
+        /// </exception>
+        /// <exception cref="NotSupportedException">
+        /// Thrown when the best model does not support JIT compilation.
+        /// </exception>
+        public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+        {
+            if (inputNodes == null)
+                throw new ArgumentNullException(nameof(inputNodes));
+
+            if (BestModel is null || BestModel == null)
+                throw new InvalidOperationException(
+                    "Cannot export computation graph: No best model has been found yet. " +
+                    "Call SearchAsync to find the best model first.");
+
+            if (!BestModel.SupportsJitCompilation)
+                throw new NotSupportedException(
+                    $"The best model of type {BestModel.GetType().Name} does not support JIT compilation. " +
+                    "JIT compilation availability depends on the specific model type found during AutoML search.");
+
+            return BestModel.ExportComputationGraph(inputNodes);
+        }
+
+        #endregion
+
+        /// <summary>
+        /// Saves the AutoML model's current state to a stream.
+        /// </summary>
+        /// <param name="stream">The stream to write the model state to.</param>
+        /// <remarks>
+        /// <para>
+        /// This method serializes the best model found during the AutoML search.
+        /// It uses the existing Serialize method and writes the data to the provided stream.
+        /// </para>
+        /// <para><b>For Beginners:</b> This is like creating a snapshot of your best AutoML model.
+        ///
+        /// When you call SaveState:
+        /// - The best model found during search is written to the stream
+        /// - All model parameters and configuration are preserved
+        ///
+        /// This is particularly useful for:
+        /// - Saving the best model after AutoML search
+        /// - Checkpointing during long-running searches
+        /// - Knowledge distillation from AutoML-optimized models
+        /// - Deploying optimized models to production
+        ///
+        /// You can later use LoadState to restore the model.
+        /// </para>
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when no best model exists.</exception>
+        /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+        public virtual void SaveState(Stream stream)
+        {
+            if (stream == null)
+                throw new ArgumentNullException(nameof(stream));
+
+            if (!stream.CanWrite)
+                throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+            try
+            {
+                var data = this.Serialize();
+                stream.Write(data, 0, data.Length);
+                stream.Flush();
+            }
+            catch (IOException ex)
+            {
+                throw new IOException($"Failed to save AutoML model state to stream: {ex.Message}", ex);
+            }
+            catch (InvalidOperationException)
+            {
+                // Re-throw InvalidOperationException from Serialize (no best model)
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Unexpected error while saving AutoML model state: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Loads the AutoML model's state from a stream.
+        /// </summary>
+        /// <param name="stream">The stream to read the model state from.</param>
+        /// <remarks>
+        /// <para>
+        /// This method deserializes a best model that was previously saved with SaveState.
+        /// It uses the existing Deserialize method after reading data from the stream.
+        /// </para>
+        /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your best AutoML model.
+        ///
+        /// When you call LoadState:
+        /// - The best model is read from the stream
+        /// - All parameters and configuration are restored
+        ///
+        /// After loading, the model can:
+        /// - Make predictions using the restored best model
+        /// - Be further optimized if needed
+        /// - Be deployed to production
+        ///
+        /// This is essential for:
+        /// - Loading the best model after AutoML search
+        /// - Deploying optimized models to production
+        /// - Knowledge distillation workflows
+        /// </para>
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+        /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data, or when BestModel is not initialized.</exception>
+        public virtual void LoadState(Stream stream)
+        {
+            if (stream == null)
+                throw new ArgumentNullException(nameof(stream));
+
+            if (!stream.CanRead)
+                throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+            try
+            {
+                using var ms = new MemoryStream();
+                stream.CopyTo(ms);
+                var data = ms.ToArray();
+
+                if (data.Length == 0)
+                    throw new InvalidOperationException("Stream contains no data.");
+
+                this.Deserialize(data);
+            }
+            catch (IOException ex)
+            {
+                throw new IOException($"Failed to read AutoML model state from stream: {ex.Message}", ex);
+            }
+            catch (InvalidOperationException)
+            {
+                // Re-throw InvalidOperationException from Deserialize
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to deserialize AutoML model state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+            }
+        }
     }
 }
