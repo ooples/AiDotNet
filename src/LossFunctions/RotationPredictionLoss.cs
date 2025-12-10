@@ -97,6 +97,9 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
             }
         }
 
+        // Cast through object is required for generic type conversion at runtime.
+        // The compiler cannot verify Tensor<T> -> TInput at compile time, so the
+        // intermediate cast to object is necessary to allow the unconstrained generic conversion.
         return ((TInput)(object)augmentedX, (TOutput)(object)augmentedY);
     }
 
@@ -278,7 +281,38 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
             }
         }
 
-        // Note: Boxing to object is implicit before casting to generic TInput/TOutput
-        return ((TInput)(object)augmentedX, (TOutput)(object)augmentedY);
+        // Handle output type conversion
+        // If TOutput is Vector<T>, convert one-hot Matrix to class indices Vector
+        // If TOutput is Matrix<T>, use the one-hot Matrix directly
+        object outputY;
+        if (typeof(TOutput) == typeof(Vector<T>))
+        {
+            // Convert one-hot Matrix to class index Vector
+            var classIndices = new Vector<T>(totalAugmented);
+            for (int i = 0; i < totalAugmented; i++)
+            {
+                // Find the class with value 1 (the rotation class)
+                for (int c = 0; c < 4; c++)
+                {
+                    // Check if this is the 1 in the one-hot encoding
+                    if (NumOps.Equals(augmentedY[i, c], NumOps.One))
+                    {
+                        classIndices[i] = NumOps.FromDouble(c);
+                        break;
+                    }
+                }
+            }
+            outputY = classIndices;
+        }
+        else
+        {
+            outputY = augmentedY;
+        }
+
+        // Cast through object is required for generic type conversion at runtime
+        // The compiler cannot verify Matrix<T> -> TInput at compile time
+        TInput resultX = (TInput)(object)augmentedX;
+        TOutput resultY = (TOutput)outputY;
+        return (resultX, resultY);
     }
 }

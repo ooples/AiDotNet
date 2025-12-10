@@ -657,8 +657,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var weightsTransposed = Engine.TensorTranspose(_weights);
         var matmul = Engine.TensorMatMul(flattenedInput, weightsTransposed);
 
-        // Add biases (broadcasted automatically by Engine or Tensor ops)
-        var output = Engine.TensorAdd(matmul, _biases);
+        // Add biases with broadcasting support ([batch, outputSize] + [outputSize])
+        var output = Engine.TensorBroadcastAdd(matmul, _biases);
 
         // Cache pre-activation output for proper gradient computation in backward pass
         _lastOutput = output;

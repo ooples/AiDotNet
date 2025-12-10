@@ -800,8 +800,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         // Apply activation derivative to get delta
-        Tensor<T> activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
-        var delta = Tensor<T>.ElementwiseMultiply(outputGradient, activationGradient);
+        // ApplyActivationDerivative already multiplies by outputGradient (chain rule)
+        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
 
         // === GPU-Accelerated Backward Pass ===
         // Phase B: US-GPU-016 - Replace 7 nested loops with Engine.Conv2DBackward operations

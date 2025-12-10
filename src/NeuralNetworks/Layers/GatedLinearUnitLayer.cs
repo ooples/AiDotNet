@@ -461,12 +461,12 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         // Linear path: linear = input @ weights^T + bias
         var linearWeightsT = _linearWeights.Transpose([1, 0]);
         var linearOutput = input.MatrixMultiply(linearWeightsT);
-        linearOutput = Engine.TensorAdd(linearOutput, _linearBias); // Broadcasting
+        linearOutput = Engine.TensorBroadcastAdd(linearOutput, _linearBias); // Broadcasting
 
         // Gate path: gate = sigmoid(input @ weights^T + bias)
         var gateWeightsT = _gateWeights.Transpose([1, 0]);
         var gateOutput = input.MatrixMultiply(gateWeightsT);
-        gateOutput = Engine.TensorAdd(gateOutput, _gateBias); // Broadcasting
+        gateOutput = Engine.TensorBroadcastAdd(gateOutput, _gateBias); // Broadcasting
 
         _lastLinearOutput = linearOutput;
         _lastGateOutput = ApplyActivation(gateOutput);
