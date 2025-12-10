@@ -610,73 +610,105 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Builds a predictive model using meta-learning.
-    /// Requires ConfigureMetaLearning() to be called first.
+    /// Builds a predictive model using data from ConfigureDataLoader() or meta-learning from ConfigureMetaLearning().
     /// </summary>
-    /// <returns>A task that represents the asynchronous operation, containing the trained meta-learning model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when ConfigureMetaLearning() hasn't been called.</exception>
+    /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when neither ConfigureDataLoader() nor ConfigureMetaLearning() has been called.</exception>
     /// <remarks>
-    /// <b>For Beginners:</b> This overload is for meta-learning, where the model learns to quickly adapt to new tasks.
-    /// Use this when you've configured a meta-learner via ConfigureMetaLearning().
+    /// <b>For Beginners:</b> Use this method when you've configured either:
+    /// - A data loader (via ConfigureDataLoader) - the loader provides the training data
+    /// - Meta-learning (via ConfigureMetaLearning) - trains your model to learn NEW tasks quickly
     ///
-    /// **Meta-Learning**:
+    /// **Data Loader Path**:
+    /// - LoadAsync() is called on the data loader
+    /// - Features and Labels are extracted from the loader
+    /// - Training proceeds using the loaded data
+    ///
+    /// **Meta-Learning Path**:
     /// - Trains a model that can quickly adapt to new tasks
     /// - Uses episodic data from the meta-learner configuration
-    /// - No need to provide x and y - they're in the meta-learner config
     ///
-    /// Example:
+    /// Example with data loader:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureDataLoader(DataLoaders.FromArrays(features, labels))
+    ///     .ConfigureModel(model)
+    ///     .BuildAsync();
+    /// </code>
+    ///
+    /// Example with meta-learning:
     /// <code>
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureMetaLearning(metaLearner)
     ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    public Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync()
+    public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync()
     {
-        // META-LEARNING PATH - requires ConfigureMetaLearning() to be called first
-        if (_metaLearner == null)
-            throw new InvalidOperationException(
-                "BuildAsync() without parameters requires ConfigureMetaLearning() to be called first. " +
-                "For regular training, use BuildAsync(x, y) with your input and output data.");
-
-        // Perform meta-training using parameters from config (specified during meta-learner construction)
-        var metaResult = _metaLearner.Train();
-
-        // Create deployment configuration from individual configs
-        var deploymentConfig = DeploymentConfiguration.Create(
-            _quantizationConfig,
-            _cacheConfig,
-            _versioningConfig,
-            _abTestingConfig,
-            _telemetryConfig,
-            _exportConfig,
-            _gpuAccelerationConfig);
-
-        // Create PredictionModelResult with meta-learning constructor
-        var result = new PredictionModelResult<T, TInput, TOutput>(
-            metaLearner: _metaLearner,
-            metaResult: metaResult,
-            loraConfiguration: _loraConfiguration,
-            biasDetector: _biasDetector,
-            fairnessEvaluator: _fairnessEvaluator,
-            ragRetriever: _ragRetriever,
-            ragReranker: _ragReranker,
-            ragGenerator: _ragGenerator,
-            queryProcessors: _queryProcessors,
-            agentConfig: _agentConfig,
-            deploymentConfiguration: deploymentConfig,
-            reasoningConfig: _reasoningConfig,
-            knowledgeGraph: _knowledgeGraph,
-            graphStore: _graphStore,
-            hybridGraphRetriever: _hybridGraphRetriever);
-
-        // Attach tokenizer if configured
-        if (_tokenizer != null)
+        // DATA LOADER PATH - check if data loader is configured and provides input/output data
+        if (_dataLoader is IInputOutputDataLoader<T, TInput, TOutput> inputOutputLoader)
         {
-            result.AttachTokenizer(_tokenizer, _tokenizationConfig);
+            // Load data if not already loaded
+            if (!_dataLoader.IsLoaded)
+            {
+                await _dataLoader.LoadAsync();
+            }
+
+            // Get features and labels from the typed loader
+            var features = inputOutputLoader.Features;
+            var labels = inputOutputLoader.Labels;
+
+            // Delegate to the overload that handles regular training
+            return await BuildAsync(features, labels);
         }
 
-        return Task.FromResult(result);
+        // META-LEARNING PATH - check if meta-learner is configured
+        if (_metaLearner is not null)
+        {
+            // Perform meta-training using parameters from config (specified during meta-learner construction)
+            var metaResult = _metaLearner.Train();
+
+            // Create deployment configuration from individual configs
+            var deploymentConfig = DeploymentConfiguration.Create(
+                _quantizationConfig,
+                _cacheConfig,
+                _versioningConfig,
+                _abTestingConfig,
+                _telemetryConfig,
+                _exportConfig,
+                _gpuAccelerationConfig);
+
+            // Create PredictionModelResult with meta-learning constructor
+            var result = new PredictionModelResult<T, TInput, TOutput>(
+                metaLearner: _metaLearner,
+                metaResult: metaResult,
+                loraConfiguration: _loraConfiguration,
+                biasDetector: _biasDetector,
+                fairnessEvaluator: _fairnessEvaluator,
+                ragRetriever: _ragRetriever,
+                ragReranker: _ragReranker,
+                ragGenerator: _ragGenerator,
+                queryProcessors: _queryProcessors,
+                agentConfig: _agentConfig,
+                deploymentConfiguration: deploymentConfig,
+                reasoningConfig: _reasoningConfig,
+                knowledgeGraph: _knowledgeGraph,
+                graphStore: _graphStore,
+                hybridGraphRetriever: _hybridGraphRetriever);
+
+            // Attach tokenizer if configured
+            if (_tokenizer is not null)
+            {
+                result.AttachTokenizer(_tokenizer, _tokenizationConfig);
+            }
+
+            return result;
+        }
+
+        // Neither data loader nor meta-learner configured
+        throw new InvalidOperationException(
+            "BuildAsync() without parameters requires either ConfigureDataLoader() or ConfigureMetaLearning() to be called first. " +
+            "For regular training with explicit data, use BuildAsync(x, y) with your input and output data.");
     }
 
     /// <summary>
