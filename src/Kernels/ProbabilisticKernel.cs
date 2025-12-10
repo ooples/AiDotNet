@@ -22,10 +22,10 @@ namespace AiDotNet.Kernels;
 /// </para>
 /// <para>
 /// The formula for the Probabilistic kernel is:
-/// k(x, y) = (x·y / v(||x||²·||y||²)) · exp(-||x||² - ||y||²)²/(2s²))
+/// k(x, y) = (xÂ·y / v(||x||Â²Â·||y||Â²)) Â· exp(-||x||Â² - ||y||Â²)Â²/(2sÂ²))
 /// where:
 /// - x and y are the two data points being compared
-/// - x·y is the dot product (a measure of how aligned the vectors are)
+/// - xÂ·y is the dot product (a measure of how aligned the vectors are)
 /// - ||x|| and ||y|| are the magnitudes (lengths) of the vectors
 /// - s (sigma) is a parameter that controls sensitivity to magnitude differences
 /// </para>

@@ -311,6 +311,10 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             _bankIndicesB = GenerateRandomIndices(rank, bankSizeB);
         }
+
+        // Now that all fields are initialized, update the LoRA layer with bank-selected vectors
+        // This must happen after banks are initialized and indices are set
+        UpdateLoRALayerFromBanks(_loraLayer);
     }
 
     /// <summary>
@@ -395,27 +399,25 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <returns>A LoRA layer configured to use vector banks.</returns>
     /// <remarks>
     /// <para>
-    /// This override constructs matrices A and B from the selected bank vectors rather than
-    /// initializing them independently. The resulting LoRA layer operates normally but its
-    /// parameters reference shared bank storage.
+    /// This override creates a standard LoRA layer. The matrices will be updated from
+    /// bank vectors later in the constructor, after banks and indices are initialized.
     /// </para>
-    /// <para><b>For Beginners:</b> Instead of creating brand new A and B matrices, this builds
-    /// them by selecting specific vectors from the shared banks. It's like assembling a custom
-    /// toolbox by picking specific tools from the shared library.
+    /// <para><b>For Beginners:</b> This creates a basic LoRA layer first. The bank-based
+    /// customization happens later in the constructor after the banks are set up.
+    /// </para>
+    /// <para><b>Note:</b> We don't call UpdateLoRALayerFromBanks here because this method
+    /// is called from the base constructor, before VBLoRAAdapter's fields (_bankKey,
+    /// _bankIndicesA, etc.) are initialized. The bank update happens in the constructor
+    /// after all fields are set up.
     /// </para>
     /// </remarks>
     protected override LoRALayer<T> CreateLoRALayer(int rank, double alpha)
     {
-        // Create a standard LoRA layer - we'll override its matrices with bank-selected vectors
+        // Create a standard LoRA layer - bank-based initialization happens later in constructor
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputShape()[0];
 
-        LoRALayer<T> loraLayer = new LoRALayer<T>(inputSize, outputSize, rank, alpha);
-
-        // Replace the LoRA layer's matrices with bank-selected vectors
-        UpdateLoRALayerFromBanks(loraLayer);
-
-        return loraLayer;
+        return new LoRALayer<T>(inputSize, outputSize, rank, alpha);
     }
 
     /// <summary>

@@ -322,7 +322,7 @@ public class ErrorStats<T>
     /// For example, if your model correctly classifies 90 out of 100 samples, the accuracy is 0.9 or 90%.
     ///
     /// Note: This property is typically used for classification tasks. For regression tasks,
-    /// other metrics like MAE, MSE, or R² are more appropriate.
+    /// other metrics like MAE, MSE, or R-squared (R2) are more appropriate.
     ///
     /// While intuitive, accuracy can be misleading for imbalanced classes. For example, if 95% of your
     /// data belongs to class A, a model that always predicts class A would have 95% accuracy
@@ -423,7 +423,11 @@ public class ErrorStats<T>
 
         ErrorList = [];
 
-        CalculateErrorStats(inputs.Actual, inputs.Predicted, inputs.FeatureCount, inputs.PredictionType);
+        // Only calculate error stats if we have actual data
+        if (inputs.Actual.Length > 0 && inputs.Predicted.Length > 0)
+        {
+            CalculateErrorStats(inputs.Actual, inputs.Predicted, inputs.FeatureCount, inputs.PredictionType);
+        }
     }
 
     /// <summary>

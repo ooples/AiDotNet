@@ -12,7 +12,7 @@ namespace AiDotNet.FitDetectors;
 /// if it's underfitting, overfitting, or has a good fit.
 /// </para>
 /// <para>
-/// By comparing metrics like R² (coefficient of determination) across different datasets, the detector 
+/// By comparing metrics like RÂ² (coefficient of determination) across different datasets, the detector 
 /// can identify issues like overfitting (performing much better on training than validation data) or 
 /// underfitting (performing poorly across all datasets).
 /// </para>
@@ -123,22 +123,22 @@ public class CrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// <returns>The detected fit type based on cross-validation analysis.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This method compares the model's performance (R² values) across training, 
+    /// <b>For Beginners:</b> This method compares the model's performance (RÂ² values) across training, 
     /// validation, and test datasets to determine what type of fit your model has.
     /// </para>
     /// <para>
     /// The method looks at:
     /// <list type="bullet">
-    /// <item><description>R² values for each dataset (training, validation, test)</description></item>
-    /// <item><description>Differences between training and validation R² values</description></item>
+    /// <item><description>RÂ² values for each dataset (training, validation, test)</description></item>
+    /// <item><description>Differences between training and validation RÂ² values</description></item>
     /// </list>
     /// </para>
     /// <para>
     /// Based on these metrics, it categorizes the model as having:
     /// <list type="bullet">
-    /// <item><description>Good Fit: High R² values across all datasets</description></item>
-    /// <item><description>Overfit: Much higher R² on training than validation</description></item>
-    /// <item><description>Underfit: Low R² values across all datasets</description></item>
+    /// <item><description>Good Fit: High RÂ² values across all datasets</description></item>
+    /// <item><description>Overfit: Much higher RÂ² on training than validation</description></item>
+    /// <item><description>Underfit: Low RÂ² values across all datasets</description></item>
     /// <item><description>High Variance: Large differences between datasets but not clearly overfitting</description></item>
     /// <item><description>Unstable: Inconsistent performance that doesn't fit other categories</description></item>
     /// </list>
@@ -193,7 +193,7 @@ public class CrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// <para>
     /// The method calculates:
     /// <list type="bullet">
-    /// <item><description>R² consistency: Average R² across all datasets</description></item>
+    /// <item><description>RÂ² consistency: Average RÂ² across all datasets</description></item>
     /// <item><description>MSE consistency: Average Mean Squared Error across all datasets</description></item>
     /// </list>
     /// </para>
@@ -240,7 +240,7 @@ public class CrossValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// </list>
     /// </para>
     /// <para>
-    /// The method also provides specific recommendations based on the R² values of each dataset, 
+    /// The method also provides specific recommendations based on the RÂ² values of each dataset, 
     /// highlighting areas where the model's performance could be improved.
     /// </para>
     /// </remarks>

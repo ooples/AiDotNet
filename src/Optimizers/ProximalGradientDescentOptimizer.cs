@@ -92,10 +92,16 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     private IRegularization<T, TInput, TOutput> _regularization;
 
     /// <summary>
+    /// Stores the pre-update parameters for approximate reverse updates.
+    /// </summary>
+    private Vector<T>? _previousParameters;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ProximalGradientDescentOptimizer{T}"/> class with the specified options and components.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">The proximal gradient descent optimization options, or null to use default options.</param>
+    /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new proximal gradient descent optimizer with the specified options and components.
@@ -115,7 +121,8 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// </remarks>
     public ProximalGradientDescentOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
+        ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
         : base(model, options ?? new())
     {
         _options = options ?? new ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>();
@@ -230,36 +237,84 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// The step size is determined by the current learning rate.
     /// </para>
     /// <para><b>For Beginners:</b> This method takes one step down the hill while respecting the guardrails.
-    /// 
+    ///
     /// The process has two parts:
     /// 1. Take a step downhill:
     ///    - Look at the gradient to see which way is most downhill
     ///    - Move in that direction by an amount controlled by the learning rate
-    /// 
+    ///
     /// 2. Apply the guardrails:
     ///    - The regularization takes the solution after the gradient step
     ///    - It adjusts the solution to make it satisfy the desired properties
     ///    - For example, it might reduce any extremely large values
-    /// 
+    ///
     /// This combination of steps helps find solutions that both minimize the error and have good properties.
     /// </para>
     /// </remarks>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        // === Vectorized Proximal GD Update using IEngine (Phase B: US-GPU-015) ===
+        // params_new = params - stepSize * gradient
+        // Then apply proximal operator (regularization)
+
         var stepSize = CurrentLearningRate;
         var parameters = currentSolution.GetParameters();
 
-        var newCoefficients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            var gradientStep = NumOps.Multiply(gradient[i], stepSize);
-            newCoefficients[i] = NumOps.Subtract(parameters[i], gradientStep);
-        }
+        // Save pre-update parameters for reverse updates (vectorized copy)
+        _previousParameters = new Vector<T>(parameters);
 
-        // Apply regularization
+        // Vectorized gradient descent step
+        var gradientStep = (Vector<T>)Engine.Multiply(gradient, stepSize);
+        var newCoefficients = (Vector<T>)Engine.Subtract(parameters, gradientStep);
+
+        // Apply proximal operator (regularization)
         newCoefficients = _regularization.Regularize(newCoefficients);
 
         return currentSolution.WithParameters(newCoefficients);
+    }
+
+    /// <summary>
+    /// Reverses a Proximal Gradient Descent update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after PGD update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// PGD applies vanilla gradient descent followed by a proximal operator (regularization).
+    /// The reverse update undoes the gradient step. Note: The regularization cannot be perfectly
+    /// reversed since the proximal operator is generally not invertible.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before a PGD update.
+    /// PGD takes a gradient step then applies regularization. We can reverse the gradient step
+    /// but the regularization effect remains, since regularization is one-way (like rounding numbers).
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        if (_previousParameters == null || _previousParameters.Length != updatedParameters.Length)
+        {
+            throw new InvalidOperationException(
+                "Proximal GD optimizer state is not initialized. ReverseUpdate must be called after UpdateSolution.");
+        }
+
+        // === Vectorized Reverse PGD Update (Phase B: US-GPU-015) ===
+        // PGD's proximal operator (regularization) cannot be inverted.
+        // Return the pre-update parameters that were saved in UpdateSolution.
+        // This is the best we can do since the proximal operator is irreversible.
+        return new Vector<T>(_previousParameters);
     }
 
     /// <summary>

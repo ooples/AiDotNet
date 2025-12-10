@@ -1,6 +1,6 @@
 using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Config;
 using AiDotNet.MetaLearning.Trainers;
@@ -226,7 +226,8 @@ public class ReptileTrainerTests
         var exception = Assert.Throws<ArgumentException>(() =>
             new ReptileTrainerDouble(model, lossFunction, dataLoader, invalidConfig));
 
-        Assert.Contains("meta-iterations", exception.Message.ToLower());
+        Assert.Contains("configuration validation failed", exception.Message.ToLower());
+        Assert.Equal("config", exception.ParamName);
     }
 
     [Fact]

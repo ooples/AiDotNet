@@ -12,7 +12,7 @@ namespace AiDotNet.Enums.AlgorithmTypes;
 /// A = QTQ*
 /// 
 /// Where:
-/// - Q is a unitary matrix (a special kind of matrix where Q* × Q = I, the identity matrix)
+/// - Q is a unitary matrix (a special kind of matrix where Q* Ã— Q = I, the identity matrix)
 /// - T is an upper triangular matrix (has zeros below the diagonal)
 /// - Q* is the conjugate transpose of Q (flip the matrix over its diagonal and take complex conjugates)
 /// 
@@ -81,8 +81,8 @@ public enum SchurAlgorithmType
     /// <b>For Beginners:</b> The Implicit algorithm is a variation that focuses on numerical stability and efficiency 
     /// by avoiding explicit calculations of certain intermediate results.
     /// 
-    /// Think of it like mental math: instead of writing down every step when calculating 5×18, you might think 
-    /// "5×20=100, then subtract 5×2=10, so the answer is 90." You're implicitly handling the calculation without 
+    /// Think of it like mental math: instead of writing down every step when calculating 5Ã—18, you might think 
+    /// "5Ã—20=100, then subtract 5Ã—2=10, so the answer is 90." You're implicitly handling the calculation without 
     /// explicitly writing out each step.
     /// 
     /// The Implicit algorithm:

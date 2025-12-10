@@ -129,7 +129,7 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     {
         _options = options;
         _trees = [];
-        _random = new Random(_options.Seed ?? Environment.TickCount);
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -473,7 +473,7 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
             _trees.Add(tree);
         }
 
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -506,4 +506,116 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         // Create and return a new instance with the same configuration
         return new ExtremelyRandomizedTreesRegression<T>(_options, Regularization);
     }
+
+    #region IJitCompilable Implementation Override
+
+    /// <summary>
+    /// Gets whether this Extremely Randomized Trees model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> when soft tree mode is enabled and trees have been trained;
+    /// <c>false</c> otherwise.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Extremely Randomized Trees supports JIT compilation when soft tree mode is enabled.
+    /// In soft mode, each tree in the ensemble uses sigmoid-based soft gating instead of
+    /// hard if-then splits, making the entire ensemble differentiable.
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT compilation is available when soft tree mode is enabled.
+    ///
+    /// In soft tree mode:
+    /// - Each tree in the Extra Trees ensemble uses smooth transitions
+    /// - All trees can be exported as a single computation graph
+    /// - The final prediction averages all tree outputs
+    ///
+    /// This gives you the benefits of extra randomization with JIT-compiled speed.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation =>
+        UseSoftTree && _trees.Count > 0;
+
+    /// <summary>
+    /// Exports the Extremely Randomized Trees model's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The root node of the exported computation graph.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when soft tree mode is not enabled.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the forest has not been trained (no trees).
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// When soft tree mode is enabled, this exports the entire Extra Trees ensemble as a
+    /// differentiable computation graph. Each tree is exported individually, and their
+    /// outputs are averaged to produce the final prediction.
+    /// </para>
+    /// <para><b>For Beginners:</b> This exports the Extra Trees ensemble as a computation graph.
+    ///
+    /// Extra Trees, like Random Forest, averages predictions from all trees.
+    /// The main difference is how trees are built (random thresholds instead of optimal),
+    /// but for JIT compilation the averaging formula is the same.
+    /// </para>
+    /// </remarks>
+    public override AiDotNet.Autodiff.ComputationNode<T> ExportComputationGraph(
+        List<AiDotNet.Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (!UseSoftTree)
+        {
+            throw new NotSupportedException(
+                "Extremely Randomized Trees does not support JIT compilation in hard tree mode because " +
+                "decision trees use discrete branching logic.\n\n" +
+                "To enable JIT compilation, set UseSoftTree = true to use soft (differentiable) " +
+                "decision trees with sigmoid-based gating.");
+        }
+
+        if (_trees.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Cannot export computation graph: the Extra Trees model has not been trained. " +
+                "Call Train() or TrainAsync() first to build the trees.");
+        }
+
+        // Ensure all trees have soft mode enabled
+        foreach (var tree in _trees)
+        {
+            tree.UseSoftTree = true;
+            tree.SoftTreeTemperature = SoftTreeTemperature;
+        }
+
+        // Export first tree to get input node
+        var tempInputNodes = new List<AiDotNet.Autodiff.ComputationNode<T>>();
+        var firstTreeGraph = _trees[0].ExportComputationGraph(tempInputNodes);
+
+        if (tempInputNodes.Count > 0)
+        {
+            inputNodes.Add(tempInputNodes[0]);
+        }
+
+        // If there's only one tree, return its graph directly
+        if (_trees.Count == 1)
+        {
+            return firstTreeGraph;
+        }
+
+        // Sum all tree outputs
+        var sumNode = firstTreeGraph;
+        for (int i = 1; i < _trees.Count; i++)
+        {
+            var treeInputNodes = new List<AiDotNet.Autodiff.ComputationNode<T>>();
+            var treeGraph = _trees[i].ExportComputationGraph(treeInputNodes);
+            sumNode = TensorOperations<T>.Add(sumNode, treeGraph);
+        }
+
+        // Divide by number of trees to get average
+        var numTreesTensor = new Tensor<T>(new[] { 1 });
+        numTreesTensor[0] = NumOps.FromDouble(_trees.Count);
+        var numTreesNode = TensorOperations<T>.Constant(numTreesTensor, "num_trees");
+
+        return TensorOperations<T>.Divide(sumNode, numTreesNode);
+    }
+
+    #endregion
 }
