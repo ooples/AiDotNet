@@ -647,6 +647,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </remarks>
     public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync()
     {
+        // RL TRAINING PATH - check if RL options are configured with an environment
+        if (_rlOptions?.Environment is not null)
+        {
+            // Use episodes from options (default: 1000)
+            int episodes = _rlOptions.Episodes;
+            bool verbose = _rlOptions.LogFrequency > 0;
+            return await BuildRLInternalAsync(episodes, verbose);
+        }
+
         // DATA LOADER PATH - check if data loader is configured and provides input/output data
         if (_dataLoader is IInputOutputDataLoader<T, TInput, TOutput> inputOutputLoader)
         {
@@ -670,10 +679,13 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             return BuildMetaLearningInternalAsync();
         }
 
-        // Neither data loader nor meta-learner configured
+        // No training path configured
         throw new InvalidOperationException(
-            "BuildAsync() without parameters requires either ConfigureDataLoader() or ConfigureMetaLearning() to be called first. " +
-            "For regular training with explicit data, use BuildAsync(x, y) with your input and output data.");
+            "BuildAsync() requires one of the following to be configured first:\n" +
+            "- ConfigureReinforcementLearning() for RL training\n" +
+            "- ConfigureDataLoader() for supervised learning\n" +
+            "- ConfigureMetaLearning() for meta-learning\n" +
+            "For explicit data training, use BuildAsync(x, y) with your input and output data.");
     }
 
     /// <summary>
