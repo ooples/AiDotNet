@@ -138,6 +138,12 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pass user-controlled values as env vars to prevent script injection
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BRANCH: ${{ github.head_ref }}
+          PR_BASE: ${{ github.base_ref }}
+          PR_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
         shell: powershell
         run: |
           $params = @(
@@ -150,13 +156,13 @@ jobs:
             "/d:sonar.scm.provider=git"
           )
 
-          # For PRs, add incremental analysis parameters
-          if ("${{ github.event_name }}" -eq "pull_request") {
-            $params += "/d:sonar.pullrequest.key=${{ github.event.pull_request.number }}"
-            $params += "/d:sonar.pullrequest.branch=${{ github.head_ref }}"
-            $params += "/d:sonar.pullrequest.base=${{ github.base_ref }}"
+          # For PRs, add incremental analysis parameters (using env vars for safety)
+          if ($env:EVENT_NAME -eq "pull_request") {
+            $params += "/d:sonar.pullrequest.key=$env:PR_NUMBER"
+            $params += "/d:sonar.pullrequest.branch=$env:PR_BRANCH"
+            $params += "/d:sonar.pullrequest.base=$env:PR_BASE"
             $params += "/d:sonar.pullrequest.provider=GitHub"
-            $params += "/d:sonar.pullrequest.github.repository=${{ github.repository }}"
+            $params += "/d:sonar.pullrequest.github.repository=$env:PR_REPO"
           }
 
           & "${{ runner.temp }}\scanner\dotnet-sonarscanner" begin @params
