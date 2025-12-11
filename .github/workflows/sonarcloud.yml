@@ -73,6 +73,9 @@ jobs:
           New-Item -Path ${{ runner.temp }}\scanner -ItemType Directory -Force
           dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}\scanner
 
+      - name: Install coverage tool
+        run: dotnet tool install --global coverlet.console
+
       - name: Restore dependencies
         run: dotnet restore
 
@@ -91,6 +94,10 @@ jobs:
 
       - name: Build (Release)
         run: dotnet build -c Release --no-restore
+
+      - name: Run tests with coverage (net8.0)
+        run: |
+          dotnet test -c Release --framework net8.0 --no-build --filter "Category!=GPU&Category!=Integration" /p:CollectCoverage=true /p:CoverletOutputFormat=opencover /p:CoverletOutput=./coverage.opencover.xml --logger "trx;LogFileName=test-results-net8.trx" --results-directory ./TestResults
 
       - name: End SonarCloud analysis
         env:
@@ -118,9 +125,17 @@ jobs:
           name: nuget-packages
           path: ./artifacts/*.nupkg
 
-  # Run tests after build completes
-  test:
-    name: Run Tests
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-build
+          path: ./TestResults/*.trx
+          if-no-files-found: ignore
+
+  # Run additional tests after build completes (net471)
+  test-net471:
+    name: Run Tests (net471)
     runs-on: windows-latest
     needs: build
     timeout-minutes: 30
@@ -150,21 +165,16 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      # Run tests on both frameworks (Windows can run net471)
-      - name: Run tests (net8.0)
-        run: |
-          dotnet test --no-build -c Release --framework net8.0 --filter "Category!=GPU&Category!=Integration" --logger "trx;LogFileName=test-results-net8.trx" --results-directory ./TestResults
-
+      # Run tests on net471 (Windows can run .NET Framework)
       - name: Run tests (net471)
         run: |
           dotnet test --no-build -c Release --framework net471 --filter "Category!=GPU&Category!=Integration" --logger "trx;LogFileName=test-results-net471.trx" --results-directory ./TestResults
-        continue-on-error: true  # net471 tests may have some compatibility issues
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results
+          name: test-results-net471
           path: ./TestResults/*.trx
           if-no-files-found: ignore
 

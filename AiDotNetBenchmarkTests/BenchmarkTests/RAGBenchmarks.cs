@@ -10,12 +10,16 @@ namespace AiDotNetBenchmarkTests.BenchmarkTests;
 /// Tests RAG configuration, evaluation, and retrieval performance
 /// </summary>
 [MemoryDiagnoser]
-[SimpleJob(RuntimeMoniker.Net462, baseline: true)]
-[SimpleJob(RuntimeMoniker.Net60)]
-[SimpleJob(RuntimeMoniker.Net70)]
+[SimpleJob(RuntimeMoniker.Net471, baseline: true)]
 [SimpleJob(RuntimeMoniker.Net80)]
-public class RAGBenchmarks
+public class RagBenchmarks
 {
+    // String constants to avoid repetition (SonarCloud S1192)
+    private const string ChunkingStrategySentence = "sentence";
+    private const string EmbeddingModelSentenceTransformers = "sentence-transformers";
+    private const string RetrievalStrategyHybrid = "hybrid";
+    private const string DocumentStoreTypeMemory = "memory";
+
     [Params(100, 500)]
     public int DocumentCount { get; set; }
 
@@ -43,7 +47,7 @@ public class RAGBenchmarks
         {
             DocumentStore = new DocumentStoreConfig
             {
-                Type = "memory",
+                Type = DocumentStoreTypeMemory,
                 Parameters = new Dictionary<string, object>
                 {
                     { "max_size", 10000 }
@@ -51,18 +55,18 @@ public class RAGBenchmarks
             },
             Chunking = new ChunkingConfig
             {
-                Strategy = "sentence",
+                Strategy = ChunkingStrategySentence,
                 ChunkSize = 512,
                 ChunkOverlap = 50
             },
             Embedding = new EmbeddingConfig
             {
-                ModelType = "sentence-transformers",
+                ModelType = EmbeddingModelSentenceTransformers,
                 EmbeddingDimension = 768
             },
             Retrieval = new RetrievalConfig
             {
-                Strategy = "hybrid",
+                Strategy = RetrievalStrategyHybrid,
                 TopK = TopK
             }
         };
@@ -73,10 +77,10 @@ public class RAGBenchmarks
     public RAGConfigurationBuilder<double> RAG_BuildConfiguration()
     {
         var builder = new RAGConfigurationBuilder<double>()
-            .WithDocumentStore("memory")
-            .WithChunking("sentence", chunkSize: 512, chunkOverlap: 50)
-            .WithEmbedding("sentence-transformers", embeddingDimension: 768)
-            .WithRetrieval("hybrid", TopK);
+            .WithDocumentStore(DocumentStoreTypeMemory)
+            .WithChunking(ChunkingStrategySentence, chunkSize: 512, chunkOverlap: 50)
+            .WithEmbedding(EmbeddingModelSentenceTransformers, embeddingDimension: 768)
+            .WithRetrieval(RetrievalStrategyHybrid, TopK);
 
         return builder;
     }
@@ -85,10 +89,10 @@ public class RAGBenchmarks
     public RAGConfiguration<double> RAG_BuildAndCreate()
     {
         return new RAGConfigurationBuilder<double>()
-            .WithDocumentStore("memory")
-            .WithChunking("sentence", chunkSize: 512, chunkOverlap: 50)
-            .WithEmbedding("sentence-transformers", embeddingDimension: 768)
-            .WithRetrieval("hybrid", TopK)
+            .WithDocumentStore(DocumentStoreTypeMemory)
+            .WithChunking(ChunkingStrategySentence, chunkSize: 512, chunkOverlap: 50)
+            .WithEmbedding(EmbeddingModelSentenceTransformers, embeddingDimension: 768)
+            .WithRetrieval(RetrievalStrategyHybrid, TopK)
             .Build();
     }
 
@@ -102,17 +106,13 @@ public class RAGBenchmarks
     [Benchmark]
     public double RAG_CalculateRetrievalAccuracy()
     {
-        // Simulate retrieval results
-        var retrievedDocs = new List<string>();
-        for (int i = 0; i < TopK; i++)
-        {
-            retrievedDocs.Add(_documents[i]);
-        }
+        // Simulate retrieval results - use _documents to ensure container is accessed
+        var retrievedDocs = _documents.Take(TopK).ToList();
 
-        var relevantDocs = new List<string> { _documents[0], _documents[1] };
+        var relevantDocs = new HashSet<string> { _documents[0], _documents[1] };
 
-        // Calculate accuracy using explicit LINQ filter
-        int correct = retrievedDocs.Where(doc => relevantDocs.Contains(doc)).Count();
+        // Calculate accuracy using Count with predicate (SonarCloud S2971)
+        int correct = retrievedDocs.Count(doc => relevantDocs.Contains(doc));
 
         return (double)correct / TopK;
     }
@@ -122,7 +122,7 @@ public class RAGBenchmarks
     {
         return new ChunkingConfig
         {
-            Strategy = "sentence",
+            Strategy = ChunkingStrategySentence,
             ChunkSize = 512,
             ChunkOverlap = 100
         };
@@ -133,7 +133,7 @@ public class RAGBenchmarks
     {
         return new EmbeddingConfig
         {
-            ModelType = "sentence-transformers",
+            ModelType = EmbeddingModelSentenceTransformers,
             ModelPath = "all-MiniLM-L6-v2",
             EmbeddingDimension = 384
         };
@@ -144,7 +144,7 @@ public class RAGBenchmarks
     {
         return new RetrievalConfig
         {
-            Strategy = "hybrid",
+            Strategy = RetrievalStrategyHybrid,
             TopK = TopK,
             Parameters = new Dictionary<string, object>
             {

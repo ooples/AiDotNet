@@ -67,9 +67,10 @@ public class LossFunctionsBenchmarks
         for (int i = 0; i < Size; i++)
         {
             _binaryPredicted[i] = random.NextDouble();
-            _binaryActual[i] = random.Next(2); // 0 or 1
+            int binaryLabel = random.Next(2); // 0 or 1
+            _binaryActual[i] = binaryLabel;
             // Convert 0/1 to -1/+1 for hinge loss: 0 -> -1, 1 -> +1
-            _hingeBinaryActual[i] = _binaryActual[i] == 0 ? -1.0 : 1.0;
+            _hingeBinaryActual[i] = binaryLabel == 0 ? -1.0 : 1.0;
         }
 
         // Initialize multi-class softmax vectors (proper probability distributions)
