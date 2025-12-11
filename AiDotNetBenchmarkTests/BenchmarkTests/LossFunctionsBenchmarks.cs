@@ -21,6 +21,7 @@ public class LossFunctionsBenchmarks
     private Vector<double> _actual = null!;
     private Vector<double> _binaryPredicted = null!;
     private Vector<double> _binaryActual = null!;
+    private Vector<double> _hingeBinaryActual = null!;  // {-1, +1} labels for hinge loss
     private Vector<double> _softmaxPredicted = null!;
     private Vector<double> _oneHotActual = null!;
 
@@ -61,11 +62,14 @@ public class LossFunctionsBenchmarks
         // Initialize binary classification vectors (values between 0 and 1)
         _binaryPredicted = new Vector<double>(Size);
         _binaryActual = new Vector<double>(Size);
+        _hingeBinaryActual = new Vector<double>(Size);  // {-1, +1} labels for hinge loss
 
         for (int i = 0; i < Size; i++)
         {
             _binaryPredicted[i] = random.NextDouble();
             _binaryActual[i] = random.Next(2); // 0 or 1
+            // Convert 0/1 to -1/+1 for hinge loss: 0 -> -1, 1 -> +1
+            _hingeBinaryActual[i] = _binaryActual[i] == 0 ? -1.0 : 1.0;
         }
 
         // Initialize multi-class softmax vectors (proper probability distributions)
@@ -261,13 +265,15 @@ public class LossFunctionsBenchmarks
     [Benchmark]
     public double Hinge_CalculateLoss()
     {
-        return _hinge.CalculateLoss(_binaryPredicted, _binaryActual);
+        // Hinge loss expects {-1, +1} labels for max(0, 1 - y*f(x)) formula
+        return _hinge.CalculateLoss(_binaryPredicted, _hingeBinaryActual);
     }
 
     [Benchmark]
     public Vector<double> Hinge_CalculateDerivative()
     {
-        return _hinge.CalculateDerivative(_binaryPredicted, _binaryActual);
+        // Hinge loss expects {-1, +1} labels for max(0, 1 - y*f(x)) formula
+        return _hinge.CalculateDerivative(_binaryPredicted, _hingeBinaryActual);
     }
 
     #endregion

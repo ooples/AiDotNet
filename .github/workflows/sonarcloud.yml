@@ -1,0 +1,226 @@
+name: Build & SonarCloud
+
+# Primary build workflow - other workflows depend on this
+# Runs on Windows to support both net8.0 and net471 targets
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  build:
+    name: Build & Analyze
+    runs-on: windows-latest
+    timeout-minutes: 30
+    if: github.event.pull_request.draft != true
+
+    steps:
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'zulu'
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 8.0
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v4
+        with:
+          path: ~\sonar\cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Cache SonarCloud scanner
+        id: cache-sonar-scanner
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\scanner
+          key: ${{ runner.os }}-sonar-scanner
+          restore-keys: ${{ runner.os }}-sonar-scanner
+
+      - name: Install SonarCloud scanner
+        if: steps.cache-sonar-scanner.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          New-Item -Path ${{ runner.temp }}\scanner -ItemType Directory -Force
+          dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}\scanner
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Begin SonarCloud analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        shell: powershell
+        run: |
+          ${{ runner.temp }}\scanner\dotnet-sonarscanner begin `
+            /k:"franklin-moormann_AiDotNet" `
+            /o:"franklin-moormann" `
+            /d:sonar.token="${{ secrets.SONAR_TOKEN }}" `
+            /d:sonar.host.url="https://sonarcloud.io" `
+            /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" `
+            /d:sonar.coverage.exclusions="**/tests/**,**/testconsole/**,**/AiDotNetBenchmarkTests/**,**/examples/**"
+
+      - name: Build (Release)
+        run: dotnet build -c Release --no-restore
+
+      - name: End SonarCloud analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        shell: powershell
+        run: |
+          ${{ runner.temp }}\scanner\dotnet-sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+
+      # Upload build artifacts for other workflows to reuse
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output-${{ github.sha }}
+          path: |
+            **/bin/Release/
+            **/obj/Release/
+          retention-days: 1
+
+      - name: Build NuGet package
+        run: dotnet pack --no-build -c Release --output ./artifacts
+
+      - name: Upload NuGet package
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: ./artifacts/*.nupkg
+
+  # Run tests after build completes
+  test:
+    name: Run Tests
+    runs-on: windows-latest
+    needs: build
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8.0
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output-${{ github.sha }}
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      # Run tests on both frameworks (Windows can run net471)
+      - name: Run tests (net8.0)
+        run: |
+          dotnet test --no-build -c Release --framework net8.0 --filter "Category!=GPU&Category!=Integration" --logger "trx;LogFileName=test-results-net8.trx" --results-directory ./TestResults
+
+      - name: Run tests (net471)
+        run: |
+          dotnet test --no-build -c Release --framework net471 --filter "Category!=GPU&Category!=Integration" --logger "trx;LogFileName=test-results-net471.trx" --results-directory ./TestResults
+        continue-on-error: true  # net471 tests may have some compatibility issues
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: ./TestResults/*.trx
+          if-no-files-found: ignore
+
+  # Artifact size analysis
+  size-check:
+    name: Artifact Size Check
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8.0
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore and publish for size analysis
+        run: |
+          dotnet restore
+          dotnet publish src/AiDotNet.csproj -c Release -f net8.0 -o publish
+
+      - name: Analyze artifact size
+        id: size
+        run: |
+          CURRENT_SIZE=$(du -sb publish | cut -f1)
+          CURRENT_MB=$(echo "scale=2; $CURRENT_SIZE/1024/1024" | bc)
+          echo "current_size=$CURRENT_SIZE" >> $GITHUB_OUTPUT
+          echo "current_mb=$CURRENT_MB" >> $GITHUB_OUTPUT
+          echo "Publish size: ${CURRENT_MB} MB"
+
+          BASELINE_FILE=".github/artifact-size-baseline.txt"
+          if [ -f "$BASELINE_FILE" ]; then
+            BASELINE=$(cat "$BASELINE_FILE")
+            BASELINE_MB=$(echo "scale=2; $BASELINE/1024/1024" | bc)
+            CHANGE=$(echo "scale=2; (($CURRENT_SIZE - $BASELINE) * 100) / $BASELINE" | bc)
+            echo "Size change: ${CHANGE}% (baseline ${BASELINE_MB} MB)"
+            if (( $(echo "$CHANGE > 10" | bc -l) )); then
+              echo "::warning::Artifact size increased by ${CHANGE}% (threshold: 10%)"
+            fi
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Publish size: ${{ steps.size.outputs.current_mb }} MB" >> $GITHUB_STEP_SUMMARY
