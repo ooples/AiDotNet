@@ -119,15 +119,8 @@ public class RAGBenchmarks
 
         var relevantDocs = new List<string> { _documents[0], _documents[1] };
 
-        // Calculate accuracy
-        int correct = 0;
-        foreach (var doc in retrievedDocs)
-        {
-            if (relevantDocs.Contains(doc))
-            {
-                correct++;
-            }
-        }
+        // Calculate accuracy using explicit LINQ filter
+        int correct = retrievedDocs.Where(doc => relevantDocs.Contains(doc)).Count();
 
         return (double)correct / TopK;
     }

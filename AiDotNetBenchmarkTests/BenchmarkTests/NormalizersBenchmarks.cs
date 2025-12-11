@@ -43,7 +43,7 @@ public class NormalizersBenchmarks
             for (int j = 0; j < FeatureCount; j++)
             {
                 // Mix of scales to make normalization meaningful
-                _data[i, j] = random.NextDouble() * 100 + j * 10;
+                _data[i, j] = random.NextDouble() * 100 + j * 10.0;
             }
         }
 

@@ -74,7 +74,7 @@ public class NeuralNetworkLayersBenchmarks
     [Benchmark]
     public Tensor<double> DenseLayer_ForwardBackward()
     {
-        var output = _denseLayer.Forward(_input);
+        _denseLayer.Forward(_input);
         return _denseLayer.Backward(_gradOutput);
     }
 
@@ -91,7 +91,7 @@ public class NeuralNetworkLayersBenchmarks
     [Benchmark]
     public Tensor<double> ActivationLayer_ForwardBackward()
     {
-        var output = _activationLayer.Forward(_input);
+        _activationLayer.Forward(_input);
         // Use same-shape gradient for activation layer
         var activationGrad = new Tensor<double>(new[] { BatchSize, InputSize });
         for (int i = 0; i < activationGrad.Length; i++)
@@ -114,7 +114,7 @@ public class NeuralNetworkLayersBenchmarks
     [Benchmark]
     public Tensor<double> DropoutLayer_ForwardBackward()
     {
-        var output = _dropoutLayer.Forward(_input);
+        _dropoutLayer.Forward(_input);
         // Use same-shape gradient for dropout layer
         var dropoutGrad = new Tensor<double>(new[] { BatchSize, InputSize });
         for (int i = 0; i < dropoutGrad.Length; i++)
@@ -137,7 +137,7 @@ public class NeuralNetworkLayersBenchmarks
     [Benchmark]
     public Tensor<double> BatchNormalization_ForwardBackward()
     {
-        var output = _batchNormLayer.Forward(_input);
+        _batchNormLayer.Forward(_input);
         // Use same-shape gradient for batch norm layer
         var bnGrad = new Tensor<double>(new[] { BatchSize, InputSize });
         for (int i = 0; i < bnGrad.Length; i++)
@@ -160,7 +160,7 @@ public class NeuralNetworkLayersBenchmarks
     [Benchmark]
     public Tensor<double> LayerNormalization_ForwardBackward()
     {
-        var output = _layerNormLayer.Forward(_input);
+        _layerNormLayer.Forward(_input);
         // Use same-shape gradient for layer norm layer
         var lnGrad = new Tensor<double>(new[] { BatchSize, InputSize });
         for (int i = 0; i < lnGrad.Length; i++)
