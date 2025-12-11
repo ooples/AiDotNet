@@ -1083,42 +1083,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Builds a predictive model using the provided input features and output values.
-    /// If agent assistance is enabled, the agent will help with model selection and hyperparameter tuning.
-    /// </summary>
-    /// <param name="x">Matrix of input features (required).</param>
-    /// <param name="y">Vector of output values (required).</param>
-    /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
-    /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no model has been specified for regular training.</exception>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method trains your AI model on your specific dataset.
-    ///
-    /// **Regular Training**:
-    /// - Trains on your specific dataset
-    /// - Learns patterns from your examples
-    /// - Can use agent assistance to select models and tune hyperparameters
-    ///
-    /// Example with agent assistance:
-    /// <code>
-    /// var agentConfig = new AgentConfiguration&lt;double&gt;
-    /// {
-    ///     ApiKey = "sk-...",
-    ///     Provider = LLMProvider.OpenAI,
-    ///     IsEnabled = true
-    /// };
-    ///
-    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureAgentAssistance(agentConfig)
-    ///     .BuildAsync(housingData, prices);
-    /// </code>
-    /// </remarks>
-    public Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput x, TOutput y)
-    {
-        return BuildSupervisedInternalAsync(x, y);
-    }
-
-    /// <summary>
     /// Internal method that performs reinforcement learning training.
     /// This contains all the core RL training logic.
     /// </summary>
@@ -1359,55 +1323,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         return result;
     }
 #pragma warning restore CS1998
-
-    /// <summary>
-    /// Builds and trains a reinforcement learning agent in the configured environment.
-    /// Requires ConfigureReinforcementLearning() and ConfigureModel() (with an RL agent) to be called first.
-    /// </summary>
-    /// <param name="episodes">Number of episodes to train for.</param>
-    /// <param name="verbose">Whether to print training progress.</param>
-    /// <returns>A task that represents the asynchronous operation, containing the trained RL agent.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when environment or RL agent not configured.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This overload is specifically for reinforcement learning. Instead of
-    /// training on a fixed dataset (x, y), the agent learns by interacting with an environment
-    /// over many episodes. Each episode is like playing one game from start to finish.
-    /// </para>
-    /// <para>
-    /// **Reinforcement Learning Training**:
-    /// - Agent interacts with environment for specified number of episodes
-    /// - Each episode: agent takes actions, receives rewards, updates policy
-    /// - No need for x/y data - agent learns from environment feedback
-    /// - Returns standard PredictionModelResult for consistency
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// var agent = new DQNAgent&lt;double&gt;(new DQNOptions&lt;double&gt;
-    /// {
-    ///     StateSize = 4,
-    ///     ActionSize = 2,
-    ///     LearningRate = NumOps.FromDouble(0.001)
-    /// });
-    ///
-    /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureReinforcementLearning(new RLTrainingOptions&lt;double&gt;
-    ///     {
-    ///         Environment = new CartPoleEnvironment&lt;double&gt;()
-    ///     })
-    ///     .ConfigureModel(agent)
-    ///     .BuildAsync(episodes: 1000);
-    ///
-    /// // Use trained agent
-    /// var action = result.Predict(stateObservation);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(int episodes, bool verbose = true)
-    {
-        return BuildRLInternalAsync(episodes, verbose);
-    }
 
     /// <summary>
     /// Uses a trained model to make predictions on new data.
