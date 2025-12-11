@@ -251,9 +251,10 @@ jobs:
       # Run tests on net471 (Windows can run .NET Framework)
       # Note: Coverage not collected here as SonarCloud analysis has already completed
       # Only net8.0 coverage is included in SonarCloud analysis (primary target)
+      # Only run AiDotNet.Tests as AiDotNet.Serving.Tests only targets net8.0
       - name: Run tests (net471)
         run: |
-          dotnet test --no-build -c Release --framework net471 --filter "Category!=GPU&Category!=Integration" --logger "trx;LogFileName=test-results-net471.trx" --results-directory ./TestResults
+          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj --no-build -c Release --framework net471 --filter "Category!=GPU&Category!=Integration" --logger "trx;LogFileName=test-results-net471.trx" --results-directory ./TestResults
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
