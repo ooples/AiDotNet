@@ -51,7 +51,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     private INeuralNetwork<T> _mixingNetwork;
     private INeuralNetwork<T> _targetMixingNetwork;
 
-    private UniformReplayBuffer<T> _replayBuffer;
+    private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private double _epsilon;
     private int _stepCount;
 
@@ -71,7 +71,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         _targetAgentNetworks = new List<INeuralNetwork<T>>();
         _mixingNetwork = CreateMixingNetwork();
         _targetMixingNetwork = CreateMixingNetwork();
-        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
         _stepCount = 0;
 
         InitializeNetworks();
@@ -184,7 +184,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
     }
 
     /// <summary>
@@ -240,7 +240,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         var jointAction = ConcatenateVectors(agentActions);
         var jointNextState = ConcatenateWithGlobal(nextAgentStates, nextGlobalState);
 
-        _replayBuffer.Add(new ReplayBuffers.Experience<T>(jointState, jointAction, teamReward, jointNextState, done));
+        _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(jointState, jointAction, teamReward, jointNextState, done));
         _stepCount++;
 
         // Decay epsilon
@@ -249,7 +249,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
         _stepCount++;
         _epsilon = Math.Max(_options.EpsilonEnd, _epsilon * _options.EpsilonDecay);
     }

@@ -41,7 +41,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleDQN;
 public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private DoubleDQNOptions<T> _options;
-    private readonly UniformReplayBuffer<T> _replayBuffer;
+    private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
     private NeuralNetwork<T> _qNetwork;
     private NeuralNetwork<T> _targetNetwork;
@@ -59,7 +59,7 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         : base(CreateBaseOptions(options))
     {
         _options = options;
-        _replayBuffer = new UniformReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(options.ReplayBufferSize, options.Seed);
         _epsilon = options.EpsilonStart;
         _steps = 0;
 
@@ -144,7 +144,7 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
     }
 
     /// <inheritdoc/>

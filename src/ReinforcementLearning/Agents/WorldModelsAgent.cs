@@ -52,7 +52,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     // C: Controller (simple linear policy)
     private Matrix<T> _controllerWeights;
 
-    private UniformReplayBuffer<T> _replayBuffer;
+    private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private int _updateCount;
     private Random _random;
 
@@ -91,7 +91,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         _rnnHiddenState = new Vector<T>(_options.RNNHiddenSize);
 
         // Initialize replay buffer
-        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
 
         // Add all networks to Networks list for parameter access
         Networks.Add(_vaeEncoder);
@@ -191,8 +191,8 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
-        // Store using ReplayBuffers.Experience which expects Vector<T>
-        var experience = new AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>(observation, action, reward, nextObservation, done);
+        // Store using Experience<T, TState, TAction> which expects Vector<T>
+        var experience = new Experience<T, Vector<T>, Vector<T>>(observation, action, reward, nextObservation, done);
         _replayBuffer.Add(experience);
 
         if (done)

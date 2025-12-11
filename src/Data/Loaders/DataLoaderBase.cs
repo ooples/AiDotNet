@@ -1,4 +1,4 @@
-namespace AiDotNet.DataLoading.Base;
+namespace AiDotNet.Data.Loaders;
 
 /// <summary>
 /// Abstract base class providing common functionality for all data loaders.

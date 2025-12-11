@@ -52,7 +52,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     private NeuralNetwork<T> _q2Network;
     private NeuralNetwork<T> _targetValueNetwork;
 
-    private UniformReplayBuffer<T> _offlineBuffer;
+    private UniformReplayBuffer<T, Vector<T>, Vector<T>> _offlineBuffer;
     private Random _random;
     private int _updateCount;
 
@@ -81,7 +81,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         CopyNetworkWeights(_valueNetwork, _targetValueNetwork);
 
         // Initialize offline buffer
-        _offlineBuffer = new UniformReplayBuffer<T>(_options.BufferSize, _options.Seed);
+        _offlineBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.BufferSize, _options.Seed);
     }
 
     private NeuralNetwork<T> CreatePolicyNetwork()
@@ -160,7 +160,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeBuffer()
     {
-        _offlineBuffer = new UniformReplayBuffer<T>(_options.BufferSize);
+        _offlineBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.BufferSize);
     }
 
     /// <summary>
@@ -170,7 +170,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         foreach (var transition in dataset)
         {
-            _offlineBuffer.Add(new ReplayBuffers.Experience<T>(transition.state, transition.action, transition.reward, transition.nextState, transition.done));
+            _offlineBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(transition.state, transition.action, transition.reward, transition.nextState, transition.done));
         }
     }
 
@@ -217,7 +217,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         // IQL is offline - data is loaded beforehand
-        _offlineBuffer.Add(new ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
+        _offlineBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
     }
 
     public override T Train()
@@ -251,7 +251,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         return _numOps.Divide(totalLoss, _numOps.FromDouble(3));
     }
 
-    private T UpdateValueFunction(List<ReplayBuffers.Experience<T>> batch)
+    private T UpdateValueFunction(List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         T totalLoss = _numOps.Zero;
 
@@ -313,7 +313,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         return _numOps.Multiply(weight, diffSquared);
     }
 
-    private T UpdateQFunctions(List<ReplayBuffers.Experience<T>> batch)
+    private T UpdateQFunctions(List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         T totalLoss = _numOps.Zero;
 
@@ -374,7 +374,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count * 2));
     }
 
-    private T UpdatePolicy(List<ReplayBuffers.Experience<T>> batch)
+    private T UpdatePolicy(List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         T totalLoss = _numOps.Zero;
 

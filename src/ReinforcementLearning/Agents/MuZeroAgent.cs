@@ -47,7 +47,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     private NeuralNetwork<T> _dynamicsNetwork;  // (h', r) = g(h, action)
     private NeuralNetwork<T> _predictionNetwork;  // (p, v) = f(h)
 
-    private UniformReplayBuffer<T> _replayBuffer;
+    private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private int _updateCount;
 
     public MuZeroAgent(MuZeroOptions<T> options) : base(new ReinforcementLearningOptions<T>
@@ -72,7 +72,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         _predictionNetwork = CreateNetwork(_options.LatentStateSize, _options.ActionSize + 1, _options.PredictionLayers);
 
         // Initialize replay buffer
-        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize, _options.Seed);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize, _options.Seed);
 
         // Initialize Networks list for base class (used by GetParameters/SetParameters)
         Networks = new List<INeuralNetwork<T>>
@@ -109,7 +109,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
     }
 
     public override Vector<T> SelectAction(Vector<T> observation, bool training = true)
@@ -340,7 +340,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
-        _replayBuffer.Add(new ReinforcementLearning.ReplayBuffers.Experience<T>(observation, action, reward, nextObservation, done));
+        _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(observation, action, reward, nextObservation, done));
     }
 
     public override T Train()
@@ -641,7 +641,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         _predictionNetwork.Deserialize(predData);
 
         // Reinitialize replay buffer (training state not persisted)
-        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize, _options.Seed);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize, _options.Seed);
 
         // Update Networks list
         Networks = new List<INeuralNetwork<T>>

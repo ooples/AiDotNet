@@ -1,7 +1,6 @@
-using AiDotNet.DataLoading.Base;
 using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.DataLoading.InputOutput;
+namespace AiDotNet.Data.Loaders;
 
 /// <summary>
 /// A simple in-memory data loader for supervised learning data.

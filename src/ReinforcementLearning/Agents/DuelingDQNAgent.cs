@@ -45,7 +45,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DuelingDQN;
 public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private DuelingDQNOptions<T> _options;
-    private readonly UniformReplayBuffer<T> _replayBuffer;
+    private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
     private DuelingNetwork<T> _qNetwork;
     private DuelingNetwork<T> _targetNetwork;
@@ -72,7 +72,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         })
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
-        _replayBuffer = new UniformReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(options.ReplayBufferSize, options.Seed);
         _epsilon = options.EpsilonStart;
         _steps = 0;
 
@@ -119,7 +119,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new ReinforcementLearning.ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
     }
 
     /// <inheritdoc/>

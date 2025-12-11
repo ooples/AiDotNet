@@ -46,7 +46,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     private NeuralNetwork<T> _targetQ1Network;
     private NeuralNetwork<T> _targetQ2Network;
 
-    private UniformReplayBuffer<T> _offlineBuffer;  // Fixed offline dataset
+    private UniformReplayBuffer<T, Vector<T>, Vector<T>> _offlineBuffer;  // Fixed offline dataset
     private Random _random;
     private T _logAlpha;
     private T _alpha;
@@ -73,7 +73,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         CopyNetworkWeights(_q2Network, _targetQ2Network);
 
         // Initialize offline buffer
-        _offlineBuffer = new UniformReplayBuffer<T>(_options.BufferSize, _options.Seed);
+        _offlineBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.BufferSize, _options.Seed);
     }
 
     private static ReinforcementLearningOptions<T> CreateBaseOptions(CQLOptions<T> options)
@@ -148,7 +148,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeBuffer()
     {
-        _offlineBuffer = new UniformReplayBuffer<T>(_options.BufferSize);
+        _offlineBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.BufferSize);
     }
 
     /// <summary>
@@ -158,7 +158,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         foreach (var transition in dataset)
         {
-            var experience = new ReplayBuffers.Experience<T>(
+            var experience = new Experience<T, Vector<T>, Vector<T>>(
                 transition.state,
                 transition.action,
                 transition.reward,
@@ -214,7 +214,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         // CQL is offline - data is loaded beforehand
         // This method is kept for interface compliance but not used in offline setting
-        var experience = new ReplayBuffers.Experience<T>(state, action, reward, nextState, done);
+        var experience = new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done);
         _offlineBuffer.Add(experience);
     }
 
@@ -251,7 +251,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         return _numOps.Divide(totalLoss, _numOps.FromDouble(2));
     }
 
-    private T UpdateQNetworks(List<ReplayBuffers.Experience<T>> batch)
+    private T UpdateQNetworks(List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         T totalLoss = _numOps.Zero;
 
@@ -387,7 +387,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         return _numOps.Multiply(_options.CQLAlpha, gap);
     }
 
-    private T UpdatePolicy(List<ReplayBuffers.Experience<T>> batch)
+    private T UpdatePolicy(List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         T totalLoss = _numOps.Zero;
 
@@ -451,7 +451,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
     }
 
-    private void UpdateTemperature(List<ReplayBuffers.Experience<T>> batch)
+    private void UpdateTemperature(List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         // Temperature update using entropy target
         // Loss: alpha * (entropy - target_entropy)

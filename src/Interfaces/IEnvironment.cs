@@ -1,6 +1,6 @@
 using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.ReinforcementLearning.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Represents a reinforcement learning environment that an agent interacts with.

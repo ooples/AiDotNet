@@ -1,5 +1,5 @@
+using AiDotNet.Data.Loaders;
 using AiDotNet.Data.Structures;
-using AiDotNet.DataLoading.Base;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -55,16 +55,11 @@ namespace AiDotNet.Data.Graph;
 /// - Even unlabeled papers can be classified based on what they cite
 /// </para>
 /// </remarks>
-public class CitationNetworkLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
+public class CitationNetworkLoader<T> : GraphDataLoaderBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly CitationDataset _dataset;
     private readonly string _dataPath;
     private readonly bool _autoDownload;
-    private GraphData<T>? _loadedGraph;
-    private int _batchSize = 1;
-    private int _currentBatchIndex;
     private int _numClasses;
 
     // Standard download URLs for citation network datasets
@@ -97,96 +92,7 @@ public class CitationNetworkLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
     public override string Description => $"Citation network loader for {_dataset} dataset";
 
     /// <inheritdoc/>
-    public override int TotalCount => NumNodes;
-
-    /// <inheritdoc/>
-    public int NumGraphs => 1; // Single large graph
-
-    /// <inheritdoc/>
-    public override int BatchSize
-    {
-        get => _batchSize;
-        set => _batchSize = Math.Max(1, value);
-    }
-
-    /// <inheritdoc/>
-    public bool HasNext => _currentBatchIndex == 0;
-
-    /// <inheritdoc/>
-    public Tensor<T> NodeFeatures
-    {
-        get
-        {
-            EnsureLoaded();
-            return _loadedGraph?.NodeFeatures ?? throw new InvalidOperationException("Graph not loaded");
-        }
-    }
-
-    /// <inheritdoc/>
-    public Tensor<T> AdjacencyMatrix
-    {
-        get
-        {
-            EnsureLoaded();
-            return _loadedGraph?.AdjacencyMatrix ?? throw new InvalidOperationException("Graph not loaded");
-        }
-    }
-
-    /// <inheritdoc/>
-    public Tensor<T> EdgeIndex
-    {
-        get
-        {
-            EnsureLoaded();
-            return _loadedGraph?.EdgeIndex ?? throw new InvalidOperationException("Graph not loaded");
-        }
-    }
-
-    /// <inheritdoc/>
-    public Tensor<T>? NodeLabels
-    {
-        get
-        {
-            EnsureLoaded();
-            return _loadedGraph?.NodeLabels;
-        }
-    }
-
-    /// <inheritdoc/>
-    public Tensor<T>? GraphLabels => null; // Citation networks use node labels, not graph labels
-
-    /// <inheritdoc/>
-    public int NumNodeFeatures
-    {
-        get
-        {
-            EnsureLoaded();
-            return _loadedGraph?.NumNodeFeatures ?? 0;
-        }
-    }
-
-    /// <inheritdoc/>
-    public int NumNodes
-    {
-        get
-        {
-            EnsureLoaded();
-            return _loadedGraph?.NumNodes ?? 0;
-        }
-    }
-
-    /// <inheritdoc/>
-    public int NumEdges
-    {
-        get
-        {
-            EnsureLoaded();
-            return _loadedGraph?.NumEdges ?? 0;
-        }
-    }
-
-    /// <inheritdoc/>
-    public int NumClasses
+    public override int NumClasses
     {
         get
         {
@@ -239,33 +145,6 @@ public class CitationNetworkLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
     }
 
     /// <inheritdoc/>
-    public GraphData<T> GetNextBatch()
-    {
-        EnsureLoaded();
-
-        if (!HasNext)
-        {
-            throw new InvalidOperationException("No more batches available. Call Reset() to start over.");
-        }
-
-        _currentBatchIndex++;
-        return _loadedGraph!;
-    }
-
-    /// <inheritdoc/>
-    public bool TryGetNextBatch(out GraphData<T> batch)
-    {
-        if (!HasNext)
-        {
-            batch = default!;
-            return false;
-        }
-
-        batch = GetNextBatch();
-        return true;
-    }
-
-    /// <inheritdoc/>
     protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
     {
         string datasetDir = Path.Combine(_dataPath, _dataset.ToString().ToLowerInvariant());
@@ -274,19 +153,13 @@ public class CitationNetworkLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
         await EnsureDataExistsAsync(datasetDir, cancellationToken);
 
         // Parse the dataset files
-        _loadedGraph = await ParseDatasetFilesAsync(datasetDir, cancellationToken);
+        LoadedGraphData = await ParseDatasetFilesAsync(datasetDir, cancellationToken);
     }
 
     /// <inheritdoc/>
     protected override void UnloadDataCore()
     {
-        _loadedGraph = null;
-    }
-
-    /// <inheritdoc/>
-    protected override void OnReset()
-    {
-        _currentBatchIndex = 0;
+        LoadedGraphData = null;
     }
 
     /// <summary>
@@ -718,40 +591,7 @@ public class CitationNetworkLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
     }
 
     /// <inheritdoc/>
-    public NodeClassificationTask<T> CreateNodeClassificationTask(
-        double trainRatio = 0.1,
-        double valRatio = 0.1,
-        int? seed = null)
-    {
-        EnsureLoaded();
-
-        var graph = _loadedGraph!;
-        int numNodes = graph.NumNodes;
-
-        // Create random split
-        var random = seed.HasValue ? new Random(seed.Value) : new Random();
-        var indices = Enumerable.Range(0, numNodes).OrderBy(_ => random.Next()).ToArray();
-        int trainSize = (int)(numNodes * trainRatio);
-        int valSize = (int)(numNodes * valRatio);
-
-        var trainIndices = indices.Take(trainSize).ToArray();
-        var valIndices = indices.Skip(trainSize).Take(valSize).ToArray();
-        var testIndices = indices.Skip(trainSize + valSize).ToArray();
-
-        return new NodeClassificationTask<T>
-        {
-            Graph = graph,
-            Labels = graph.NodeLabels!,
-            TrainIndices = trainIndices,
-            ValIndices = valIndices,
-            TestIndices = testIndices,
-            NumClasses = _numClasses,
-            IsMultiLabel = false
-        };
-    }
-
-    /// <inheritdoc/>
-    public GraphClassificationTask<T> CreateGraphClassificationTask(
+    public override GraphClassificationTask<T> CreateGraphClassificationTask(
         double trainRatio = 0.8,
         double valRatio = 0.1,
         int? seed = null)
@@ -764,14 +604,19 @@ public class CitationNetworkLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
     }
 
     /// <inheritdoc/>
-    public LinkPredictionTask<T> CreateLinkPredictionTask(
+    public override LinkPredictionTask<T> CreateLinkPredictionTask(
         double trainRatio = 0.85,
         double negativeRatio = 1.0,
         int? seed = null)
     {
         EnsureLoaded();
 
-        var graph = _loadedGraph!;
+        if (LoadedGraphData == null)
+        {
+            throw new InvalidOperationException("Graph data not loaded.");
+        }
+
+        var graph = LoadedGraphData;
         var random = seed.HasValue ? new Random(seed.Value) : new Random();
 
         // Get all edges from edge index

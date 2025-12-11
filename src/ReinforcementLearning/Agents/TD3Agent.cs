@@ -49,7 +49,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
     private NeuralNetwork<T> _targetCritic1Network;
     private NeuralNetwork<T> _targetCritic2Network;
 
-    private UniformReplayBuffer<T> _replayBuffer;
+    private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private Random _random;
     private int _stepCount;
     private int _updateCount;
@@ -78,7 +78,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         CopyNetworkWeights(_critic2Network, _targetCritic2Network);
 
         // Initialize replay buffer
-        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize, _options.Seed);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize, _options.Seed);
     }
 
     private static ReinforcementLearningOptions<T> CreateBaseOptions(TD3Options<T> options)
@@ -175,7 +175,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new ReinforcementLearning.ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
         _stepCount++;
     }
 
@@ -205,7 +205,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         return criticLoss;
     }
 
-    private T UpdateCritics(List<ReinforcementLearning.ReplayBuffers.Experience<T>> batch)
+    private T UpdateCritics(List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         T totalLoss = _numOps.Zero;
 
@@ -311,7 +311,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count * 2));
     }
 
-    private void UpdateActor(List<ReinforcementLearning.ReplayBuffers.Experience<T>> batch)
+    private void UpdateActor(List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         foreach (var experience in batch)
         {

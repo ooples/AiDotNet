@@ -55,7 +55,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     private NeuralNetwork<T> _actorNetwork;
     private NeuralNetwork<T> _valueNetwork;
 
-    private ReplayBuffers.UniformReplayBuffer<T> _replayBuffer;
+    private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private int _updateCount;
 
     public DreamerAgent(DreamerOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
@@ -99,7 +99,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         Networks.Add(_valueNetwork);
 
         // Initialize replay buffer
-        _replayBuffer = new ReplayBuffers.UniformReplayBuffer<T>(_options.ReplayBufferSize, _options.Seed);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize, _options.Seed);
     }
 
     private NeuralNetwork<T> CreateEncoderNetwork(int inputSize, int outputSize)
@@ -134,7 +134,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new ReplayBuffers.UniformReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
     }
 
     public override Vector<T> SelectAction(Vector<T> observation, bool training = true)
@@ -161,7 +161,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
-        _replayBuffer.Add(new ReplayBuffers.Experience<T>(observation, action, reward, nextObservation, done));
+        _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(observation, action, reward, nextObservation, done));
     }
 
     public override T Train()
@@ -184,7 +184,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         return NumOps.Add(worldModelLoss, policyLoss);
     }
 
-    private T TrainWorldModel(List<ReplayBuffers.Experience<T>> batch)
+    private T TrainWorldModel(List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         T totalLoss = NumOps.Zero;
 

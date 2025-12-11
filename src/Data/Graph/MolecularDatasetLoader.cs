@@ -1,5 +1,5 @@
+using AiDotNet.Data.Loaders;
 using AiDotNet.Data.Structures;
-using AiDotNet.DataLoading.Base;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -58,16 +58,11 @@ namespace AiDotNet.Data.Graph;
 /// - **Use case**: Property prediction, molecular design
 /// </para>
 /// </remarks>
-public class MolecularDatasetLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
+public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly MolecularDataset _dataset;
     private readonly string _dataPath;
     private readonly bool _autoDownload;
-    private int _batchSize = 32;
-    private List<GraphData<T>>? _loadedGraphs;
-    private int _currentBatchIndex;
     private int _numClasses;
 
     // Standard download URLs for molecular datasets
@@ -117,135 +112,7 @@ public class MolecularDatasetLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
     public override string Description => $"Molecular graph dataset loader for {_dataset}";
 
     /// <inheritdoc/>
-    public override int TotalCount => NumGraphs;
-
-    /// <inheritdoc/>
-    public int NumGraphs { get; private set; }
-
-    /// <inheritdoc/>
-    public override int BatchSize
-    {
-        get => _batchSize;
-        set => _batchSize = Math.Max(1, value);
-    }
-
-    /// <inheritdoc/>
-    public bool HasNext => _loadedGraphs is not null && _currentBatchIndex < _loadedGraphs.Count;
-
-    /// <inheritdoc/>
-    public Tensor<T> NodeFeatures
-    {
-        get
-        {
-            EnsureLoaded();
-            if (_loadedGraphs is null || _loadedGraphs.Count == 0)
-            {
-                throw new InvalidOperationException("No graphs loaded");
-            }
-            return _loadedGraphs[0].NodeFeatures;
-        }
-    }
-
-    /// <inheritdoc/>
-    public Tensor<T> AdjacencyMatrix
-    {
-        get
-        {
-            EnsureLoaded();
-            if (_loadedGraphs is null || _loadedGraphs.Count == 0)
-            {
-                throw new InvalidOperationException("No graphs loaded");
-            }
-            return _loadedGraphs[0].AdjacencyMatrix ?? new Tensor<T>([0, 0]);
-        }
-    }
-
-    /// <inheritdoc/>
-    public Tensor<T> EdgeIndex
-    {
-        get
-        {
-            EnsureLoaded();
-            if (_loadedGraphs is null || _loadedGraphs.Count == 0)
-            {
-                throw new InvalidOperationException("No graphs loaded");
-            }
-            return _loadedGraphs[0].EdgeIndex;
-        }
-    }
-
-    /// <inheritdoc/>
-    public Tensor<T>? NodeLabels
-    {
-        get
-        {
-            EnsureLoaded();
-            if (_loadedGraphs is null || _loadedGraphs.Count == 0)
-            {
-                return null;
-            }
-            return _loadedGraphs[0].NodeLabels;
-        }
-    }
-
-    /// <inheritdoc/>
-    public Tensor<T>? GraphLabels
-    {
-        get
-        {
-            EnsureLoaded();
-            if (_loadedGraphs is null || _loadedGraphs.Count == 0)
-            {
-                return null;
-            }
-            return _loadedGraphs[0].GraphLabel;
-        }
-    }
-
-    /// <inheritdoc/>
-    public int NumNodeFeatures
-    {
-        get
-        {
-            EnsureLoaded();
-            if (_loadedGraphs is null || _loadedGraphs.Count == 0)
-            {
-                return 0;
-            }
-            return _loadedGraphs[0].NumNodeFeatures;
-        }
-    }
-
-    /// <inheritdoc/>
-    public int NumNodes
-    {
-        get
-        {
-            EnsureLoaded();
-            if (_loadedGraphs is null || _loadedGraphs.Count == 0)
-            {
-                return 0;
-            }
-            return _loadedGraphs[0].NumNodes;
-        }
-    }
-
-    /// <inheritdoc/>
-    public int NumEdges
-    {
-        get
-        {
-            EnsureLoaded();
-            if (_loadedGraphs is null || _loadedGraphs.Count == 0)
-            {
-                return 0;
-            }
-            return _loadedGraphs[0].NumEdges;
-        }
-    }
-
-    /// <inheritdoc/>
-    public int NumClasses
+    public override int NumClasses
     {
         get
         {
@@ -293,37 +160,9 @@ public class MolecularDatasetLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
         bool autoDownload = true)
     {
         _dataset = dataset;
-        _batchSize = batchSize;
+        BatchSize = batchSize;
         _dataPath = dataPath ?? GetDefaultDataPath();
         _autoDownload = autoDownload;
-    }
-
-    /// <inheritdoc/>
-    public GraphData<T> GetNextBatch()
-    {
-        EnsureLoaded();
-
-        if (!HasNext)
-        {
-            throw new InvalidOperationException("No more batches available. Call Reset() to start over.");
-        }
-
-        var graph = _loadedGraphs![_currentBatchIndex];
-        _currentBatchIndex++;
-        return graph;
-    }
-
-    /// <inheritdoc/>
-    public bool TryGetNextBatch(out GraphData<T> batch)
-    {
-        if (!HasNext)
-        {
-            batch = default!;
-            return false;
-        }
-
-        batch = GetNextBatch();
-        return true;
     }
 
     /// <inheritdoc/>
@@ -335,8 +174,13 @@ public class MolecularDatasetLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
         await EnsureDataExistsAsync(datasetDir, cancellationToken);
 
         // Parse the dataset files
-        _loadedGraphs = await ParseDatasetAsync(datasetDir, cancellationToken);
-        NumGraphs = _loadedGraphs.Count;
+        LoadedGraphs = await ParseDatasetAsync(datasetDir, cancellationToken);
+
+        // Set first graph as the main LoadedGraphData for single-graph access
+        if (LoadedGraphs.Count > 0)
+        {
+            LoadedGraphData = LoadedGraphs[0];
+        }
 
         // Determine number of classes based on dataset type
         _numClasses = _dataset == MolecularDataset.QM9 ? 1 : 1; // Regression tasks
@@ -345,14 +189,8 @@ public class MolecularDatasetLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
     /// <inheritdoc/>
     protected override void UnloadDataCore()
     {
-        _loadedGraphs = null;
-        NumGraphs = 0;
-    }
-
-    /// <inheritdoc/>
-    protected override void OnReset()
-    {
-        _currentBatchIndex = 0;
+        LoadedGraphs = null;
+        LoadedGraphData = null;
     }
 
     /// <summary>
@@ -1228,7 +1066,7 @@ public class MolecularDatasetLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
     }
 
     /// <inheritdoc/>
-    public NodeClassificationTask<T> CreateNodeClassificationTask(
+    public override NodeClassificationTask<T> CreateNodeClassificationTask(
         double trainRatio = 0.1,
         double valRatio = 0.1,
         int? seed = null)
@@ -1240,20 +1078,20 @@ public class MolecularDatasetLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
     }
 
     /// <inheritdoc/>
-    public GraphClassificationTask<T> CreateGraphClassificationTask(
+    public override GraphClassificationTask<T> CreateGraphClassificationTask(
         double trainRatio = 0.8,
         double valRatio = 0.1,
         int? seed = null)
     {
         EnsureLoaded();
 
-        if (_loadedGraphs is null || _loadedGraphs.Count == 0)
+        if (LoadedGraphs is null || LoadedGraphs.Count == 0)
         {
             throw new InvalidOperationException("No graphs loaded");
         }
 
         var random = seed.HasValue ? new Random(seed.Value) : new Random();
-        var shuffledGraphs = _loadedGraphs.OrderBy(_ => random.Next()).ToList();
+        var shuffledGraphs = LoadedGraphs.OrderBy(_ => random.Next()).ToList();
 
         int trainSize = (int)(shuffledGraphs.Count * trainRatio);
         int valSize = (int)(shuffledGraphs.Count * valRatio);
@@ -1287,7 +1125,7 @@ public class MolecularDatasetLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
     }
 
     /// <inheritdoc/>
-    public LinkPredictionTask<T> CreateLinkPredictionTask(
+    public override LinkPredictionTask<T> CreateLinkPredictionTask(
         double trainRatio = 0.85,
         double negativeRatio = 1.0,
         int? seed = null)
@@ -1343,14 +1181,14 @@ public class MolecularDatasetLoader<T> : DataLoaderBase<T>, IGraphDataLoader<T>
     {
         EnsureLoaded();
 
-        if (_loadedGraphs is null || _loadedGraphs.Count == 0)
+        if (LoadedGraphs is null || LoadedGraphs.Count == 0)
         {
             throw new InvalidOperationException("No graphs loaded");
         }
 
-        int trainSize = (int)(_loadedGraphs.Count * 0.9);
-        var trainingGraphs = _loadedGraphs.Take(trainSize).ToList();
-        var validationGraphs = _loadedGraphs.Skip(trainSize).ToList();
+        int trainSize = (int)(LoadedGraphs.Count * 0.9);
+        var trainingGraphs = LoadedGraphs.Take(trainSize).ToList();
+        var validationGraphs = LoadedGraphs.Skip(trainSize).ToList();
 
         // Common atom types in organic molecules
         var atomTypesList = AtomTypeMap.Keys.ToList();

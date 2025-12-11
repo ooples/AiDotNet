@@ -1,7 +1,6 @@
-using AiDotNet.DataLoading.InputOutput;
 using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.DataLoading;
+namespace AiDotNet.Data.Loaders;
 
 /// <summary>
 /// Static factory class for creating data loaders with beginner-friendly methods.

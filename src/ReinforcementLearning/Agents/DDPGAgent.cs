@@ -45,7 +45,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DDPG;
 public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private DDPGOptions<T> _options;
-    private readonly UniformReplayBuffer<T> _replayBuffer;
+    private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private readonly OrnsteinUhlenbeckNoise<T> _noise;
 
     private NeuralNetwork<T> _actorNetwork;
@@ -61,7 +61,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         : base(CreateBaseOptions(options))
     {
         _options = options;
-        _replayBuffer = new UniformReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(options.ReplayBufferSize, options.Seed);
         _noise = new OrnsteinUhlenbeckNoise<T>(options.ActionSize, NumOps, Random, options.ExplorationNoise);
         _steps = 0;
 
@@ -180,7 +180,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
     }
 
     /// <inheritdoc/>
@@ -211,7 +211,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         return totalLoss;
     }
 
-    private T UpdateCritic(List<ReplayBuffers.Experience<T>> batch)
+    private T UpdateCritic(List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         T totalLoss = NumOps.Zero;
 
@@ -260,7 +260,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
-    private T UpdateActor(List<ReplayBuffers.Experience<T>> batch)
+    private T UpdateActor(List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         T totalLoss = NumOps.Zero;
 

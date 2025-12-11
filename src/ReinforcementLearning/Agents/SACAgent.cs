@@ -43,7 +43,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.SAC;
 public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private SACOptions<T> _sacOptions;
-    private readonly UniformReplayBuffer<T> _replayBuffer;
+    private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
     private NeuralNetwork<T> _policyNetwork;      // Actor (stochastic policy)
     private NeuralNetwork<T> _q1Network;          // First Q-network (critic 1)
@@ -73,7 +73,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         })
     {
         _sacOptions = options ?? throw new ArgumentNullException(nameof(options));
-        _replayBuffer = new UniformReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(options.ReplayBufferSize, options.Seed);
         _steps = 0;
         _logAlpha = NumOps.FromDouble(Math.Log(NumOps.ToDouble(options.InitialTemperature)));
 
@@ -212,7 +212,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
     }
 
     /// <inheritdoc/>
@@ -257,7 +257,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         return avgLoss;
     }
 
-    private T UpdateCritics(List<ReplayBuffers.Experience<T>> batch)
+    private T UpdateCritics(List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         T totalQLoss = NumOps.Zero;
 
@@ -334,7 +334,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         return NumOps.Divide(totalQLoss, NumOps.FromDouble(batch.Count * 2));
     }
 
-    private T UpdateActor(List<ReplayBuffers.Experience<T>> batch)
+    private T UpdateActor(List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         T totalPolicyLoss = NumOps.Zero;
 
@@ -446,7 +446,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         return gradient;
     }
 
-    private void UpdateTemperature(List<ReplayBuffers.Experience<T>> batch)
+    private void UpdateTemperature(List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         if (!_sacOptions.AutoTuneTemperature) return;
 

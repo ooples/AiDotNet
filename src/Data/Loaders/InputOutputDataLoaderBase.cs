@@ -1,7 +1,6 @@
-using AiDotNet.DataLoading.Base;
 using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.DataLoading.InputOutput;
+namespace AiDotNet.Data.Loaders;
 
 /// <summary>
 /// Abstract base class for input-output data loaders providing common supervised learning functionality.

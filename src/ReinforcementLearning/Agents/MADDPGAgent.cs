@@ -50,7 +50,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     private List<INeuralNetwork<T>> _criticNetworks;
     private List<INeuralNetwork<T>> _targetCriticNetworks;
 
-    private UniformReplayBuffer<T> _replayBuffer;
+    private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private int _stepCount;
 
     // Track per-agent rewards for competitive/mixed-motive scenarios
@@ -71,7 +71,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             Epsilon = 1e-8
         });
         _stepCount = 0;
-        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
         _perAgentRewards = new Dictionary<int, List<T>>();
 
         // Initialize networks directly in constructor
@@ -168,7 +168,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
     }
 
     /// <summary>
@@ -256,13 +256,13 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
         avgReward = NumOps.Divide(avgReward, NumOps.FromDouble(rewards.Count));
 
-        _replayBuffer.Add(new ReplayBuffers.Experience<T>(jointState, jointAction, avgReward, jointNextState, done));
+        _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(jointState, jointAction, avgReward, jointNextState, done));
         _stepCount++;
     }
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
         _stepCount++;
     }
 
@@ -293,7 +293,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(_options.NumAgents * 2));
     }
 
-    private T UpdateCritic(int agentId, List<AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>> batch, List<int> indices)
+    private T UpdateCritic(int agentId, List<Experience<T, Vector<T>, Vector<T>>> batch, List<int> indices)
     {
         T totalLoss = NumOps.Zero;
 
@@ -374,7 +374,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
-    private T UpdateActor(int agentId, List<AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>> batch)
+    private T UpdateActor(int agentId, List<Experience<T, Vector<T>, Vector<T>>> batch)
     {
         T totalLoss = NumOps.Zero;
 

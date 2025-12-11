@@ -1,8 +1,7 @@
 using AiDotNet.Data.Structures;
-using AiDotNet.DataLoading.Base;
 using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.DataLoading.Graph;
+namespace AiDotNet.Data.Loaders;
 
 /// <summary>
 /// Abstract base class for graph data loaders providing common graph-related functionality.

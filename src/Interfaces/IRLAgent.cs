@@ -1,7 +1,6 @@
-using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.ReinforcementLearning.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Marker interface for reinforcement learning agents that integrate with PredictionModelBuilder.
@@ -32,13 +31,13 @@ public interface IRLAgent<T> : IFullModel<T, Vector<T>, Vector<T>>
     /// Selects an action given the current state observation.
     /// </summary>
     /// <param name="state">The current state observation.</param>
-    /// <param name="training">Whether the agent is in training mode (affects exploration).</param>
+    /// <param name="explore">Whether to use exploration (epsilon-greedy, etc.).</param>
     /// <returns>Action as a Vector (one-hot for discrete, continuous values for continuous action spaces).</returns>
     /// <remarks>
     /// <b>For Beginners:</b> This is how the agent decides what to do in a given situation.
     /// During training, it might explore (try random things), but during evaluation it uses its learned policy.
     /// </remarks>
-    Vector<T> SelectAction(Vector<T> state, bool training = true);
+    Vector<T> SelectAction(Vector<T> state, bool explore = true);
 
     /// <summary>
     /// Stores an experience tuple for later learning.
