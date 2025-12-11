@@ -2,6 +2,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using AiDotNet.Regression;
 using AiDotNet.Configuration;
+using AiDotNet.Data.Loaders;
 using System.Diagnostics;
 
 namespace AiDotNet.Tests.IntegrationTests;
@@ -43,18 +44,18 @@ public class JitCompilationIntegrationTests
         var yData = new Vector<float>(new float[] { 5.0f, 7.0f, 9.0f, 11.0f, 13.0f, 15.0f, 17.0f, 19.0f, 21.0f, 23.0f });
 
         // Train model WITHOUT JIT
-        var modelWithoutJit = new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
+        var resultWithoutJit = await new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
+            .ConfigureDataLoader(new InMemoryDataLoader<float, Matrix<float>, Vector<float>>(xData, yData))
             .ConfigureModel(new SimpleRegression<float>())
-            .ConfigureJitCompilation(new JitCompilationConfig { Enabled = false });
-
-        var resultWithoutJit = await modelWithoutJit.BuildAsync(xData, yData);
+            .ConfigureJitCompilation(new JitCompilationConfig { Enabled = false })
+            .BuildAsync();
 
         // Train model WITH JIT
-        var modelWithJit = new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
+        var resultWithJit = await new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
+            .ConfigureDataLoader(new InMemoryDataLoader<float, Matrix<float>, Vector<float>>(xData, yData))
             .ConfigureModel(new SimpleRegression<float>())
-            .ConfigureJitCompilation(new JitCompilationConfig { Enabled = true });
-
-        var resultWithJit = await modelWithJit.BuildAsync(xData, yData);
+            .ConfigureJitCompilation(new JitCompilationConfig { Enabled = true })
+            .BuildAsync();
 
         // Act: Make predictions on new data
         var testData = new Matrix<float>(new float[,] { { 6.0f }, { 7.0f }, { 8.0f } });
@@ -100,17 +101,17 @@ public class JitCompilationIntegrationTests
         }
 
         // Train models
-        var modelWithoutJit = new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
+        var resultWithoutJit = await new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
+            .ConfigureDataLoader(new InMemoryDataLoader<float, Matrix<float>, Vector<float>>(xData, yData))
             .ConfigureModel(new SimpleRegression<float>())
-            .ConfigureJitCompilation(new JitCompilationConfig { Enabled = false });
+            .ConfigureJitCompilation(new JitCompilationConfig { Enabled = false })
+            .BuildAsync();
 
-        var resultWithoutJit = await modelWithoutJit.BuildAsync(xData, yData);
-
-        var modelWithJit = new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
+        var resultWithJit = await new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
+            .ConfigureDataLoader(new InMemoryDataLoader<float, Matrix<float>, Vector<float>>(xData, yData))
             .ConfigureModel(new SimpleRegression<float>())
-            .ConfigureJitCompilation(new JitCompilationConfig { Enabled = true });
-
-        var resultWithJit = await modelWithJit.BuildAsync(xData, yData);
+            .ConfigureJitCompilation(new JitCompilationConfig { Enabled = true })
+            .BuildAsync();
 
         // Create test data (large batch for meaningful timing)
         var testData = new Matrix<float>(1000, 10);
@@ -180,16 +181,16 @@ public class JitCompilationIntegrationTests
         var yData = new Vector<float>(new float[] { 5.0f, 7.0f, 9.0f, 11.0f, 13.0f, 15.0f, 17.0f, 19.0f, 21.0f, 23.0f });
 
         // Configure JIT with ThrowOnFailure = false (graceful fallback)
-        var model = new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
+        // Act & Assert: Build should succeed even if JIT fails
+        var result = await new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
+            .ConfigureDataLoader(new InMemoryDataLoader<float, Matrix<float>, Vector<float>>(xData, yData))
             .ConfigureModel(new SimpleRegression<float>())
             .ConfigureJitCompilation(new JitCompilationConfig
             {
                 Enabled = true,
                 ThrowOnFailure = false  // Graceful fallback
-            });
-
-        // Act & Assert: Build should succeed even if JIT fails
-        var result = await model.BuildAsync(xData, yData);
+            })
+            .BuildAsync();
 
         // Predictions should still work (using non-JIT path if JIT failed)
         var testData = new Matrix<float>(new float[,] { { 4.0f } });
@@ -214,16 +215,16 @@ public class JitCompilationIntegrationTests
         });
         var yData = new Vector<float>(new float[] { 5.0f, 7.0f, 9.0f, 11.0f, 13.0f, 15.0f, 17.0f, 19.0f, 21.0f, 23.0f });
 
-        var model = new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
+        // Act: Should succeed
+        var result = await new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
+            .ConfigureDataLoader(new InMemoryDataLoader<float, Matrix<float>, Vector<float>>(xData, yData))
             .ConfigureModel(new SimpleRegression<float>())
             .ConfigureJitCompilation(new JitCompilationConfig
             {
                 Enabled = true,
                 ThrowOnFailure = false  // Use graceful fallback since not all models support JIT
-            });
-
-        // Act: Should succeed
-        var result = await model.BuildAsync(xData, yData);
+            })
+            .BuildAsync();
 
         // Assert: Model should be functional
         var testData = new Matrix<float>(new float[,] { { 4.0f } });
@@ -270,11 +271,11 @@ public class JitCompilationIntegrationTests
         });
 
         // Train with JIT
-        var model = new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
+        var result = await new PredictionModelBuilder<float, Matrix<float>, Vector<float>>()
+            .ConfigureDataLoader(new InMemoryDataLoader<float, Matrix<float>, Vector<float>>(xData, yData))
             .ConfigureModel(new SimpleRegression<float>())
-            .ConfigureJitCompilation(new JitCompilationConfig { Enabled = true });
-
-        var result = await model.BuildAsync(xData, yData);
+            .ConfigureJitCompilation(new JitCompilationConfig { Enabled = true })
+            .BuildAsync();
 
         // Act: Make prediction
         var testData = new Matrix<float>(new float[,] { { 6.0f, 7.0f, 8.0f } });

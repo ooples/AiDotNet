@@ -1,3 +1,5 @@
+global using AiDotNet.Configuration;
+global using AiDotNet.Helpers;
 global using AiDotNet.FeatureSelectors;
 global using AiDotNet.FitnessCalculators;
 global using AiDotNet.Regularization;
@@ -51,6 +53,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IFullModel<T, TInput, TOutput>? _model;
     private IOptimizer<T, TInput, TOutput>? _optimizer;
     private IDataPreprocessor<T, TInput, TOutput>? _dataPreprocessor;
+    private IDataLoader<T>? _dataLoader;
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
@@ -76,7 +79,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private MixedPrecisionConfig? _mixedPrecisionConfig;
     private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig;
     private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
-    private ReinforcementLearning.Interfaces.IEnvironment<T>? _environment;
+    private RLTrainingOptions<T>? _rlOptions;
     private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
 
     // Deployment configuration fields
@@ -558,6 +561,40 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
+    /// Configures the data loader for providing training data.
+    /// </summary>
+    /// <param name="dataLoader">The data loader that provides training data.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> A data loader handles loading your data from various sources
+    /// (files, databases, memory, URLs) and provides it in a format suitable for model training.
+    ///
+    /// You can use:
+    /// - IInputOutputDataLoader for standard supervised learning (features + labels)
+    /// - IGraphDataLoader for graph neural networks
+    /// - IEpisodicDataLoader for meta-learning
+    ///
+    /// Example:
+    /// <code>
+    /// // Simple in-memory data
+    /// var loader = DataLoaders.FromArrays(features, labels);
+    ///
+    /// // Or graph data
+    /// var graphLoader = new CitationNetworkLoader("cora");
+    ///
+    /// var result = await builder
+    ///     .ConfigureDataLoader(loader)
+    ///     .ConfigureModel(model)
+    ///     .BuildAsync();
+    /// </code>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataLoader(IDataLoader<T> dataLoader)
+    {
+        _dataLoader = dataLoader;
+        return this;
+    }
+
+    /// <summary>
     /// Configures how to detect and handle outliers in the data.
     /// </summary>
     /// <param name="outlierRemoval">The outlier removal strategy to use.</param>
@@ -575,109 +612,92 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Builds a predictive model using meta-learning.
-    /// Requires ConfigureMetaLearning() to be called first.
+    /// Builds a predictive model using data from ConfigureDataLoader() or meta-learning from ConfigureMetaLearning().
     /// </summary>
-    /// <returns>A task that represents the asynchronous operation, containing the trained meta-learning model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when ConfigureMetaLearning() hasn't been called.</exception>
+    /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when neither ConfigureDataLoader() nor ConfigureMetaLearning() has been called.</exception>
     /// <remarks>
-    /// <b>For Beginners:</b> This overload is for meta-learning, where the model learns to quickly adapt to new tasks.
-    /// Use this when you've configured a meta-learner via ConfigureMetaLearning().
+    /// <b>For Beginners:</b> Use this method when you've configured either:
+    /// - A data loader (via ConfigureDataLoader) - the loader provides the training data
+    /// - Meta-learning (via ConfigureMetaLearning) - trains your model to learn NEW tasks quickly
     ///
-    /// **Meta-Learning**:
+    /// **Data Loader Path**:
+    /// - LoadAsync() is called on the data loader
+    /// - Features and Labels are extracted from the loader
+    /// - Training proceeds using the loaded data
+    ///
+    /// **Meta-Learning Path**:
     /// - Trains a model that can quickly adapt to new tasks
     /// - Uses episodic data from the meta-learner configuration
-    /// - No need to provide x and y - they're in the meta-learner config
     ///
-    /// Example:
+    /// Example with data loader:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureDataLoader(DataLoaders.FromArrays(features, labels))
+    ///     .ConfigureModel(model)
+    ///     .BuildAsync();
+    /// </code>
+    ///
+    /// Example with meta-learning:
     /// <code>
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureMetaLearning(metaLearner)
     ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    public Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync()
+    public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync()
     {
-        // META-LEARNING PATH - requires ConfigureMetaLearning() to be called first
-        if (_metaLearner == null)
-            throw new InvalidOperationException(
-                "BuildAsync() without parameters requires ConfigureMetaLearning() to be called first. " +
-                "For regular training, use BuildAsync(x, y) with your input and output data.");
-
-        // Perform meta-training using parameters from config (specified during meta-learner construction)
-        var metaResult = _metaLearner.Train();
-
-        // Create deployment configuration from individual configs
-        var deploymentConfig = DeploymentConfiguration.Create(
-            _quantizationConfig,
-            _cacheConfig,
-            _versioningConfig,
-            _abTestingConfig,
-            _telemetryConfig,
-            _exportConfig,
-            _gpuAccelerationConfig);
-
-        // Create PredictionModelResult with meta-learning constructor
-        var result = new PredictionModelResult<T, TInput, TOutput>(
-            metaLearner: _metaLearner,
-            metaResult: metaResult,
-            loraConfiguration: _loraConfiguration,
-            biasDetector: _biasDetector,
-            fairnessEvaluator: _fairnessEvaluator,
-            ragRetriever: _ragRetriever,
-            ragReranker: _ragReranker,
-            ragGenerator: _ragGenerator,
-            queryProcessors: _queryProcessors,
-            agentConfig: _agentConfig,
-            deploymentConfiguration: deploymentConfig,
-            reasoningConfig: _reasoningConfig,
-            knowledgeGraph: _knowledgeGraph,
-            graphStore: _graphStore,
-            hybridGraphRetriever: _hybridGraphRetriever);
-
-        // Attach tokenizer if configured
-        if (_tokenizer != null)
+        // RL TRAINING PATH - check if RL options are configured with an environment
+        if (_rlOptions?.Environment is not null)
         {
-            result.AttachTokenizer(_tokenizer, _tokenizationConfig);
+            // Use episodes from options (default: 1000)
+            int episodes = _rlOptions.Episodes;
+            bool verbose = _rlOptions.LogFrequency > 0;
+            return await BuildRLInternalAsync(episodes, verbose);
         }
 
-        return Task.FromResult(result);
+        // DATA LOADER PATH - check if data loader is configured and provides input/output data
+        if (_dataLoader is IInputOutputDataLoader<T, TInput, TOutput> inputOutputLoader)
+        {
+            // Load data if not already loaded
+            if (!_dataLoader.IsLoaded)
+            {
+                await _dataLoader.LoadAsync();
+            }
+
+            // Get features and labels from the typed loader
+            var features = inputOutputLoader.Features;
+            var labels = inputOutputLoader.Labels;
+
+            // Delegate to the internal supervised training method
+            return await BuildSupervisedInternalAsync(features, labels);
+        }
+
+        // META-LEARNING PATH - check if meta-learner is configured
+        if (_metaLearner is not null)
+        {
+            return BuildMetaLearningInternalAsync();
+        }
+
+        // No training path configured
+        throw new InvalidOperationException(
+            "BuildAsync() requires one of the following to be configured first:\n" +
+            "- ConfigureReinforcementLearning() for RL training\n" +
+            "- ConfigureDataLoader() for supervised learning\n" +
+            "- ConfigureMetaLearning() for meta-learning\n" +
+            "For explicit data training, use BuildAsync(x, y) with your input and output data.");
     }
 
     /// <summary>
-    /// Builds a predictive model using the provided input features and output values.
-    /// If agent assistance is enabled, the agent will help with model selection and hyperparameter tuning.
+    /// Internal method that performs supervised training with the provided input features and output values.
+    /// This contains all the core supervised learning logic.
     /// </summary>
-    /// <param name="x">Matrix of input features (required).</param>
-    /// <param name="y">Vector of output values (required).</param>
+    /// <param name="x">Matrix of input features.</param>
+    /// <param name="y">Vector of output values.</param>
     /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
-    /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no model has been specified for regular training.</exception>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method trains your AI model on your specific dataset.
-    ///
-    /// **Regular Training**:
-    /// - Trains on your specific dataset
-    /// - Learns patterns from your examples
-    /// - Can use agent assistance to select models and tune hyperparameters
-    ///
-    /// Example with agent assistance:
-    /// <code>
-    /// var agentConfig = new AgentConfiguration&lt;double&gt;
-    /// {
-    ///     ApiKey = "sk-...",
-    ///     Provider = LLMProvider.OpenAI,
-    ///     IsEnabled = true
-    /// };
-    ///
-    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureAgentAssistance(agentConfig)
-    ///     .BuildAsync(housingData, prices);
-    /// </code>
-    /// </remarks>
-    public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput x, TOutput y)
+    private async Task<PredictionModelResult<T, TInput, TOutput>> BuildSupervisedInternalAsync(TInput x, TOutput y)
     {
-        // REGULAR TRAINING PATH
+        // SUPERVISED TRAINING PATH
 
         // Apply GPU configuration first (before any operations that might use GPU)
         ApplyGpuConfiguration();
@@ -1007,63 +1027,90 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Builds and trains a reinforcement learning agent in the configured environment.
-    /// Requires ConfigureEnvironment() and ConfigureModel() (with an RL agent) to be called first.
+    /// Internal method that performs meta-learning training.
+    /// This contains all the core meta-learning logic.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation, containing the trained meta-learner result.</returns>
+    private PredictionModelResult<T, TInput, TOutput> BuildMetaLearningInternalAsync()
+    {
+        // META-LEARNING TRAINING PATH
+
+        // Validate meta-learner is configured (should be checked by caller, but defensive)
+        if (_metaLearner is null)
+        {
+            throw new InvalidOperationException(
+                "BuildMetaLearningInternalAsync requires ConfigureMetaLearning() to be called first.");
+        }
+
+        // Perform meta-training using parameters from config (specified during meta-learner construction)
+        var metaResult = _metaLearner.Train();
+
+        // Create deployment configuration from individual configs
+        var deploymentConfig = DeploymentConfiguration.Create(
+            _quantizationConfig,
+            _cacheConfig,
+            _versioningConfig,
+            _abTestingConfig,
+            _telemetryConfig,
+            _exportConfig,
+            _gpuAccelerationConfig);
+
+        // Create PredictionModelResult with meta-learning constructor
+        var result = new PredictionModelResult<T, TInput, TOutput>(
+            metaLearner: _metaLearner,
+            metaResult: metaResult,
+            loraConfiguration: _loraConfiguration,
+            biasDetector: _biasDetector,
+            fairnessEvaluator: _fairnessEvaluator,
+            ragRetriever: _ragRetriever,
+            ragReranker: _ragReranker,
+            ragGenerator: _ragGenerator,
+            queryProcessors: _queryProcessors,
+            agentConfig: _agentConfig,
+            deploymentConfiguration: deploymentConfig,
+            reasoningConfig: _reasoningConfig,
+            knowledgeGraph: _knowledgeGraph,
+            graphStore: _graphStore,
+            hybridGraphRetriever: _hybridGraphRetriever);
+
+        // Attach tokenizer if configured
+        if (_tokenizer is not null)
+        {
+            result.AttachTokenizer(_tokenizer, _tokenizationConfig);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Internal method that performs reinforcement learning training.
+    /// This contains all the core RL training logic.
     /// </summary>
     /// <param name="episodes">Number of episodes to train for.</param>
     /// <param name="verbose">Whether to print training progress.</param>
-    /// <returns>A task that represents the asynchronous operation, containing the trained RL agent.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when environment or RL agent not configured.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This overload is specifically for reinforcement learning. Instead of
-    /// training on a fixed dataset (x, y), the agent learns by interacting with an environment
-    /// over many episodes. Each episode is like playing one game from start to finish.
-    /// </para>
-    /// <para>
-    /// **Reinforcement Learning Training**:
-    /// - Agent interacts with environment for specified number of episodes
-    /// - Each episode: agent takes actions, receives rewards, updates policy
-    /// - No need for x/y data - agent learns from environment feedback
-    /// - Returns standard PredictionModelResult for consistency
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// var agent = new DQNAgent&lt;double&gt;(new DQNOptions&lt;double&gt;
-    /// {
-    ///     StateSize = 4,
-    ///     ActionSize = 2,
-    ///     LearningRate = NumOps.FromDouble(0.001)
-    /// });
-    ///
-    /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureEnvironment(new CartPoleEnvironment&lt;double&gt;())
-    ///     .ConfigureModel(agent)
-    ///     .BuildAsync(episodes: 1000);
-    ///
-    /// // Use trained agent
-    /// var action = result.Predict(stateObservation);
-    /// </code>
-    /// </para>
-    /// </remarks>
+    /// <returns>A task that represents the asynchronous operation, containing the trained RL agent result.</returns>
 #pragma warning disable CS1998
-    public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(int episodes, bool verbose = true)
+    private async Task<PredictionModelResult<T, TInput, TOutput>> BuildRLInternalAsync(int episodes, bool verbose)
     {
-        // RL TRAINING PATH - requires ConfigureEnvironment() and an RL agent
+        // RL TRAINING PATH
 
         // Apply GPU configuration first (before any operations that might use GPU)
         ApplyGpuConfiguration();
 
-        if (_environment == null)
+        // Validate RL options are configured
+        if (_rlOptions?.Environment is null)
+        {
             throw new InvalidOperationException(
-                "BuildAsync(episodes) requires ConfigureEnvironment() to be called first. " +
-                "For regular training, use BuildAsync(x, y).");
+                "BuildRLInternalAsync requires ConfigureReinforcementLearning() with a valid Environment.");
+        }
 
-        if (_model == null)
+        // Validate model is set
+        if (_model is null)
+        {
             throw new InvalidOperationException("Model (RL agent) must be specified using ConfigureModel().");
+        }
 
-        if (_model is not ReinforcementLearning.Interfaces.IRLAgent<T> rlAgent)
+        if (_model is not IRLAgent<T> rlAgent)
             throw new InvalidOperationException(
                 "The configured model must implement IRLAgent<T> for RL training. " +
                 "Use RL agent types like DQNAgent, PPOAgent, SACAgent, etc.");
@@ -1072,13 +1119,18 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var episodeRewards = new List<T>();
         var episodeLengths = new List<int>();
         var losses = new List<T>();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        int totalStepsAcrossEpisodes = 0;
 
         var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Invoke OnTrainingStart callback
+        _rlOptions.OnTrainingStart?.Invoke();
 
         if (verbose)
         {
             Console.WriteLine($"Starting RL training for {episodes} episodes...");
-            Console.WriteLine($"Environment: {_environment.GetType().Name}");
+            Console.WriteLine($"Environment: {_rlOptions.Environment.GetType().Name}");
             Console.WriteLine($"Agent: {rlAgent.GetType().Name}");
             Console.WriteLine();
         }
@@ -1086,7 +1138,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Training loop
         for (int episode = 0; episode < episodes; episode++)
         {
-            var state = _environment.Reset();
+            var state = _rlOptions.Environment.Reset();
             rlAgent.ResetEpisode();
 
             T episodeReward = numOps.Zero;
@@ -1097,17 +1149,18 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             while (!done)
             {
                 // Select action
-                var action = rlAgent.SelectAction(state, training: true);
+                var action = rlAgent.SelectAction(state, explore: true);
 
                 // Take step in environment
-                var (nextState, reward, isDone, info) = _environment.Step(action);
+                var (nextState, reward, isDone, info) = _rlOptions.Environment.Step(action);
 
                 // Store experience
                 rlAgent.StoreExperience(state, action, reward, nextState, isDone);
 
                 // Train agent
                 var loss = rlAgent.Train();
-                if (numOps.ToDouble(loss) > 0)
+                bool didTrain = numOps.ToDouble(loss) > 0;
+                if (didTrain)
                 {
                     losses.Add(loss);
                 }
@@ -1116,38 +1169,108 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 state = nextState;
                 episodeReward = numOps.Add(episodeReward, reward);
                 steps++;
+                totalStepsAcrossEpisodes++;
                 done = isDone;
+
+                // Invoke OnStepComplete callback
+                if (_rlOptions.OnStepComplete is not null)
+                {
+                    var stepMetrics = new RLStepMetrics<T>
+                    {
+                        Episode = episode + 1,
+                        Step = steps,
+                        TotalSteps = totalStepsAcrossEpisodes,
+                        Reward = reward,
+                        Loss = didTrain ? loss : default,
+                        DidTrain = didTrain
+                    };
+                    _rlOptions.OnStepComplete(stepMetrics);
+                }
             }
 
             episodeRewards.Add(episodeReward);
             episodeLengths.Add(steps);
 
+            // Calculate metrics for this episode
+            var recentRewards = episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100).ToList();
+            var avgRewardRecent = recentRewards.Count > 0
+                ? StatisticsHelper<T>.CalculateMean(recentRewards)
+                : numOps.Zero;
+
+            var recentLosses = losses.Skip(Math.Max(0, losses.Count - 100)).Take(100).ToList();
+            var avgLoss = recentLosses.Count > 0
+                ? StatisticsHelper<T>.CalculateMean(recentLosses)
+                : numOps.Zero;
+
             // Print progress
             if (verbose && (episode + 1) % Math.Max(1, episodes / 10) == 0)
             {
-                var recentRewards = episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100).ToList();
-                var avgReward = recentRewards.Count > 0
-                    ? ComputeAverage(recentRewards, numOps)
-                    : numOps.Zero;
-
-                var recentLosses = losses.Skip(Math.Max(0, losses.Count - 100)).Take(100).ToList();
-                var avgLoss = recentLosses.Count > 0
-                    ? ComputeAverage(recentLosses, numOps)
-                    : numOps.Zero;
-
                 Console.WriteLine($"Episode {episode + 1}/{episodes} | " +
-                                  $"Avg Reward (last 100): {numOps.ToDouble(avgReward):F2} | " +
+                                  $"Avg Reward (last 100): {numOps.ToDouble(avgRewardRecent):F2} | " +
                                   $"Avg Loss: {numOps.ToDouble(avgLoss):F6} | " +
                                   $"Steps: {steps}");
             }
+
+            // Invoke OnEpisodeComplete callback
+            if (_rlOptions.OnEpisodeComplete is not null)
+            {
+                var episodeMetrics = new RLEpisodeMetrics<T>
+                {
+                    Episode = episode + 1,
+                    TotalReward = episodeReward,
+                    Steps = steps,
+                    AverageLoss = avgLoss,
+                    TerminatedNaturally = done,
+                    AverageRewardRecent = avgRewardRecent,
+                    ElapsedTime = stopwatch.Elapsed
+                };
+                _rlOptions.OnEpisodeComplete(episodeMetrics);
+            }
         }
+
+        // Stop timing
+        stopwatch.Stop();
+
+        // Calculate final summary metrics
+        var finalRecentRewards = episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100).ToList();
+        var finalAvgReward = finalRecentRewards.Count > 0
+            ? StatisticsHelper<T>.CalculateMean(finalRecentRewards)
+            : numOps.Zero;
+
+        var overallAvgReward = episodeRewards.Count > 0
+            ? StatisticsHelper<T>.CalculateMean(episodeRewards)
+            : numOps.Zero;
+
+        var bestReward = episodeRewards.Count > 0
+            ? episodeRewards.Aggregate(numOps.Zero, (max, r) => numOps.GreaterThan(r, max) ? r : max)
+            : numOps.Zero;
+
+        var overallAvgLoss = losses.Count > 0
+            ? StatisticsHelper<T>.CalculateMean(losses)
+            : numOps.Zero;
 
         if (verbose)
         {
             Console.WriteLine();
             Console.WriteLine("Training completed!");
-            var finalAvgReward = ComputeAverage(episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100), numOps);
             Console.WriteLine($"Final average reward (last 100 episodes): {numOps.ToDouble(finalAvgReward):F2}");
+        }
+
+        // Invoke OnTrainingComplete callback
+        if (_rlOptions.OnTrainingComplete is not null)
+        {
+            var summary = new RLTrainingSummary<T>
+            {
+                TotalEpisodes = episodes,
+                TotalSteps = totalStepsAcrossEpisodes,
+                AverageReward = overallAvgReward,
+                BestReward = bestReward,
+                FinalAverageReward = finalAvgReward,
+                AverageLoss = overallAvgLoss,
+                TotalTime = stopwatch.Elapsed,
+                EarlyStopTriggered = false
+            };
+            _rlOptions.OnTrainingComplete(summary);
         }
 
         // Create optimization result for RL training
@@ -1199,19 +1322,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
         return result;
     }
-
-    private static T ComputeAverage(IEnumerable<T> values, INumericOperations<T> numOps)
-    {
-        var list = values.ToList();
-        if (list.Count == 0) return numOps.Zero;
-
-        T sum = numOps.Zero;
-        foreach (var value in list)
-        {
-            sum = numOps.Add(sum, value);
-        }
-        return numOps.Divide(sum, numOps.FromDouble(list.Count));
-    }
+#pragma warning restore CS1998
 
     /// <summary>
     /// Uses a trained model to make predictions on new data.
@@ -1224,7 +1335,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// predictions for new data. For example, if you trained a model to predict house prices based on features
     /// like size and location, you can now give it details of houses currently for sale (without knowing their prices)
     /// and the model will predict what their prices should be.
-    /// 
+    ///
     /// The input matrix should have the same number of columns (features) as the data you used to train the model.
     /// </remarks>
     public TOutput Predict(TInput newData, PredictionModelResult<T, TInput, TOutput> modelResult)
@@ -1645,29 +1756,40 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Configures the environment for reinforcement learning.
+    /// Configures reinforcement learning options for training an RL agent.
     /// </summary>
-    /// <param name="environment">The RL environment to use for training.</param>
+    /// <param name="options">The reinforcement learning configuration options.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> When training reinforcement learning agents, you need an environment
-    /// for the agent to interact with. This is like setting up a simulation or game for the agent
-    /// to learn from. Common environments include CartPole (balancing a pole), Atari games,
-    /// robotic simulations, etc.
+    /// <b>For Beginners:</b> Reinforcement learning trains an agent through trial and error
+    /// in an environment. This method configures all aspects of RL training:
+    /// - The environment (simulation/game for the agent to learn from)
+    /// - Training parameters (episodes, steps, batch size)
+    /// - Exploration strategies (how to balance trying new things vs using learned behavior)
+    /// - Replay buffers (how to store and sample past experiences)
+    /// - Callbacks for monitoring training progress
     ///
-    /// After configuring an environment, use BuildAsync(episodes) to train an RL agent.
+    /// After configuring RL options, use BuildAsync(episodes) to train the agent.
     ///
     /// Example:
     /// <code>
+    /// var options = new RLTrainingOptions&lt;double&gt;
+    /// {
+    ///     Environment = new CartPoleEnvironment&lt;double&gt;(),
+    ///     Episodes = 1000,
+    ///     MaxStepsPerEpisode = 500,
+    ///     OnEpisodeComplete = (metrics) =&gt; Console.WriteLine($"Episode {metrics.Episode}: {metrics.TotalReward}")
+    /// };
+    ///
     /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureEnvironment(new CartPoleEnvironment&lt;double&gt;())
+    ///     .ConfigureReinforcementLearning(options)
     ///     .ConfigureModel(new DQNAgent&lt;double&gt;())
-    ///     .BuildAsync(episodes: 1000);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureEnvironment(ReinforcementLearning.Interfaces.IEnvironment<T> environment)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureReinforcementLearning(RLTrainingOptions<T> options)
     {
-        _environment = environment;
+        _rlOptions = options;
         return this;
     }
 

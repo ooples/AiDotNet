@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Layers;
+
 namespace AiDotNet.Helpers;
 
 /// <summary>
@@ -1311,6 +1313,184 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates default layers for a GraphSAGE (Graph Sample and Aggregate) Network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="aggregatorType">The type of aggregation function (default: Mean).</param>
+    /// <param name="numLayers">Number of GraphSAGE layers (default: 2).</param>
+    /// <param name="normalize">Whether to apply L2 normalization (default: true).</param>
+    /// <returns>A collection of layers configured for GraphSAGE processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GraphSAGE learns to aggregate neighbor information for inductive learning.
+    /// It can generalize to new, unseen nodes by learning aggregation functions.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGraphSAGELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        SAGEAggregatorType aggregatorType = SAGEAggregatorType.Mean,
+        int numLayers = 2,
+        bool normalize = true)
+    {
+        if (architecture.CalculatedInputSize <= 0 || architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("The network must have valid input and output dimensions.");
+        }
+
+        int inputSize = architecture.CalculatedInputSize;
+        int outputSize = architecture.OutputSize;
+        int hiddenSize = 64;
+
+        int currentInputDim = inputSize;
+
+        // Add GraphSAGE layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            bool isLastLayer = (i == numLayers - 1);
+            int outputDim = isLastLayer ? outputSize : hiddenSize;
+
+            yield return new GraphSAGELayer<T>(
+                inputFeatures: currentInputDim,
+                outputFeatures: outputDim,
+                aggregatorType: aggregatorType,
+                normalize: normalize && !isLastLayer,
+                activationFunction: isLastLayer ? null : new ReLUActivation<T>());
+
+            currentInputDim = outputDim;
+        }
+
+        // Add final activation based on task type
+        if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SigmoidActivation<T>() as IVectorActivationFunction<T>);
+        }
+        else if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for a Graph Attention Network (GAT).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="numHeads">Number of attention heads per layer (default: 8).</param>
+    /// <param name="numLayers">Number of GAT layers (default: 2).</param>
+    /// <param name="dropoutRate">Dropout rate for attention coefficients (default: 0.6).</param>
+    /// <returns>A collection of layers configured for GAT processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GAT uses attention mechanisms to learn which neighbors are most important
+    /// for each node, allowing dynamic weighting of neighbor contributions.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGraphAttentionLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numHeads = 8,
+        int numLayers = 2,
+        double dropoutRate = 0.6)
+    {
+        if (architecture.CalculatedInputSize <= 0 || architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("The network must have valid input and output dimensions.");
+        }
+
+        int inputSize = architecture.CalculatedInputSize;
+        int outputSize = architecture.OutputSize;
+        int hiddenSize = 64;
+
+        int currentInputDim = inputSize;
+
+        // Add GAT layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            bool isLastLayer = (i == numLayers - 1);
+            int outputDim = isLastLayer ? outputSize : hiddenSize;
+            int heads = isLastLayer ? 1 : numHeads;
+
+            yield return new GraphAttentionLayer<T>(
+                inputFeatures: currentInputDim,
+                outputFeatures: outputDim,
+                numHeads: heads,
+                dropoutRate: dropoutRate,
+                activationFunction: isLastLayer ? null : new LeakyReLUActivation<T>(0.2));
+
+            currentInputDim = outputDim;
+        }
+
+        // Add final activation based on task type
+        if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SigmoidActivation<T>() as IVectorActivationFunction<T>);
+        }
+        else if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for a Graph Isomorphism Network (GIN).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="mlpHiddenDim">Hidden dimension for MLP within GIN layers (default: 64).</param>
+    /// <param name="numLayers">Number of GIN layers (default: 5).</param>
+    /// <param name="learnEpsilon">Whether to learn epsilon parameter (default: true).</param>
+    /// <param name="initialEpsilon">Initial value for epsilon (default: 0.0).</param>
+    /// <returns>A collection of layers configured for GIN processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GIN is provably as powerful as the Weisfeiler-Lehman graph isomorphism test,
+    /// making it optimal for distinguishing graph structures.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGraphIsomorphismLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int mlpHiddenDim = 64,
+        int numLayers = 5,
+        bool learnEpsilon = true,
+        double initialEpsilon = 0.0)
+    {
+        if (architecture.CalculatedInputSize <= 0 || architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("The network must have valid input and output dimensions.");
+        }
+
+        int inputSize = architecture.CalculatedInputSize;
+        int outputSize = architecture.OutputSize;
+        int hiddenSize = 64;
+
+        int currentInputDim = inputSize;
+
+        // Add GIN layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            bool isLastLayer = (i == numLayers - 1);
+            int outputDim = isLastLayer ? outputSize : hiddenSize;
+
+            yield return new GraphIsomorphismLayer<T>(
+                inputFeatures: currentInputDim,
+                outputFeatures: outputDim,
+                mlpHiddenDim: mlpHiddenDim,
+                learnEpsilon: learnEpsilon,
+                epsilon: initialEpsilon,
+                activationFunction: isLastLayer ? null : new ReLUActivation<T>());
+
+            currentInputDim = outputDim;
+        }
+
+        // Add final activation based on task type
+        if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SigmoidActivation<T>() as IVectorActivationFunction<T>);
+        }
+        else if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+        }
+    }
+
+    /// <summary>
     /// Creates a default Gated Recurrent Unit (GRU) neural network layer configuration.
     /// </summary>
     /// <param name="architecture">The neural network architecture specification.</param>
@@ -2288,5 +2468,200 @@ public static class LayerHelper<T>
         var outputActivation = NeuralNetworkHelper<T>.GetDefaultActivationFunction(architecture.TaskType);
 
         yield return new DenseLayer<T>(hiddenLayerSize, architecture.OutputSize, outputActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Node Classification model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="hiddenDim">Hidden dimension size (default: 64).</param>
+    /// <param name="numLayers">Number of GNN layers (default: 2).</param>
+    /// <param name="dropoutRate">Dropout rate for regularization (default: 0.5).</param>
+    /// <returns>A collection of layers configured for node classification.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Node classification predicts labels for individual nodes in a graph.
+    /// This architecture uses GCN layers with dropout for semi-supervised learning on graphs.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultNodeClassificationLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenDim = 64,
+        int numLayers = 2,
+        double dropoutRate = 0.5)
+    {
+        if (architecture.CalculatedInputSize <= 0 || architecture.OutputSize <= 0)
+        {
+            throw new InvalidOperationException("The network must have valid input and output dimensions.");
+        }
+
+        int inputFeatures = architecture.CalculatedInputSize;
+        int numClasses = architecture.OutputSize;
+        var reluActivation = new ReLUActivation<T>();
+
+        // First GCN layer: input_features -> hidden_dim
+        yield return new GraphConvolutionalLayer<T>(inputFeatures, hiddenDim, (IActivationFunction<T>?)null);
+        yield return new ActivationLayer<T>([hiddenDim], (IActivationFunction<T>)reluActivation);
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Additional intermediate layers
+        for (int i = 1; i < numLayers - 1; i++)
+        {
+            yield return new GraphConvolutionalLayer<T>(hiddenDim, hiddenDim, (IActivationFunction<T>?)null);
+            yield return new ActivationLayer<T>([hiddenDim], (IActivationFunction<T>)reluActivation);
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final GCN layer: hidden_dim -> num_classes
+        yield return new GraphConvolutionalLayer<T>(hiddenDim, numClasses, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Link Prediction model encoder.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="hiddenDim">Hidden dimension size (default: 64).</param>
+    /// <param name="embeddingDim">Node embedding dimension (default: 32).</param>
+    /// <param name="numLayers">Number of GNN layers (default: 2).</param>
+    /// <param name="dropoutRate">Dropout rate for regularization (default: 0.5).</param>
+    /// <returns>A collection of layers configured for link prediction.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Link prediction predicts whether edges should exist between nodes.
+    /// This encoder learns node embeddings that can be combined to score potential edges.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultLinkPredictionLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenDim = 64,
+        int embeddingDim = 32,
+        int numLayers = 2,
+        double dropoutRate = 0.5)
+    {
+        if (architecture.CalculatedInputSize <= 0)
+        {
+            throw new InvalidOperationException("The network must have valid input dimensions.");
+        }
+
+        int inputFeatures = architecture.CalculatedInputSize;
+        var reluActivation = new ReLUActivation<T>();
+
+        // First GCN layer: input_features -> hidden_dim
+        yield return new GraphConvolutionalLayer<T>(inputFeatures, hiddenDim, (IActivationFunction<T>?)null);
+        yield return new ActivationLayer<T>([hiddenDim], (IActivationFunction<T>)reluActivation);
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Additional intermediate layers
+        for (int i = 1; i < numLayers - 1; i++)
+        {
+            yield return new GraphConvolutionalLayer<T>(hiddenDim, hiddenDim, (IActivationFunction<T>?)null);
+            yield return new ActivationLayer<T>([hiddenDim], (IActivationFunction<T>)reluActivation);
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final layer: hidden_dim -> embedding_dim
+        yield return new GraphConvolutionalLayer<T>(hiddenDim, embeddingDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Graph Classification model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="hiddenDim">Hidden dimension size (default: 64).</param>
+    /// <param name="embeddingDim">Graph embedding dimension (default: 128).</param>
+    /// <param name="numGnnLayers">Number of GNN layers (default: 3).</param>
+    /// <param name="dropoutRate">Dropout rate for regularization (default: 0.5).</param>
+    /// <returns>A collection of layers configured for graph classification.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Graph classification predicts labels for entire graphs.
+    /// This architecture uses multiple GCN layers followed by pooling and classification.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGraphClassificationLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenDim = 64,
+        int embeddingDim = 128,
+        int numGnnLayers = 3,
+        double dropoutRate = 0.5)
+    {
+        if (architecture.CalculatedInputSize <= 0)
+        {
+            throw new InvalidOperationException("The network must have valid input dimensions.");
+        }
+
+        int inputFeatures = architecture.CalculatedInputSize;
+        var reluActivation = new ReLUActivation<T>();
+
+        // First GCN layer: input_features -> hidden_dim
+        yield return new GraphConvolutionalLayer<T>(inputFeatures, hiddenDim, (IActivationFunction<T>?)null);
+        yield return new ActivationLayer<T>([hiddenDim], (IActivationFunction<T>)reluActivation);
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Additional GNN layers: hidden_dim -> hidden_dim
+        for (int i = 1; i < numGnnLayers - 1; i++)
+        {
+            yield return new GraphConvolutionalLayer<T>(hiddenDim, hiddenDim, (IActivationFunction<T>?)null);
+            yield return new ActivationLayer<T>([hiddenDim], (IActivationFunction<T>)reluActivation);
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Final GNN layer: hidden_dim -> embedding_dim
+        yield return new GraphConvolutionalLayer<T>(hiddenDim, embeddingDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Graph Generation model (VGAE encoder).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture specification.</param>
+    /// <param name="hiddenDim">Hidden dimension size (default: 32).</param>
+    /// <param name="numEncoderLayers">Number of encoder GNN layers (default: 2).</param>
+    /// <returns>A collection of layers configured for graph generation encoder.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Graph generation models learn to create new graph structures.
+    /// This encoder uses GCN layers to map node features to a latent space.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGraphGenerationLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenDim = 32,
+        int numEncoderLayers = 2)
+    {
+        if (architecture.CalculatedInputSize <= 0)
+        {
+            throw new InvalidOperationException("The network must have valid input dimensions.");
+        }
+
+        int inputFeatures = architecture.CalculatedInputSize;
+        int currentInputDim = inputFeatures;
+
+        // Add GCN encoder layers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new GraphConvolutionalLayer<T>(
+                inputFeatures: currentInputDim,
+                outputFeatures: hiddenDim,
+                activationFunction: new ReLUActivation<T>());
+            currentInputDim = hiddenDim;
+        }
     }
 }

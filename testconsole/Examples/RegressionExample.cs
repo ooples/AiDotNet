@@ -1,4 +1,5 @@
 ﻿using AiDotNet;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
@@ -72,9 +73,10 @@ public class RegressionExample
 
             // Build a multiple regression model
             var model = await modelBuilder
+                .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(houseFeatures, housePrices))
                 .ConfigureOptimizer(optimizer)
                 .ConfigureModel(new MultipleRegression<double>(regressionOptions))
-                .BuildAsync(houseFeatures, housePrices);
+                .BuildAsync();
 
             Console.WriteLine("Model trained successfully!");
 

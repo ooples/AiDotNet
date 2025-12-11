@@ -11,6 +11,7 @@ using AiDotNet.Normalizers;
 using AiDotNet.Optimizers;
 using AiDotNet.OutlierRemoval;
 using AiDotNet.Regression;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Regularization;
 
 public class EnhancedRegressionExample
@@ -94,7 +95,8 @@ public class EnhancedRegressionExample
                     UseIntercept = true
                 }))
                 .ConfigureFitnessCalculator(new RSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>())
-                .BuildAsync(features, prices);
+                .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(features, prices))
+                .BuildAsync();
 
             // Ridge regression model (with L2 regularization)
             Console.WriteLine("\n2. Training Ridge Regression model (with regularization)...");
@@ -118,7 +120,8 @@ public class EnhancedRegressionExample
                     UseIntercept = true
                 }))
                 .ConfigureFitnessCalculator(new RSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>())
-                .BuildAsync(features, prices);
+                .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(features, prices))
+                .BuildAsync();
 
             // 6. Evaluate models on test set
             Console.WriteLine("\nEvaluating models on test set:");
