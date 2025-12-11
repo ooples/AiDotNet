@@ -1,4 +1,5 @@
 global using AiDotNet.Configuration;
+global using AiDotNet.Helpers;
 global using AiDotNet.FeatureSelectors;
 global using AiDotNet.FitnessCalculators;
 global using AiDotNet.Regularization;
@@ -1195,12 +1196,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             {
                 var recentRewards = episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100).ToList();
                 var avgReward = recentRewards.Count > 0
-                    ? ComputeAverage(recentRewards, numOps)
+                    ? StatisticsHelper<T>.CalculateMean(recentRewards)
                     : numOps.Zero;
 
                 var recentLosses = losses.Skip(Math.Max(0, losses.Count - 100)).Take(100).ToList();
                 var avgLoss = recentLosses.Count > 0
-                    ? ComputeAverage(recentLosses, numOps)
+                    ? StatisticsHelper<T>.CalculateMean(recentLosses)
                     : numOps.Zero;
 
                 Console.WriteLine($"Episode {episode + 1}/{episodes} | " +
@@ -1214,7 +1215,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         {
             Console.WriteLine();
             Console.WriteLine("Training completed!");
-            var finalAvgReward = ComputeAverage(episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100), numOps);
+            var recentEpisodeRewards = episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100).ToList();
+            var finalAvgReward = recentEpisodeRewards.Count > 0
+                ? StatisticsHelper<T>.CalculateMean(recentEpisodeRewards)
+                : numOps.Zero;
             Console.WriteLine($"Final average reward (last 100 episodes): {numOps.ToDouble(finalAvgReward):F2}");
         }
 
@@ -1266,19 +1270,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         }
 
         return result;
-    }
-
-    private static T ComputeAverage(IEnumerable<T> values, INumericOperations<T> numOps)
-    {
-        var list = values.ToList();
-        if (list.Count == 0) return numOps.Zero;
-
-        T sum = numOps.Zero;
-        foreach (var value in list)
-        {
-            sum = numOps.Add(sum, value);
-        }
-        return numOps.Divide(sum, numOps.FromDouble(list.Count));
     }
 
     /// <summary>
