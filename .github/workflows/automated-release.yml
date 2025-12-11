@@ -208,74 +208,16 @@ jobs:
         if: steps.version.outputs.should_release == 'true'
         run: dotnet build -c Release --no-restore
 
-  # Parallel test execution - 3 shards running simultaneously
-  # Each shard builds independently but uses cached NuGet packages
-  # Tests run on net8.0 only for speed (net471 verified in pack step)
-  test:
-    name: Test (${{ matrix.project }})
-    runs-on: ubuntu-latest
-    needs: version-and-build
-    timeout-minutes: 30
-    if: needs.version-and-build.outputs.should_release == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        project:
-          - tests/AiDotNet.Tests/AiDotNetTests.csproj
-          - tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj
-          - tests/AiDotNet.Tensors.Tests/AiDotNet.Tensors.Tests.csproj
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+  # NOTE: Tests are NOT run in the release pipeline because:
+  # 1. Tests are already required to pass before PRs can be merged
+  # 2. This avoids duplicate test runs and speeds up releases
+  # 3. SDK version conflicts between CI runners and project requirements are avoided
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-
-      - name: Restore dependencies
-        run: dotnet restore
-
-      - name: Build
-        run: dotnet build -c Release --no-restore
-
-      # Run tests with detailed logging
-      # net8.0 only for CI speed - net471 compatibility verified in pack step
-      # GPU tests are quarantined (require physical GPU hardware not available in CI)
-      # Integration tests are skipped (timing-dependent tests unreliable in CI)
-      - name: Run tests for ${{ matrix.project }}
-        run: |
-          PROJECT_NAME=$(basename "${{ matrix.project }}" .csproj)
-          dotnet test "${{ matrix.project }}" \
-            -c Release \
-            --framework net8.0 \
-            --no-build \
-            -v detailed \
-            --filter "Category!=GPU&Category!=Integration" \
-            --logger "trx;LogFileName=${PROJECT_NAME}.trx" \
-            --results-directory ./TestResults
-
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results-${{ strategy.job-index }}
-          path: ./TestResults/*.trx
-          retention-days: 7
-
-  # Pack NuGet after all tests pass
+  # Pack NuGet after version-and-build completes
   pack:
     name: Pack NuGet
     runs-on: ubuntu-latest
-    needs: [version-and-build, test]
+    needs: version-and-build
     timeout-minutes: 20
     if: needs.version-and-build.outputs.should_release == 'true'
     steps:
