@@ -1,5 +1,5 @@
 using AiDotNet.Normalizers;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 
@@ -16,20 +16,20 @@ namespace AiDotNetBenchmarkTests.BenchmarkTests;
 [SimpleJob(RuntimeMoniker.Net80)]
 public class NormalizersBenchmarks
 {
-    [Params(1000, 10000, 50000)]
+    [Params(1000, 10000)]
     public int SampleCount { get; set; }
 
     [Params(10, 50)]
     public int FeatureCount { get; set; }
 
-    private Matrix<double> _data = null!;
-    private Vector<double> _vectorData = null!;
+    private Matrix<double> _data = new Matrix<double>(0, 0);
+    private Vector<double> _vectorData = new Vector<double>(0);
 
-    private MinMaxNormalizer<double> _minMax = null!;
-    private ZScoreNormalizer<double> _zScore = null!;
-    private LogNormalizer<double> _log = null!;
-    private MeanVarianceNormalizer<double> _meanVariance = null!;
-    private RobustScalingNormalizer<double> _robust = null!;
+    private MinMaxNormalizer<double, Matrix<double>, Vector<double>> _minMax = new();
+    private ZScoreNormalizer<double, Matrix<double>, Vector<double>> _zScore = new();
+    private LogNormalizer<double, Matrix<double>, Vector<double>> _log = new();
+    private MeanVarianceNormalizer<double, Matrix<double>, Vector<double>> _meanVariance = new();
+    private RobustScalingNormalizer<double, Matrix<double>, Vector<double>> _robust = new();
 
     [GlobalSetup]
     public void Setup()
@@ -51,30 +51,36 @@ public class NormalizersBenchmarks
         _vectorData = new Vector<double>(SampleCount);
         for (int i = 0; i < SampleCount; i++)
         {
-            _vectorData[i] = random.NextDouble() * 100;
+            _vectorData[i] = random.NextDouble() * 100 + 1; // Ensure positive for log
         }
 
         // Initialize normalizers
-        _minMax = new MinMaxNormalizer<double>();
-        _zScore = new ZScoreNormalizer<double>();
-        _log = new LogNormalizer<double>();
-        _meanVariance = new MeanVarianceNormalizer<double>();
-        _robust = new RobustScalingNormalizer<double>();
+        _minMax = new MinMaxNormalizer<double, Matrix<double>, Vector<double>>();
+        _zScore = new ZScoreNormalizer<double, Matrix<double>, Vector<double>>();
+        _log = new LogNormalizer<double, Matrix<double>, Vector<double>>();
+        _meanVariance = new MeanVarianceNormalizer<double, Matrix<double>, Vector<double>>();
+        _robust = new RobustScalingNormalizer<double, Matrix<double>, Vector<double>>();
     }
 
     #region MinMax Normalization
 
     [Benchmark(Baseline = true)]
-    public Matrix<double> MinMax_FitTransform()
+    public (Vector<double>, NormalizationParameters<double>) MinMax_NormalizeOutput()
     {
-        return _minMax.FitTransform(_data);
+        return _minMax.NormalizeOutput(_vectorData);
     }
 
     [Benchmark]
-    public Vector<double> MinMax_TransformVector()
+    public (Matrix<double>, List<NormalizationParameters<double>>) MinMax_NormalizeInput()
     {
-        _minMax.Fit(_data);
-        return _minMax.Transform(_vectorData);
+        return _minMax.NormalizeInput(_data);
+    }
+
+    [Benchmark]
+    public Vector<double> MinMax_Denormalize()
+    {
+        var (normalized, parameters) = _minMax.NormalizeOutput(_vectorData);
+        return _minMax.Denormalize(normalized, parameters);
     }
 
     #endregion
@@ -82,16 +88,22 @@ public class NormalizersBenchmarks
     #region Z-Score Normalization
 
     [Benchmark]
-    public Matrix<double> ZScore_FitTransform()
+    public (Vector<double>, NormalizationParameters<double>) ZScore_NormalizeOutput()
     {
-        return _zScore.FitTransform(_data);
+        return _zScore.NormalizeOutput(_vectorData);
     }
 
     [Benchmark]
-    public Vector<double> ZScore_TransformVector()
+    public (Matrix<double>, List<NormalizationParameters<double>>) ZScore_NormalizeInput()
     {
-        _zScore.Fit(_data);
-        return _zScore.Transform(_vectorData);
+        return _zScore.NormalizeInput(_data);
+    }
+
+    [Benchmark]
+    public Vector<double> ZScore_Denormalize()
+    {
+        var (normalized, parameters) = _zScore.NormalizeOutput(_vectorData);
+        return _zScore.Denormalize(normalized, parameters);
     }
 
     #endregion
@@ -99,7 +111,13 @@ public class NormalizersBenchmarks
     #region Log Normalization
 
     [Benchmark]
-    public Matrix<double> Log_FitTransform()
+    public (Vector<double>, NormalizationParameters<double>) Log_NormalizeOutput()
+    {
+        return _log.NormalizeOutput(_vectorData);
+    }
+
+    [Benchmark]
+    public (Matrix<double>, List<NormalizationParameters<double>>) Log_NormalizeInput()
     {
         // Use positive data for log transform
         var positiveData = new Matrix<double>(SampleCount, FeatureCount);
@@ -110,7 +128,7 @@ public class NormalizersBenchmarks
                 positiveData[i, j] = Math.Abs(_data[i, j]) + 1;
             }
         }
-        return _log.FitTransform(positiveData);
+        return _log.NormalizeInput(positiveData);
     }
 
     #endregion
@@ -118,16 +136,15 @@ public class NormalizersBenchmarks
     #region Mean-Variance Normalization
 
     [Benchmark]
-    public Matrix<double> MeanVariance_FitTransform()
+    public (Vector<double>, NormalizationParameters<double>) MeanVariance_NormalizeOutput()
     {
-        return _meanVariance.FitTransform(_data);
+        return _meanVariance.NormalizeOutput(_vectorData);
     }
 
     [Benchmark]
-    public Vector<double> MeanVariance_TransformVector()
+    public (Matrix<double>, List<NormalizationParameters<double>>) MeanVariance_NormalizeInput()
     {
-        _meanVariance.Fit(_data);
-        return _meanVariance.Transform(_vectorData);
+        return _meanVariance.NormalizeInput(_data);
     }
 
     #endregion
@@ -135,34 +152,49 @@ public class NormalizersBenchmarks
     #region Robust Scaling
 
     [Benchmark]
-    public Matrix<double> RobustScaling_FitTransform()
+    public (Vector<double>, NormalizationParameters<double>) RobustScaling_NormalizeOutput()
     {
-        return _robust.FitTransform(_data);
+        return _robust.NormalizeOutput(_vectorData);
     }
 
     [Benchmark]
-    public Vector<double> RobustScaling_TransformVector()
+    public (Matrix<double>, List<NormalizationParameters<double>>) RobustScaling_NormalizeInput()
     {
-        _robust.Fit(_data);
-        return _robust.Transform(_vectorData);
+        return _robust.NormalizeInput(_data);
     }
 
     #endregion
 
-    #region Inverse Transform
+    #region Normalizer Construction
 
     [Benchmark]
-    public Matrix<double> MinMax_FitTransform_InverseTransform()
+    public MinMaxNormalizer<double, Matrix<double>, Vector<double>> MinMax_CreateNormalizer()
     {
-        var normalized = _minMax.FitTransform(_data);
-        return _minMax.InverseTransform(normalized);
+        return new MinMaxNormalizer<double, Matrix<double>, Vector<double>>();
     }
 
     [Benchmark]
-    public Matrix<double> ZScore_FitTransform_InverseTransform()
+    public ZScoreNormalizer<double, Matrix<double>, Vector<double>> ZScore_CreateNormalizer()
     {
-        var normalized = _zScore.FitTransform(_data);
-        return _zScore.InverseTransform(normalized);
+        return new ZScoreNormalizer<double, Matrix<double>, Vector<double>>();
+    }
+
+    [Benchmark]
+    public LogNormalizer<double, Matrix<double>, Vector<double>> Log_CreateNormalizer()
+    {
+        return new LogNormalizer<double, Matrix<double>, Vector<double>>();
+    }
+
+    [Benchmark]
+    public MeanVarianceNormalizer<double, Matrix<double>, Vector<double>> MeanVariance_CreateNormalizer()
+    {
+        return new MeanVarianceNormalizer<double, Matrix<double>, Vector<double>>();
+    }
+
+    [Benchmark]
+    public RobustScalingNormalizer<double, Matrix<double>, Vector<double>> RobustScaling_CreateNormalizer()
+    {
+        return new RobustScalingNormalizer<double, Matrix<double>, Vector<double>>();
     }
 
     #endregion

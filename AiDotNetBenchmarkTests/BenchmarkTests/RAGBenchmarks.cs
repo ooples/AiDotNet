@@ -1,6 +1,5 @@
 using AiDotNet.RetrievalAugmentedGeneration.Configuration;
 using AiDotNet.RetrievalAugmentedGeneration.Evaluation;
-using AiDotNet.Agents;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 
@@ -23,13 +22,12 @@ public class RAGBenchmarks
     [Params(5, 10)]
     public int TopK { get; set; }
 
-    private List<string> _documents = null!;
-    private List<string> _queries = null!;
+    private List<string> _documents = new List<string>();
+    private List<string> _queries = new List<string>();
 
     [GlobalSetup]
     public void Setup()
     {
-        var random = new Random(42);
         _documents = new List<string>();
         _queries = new List<string>();
 
@@ -47,43 +45,58 @@ public class RAGBenchmarks
     }
 
     [Benchmark(Baseline = true)]
-    public RAGConfiguration RAG_CreateConfiguration()
+    public RAGConfiguration<double> RAG_CreateConfiguration()
     {
-        var config = new RAGConfiguration
+        var config = new RAGConfiguration<double>
         {
-            RetrievalTopK = TopK,
-            ChunkSize = 512,
-            ChunkOverlap = 50,
-            EmbeddingModel = "sentence-transformers",
-            RerankerModel = "cross-encoder",
-            UseHybridSearch = true,
-            IncludeMetadata = true
+            DocumentStore = new DocumentStoreConfig
+            {
+                Type = "memory",
+                Parameters = new Dictionary<string, object>
+                {
+                    { "max_size", 10000 }
+                }
+            },
+            Chunking = new ChunkingConfig
+            {
+                Strategy = "sentence",
+                ChunkSize = 512,
+                ChunkOverlap = 50
+            },
+            Embedding = new EmbeddingConfig
+            {
+                ModelType = "sentence-transformers",
+                EmbeddingDimension = 768
+            },
+            Retrieval = new RetrievalConfig
+            {
+                Strategy = "hybrid",
+                TopK = TopK
+            }
         };
         return config;
     }
 
     [Benchmark]
-    public RAGConfigurationBuilder RAG_BuildConfiguration()
+    public RAGConfigurationBuilder<double> RAG_BuildConfiguration()
     {
-        var builder = new RAGConfigurationBuilder()
-            .WithRetrievalTopK(TopK)
-            .WithChunkSize(512)
-            .WithChunkOverlap(50)
-            .WithEmbeddingModel("sentence-transformers")
-            .WithHybridSearch(true);
+        var builder = new RAGConfigurationBuilder<double>()
+            .WithDocumentStore("memory")
+            .WithChunking("sentence", chunkSize: 512, chunkOverlap: 50)
+            .WithEmbedding("sentence-transformers", embeddingDimension: 768)
+            .WithRetrieval("hybrid", TopK);
 
         return builder;
     }
 
     [Benchmark]
-    public RAGConfiguration RAG_BuildAndCreate()
+    public RAGConfiguration<double> RAG_BuildAndCreate()
     {
-        return new RAGConfigurationBuilder()
-            .WithRetrievalTopK(TopK)
-            .WithChunkSize(512)
-            .WithChunkOverlap(50)
-            .WithEmbeddingModel("sentence-transformers")
-            .WithHybridSearch(true)
+        return new RAGConfigurationBuilder<double>()
+            .WithDocumentStore("memory")
+            .WithChunking("sentence", chunkSize: 512, chunkOverlap: 50)
+            .WithEmbedding("sentence-transformers", embeddingDimension: 768)
+            .WithRetrieval("hybrid", TopK)
             .Build();
     }
 
@@ -117,5 +130,42 @@ public class RAGBenchmarks
         }
 
         return (double)correct / TopK;
+    }
+
+    [Benchmark]
+    public ChunkingConfig RAG_CreateChunkingConfig()
+    {
+        return new ChunkingConfig
+        {
+            Strategy = "sentence",
+            ChunkSize = 512,
+            ChunkOverlap = 100
+        };
+    }
+
+    [Benchmark]
+    public EmbeddingConfig RAG_CreateEmbeddingConfig()
+    {
+        return new EmbeddingConfig
+        {
+            ModelType = "sentence-transformers",
+            ModelPath = "all-MiniLM-L6-v2",
+            EmbeddingDimension = 384
+        };
+    }
+
+    [Benchmark]
+    public RetrievalConfig RAG_CreateRetrievalConfig()
+    {
+        return new RetrievalConfig
+        {
+            Strategy = "hybrid",
+            TopK = TopK,
+            Parameters = new Dictionary<string, object>
+            {
+                { "use_reranker", true },
+                { "reranker_model", "cross-encoder" }
+            }
+        };
     }
 }

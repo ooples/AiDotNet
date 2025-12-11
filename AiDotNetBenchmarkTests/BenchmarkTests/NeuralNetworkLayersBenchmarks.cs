@@ -1,5 +1,5 @@
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors;
 using AiDotNet.ActivationFunctions;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
@@ -54,9 +54,10 @@ public class NeuralNetworkLayersBenchmarks
             _gradOutput[i] = random.NextDouble() * 0.1;
         }
 
-        // Initialize layers
-        _denseLayer = new DenseLayer<double>(InputSize, OutputSize);
-        _activationLayer = new ActivationLayer<double>(new ReLUActivation<double>());
+        // Initialize layers with explicit activation function to avoid ambiguity
+        IActivationFunction<double> relu = new ReLUActivation<double>();
+        _denseLayer = new DenseLayer<double>(InputSize, OutputSize, relu);
+        _activationLayer = new ActivationLayer<double>(new[] { BatchSize, InputSize }, relu);
         _dropoutLayer = new DropoutLayer<double>(dropoutRate: 0.5);
         _batchNormLayer = new BatchNormalizationLayer<double>(InputSize);
         _layerNormLayer = new LayerNormalizationLayer<double>(InputSize);
@@ -91,7 +92,13 @@ public class NeuralNetworkLayersBenchmarks
     public Tensor<double> ActivationLayer_ForwardBackward()
     {
         var output = _activationLayer.Forward(_input);
-        return _activationLayer.Backward(_gradOutput);
+        // Use same-shape gradient for activation layer
+        var activationGrad = new Tensor<double>(new[] { BatchSize, InputSize });
+        for (int i = 0; i < activationGrad.Length; i++)
+        {
+            activationGrad[i] = 0.1;
+        }
+        return _activationLayer.Backward(activationGrad);
     }
 
     #endregion
@@ -108,7 +115,13 @@ public class NeuralNetworkLayersBenchmarks
     public Tensor<double> DropoutLayer_ForwardBackward()
     {
         var output = _dropoutLayer.Forward(_input);
-        return _dropoutLayer.Backward(_gradOutput);
+        // Use same-shape gradient for dropout layer
+        var dropoutGrad = new Tensor<double>(new[] { BatchSize, InputSize });
+        for (int i = 0; i < dropoutGrad.Length; i++)
+        {
+            dropoutGrad[i] = 0.1;
+        }
+        return _dropoutLayer.Backward(dropoutGrad);
     }
 
     #endregion
@@ -125,7 +138,13 @@ public class NeuralNetworkLayersBenchmarks
     public Tensor<double> BatchNormalization_ForwardBackward()
     {
         var output = _batchNormLayer.Forward(_input);
-        return _batchNormLayer.Backward(_gradOutput);
+        // Use same-shape gradient for batch norm layer
+        var bnGrad = new Tensor<double>(new[] { BatchSize, InputSize });
+        for (int i = 0; i < bnGrad.Length; i++)
+        {
+            bnGrad[i] = 0.1;
+        }
+        return _batchNormLayer.Backward(bnGrad);
     }
 
     #endregion
@@ -142,51 +161,49 @@ public class NeuralNetworkLayersBenchmarks
     public Tensor<double> LayerNormalization_ForwardBackward()
     {
         var output = _layerNormLayer.Forward(_input);
-        return _layerNormLayer.Backward(_gradOutput);
+        // Use same-shape gradient for layer norm layer
+        var lnGrad = new Tensor<double>(new[] { BatchSize, InputSize });
+        for (int i = 0; i < lnGrad.Length; i++)
+        {
+            lnGrad[i] = 0.1;
+        }
+        return _layerNormLayer.Backward(lnGrad);
     }
 
     #endregion
 
-    #region Sequential Layer Processing
+    #region Layer Construction
 
     [Benchmark]
-    public Tensor<double> Sequential_DenseActivation()
+    public DenseLayer<double> DenseLayer_Create()
     {
-        var dense1 = new DenseLayer<double>(InputSize, OutputSize);
-        var activation1 = new ActivationLayer<double>(new ReLUActivation<double>());
-
-        var h1 = dense1.Forward(_input);
-        return activation1.Forward(h1);
+        IActivationFunction<double> relu = new ReLUActivation<double>();
+        return new DenseLayer<double>(InputSize, OutputSize, relu);
     }
 
     [Benchmark]
-    public Tensor<double> Sequential_DenseNormActivation()
+    public ActivationLayer<double> ActivationLayer_Create()
     {
-        var dense1 = new DenseLayer<double>(InputSize, OutputSize);
-        var norm1 = new BatchNormalizationLayer<double>(OutputSize);
-        var activation1 = new ActivationLayer<double>(new ReLUActivation<double>());
-
-        var h1 = dense1.Forward(_input);
-        var h2 = norm1.Forward(h1);
-        return activation1.Forward(h2);
+        IActivationFunction<double> relu = new ReLUActivation<double>();
+        return new ActivationLayer<double>(new[] { BatchSize, InputSize }, relu);
     }
 
     [Benchmark]
-    public Tensor<double> Sequential_ThreeLayerNetwork()
+    public DropoutLayer<double> DropoutLayer_Create()
     {
-        int hiddenSize = 128;
+        return new DropoutLayer<double>(dropoutRate: 0.5);
+    }
 
-        var dense1 = new DenseLayer<double>(InputSize, hiddenSize);
-        var activation1 = new ActivationLayer<double>(new ReLUActivation<double>());
-        var dense2 = new DenseLayer<double>(hiddenSize, hiddenSize);
-        var activation2 = new ActivationLayer<double>(new ReLUActivation<double>());
-        var dense3 = new DenseLayer<double>(hiddenSize, OutputSize);
+    [Benchmark]
+    public BatchNormalizationLayer<double> BatchNormLayer_Create()
+    {
+        return new BatchNormalizationLayer<double>(InputSize);
+    }
 
-        var h1 = dense1.Forward(_input);
-        var a1 = activation1.Forward(h1);
-        var h2 = dense2.Forward(a1);
-        var a2 = activation2.Forward(h2);
-        return dense3.Forward(a2);
+    [Benchmark]
+    public LayerNormalizationLayer<double> LayerNormLayer_Create()
+    {
+        return new LayerNormalizationLayer<double>(InputSize);
     }
 
     #endregion

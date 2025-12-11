@@ -1,5 +1,5 @@
 using AiDotNet.LossFunctions;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 
