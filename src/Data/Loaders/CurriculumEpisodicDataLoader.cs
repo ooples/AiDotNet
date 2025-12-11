@@ -1,4 +1,4 @@
-using AiDotNet.Data.Abstractions;
+using AiDotNet.Data.Structures;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Data.Loaders;
@@ -92,7 +92,7 @@ public class CurriculumEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoad
     /// <summary>
     /// Gets the current curriculum progress (0.0 = easiest, 1.0 = target difficulty).
     /// </summary>
-    public double Progress => _progress;
+    public double CurriculumProgress => _progress;
 
     /// <summary>
     /// Initializes a new instance of the CurriculumEpisodicDataLoader for progressive N-way K-shot task sampling.
@@ -233,8 +233,8 @@ public class CurriculumEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoad
         int currentKShot = CalculateCurrentKShot();
 
         // Step 2: Randomly select currentNWay classes
-        var selectedClasses = AvailableClasses
-            .OrderBy(_ => Random.Next())
+        var selectedClasses = _availableClasses
+            .OrderBy(_ => RandomInstance.Next())
             .Take(currentNWay)
             .ToArray();
 
@@ -251,12 +251,12 @@ public class CurriculumEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoad
 
             // Sample (currentKShot + queryShots) examples and shuffle
             var sampledIndices = classIndices
-                .OrderBy(_ => Random.Next())
+                .OrderBy(_ => RandomInstance.Next())
                 .Take(currentKShot + QueryShots)
                 .ToList();
 
             // Shuffle the sampled indices to prevent ordering bias
-            sampledIndices = sampledIndices.OrderBy(_ => Random.Next()).ToList();
+            sampledIndices = sampledIndices.OrderBy(_ => RandomInstance.Next()).ToList();
 
             // Split into support (first currentKShot) and query
             var supportIndices = sampledIndices.Take(currentKShot);

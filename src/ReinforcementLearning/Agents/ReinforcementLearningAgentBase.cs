@@ -3,7 +3,6 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.ReinforcementLearning.Interfaces;
 
 namespace AiDotNet.ReinforcementLearning.Agents;
 

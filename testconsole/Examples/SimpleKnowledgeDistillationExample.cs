@@ -1,5 +1,6 @@
 using AiDotNet;
 using AiDotNet.Autodiff;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -42,9 +43,10 @@ public static class SimpleKnowledgeDistillationExample
 
         // 5. Train student with knowledge distillation
         var result = await new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(trainX, trainY))
             .ConfigureModel(studentModel)
             .ConfigureKnowledgeDistillation(kdOptions)
-            .BuildAsync(trainX, trainY);
+            .BuildAsync();
 
         // 6. Use the compressed model for inference
         var predictions = result.Predict(testX);

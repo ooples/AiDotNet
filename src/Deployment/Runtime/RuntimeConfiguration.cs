@@ -23,7 +23,7 @@ public class RuntimeConfiguration
     /// <summary>
     /// Gets or sets the cache eviction policy.
     /// </summary>
-    public CacheEvictionPolicy CacheEvictionPolicy { get; set; } = CacheEvictionPolicy.LRU;
+    public Enums.CacheEvictionPolicy CacheEvictionPolicy { get; set; } = Enums.CacheEvictionPolicy.LRU;
 
     /// <summary>
     /// Gets or sets whether to enable automatic model warm-up on registration (default: true).
