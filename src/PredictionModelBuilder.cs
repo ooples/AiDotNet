@@ -1141,8 +1141,13 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var episodeRewards = new List<T>();
         var episodeLengths = new List<int>();
         var losses = new List<T>();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        int totalStepsAcrossEpisodes = 0;
 
         var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Invoke OnTrainingStart callback
+        _rlOptions.OnTrainingStart?.Invoke();
 
         if (verbose)
         {
@@ -1176,7 +1181,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
                 // Train agent
                 var loss = rlAgent.Train();
-                if (numOps.ToDouble(loss) > 0)
+                bool didTrain = numOps.ToDouble(loss) > 0;
+                if (didTrain)
                 {
                     losses.Add(loss);
                 }
@@ -1185,41 +1191,108 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 state = nextState;
                 episodeReward = numOps.Add(episodeReward, reward);
                 steps++;
+                totalStepsAcrossEpisodes++;
                 done = isDone;
+
+                // Invoke OnStepComplete callback
+                if (_rlOptions.OnStepComplete is not null)
+                {
+                    var stepMetrics = new RLStepMetrics<T>
+                    {
+                        Episode = episode + 1,
+                        Step = steps,
+                        TotalSteps = totalStepsAcrossEpisodes,
+                        Reward = reward,
+                        Loss = didTrain ? loss : default,
+                        DidTrain = didTrain
+                    };
+                    _rlOptions.OnStepComplete(stepMetrics);
+                }
             }
 
             episodeRewards.Add(episodeReward);
             episodeLengths.Add(steps);
 
+            // Calculate metrics for this episode
+            var recentRewards = episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100).ToList();
+            var avgRewardRecent = recentRewards.Count > 0
+                ? StatisticsHelper<T>.CalculateMean(recentRewards)
+                : numOps.Zero;
+
+            var recentLosses = losses.Skip(Math.Max(0, losses.Count - 100)).Take(100).ToList();
+            var avgLoss = recentLosses.Count > 0
+                ? StatisticsHelper<T>.CalculateMean(recentLosses)
+                : numOps.Zero;
+
             // Print progress
             if (verbose && (episode + 1) % Math.Max(1, episodes / 10) == 0)
             {
-                var recentRewards = episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100).ToList();
-                var avgReward = recentRewards.Count > 0
-                    ? StatisticsHelper<T>.CalculateMean(recentRewards)
-                    : numOps.Zero;
-
-                var recentLosses = losses.Skip(Math.Max(0, losses.Count - 100)).Take(100).ToList();
-                var avgLoss = recentLosses.Count > 0
-                    ? StatisticsHelper<T>.CalculateMean(recentLosses)
-                    : numOps.Zero;
-
                 Console.WriteLine($"Episode {episode + 1}/{episodes} | " +
-                                  $"Avg Reward (last 100): {numOps.ToDouble(avgReward):F2} | " +
+                                  $"Avg Reward (last 100): {numOps.ToDouble(avgRewardRecent):F2} | " +
                                   $"Avg Loss: {numOps.ToDouble(avgLoss):F6} | " +
                                   $"Steps: {steps}");
             }
+
+            // Invoke OnEpisodeComplete callback
+            if (_rlOptions.OnEpisodeComplete is not null)
+            {
+                var episodeMetrics = new RLEpisodeMetrics<T>
+                {
+                    Episode = episode + 1,
+                    TotalReward = episodeReward,
+                    Steps = steps,
+                    AverageLoss = avgLoss,
+                    TerminatedNaturally = done,
+                    AverageRewardRecent = avgRewardRecent,
+                    ElapsedTime = stopwatch.Elapsed
+                };
+                _rlOptions.OnEpisodeComplete(episodeMetrics);
+            }
         }
+
+        // Stop timing
+        stopwatch.Stop();
+
+        // Calculate final summary metrics
+        var finalRecentRewards = episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100).ToList();
+        var finalAvgReward = finalRecentRewards.Count > 0
+            ? StatisticsHelper<T>.CalculateMean(finalRecentRewards)
+            : numOps.Zero;
+
+        var overallAvgReward = episodeRewards.Count > 0
+            ? StatisticsHelper<T>.CalculateMean(episodeRewards)
+            : numOps.Zero;
+
+        var bestReward = episodeRewards.Count > 0
+            ? episodeRewards.Aggregate(numOps.Zero, (max, r) => numOps.GreaterThan(r, max) ? r : max)
+            : numOps.Zero;
+
+        var overallAvgLoss = losses.Count > 0
+            ? StatisticsHelper<T>.CalculateMean(losses)
+            : numOps.Zero;
 
         if (verbose)
         {
             Console.WriteLine();
             Console.WriteLine("Training completed!");
-            var recentEpisodeRewards = episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100).ToList();
-            var finalAvgReward = recentEpisodeRewards.Count > 0
-                ? StatisticsHelper<T>.CalculateMean(recentEpisodeRewards)
-                : numOps.Zero;
             Console.WriteLine($"Final average reward (last 100 episodes): {numOps.ToDouble(finalAvgReward):F2}");
+        }
+
+        // Invoke OnTrainingComplete callback
+        if (_rlOptions.OnTrainingComplete is not null)
+        {
+            var summary = new RLTrainingSummary<T>
+            {
+                TotalEpisodes = episodes,
+                TotalSteps = totalStepsAcrossEpisodes,
+                AverageReward = overallAvgReward,
+                BestReward = bestReward,
+                FinalAverageReward = finalAvgReward,
+                AverageLoss = overallAvgLoss,
+                TotalTime = stopwatch.Elapsed,
+                EarlyStopTriggered = false
+            };
+            _rlOptions.OnTrainingComplete(summary);
         }
 
         // Create optimization result for RL training
