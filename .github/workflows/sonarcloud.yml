@@ -173,7 +173,14 @@ jobs:
 
       - name: Run tests with coverage (net8.0)
         run: |
-          dotnet test -c Release --framework net8.0 --no-build --filter "Category!=GPU&Category!=Integration" /p:CollectCoverage=true /p:CoverletOutputFormat=opencover /p:CoverletOutput=./coverage.opencover.xml --logger "trx;LogFileName=test-results-net8.trx" --results-directory ./TestResults
+          dotnet test -c Release --framework net8.0 --no-build --filter "Category!=GPU&Category!=Integration" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results-net8.trx" --results-directory ./TestResults
+
+      # Debug: List coverage files found
+      - name: List coverage reports
+        shell: powershell
+        run: |
+          Write-Host "Looking for coverage files..."
+          Get-ChildItem -Path ./TestResults -Recurse | ForEach-Object { Write-Host $_.FullName }
 
       - name: End SonarCloud analysis
         env:
