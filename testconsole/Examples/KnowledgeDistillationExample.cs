@@ -1,5 +1,6 @@
 using AiDotNet;
 using AiDotNet.Autodiff;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation;
@@ -114,9 +115,10 @@ public static class KnowledgeDistillationExample
         {
             // Note: This uses the PredictionModelBuilder API
             var result = await new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
+                .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(trainData, trainLabels))
                 .ConfigureModel(studentModel)
                 .ConfigureKnowledgeDistillation(kdOptions)
-                .BuildAsync(trainData, trainLabels);
+                .BuildAsync();
 
             Console.WriteLine("  ✓ Knowledge distillation training completed!");
             Console.WriteLine();
