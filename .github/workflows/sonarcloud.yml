@@ -95,8 +95,8 @@ jobs:
         shell: powershell
         run: |
           ${{ runner.temp }}\scanner\dotnet-sonarscanner begin `
-            /k:"franklin-moormann_AiDotNet" `
-            /o:"franklin-moormann" `
+            /k:"ooples_AiDotNet" `
+            /o:"ooples" `
             /d:sonar.token="${{ secrets.SONAR_TOKEN }}" `
             /d:sonar.host.url="https://sonarcloud.io" `
             /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" `
