@@ -28,7 +28,11 @@ namespace AiDotNet.Tensors.Interfaces;
 /// - .NET 5+/.NET 8.0: Full SIMD support (Vector128/256/512)
 /// </para>
 /// </remarks>
+// S2326: TVector is used in Vector128/256/512 methods which are only available in .NET 5+
+// The type parameter is intentionally designed for cross-framework compatibility
+#pragma warning disable S2326
 public interface IBinaryOperator<T, TVector>
+#pragma warning restore S2326
 {
     /// <summary>
     /// Performs the operation on two scalar values.

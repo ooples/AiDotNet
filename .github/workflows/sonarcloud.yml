@@ -24,12 +24,12 @@ env:
 
 jobs:
   # CodeQL runs on Ubuntu with net8.0 only - parallel with SonarCloud
-  # Only runs on master/main pushes and scheduled runs (not on every PR to save time)
+  # Runs on PRs, pushes to master/main, and weekly schedule for security analysis
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name == 'push' || github.event_name == 'schedule'
+    if: github.event.pull_request.draft != true
     permissions:
       contents: read
       security-events: write
