@@ -641,7 +641,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///     .BuildAsync(episodes: 1000);
     /// </code>
     /// </remarks>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureEnvironment(ReinforcementLearning.Interfaces.IEnvironment<T> environment);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureEnvironment(IEnvironment<T> environment);
 
     /// <summary>
     /// Configures knowledge distillation for training a smaller student model from a larger teacher model.

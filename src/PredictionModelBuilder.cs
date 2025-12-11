@@ -77,7 +77,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private MixedPrecisionConfig? _mixedPrecisionConfig;
     private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig;
     private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
-    private ReinforcementLearning.Interfaces.IEnvironment<T>? _environment;
+    private IEnvironment<T>? _environment;
     private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
 
     // Deployment configuration fields
@@ -1130,7 +1130,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         if (_model == null)
             throw new InvalidOperationException("Model (RL agent) must be specified using ConfigureModel().");
 
-        if (_model is not ReinforcementLearning.Interfaces.IRLAgent<T> rlAgent)
+        if (_model is not IRLAgent<T> rlAgent)
             throw new InvalidOperationException(
                 "The configured model must implement IRLAgent<T> for RL training. " +
                 "Use RL agent types like DQNAgent, PPOAgent, SACAgent, etc.");
@@ -1164,7 +1164,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             while (!done)
             {
                 // Select action
-                var action = rlAgent.SelectAction(state, training: true);
+                var action = rlAgent.SelectAction(state, explore: true);
 
                 // Take step in environment
                 var (nextState, reward, isDone, info) = _environment.Step(action);
@@ -1732,7 +1732,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///     .BuildAsync(episodes: 1000);
     /// </code>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureEnvironment(ReinforcementLearning.Interfaces.IEnvironment<T> environment)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureEnvironment(IEnvironment<T> environment)
     {
         _environment = environment;
         return this;
