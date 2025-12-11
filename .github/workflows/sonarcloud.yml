@@ -249,9 +249,11 @@ jobs:
         run: dotnet restore
 
       # Run tests on net471 (Windows can run .NET Framework)
-      - name: Run tests with coverage (net471)
+      # Note: Coverage not collected here as SonarCloud analysis has already completed
+      # Only net8.0 coverage is included in SonarCloud analysis (primary target)
+      - name: Run tests (net471)
         run: |
-          dotnet test --no-build -c Release --framework net471 --filter "Category!=GPU&Category!=Integration" /p:CollectCoverage=true /p:CoverletOutputFormat=opencover /p:CoverletOutput=./coverage.net471.opencover.xml --logger "trx;LogFileName=test-results-net471.trx" --results-directory ./TestResults
+          dotnet test --no-build -c Release --framework net471 --filter "Category!=GPU&Category!=Integration" --logger "trx;LogFileName=test-results-net471.trx" --results-directory ./TestResults
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

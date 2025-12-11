@@ -20,9 +20,11 @@ public class RagBenchmarks
     private const string RetrievalStrategyHybrid = "hybrid";
     private const string DocumentStoreTypeMemory = "memory";
 
+    // BenchmarkDotNet uses Params arrays via reflection - not unused (CodeQL cs/unused-collection false positive)
     [Params(100, 500)]
     public int DocumentCount { get; set; }
 
+    // BenchmarkDotNet uses Params arrays via reflection - not unused (CodeQL cs/unused-collection false positive)
     [Params(5, 10)]
     public int TopK { get; set; }
 
