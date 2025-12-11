@@ -1,3 +1,4 @@
+global using AiDotNet.Configuration;
 global using AiDotNet.FeatureSelectors;
 global using AiDotNet.FitnessCalculators;
 global using AiDotNet.Regularization;
@@ -77,7 +78,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private MixedPrecisionConfig? _mixedPrecisionConfig;
     private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig;
     private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
-    private IEnvironment<T>? _environment;
+    private RLTrainingOptions<T>? _rlOptions;
     private IAutoMLModel<T, TInput, TOutput>? _autoMLModel;
 
     // Deployment configuration fields
@@ -1122,9 +1123,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Apply GPU configuration first (before any operations that might use GPU)
         ApplyGpuConfiguration();
 
-        if (_environment == null)
+        if (_rlOptions?.Environment == null)
             throw new InvalidOperationException(
-                "BuildAsync(episodes) requires ConfigureEnvironment() to be called first. " +
+                "BuildAsync(episodes) requires ConfigureReinforcementLearning() with a valid Environment. " +
                 "For regular training, use BuildAsync(x, y).");
 
         if (_model == null)
@@ -1145,7 +1146,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         if (verbose)
         {
             Console.WriteLine($"Starting RL training for {episodes} episodes...");
-            Console.WriteLine($"Environment: {_environment.GetType().Name}");
+            Console.WriteLine($"Environment: {_rlOptions.Environment.GetType().Name}");
             Console.WriteLine($"Agent: {rlAgent.GetType().Name}");
             Console.WriteLine();
         }
@@ -1153,7 +1154,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Training loop
         for (int episode = 0; episode < episodes; episode++)
         {
-            var state = _environment.Reset();
+            var state = _rlOptions.Environment.Reset();
             rlAgent.ResetEpisode();
 
             T episodeReward = numOps.Zero;
@@ -1167,7 +1168,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 var action = rlAgent.SelectAction(state, explore: true);
 
                 // Take step in environment
-                var (nextState, reward, isDone, info) = _environment.Step(action);
+                var (nextState, reward, isDone, info) = _rlOptions.Environment.Step(action);
 
                 // Store experience
                 rlAgent.StoreExperience(state, action, reward, nextState, isDone);
@@ -1712,29 +1713,40 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Configures the environment for reinforcement learning.
+    /// Configures reinforcement learning options for training an RL agent.
     /// </summary>
-    /// <param name="environment">The RL environment to use for training.</param>
+    /// <param name="options">The reinforcement learning configuration options.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> When training reinforcement learning agents, you need an environment
-    /// for the agent to interact with. This is like setting up a simulation or game for the agent
-    /// to learn from. Common environments include CartPole (balancing a pole), Atari games,
-    /// robotic simulations, etc.
+    /// <b>For Beginners:</b> Reinforcement learning trains an agent through trial and error
+    /// in an environment. This method configures all aspects of RL training:
+    /// - The environment (simulation/game for the agent to learn from)
+    /// - Training parameters (episodes, steps, batch size)
+    /// - Exploration strategies (how to balance trying new things vs using learned behavior)
+    /// - Replay buffers (how to store and sample past experiences)
+    /// - Callbacks for monitoring training progress
     ///
-    /// After configuring an environment, use BuildAsync(episodes) to train an RL agent.
+    /// After configuring RL options, use BuildAsync(episodes) to train the agent.
     ///
     /// Example:
     /// <code>
+    /// var options = new RLTrainingOptions&lt;double&gt;
+    /// {
+    ///     Environment = new CartPoleEnvironment&lt;double&gt;(),
+    ///     Episodes = 1000,
+    ///     MaxStepsPerEpisode = 500,
+    ///     OnEpisodeComplete = (metrics) =&gt; Console.WriteLine($"Episode {metrics.Episode}: {metrics.TotalReward}")
+    /// };
+    ///
     /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureEnvironment(new CartPoleEnvironment&lt;double&gt;())
+    ///     .ConfigureReinforcementLearning(options)
     ///     .ConfigureModel(new DQNAgent&lt;double&gt;())
-    ///     .BuildAsync(episodes: 1000);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureEnvironment(IEnvironment<T> environment)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureReinforcementLearning(RLTrainingOptions<T> options)
     {
-        _environment = environment;
+        _rlOptions = options;
         return this;
     }
 

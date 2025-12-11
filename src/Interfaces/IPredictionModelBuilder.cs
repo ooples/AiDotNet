@@ -1,3 +1,4 @@
+using AiDotNet.Configuration;
 using AiDotNet.Models.Results;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
@@ -621,27 +622,38 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
 
     /// <summary>
-    /// Configures the environment for reinforcement learning.
+    /// Configures reinforcement learning options for training an RL agent.
     /// </summary>
-    /// <param name="environment">The RL environment to use for training.</param>
+    /// <param name="options">The reinforcement learning configuration options.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> When training reinforcement learning agents, you need an environment
-    /// for the agent to interact with. This is like setting up a simulation or game for the agent
-    /// to learn from. Common environments include CartPole (balancing a pole), Atari games,
-    /// robotic simulations, etc.
+    /// <b>For Beginners:</b> Reinforcement learning trains an agent through trial and error
+    /// in an environment. This method configures all aspects of RL training:
+    /// - The environment (simulation/game for the agent to learn from)
+    /// - Training parameters (episodes, steps, batch size)
+    /// - Exploration strategies (how to balance trying new things vs using learned behavior)
+    /// - Replay buffers (how to store and sample past experiences)
+    /// - Callbacks for monitoring training progress
     ///
-    /// After configuring an environment, use BuildAsync(episodes) to train an RL agent.
+    /// After configuring RL options, use BuildAsync(episodes) to train the agent.
     ///
     /// Example:
     /// <code>
+    /// var options = new RLTrainingOptions&lt;double&gt;
+    /// {
+    ///     Environment = new CartPoleEnvironment&lt;double&gt;(),
+    ///     Episodes = 1000,
+    ///     MaxStepsPerEpisode = 500,
+    ///     OnEpisodeComplete = (metrics) =&gt; Console.WriteLine($"Episode {metrics.Episode}: {metrics.TotalReward}")
+    /// };
+    ///
     /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureEnvironment(new CartPoleEnvironment&lt;double&gt;())
+    ///     .ConfigureReinforcementLearning(options)
     ///     .ConfigureModel(new DQNAgent&lt;double&gt;())
-    ///     .BuildAsync(episodes: 1000);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureEnvironment(IEnvironment<T> environment);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureReinforcementLearning(RLTrainingOptions<T> options);
 
     /// <summary>
     /// Configures knowledge distillation for training a smaller student model from a larger teacher model.

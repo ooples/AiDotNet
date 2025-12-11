@@ -58,7 +58,7 @@ public class CacheConfig
     /// LRU (Least Recently Used) is recommended - it removes models you haven't used recently.
     /// </para>
     /// </remarks>
-    public CacheEvictionPolicy EvictionPolicy { get; set; } = CacheEvictionPolicy.LRU;
+    public Enums.CacheEvictionPolicy EvictionPolicy { get; set; } = Enums.CacheEvictionPolicy.LRU;
 
     /// <summary>
     /// Gets or sets the cache entry time-to-live in seconds (default: 3600 = 1 hour).

@@ -6,13 +6,17 @@ using AiDotNet.ReinforcementLearning.ReplayBuffers;
 namespace AiDotNet.Configuration;
 
 /// <summary>
-/// Configuration options for reinforcement learning training.
+/// Configuration options for reinforcement learning training loops via PredictionModelBuilder.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// This class provides comprehensive configuration for RL training, following industry-standard
+/// This class provides comprehensive configuration for RL training loops, following industry-standard
 /// patterns from libraries like Stable-Baselines3, RLlib, and CleanRL.
+/// </para>
+/// <para>
+/// <b>Note:</b> This class is for configuring the training loop (episodes, steps, callbacks).
+/// For agent-specific options (learning rate, discount factor), see each agent's options class.
 /// </para>
 /// <para><b>For Beginners:</b> Reinforcement learning trains an agent through trial and error
 /// in an environment. This options class lets you customize every aspect of that training process:
@@ -23,7 +27,7 @@ namespace AiDotNet.Configuration;
 ///
 /// **Quick Start Example:**
 /// <code>
-/// var options = new ReinforcementLearningOptions&lt;double&gt;
+/// var options = new RLTrainingOptions&lt;double&gt;
 /// {
 ///     Environment = new CartPoleEnvironment&lt;double&gt;(),
 ///     Episodes = 1000,
@@ -37,7 +41,7 @@ namespace AiDotNet.Configuration;
 /// </code>
 /// </para>
 /// </remarks>
-public class ReinforcementLearningOptions<T>
+public class RLTrainingOptions<T>
 {
     /// <summary>
     /// Gets or sets the environment for the agent to interact with.
@@ -290,9 +294,9 @@ public class ReinforcementLearningOptions<T>
     /// </summary>
     /// <param name="environment">The environment to train in.</param>
     /// <returns>Options with recommended defaults.</returns>
-    public static ReinforcementLearningOptions<T> Default(IEnvironment<T> environment)
+    public static RLTrainingOptions<T> Default(IEnvironment<T> environment)
     {
-        return new ReinforcementLearningOptions<T>
+        return new RLTrainingOptions<T>
         {
             Environment = environment,
             Episodes = 1000,
