@@ -1,4 +1,7 @@
+using AiDotNet.Engines;
 using Newtonsoft.Json;
+
+namespace AiDotNet.Optimizers;
 
 /// <summary>
 /// Implements the Root Mean Square Propagation (RMSProp) optimization algorithm, an adaptive learning rate method.
@@ -116,7 +119,8 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// </remarks>
     public RootMeanSquarePropagationOptimizer(
         IFullModel<T, TInput, TOutput> model,
-        RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>? options = null)
+        RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>? options = null,
+        IEngine? engine = null)
         : base(model, options ?? new())
     {
         _t = 0;
@@ -225,19 +229,30 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            var squaredGrad = NumOps.Multiply(gradient[i], gradient[i]);
-            _squaredGradient[i] = NumOps.Add(NumOps.Multiply(NumOps.FromDouble(_options.Decay), _squaredGradient[i]), NumOps.Multiply(NumOps.FromDouble(1 - _options.Decay), squaredGrad));
-            
-            var adaptiveLearningRate = CurrentLearningRate;
-            var denominator = NumOps.Add(NumOps.Sqrt(_squaredGradient[i]), NumOps.FromDouble(_options.Epsilon));
-            var update = NumOps.Divide(NumOps.Multiply(adaptiveLearningRate, gradient[i]), denominator);
-            
-            parameters[i] = NumOps.Subtract(parameters[i], update);
-        }
+        // === Vectorized RMSProp Update using IEngine ===
+        // Phase B: US-GPU-015 - GPU-accelerated gradient updates
 
-        return parameters;
+        T decay = NumOps.FromDouble(_options.Decay);
+        T oneMinusDecay = NumOps.FromDouble(1 - _options.Decay);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+
+        // Update squared gradient: sqGrad = decay * sqGrad + (1 - decay) * grad^2
+        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
+        var sqGradScaled = (Vector<T>)Engine.Multiply(_squaredGradient, decay);
+        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusDecay);
+        _squaredGradient = (Vector<T>)Engine.Add(sqGradScaled, gradSquaredScaled);
+
+        // Compute update: update = learningRate * gradient / (sqrt(sqGrad) + epsilon)
+        var sqGradSqrt = (Vector<T>)Engine.Sqrt(_squaredGradient);
+        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, sqGradSqrt.Length));
+        var denominator = (Vector<T>)Engine.Add(sqGradSqrt, epsilonVec);
+        var gradScaled = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
+        var update = (Vector<T>)Engine.Divide(gradScaled, denominator);
+
+        // Apply update: params = params - update
+        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
+
+        return updatedParams;
     }
 
     /// <summary>
@@ -278,23 +293,31 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var parameters = currentSolution.GetParameters();
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            var gradientSquared = NumOps.Multiply(gradient[i], gradient[i]);
-            _squaredGradient[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(_options.Decay), _squaredGradient[i]),
-                NumOps.Multiply(NumOps.FromDouble(1 - _options.Decay), gradientSquared)
-            );
 
-            var update = NumOps.Divide(
-                NumOps.Multiply(CurrentLearningRate, gradient[i]),
-                NumOps.Add(NumOps.Sqrt(_squaredGradient[i]), NumOps.FromDouble(_options.Epsilon))
-            );
+        // === Vectorized RMSProp Update using IEngine ===
+        // Phase B: US-GPU-015 - GPU-accelerated gradient updates
 
-            parameters[i] = NumOps.Subtract(parameters[i], update);
-        }
+        T decay = NumOps.FromDouble(_options.Decay);
+        T oneMinusDecay = NumOps.FromDouble(1 - _options.Decay);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
 
-        return currentSolution;
+        // Update squared gradient: sqGrad = decay * sqGrad + (1 - decay) * grad^2
+        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
+        var sqGradScaled = (Vector<T>)Engine.Multiply(_squaredGradient, decay);
+        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusDecay);
+        _squaredGradient = (Vector<T>)Engine.Add(sqGradScaled, gradSquaredScaled);
+
+        // Compute update: update = learningRate * gradient / (sqrt(sqGrad) + epsilon)
+        var sqGradSqrt = (Vector<T>)Engine.Sqrt(_squaredGradient);
+        var epsilonVec = Vector<T>.CreateDefault(sqGradSqrt.Length, epsilon);
+        var denominator = (Vector<T>)Engine.Add(sqGradSqrt, epsilonVec);
+        var gradScaled = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
+        var update = (Vector<T>)Engine.Divide(gradScaled, denominator);
+
+        // Apply update: params = params - update
+        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
+
+        return currentSolution.WithParameters(updatedParams);
     }
 
     /// <summary>
@@ -507,20 +530,19 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
             return base.ReverseUpdate(updatedParameters, appliedGradients);
         }
 
+        // === Vectorized Reverse RMSprop Update (Phase B: US-GPU-015) ===
         // Reverse RMSprop update: params_old = params_new + update
         // Where update = learning_rate * gradient / (sqrt(squared_gradient) + epsilon)
-        var original = new T[updatedParameters.Length];
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            // Recalculate the adaptive update that was applied
-            T numerator = NumOps.Multiply(CurrentLearningRate, appliedGradients[i]);
-            T denominator = NumOps.Add(NumOps.Sqrt(_squaredGradient[i]), NumOps.FromDouble(_options.Epsilon));
-            T update = NumOps.Divide(numerator, denominator);
 
-            // Reverse the update: params_old = params_new + update
-            original[i] = NumOps.Add(updatedParameters[i], update);
-        }
+        // Recalculate the adaptive update that was applied
+        var currentLrVec = Vector<T>.CreateDefault(appliedGradients.Length, CurrentLearningRate);
+        var numerator = (Vector<T>)Engine.Multiply(currentLrVec, appliedGradients);
+        var sqrtSquaredGrad = (Vector<T>)Engine.Sqrt(_squaredGradient);
+        var epsilonVec = Vector<T>.CreateDefault(sqrtSquaredGrad.Length, NumOps.FromDouble(_options.Epsilon));
+        var denominator = (Vector<T>)Engine.Add(sqrtSquaredGrad, epsilonVec);
+        var update = (Vector<T>)Engine.Divide(numerator, denominator);
 
-        return new Vector<T>(original);
+        // Reverse the update: params_old = params_new + update
+        return (Vector<T>)Engine.Add(updatedParameters, update);
     }
 }

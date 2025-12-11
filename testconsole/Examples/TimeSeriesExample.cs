@@ -1,4 +1,5 @@
 ﻿using AiDotNet;
+using AiDotNet.Data.Loaders;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
@@ -64,9 +65,10 @@ public class TimeSeriesExample
 
             // Build the time series model
             var model = await modelBuilder
+                .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(timeFeatures, priceVector))
                 .ConfigureOptimizer(optimizer)
                 .ConfigureModel(new ProphetModel<double, Matrix<double>, Vector<double>>(timeSeriesOptions))
-                .BuildAsync(timeFeatures, priceVector);
+                .BuildAsync();
 
             Console.WriteLine("Model trained successfully!");
 

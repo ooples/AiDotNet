@@ -7,7 +7,7 @@ namespace AiDotNet.WindowFunctions;
 /// <para>
 /// The Gaussian window is based on the Gaussian (normal) distribution and provides excellent 
 /// time-frequency localization. It is defined by the equation:
-/// w(n) = exp(-(n-N/2)²/(2s²))
+/// w(n) = exp(-(n-N/2)Â²/(2sÂ²))
 /// where n is the sample index, N is the window size, and s (sigma) controls the width of the window.
 /// </para>
 /// <para><b>For Beginners:</b> A window function is like a special filter that helps analyze signals more accurately.
@@ -98,7 +98,7 @@ public class GaussianWindow<T> : IWindowFunction<T>
     /// <remarks>
     /// <para>
     /// This method implements the Gaussian window function formula:
-    /// w(n) = exp(-(n-N/2)²/(2s²))
+    /// w(n) = exp(-(n-N/2)Â²/(2sÂ²))
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates the actual window values based on the size you specify.

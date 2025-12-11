@@ -1,4 +1,4 @@
-using AiDotNet.Data.Abstractions;
+using AiDotNet.Data.Structures;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Data.Loaders;
@@ -101,7 +101,7 @@ public class BalancedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoader
     {
         // Initialize usage tracking - all classes start with count 0
         _classUsageCount = new Dictionary<int, int>();
-        foreach (var classLabel in AvailableClasses)
+        foreach (var classLabel in _availableClasses)
         {
             _classUsageCount[classLabel] = 0;
         }
@@ -144,14 +144,14 @@ public class BalancedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoader
         var usageRange = maxUsage - minUsage + 1; // Add 1 to avoid division by zero
 
         var weights = new Dictionary<int, double>();
-        foreach (var classLabel in AvailableClasses)
+        foreach (var classLabel in _availableClasses)
         {
             // Inverse weight: less used = higher weight
             weights[classLabel] = usageRange - (_classUsageCount[classLabel] - minUsage);
         }
 
         // Step 2: Perform weighted random selection of nWay classes
-        var selectedClasses = WeightedSample(AvailableClasses, weights, NWay);
+        var selectedClasses = WeightedSample(_availableClasses, weights, NWay);
 
         // Step 3: Update usage counts for selected classes
         foreach (var classLabel in selectedClasses)
@@ -172,12 +172,12 @@ public class BalancedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoader
 
             // Sample (kShot + queryShots) examples and shuffle
             var sampledIndices = classIndices
-                .OrderBy(_ => Random.Next())
+                .OrderBy(_ => RandomInstance.Next())
                 .Take(KShot + QueryShots)
                 .ToList();
 
             // Shuffle the sampled indices to prevent ordering bias
-            sampledIndices = sampledIndices.OrderBy(_ => Random.Next()).ToList();
+            sampledIndices = sampledIndices.OrderBy(_ => RandomInstance.Next()).ToList();
 
             // Split into support and query
             var supportIndices = sampledIndices.Take(KShot);
@@ -215,7 +215,7 @@ public class BalancedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoader
         {
             // Calculate cumulative weights
             var totalWeight = remainingWeights.Values.Sum();
-            var randomValue = Random.NextDouble() * totalWeight;
+            var randomValue = RandomInstance.NextDouble() * totalWeight;
 
             // Select based on weighted probability
             double cumulative = NumOps.ToInt32(NumOps.Zero);

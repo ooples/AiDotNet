@@ -4,12 +4,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.AutoML;
 using AiDotNet.Enums;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
-using AiDotNet.NumericOperations;
 
 namespace AiDotNet.NeuralNetworks
 {
@@ -83,7 +80,7 @@ namespace AiDotNet.NeuralNetworks
             _searchSpace = searchSpace;
             _numNodes = numNodes;
             _numOperations = searchSpace.Operations?.Count ?? 5; // Default operations: identity, conv3x3, conv5x5, maxpool, avgpool
-            _random = new Random(42); // Initialize with seed for reproducibility
+            _random = RandomHelper.CreateSeededRandom(42); // Initialize with seed for reproducibility
 
             // Initialize architecture parameters (alpha) with small random values
             _architectureParams = new List<Matrix<T>>();
@@ -1341,6 +1338,344 @@ namespace AiDotNet.NeuralNetworks
         }
 
         #endregion
+
+        /// <summary>
+        /// Saves the SuperNet's current state (architecture parameters and weights) to a stream.
+        /// </summary>
+        /// <param name="stream">The stream to write the model state to.</param>
+        /// <remarks>
+        /// <para>
+        /// This method serializes all the information needed to recreate the SuperNet's current state,
+        /// including architecture parameters, operation weights, and model configuration.
+        /// It uses the existing Serialize method and writes the data to the provided stream.
+        /// </para>
+        /// <para><b>For Beginners:</b> This is like creating a snapshot of your neural architecture search model.
+        ///
+        /// When you call SaveState:
+        /// - All architecture parameters (alpha values) are written to the stream
+        /// - All operation weights are saved
+        /// - The model's configuration and structure are preserved
+        ///
+        /// This is particularly useful for:
+        /// - Checkpointing during neural architecture search
+        /// - Saving the best architecture found during search
+        /// - Knowledge distillation from SuperNet to final architecture
+        /// - Resuming interrupted architecture search
+        ///
+        /// You can later use LoadState to restore the model to this exact state.
+        /// </para>
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+        /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+        public virtual void SaveState(Stream stream)
+        {
+            if (stream == null)
+                throw new ArgumentNullException(nameof(stream));
+
+            if (!stream.CanWrite)
+                throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+            try
+            {
+                var data = this.Serialize();
+                stream.Write(data, 0, data.Length);
+                stream.Flush();
+            }
+            catch (IOException ex)
+            {
+                throw new IOException($"Failed to save SuperNet state to stream: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Unexpected error while saving SuperNet state: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Loads the SuperNet's state (architecture parameters and weights) from a stream.
+        /// </summary>
+        /// <param name="stream">The stream to read the model state from.</param>
+        /// <remarks>
+        /// <para>
+        /// This method deserializes SuperNet state that was previously saved with SaveState,
+        /// restoring all architecture parameters, operation weights, and configuration.
+        /// It uses the existing Deserialize method after reading data from the stream.
+        /// </para>
+        /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your neural architecture search model.
+        ///
+        /// When you call LoadState:
+        /// - All architecture parameters (alpha values) are read from the stream
+        /// - All operation weights are restored
+        /// - The model is configured to match the saved state
+        ///
+        /// After loading, the model can:
+        /// - Continue architecture search from where it left off
+        /// - Make predictions using the restored architecture
+        /// - Be used for further optimization or deployment
+        ///
+        /// This is essential for:
+        /// - Resuming interrupted architecture search
+        /// - Loading the best architecture found during search
+        /// - Deploying searched architectures to production
+        /// - Knowledge distillation workflows
+        /// </para>
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+        /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
+        public virtual void LoadState(Stream stream)
+        {
+            if (stream == null)
+                throw new ArgumentNullException(nameof(stream));
+
+            if (!stream.CanRead)
+                throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+            try
+            {
+                using var ms = new MemoryStream();
+                stream.CopyTo(ms);
+                var data = ms.ToArray();
+
+                if (data.Length == 0)
+                    throw new InvalidOperationException("Stream contains no data.");
+
+                this.Deserialize(data);
+            }
+            catch (IOException ex)
+            {
+                throw new IOException($"Failed to read SuperNet state from stream: {ex.Message}", ex);
+            }
+            catch (InvalidOperationException)
+            {
+                // Re-throw InvalidOperationException from Deserialize
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to deserialize SuperNet state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+            }
+        }
+
+    #region IJitCompilable Implementation
+
+    /// <summary>
+    /// Gets whether this SuperNet supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> after at least one forward pass has been performed to initialize weights.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// SuperNet implements Differentiable Architecture Search (DARTS), which is specifically
+    /// designed to be differentiable. The softmax-weighted operation mixing that defines DARTS
+    /// is a fully differentiable computation that can be exported as a computation graph.
+    /// </para>
+    /// <para><b>Key Insight:</b> While the architecture parameters (alpha) are learned during
+    /// training, at inference time they are fixed values. The computation graph includes:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Softmax over architecture parameters for each node</description></item>
+    /// <item><description>All operation outputs computed in parallel</description></item>
+    /// <item><description>Weighted sum of operation outputs using softmax weights</description></item>
+    /// </list>
+    /// <para>
+    /// This is exactly what makes DARTS "differentiable" - the entire forward pass can be
+    /// expressed as continuous, differentiable operations that are JIT-compilable.
+    /// </para>
+    /// <para><b>For Beginners:</b> DARTS uses a clever trick called "continuous relaxation":
+    ///
+    /// Instead of choosing ONE operation at each step (which would be discrete and non-differentiable),
+    /// DARTS computes ALL operations and combines them with softmax weights. This weighted
+    /// combination IS differentiable and CAN be JIT compiled.
+    ///
+    /// The JIT-compiled SuperNet will:
+    /// - Use the current architecture parameters (alpha values)
+    /// - Compute softmax weights over operations
+    /// - Evaluate all operations
+    /// - Combine outputs using the computed weights
+    ///
+    /// After architecture search is complete, you can also call DeriveArchitecture() to create
+    /// a simpler, discrete architecture that uses only the best operations.
+    /// </para>
+    /// </remarks>
+    public bool SupportsJitCompilation => _weights.Count > 0;
+
+    /// <summary>
+    /// Exports the model's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes (parameters).</param>
+    /// <returns>The output computation node representing the SuperNet forward pass.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if called before any forward pass has initialized the weights.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// Exports the DARTS continuous relaxation as a computation graph. The graph includes:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Input tensor variable</description></item>
+    /// <item><description>Architecture parameters embedded as constants</description></item>
+    /// <item><description>Softmax computation over architecture parameters</description></item>
+    /// <item><description>All operation outputs</description></item>
+    /// <item><description>Weighted sum using softmax weights</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> This exports the current state of the SuperNet as a
+    /// JIT-compilable graph. The architecture parameters (alpha values) are baked into
+    /// the graph as constants, so the exported graph represents the current "snapshot"
+    /// of the architecture search.
+    ///
+    /// You can export at different points during training to capture the evolving architecture,
+    /// or export after search completes to get the final continuous relaxation.
+    /// </para>
+    /// </remarks>
+    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (_weights.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "SuperNet must be initialized with at least one forward pass before exporting computation graph. " +
+                "Call Predict() first to initialize the network weights.");
+        }
+
+        // Create input node for the data tensor
+        // We assume 2D input: [batch, features]
+        var inputShape = new[] { 1, _inputSize > 0 ? _inputSize : 1 };
+        var inputTensor = new Tensor<T>(inputShape);
+        var input = TensorOperations<T>.Variable(inputTensor, "input");
+        inputNodes.Add(input);
+
+        // Build the computation graph for DARTS forward pass
+        // Store intermediate node outputs as computation nodes
+        var nodeOutputs = new List<ComputationNode<T>> { input };
+
+        // Process each node in the architecture
+        for (int nodeIdx = 0; nodeIdx < _numNodes; nodeIdx++)
+        {
+            var alpha = _architectureParams[nodeIdx];
+
+            // Compute softmax weights for this node's architecture parameters
+            // Create a constant tensor from the softmax weights
+            var softmaxWeights = ApplySoftmax(alpha);
+
+            // Initialize accumulated output for this node
+            ComputationNode<T>? nodeOutput = null;
+
+            // Mix operations from all previous nodes
+            for (int prevNodeIdx = 0; prevNodeIdx <= nodeIdx; prevNodeIdx++)
+            {
+                var prevOutput = nodeOutputs[prevNodeIdx];
+
+                // Apply each operation and mix with softmax weights
+                for (int opIdx = 0; opIdx < _numOperations; opIdx++)
+                {
+                    var weightKey = $"node{nodeIdx}_from{prevNodeIdx}_op{opIdx}";
+                    var weight = softmaxWeights[prevNodeIdx, opIdx];
+
+                    // Create computation for this operation's output
+                    var opOutput = ExportOperationGraph(prevOutput, opIdx, weightKey);
+
+                    // Scale by softmax weight (create constant for the weight)
+                    var weightTensor = new Tensor<T>(new[] { 1 });
+                    weightTensor[0] = weight;
+                    var weightNode = TensorOperations<T>.Constant(weightTensor, $"weight_{nodeIdx}_{prevNodeIdx}_{opIdx}");
+
+                    var scaledOutput = TensorOperations<T>.ElementwiseMultiply(opOutput, weightNode);
+
+                    // Accumulate
+                    if (nodeOutput == null)
+                    {
+                        nodeOutput = scaledOutput;
+                    }
+                    else
+                    {
+                        nodeOutput = TensorOperations<T>.Add(nodeOutput, scaledOutput);
+                    }
+                }
+            }
+
+            nodeOutputs.Add(nodeOutput ?? input);
+        }
+
+        // Return the output of the final node
+        return nodeOutputs[nodeOutputs.Count - 1];
+    }
+
+    /// <summary>
+    /// Exports a single operation as a computation graph.
+    /// </summary>
+    private ComputationNode<T> ExportOperationGraph(ComputationNode<T> input, int opIdx, string weightKey)
+    {
+        // Get or create weight constants
+        Vector<T>? weight = null;
+        if (_weights.TryGetValue(weightKey, out var w))
+        {
+            weight = w;
+        }
+
+        switch (opIdx)
+        {
+            case 0: // Identity
+                return input;
+
+            case 1: // 3x3 Conv (simplified as weighted pass)
+                if (weight != null)
+                {
+                    var weightTensor = new Tensor<T>(new[] { weight.Length });
+                    for (int i = 0; i < weight.Length; i++)
+                    {
+                        weightTensor[i] = NumOps.Add(NumOps.One, weight[i]);
+                    }
+                    var weightNode = TensorOperations<T>.Constant(weightTensor, $"weights_{weightKey}");
+                    return TensorOperations<T>.ElementwiseMultiply(input, weightNode);
+                }
+                return input;
+
+            case 2: // 5x5 Conv (simplified)
+                if (weight != null)
+                {
+                    var weightTensor = new Tensor<T>(new[] { weight.Length });
+                    for (int i = 0; i < weight.Length; i++)
+                    {
+                        weightTensor[i] = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(1.5), weight[i]));
+                    }
+                    var weightNode = TensorOperations<T>.Constant(weightTensor, $"weights_{weightKey}");
+                    return TensorOperations<T>.ElementwiseMultiply(input, weightNode);
+                }
+                return input;
+
+            case 3: // MaxPool (simplified as scaling)
+                {
+                    var scaleTensor = new Tensor<T>(new[] { 1 });
+                    scaleTensor[0] = NumOps.FromDouble(0.9);
+                    var scaleNode = TensorOperations<T>.Constant(scaleTensor, $"maxpool_scale_{weightKey}");
+                    return TensorOperations<T>.ElementwiseMultiply(input, scaleNode);
+                }
+
+            case 4: // AvgPool (simplified as scaling)
+                {
+                    var scaleTensor = new Tensor<T>(new[] { 1 });
+                    scaleTensor[0] = NumOps.FromDouble(0.8);
+                    var scaleNode = TensorOperations<T>.Constant(scaleTensor, $"avgpool_scale_{weightKey}");
+                    return TensorOperations<T>.ElementwiseMultiply(input, scaleNode);
+                }
+
+            default:
+                return input;
+        }
+    }
+
+    /// <summary>
+    /// Performs forward pass through the model (required by IJitCompilable).
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>The output tensor.</returns>
+    public Tensor<T> Forward(Tensor<T> input)
+    {
+        return Predict(input);
+    }
+
+    #endregion
     }
 }
-

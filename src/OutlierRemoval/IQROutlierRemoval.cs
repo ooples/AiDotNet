@@ -59,7 +59,7 @@ public class IQROutlierRemoval<T, TInput, TOutput> : IOutlierRemoval<T, TInput, 
     /// This method applies the IQR outlier detection technique to each feature (column) in your data:
     /// 1. For each feature, it calculates Q1 (25th percentile) and Q3 (75th percentile)
     /// 2. It computes the IQR as Q3 - Q1
-    /// 3. It defines the lower bound as Q1 - (multiplier × IQR) and upper bound as Q3 + (multiplier × IQR)
+    /// 3. It defines the lower bound as Q1 - (multiplier Ã— IQR) and upper bound as Q3 + (multiplier Ã— IQR)
     /// 4. Any data point outside these bounds for any feature is considered an outlier
     /// 
     /// <b>For Beginners:</b> This method examines each feature (column) in your data separately.

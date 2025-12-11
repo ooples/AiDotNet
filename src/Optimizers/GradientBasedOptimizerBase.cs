@@ -1,3 +1,8 @@
+using AiDotNet.Engines;
+
+using AiDotNet.MixedPrecision;
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -69,6 +74,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected IRegularization<T, TInput, TOutput> Regularization;
 
     /// <summary>
+    /// Mixed-precision training context (null if mixed-precision is disabled).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixed-precision training uses both 16-bit (FP16) and 32-bit (FP32) floating-point
+    /// numbers during optimization. This context manages the conversion between precisions and handles
+    /// loss scaling to prevent numerical issues. When enabled, this can provide:
+    /// - 2-3x faster training on modern GPUs (V100, A100, RTX 3000+)
+    /// - ~50% memory reduction
+    /// - Maintained accuracy through careful precision management
+    /// </para>
+    /// </remarks>
+    protected MixedPrecisionContext? _mixedPrecisionContext;
+
+    /// <summary>
+    /// Gets whether mixed-precision training is enabled for this optimizer.
+    /// </summary>
+    public bool IsMixedPrecisionEnabled => _mixedPrecisionContext != null;
+
+    /// <summary>
     /// Initializes a new instance of the GradientBasedOptimizerBase class.
     /// </summary>
     /// <remarks>
@@ -79,13 +104,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     /// <param name="model">The model to optimize (can be null if set later).</param>
     /// <param name="options">Options for the gradient-based optimizer.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
-    /// <param name="gradientCache">The gradient cache to use.</param>
     protected GradientBasedOptimizerBase(
         IFullModel<T, TInput, TOutput>? model,
         GradientBasedOptimizerOptions<T, TInput, TOutput> options) :
@@ -99,6 +117,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         LossFunction = options.LossFunction;
         GradientCache = options.GradientCache;
         Regularization = options.Regularization;
+        // Engine property now returns AiDotNetEngine.Current automatically
     }
 
     /// <inheritdoc/>
@@ -208,6 +227,140 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <summary>
+    /// Enables mixed-precision training for this optimizer.
+    /// </summary>
+    /// <param name="config">Configuration for mixed-precision training (optional, uses defaults if null).</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixed-precision training uses a mix of 16-bit (FP16) and 32-bit (FP32) floating-point
+    /// numbers during optimization to achieve faster training while maintaining accuracy.
+    ///
+    /// Benefits:
+    /// - **2-3x faster** on modern GPUs with Tensor Cores (V100, A100, RTX 3000+)
+    /// - **~50% memory reduction** allows larger batches or models
+    /// - **Maintained accuracy** through FP32 master weights and loss scaling
+    ///
+    /// When to use:
+    /// - ✅ Training large models with gradient-based optimizers
+    /// - ✅ Using modern GPUs with Tensor Core support
+    /// - ✅ Memory-constrained scenarios
+    /// - ❌ CPU-only training (minimal benefit)
+    /// - ❌ Non-gradient optimizers (genetic algorithms, etc.)
+    ///
+    /// Note: Only works with float (FP32) as the base type T.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var optimizer = new AdamOptimizer&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(model, options);
+    /// optimizer.EnableMixedPrecision();
+    ///
+    /// // Or with custom configuration
+    /// optimizer.EnableMixedPrecision(MixedPrecisionConfig.Conservative());
+    /// </code>
+    /// </example>
+    /// <exception cref="NotSupportedException">Thrown when T is not float.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when mixed-precision is already enabled.</exception>
+    internal virtual void EnableMixedPrecision(MixedPrecisionConfig? config = null)
+    {
+        // Check that T is float
+        if (typeof(T) != typeof(float))
+        {
+            throw new NotSupportedException(
+                $"Mixed-precision training is only supported for optimizers with type parameter float. " +
+                $"Current type: {typeof(T).Name}. " +
+                $"Use Optimizer<float, ...> to enable mixed-precision training.");
+        }
+
+        if (_mixedPrecisionContext != null)
+        {
+            throw new InvalidOperationException(
+                "Mixed-precision training is already enabled. Call DisableMixedPrecision() first if you want to change the configuration.");
+        }
+
+        _mixedPrecisionContext = new MixedPrecisionContext(config);
+    }
+
+    /// <summary>
+    /// Disables mixed-precision training and releases associated resources.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This turns off mixed-precision training and returns the optimizer to
+    /// standard FP32 operation. Useful for debugging or comparing performance.
+    /// </para>
+    /// </remarks>
+    internal virtual void DisableMixedPrecision()
+    {
+        if (_mixedPrecisionContext != null)
+        {
+            _mixedPrecisionContext.Dispose();
+            _mixedPrecisionContext = null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the mixed-precision training context (if enabled).
+    /// </summary>
+    /// <returns>The mixed-precision context, or null if mixed-precision is disabled.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This provides access to the mixed-precision training internals,
+    /// such as the current loss scale and overflow statistics. Useful for monitoring and debugging.
+    /// </para>
+    /// </remarks>
+    internal virtual MixedPrecisionContext? GetMixedPrecisionContext()
+    {
+        return _mixedPrecisionContext;
+    }
+
+    /// <summary>
+    /// Applies gradients with mixed-precision support (if enabled).
+    /// </summary>
+    /// <param name="originalParameters">The original parameters in FP32.</param>
+    /// <param name="gradients">The gradients (may be in FP16 if mixed-precision is enabled).</param>
+    /// <param name="model">The model to update.</param>
+    /// <param name="scaledLoss">Optional scaled loss value (if mixed-precision is enabled).</param>
+    /// <returns>The updated model with new parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method handles gradient application with mixed-precision support.
+    /// If mixed-precision is enabled, it:
+    /// 1. Unscales the gradients
+    /// 2. Checks for overflow/underflow
+    /// 3. Updates parameters in FP32 (master weights)
+    /// 4. Skips the update if overflow is detected
+    /// </para>
+    /// </remarks>
+    internal virtual IFullModel<T, TInput, TOutput> ApplyGradientsWithMixedPrecision(
+        Vector<T> originalParameters,
+        Vector<T> gradients,
+        IFullModel<T, TInput, TOutput> model)
+    {
+        // If mixed-precision is not enabled, use standard application
+        if (_mixedPrecisionContext == null)
+        {
+            return ApplyGradients(originalParameters, gradients, model);
+        }
+
+        // Cast to float (required for mixed-precision context)
+        var gradientsFloat = gradients as Vector<float>
+            ?? throw new InvalidOperationException("Gradients must be Vector<float> for mixed-precision training.");
+
+        // Unscale gradients and check for overflow
+        bool isValid = _mixedPrecisionContext.LossScaler.UnscaleGradientsAndCheck(gradientsFloat);
+
+        if (!isValid)
+        {
+            // Overflow detected - return model unchanged
+            return model;
+        }
+
+        // Apply gradients normally (now unscaled)
+        return ApplyGradients(originalParameters, gradients, model);
+    }
+
+    /// <summary>
     /// Creates a regularization technique based on the provided options.
     /// </summary>
     /// <remarks>
@@ -304,6 +457,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         int batchSize = InputHelper<T, TInput>.GetBatchSize(X);
         gradient = gradient.Divide(NumOps.FromDouble(batchSize));
 
+        // Apply gradient clipping if enabled
+        gradient = ApplyGradientClipping(gradient);
+
         var gradientModel = new GradientModel<T>(gradient);
         GradientCache.CacheGradient(cacheKey, gradientModel);
 
@@ -311,6 +467,94 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _lastComputedGradients = gradient;
 
         return gradient;
+    }
+
+    /// <summary>
+    /// Applies gradient clipping based on the configured options.
+    /// </summary>
+    /// <param name="gradient">The gradient to clip.</param>
+    /// <returns>The clipped gradient.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Gradient clipping prevents training instability by limiting
+    /// how large gradients can become. This is especially important for deep networks and RNNs
+    /// where gradients can "explode" (become extremely large) during backpropagation.
+    /// </para>
+    /// </remarks>
+    protected virtual Vector<T> ApplyGradientClipping(Vector<T> gradient)
+    {
+        if (!GradientOptions.EnableGradientClipping)
+        {
+            return gradient;
+        }
+
+        return GradientOptions.GradientClippingMethod switch
+        {
+            GradientClippingMethod.ByNorm => GradientClippingHelper.ClipByNorm(gradient, GradientOptions.MaxGradientNorm) ?? gradient,
+            GradientClippingMethod.ByValue => GradientClippingHelper.ClipByValue(gradient, GradientOptions.MaxGradientValue) ?? gradient,
+            _ => gradient
+        };
+    }
+
+    /// <summary>
+    /// Checks if the current gradients are exhibiting exploding gradient behavior.
+    /// </summary>
+    /// <param name="threshold">The threshold above which gradients are considered exploding. Default is 1000.</param>
+    /// <returns>True if gradients are exploding, false otherwise.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method helps detect when training is becoming unstable.
+    /// If gradients become too large, it usually indicates a problem with the learning rate
+    /// or model architecture that needs to be addressed.
+    /// </para>
+    /// </remarks>
+    public bool AreGradientsExploding(double threshold = 1000.0)
+    {
+        if (_lastComputedGradients == null || _lastComputedGradients.Length == 0)
+        {
+            return false;
+        }
+
+        return GradientClippingHelper.AreGradientsExploding(_lastComputedGradients, threshold);
+    }
+
+    /// <summary>
+    /// Checks if the current gradients are exhibiting vanishing gradient behavior.
+    /// </summary>
+    /// <param name="threshold">The threshold below which gradients are considered vanishing. Default is 1e-7.</param>
+    /// <returns>True if gradients are vanishing, false otherwise.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Vanishing gradients occur when gradients become so small that
+    /// learning effectively stops. This is common in deep networks and can indicate the need
+    /// for techniques like residual connections, batch normalization, or different activation functions.
+    /// </para>
+    /// </remarks>
+    public bool AreGradientsVanishing(double threshold = 1e-7)
+    {
+        if (_lastComputedGradients == null || _lastComputedGradients.Length == 0)
+        {
+            return false;
+        }
+
+        return GradientClippingHelper.AreGradientsVanishing(_lastComputedGradients, threshold);
+    }
+
+    /// <summary>
+    /// Gets the L2 norm of the last computed gradients.
+    /// </summary>
+    /// <returns>The gradient norm, or 0 if no gradients have been computed.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The gradient norm is a measure of how "strong" the overall
+    /// gradient is. Monitoring this value during training can help diagnose issues with
+    /// exploding or vanishing gradients.
+    /// </para>
+    /// </remarks>
+    public T GetGradientNorm()
+    {
+        if (_lastComputedGradients == null || _lastComputedGradients.Length == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        return GradientClippingHelper.ComputeNorm(_lastComputedGradients);
     }
 
     /// <summary>

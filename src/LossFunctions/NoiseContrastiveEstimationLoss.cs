@@ -1,3 +1,5 @@
+
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -31,12 +33,7 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
     /// The number of noise samples to use per true sample.
     /// </summary>
     private readonly int _numNoiseSamples;
-    
-    /// <summary>
-    /// Small value to prevent numerical instability.
-    /// </summary>
-    private readonly T _epsilon;
-    
+
     /// <summary>
     /// Initializes a new instance of the NoiseContrastiveEstimationLoss class.
     /// </summary>
@@ -44,7 +41,6 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
     public NoiseContrastiveEstimationLoss(int numNoiseSamples = 10)
     {
         _numNoiseSamples = numNoiseSamples;
-        _epsilon = NumOps.FromDouble(1e-15);
     }
     
     /// <summary>
@@ -71,23 +67,22 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
         {
             // P(target is real | target)
             T targetProb = Sigmoid(targetLogits[i]);
-            
+
             // Log P(target is real | target)
-            T targetTerm = NumOps.Log(MathHelper.Clamp(targetProb, _epsilon, NumOps.Subtract(NumOps.One, _epsilon)));
-            
+            T targetTerm = NumericalStabilityHelper.SafeLog(targetProb, NumericalStabilityHelper.SmallEpsilon);
+
             // Sum of log(1 - P(noise is real | noise))
             T noiseSum = NumOps.Zero;
             for (int j = 0; j < _numNoiseSamples; j++)
             {
                 T noiseProb = Sigmoid(noiseLogits[i, j]);
-                T noiseTerm = NumOps.Log(MathHelper.Clamp(
-                    NumOps.Subtract(NumOps.One, noiseProb), 
-                    _epsilon, 
-                    NumOps.Subtract(NumOps.One, _epsilon)
-                ));
+                T noiseTerm = NumericalStabilityHelper.SafeLog(
+                    NumOps.Subtract(NumOps.One, noiseProb),
+                    NumericalStabilityHelper.SmallEpsilon
+                );
                 noiseSum = NumOps.Add(noiseSum, noiseTerm);
             }
-            
+
             // -(log P(target is real) + sum(log P(noise is noise)))
             loss = NumOps.Add(loss, NumOps.Negate(NumOps.Add(targetTerm, noiseSum)));
         }

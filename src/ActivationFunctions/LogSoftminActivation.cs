@@ -1,3 +1,6 @@
+using AiDotNet.Autodiff;
+
+
 namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
@@ -59,7 +62,7 @@ public class LogSoftminActivation<T> : ActivationFunctionBase<T>
         T minInput = input.Min();
         Vector<T> shiftedExp = input.Transform(x => NumOps.Exp(NumOps.Subtract(minInput, x)));
         T sumExp = shiftedExp.Sum();
-        T logSumExp = NumOps.Add(NumOps.Log(sumExp), NumOps.Negate(minInput));
+        T logSumExp = NumOps.Add(NumericalStabilityHelper.SafeLog(sumExp), NumOps.Negate(minInput));
 
         return input.Transform(x => NumOps.Subtract(NumOps.Negate(x), logSumExp));
     }
@@ -107,5 +110,41 @@ public class LogSoftminActivation<T> : ActivationFunctionBase<T>
         }
 
         return jacobian;
+    }
+
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>True because TensorOperations.LogSoftmin provides full forward and backward pass support.</value>
+    /// <remarks>
+    /// <para>
+    /// LogSoftmin supports JIT compilation with numerically stable gradient computation.
+    /// The backward pass efficiently computes gradients similar to LogSoftmax but for the minimum-focused variant.
+    /// </para>
+    /// <para>
+    /// Note: Currently implemented for 2D tensors (batch, features) along axis=-1.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with LogSoftmin activation applied.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method maps to TensorOperations&lt;T&gt;.LogSoftmin(input) which handles both
+    /// forward and backward passes for JIT compilation.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        return TensorOperations<T>.LogSoftmin(input);
     }
 }

@@ -1,6 +1,9 @@
 using System;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Net;
+using System.Net.Sockets;
+using System.IO;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.DistributedTraining;
@@ -62,22 +65,28 @@ internal enum ncclResult_t
 /// - Ring and tree algorithms for different collective operations
 /// - Essential for high-performance multi-GPU training
 /// </para>
-/// <para><b>Use Cases:</b>
-/// - Multi-GPU training on NVIDIA hardware
-/// - DGX systems and GPU clusters
-/// - When maximum GPU-to-GPU communication performance is critical
-/// - Production training on NVIDIA infrastructure
+/// <para><b>Architecture:</b>
+/// This backend supports two modes of operation:
+///
+/// 1. **Native NCCL Mode:**
+///    Uses NCCL library with actual GPU memory for collective operations.
+///    Requires CUDA toolkit and NCCL library. Provides near-optimal GPU bandwidth.
+///
+/// 2. **CPU Fallback Mode:**
+///    When NCCL/CUDA not available, uses TCP-based ring algorithms similar to Gloo.
+///    Allows development and testing on systems without NVIDIA GPUs.
+///
+/// The implementation features:
+/// - Automatic NCCL detection and initialization
+/// - TCP-based unique ID distribution for multi-node setup
+/// - Environment-based rendezvous (AIDOTNET_MASTER_ADDR, AIDOTNET_MASTER_PORT)
+/// - Proper CUDA stream synchronization
+/// - Memory-efficient GPU operations
 /// </para>
-/// <para><b>Requirements:</b>
+/// <para><b>Requirements for GPU Mode:</b>
 /// - NVIDIA GPUs (compute capability 3.0+)
-/// - CUDA toolkit
-/// - NCCL library
-/// - .NET bindings for NCCL (custom P/Invoke or wrapper library)
-/// </para>
-/// <para><b>Graceful Degradation:</b>
-/// If NCCL library is not available, this backend falls back to CPU-based collective operations.
-/// A warning is logged when fallback mode is active. This allows code to work on systems
-/// without NVIDIA GPUs or NCCL, albeit with reduced performance.
+/// - CUDA toolkit 10.0+
+/// - NCCL library 2.0+
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for operations</typeparam>
@@ -88,6 +97,18 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
     private readonly int _deviceId;
     private bool _ncclAvailable;
     private IntPtr _ncclComm;
+    private IntPtr _cudaStream;
+
+    // GPU memory buffers
+    private IntPtr _gpuSendBuffer;
+    private IntPtr _gpuRecvBuffer;
+    private int _bufferSize;
+
+    // TCP connections for fallback mode or unique ID distribution
+    private Dictionary<int, TcpClient>? _tcpConnections;
+    private TcpListener? _tcpListener;
+    private readonly object _connectionLock = new();
+    private bool _useTcpFallback;
 
     /// <summary>
     /// Creates a new NCCL communication backend.
@@ -102,6 +123,11 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
         _deviceId = deviceId >= 0 ? deviceId : rank;
         _ncclAvailable = false;
         _ncclComm = IntPtr.Zero;
+        _cudaStream = IntPtr.Zero;
+        _gpuSendBuffer = IntPtr.Zero;
+        _gpuRecvBuffer = IntPtr.Zero;
+        _bufferSize = 0;
+        _useTcpFallback = false;
     }
 
     /// <inheritdoc/>
@@ -113,32 +139,12 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
     /// <inheritdoc/>
     protected override void OnInitialize()
     {
-        // Try to use NCCL if available
+        _tcpConnections = new Dictionary<int, TcpClient>();
+
+        // Try to initialize NCCL
         try
         {
-            // Check if NCCL library is available
-            ncclResult_t result = NcclNativeMethods.ncclGetVersion(out int version);
-
-            if (result == ncclResult_t.ncclSuccess)
-            {
-                _ncclAvailable = true;
-                Console.WriteLine($"NCCL library detected (version: {version}). Using NCCL for GPU communication.");
-
-                // Note: Full NCCL initialization requires:
-                // 1. ncclGetUniqueId() on rank 0
-                // 2. Broadcast unique ID to all ranks (via separate mechanism like TCP)
-                // 3. ncclCommInitRank() on all ranks
-                // This is complex and requires additional infrastructure, so we log a warning
-
-                Console.WriteLine("WARNING: NCCL communicator initialization requires additional setup.");
-                Console.WriteLine("For full NCCL support, implement unique ID distribution and call ncclCommInitRank.");
-                _ncclAvailable = false; // Disable NCCL until full initialization is implemented
-            }
-        }
-        catch (DllNotFoundException)
-        {
-            // NCCL library not found
-            _ncclAvailable = false;
+            InitializeNCCL();
         }
         catch (Exception ex)
         {
@@ -146,40 +152,328 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
             _ncclAvailable = false;
         }
 
+        // If NCCL not available, use TCP fallback
         if (!_ncclAvailable)
         {
-            // For multi-rank distributed training, NCCL is required
             if (_worldSize > 1)
             {
-                throw new InvalidOperationException(
-                    $"NCCL library is required for multi-GPU training (worldSize={_worldSize}). " +
-                    "Please install NCCL library and CUDA toolkit, or use a different communication backend.");
+                Console.WriteLine("NCCL not available. Using TCP-based collective operations.");
+                Console.WriteLine("For optimal GPU performance, install CUDA toolkit and NCCL library.");
+                _useTcpFallback = true;
+                InitializeTCPConnections();
+            }
+            else
+            {
+                Console.WriteLine("NCCLCommunicationBackend: Single-process mode (worldSize=1).");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Initializes NCCL communicator with proper multi-process setup.
+    /// </summary>
+    private void InitializeNCCL()
+    {
+        // Check if NCCL library is available
+        ncclResult_t result = NcclNativeMethods.ncclGetVersion(out int version);
+        if (result != ncclResult_t.ncclSuccess)
+        {
+            throw new InvalidOperationException("NCCL library not found or incompatible.");
+        }
+
+        Console.WriteLine($"NCCL library detected (version: {version / 1000}.{(version % 1000) / 100}.{version % 100})");
+
+        // Set CUDA device
+        CudaNativeMethods.cudaSetDevice(_deviceId);
+
+        // Create CUDA stream
+        result = CudaNativeMethods.cudaStreamCreate(out _cudaStream);
+        if (result != ncclResult_t.ncclSuccess)
+        {
+            throw new InvalidOperationException($"Failed to create CUDA stream: {result}");
+        }
+
+        if (_worldSize == 1)
+        {
+            // Single-process NCCL initialization
+            InitializeSingleProcessNCCL();
+        }
+        else
+        {
+            // Multi-process NCCL initialization
+            InitializeMultiProcessNCCL();
+        }
+
+        _ncclAvailable = true;
+        Console.WriteLine($"NCCL initialized successfully on GPU {_deviceId} (rank {_rank}/{_worldSize})");
+    }
+
+    /// <summary>
+    /// Initializes NCCL for single-process mode.
+    /// </summary>
+    private void InitializeSingleProcessNCCL()
+    {
+        // Get unique ID
+        var uniqueId = new NcclUniqueId();
+        ncclResult_t result = NcclNativeMethods.ncclGetUniqueId(ref uniqueId);
+        if (result != ncclResult_t.ncclSuccess)
+        {
+            throw new InvalidOperationException($"Failed to get NCCL unique ID: {result}");
+        }
+
+        // Initialize communicator
+        result = NcclNativeMethods.ncclCommInitRank(out _ncclComm, 1, uniqueId, 0);
+        if (result != ncclResult_t.ncclSuccess)
+        {
+            throw new InvalidOperationException($"Failed to initialize NCCL communicator: {result}");
+        }
+    }
+
+    /// <summary>
+    /// Initializes NCCL for multi-process mode with TCP-based unique ID distribution.
+    /// </summary>
+    private void InitializeMultiProcessNCCL()
+    {
+        // Ensure TCP is set up for unique ID distribution
+        InitializeTCPConnections();
+
+        NcclUniqueId uniqueId;
+
+        if (_rank == 0)
+        {
+            // Rank 0 creates the unique ID
+            uniqueId = new NcclUniqueId();
+            ncclResult_t result = NcclNativeMethods.ncclGetUniqueId(ref uniqueId);
+            if (result != ncclResult_t.ncclSuccess)
+            {
+                throw new InvalidOperationException($"Failed to get NCCL unique ID: {result}");
             }
 
-            Console.WriteLine("WARNING: NCCL not available. Falling back to CPU-based collective operations.");
-            Console.WriteLine("For production GPU training, install NCCL library and CUDA toolkit.");
+            // Broadcast unique ID to all other ranks via TCP
+            BroadcastUniqueIdTcp(uniqueId);
+        }
+        else
+        {
+            // Non-root ranks receive the unique ID
+            uniqueId = ReceiveUniqueIdTcp();
+        }
+
+        // Initialize communicator with the shared unique ID
+        ncclResult_t initResult = NcclNativeMethods.ncclCommInitRank(out _ncclComm, _worldSize, uniqueId, _rank);
+        if (initResult != ncclResult_t.ncclSuccess)
+        {
+            throw new InvalidOperationException($"Failed to initialize NCCL communicator: {initResult}");
+        }
+    }
+
+    /// <summary>
+    /// Broadcasts NCCL unique ID from rank 0 to all other ranks.
+    /// </summary>
+    private void BroadcastUniqueIdTcp(NcclUniqueId uniqueId)
+    {
+        byte[] idBytes = uniqueId.ToBytes();
+
+        for (int destRank = 1; destRank < _worldSize; destRank++)
+        {
+            if (_tcpConnections == null || !_tcpConnections.ContainsKey(destRank))
+            {
+                throw new InvalidOperationException($"No TCP connection to rank {destRank}");
+            }
+
+            lock (_connectionLock)
+            {
+                var client = _tcpConnections[destRank];
+                var stream = client.GetStream();
+                var writer = new BinaryWriter(stream);
+                writer.Write(idBytes.Length);
+                writer.Write(idBytes);
+                writer.Flush();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Receives NCCL unique ID from rank 0.
+    /// </summary>
+    private NcclUniqueId ReceiveUniqueIdTcp()
+    {
+        if (_tcpConnections == null || !_tcpConnections.ContainsKey(0))
+        {
+            throw new InvalidOperationException("No TCP connection to rank 0");
+        }
+
+        lock (_connectionLock)
+        {
+            var client = _tcpConnections[0];
+            var stream = client.GetStream();
+            var reader = new BinaryReader(stream);
+            int length = reader.ReadInt32();
+            byte[] idBytes = reader.ReadBytes(length);
+            return NcclUniqueId.FromBytes(idBytes);
+        }
+    }
+
+    /// <summary>
+    /// Initializes TCP connections for multi-process communication.
+    /// </summary>
+    private void InitializeTCPConnections()
+    {
+        if (_tcpConnections != null && _tcpConnections.Count > 0)
+        {
+            return; // Already initialized
+        }
+
+        _tcpConnections ??= new Dictionary<int, TcpClient>();
+
+        if (_worldSize == 1)
+        {
+            return;
+        }
+
+        string? masterAddr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_ADDR");
+        string? masterPortStr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT");
+
+        if (string.IsNullOrEmpty(masterAddr) || string.IsNullOrEmpty(masterPortStr))
+        {
+            throw new InvalidOperationException(
+                "Multi-GPU NCCL requires environment variables:\n" +
+                "- AIDOTNET_MASTER_ADDR: IP address of rank 0 (e.g., 192.168.1.10 or localhost)\n" +
+                "- AIDOTNET_MASTER_PORT: Base port number (e.g., 29500)");
+        }
+
+        if (!int.TryParse(masterPortStr, out int basePort))
+        {
+            throw new InvalidOperationException($"Invalid AIDOTNET_MASTER_PORT: {masterPortStr}");
+        }
+
+        // Start TCP listener
+        int myPort = basePort + _rank;
+        _tcpListener = new TcpListener(IPAddress.Any, myPort);
+        _tcpListener.Start();
+
+        // Connect to ranks with lower rank number
+        for (int otherRank = 0; otherRank < _rank; otherRank++)
+        {
+            ConnectToRank(otherRank, masterAddr, basePort);
+        }
+
+        // Accept connections from ranks with higher rank number
+        int numExpectedConnections = _worldSize - _rank - 1;
+        for (int i = 0; i < numExpectedConnections; i++)
+        {
+            AcceptConnectionFromAnyRank();
+        }
+
+        Console.WriteLine($"Rank {_rank}: TCP connections established for NCCL setup ({_tcpConnections.Count} peers)");
+    }
+
+    private void ConnectToRank(int targetRank, string masterAddr, int basePort)
+    {
+        int targetPort = basePort + targetRank;
+        int maxRetries = 10;
+        int retryDelayMs = 1000;
+
+        for (int attempt = 0; attempt < maxRetries; attempt++)
+        {
+            try
+            {
+                var client = new TcpClient();
+                client.Connect(masterAddr, targetPort);
+
+                var stream = client.GetStream();
+                var writer = new BinaryWriter(stream);
+                writer.Write(_rank);
+                writer.Flush();
+
+                lock (_connectionLock)
+                {
+                    _tcpConnections![targetRank] = client;
+                }
+                return;
+            }
+            catch (SocketException)
+            {
+                if (attempt < maxRetries - 1)
+                {
+                    Thread.Sleep(retryDelayMs);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to connect to rank {targetRank} at {masterAddr}:{targetPort}");
+                }
+            }
+        }
+    }
+
+    private void AcceptConnectionFromAnyRank()
+    {
+        if (_tcpListener == null)
+        {
+            throw new InvalidOperationException("TCP listener not initialized");
+        }
+
+        var client = _tcpListener.AcceptTcpClient();
+        var stream = client.GetStream();
+        var reader = new BinaryReader(stream);
+        int receivedRank = reader.ReadInt32();
+
+        if (receivedRank <= _rank || receivedRank >= _worldSize)
+        {
+            client.Close();
+            throw new InvalidOperationException($"Invalid connection from rank {receivedRank}");
+        }
+
+        lock (_connectionLock)
+        {
+            _tcpConnections![receivedRank] = client;
         }
     }
 
     /// <inheritdoc/>
     protected override void OnShutdown()
     {
-        if (_ncclAvailable && _ncclComm != IntPtr.Zero)
+        // Free GPU buffers
+        if (_gpuSendBuffer != IntPtr.Zero)
         {
-            try
+            CudaNativeMethods.cudaFree(_gpuSendBuffer);
+            _gpuSendBuffer = IntPtr.Zero;
+        }
+        if (_gpuRecvBuffer != IntPtr.Zero)
+        {
+            CudaNativeMethods.cudaFree(_gpuRecvBuffer);
+            _gpuRecvBuffer = IntPtr.Zero;
+        }
+
+        // Destroy NCCL communicator
+        if (_ncclComm != IntPtr.Zero)
+        {
+            NcclNativeMethods.ncclCommDestroy(_ncclComm);
+            _ncclComm = IntPtr.Zero;
+        }
+
+        // Destroy CUDA stream
+        if (_cudaStream != IntPtr.Zero)
+        {
+            CudaNativeMethods.cudaStreamDestroy(_cudaStream);
+            _cudaStream = IntPtr.Zero;
+        }
+
+        // Close TCP connections
+        if (_tcpConnections != null)
+        {
+            lock (_connectionLock)
             {
-                // Note: Would call ncclCommDestroy(_ncclComm) here if fully initialized
-                Console.WriteLine("NCCL communicator cleanup (placeholder - full implementation requires ncclCommDestroy).");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Warning: Error during NCCL shutdown: {ex.Message}");
-            }
-            finally
-            {
-                _ncclComm = IntPtr.Zero;
+                foreach (var connection in _tcpConnections.Values)
+                {
+                    try { connection.Close(); } catch { }
+                }
+                _tcpConnections.Clear();
             }
         }
+
+        _tcpListener?.Stop();
+        _tcpListener = null;
     }
 
     /// <inheritdoc/>
@@ -187,17 +481,22 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         EnsureInitialized();
 
-        if (!_ncclAvailable)
+        if (_worldSize == 1)
         {
-            // CPU fallback: single-process barrier is a no-op
             return;
         }
 
-        // NCCL doesn't have a native barrier operation
-        // Standard practice: perform a dummy AllReduce
-        var dummy = new Vector<T>(new T[1]);
-        dummy[0] = NumOps.FromDouble(0);
-        AllReduce(dummy, ReductionOperation.Sum);
+        if (_ncclAvailable)
+        {
+            // NCCL barrier via dummy AllReduce
+            var dummy = new Vector<T>(new T[1]);
+            dummy[0] = NumOps.FromDouble(0);
+            AllReduce(dummy, ReductionOperation.Sum);
+        }
+        else if (_useTcpFallback)
+        {
+            PerformTcpBarrier();
+        }
     }
 
     /// <inheritdoc/>
@@ -206,20 +505,99 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
         EnsureInitialized();
         ValidateData(data, nameof(data));
 
-        if (!_ncclAvailable)
+        if (_worldSize == 1)
         {
-            // CPU fallback: use base class reduction logic
-            PerformCPUAllReduce(data, operation);
+            // Single-process: apply average if needed, otherwise no-op
+            if (operation == ReductionOperation.Average)
+            {
+                // Average of single value is the value itself
+            }
             return;
         }
 
-        // Note: Full NCCL implementation would:
-        // 1. Copy data to GPU (cudaMalloc, cudaMemcpy)
-        // 2. Call ncclAllReduce with GPU pointers
-        // 3. Synchronize stream
-        // 4. Copy result back to host
-        // For now, fall back to CPU
-        PerformCPUAllReduce(data, operation);
+        if (_ncclAvailable)
+        {
+            PerformNcclAllReduce(data, operation);
+        }
+        else if (_useTcpFallback)
+        {
+            PerformTcpAllReduce(data, operation);
+        }
+    }
+
+    /// <summary>
+    /// Performs AllReduce using NCCL with GPU memory.
+    /// </summary>
+    private void PerformNcclAllReduce(Vector<T> data, ReductionOperation operation)
+    {
+        int count = data.Length;
+        int byteSize = count * Marshal.SizeOf<T>();
+
+        // Ensure GPU buffers are allocated
+        EnsureGpuBuffers(byteSize);
+
+        // Copy data to GPU
+        var dataArray = data.ToArray();
+        var handle = GCHandle.Alloc(dataArray, GCHandleType.Pinned);
+        try
+        {
+            CudaNativeMethods.cudaMemcpyAsync(
+                _gpuSendBuffer,
+                handle.AddrOfPinnedObject(),
+                (IntPtr)byteSize,
+                CudaMemcpyKind.HostToDevice,
+                _cudaStream);
+
+            // Perform NCCL AllReduce
+            ncclRedOp_t ncclOp = GetNcclOperation(operation);
+            ncclDataType_t ncclType = GetNcclDataType();
+
+            ncclResult_t result = NcclNativeMethods.ncclAllReduce(
+                _gpuSendBuffer,
+                _gpuRecvBuffer,
+                (IntPtr)count,
+                ncclType,
+                ncclOp,
+                _ncclComm,
+                _cudaStream);
+
+            if (result != ncclResult_t.ncclSuccess)
+            {
+                throw new InvalidOperationException($"NCCL AllReduce failed: {result}");
+            }
+
+            // Synchronize stream
+            CudaNativeMethods.cudaStreamSynchronize(_cudaStream);
+
+            // Copy result back to host
+            CudaNativeMethods.cudaMemcpyAsync(
+                handle.AddrOfPinnedObject(),
+                _gpuRecvBuffer,
+                (IntPtr)byteSize,
+                CudaMemcpyKind.DeviceToHost,
+                _cudaStream);
+
+            CudaNativeMethods.cudaStreamSynchronize(_cudaStream);
+        }
+        finally
+        {
+            handle.Free();
+        }
+
+        // Copy result back to vector
+        for (int i = 0; i < count; i++)
+        {
+            data[i] = dataArray[i];
+        }
+
+        // Apply averaging if needed (NCCL Sum was used)
+        if (operation == ReductionOperation.Average)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                data[i] = NumOps.Divide(data[i], NumOps.FromDouble(_worldSize));
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -228,15 +606,92 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
         EnsureInitialized();
         ValidateData(sendData, nameof(sendData));
 
-        if (!_ncclAvailable)
+        if (_worldSize == 1)
         {
-            // CPU fallback
-            return PerformCPUAllGather(sendData);
+            return sendData.Clone();
         }
 
-        // Note: Full NCCL implementation would use ncclAllGather
-        // For now, fall back to CPU
-        return PerformCPUAllGather(sendData);
+        if (_ncclAvailable)
+        {
+            return PerformNcclAllGather(sendData);
+        }
+        else if (_useTcpFallback)
+        {
+            return PerformTcpAllGather(sendData);
+        }
+
+        return sendData.Clone();
+    }
+
+    /// <summary>
+    /// Performs AllGather using NCCL with GPU memory.
+    /// </summary>
+    private Vector<T> PerformNcclAllGather(Vector<T> sendData)
+    {
+        int sendCount = sendData.Length;
+        int recvCount = sendCount * _worldSize;
+        int sendByteSize = sendCount * Marshal.SizeOf<T>();
+        int recvByteSize = recvCount * Marshal.SizeOf<T>();
+
+        // Allocate receive buffer
+        IntPtr gpuRecvBuffer;
+        CudaNativeMethods.cudaMalloc(out gpuRecvBuffer, (IntPtr)recvByteSize);
+
+        // Ensure send buffer is allocated
+        EnsureGpuBuffers(sendByteSize);
+
+        var sendArray = sendData.ToArray();
+        var recvArray = new T[recvCount];
+
+        var sendHandle = GCHandle.Alloc(sendArray, GCHandleType.Pinned);
+        var recvHandle = GCHandle.Alloc(recvArray, GCHandleType.Pinned);
+
+        try
+        {
+            // Copy send data to GPU
+            CudaNativeMethods.cudaMemcpyAsync(
+                _gpuSendBuffer,
+                sendHandle.AddrOfPinnedObject(),
+                (IntPtr)sendByteSize,
+                CudaMemcpyKind.HostToDevice,
+                _cudaStream);
+
+            // Perform NCCL AllGather
+            ncclDataType_t ncclType = GetNcclDataType();
+            ncclResult_t result = NcclNativeMethods.ncclAllGather(
+                _gpuSendBuffer,
+                gpuRecvBuffer,
+                (IntPtr)sendCount,
+                ncclType,
+                _ncclComm,
+                _cudaStream);
+
+            if (result != ncclResult_t.ncclSuccess)
+            {
+                throw new InvalidOperationException($"NCCL AllGather failed: {result}");
+            }
+
+            // Synchronize
+            CudaNativeMethods.cudaStreamSynchronize(_cudaStream);
+
+            // Copy result back to host
+            CudaNativeMethods.cudaMemcpyAsync(
+                recvHandle.AddrOfPinnedObject(),
+                gpuRecvBuffer,
+                (IntPtr)recvByteSize,
+                CudaMemcpyKind.DeviceToHost,
+                _cudaStream);
+
+            CudaNativeMethods.cudaStreamSynchronize(_cudaStream);
+        }
+        finally
+        {
+            sendHandle.Free();
+            recvHandle.Free();
+            CudaNativeMethods.cudaFree(gpuRecvBuffer);
+        }
+
+        return new Vector<T>(recvArray);
     }
 
     /// <inheritdoc/>
@@ -246,15 +701,81 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
         ValidateData(data, nameof(data));
         ValidateRoot(root);
 
-        if (!_ncclAvailable)
+        if (_worldSize == 1)
         {
-            // CPU fallback
             return data.Clone();
         }
 
-        // Note: Full NCCL implementation would use ncclBroadcast
-        // For now, fall back to CPU
+        if (_ncclAvailable)
+        {
+            return PerformNcclBroadcast(data, root);
+        }
+        else if (_useTcpFallback)
+        {
+            return PerformTcpBroadcast(data, root);
+        }
+
         return data.Clone();
+    }
+
+    /// <summary>
+    /// Performs Broadcast using NCCL with GPU memory.
+    /// </summary>
+    private Vector<T> PerformNcclBroadcast(Vector<T> data, int root)
+    {
+        int count = data.Length;
+        int byteSize = count * Marshal.SizeOf<T>();
+
+        EnsureGpuBuffers(byteSize);
+
+        var dataArray = data.ToArray();
+        var handle = GCHandle.Alloc(dataArray, GCHandleType.Pinned);
+
+        try
+        {
+            // Copy data to GPU (only root's data matters, but all copy for simplicity)
+            CudaNativeMethods.cudaMemcpyAsync(
+                _gpuSendBuffer,
+                handle.AddrOfPinnedObject(),
+                (IntPtr)byteSize,
+                CudaMemcpyKind.HostToDevice,
+                _cudaStream);
+
+            // Perform NCCL Broadcast (in-place on send buffer)
+            ncclDataType_t ncclType = GetNcclDataType();
+            ncclResult_t result = NcclNativeMethods.ncclBroadcast(
+                _gpuSendBuffer,
+                _gpuSendBuffer,
+                (IntPtr)count,
+                ncclType,
+                root,
+                _ncclComm,
+                _cudaStream);
+
+            if (result != ncclResult_t.ncclSuccess)
+            {
+                throw new InvalidOperationException($"NCCL Broadcast failed: {result}");
+            }
+
+            // Synchronize
+            CudaNativeMethods.cudaStreamSynchronize(_cudaStream);
+
+            // Copy result back to host
+            CudaNativeMethods.cudaMemcpyAsync(
+                handle.AddrOfPinnedObject(),
+                _gpuSendBuffer,
+                (IntPtr)byteSize,
+                CudaMemcpyKind.DeviceToHost,
+                _cudaStream);
+
+            CudaNativeMethods.cudaStreamSynchronize(_cudaStream);
+        }
+        finally
+        {
+            handle.Free();
+        }
+
+        return new Vector<T>(dataArray);
     }
 
     /// <inheritdoc/>
@@ -263,14 +784,48 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
         EnsureInitialized();
         ValidateRoot(root);
 
-        if (!_ncclAvailable)
+        // NCCL doesn't have native scatter - implement via Broadcast + indexing
+        if (_worldSize == 1)
         {
-            // CPU fallback
-            return PerformCPUScatter(sendData, root);
+            if (Rank == root)
+            {
+                ValidateData(sendData, nameof(sendData));
+                return sendData.Clone();
+            }
+            return new Vector<T>(Array.Empty<T>());
         }
 
-        // NCCL doesn't have native scatter - use broadcast + indexing
-        return PerformCPUScatter(sendData, root);
+        if (Rank == root)
+        {
+            ValidateData(sendData, nameof(sendData));
+            if (sendData.Length % _worldSize != 0)
+            {
+                throw new ArgumentException(
+                    $"Data length {sendData.Length} must be divisible by world size {_worldSize}.");
+            }
+        }
+
+        // Use Broadcast + local extraction
+        Vector<T> broadcasted;
+        if (_ncclAvailable)
+        {
+            broadcasted = PerformNcclBroadcast(sendData, root);
+        }
+        else if (_useTcpFallback)
+        {
+            broadcasted = PerformTcpBroadcast(sendData, root);
+        }
+        else
+        {
+            broadcasted = sendData.Clone();
+        }
+
+        int chunkSize = broadcasted.Length / _worldSize;
+        var chunk = new T[chunkSize];
+        var broadcastedArray = broadcasted.ToArray();
+        Array.Copy(broadcastedArray, _rank * chunkSize, chunk, 0, chunkSize);
+
+        return new Vector<T>(chunk);
     }
 
     /// <inheritdoc/>
@@ -285,153 +840,412 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
                 $"Data length {data.Length} must be divisible by world size {_worldSize}.");
         }
 
-        if (!_ncclAvailable)
-        {
-            // CPU fallback
-            return PerformCPUReduceScatter(data, operation);
-        }
-
-        // Note: Full NCCL implementation would use ncclReduceScatter
-        // For now, fall back to CPU
-        return PerformCPUReduceScatter(data, operation);
-    }
-
-    /// <inheritdoc/>
-    public override void Send(Vector<T> data, int destinationRank, int tag = 0)
-    {
-        EnsureInitialized();
-        ValidateData(data, nameof(data));
-        ValidateRank(destinationRank, nameof(destinationRank));
-
-        // NCCL does not natively support point-to-point Send/Receive operations.
-        // NCCL is designed exclusively for collective communications (AllReduce, AllGather, etc.)
-        // and optimizes GPU-to-GPU transfers for those operations.
-        //
-        // For point-to-point communication in pipeline parallelism or other use cases:
-        // 1. Use GlooCommunicationBackend (supports both collective and point-to-point via TCP)
-        // 2. Use MPICommunicationBackend (MPI has native Send/Receive support)
-        // 3. Use NCCL for collective ops + separate backend for point-to-point
-        //
-        // Hybrid approach example:
-        //   var collectiveBackend = new NCCLCommunicationBackend<T>(rank, worldSize);
-        //   var p2pBackend = new GlooCommunicationBackend<T>(rank, worldSize);
-        //   // Use collectiveBackend for AllReduce, use p2pBackend for Send/Receive
-
-        throw new NotSupportedException(
-            "NCCL does not support point-to-point Send/Receive operations. " +
-            "NCCL is optimized exclusively for collective communications (AllReduce, AllGather, Broadcast, etc.). " +
-            "\n\n" +
-            "For point-to-point communication, please use one of these alternatives:\n" +
-            "1. GlooCommunicationBackend - supports both collective and point-to-point operations via TCP\n" +
-            "2. MPICommunicationBackend - MPI has native Send/Receive support\n" +
-            "3. Hybrid approach: Use NCCL for collective ops + Gloo/MPI for point-to-point\n" +
-            "\n" +
-            "For pipeline parallelism, we recommend GlooCommunicationBackend or MPICommunicationBackend.");
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> Receive(int sourceRank, int count, int tag = 0)
-    {
-        EnsureInitialized();
-        ValidateRank(sourceRank, nameof(sourceRank));
-
-        if (count <= 0)
-        {
-            throw new ArgumentException("Count must be positive.", nameof(count));
-        }
-
-        // NCCL does not natively support point-to-point Send/Receive operations.
-        // See Send() method documentation for alternatives.
-
-        throw new NotSupportedException(
-            "NCCL does not support point-to-point Send/Receive operations. " +
-            "NCCL is optimized exclusively for collective communications (AllReduce, AllGather, Broadcast, etc.). " +
-            "\n\n" +
-            "For point-to-point communication, please use one of these alternatives:\n" +
-            "1. GlooCommunicationBackend - supports both collective and point-to-point operations via TCP\n" +
-            "2. MPICommunicationBackend - MPI has native Send/Receive support\n" +
-            "3. Hybrid approach: Use NCCL for collective ops + Gloo/MPI for point-to-point\n" +
-            "\n" +
-            "For pipeline parallelism, we recommend GlooCommunicationBackend or MPICommunicationBackend.");
-    }
-
-    /// <summary>
-    /// Performs CPU-based AllReduce operation.
-    /// </summary>
-    private void PerformCPUAllReduce(Vector<T> data, ReductionOperation operation)
-    {
-        // Single-process: data already contains the result
-        if (_worldSize == 1)
-        {
-            return;
-        }
-
-        // For multi-process simulation without actual communication,
-        // we can only work correctly in single-process mode
-        // In production, this would communicate with other processes via CPU networking
-    }
-
-    /// <summary>
-    /// Performs CPU-based AllGather operation.
-    /// </summary>
-    private Vector<T> PerformCPUAllGather(Vector<T> sendData)
-    {
-        // Single-process: return a copy
-        return sendData.Clone();
-    }
-
-    /// <summary>
-    /// Performs CPU-based Scatter operation.
-    /// </summary>
-    private Vector<T> PerformCPUScatter(Vector<T> sendData, int root)
-    {
-        if (Rank == root)
-        {
-            ValidateData(sendData, nameof(sendData));
-
-            if (_worldSize == 1)
-            {
-                return sendData.Clone();
-            }
-
-            if (sendData.Length % _worldSize != 0)
-            {
-                throw new ArgumentException(
-                    $"Data length {sendData.Length} must be divisible by world size {_worldSize}.");
-            }
-
-            // In single-process mode, return the chunk for this rank
-            int chunkSize = sendData.Length / _worldSize;
-            var chunk = new T[chunkSize];
-            Array.Copy(sendData.ToArray(), Rank * chunkSize, chunk, 0, chunkSize);
-            return new Vector<T>(chunk);
-        }
-
-        return new Vector<T>(Array.Empty<T>());
-    }
-
-    /// <summary>
-    /// Performs CPU-based ReduceScatter operation.
-    /// </summary>
-    private Vector<T> PerformCPUReduceScatter(Vector<T> data, ReductionOperation operation)
-    {
-        // Single-process: return a copy
         if (_worldSize == 1)
         {
             return data.Clone();
         }
 
-        // For multi-process, would need actual communication
-        // In single-process mode, return appropriate chunk
+        if (_ncclAvailable)
+        {
+            return PerformNcclReduceScatter(data, operation);
+        }
+        else if (_useTcpFallback)
+        {
+            return PerformTcpReduceScatter(data, operation);
+        }
+
+        // Fallback
         int chunkSize = data.Length / _worldSize;
         var chunk = new T[chunkSize];
-        Array.Copy(data.ToArray(), Rank * chunkSize, chunk, 0, chunkSize);
+        Array.Copy(data.ToArray(), _rank * chunkSize, chunk, 0, chunkSize);
         return new Vector<T>(chunk);
     }
 
     /// <summary>
-    /// Gets the NCCL data type for type T.
+    /// Performs ReduceScatter using NCCL with GPU memory.
     /// </summary>
+    private Vector<T> PerformNcclReduceScatter(Vector<T> data, ReductionOperation operation)
+    {
+        int sendCount = data.Length;
+        int recvCount = sendCount / _worldSize;
+        int sendByteSize = sendCount * Marshal.SizeOf<T>();
+        int recvByteSize = recvCount * Marshal.SizeOf<T>();
+
+        EnsureGpuBuffers(Math.Max(sendByteSize, recvByteSize));
+
+        var sendArray = data.ToArray();
+        var recvArray = new T[recvCount];
+
+        var sendHandle = GCHandle.Alloc(sendArray, GCHandleType.Pinned);
+        var recvHandle = GCHandle.Alloc(recvArray, GCHandleType.Pinned);
+
+        try
+        {
+            // Copy send data to GPU
+            CudaNativeMethods.cudaMemcpyAsync(
+                _gpuSendBuffer,
+                sendHandle.AddrOfPinnedObject(),
+                (IntPtr)sendByteSize,
+                CudaMemcpyKind.HostToDevice,
+                _cudaStream);
+
+            // Perform NCCL ReduceScatter
+            ncclRedOp_t ncclOp = GetNcclOperation(operation);
+            ncclDataType_t ncclType = GetNcclDataType();
+
+            ncclResult_t result = NcclNativeMethods.ncclReduceScatter(
+                _gpuSendBuffer,
+                _gpuRecvBuffer,
+                (IntPtr)recvCount,
+                ncclType,
+                ncclOp,
+                _ncclComm,
+                _cudaStream);
+
+            if (result != ncclResult_t.ncclSuccess)
+            {
+                throw new InvalidOperationException($"NCCL ReduceScatter failed: {result}");
+            }
+
+            // Synchronize
+            CudaNativeMethods.cudaStreamSynchronize(_cudaStream);
+
+            // Copy result back to host
+            CudaNativeMethods.cudaMemcpyAsync(
+                recvHandle.AddrOfPinnedObject(),
+                _gpuRecvBuffer,
+                (IntPtr)recvByteSize,
+                CudaMemcpyKind.DeviceToHost,
+                _cudaStream);
+
+            CudaNativeMethods.cudaStreamSynchronize(_cudaStream);
+        }
+        finally
+        {
+            sendHandle.Free();
+            recvHandle.Free();
+        }
+
+        // Apply averaging if needed
+        if (operation == ReductionOperation.Average)
+        {
+            for (int i = 0; i < recvCount; i++)
+            {
+                recvArray[i] = NumOps.Divide(recvArray[i], NumOps.FromDouble(_worldSize));
+            }
+        }
+
+        return new Vector<T>(recvArray);
+    }
+
+    /// <inheritdoc/>
+    public override void Send(Vector<T> data, int destinationRank, int tag = 0)
+    {
+        // NCCL does not support point-to-point operations
+        throw new NotSupportedException(
+            "NCCL does not support point-to-point Send/Receive operations. " +
+            "Use GlooCommunicationBackend or MPICommunicationBackend for point-to-point communication.");
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> Receive(int sourceRank, int count, int tag = 0)
+    {
+        // NCCL does not support point-to-point operations
+        throw new NotSupportedException(
+            "NCCL does not support point-to-point Send/Receive operations. " +
+            "Use GlooCommunicationBackend or MPICommunicationBackend for point-to-point communication.");
+    }
+
+    #region GPU Buffer Management
+
+    private void EnsureGpuBuffers(int requiredSize)
+    {
+        if (_bufferSize >= requiredSize)
+        {
+            return;
+        }
+
+        // Free old buffers
+        if (_gpuSendBuffer != IntPtr.Zero)
+        {
+            CudaNativeMethods.cudaFree(_gpuSendBuffer);
+        }
+        if (_gpuRecvBuffer != IntPtr.Zero)
+        {
+            CudaNativeMethods.cudaFree(_gpuRecvBuffer);
+        }
+
+        // Allocate new buffers with some extra space
+        int newSize = Math.Max(requiredSize, _bufferSize * 2);
+        newSize = Math.Max(newSize, 1024 * 1024); // Minimum 1MB
+
+        CudaNativeMethods.cudaMalloc(out _gpuSendBuffer, (IntPtr)newSize);
+        CudaNativeMethods.cudaMalloc(out _gpuRecvBuffer, (IntPtr)newSize);
+        _bufferSize = newSize;
+    }
+
+    #endregion
+
+    #region TCP Fallback Methods
+
+    private void PerformTcpBarrier()
+    {
+        var signal = new Vector<T>(new[] { NumOps.One });
+
+        for (int otherRank = 0; otherRank < _worldSize; otherRank++)
+        {
+            if (otherRank != _rank)
+            {
+                SendDataTcp(otherRank, signal);
+            }
+        }
+
+        for (int otherRank = 0; otherRank < _worldSize; otherRank++)
+        {
+            if (otherRank != _rank)
+            {
+                ReceiveDataTcp(otherRank, 1);
+            }
+        }
+    }
+
+    private void PerformTcpAllReduce(Vector<T> data, ReductionOperation operation)
+    {
+        // Ring AllReduce implementation
+        int chunkSize = (data.Length + _worldSize - 1) / _worldSize;
+        int nextRank = (_rank + 1) % _worldSize;
+        int prevRank = (_rank - 1 + _worldSize) % _worldSize;
+
+        var dataArray = data.ToArray();
+
+        // ReduceScatter phase
+        for (int step = 0; step < _worldSize - 1; step++)
+        {
+            int sendChunkIdx = (_rank - step + _worldSize) % _worldSize;
+            int recvChunkIdx = (_rank - step - 1 + _worldSize) % _worldSize;
+
+            int sendStart = sendChunkIdx * chunkSize;
+            int sendCount = Math.Min(chunkSize, data.Length - sendStart);
+            int recvStart = recvChunkIdx * chunkSize;
+            int recvCount = Math.Min(chunkSize, data.Length - recvStart);
+
+            var sendChunk = new T[sendCount];
+            Array.Copy(dataArray, sendStart, sendChunk, 0, sendCount);
+
+            var sendTask = Task.Run(() => SendDataTcp(nextRank, new Vector<T>(sendChunk)));
+            var recvChunk = ReceiveDataTcp(prevRank, recvCount);
+            sendTask.Wait();
+
+            for (int i = 0; i < recvCount; i++)
+            {
+                dataArray[recvStart + i] = PerformReduction(dataArray[recvStart + i], recvChunk[i], operation);
+            }
+        }
+
+        // AllGather phase
+        for (int step = 0; step < _worldSize - 1; step++)
+        {
+            int sendChunkIdx = (_rank - step + 1 + _worldSize) % _worldSize;
+            int recvChunkIdx = (_rank - step + _worldSize) % _worldSize;
+
+            int sendStart = sendChunkIdx * chunkSize;
+            int sendCount = Math.Min(chunkSize, data.Length - sendStart);
+            int recvStart = recvChunkIdx * chunkSize;
+            int recvCount = Math.Min(chunkSize, data.Length - recvStart);
+
+            var sendChunk = new T[sendCount];
+            Array.Copy(dataArray, sendStart, sendChunk, 0, sendCount);
+
+            var sendTask = Task.Run(() => SendDataTcp(nextRank, new Vector<T>(sendChunk)));
+            var recvChunk = ReceiveDataTcp(prevRank, recvCount);
+            sendTask.Wait();
+
+            Array.Copy(recvChunk, 0, dataArray, recvStart, recvCount);
+        }
+
+        if (operation == ReductionOperation.Average)
+        {
+            for (int i = 0; i < dataArray.Length; i++)
+            {
+                dataArray[i] = NumOps.Divide(dataArray[i], NumOps.FromDouble(_worldSize));
+            }
+        }
+
+        for (int i = 0; i < dataArray.Length; i++)
+        {
+            data[i] = dataArray[i];
+        }
+    }
+
+    private Vector<T> PerformTcpAllGather(Vector<T> sendData)
+    {
+        int chunkSize = sendData.Length;
+        int nextRank = (_rank + 1) % _worldSize;
+        int prevRank = (_rank - 1 + _worldSize) % _worldSize;
+
+        var result = new T[chunkSize * _worldSize];
+        Array.Copy(sendData.ToArray(), 0, result, _rank * chunkSize, chunkSize);
+
+        for (int step = 0; step < _worldSize - 1; step++)
+        {
+            int sendChunkIdx = (_rank - step + _worldSize) % _worldSize;
+            int recvChunkIdx = (_rank - step - 1 + _worldSize) % _worldSize;
+
+            var sendChunk = new T[chunkSize];
+            Array.Copy(result, sendChunkIdx * chunkSize, sendChunk, 0, chunkSize);
+
+            var sendTask = Task.Run(() => SendDataTcp(nextRank, new Vector<T>(sendChunk)));
+            var recvChunk = ReceiveDataTcp(prevRank, chunkSize);
+            sendTask.Wait();
+
+            Array.Copy(recvChunk, 0, result, recvChunkIdx * chunkSize, chunkSize);
+        }
+
+        return new Vector<T>(result);
+    }
+
+    private Vector<T> PerformTcpBroadcast(Vector<T> data, int root)
+    {
+        var dataArray = data.ToArray();
+        int relativeRank = (_rank - root + _worldSize) % _worldSize;
+
+        if (relativeRank != 0)
+        {
+            int parentRelative = (relativeRank - 1) / 2;
+            int parentAbsolute = (parentRelative + root) % _worldSize;
+            dataArray = ReceiveDataTcp(parentAbsolute, data.Length);
+        }
+
+        int leftChildRelative = 2 * relativeRank + 1;
+        int rightChildRelative = 2 * relativeRank + 2;
+
+        if (leftChildRelative < _worldSize)
+        {
+            int leftChildAbsolute = (leftChildRelative + root) % _worldSize;
+            SendDataTcp(leftChildAbsolute, new Vector<T>(dataArray));
+        }
+
+        if (rightChildRelative < _worldSize)
+        {
+            int rightChildAbsolute = (rightChildRelative + root) % _worldSize;
+            SendDataTcp(rightChildAbsolute, new Vector<T>(dataArray));
+        }
+
+        return new Vector<T>(dataArray);
+    }
+
+    private Vector<T> PerformTcpReduceScatter(Vector<T> data, ReductionOperation operation)
+    {
+        int chunkSize = data.Length / _worldSize;
+        int nextRank = (_rank + 1) % _worldSize;
+        int prevRank = (_rank - 1 + _worldSize) % _worldSize;
+
+        var dataArray = data.ToArray();
+
+        for (int step = 0; step < _worldSize - 1; step++)
+        {
+            int sendChunkIdx = (_rank - step + _worldSize) % _worldSize;
+            int recvChunkIdx = (_rank - step - 1 + _worldSize) % _worldSize;
+
+            int sendStart = sendChunkIdx * chunkSize;
+            int sendCount = Math.Min(chunkSize, data.Length - sendStart);
+            int recvStart = recvChunkIdx * chunkSize;
+            int recvCount = Math.Min(chunkSize, data.Length - recvStart);
+
+            var sendChunk = new T[sendCount];
+            Array.Copy(dataArray, sendStart, sendChunk, 0, sendCount);
+
+            var sendTask = Task.Run(() => SendDataTcp(nextRank, new Vector<T>(sendChunk)));
+            var recvChunk = ReceiveDataTcp(prevRank, recvCount);
+            sendTask.Wait();
+
+            for (int i = 0; i < recvCount; i++)
+            {
+                dataArray[recvStart + i] = PerformReduction(dataArray[recvStart + i], recvChunk[i], operation);
+            }
+        }
+
+        var myChunk = new T[chunkSize];
+        Array.Copy(dataArray, _rank * chunkSize, myChunk, 0, chunkSize);
+
+        if (operation == ReductionOperation.Average)
+        {
+            for (int i = 0; i < myChunk.Length; i++)
+            {
+                myChunk[i] = NumOps.Divide(myChunk[i], NumOps.FromDouble(_worldSize));
+            }
+        }
+
+        return new Vector<T>(myChunk);
+    }
+
+    private T PerformReduction(T a, T b, ReductionOperation operation)
+    {
+        return operation switch
+        {
+            ReductionOperation.Sum or ReductionOperation.Average => NumOps.Add(a, b),
+            ReductionOperation.Max => NumOps.GreaterThan(a, b) ? a : b,
+            ReductionOperation.Min => NumOps.LessThan(a, b) ? a : b,
+            ReductionOperation.Product => NumOps.Multiply(a, b),
+            _ => throw new ArgumentException($"Unsupported operation: {operation}")
+        };
+    }
+
+    private void SendDataTcp(int destRank, Vector<T> data)
+    {
+        if (_tcpConnections == null || !_tcpConnections.ContainsKey(destRank))
+        {
+            throw new InvalidOperationException($"No TCP connection to rank {destRank}");
+        }
+
+        lock (_connectionLock)
+        {
+            var client = _tcpConnections[destRank];
+            var stream = client.GetStream();
+            var writer = new BinaryWriter(stream);
+
+            writer.Write(data.Length);
+            for (int i = 0; i < data.Length; i++)
+            {
+                writer.Write(Convert.ToDouble(data[i]));
+            }
+            writer.Flush();
+        }
+    }
+
+    private T[] ReceiveDataTcp(int sourceRank, int expectedLength)
+    {
+        if (_tcpConnections == null || !_tcpConnections.ContainsKey(sourceRank))
+        {
+            throw new InvalidOperationException($"No TCP connection to rank {sourceRank}");
+        }
+
+        lock (_connectionLock)
+        {
+            var client = _tcpConnections[sourceRank];
+            var stream = client.GetStream();
+            var reader = new BinaryReader(stream);
+
+            int length = reader.ReadInt32();
+            if (length != expectedLength)
+            {
+                throw new InvalidOperationException(
+                    $"Expected {expectedLength} elements but received {length}");
+            }
+
+            var result = new T[length];
+            for (int i = 0; i < length; i++)
+            {
+                result[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            return result;
+        }
+    }
+
+    #endregion
+
+    #region NCCL Helpers
+
     private ncclDataType_t GetNcclDataType()
     {
         var typeCode = Type.GetTypeCode(typeof(T));
@@ -449,9 +1263,6 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
         };
     }
 
-    /// <summary>
-    /// Gets the NCCL reduction operation for the specified reduction operation.
-    /// </summary>
     private ncclRedOp_t GetNcclOperation(ReductionOperation operation)
     {
         return operation switch
@@ -460,14 +1271,50 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
             ReductionOperation.Product => ncclRedOp_t.ncclProd,
             ReductionOperation.Min => ncclRedOp_t.ncclMin,
             ReductionOperation.Max => ncclRedOp_t.ncclMax,
-            ReductionOperation.Average => ncclRedOp_t.ncclAvg,
+            ReductionOperation.Average => ncclRedOp_t.ncclSum, // We apply division after
             _ => throw new NotSupportedException($"Operation {operation} is not supported.")
         };
+    }
+
+    #endregion
+}
+
+/// <summary>
+/// NCCL unique ID structure for communicator initialization.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct NcclUniqueId
+{
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 128)]
+    public byte[] Internal;
+
+    public NcclUniqueId()
+    {
+        Internal = new byte[128];
+    }
+
+    public byte[] ToBytes()
+    {
+        return Internal ?? new byte[128];
+    }
+
+    public static NcclUniqueId FromBytes(byte[] bytes)
+    {
+        var id = new NcclUniqueId();
+        if (bytes.Length >= 128)
+        {
+            Array.Copy(bytes, id.Internal, 128);
+        }
+        else
+        {
+            Array.Copy(bytes, id.Internal, bytes.Length);
+        }
+        return id;
     }
 }
 
 /// <summary>
-/// NCCL P/Invoke methods (DllImport not allowed in generic types, so this must be outside)
+/// NCCL P/Invoke methods.
 /// </summary>
 internal static class NcclNativeMethods
 {
@@ -475,4 +1322,77 @@ internal static class NcclNativeMethods
 
     [DllImport(NcclLibrary, CallingConvention = CallingConvention.Cdecl)]
     internal static extern ncclResult_t ncclGetVersion(out int version);
+
+    [DllImport(NcclLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t ncclGetUniqueId(ref NcclUniqueId uniqueId);
+
+    [DllImport(NcclLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t ncclCommInitRank(out IntPtr comm, int nranks, NcclUniqueId commId, int rank);
+
+    [DllImport(NcclLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t ncclCommDestroy(IntPtr comm);
+
+    [DllImport(NcclLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t ncclAllReduce(
+        IntPtr sendbuff, IntPtr recvbuff, IntPtr count,
+        ncclDataType_t datatype, ncclRedOp_t op,
+        IntPtr comm, IntPtr stream);
+
+    [DllImport(NcclLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t ncclAllGather(
+        IntPtr sendbuff, IntPtr recvbuff, IntPtr sendcount,
+        ncclDataType_t datatype, IntPtr comm, IntPtr stream);
+
+    [DllImport(NcclLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t ncclBroadcast(
+        IntPtr sendbuff, IntPtr recvbuff, IntPtr count,
+        ncclDataType_t datatype, int root, IntPtr comm, IntPtr stream);
+
+    [DllImport(NcclLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t ncclReduceScatter(
+        IntPtr sendbuff, IntPtr recvbuff, IntPtr recvcount,
+        ncclDataType_t datatype, ncclRedOp_t op,
+        IntPtr comm, IntPtr stream);
+}
+
+/// <summary>
+/// CUDA memory copy direction.
+/// </summary>
+internal enum CudaMemcpyKind
+{
+    HostToHost = 0,
+    HostToDevice = 1,
+    DeviceToHost = 2,
+    DeviceToDevice = 3
+}
+
+/// <summary>
+/// CUDA P/Invoke methods for memory management and stream operations.
+/// </summary>
+internal static class CudaNativeMethods
+{
+    private const string CudaLibrary = "cudart64_12"; // CUDA 12.x runtime
+
+    [DllImport(CudaLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t cudaSetDevice(int device);
+
+    [DllImport(CudaLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t cudaMalloc(out IntPtr devPtr, IntPtr size);
+
+    [DllImport(CudaLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t cudaFree(IntPtr devPtr);
+
+    [DllImport(CudaLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t cudaStreamCreate(out IntPtr stream);
+
+    [DllImport(CudaLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t cudaStreamDestroy(IntPtr stream);
+
+    [DllImport(CudaLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t cudaStreamSynchronize(IntPtr stream);
+
+    [DllImport(CudaLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t cudaMemcpyAsync(
+        IntPtr dst, IntPtr src, IntPtr count,
+        CudaMemcpyKind kind, IntPtr stream);
 }
