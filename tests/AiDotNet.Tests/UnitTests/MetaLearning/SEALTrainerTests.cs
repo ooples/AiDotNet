@@ -1,3 +1,6 @@
+// Nullable disabled: This test file intentionally passes null values to test argument validation
+#nullable disable
+
 using AiDotNet.Autodiff;
 using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;

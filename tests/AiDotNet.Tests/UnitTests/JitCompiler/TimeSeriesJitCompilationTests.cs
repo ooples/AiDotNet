@@ -1,3 +1,6 @@
+// Nullable disabled: This test file has methods that may return null for unsupported model types
+#nullable disable
+
 using Xunit;
 using AiDotNet.TimeSeries;
 using AiDotNet.Autodiff;
