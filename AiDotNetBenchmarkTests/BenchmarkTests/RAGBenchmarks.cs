@@ -23,24 +23,16 @@ public class RAGBenchmarks
     public int TopK { get; set; }
 
     private List<string> _documents = new List<string>();
-    private List<string> _queries = new List<string>();
 
     [GlobalSetup]
     public void Setup()
     {
         _documents = new List<string>();
-        _queries = new List<string>();
 
         // Generate synthetic documents
         for (int i = 0; i < DocumentCount; i++)
         {
             _documents.Add($"Document {i} contains information about topic {i % 10} with details.");
-        }
-
-        // Generate queries
-        for (int i = 0; i < 20; i++)
-        {
-            _queries.Add($"Query about topic {i % 10}");
         }
     }
 

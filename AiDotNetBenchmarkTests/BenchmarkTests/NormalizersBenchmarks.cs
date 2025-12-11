@@ -24,6 +24,13 @@ public class NormalizersBenchmarks
 
     private Matrix<double> _data = new Matrix<double>(0, 0);
     private Vector<double> _vectorData = new Vector<double>(0);
+    private Matrix<double> _positiveData = new Matrix<double>(0, 0);
+
+    // Pre-computed normalized data and parameters for denormalization benchmarks
+    private Vector<double> _minMaxNormalized = new Vector<double>(0);
+    private NormalizationParameters<double> _minMaxParams = new NormalizationParameters<double>();
+    private Vector<double> _zScoreNormalized = new Vector<double>(0);
+    private NormalizationParameters<double> _zScoreParams = new NormalizationParameters<double>();
 
     private MinMaxNormalizer<double, Matrix<double>, Vector<double>> _minMax = new();
     private ZScoreNormalizer<double, Matrix<double>, Vector<double>> _zScore = new();
@@ -54,12 +61,27 @@ public class NormalizersBenchmarks
             _vectorData[i] = random.NextDouble() * 100 + 1; // Ensure positive for log
         }
 
+        // Initialize positive data for log transform (pre-computed to avoid allocation in benchmark)
+        _positiveData = new Matrix<double>(SampleCount, FeatureCount);
+        for (int i = 0; i < SampleCount; i++)
+        {
+            for (int j = 0; j < FeatureCount; j++)
+            {
+                _positiveData[i, j] = Math.Abs(_data[i, j]) + 1;
+            }
+        }
+
         // Initialize normalizers
         _minMax = new MinMaxNormalizer<double, Matrix<double>, Vector<double>>();
         _zScore = new ZScoreNormalizer<double, Matrix<double>, Vector<double>>();
         _log = new LogNormalizer<double, Matrix<double>, Vector<double>>();
         _meanVariance = new MeanVarianceNormalizer<double, Matrix<double>, Vector<double>>();
         _robust = new RobustScalingNormalizer<double, Matrix<double>, Vector<double>>();
+
+        // Pre-compute normalized data and parameters for denormalization benchmarks
+        // This avoids measuring normalization overhead in denormalization benchmarks
+        (_minMaxNormalized, _minMaxParams) = _minMax.NormalizeOutput(_vectorData);
+        (_zScoreNormalized, _zScoreParams) = _zScore.NormalizeOutput(_vectorData);
     }
 
     #region MinMax Normalization
@@ -79,8 +101,8 @@ public class NormalizersBenchmarks
     [Benchmark]
     public Vector<double> MinMax_Denormalize()
     {
-        var (normalized, parameters) = _minMax.NormalizeOutput(_vectorData);
-        return _minMax.Denormalize(normalized, parameters);
+        // Use pre-computed normalized data and parameters to measure only denormalization
+        return _minMax.Denormalize(_minMaxNormalized, _minMaxParams);
     }
 
     #endregion
@@ -102,8 +124,8 @@ public class NormalizersBenchmarks
     [Benchmark]
     public Vector<double> ZScore_Denormalize()
     {
-        var (normalized, parameters) = _zScore.NormalizeOutput(_vectorData);
-        return _zScore.Denormalize(normalized, parameters);
+        // Use pre-computed normalized data and parameters to measure only denormalization
+        return _zScore.Denormalize(_zScoreNormalized, _zScoreParams);
     }
 
     #endregion
@@ -119,16 +141,8 @@ public class NormalizersBenchmarks
     [Benchmark]
     public (Matrix<double>, List<NormalizationParameters<double>>) Log_NormalizeInput()
     {
-        // Use positive data for log transform
-        var positiveData = new Matrix<double>(SampleCount, FeatureCount);
-        for (int i = 0; i < SampleCount; i++)
-        {
-            for (int j = 0; j < FeatureCount; j++)
-            {
-                positiveData[i, j] = Math.Abs(_data[i, j]) + 1;
-            }
-        }
-        return _log.NormalizeInput(positiveData);
+        // Use pre-computed positive data to avoid allocation in benchmark iteration
+        return _log.NormalizeInput(_positiveData);
     }
 
     #endregion
