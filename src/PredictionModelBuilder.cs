@@ -660,51 +660,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             var features = inputOutputLoader.Features;
             var labels = inputOutputLoader.Labels;
 
-            // Delegate to the overload that handles regular training
-            return await BuildAsync(features, labels);
+            // Delegate to the internal supervised training method
+            return await BuildSupervisedInternalAsync(features, labels);
         }
 
         // META-LEARNING PATH - check if meta-learner is configured
         if (_metaLearner is not null)
         {
-            // Perform meta-training using parameters from config (specified during meta-learner construction)
-            var metaResult = _metaLearner.Train();
-
-            // Create deployment configuration from individual configs
-            var deploymentConfig = DeploymentConfiguration.Create(
-                _quantizationConfig,
-                _cacheConfig,
-                _versioningConfig,
-                _abTestingConfig,
-                _telemetryConfig,
-                _exportConfig,
-                _gpuAccelerationConfig);
-
-            // Create PredictionModelResult with meta-learning constructor
-            var result = new PredictionModelResult<T, TInput, TOutput>(
-                metaLearner: _metaLearner,
-                metaResult: metaResult,
-                loraConfiguration: _loraConfiguration,
-                biasDetector: _biasDetector,
-                fairnessEvaluator: _fairnessEvaluator,
-                ragRetriever: _ragRetriever,
-                ragReranker: _ragReranker,
-                ragGenerator: _ragGenerator,
-                queryProcessors: _queryProcessors,
-                agentConfig: _agentConfig,
-                deploymentConfiguration: deploymentConfig,
-                reasoningConfig: _reasoningConfig,
-                knowledgeGraph: _knowledgeGraph,
-                graphStore: _graphStore,
-                hybridGraphRetriever: _hybridGraphRetriever);
-
-            // Attach tokenizer if configured
-            if (_tokenizer is not null)
-            {
-                result.AttachTokenizer(_tokenizer, _tokenizationConfig);
-            }
-
-            return result;
+            return BuildMetaLearningInternalAsync();
         }
 
         // Neither data loader nor meta-learner configured
@@ -714,39 +677,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Builds a predictive model using the provided input features and output values.
-    /// If agent assistance is enabled, the agent will help with model selection and hyperparameter tuning.
+    /// Internal method that performs supervised training with the provided input features and output values.
+    /// This contains all the core supervised learning logic.
     /// </summary>
-    /// <param name="x">Matrix of input features (required).</param>
-    /// <param name="y">Vector of output values (required).</param>
+    /// <param name="x">Matrix of input features.</param>
+    /// <param name="y">Vector of output values.</param>
     /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
-    /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no model has been specified for regular training.</exception>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method trains your AI model on your specific dataset.
-    ///
-    /// **Regular Training**:
-    /// - Trains on your specific dataset
-    /// - Learns patterns from your examples
-    /// - Can use agent assistance to select models and tune hyperparameters
-    ///
-    /// Example with agent assistance:
-    /// <code>
-    /// var agentConfig = new AgentConfiguration&lt;double&gt;
-    /// {
-    ///     ApiKey = "sk-...",
-    ///     Provider = LLMProvider.OpenAI,
-    ///     IsEnabled = true
-    /// };
-    ///
-    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureAgentAssistance(agentConfig)
-    ///     .BuildAsync(housingData, prices);
-    /// </code>
-    /// </remarks>
-    public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput x, TOutput y)
+    private async Task<PredictionModelResult<T, TInput, TOutput>> BuildSupervisedInternalAsync(TInput x, TOutput y)
     {
-        // REGULAR TRAINING PATH
+        // SUPERVISED TRAINING PATH
 
         // Apply GPU configuration first (before any operations that might use GPU)
         ApplyGpuConfiguration();
@@ -1076,61 +1015,124 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Builds and trains a reinforcement learning agent in the configured environment.
-    /// Requires ConfigureEnvironment() and ConfigureModel() (with an RL agent) to be called first.
+    /// Internal method that performs meta-learning training.
+    /// This contains all the core meta-learning logic.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation, containing the trained meta-learner result.</returns>
+    private PredictionModelResult<T, TInput, TOutput> BuildMetaLearningInternalAsync()
+    {
+        // META-LEARNING TRAINING PATH
+
+        // Validate meta-learner is configured (should be checked by caller, but defensive)
+        if (_metaLearner is null)
+        {
+            throw new InvalidOperationException(
+                "BuildMetaLearningInternalAsync requires ConfigureMetaLearning() to be called first.");
+        }
+
+        // Perform meta-training using parameters from config (specified during meta-learner construction)
+        var metaResult = _metaLearner.Train();
+
+        // Create deployment configuration from individual configs
+        var deploymentConfig = DeploymentConfiguration.Create(
+            _quantizationConfig,
+            _cacheConfig,
+            _versioningConfig,
+            _abTestingConfig,
+            _telemetryConfig,
+            _exportConfig,
+            _gpuAccelerationConfig);
+
+        // Create PredictionModelResult with meta-learning constructor
+        var result = new PredictionModelResult<T, TInput, TOutput>(
+            metaLearner: _metaLearner,
+            metaResult: metaResult,
+            loraConfiguration: _loraConfiguration,
+            biasDetector: _biasDetector,
+            fairnessEvaluator: _fairnessEvaluator,
+            ragRetriever: _ragRetriever,
+            ragReranker: _ragReranker,
+            ragGenerator: _ragGenerator,
+            queryProcessors: _queryProcessors,
+            agentConfig: _agentConfig,
+            deploymentConfiguration: deploymentConfig,
+            reasoningConfig: _reasoningConfig,
+            knowledgeGraph: _knowledgeGraph,
+            graphStore: _graphStore,
+            hybridGraphRetriever: _hybridGraphRetriever);
+
+        // Attach tokenizer if configured
+        if (_tokenizer is not null)
+        {
+            result.AttachTokenizer(_tokenizer, _tokenizationConfig);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Builds a predictive model using the provided input features and output values.
+    /// If agent assistance is enabled, the agent will help with model selection and hyperparameter tuning.
+    /// </summary>
+    /// <param name="x">Matrix of input features (required).</param>
+    /// <param name="y">Vector of output values (required).</param>
+    /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
+    /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no model has been specified for regular training.</exception>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method trains your AI model on your specific dataset.
+    ///
+    /// **Regular Training**:
+    /// - Trains on your specific dataset
+    /// - Learns patterns from your examples
+    /// - Can use agent assistance to select models and tune hyperparameters
+    ///
+    /// Example with agent assistance:
+    /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig)
+    ///     .BuildAsync(housingData, prices);
+    /// </code>
+    /// </remarks>
+    public Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput x, TOutput y)
+    {
+        return BuildSupervisedInternalAsync(x, y);
+    }
+
+    /// <summary>
+    /// Internal method that performs reinforcement learning training.
+    /// This contains all the core RL training logic.
     /// </summary>
     /// <param name="episodes">Number of episodes to train for.</param>
     /// <param name="verbose">Whether to print training progress.</param>
-    /// <returns>A task that represents the asynchronous operation, containing the trained RL agent.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when environment or RL agent not configured.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This overload is specifically for reinforcement learning. Instead of
-    /// training on a fixed dataset (x, y), the agent learns by interacting with an environment
-    /// over many episodes. Each episode is like playing one game from start to finish.
-    /// </para>
-    /// <para>
-    /// **Reinforcement Learning Training**:
-    /// - Agent interacts with environment for specified number of episodes
-    /// - Each episode: agent takes actions, receives rewards, updates policy
-    /// - No need for x/y data - agent learns from environment feedback
-    /// - Returns standard PredictionModelResult for consistency
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// var agent = new DQNAgent&lt;double&gt;(new DQNOptions&lt;double&gt;
-    /// {
-    ///     StateSize = 4,
-    ///     ActionSize = 2,
-    ///     LearningRate = NumOps.FromDouble(0.001)
-    /// });
-    ///
-    /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureEnvironment(new CartPoleEnvironment&lt;double&gt;())
-    ///     .ConfigureModel(agent)
-    ///     .BuildAsync(episodes: 1000);
-    ///
-    /// // Use trained agent
-    /// var action = result.Predict(stateObservation);
-    /// </code>
-    /// </para>
-    /// </remarks>
+    /// <returns>A task that represents the asynchronous operation, containing the trained RL agent result.</returns>
 #pragma warning disable CS1998
-    public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(int episodes, bool verbose = true)
+    private async Task<PredictionModelResult<T, TInput, TOutput>> BuildRLInternalAsync(int episodes, bool verbose)
     {
-        // RL TRAINING PATH - requires ConfigureEnvironment() and an RL agent
+        // RL TRAINING PATH
 
         // Apply GPU configuration first (before any operations that might use GPU)
         ApplyGpuConfiguration();
 
-        if (_rlOptions?.Environment == null)
+        // Validate RL options are configured
+        if (_rlOptions?.Environment is null)
+        {
             throw new InvalidOperationException(
-                "BuildAsync(episodes) requires ConfigureReinforcementLearning() with a valid Environment. " +
-                "For regular training, use BuildAsync(x, y).");
+                "BuildRLInternalAsync requires ConfigureReinforcementLearning() with a valid Environment.");
+        }
 
-        if (_model == null)
+        // Validate model is set
+        if (_model is null)
+        {
             throw new InvalidOperationException("Model (RL agent) must be specified using ConfigureModel().");
+        }
 
         if (_model is not IRLAgent<T> rlAgent)
             throw new InvalidOperationException(
@@ -1344,6 +1346,56 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
         return result;
     }
+#pragma warning restore CS1998
+
+    /// <summary>
+    /// Builds and trains a reinforcement learning agent in the configured environment.
+    /// Requires ConfigureReinforcementLearning() and ConfigureModel() (with an RL agent) to be called first.
+    /// </summary>
+    /// <param name="episodes">Number of episodes to train for.</param>
+    /// <param name="verbose">Whether to print training progress.</param>
+    /// <returns>A task that represents the asynchronous operation, containing the trained RL agent.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when environment or RL agent not configured.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This overload is specifically for reinforcement learning. Instead of
+    /// training on a fixed dataset (x, y), the agent learns by interacting with an environment
+    /// over many episodes. Each episode is like playing one game from start to finish.
+    /// </para>
+    /// <para>
+    /// **Reinforcement Learning Training**:
+    /// - Agent interacts with environment for specified number of episodes
+    /// - Each episode: agent takes actions, receives rewards, updates policy
+    /// - No need for x/y data - agent learns from environment feedback
+    /// - Returns standard PredictionModelResult for consistency
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var agent = new DQNAgent&lt;double&gt;(new DQNOptions&lt;double&gt;
+    /// {
+    ///     StateSize = 4,
+    ///     ActionSize = 2,
+    ///     LearningRate = NumOps.FromDouble(0.001)
+    /// });
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureReinforcementLearning(new RLTrainingOptions&lt;double&gt;
+    ///     {
+    ///         Environment = new CartPoleEnvironment&lt;double&gt;()
+    ///     })
+    ///     .ConfigureModel(agent)
+    ///     .BuildAsync(episodes: 1000);
+    ///
+    /// // Use trained agent
+    /// var action = result.Predict(stateObservation);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(int episodes, bool verbose = true)
+    {
+        return BuildRLInternalAsync(episodes, verbose);
+    }
 
     /// <summary>
     /// Uses a trained model to make predictions on new data.
@@ -1356,7 +1408,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// predictions for new data. For example, if you trained a model to predict house prices based on features
     /// like size and location, you can now give it details of houses currently for sale (without knowing their prices)
     /// and the model will predict what their prices should be.
-    /// 
+    ///
     /// The input matrix should have the same number of columns (features) as the data you used to train the model.
     /// </remarks>
     public TOutput Predict(TInput newData, PredictionModelResult<T, TInput, TOutput> modelResult)
