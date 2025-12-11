@@ -8,6 +8,7 @@ using AiDotNet.Normalizers;
 using AiDotNet.DataProcessor;
 using AiDotNet.FeatureSelectors;
 using AiDotNet.OutlierRemoval;
+using AiDotNet.Data.Loaders;
 using System.Globalization;
 
 namespace AiDotNet.Examples;
@@ -407,7 +408,8 @@ public class EnhancedTimeSeriesExample
         return modelBuilder
             .ConfigureOptimizer(optimizer)
             .ConfigureModel(new ProphetModel<double, Matrix<double>, Vector<double>>(prophetOptions))
-            .BuildAsync(features, target);
+            .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(features, target))
+            .BuildAsync();
     }
 
     // Helper method to train an ARIMA model
@@ -437,7 +439,8 @@ public class EnhancedTimeSeriesExample
         return modelBuilder
             .ConfigureOptimizer(optimizer)
             .ConfigureModel(new ARIMAModel<double>(arimaOptions))
-            .BuildAsync(features, target);
+            .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(features, target))
+            .BuildAsync();
     }
 
     // Helper method to train an Exponential Smoothing model
@@ -468,7 +471,8 @@ public class EnhancedTimeSeriesExample
         return modelBuilder
             .ConfigureOptimizer(optimizer)
             .ConfigureModel(new ExponentialSmoothingModel<double>(esOptions))
-            .BuildAsync(features, target);
+            .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(features, target))
+            .BuildAsync();
     }
 
     // Helper method to evaluate a model

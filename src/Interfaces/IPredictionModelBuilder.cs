@@ -1,3 +1,4 @@
+using AiDotNet.Configuration;
 using AiDotNet.Models.Results;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
@@ -621,27 +622,38 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
 
     /// <summary>
-    /// Configures the environment for reinforcement learning.
+    /// Configures reinforcement learning options for training an RL agent.
     /// </summary>
-    /// <param name="environment">The RL environment to use for training.</param>
+    /// <param name="options">The reinforcement learning configuration options.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> When training reinforcement learning agents, you need an environment
-    /// for the agent to interact with. This is like setting up a simulation or game for the agent
-    /// to learn from. Common environments include CartPole (balancing a pole), Atari games,
-    /// robotic simulations, etc.
+    /// <b>For Beginners:</b> Reinforcement learning trains an agent through trial and error
+    /// in an environment. This method configures all aspects of RL training:
+    /// - The environment (simulation/game for the agent to learn from)
+    /// - Training parameters (episodes, steps, batch size)
+    /// - Exploration strategies (how to balance trying new things vs using learned behavior)
+    /// - Replay buffers (how to store and sample past experiences)
+    /// - Callbacks for monitoring training progress
     ///
-    /// After configuring an environment, use BuildAsync(episodes) to train an RL agent.
+    /// After configuring RL options, use BuildAsync(episodes) to train the agent.
     ///
     /// Example:
     /// <code>
+    /// var options = new RLTrainingOptions&lt;double&gt;
+    /// {
+    ///     Environment = new CartPoleEnvironment&lt;double&gt;(),
+    ///     Episodes = 1000,
+    ///     MaxStepsPerEpisode = 500,
+    ///     OnEpisodeComplete = (metrics) =&gt; Console.WriteLine($"Episode {metrics.Episode}: {metrics.TotalReward}")
+    /// };
+    ///
     /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureEnvironment(new CartPoleEnvironment&lt;double&gt;())
+    ///     .ConfigureReinforcementLearning(options)
     ///     .ConfigureModel(new DQNAgent&lt;double&gt;())
-    ///     .BuildAsync(episodes: 1000);
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureEnvironment(ReinforcementLearning.Interfaces.IEnvironment<T> environment);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureReinforcementLearning(RLTrainingOptions<T> options);
 
     /// <summary>
     /// Configures knowledge distillation for training a smaller student model from a larger teacher model.
@@ -1187,58 +1199,77 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureReasoning(ReasoningConfig? config = null);
 
     /// <summary>
+    /// Configures the data loader for providing training data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A data loader handles loading data from various sources (files, databases, memory, URLs)
+    /// and provides it in a format suitable for model training.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Instead of passing raw arrays or matrices directly to BuildAsync,
+    /// you can configure a data loader that handles loading your data for you. This is useful when:
+    /// - Your data comes from a file (CSV, JSON, etc.)
+    /// - Your data needs to be downloaded from the internet
+    /// - You want automatic batching and shuffling
+    /// - You want train/validation/test splitting handled for you
+    ///
+    /// Example:
+    /// <code>
+    /// // Load data from CSV
+    /// var loader = DataLoaders.FromCsv("housing.csv", labelColumn: "price");
+    ///
+    /// var result = await builder
+    ///     .ConfigureDataLoader(loader)
+    ///     .ConfigureModel(model)
+    ///     .BuildAsync();  // Uses data from the loader
+    /// </code>
+    ///
+    /// You can also use simple in-memory loaders for arrays:
+    /// <code>
+    /// var loader = DataLoaders.FromArrays(features, labels);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="dataLoader">The data loader that provides training data.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataLoader(IDataLoader<T> dataLoader);
+
+    /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method is used when you've configured a meta-learner using ConfigureMetaLearning().
-    /// It performs meta-training across many tasks to create a model that can rapidly adapt
-    /// to new tasks with just a few examples.
+    /// This method is used when you've configured a meta-learner using ConfigureMetaLearning(),
+    /// or when you've configured a data loader using ConfigureDataLoader().
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> Use this method when you've configured meta-learning and agent assistance.
-    /// Unlike BuildAsync(x, y) which trains on one dataset, this trains your model to be good
-    /// at learning NEW tasks quickly. The training data comes from the episodic data loader
-    /// you configured in your meta-learner.
-    /// </para>
-    /// </remarks>
-    /// <returns>A task that represents the asynchronous operation, containing the meta-trained model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
-    Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync();
-
-    /// <summary>
-    /// Asynchronously builds a predictive model using the provided input features and output values.
-    /// If agent assistance is enabled, the agent will help with model selection and hyperparameter tuning.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method trains your AI model on your specific dataset. It can leverage agent assistance
-    /// to help select appropriate models and tune hyperparameters based on your data characteristics.
+    /// When a data loader is configured:
+    /// - The loader's LoadAsync() is called to load data
+    /// - Features and Labels are extracted from the loader
+    /// - Training proceeds using the loaded data
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> This method trains your AI model using the data you provide.
-    /// It's the async version that works with agent assistance features.
+    /// When meta-learning is configured:
+    /// - It performs meta-training across many tasks to create a model that can rapidly adapt
+    ///   to new tasks with just a few examples.
     /// </para>
     /// <para>
-    /// Example with agent assistance:
-    /// <code>
-    /// var agentConfig = new AgentConfiguration&lt;double&gt;
-    /// {
-    ///     ApiKey = "sk-...",
-    ///     Provider = LLMProvider.OpenAI,
-    ///     IsEnabled = true
-    /// };
+    /// <b>For Beginners:</b> Use this method when you've configured either:
+    /// - A data loader (via ConfigureDataLoader) - the loader provides the training data
+    /// - Meta-learning (via ConfigureMetaLearning) - trains your model to learn NEW tasks quickly
     ///
-    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureAgentAssistance(agentConfig)
-    ///     .BuildAsync(housingData, prices);
+    /// Example with data loader:
+    /// <code>
+    /// var result = await builder
+    ///     .ConfigureDataLoader(DataLoaders.FromCsv("data.csv", labelColumn: "target"))
+    ///     .ConfigureModel(model)
+    ///     .BuildAsync();
     /// </code>
     /// </para>
     /// </remarks>
-    /// <param name="x">Matrix of input features (required).</param>
-    /// <param name="y">Vector of output values (required).</param>
     /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
-    /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no model has been specified for regular training.</exception>
-    Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput x, TOutput y);
+    /// <exception cref="InvalidOperationException">Thrown if neither ConfigureDataLoader nor ConfigureMetaLearning has been called.</exception>
+    Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync();
+
 }

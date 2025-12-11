@@ -23,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -67,6 +67,16 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Gets the number of input features per node.
+    /// </summary>
+    public int InputFeatures { get; private set; }
+
+    /// <summary>
+    /// Gets the number of output features per node.
+    /// </summary>
+    public int OutputFeatures { get; private set; }
 
     /// <summary>
     /// Stores the last computed graph smoothness loss for diagnostic purposes.
@@ -275,6 +285,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
+        InputFeatures = inputFeatures;
+        OutputFeatures = outputFeatures;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastGraphSmoothnessLoss = NumOps.Zero;
 
@@ -311,6 +323,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([inputFeatures], [outputFeatures], vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        InputFeatures = inputFeatures;
+        OutputFeatures = outputFeatures;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastGraphSmoothnessLoss = NumOps.Zero;
 
@@ -452,6 +466,28 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// Gets the adjacency matrix currently being used by this layer.
+    /// </summary>
+    /// <returns>The adjacency matrix tensor, or null if not set.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves the adjacency matrix that was set using SetAdjacencyMatrix.
+    /// It may return null if the adjacency matrix has not been set yet.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method lets you check what graph structure the layer is using.
+    ///
+    /// This can be useful for:
+    /// - Verifying the correct graph was loaded
+    /// - Debugging graph connectivity issues
+    /// - Visualizing the graph structure
+    /// </para>
+    /// </remarks>
+    public Tensor<T>? GetAdjacencyMatrix()
+    {
+        return _adjacencyMatrix;
+    }
+
+    /// <summary>
     /// Performs the forward pass of the graph convolutional layer.
     /// </summary>
     /// <param name="input">The input tensor to process.</param>
@@ -490,11 +526,11 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int outputFeatures = _weights.Shape[1];
 
         // Perform graph convolution: A * X * W
-        // First: X * W using Engine operations
-        var xw = Engine.TensorMatMul(input, _weights);
+        // First: X * W using reshape pattern for 3D @ 2D
+        var xw = BatchedMatMul3Dx2D(input, _weights, batchSize, numNodes, input.Shape[2], outputFeatures);
 
-        // Then: A * (X * W) using Engine operations (batch matrix multiplication)
-        var output = Engine.TensorMatMul(_adjacencyMatrix, xw);
+        // Then: A * (X * W) using batched matmul for 3D @ 3D
+        var output = Engine.BatchMatMul(_adjacencyMatrix, xw);
 
         // Add bias by broadcasting across batch and node dimensions
         var biasBroadcast = BroadcastBias(_bias, batchSize, numNodes);
@@ -526,6 +562,20 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var broadcast = Engine.TensorTile(biasReshaped, [batchSize, numNodes, 1]);
 
         return broadcast;
+    }
+
+    /// <summary>
+    /// Performs batched matrix multiplication between a 3D tensor and a 2D weight matrix.
+    /// Input: [batch, rows, cols] @ weights: [cols, output_cols] -> [batch, rows, output_cols]
+    /// </summary>
+    private Tensor<T> BatchedMatMul3Dx2D(Tensor<T> input3D, Tensor<T> weights2D, int batch, int rows, int cols, int outputCols)
+    {
+        // Flatten batch dimension: [batch, rows, cols] -> [batch * rows, cols]
+        var flattened = input3D.Reshape([batch * rows, cols]);
+        // Standard 2D matmul: [batch * rows, cols] @ [cols, output_cols] -> [batch * rows, output_cols]
+        var result = Engine.TensorMatMul(flattened, weights2D);
+        // Unflatten: [batch * rows, output_cols] -> [batch, rows, output_cols]
+        return result.Reshape([batch, rows, outputCols]);
     }
 
     /// <summary>
@@ -1005,7 +1055,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return new Dictionary<string, string>
         {
             { "TotalSmoothnessLoss", $"{_lastGraphSmoothnessLoss}" },
-            { "SmoothnessWeight", $"{AuxiliaryLossWeight}" },
+            { "SmoothnessWeight", $"{SmoothnessWeight}" },
             { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
         };
     }
