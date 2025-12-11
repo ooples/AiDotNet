@@ -28,7 +28,8 @@ public class NeuralNetworkArchitecturesBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        var random = new Random(42);
+        // Using seeded Random for reproducible benchmark data - not used for security purposes
+        var random = new Random(42); // NOSONAR S2245 - benchmarks don't need cryptographic randomness
 
         // Initialize input tensor (batch_size x input_size)
         int batchSize = 32;

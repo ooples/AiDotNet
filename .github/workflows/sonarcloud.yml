@@ -97,7 +97,7 @@ jobs:
           ${{ runner.temp }}\scanner\dotnet-sonarscanner begin `
             /k:"ooples_AiDotNet" `
             /o:"ooples" `
-            /d:sonar.token="${{ secrets.SONAR_TOKEN }}" `
+            /d:sonar.token="$env:SONAR_TOKEN" `
             /d:sonar.host.url="https://sonarcloud.io" `
             /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" `
             /d:sonar.coverage.exclusions="**/tests/**,**/testconsole/**,**/AiDotNetBenchmarkTests/**,**/examples/**"
@@ -120,7 +120,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         shell: powershell
         run: |
-          ${{ runner.temp }}\scanner\dotnet-sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+          ${{ runner.temp }}\scanner\dotnet-sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"
 
       # Upload build artifacts for other workflows to reuse
       - name: Upload build artifacts

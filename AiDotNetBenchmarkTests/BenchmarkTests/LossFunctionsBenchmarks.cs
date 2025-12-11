@@ -47,7 +47,8 @@ public class LossFunctionsBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        var random = new Random(42);
+        // Using seeded Random for reproducible benchmark data - not used for security purposes
+        var random = new Random(42); // NOSONAR S2245 - benchmarks don't need cryptographic randomness
 
         // Initialize regression vectors
         _predicted = new Vector<double>(Size);
