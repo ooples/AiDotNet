@@ -1,9 +1,9 @@
 name: Quality Gates (.NET)
 
+# Quality gates for pull requests only
+# Master/main builds are handled by automated-release.yml
 on:
   pull_request:
-    branches: [ '**' ]
-  push:
     branches: [ '**' ]
 
 concurrency:
@@ -17,12 +17,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 8.0.x
 

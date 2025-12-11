@@ -1,0 +1,155 @@
+name: Auto-Fix PR Title
+
+on:
+  pull_request:
+    types: [opened, edited, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  auto-fix-pr-title:
+    name: Auto-Fix PR Title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Auto-fix PR title to conventional commits format
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prTitle = context.payload.pull_request.title;
+            const pattern = /^(feat|fix|docs|refactor|perf|test|chore|ci|style)(\(.+\))?!?: .+/;
+
+            if (pattern.test(prTitle)) {
+              core.info(`✅ PR title already valid: ${prTitle}`);
+              return;
+            }
+
+            // Get PR files to intelligently determine type
+            const files = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number
+            });
+
+            const filenames = files.data.map(f => f.filename);
+            core.info(`Files changed: ${filenames.join(', ')}`);
+
+            // Intelligent type detection based on files
+            let type = 'chore'; // default
+            let reasoning = 'default type';
+
+            // Check for specific patterns
+            const hasDocsFiles = filenames.some(f => f.match(/\.(md|txt)$/) || f.includes('README') || f.includes('CONTRIBUTING'));
+            const hasTestFiles = filenames.some(f => f.includes('test') || f.includes('Test') || f.includes('.spec.') || f.includes('.test.'));
+            const hasCIFiles = filenames.some(f => f.startsWith('.github/workflows/') || f.includes('ci/') || f.includes('.yml'));
+            const hasSrcFiles = filenames.some(f => f.match(/\.(cs|js|ts|py|java|cpp|c|h)$/));
+
+            // Analyze PR title for hints
+            const lowerTitle = prTitle.toLowerCase();
+
+            if (lowerTitle.match(/^(add|implement|create|introduce)/)) {
+              type = 'feat';
+              reasoning = 'title starts with add/implement/create/introduce';
+            } else if (lowerTitle.match(/^(fix|correct|resolve|patch)/)) {
+              type = 'fix';
+              reasoning = 'title starts with fix/correct/resolve/patch';
+            } else if (lowerTitle.match(/^(update|improve|enhance|optimize)/)) {
+              if (hasDocsFiles) {
+                type = 'docs';
+                reasoning = 'updating documentation files';
+              } else {
+                type = 'refactor';
+                reasoning = 'title suggests improvement/enhancement';
+              }
+            } else if (lowerTitle.match(/^(refactor|restructure|reorganize)/)) {
+              type = 'refactor';
+              reasoning = 'title starts with refactor/restructure/reorganize';
+            } else if (hasDocsFiles && filenames.length === filenames.filter(f => f.match(/\.(md|txt)$/)).length) {
+              type = 'docs';
+              reasoning = 'only documentation files changed';
+            } else if (hasTestFiles && !hasSrcFiles) {
+              type = 'test';
+              reasoning = 'only test files changed';
+            } else if (hasCIFiles) {
+              type = 'ci';
+              reasoning = 'CI/workflow files changed';
+            } else if (lowerTitle.includes('document') || lowerTitle.includes('readme')) {
+              type = 'docs';
+              reasoning = 'title mentions documentation';
+            } else if (lowerTitle.includes('test')) {
+              type = 'test';
+              reasoning = 'title mentions tests';
+            } else if (lowerTitle.includes('perf') || lowerTitle.includes('performance') || lowerTitle.includes('optimi')) {
+              type = 'perf';
+              reasoning = 'title mentions performance';
+            }
+
+            // Clean up title (lowercase first letter after type)
+            let description = prTitle.trim();
+            description = description.charAt(0).toLowerCase() + description.slice(1);
+
+            // Build new title
+            const newTitle = `${type}: ${description}`;
+
+            core.info(`Original: ${prTitle}`);
+            core.info(`New: ${newTitle}`);
+            core.info(`Type: ${type} (${reasoning})`);
+
+            // Update PR title
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              title: newTitle
+            });
+
+            // Post informative comment
+            let versionBump = 'No release';
+            if (['feat', 'fix', 'docs', 'refactor', 'perf'].includes(type)) {
+              versionBump = 'MINOR version bump (0.1.0 → 0.2.0)';
+            }
+
+            const comment = `🤖 **PR Title Auto-Fixed**
+
+            Your PR title was automatically updated to follow [Conventional Commits](https://www.conventionalcommits.org/) format.
+
+            **Original title:**
+            \`${prTitle}\`
+
+            **New title:**
+            \`${newTitle}\`
+
+            **Detected type:** \`${type}:\` (${reasoning})
+            **Version impact:** ${versionBump}
+
+            ---
+
+            **Valid types and their effects:**
+            - \`feat:\` - New feature (MINOR bump: 0.1.0 → 0.2.0)
+            - \`fix:\` - Bug fix (MINOR bump)
+            - \`docs:\` - Documentation (MINOR bump)
+            - \`refactor:\` - Code refactoring (MINOR bump)
+            - \`perf:\` - Performance improvement (MINOR bump)
+            - \`test:\` - Tests only (no release)
+            - \`chore:\` - Build/tooling (no release)
+            - \`ci:\` - CI/CD changes (no release)
+            - \`style:\` - Code formatting (no release)
+
+            If the detected type is incorrect, you can manually edit the PR title.`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: comment
+            });

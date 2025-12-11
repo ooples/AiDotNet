@@ -142,14 +142,14 @@ public class HoldoutValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<
     /// The confidence is based on how consistent your model's performance is between the validation
     /// and test sets.
     /// 
-    /// If your model performs very similarly on both sets (measured by R² values), the confidence will be high.
+    /// If your model performs very similarly on both sets (measured by RÂ² values), the confidence will be high.
     /// If there's a big difference in performance between these sets, the confidence will be lower.
     /// 
     /// The confidence value ranges from 0 to 1:
     /// - 1.0 means complete confidence (identical performance on validation and test sets)
     /// - 0.0 means no confidence (completely different performance)
     /// 
-    /// R² (R-squared) is a statistical measure that represents how well your model's predictions match
+    /// RÂ² (R-squared) is a statistical measure that represents how well your model's predictions match
     /// the actual values. It ranges from 0 to 1, where 1 means perfect predictions.
     /// </para>
     /// </remarks>
@@ -203,8 +203,8 @@ public class HoldoutValidationFitDetector<T, TInput, TOutput> : FitDetectorBase<
     ///   * Trying different model architectures (testing alternative model designs)
     ///   * Using better feature selection (choosing more relevant input variables)
     /// 
-    /// The method also includes the R² values for validation and test sets to help you
-    /// understand the model's current performance. R² (R-squared) is a measure of how well
+    /// The method also includes the RÂ² values for validation and test sets to help you
+    /// understand the model's current performance. RÂ² (R-squared) is a measure of how well
     /// your model's predictions match the actual values, with values closer to 1.0 indicating
     /// better performance.
     /// </para>

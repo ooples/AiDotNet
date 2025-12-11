@@ -51,7 +51,7 @@ public class LinearKernel<T> : IKernelFunction<T>
     /// </para>
     /// <para>
     /// For example, if x1 = [1, 2, 3] and x2 = [4, 5, 6], then:
-    /// dot product = (1 × 4) + (2 × 5) + (3 × 6) = 4 + 10 + 18 = 32
+    /// dot product = (1 Ã— 4) + (2 Ã— 5) + (3 Ã— 6) = 4 + 10 + 18 = 32
     /// </para>
     /// <para>
     /// The result can be any number:

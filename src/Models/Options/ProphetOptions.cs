@@ -115,7 +115,7 @@ public class ProphetOptions<T, TInput, TOutput> : TimeSeriesRegressionOptions<T>
     /// seasonality components to your model.
     /// </para>
     /// </remarks>
-    public List<int> SeasonalPeriods { get; set; } = [];
+    public List<int> SeasonalPeriods { get; set; } = new List<int> {  };
 
     /// <summary>
     /// Gets or sets the list of holiday dates that have special effects on the time series.
@@ -158,7 +158,7 @@ public class ProphetOptions<T, TInput, TOutput> : TimeSeriesRegressionOptions<T>
     /// would mark Christmas and Black Friday 2023 as special events in your model.
     /// </para>
     /// </remarks>
-    public List<DateTime> Holidays { get; set; } = [];
+    public List<DateTime> Holidays { get; set; } = new List<DateTime>();
 
     /// <summary>
     /// Gets or sets the initial value for changepoint effects.
@@ -650,7 +650,7 @@ public class ProphetOptions<T, TInput, TOutput> : TimeSeriesRegressionOptions<T>
     /// significant events affecting your time series.
     /// </para>
     /// </remarks>
-    public List<T> Changepoints { get; set; } = [];
+    public List<T> Changepoints { get; set; } = new List<T>();
 
     /// <summary>
     /// Gets or sets whether to apply transformations to the predictions.

@@ -5,7 +5,8 @@ using AiDotNet.Regression;
 using AiDotNet.Models.Options;
 using AiDotNet.Regularization;
 using AiDotNet.TransferLearning.FeatureMapping;
-using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Autodiff;
 
 namespace AiDotNet.TransferLearning.Algorithms;
 
@@ -249,7 +250,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         _baseModel = baseModel;
         _mapper = mapper;
         _targetFeatures = targetFeatures;
-        _numOps = AiDotNet.Helpers.MathHelper.GetNumericOperations<T>();
+        _numOps = MathHelper.GetNumericOperations<T>();
         // Initialize inverse-map reflection method once per process if available
         _inverseMapMethod ??= _mapper.GetType().GetMethod("InverseMapFeatureName", new[] { typeof(string) });
     }
@@ -448,5 +449,241 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     {
         _baseModel.SetActiveFeatureIndices(featureIndices);
     }
-}
 
+    /// <summary>
+    /// Gets the default loss function used by this model for gradient computation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Delegates to the underlying base model's default loss function.
+    /// </para>
+    /// </remarks>
+    public ILossFunction<T> DefaultLossFunction => _baseModel.DefaultLossFunction;
+
+    /// <summary>
+    /// Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.
+    /// </summary>
+    /// <param name="input">The input data.</param>
+    /// <param name="target">The target/expected output.</param>
+    /// <param name="lossFunction">The loss function to use. If null, uses the model's default loss function.</param>
+    /// <returns>A vector containing gradients with respect to all model parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to the underlying base model's ComputeGradients implementation.
+    /// The feature mapping is NOT applied during gradient computation, as the base model
+    /// operates in the target feature space.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This calculates which direction to adjust the model's parameters to reduce error.
+    /// It delegates to the wrapped Random Forest model.
+    /// </para>
+    /// </remarks>
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        return _baseModel.ComputeGradients(input, target, lossFunction);
+    }
+
+    /// <summary>
+    /// Applies pre-computed gradients to update the model parameters.
+    /// </summary>
+    /// <param name="gradients">The gradient vector to apply.</param>
+    /// <param name="learningRate">The learning rate for the update.</param>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to the underlying base model's ApplyGradients implementation.
+    /// Updates parameters using: θ = θ - learningRate * gradients
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// After computing gradients, this method actually updates the model's parameters.
+    /// It delegates to the wrapped Random Forest model.
+    /// </para>
+    /// </remarks>
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        _baseModel.ApplyGradients(gradients, learningRate);
+    }
+
+    /// <summary>
+    /// Saves the mapped Random Forest model's current state to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the wrapped Random Forest model along with feature mapping metadata.
+    /// It uses the existing Serialize method and writes the data to the provided stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a snapshot of your transfer learning model.
+    ///
+    /// When you call SaveState:
+    /// - The underlying Random Forest model is written to the stream
+    /// - Feature mapping metadata is preserved
+    /// - All model parameters and tree structures are saved
+    ///
+    /// This is particularly useful for:
+    /// - Saving transfer learning models after adaptation
+    /// - Checkpointing during cross-domain training
+    /// - Knowledge distillation from transfer-learned models
+    /// - Deploying adapted models to production
+    ///
+    /// You can later use LoadState to restore the model.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+    public void SaveState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanWrite)
+            throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+        try
+        {
+            var data = this.Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to save mapped Random Forest model state to stream: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Unexpected error while saving mapped Random Forest model state: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads the mapped Random Forest model's state from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes a mapped Random Forest model that was previously saved with SaveState.
+    /// It uses the existing Deserialize method after reading data from the stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your transfer learning model.
+    ///
+    /// When you call LoadState:
+    /// - The underlying Random Forest model is read from the stream
+    /// - Feature mapping metadata is restored
+    /// - All parameters and tree structures are recovered
+    ///
+    /// After loading, the model can:
+    /// - Make predictions on new data (with automatic feature mapping)
+    /// - Continue adaptation if needed
+    /// - Be deployed to production
+    ///
+    /// This is essential for:
+    /// - Loading transfer-learned models after training
+    /// - Deploying adapted models to production
+    /// - Knowledge distillation workflows
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
+    public void LoadState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanRead)
+            throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+        try
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            var data = ms.ToArray();
+
+            if (data.Length == 0)
+                throw new InvalidOperationException("Stream contains no data.");
+
+            this.Deserialize(data);
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to read mapped Random Forest model state from stream: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw InvalidOperationException from Deserialize
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to deserialize mapped Random Forest model state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+        }
+    }
+
+    #region IJitCompilable Implementation
+
+    /// <summary>
+    /// Gets whether this mapped Random Forest model supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> when the underlying model supports JIT compilation (soft tree mode enabled);
+    /// <c>false</c> otherwise.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation is supported when the underlying Random Forest model has soft tree mode enabled.
+    /// In soft tree mode, the discrete branching logic is replaced with smooth sigmoid-based gating,
+    /// making the model differentiable and compatible with JIT compilation.
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT compilation is available when soft tree mode is enabled.
+    ///
+    /// Traditional Random Forests use hard yes/no decisions that can't be JIT compiled.
+    /// With soft tree mode, the trees use smooth transitions instead:
+    /// - This makes the model differentiable
+    /// - Enables JIT compilation for faster inference
+    /// - Gives similar results to traditional Random Forests
+    ///
+    /// To enable JIT compilation:
+    /// <code>
+    /// var rf = (RandomForestRegression&lt;double&gt;)wrappedModel;
+    /// rf.UseSoftTree = true;
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public bool SupportsJitCompilation =>
+        _baseModel is IJitCompilable<T> jitModel && jitModel.SupportsJitCompilation;
+
+    /// <summary>
+    /// Exports the model's computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The root node of the exported computation graph.</returns>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the underlying model does not support JIT compilation.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// Delegates to the underlying Random Forest model's ExportComputationGraph method.
+    /// Requires the underlying model to have soft tree mode enabled.
+    /// </para>
+    /// <para><b>For Beginners:</b> This exports the Random Forest as a computation graph.
+    ///
+    /// When soft tree mode is enabled, each tree becomes a smooth function that can be
+    /// compiled into an optimized computation graph. The ensemble of soft trees is then
+    /// averaged to produce the final prediction.
+    /// </para>
+    /// </remarks>
+    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (_baseModel is IJitCompilable<T> jitModel && jitModel.SupportsJitCompilation)
+        {
+            return jitModel.ExportComputationGraph(inputNodes);
+        }
+
+        throw new NotSupportedException(
+            "This mapped Random Forest model does not support JIT compilation. " +
+            "To enable JIT compilation, set UseSoftTree = true on the underlying Random Forest model " +
+            "to use soft (differentiable) decision trees with sigmoid-based gating.");
+    }
+
+    #endregion
+}

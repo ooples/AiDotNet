@@ -118,7 +118,7 @@ public class WaveKernel<T> : IKernelFunction<T>
     /// <para>
     /// What is Euclidean distance? It's the straight-line distance between two points, calculated
     /// using the Pythagorean theorem. For example, the Euclidean distance between points (1,2) and
-    /// (4,6) is v((4-1)² + (6-2)²) = v(9 + 16) = v25 = 5.
+    /// (4,6) is v((4-1)Â² + (6-2)Â²) = v(9 + 16) = v25 = 5.
     /// </para>
     /// <para>
     /// What makes this kernel special is its oscillating behavior, which can be useful for capturing
