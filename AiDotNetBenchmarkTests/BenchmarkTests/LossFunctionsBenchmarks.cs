@@ -23,6 +23,8 @@ public class LossFunctionsBenchmarks
     private Vector<double> _actual = null!;
     private Vector<double> _binaryPredicted = null!;
     private Vector<double> _binaryActual = null!;
+    private Vector<double> _softmaxPredicted = null!;
+    private Vector<double> _oneHotActual = null!;
 
     // Regression loss functions
     private MeanSquaredErrorLoss<double> _mse = null!;
@@ -66,6 +68,30 @@ public class LossFunctionsBenchmarks
         {
             _binaryPredicted[i] = random.NextDouble();
             _binaryActual[i] = random.Next(2); // 0 or 1
+        }
+
+        // Initialize multi-class softmax vectors (proper probability distributions)
+        // Using pairs of values that sum to 1.0 (2-class softmax output)
+        _softmaxPredicted = new Vector<double>(Size);
+        _oneHotActual = new Vector<double>(Size);
+
+        for (int i = 0; i < Size; i += 2)
+        {
+            // Generate softmax output (values that sum to 1)
+            double p = random.NextDouble();
+            _softmaxPredicted[i] = p;
+            if (i + 1 < Size)
+            {
+                _softmaxPredicted[i + 1] = 1.0 - p;
+            }
+
+            // Generate one-hot encoded actual (0 or 1, exactly one class active per pair)
+            int classIndex = random.Next(2);
+            _oneHotActual[i] = classIndex == 0 ? 1.0 : 0.0;
+            if (i + 1 < Size)
+            {
+                _oneHotActual[i + 1] = classIndex == 1 ? 1.0 : 0.0;
+            }
         }
 
         // Initialize loss functions
@@ -198,18 +224,20 @@ public class LossFunctionsBenchmarks
 
     #endregion
 
-    #region Cross Entropy
+    #region Cross Entropy (Multi-class)
 
     [Benchmark]
     public double CrossEntropy_CalculateLoss()
     {
-        return _crossEntropy.CalculateLoss(_binaryPredicted, _binaryActual);
+        // Use softmax predicted and one-hot encoded actual for proper multi-class classification
+        return _crossEntropy.CalculateLoss(_softmaxPredicted, _oneHotActual);
     }
 
     [Benchmark]
     public Vector<double> CrossEntropy_CalculateDerivative()
     {
-        return _crossEntropy.CalculateDerivative(_binaryPredicted, _binaryActual);
+        // Use softmax predicted and one-hot encoded actual for proper multi-class classification
+        return _crossEntropy.CalculateDerivative(_softmaxPredicted, _oneHotActual);
     }
 
     #endregion
