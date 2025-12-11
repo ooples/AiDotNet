@@ -137,15 +137,29 @@ jobs:
       - name: Begin SonarCloud analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: powershell
         run: |
-          ${{ runner.temp }}\scanner\dotnet-sonarscanner begin `
-            /k:"ooples_AiDotNet" `
-            /o:"ooples" `
-            /d:sonar.token="$env:SONAR_TOKEN" `
-            /d:sonar.host.url="https://sonarcloud.io" `
-            /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" `
-            /d:sonar.coverage.exclusions="**/tests/**,**/testconsole/**,**/AiDotNetBenchmarkTests/**,**/examples/**"
+          $params = @(
+            "/k:ooples_AiDotNet",
+            "/o:ooples",
+            "/d:sonar.token=$env:SONAR_TOKEN",
+            "/d:sonar.host.url=https://sonarcloud.io",
+            "/d:sonar.cs.opencover.reportsPaths=**/coverage.opencover.xml",
+            "/d:sonar.coverage.exclusions=**/tests/**,**/testconsole/**,**/AiDotNetBenchmarkTests/**,**/examples/**",
+            "/d:sonar.scm.provider=git"
+          )
+
+          # For PRs, add incremental analysis parameters
+          if ("${{ github.event_name }}" -eq "pull_request") {
+            $params += "/d:sonar.pullrequest.key=${{ github.event.pull_request.number }}"
+            $params += "/d:sonar.pullrequest.branch=${{ github.head_ref }}"
+            $params += "/d:sonar.pullrequest.base=${{ github.base_ref }}"
+            $params += "/d:sonar.pullrequest.provider=GitHub"
+            $params += "/d:sonar.pullrequest.github.repository=${{ github.repository }}"
+          }
+
+          & "${{ runner.temp }}\scanner\dotnet-sonarscanner" begin @params
 
       # SonarCloud needs to trace the build - build both frameworks
       - name: Build (Release)
