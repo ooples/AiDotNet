@@ -279,8 +279,14 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
                 T sample = _numOps.Add(mean, _numOps.Multiply(scale, _numOps.FromDouble(randStdNormal)));
                 forecast[h] = sample;
 
-                // Update context (simplified - in practice, would maintain full window)
-                context = new Vector<T>(new[] { sample });
+                // Update context with sliding window - shift left and append new prediction
+                var newContext = new Vector<T>(context.Length);
+                for (int i = 0; i < context.Length - 1; i++)
+                {
+                    newContext[i] = context[i + 1];
+                }
+                newContext[context.Length - 1] = sample;
+                context = newContext;
             }
 
             samples.Add(forecast);

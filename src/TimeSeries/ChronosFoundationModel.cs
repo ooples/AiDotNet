@@ -120,15 +120,59 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
-        // Note: This is a simplified training loop. In practice, gradients would be computed and applied.
+        T learningRate = _numOps.FromDouble(_options.LearningRate);
+
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             for (int i = 0; i < x.Rows; i++)
             {
                 Vector<T> input = x.GetRow(i);
+                T target = y[i];
 
-                // Forward pass - prediction computed for gradient calculation in full implementation
-                _ = PredictSingle(input);
+                // Update output projection weights using numerical gradients
+                UpdateOutputWeights(input, target, learningRate);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Updates output projection weights using numerical gradient estimation.
+    /// </summary>
+    private void UpdateOutputWeights(Vector<T> input, T target, T learningRate)
+    {
+        T epsilon = _numOps.FromDouble(1e-5);
+
+        // Update a subset of output projection weights for efficiency
+        int rowsToUpdate = Math.Min(5, _outputProjection.Rows);
+        int colsToUpdate = Math.Min(5, _outputProjection.Columns);
+
+        for (int i = 0; i < rowsToUpdate; i++)
+        {
+            for (int j = 0; j < colsToUpdate; j++)
+            {
+                T original = _outputProjection[i, j];
+
+                // Compute loss with perturbed weight (positive)
+                _outputProjection[i, j] = _numOps.Add(original, epsilon);
+                T predPlus = PredictSingle(input);
+                T errorPlus = _numOps.Subtract(target, predPlus);
+                T lossPlus = _numOps.Multiply(errorPlus, errorPlus);
+
+                // Compute loss with perturbed weight (negative)
+                _outputProjection[i, j] = _numOps.Subtract(original, epsilon);
+                T predMinus = PredictSingle(input);
+                T errorMinus = _numOps.Subtract(target, predMinus);
+                T lossMinus = _numOps.Multiply(errorMinus, errorMinus);
+
+                // Restore and update
+                _outputProjection[i, j] = original;
+
+                T gradient = _numOps.Divide(
+                    _numOps.Subtract(lossPlus, lossMinus),
+                    _numOps.Multiply(_numOps.FromDouble(2.0), epsilon)
+                );
+
+                _outputProjection[i, j] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
             }
         }
     }
@@ -238,10 +282,15 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     protected override void SerializeCore(BinaryWriter writer)
     {
+        // Serialize options
         writer.Write(_vocabularySize);
         writer.Write(_options.EmbeddingDim);
+        writer.Write(_options.ContextLength);
+        writer.Write(_options.ForecastHorizon);
+        writer.Write(_options.NumLayers);
+        writer.Write(_options.NumHeads);
 
-        // Serialize vocabulary
+        // Serialize vocabulary centroids
         for (int i = 0; i < _vocabularyCentroids.Length; i++)
             writer.Write(Convert.ToDouble(_vocabularyCentroids[i]));
 
@@ -251,23 +300,71 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < _tokenEmbeddings.Rows; i++)
             for (int j = 0; j < _tokenEmbeddings.Columns; j++)
                 writer.Write(Convert.ToDouble(_tokenEmbeddings[i, j]));
+
+        // Serialize transformer layers
+        writer.Write(_transformerLayers.Count);
+        foreach (var layer in _transformerLayers)
+        {
+            layer.Serialize(writer);
+        }
+
+        // Serialize output projection
+        writer.Write(_outputProjection.Rows);
+        writer.Write(_outputProjection.Columns);
+        for (int i = 0; i < _outputProjection.Rows; i++)
+            for (int j = 0; j < _outputProjection.Columns; j++)
+                writer.Write(Convert.ToDouble(_outputProjection[i, j]));
+
+        // Serialize output bias
+        writer.Write(_outputBias.Length);
+        for (int i = 0; i < _outputBias.Length; i++)
+            writer.Write(Convert.ToDouble(_outputBias[i]));
     }
 
     protected override void DeserializeCore(BinaryReader reader)
     {
+        // Deserialize options
         _vocabularySize = reader.ReadInt32();
         _options.EmbeddingDim = reader.ReadInt32();
+        _options.ContextLength = reader.ReadInt32();
+        _options.ForecastHorizon = reader.ReadInt32();
+        _options.NumLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
 
+        // Deserialize vocabulary centroids
         _vocabularyCentroids = new Vector<T>(_vocabularySize);
         for (int i = 0; i < _vocabularySize; i++)
             _vocabularyCentroids[i] = _numOps.FromDouble(reader.ReadDouble());
 
+        // Deserialize token embeddings
         int rows = reader.ReadInt32();
         int cols = reader.ReadInt32();
         _tokenEmbeddings = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
                 _tokenEmbeddings[i, j] = _numOps.FromDouble(reader.ReadDouble());
+
+        // Deserialize transformer layers
+        int numLayers = reader.ReadInt32();
+        _transformerLayers = new List<TransformerBlock<T>>(numLayers);
+        for (int i = 0; i < numLayers; i++)
+        {
+            _transformerLayers.Add(TransformerBlock<T>.Deserialize(reader));
+        }
+
+        // Deserialize output projection
+        rows = reader.ReadInt32();
+        cols = reader.ReadInt32();
+        _outputProjection = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                _outputProjection[i, j] = _numOps.FromDouble(reader.ReadDouble());
+
+        // Deserialize output bias
+        int biasLen = reader.ReadInt32();
+        _outputBias = new Vector<T>(biasLen);
+        for (int i = 0; i < biasLen; i++)
+            _outputBias[i] = _numOps.FromDouble(reader.ReadDouble());
     }
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -342,7 +439,7 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 internal class TransformerBlock<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private readonly Matrix<T> _weights;
+    private Matrix<T> _weights;
 
     public int ParameterCount => _weights.Rows * _weights.Columns;
 
@@ -358,6 +455,15 @@ internal class TransformerBlock<T>
                 _weights[i, j] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
     }
 
+    /// <summary>
+    /// Creates a TransformerBlock for deserialization.
+    /// </summary>
+    private TransformerBlock()
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _weights = new Matrix<T>(0, 0);
+    }
+
     public Vector<T> Forward(Vector<T> input)
     {
         var output = new Vector<T>(input.Length);
@@ -371,5 +477,35 @@ internal class TransformerBlock<T>
             output[i] = MathHelper.Tanh(sum);
         }
         return output;
+    }
+
+    /// <summary>
+    /// Serializes the transformer block weights.
+    /// </summary>
+    public void Serialize(BinaryWriter writer)
+    {
+        writer.Write(_weights.Rows);
+        writer.Write(_weights.Columns);
+        for (int i = 0; i < _weights.Rows; i++)
+            for (int j = 0; j < _weights.Columns; j++)
+                writer.Write(Convert.ToDouble(_weights[i, j]));
+    }
+
+    /// <summary>
+    /// Deserializes a transformer block from binary data.
+    /// </summary>
+    public static TransformerBlock<T> Deserialize(BinaryReader reader)
+    {
+        var block = new TransformerBlock<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int rows = reader.ReadInt32();
+        int cols = reader.ReadInt32();
+        block._weights = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                block._weights[i, j] = numOps.FromDouble(reader.ReadDouble());
+
+        return block;
     }
 }

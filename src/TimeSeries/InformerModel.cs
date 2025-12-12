@@ -51,8 +51,8 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         var random = new Random(42);
         double stddev = Math.Sqrt(2.0 / _options.EmbeddingDim);
 
-        // Input embedding
-        _embeddingWeights = new Matrix<T>(_options.EmbeddingDim, 1);
+        // Input embedding - matrix must be EmbeddingDim x LookbackWindow to process full input
+        _embeddingWeights = new Matrix<T>(_options.EmbeddingDim, _options.LookbackWindow);
         for (int i = 0; i < _embeddingWeights.Rows; i++)
             for (int j = 0; j < _embeddingWeights.Columns; j++)
                 _embeddingWeights[i, j] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
@@ -87,7 +87,8 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
-        // Note: This is a simplified training loop. In practice, gradients would be computed and applied.
+        T learningRate = _numOps.FromDouble(_options.LearningRate);
+
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             for (int batchStart = 0; batchStart < x.Rows; batchStart += _options.BatchSize)
@@ -97,10 +98,53 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                 for (int i = batchStart; i < batchEnd; i++)
                 {
                     Vector<T> input = x.GetRow(i);
+                    T target = y[i];
 
-                    // Forward pass - prediction computed for gradient calculation in full implementation
-                    _ = PredictSingle(input);
+                    // Update weights using numerical gradients
+                    UpdateOutputWeights(input, target, learningRate);
                 }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Updates output projection weights using numerical gradient estimation.
+    /// </summary>
+    private void UpdateOutputWeights(Vector<T> input, T target, T learningRate)
+    {
+        T epsilon = _numOps.FromDouble(1e-5);
+
+        // Update a subset of output projection weights for efficiency
+        int rowsToUpdate = Math.Min(5, _outputProjection.Rows);
+        int colsToUpdate = Math.Min(5, _outputProjection.Columns);
+
+        for (int i = 0; i < rowsToUpdate; i++)
+        {
+            for (int j = 0; j < colsToUpdate; j++)
+            {
+                T original = _outputProjection[i, j];
+
+                // Compute loss with perturbed weight (positive)
+                _outputProjection[i, j] = _numOps.Add(original, epsilon);
+                T predPlus = PredictSingle(input);
+                T errorPlus = _numOps.Subtract(target, predPlus);
+                T lossPlus = _numOps.Multiply(errorPlus, errorPlus);
+
+                // Compute loss with perturbed weight (negative)
+                _outputProjection[i, j] = _numOps.Subtract(original, epsilon);
+                T predMinus = PredictSingle(input);
+                T errorMinus = _numOps.Subtract(target, predMinus);
+                T lossMinus = _numOps.Multiply(errorMinus, errorMinus);
+
+                // Restore and update
+                _outputProjection[i, j] = original;
+
+                T gradient = _numOps.Divide(
+                    _numOps.Subtract(lossPlus, lossMinus),
+                    _numOps.Multiply(_numOps.FromDouble(2.0), epsilon)
+                );
+
+                _outputProjection[i, j] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
             }
         }
     }
@@ -152,14 +196,15 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private Vector<T> EmbedInput(Vector<T> input)
     {
         var embedded = new Vector<T>(_options.EmbeddingDim);
+        int inputLen = Math.Min(input.Length, _embeddingWeights.Columns);
 
-        // Simple linear embedding
+        // Linear embedding: project input through embedding weights
         for (int i = 0; i < _options.EmbeddingDim; i++)
         {
             T sum = _numOps.Zero;
-            for (int j = 0; j < Math.Min(input.Length, _embeddingWeights.Columns); j++)
+            for (int j = 0; j < inputLen; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_embeddingWeights[i, j], input[Math.Min(j, input.Length - 1)]));
+                sum = _numOps.Add(sum, _numOps.Multiply(_embeddingWeights[i, j], input[j]));
             }
             embedded[i] = sum;
         }
@@ -169,30 +214,97 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 
     protected override void SerializeCore(BinaryWriter writer)
     {
+        // Serialize options
         writer.Write(_options.LookbackWindow);
         writer.Write(_options.ForecastHorizon);
         writer.Write(_options.EmbeddingDim);
+        writer.Write(_options.NumEncoderLayers);
+        writer.Write(_options.NumDecoderLayers);
+        writer.Write(_options.NumAttentionHeads);
+        writer.Write(_options.BatchSize);
 
-        // Serialize embeddings
+        // Serialize embedding weights
         writer.Write(_embeddingWeights.Rows);
         writer.Write(_embeddingWeights.Columns);
         for (int i = 0; i < _embeddingWeights.Rows; i++)
             for (int j = 0; j < _embeddingWeights.Columns; j++)
                 writer.Write(Convert.ToDouble(_embeddingWeights[i, j]));
+
+        // Serialize encoder layers
+        writer.Write(_encoderLayers.Count);
+        foreach (var layer in _encoderLayers)
+        {
+            layer.Serialize(writer);
+        }
+
+        // Serialize decoder layers
+        writer.Write(_decoderLayers.Count);
+        foreach (var layer in _decoderLayers)
+        {
+            layer.Serialize(writer);
+        }
+
+        // Serialize output projection
+        writer.Write(_outputProjection.Rows);
+        writer.Write(_outputProjection.Columns);
+        for (int i = 0; i < _outputProjection.Rows; i++)
+            for (int j = 0; j < _outputProjection.Columns; j++)
+                writer.Write(Convert.ToDouble(_outputProjection[i, j]));
+
+        // Serialize output bias
+        writer.Write(_outputBias.Length);
+        for (int i = 0; i < _outputBias.Length; i++)
+            writer.Write(Convert.ToDouble(_outputBias[i]));
     }
 
     protected override void DeserializeCore(BinaryReader reader)
     {
+        // Deserialize options
         _options.LookbackWindow = reader.ReadInt32();
         _options.ForecastHorizon = reader.ReadInt32();
         _options.EmbeddingDim = reader.ReadInt32();
+        _options.NumEncoderLayers = reader.ReadInt32();
+        _options.NumDecoderLayers = reader.ReadInt32();
+        _options.NumAttentionHeads = reader.ReadInt32();
+        _options.BatchSize = reader.ReadInt32();
 
+        // Deserialize embedding weights
         int rows = reader.ReadInt32();
         int cols = reader.ReadInt32();
         _embeddingWeights = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
                 _embeddingWeights[i, j] = _numOps.FromDouble(reader.ReadDouble());
+
+        // Deserialize encoder layers
+        int numEncoderLayers = reader.ReadInt32();
+        _encoderLayers = new List<InformerEncoderBlock<T>>(numEncoderLayers);
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            _encoderLayers.Add(InformerEncoderBlock<T>.Deserialize(reader));
+        }
+
+        // Deserialize decoder layers
+        int numDecoderLayers = reader.ReadInt32();
+        _decoderLayers = new List<InformerDecoderBlock<T>>(numDecoderLayers);
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            _decoderLayers.Add(InformerDecoderBlock<T>.Deserialize(reader));
+        }
+
+        // Deserialize output projection
+        rows = reader.ReadInt32();
+        cols = reader.ReadInt32();
+        _outputProjection = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                _outputProjection[i, j] = _numOps.FromDouble(reader.ReadDouble());
+
+        // Deserialize output bias
+        int biasLen = reader.ReadInt32();
+        _outputBias = new Vector<T>(biasLen);
+        for (int i = 0; i < biasLen; i++)
+            _outputBias[i] = _numOps.FromDouble(reader.ReadDouble());
     }
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -241,8 +353,8 @@ internal class InformerEncoderBlock<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _embeddingDim;
-    private readonly Matrix<T> _attentionWeights;
-    private readonly Matrix<T> _ffnWeights;
+    private Matrix<T> _attentionWeights;
+    private Matrix<T> _ffnWeights;
 
     public int ParameterCount => _attentionWeights.Rows * _attentionWeights.Columns +
                                   _ffnWeights.Rows * _ffnWeights.Columns;
@@ -266,6 +378,17 @@ internal class InformerEncoderBlock<T>
             }
     }
 
+    /// <summary>
+    /// Creates an encoder block for deserialization.
+    /// </summary>
+    private InformerEncoderBlock()
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _embeddingDim = 0;
+        _attentionWeights = new Matrix<T>(0, 0);
+        _ffnWeights = new Matrix<T>(0, 0);
+    }
+
     public Vector<T> Forward(Vector<T> input)
     {
         // Simplified self-attention + FFN
@@ -283,6 +406,49 @@ internal class InformerEncoderBlock<T>
 
         return output;
     }
+
+    /// <summary>
+    /// Serializes the encoder block weights.
+    /// </summary>
+    public void Serialize(BinaryWriter writer)
+    {
+        writer.Write(_attentionWeights.Rows);
+        writer.Write(_attentionWeights.Columns);
+        for (int i = 0; i < _attentionWeights.Rows; i++)
+            for (int j = 0; j < _attentionWeights.Columns; j++)
+                writer.Write(Convert.ToDouble(_attentionWeights[i, j]));
+
+        writer.Write(_ffnWeights.Rows);
+        writer.Write(_ffnWeights.Columns);
+        for (int i = 0; i < _ffnWeights.Rows; i++)
+            for (int j = 0; j < _ffnWeights.Columns; j++)
+                writer.Write(Convert.ToDouble(_ffnWeights[i, j]));
+    }
+
+    /// <summary>
+    /// Deserializes an encoder block from binary data.
+    /// </summary>
+    public static InformerEncoderBlock<T> Deserialize(BinaryReader reader)
+    {
+        var block = new InformerEncoderBlock<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int rows = reader.ReadInt32();
+        int cols = reader.ReadInt32();
+        block._attentionWeights = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                block._attentionWeights[i, j] = numOps.FromDouble(reader.ReadDouble());
+
+        rows = reader.ReadInt32();
+        cols = reader.ReadInt32();
+        block._ffnWeights = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                block._ffnWeights[i, j] = numOps.FromDouble(reader.ReadDouble());
+
+        return block;
+    }
 }
 
 /// <summary>
@@ -292,8 +458,8 @@ internal class InformerDecoderBlock<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _embeddingDim;
-    private readonly Matrix<T> _selfAttentionWeights;
-    private readonly Matrix<T> _crossAttentionWeights;
+    private Matrix<T> _selfAttentionWeights;
+    private Matrix<T> _crossAttentionWeights;
 
     public int ParameterCount => _selfAttentionWeights.Rows * _selfAttentionWeights.Columns +
                                   _crossAttentionWeights.Rows * _crossAttentionWeights.Columns;
@@ -317,6 +483,17 @@ internal class InformerDecoderBlock<T>
             }
     }
 
+    /// <summary>
+    /// Creates a decoder block for deserialization.
+    /// </summary>
+    private InformerDecoderBlock()
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _embeddingDim = 0;
+        _selfAttentionWeights = new Matrix<T>(0, 0);
+        _crossAttentionWeights = new Matrix<T>(0, 0);
+    }
+
     public Vector<T> Forward(Vector<T> target, Vector<T> memory)
     {
         // Simplified decoder with cross-attention
@@ -333,5 +510,48 @@ internal class InformerDecoderBlock<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Serializes the decoder block weights.
+    /// </summary>
+    public void Serialize(BinaryWriter writer)
+    {
+        writer.Write(_selfAttentionWeights.Rows);
+        writer.Write(_selfAttentionWeights.Columns);
+        for (int i = 0; i < _selfAttentionWeights.Rows; i++)
+            for (int j = 0; j < _selfAttentionWeights.Columns; j++)
+                writer.Write(Convert.ToDouble(_selfAttentionWeights[i, j]));
+
+        writer.Write(_crossAttentionWeights.Rows);
+        writer.Write(_crossAttentionWeights.Columns);
+        for (int i = 0; i < _crossAttentionWeights.Rows; i++)
+            for (int j = 0; j < _crossAttentionWeights.Columns; j++)
+                writer.Write(Convert.ToDouble(_crossAttentionWeights[i, j]));
+    }
+
+    /// <summary>
+    /// Deserializes a decoder block from binary data.
+    /// </summary>
+    public static InformerDecoderBlock<T> Deserialize(BinaryReader reader)
+    {
+        var block = new InformerDecoderBlock<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int rows = reader.ReadInt32();
+        int cols = reader.ReadInt32();
+        block._selfAttentionWeights = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                block._selfAttentionWeights[i, j] = numOps.FromDouble(reader.ReadDouble());
+
+        rows = reader.ReadInt32();
+        cols = reader.ReadInt32();
+        block._crossAttentionWeights = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                block._crossAttentionWeights[i, j] = numOps.FromDouble(reader.ReadDouble());
+
+        return block;
     }
 }

@@ -363,23 +363,38 @@ internal class ConvLayer<T>
 
     public Vector<T> Forward(Vector<T> input)
     {
-        // Simplified convolution (treats input as 1D sequence)
-        int outputSize = _outputChannels;
-        var output = new Vector<T>(outputSize);
+        // Proper 1D convolution with global average pooling
+        // For each output channel, slide kernel across input and aggregate
+        var output = new Vector<T>(_outputChannels);
 
-        for (int i = 0; i < outputSize; i++)
+        // Number of valid convolution positions (no padding)
+        int numPositions = Math.Max(1, input.Length - _kernelSize + 1);
+
+        for (int outChannel = 0; outChannel < _outputChannels; outChannel++)
         {
-            T sum = _biases[i];
+            T channelSum = _numOps.Zero;
 
-            // Convolve with kernel
-            for (int k = 0; k < _kernelSize && k < input.Length; k++)
+            // Slide kernel across all valid positions
+            for (int pos = 0; pos < numPositions; pos++)
             {
-                int kernelIdx = k % _kernels.Columns;
-                sum = _numOps.Add(sum, _numOps.Multiply(_kernels[i, kernelIdx], input[k]));
+                T positionSum = _biases[outChannel];
+
+                // Apply kernel at this position
+                for (int k = 0; k < _kernelSize && (pos + k) < input.Length; k++)
+                {
+                    int kernelIdx = k % _kernels.Columns;
+                    T weight = _kernels[outChannel, kernelIdx];
+                    T inputVal = input[pos + k];
+                    positionSum = _numOps.Add(positionSum, _numOps.Multiply(weight, inputVal));
+                }
+
+                // ReLU activation at each position
+                T activated = _numOps.GreaterThan(positionSum, _numOps.Zero) ? positionSum : _numOps.Zero;
+                channelSum = _numOps.Add(channelSum, activated);
             }
 
-            // ReLU activation
-            output[i] = _numOps.GreaterThan(sum, _numOps.Zero) ? sum : _numOps.Zero;
+            // Global average pooling: average over all positions
+            output[outChannel] = _numOps.Divide(channelSum, _numOps.FromDouble(numPositions));
         }
 
         return output;
