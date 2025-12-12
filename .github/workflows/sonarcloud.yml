@@ -97,11 +97,10 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      # Windows-specific NuGet cache path
       - name: Cache NuGet packages
         uses: actions/cache@v4
         with:
-          path: ${{ runner.os == 'Windows' && '~/.nuget/packages' || '~/.nuget/packages' }}
+          path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
           restore-keys: |
             nuget-${{ runner.os }}-
@@ -174,13 +173,6 @@ jobs:
       - name: Run tests with coverage (net8.0)
         run: |
           dotnet test -c Release --framework net8.0 --no-build --filter "Category!=GPU&Category!=Integration" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results-net8.trx" --results-directory ./TestResults
-
-      # Debug: List coverage files found
-      - name: List coverage reports
-        shell: powershell
-        run: |
-          Write-Host "Looking for coverage files..."
-          Get-ChildItem -Path ./TestResults -Recurse | ForEach-Object { Write-Host $_.FullName }
 
       - name: End SonarCloud analysis
         env:
