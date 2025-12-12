@@ -145,9 +145,10 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
     private void UpdateWeightsNumerically(Vector<T> input, T target, T learningRate)
     {
         T epsilon = _numOps.FromDouble(1e-5);
+        T twoEpsilon = _numOps.Multiply(_numOps.FromDouble(2.0), epsilon);
 
-        // Update a few weights in the FC layer
-        for (int i = 0; i < Math.Min(5, _fcWeights.Columns); i++)
+        // Update ALL weights in the FC layer
+        for (int i = 0; i < _fcWeights.Columns; i++)
         {
             T original = _fcWeights[0, i];
 
@@ -167,12 +168,33 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
             _fcWeights[0, i] = original;
 
-            T gradient = _numOps.Divide(
-                _numOps.Subtract(lossPlus, lossMinus),
-                _numOps.Multiply(_numOps.FromDouble(2.0), epsilon)
+            T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
+            _fcWeights[0, i] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
+        }
+
+        // Also update FC bias
+        for (int b = 0; b < _fcBias.Length; b++)
+        {
+            T original = _fcBias[b];
+
+            _fcBias[b] = _numOps.Add(original, epsilon);
+            T predPlus = PredictSingle(input);
+            T lossPlus = _numOps.Multiply(
+                _numOps.Subtract(target, predPlus),
+                _numOps.Subtract(target, predPlus)
             );
 
-            _fcWeights[0, i] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
+            _fcBias[b] = _numOps.Subtract(original, epsilon);
+            T predMinus = PredictSingle(input);
+            T lossMinus = _numOps.Multiply(
+                _numOps.Subtract(target, predMinus),
+                _numOps.Subtract(target, predMinus)
+            );
+
+            _fcBias[b] = original;
+
+            T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
+            _fcBias[b] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
         }
     }
 
@@ -260,6 +282,13 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
         writer.Write(_options.WindowSize);
         writer.Write(Convert.ToDouble(_anomalyThreshold));
 
+        // Serialize conv layers
+        writer.Write(_convLayers.Count);
+        foreach (var conv in _convLayers)
+        {
+            conv.Serialize(writer);
+        }
+
         // Serialize FC weights
         writer.Write(_fcWeights.Rows);
         writer.Write(_fcWeights.Columns);
@@ -274,9 +303,23 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
     protected override void DeserializeCore(BinaryReader reader)
     {
-        _options.WindowSize = reader.ReadInt32();
+        int savedWindowSize = reader.ReadInt32();
+        if (savedWindowSize != _options.WindowSize)
+        {
+            throw new InvalidOperationException(
+                $"Serialized WindowSize ({savedWindowSize}) doesn't match options ({_options.WindowSize})");
+        }
         _anomalyThreshold = _numOps.FromDouble(reader.ReadDouble());
 
+        // Deserialize conv layers
+        int convLayerCount = reader.ReadInt32();
+        _convLayers.Clear();
+        for (int i = 0; i < convLayerCount; i++)
+        {
+            _convLayers.Add(ConvLayer<T>.Deserialize(reader));
+        }
+
+        // Deserialize FC weights
         int rows = reader.ReadInt32();
         int cols = reader.ReadInt32();
         _fcWeights = new Matrix<T>(rows, cols);
@@ -366,10 +409,10 @@ public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
 internal class ConvLayer<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private readonly int _outputChannels;
-    private readonly int _kernelSize;
-    private readonly Matrix<T> _kernels;
-    private readonly Vector<T> _biases;
+    private int _outputChannels;
+    private int _kernelSize;
+    private Matrix<T> _kernels;
+    private Vector<T> _biases;
 
     public int ParameterCount => _kernels.Rows * _kernels.Columns + _biases.Length;
 
@@ -389,6 +432,18 @@ internal class ConvLayer<T>
                 _kernels[i, j] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
 
         _biases = new Vector<T>(outputChannels);
+    }
+
+    /// <summary>
+    /// Creates a ConvLayer for deserialization.
+    /// </summary>
+    private ConvLayer()
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _outputChannels = 0;
+        _kernelSize = 0;
+        _kernels = new Matrix<T>(0, 0);
+        _biases = new Vector<T>(0);
     }
 
     public Vector<T> Forward(Vector<T> input)
@@ -427,5 +482,54 @@ internal class ConvLayer<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Serializes the convolutional layer weights.
+    /// </summary>
+    public void Serialize(BinaryWriter writer)
+    {
+        writer.Write(_outputChannels);
+        writer.Write(_kernelSize);
+
+        // Serialize kernels
+        writer.Write(_kernels.Rows);
+        writer.Write(_kernels.Columns);
+        for (int i = 0; i < _kernels.Rows; i++)
+            for (int j = 0; j < _kernels.Columns; j++)
+                writer.Write(Convert.ToDouble(_kernels[i, j]));
+
+        // Serialize biases
+        writer.Write(_biases.Length);
+        for (int i = 0; i < _biases.Length; i++)
+            writer.Write(Convert.ToDouble(_biases[i]));
+    }
+
+    /// <summary>
+    /// Deserializes a convolutional layer from binary data.
+    /// </summary>
+    public static ConvLayer<T> Deserialize(BinaryReader reader)
+    {
+        var layer = new ConvLayer<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        layer._outputChannels = reader.ReadInt32();
+        layer._kernelSize = reader.ReadInt32();
+
+        // Deserialize kernels
+        int rows = reader.ReadInt32();
+        int cols = reader.ReadInt32();
+        layer._kernels = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                layer._kernels[i, j] = numOps.FromDouble(reader.ReadDouble());
+
+        // Deserialize biases
+        int biasLen = reader.ReadInt32();
+        layer._biases = new Vector<T>(biasLen);
+        for (int i = 0; i < biasLen; i++)
+            layer._biases[i] = numOps.FromDouble(reader.ReadDouble());
+
+        return layer;
     }
 }

@@ -347,13 +347,45 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     protected override void DeserializeCore(BinaryReader reader)
     {
-        // Deserialize options
-        _vocabularySize = reader.ReadInt32();
-        _options.EmbeddingDim = reader.ReadInt32();
-        _options.ContextLength = reader.ReadInt32();
-        _options.ForecastHorizon = reader.ReadInt32();
-        _options.NumLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
+        // Deserialize and validate options (don't mutate _options)
+        int vocabularySize = reader.ReadInt32();
+        int embeddingDim = reader.ReadInt32();
+        int contextLength = reader.ReadInt32();
+        int forecastHorizon = reader.ReadInt32();
+        int numLayers = reader.ReadInt32();
+        int numHeads = reader.ReadInt32();
+
+        // Validate critical dimensions match current options
+        if (vocabularySize != _vocabularySize)
+        {
+            throw new InvalidOperationException(
+                $"Serialized VocabularySize ({vocabularySize}) doesn't match current ({_vocabularySize})");
+        }
+        if (embeddingDim != _options.EmbeddingDim)
+        {
+            throw new InvalidOperationException(
+                $"Serialized EmbeddingDim ({embeddingDim}) doesn't match options ({_options.EmbeddingDim})");
+        }
+        if (contextLength != _options.ContextLength)
+        {
+            throw new InvalidOperationException(
+                $"Serialized ContextLength ({contextLength}) doesn't match options ({_options.ContextLength})");
+        }
+        if (forecastHorizon != _options.ForecastHorizon)
+        {
+            throw new InvalidOperationException(
+                $"Serialized ForecastHorizon ({forecastHorizon}) doesn't match options ({_options.ForecastHorizon})");
+        }
+        if (numLayers != _options.NumLayers)
+        {
+            throw new InvalidOperationException(
+                $"Serialized NumLayers ({numLayers}) doesn't match options ({_options.NumLayers})");
+        }
+        if (numHeads != _options.NumHeads)
+        {
+            throw new InvalidOperationException(
+                $"Serialized NumHeads ({numHeads}) doesn't match options ({_options.NumHeads})");
+        }
 
         // Deserialize vocabulary centroids
         _vocabularyCentroids = new Vector<T>(_vocabularySize);
@@ -369,9 +401,9 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
                 _tokenEmbeddings[i, j] = _numOps.FromDouble(reader.ReadDouble());
 
         // Deserialize transformer layers
-        int numLayers = reader.ReadInt32();
-        _transformerLayers = new List<TransformerBlock<T>>(numLayers);
-        for (int i = 0; i < numLayers; i++)
+        int savedNumLayers = reader.ReadInt32();
+        _transformerLayers = new List<TransformerBlock<T>>(savedNumLayers);
+        for (int i = 0; i < savedNumLayers; i++)
         {
             _transformerLayers.Add(TransformerBlock<T>.Deserialize(reader));
         }

@@ -302,15 +302,52 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 
     protected override void DeserializeCore(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // version
+        int version = reader.ReadInt32();
+        if (version != SerializationVersion)
+        {
+            throw new NotSupportedException($"Unsupported serialization version: {version}");
+        }
 
-        _options.LookbackWindow = reader.ReadInt32();
-        _options.ForecastHorizon = reader.ReadInt32();
-        _options.EmbeddingDim = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumAttentionHeads = reader.ReadInt32();
-        _options.BatchSize = reader.ReadInt32();
+        // Deserialize and validate options (don't mutate _options)
+        int lookbackWindow = reader.ReadInt32();
+        int forecastHorizon = reader.ReadInt32();
+        int embeddingDim = reader.ReadInt32();
+        int numEncoderLayers = reader.ReadInt32();
+        int numDecoderLayers = reader.ReadInt32();
+        int numAttentionHeads = reader.ReadInt32();
+        _ = reader.ReadInt32(); // BatchSize (not validated - not critical for inference)
+
+        // Validate critical dimensions match current options
+        if (lookbackWindow != _options.LookbackWindow)
+        {
+            throw new InvalidOperationException(
+                $"Serialized LookbackWindow ({lookbackWindow}) doesn't match options ({_options.LookbackWindow})");
+        }
+        if (forecastHorizon != _options.ForecastHorizon)
+        {
+            throw new InvalidOperationException(
+                $"Serialized ForecastHorizon ({forecastHorizon}) doesn't match options ({_options.ForecastHorizon})");
+        }
+        if (embeddingDim != _options.EmbeddingDim)
+        {
+            throw new InvalidOperationException(
+                $"Serialized EmbeddingDim ({embeddingDim}) doesn't match options ({_options.EmbeddingDim})");
+        }
+        if (numEncoderLayers != _options.NumEncoderLayers)
+        {
+            throw new InvalidOperationException(
+                $"Serialized NumEncoderLayers ({numEncoderLayers}) doesn't match options ({_options.NumEncoderLayers})");
+        }
+        if (numDecoderLayers != _options.NumDecoderLayers)
+        {
+            throw new InvalidOperationException(
+                $"Serialized NumDecoderLayers ({numDecoderLayers}) doesn't match options ({_options.NumDecoderLayers})");
+        }
+        if (numAttentionHeads != _options.NumAttentionHeads)
+        {
+            throw new InvalidOperationException(
+                $"Serialized NumAttentionHeads ({numAttentionHeads}) doesn't match options ({_options.NumAttentionHeads})");
+        }
 
         // Deserialize embedding weights
         int rows = reader.ReadInt32();
@@ -321,17 +358,17 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                 _embeddingWeights[i, j] = _numOps.FromDouble(reader.ReadDouble());
 
         // Deserialize encoder layers
-        int numEncoderLayers = reader.ReadInt32();
-        _encoderLayers = new List<InformerEncoderBlock<T>>(numEncoderLayers);
-        for (int i = 0; i < numEncoderLayers; i++)
+        int savedEncoderLayerCount = reader.ReadInt32();
+        _encoderLayers = new List<InformerEncoderBlock<T>>(savedEncoderLayerCount);
+        for (int i = 0; i < savedEncoderLayerCount; i++)
         {
             _encoderLayers.Add(InformerEncoderBlock<T>.Deserialize(reader));
         }
 
         // Deserialize decoder layers
-        int numDecoderLayers = reader.ReadInt32();
-        _decoderLayers = new List<InformerDecoderBlock<T>>(numDecoderLayers);
-        for (int i = 0; i < numDecoderLayers; i++)
+        int savedDecoderLayerCount = reader.ReadInt32();
+        _decoderLayers = new List<InformerDecoderBlock<T>>(savedDecoderLayerCount);
+        for (int i = 0; i < savedDecoderLayerCount; i++)
         {
             _decoderLayers.Add(InformerDecoderBlock<T>.Deserialize(reader));
         }
