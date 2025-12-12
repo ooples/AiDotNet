@@ -851,6 +851,7 @@ public class PagedAttentionServerTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]  // Skip on net471 - 4GB allocation exceeds .NET Framework array size limits
     public void PagedAttentionServer_ForModel_CreatesValidServer()
     {
         // Act

@@ -1,6 +1,7 @@
 using System;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Interfaces;
+using static AiDotNet.Tensors.ErrorMessages;
 
 namespace AiDotNet.Tensors.Helpers;
 
@@ -37,7 +38,7 @@ public static class TensorPrimitivesHelper<T>
     public static Vector<T> Add(Vector<T> x, Vector<T> y)
     {
         if (x.Length != y.Length)
-            throw new ArgumentException("Vectors must have the same length");
+            throw new ArgumentException(VectorsSameLength);
 
         var xArray = x.ToArray();
         var yArray = y.ToArray();
@@ -54,7 +55,7 @@ public static class TensorPrimitivesHelper<T>
     public static Vector<T> Subtract(Vector<T> x, Vector<T> y)
     {
         if (x.Length != y.Length)
-            throw new ArgumentException("Vectors must have the same length");
+            throw new ArgumentException(VectorsSameLength);
 
         var xArray = x.ToArray();
         var yArray = y.ToArray();
@@ -71,7 +72,7 @@ public static class TensorPrimitivesHelper<T>
     public static Vector<T> Multiply(Vector<T> x, Vector<T> y)
     {
         if (x.Length != y.Length)
-            throw new ArgumentException("Vectors must have the same length");
+            throw new ArgumentException(VectorsSameLength);
 
         var xArray = x.ToArray();
         var yArray = y.ToArray();
@@ -88,7 +89,7 @@ public static class TensorPrimitivesHelper<T>
     public static Vector<T> Divide(Vector<T> x, Vector<T> y)
     {
         if (x.Length != y.Length)
-            throw new ArgumentException("Vectors must have the same length");
+            throw new ArgumentException(VectorsSameLength);
 
         var xArray = x.ToArray();
         var yArray = y.ToArray();
@@ -105,7 +106,7 @@ public static class TensorPrimitivesHelper<T>
     public static T Dot(Vector<T> x, Vector<T> y)
     {
         if (x.Length != y.Length)
-            throw new ArgumentException("Vectors must have the same length");
+            throw new ArgumentException(VectorsSameLength);
 
         var xArray = x.ToArray();
         var yArray = y.ToArray();
@@ -128,7 +129,7 @@ public static class TensorPrimitivesHelper<T>
     public static T Max(Vector<T> x)
     {
         if (x.Length == 0)
-            throw new ArgumentException("Vector cannot be empty");
+            throw new ArgumentException(VectorCannotBeEmpty);
 
         var xArray = x.ToArray();
         return NumOps.Max(xArray);
@@ -140,7 +141,7 @@ public static class TensorPrimitivesHelper<T>
     public static T Min(Vector<T> x)
     {
         if (x.Length == 0)
-            throw new ArgumentException("Vector cannot be empty");
+            throw new ArgumentException(VectorCannotBeEmpty);
 
         var xArray = x.ToArray();
         return NumOps.Min(xArray);
@@ -389,7 +390,7 @@ public static class TensorPrimitivesHelper<T>
     public static T CosineSimilarity(Vector<T> a, Vector<T> b)
     {
         if (a.Length != b.Length)
-            throw new ArgumentException("Vectors must have the same length");
+            throw new ArgumentException(VectorsSameLength);
 
         var aArray = a.ToArray();
         var bArray = b.ToArray();
