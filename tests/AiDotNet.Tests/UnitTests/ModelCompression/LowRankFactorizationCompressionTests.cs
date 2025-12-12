@@ -238,7 +238,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
             // Act
             var startTime = DateTime.Now;
-            var (compressedWeights, metadata) = compression.Compress(weightsVector);
+            var (compressedWeights, _) = compression.Compress(weightsVector);
             var elapsed = DateTime.Now - startTime;
 
             // Assert

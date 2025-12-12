@@ -624,7 +624,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var weightsVector = new Vector<double>(weights);
 
             // Act
-            var (compressedWeights, metadata) = compression.Compress(weightsVector);
+            var (_, metadata) = compression.Compress(weightsVector);
             var deepMetadata = (DeepCompressionMetadata<double>)metadata;
 
             // Assert

@@ -186,10 +186,13 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
             throw new ArgumentException("Invalid metadata type.", nameof(metadata));
         }
 
-        // Size of cluster assignments - stored as indices (not full T values)
-        // With 256 clusters, each assignment needs only 8 bits (1 byte),
-        // but we use sizeof(int) as a reasonable practical representation.
-        // Note: An optimized implementation could use ceil(log2(NumClusters)) bits per assignment.
+        // Size of cluster assignments - semantically stored as indices (not full T values)
+        // While compressedWeights is a Vector<T> for computation convenience, the semantic
+        // representation stores cluster indices. With 256 clusters, each assignment needs
+        // only 8 bits (1 byte), but we use sizeof(int) as a practical serialization format.
+        // Note: Using GetElementSize() here would incorrectly report T-sized storage when
+        // the actual compressed format stores integer indices, not full-precision values.
+        // An optimized implementation could use ceil(log2(NumClusters)) bits per assignment.
         long assignmentsSize = compressedWeights.Length * sizeof(int);
 
         // Metadata size includes cluster centers + two int fields (numClusters, originalLength)
