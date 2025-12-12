@@ -1,26 +1,27 @@
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
-/// Implements the Informer model for efficient long-sequence time series forecasting.
+/// Implements a simplified Informer-inspired model for time series forecasting.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
-/// <para>
-/// Informer introduces innovations to handle the quadratic complexity of standard Transformers:
-/// - ProbSparse Self-Attention: Reduces complexity from O(L²) to O(L log L)
-/// - Self-Attention Distilling: Progressive reduction of sequence length
-/// - Generative Inference: Efficient long-sequence forecasting
-/// </para>
+/// <para><b>Implementation Note:</b> This is a simplified educational implementation that captures
+/// the architectural spirit of Informer but does not implement all optimizations from the original paper.
+/// Specifically:</para>
+/// <list type="bullet">
+/// <item><b>ProbSparse Self-Attention:</b> Uses standard attention instead of the O(L log L) sparse variant</item>
+/// <item><b>Self-Attention Distilling:</b> Uses simplified fixed-stride pooling</item>
+/// <item><b>Generative Decoder:</b> Uses a simplified projection layer</item>
+/// </list>
+/// <para>For production use with true O(L log L) complexity, consider using the original
+/// Informer implementation from the paper authors or a dedicated deep learning framework.</para>
 /// <para>
 /// Original paper: Zhou et al., "Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting" (AAAI 2021).
 /// </para>
-/// <para><b>For Beginners:</b> Informer is like a faster, smarter version of the Transformer
-/// specifically designed for time series. It can efficiently handle very long sequences (hundreds
-/// or thousands of time steps) which would be too slow for regular Transformers.
-///
-/// The key insight is that not all past time steps are equally important for prediction.
-/// Informer intelligently focuses on the most relevant parts of the history, making it
-/// much faster without sacrificing accuracy.
+/// <para><b>For Beginners:</b> This implementation demonstrates the key ideas behind Informer -
+/// using transformer-style architecture for time series with encoder-decoder structure.
+/// While simplified for educational purposes, it still provides useful forecasting capabilities
+/// for moderate-length sequences.
 /// </para>
 /// </remarks>
 public class InformerModel<T> : TimeSeriesModelBase<T>
@@ -34,6 +35,9 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private List<InformerDecoderBlock<T>> _decoderLayers = new List<InformerDecoderBlock<T>>();
     private Matrix<T> _outputProjection = new Matrix<T>(0, 0);
     private Vector<T> _outputBias = new Vector<T>(0);
+
+    // Random for stochastic gradient sampling
+    private readonly Random _trainingRandom = new Random(42);
 
     public InformerModel(InformerOptions<T>? options = null)
         : this(options ?? new InformerOptions<T>(), initializeModel: true)
@@ -116,43 +120,55 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Updates output projection weights using numerical gradient estimation.
+    /// Updates output projection weights using numerical gradient estimation with stochastic sampling.
     /// </summary>
+    /// <remarks>
+    /// <para>Uses stochastic coordinate descent by sampling a random subset of weights each step.
+    /// This significantly reduces computational cost from O(forecast_horizon * embedding_dim) to O(sample_size)
+    /// per training sample, making training feasible for large models.</para>
+    /// </remarks>
     private void UpdateOutputWeights(Vector<T> input, T target, T learningRate)
     {
         T epsilon = _numOps.FromDouble(1e-5);
         T twoEpsilon = _numOps.Multiply(_numOps.FromDouble(2.0), epsilon);
 
-        // Update all output projection weights (not just a 5x5 subset)
-        for (int i = 0; i < _outputProjection.Rows; i++)
+        // Use stochastic coordinate descent - sample random subset of weights
+        // This reduces computational complexity from O(forecast_horizon * embedding_dim) to O(sample_size)
+        int totalWeights = _outputProjection.Rows * _outputProjection.Columns;
+        int sampleSize = Math.Min(50, totalWeights); // Update ~50 weights per sample
+
+        for (int s = 0; s < sampleSize; s++)
         {
-            for (int j = 0; j < _outputProjection.Columns; j++)
-            {
-                T original = _outputProjection[i, j];
+            int flatIndex = _trainingRandom.Next(totalWeights);
+            int i = flatIndex / _outputProjection.Columns;
+            int j = flatIndex % _outputProjection.Columns;
 
-                // Compute loss with perturbed weight (positive)
-                _outputProjection[i, j] = _numOps.Add(original, epsilon);
-                T predPlus = PredictSingle(input);
-                T errorPlus = _numOps.Subtract(target, predPlus);
-                T lossPlus = _numOps.Multiply(errorPlus, errorPlus);
+            T original = _outputProjection[i, j];
 
-                // Compute loss with perturbed weight (negative)
-                _outputProjection[i, j] = _numOps.Subtract(original, epsilon);
-                T predMinus = PredictSingle(input);
-                T errorMinus = _numOps.Subtract(target, predMinus);
-                T lossMinus = _numOps.Multiply(errorMinus, errorMinus);
+            // Compute loss with perturbed weight (positive)
+            _outputProjection[i, j] = _numOps.Add(original, epsilon);
+            T predPlus = PredictSingle(input);
+            T errorPlus = _numOps.Subtract(target, predPlus);
+            T lossPlus = _numOps.Multiply(errorPlus, errorPlus);
 
-                // Restore and update
-                _outputProjection[i, j] = original;
+            // Compute loss with perturbed weight (negative)
+            _outputProjection[i, j] = _numOps.Subtract(original, epsilon);
+            T predMinus = PredictSingle(input);
+            T errorMinus = _numOps.Subtract(target, predMinus);
+            T lossMinus = _numOps.Multiply(errorMinus, errorMinus);
 
-                T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
-                _outputProjection[i, j] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
-            }
+            // Restore and update
+            _outputProjection[i, j] = original;
+
+            T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
+            _outputProjection[i, j] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
         }
 
-        // Also update output bias
-        for (int i = 0; i < _outputBias.Length; i++)
+        // Update a random subset of output biases
+        int biasSampleSize = Math.Min(10, _outputBias.Length);
+        for (int s = 0; s < biasSampleSize; s++)
         {
+            int i = _trainingRandom.Next(_outputBias.Length);
             T original = _outputBias[i];
 
             _outputBias[i] = _numOps.Add(original, epsilon);

@@ -42,6 +42,9 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     private Matrix<T> _outputProjection = new Matrix<T>(0, 0);
     private Vector<T> _outputBias = new Vector<T>(0);
 
+    // Random for stochastic gradient sampling
+    private readonly Random _trainingRandom = new Random(42);
+
     public ChronosFoundationModel(ChronosOptions<T>? options = null)
         : this(options ?? new ChronosOptions<T>(), initializeModel: true)
     {
@@ -145,43 +148,55 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Updates output projection weights using numerical gradient estimation.
+    /// Updates output projection weights using numerical gradient estimation with stochastic sampling.
     /// </summary>
+    /// <remarks>
+    /// <para>Uses stochastic coordinate descent by sampling a random subset of weights each step.
+    /// This significantly reduces computational cost from O(rows * cols) to O(sample_size) per
+    /// training sample, making training feasible for large models.</para>
+    /// </remarks>
     private void UpdateOutputWeights(Vector<T> input, T target, T learningRate)
     {
         T epsilon = _numOps.FromDouble(1e-5);
         T twoEpsilon = _numOps.Multiply(_numOps.FromDouble(2.0), epsilon);
 
-        // Update all output projection weights (not just a 5x5 subset)
-        for (int i = 0; i < _outputProjection.Rows; i++)
+        // Use stochastic coordinate descent - sample random subset of weights
+        // This reduces computational complexity from O(vocab_size * embedding_dim) to O(sample_size)
+        int totalWeights = _outputProjection.Rows * _outputProjection.Columns;
+        int sampleSize = Math.Min(50, totalWeights); // Update ~50 weights per sample
+
+        for (int s = 0; s < sampleSize; s++)
         {
-            for (int j = 0; j < _outputProjection.Columns; j++)
-            {
-                T original = _outputProjection[i, j];
+            int flatIndex = _trainingRandom.Next(totalWeights);
+            int i = flatIndex / _outputProjection.Columns;
+            int j = flatIndex % _outputProjection.Columns;
 
-                // Compute loss with perturbed weight (positive)
-                _outputProjection[i, j] = _numOps.Add(original, epsilon);
-                T predPlus = PredictSingle(input);
-                T errorPlus = _numOps.Subtract(target, predPlus);
-                T lossPlus = _numOps.Multiply(errorPlus, errorPlus);
+            T original = _outputProjection[i, j];
 
-                // Compute loss with perturbed weight (negative)
-                _outputProjection[i, j] = _numOps.Subtract(original, epsilon);
-                T predMinus = PredictSingle(input);
-                T errorMinus = _numOps.Subtract(target, predMinus);
-                T lossMinus = _numOps.Multiply(errorMinus, errorMinus);
+            // Compute loss with perturbed weight (positive)
+            _outputProjection[i, j] = _numOps.Add(original, epsilon);
+            T predPlus = PredictSingle(input);
+            T errorPlus = _numOps.Subtract(target, predPlus);
+            T lossPlus = _numOps.Multiply(errorPlus, errorPlus);
 
-                // Restore and update
-                _outputProjection[i, j] = original;
+            // Compute loss with perturbed weight (negative)
+            _outputProjection[i, j] = _numOps.Subtract(original, epsilon);
+            T predMinus = PredictSingle(input);
+            T errorMinus = _numOps.Subtract(target, predMinus);
+            T lossMinus = _numOps.Multiply(errorMinus, errorMinus);
 
-                T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
-                _outputProjection[i, j] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
-            }
+            // Restore and update
+            _outputProjection[i, j] = original;
+
+            T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
+            _outputProjection[i, j] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
         }
 
-        // Also update output bias
-        for (int i = 0; i < _outputBias.Length; i++)
+        // Update a random subset of output biases
+        int biasSampleSize = Math.Min(10, _outputBias.Length);
+        for (int s = 0; s < biasSampleSize; s++)
         {
+            int i = _trainingRandom.Next(_outputBias.Length);
             T original = _outputBias[i];
 
             _outputBias[i] = _numOps.Add(original, epsilon);

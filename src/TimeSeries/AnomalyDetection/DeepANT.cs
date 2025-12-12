@@ -69,8 +69,8 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
         // Initialize convolutional layers with different seeds
         _convLayers.Clear();
-        _convLayers.Add(new ConvLayer<T>(_options.WindowSize, 32, 3, seed: 42));
-        _convLayers.Add(new ConvLayer<T>(32, 32, 3, seed: 1042));
+        _convLayers.Add(new ConvLayer<T>(32, 3, seed: 42));
+        _convLayers.Add(new ConvLayer<T>(32, 3, seed: 1042));
 
         // Initialize fully connected output layer
         double stddev = Math.Sqrt(2.0 / 32);
@@ -142,6 +142,23 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
         }
     }
 
+    /// <summary>
+    /// Updates fully connected layer weights using numerical gradient descent.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Design Note:</b> This implementation intentionally trains only the fully connected
+    /// (FC) layer while keeping the convolutional layers fixed with their initial random weights.
+    /// This follows the "Random CNN Features + Trained Linear Head" paradigm, which has been shown
+    /// to be surprisingly effective for time series tasks. See:</para>
+    /// <list type="bullet">
+    /// <item>Rahimi &amp; Recht (2007), "Random Features for Large-Scale Kernel Machines"</item>
+    /// <item>Extreme Learning Machines (ELM) research</item>
+    /// </list>
+    /// <para>The random convolutional filters act as a fixed feature extraction layer, transforming
+    /// the input into a higher-dimensional feature space where a simple linear model (the FC layer)
+    /// can learn the mapping. This approach is computationally efficient and often performs
+    /// comparably to fully-trained networks for anomaly detection tasks.</para>
+    /// </remarks>
     private void UpdateWeightsNumerically(Vector<T> input, T target, T learningRate)
     {
         T epsilon = _numOps.FromDouble(1e-5);
@@ -416,7 +433,7 @@ internal class ConvLayer<T>
 
     public int ParameterCount => _kernels.Rows * _kernels.Columns + _biases.Length;
 
-    public ConvLayer(int inputChannels, int outputChannels, int kernelSize, int seed = 42)
+    public ConvLayer(int outputChannels, int kernelSize, int seed = 42)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _outputChannels = outputChannels;
