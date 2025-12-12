@@ -36,14 +36,20 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private Vector<T> _outputBias = new Vector<T>(0);
 
     public InformerModel(InformerOptions<T>? options = null)
-        : base(options ?? new InformerOptions<T>())
+        : this(options ?? new InformerOptions<T>(), initializeModel: true)
     {
-        _options = options ?? new InformerOptions<T>();
+    }
+
+    private InformerModel(InformerOptions<T> options, bool initializeModel)
+        : base(options)
+    {
+        _options = options;
         _numOps = MathHelper.GetNumericOperations<T>();
         _encoderLayers = new List<InformerEncoderBlock<T>>();
         _decoderLayers = new List<InformerDecoderBlock<T>>();
 
-        InitializeModel();
+        if (initializeModel)
+            InitializeModel();
     }
 
     private void InitializeModel()
@@ -57,21 +63,23 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
             for (int j = 0; j < _embeddingWeights.Columns; j++)
                 _embeddingWeights[i, j] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
 
-        // Encoder layers with distilling
+        // Encoder layers with distilling - use different seeds for each layer
         for (int i = 0; i < _options.NumEncoderLayers; i++)
         {
             _encoderLayers.Add(new InformerEncoderBlock<T>(
                 _options.EmbeddingDim,
-                _options.NumAttentionHeads
+                _options.NumAttentionHeads,
+                seed: 42 + i * 1000  // Different seed per layer
             ));
         }
 
-        // Decoder layers
+        // Decoder layers - use different seeds for each layer
         for (int i = 0; i < _options.NumDecoderLayers; i++)
         {
             _decoderLayers.Add(new InformerDecoderBlock<T>(
                 _options.EmbeddingDim,
-                _options.NumAttentionHeads
+                _options.NumAttentionHeads,
+                seed: 42 + (_options.NumEncoderLayers + i) * 1000  // Different seed per layer
             ));
         }
 
@@ -352,19 +360,19 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 internal class InformerEncoderBlock<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private readonly int _embeddingDim;
+    private int _embeddingDim;
     private Matrix<T> _attentionWeights;
     private Matrix<T> _ffnWeights;
 
     public int ParameterCount => _attentionWeights.Rows * _attentionWeights.Columns +
                                   _ffnWeights.Rows * _ffnWeights.Columns;
 
-    public InformerEncoderBlock(int embeddingDim, int numHeads)
+    public InformerEncoderBlock(int embeddingDim, int numHeads, int seed = 42)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _embeddingDim = embeddingDim;
 
-        var random = new Random(42);
+        var random = new Random(seed);
         double stddev = Math.Sqrt(2.0 / embeddingDim);
 
         _attentionWeights = new Matrix<T>(embeddingDim, embeddingDim);
@@ -391,15 +399,28 @@ internal class InformerEncoderBlock<T>
 
     public Vector<T> Forward(Vector<T> input)
     {
-        // Simplified self-attention + FFN
-        var output = new Vector<T>(Math.Min(input.Length, _embeddingDim));
+        int outputDim = _attentionWeights.Rows > 0 ? _attentionWeights.Rows : Math.Min(input.Length, _embeddingDim);
+        var intermediate = new Vector<T>(outputDim);
 
-        for (int i = 0; i < output.Length; i++)
+        // Self-attention layer
+        for (int i = 0; i < outputDim && i < _attentionWeights.Rows; i++)
         {
             T sum = _numOps.Zero;
             for (int j = 0; j < Math.Min(input.Length, _attentionWeights.Columns); j++)
             {
                 sum = _numOps.Add(sum, _numOps.Multiply(_attentionWeights[i, j], input[j]));
+            }
+            intermediate[i] = MathHelper.Tanh(sum);
+        }
+
+        // Feed-forward network layer
+        var output = new Vector<T>(outputDim);
+        for (int i = 0; i < outputDim && i < _ffnWeights.Rows; i++)
+        {
+            T sum = _numOps.Zero;
+            for (int j = 0; j < Math.Min(intermediate.Length, _ffnWeights.Columns); j++)
+            {
+                sum = _numOps.Add(sum, _numOps.Multiply(_ffnWeights[i, j], intermediate[j]));
             }
             output[i] = MathHelper.Tanh(sum);
         }
@@ -436,6 +457,7 @@ internal class InformerEncoderBlock<T>
         int rows = reader.ReadInt32();
         int cols = reader.ReadInt32();
         block._attentionWeights = new Matrix<T>(rows, cols);
+        block._embeddingDim = rows; // Set embedding dim from deserialized matrix size
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
                 block._attentionWeights[i, j] = numOps.FromDouble(reader.ReadDouble());
@@ -457,19 +479,19 @@ internal class InformerEncoderBlock<T>
 internal class InformerDecoderBlock<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private readonly int _embeddingDim;
+    private int _embeddingDim;
     private Matrix<T> _selfAttentionWeights;
     private Matrix<T> _crossAttentionWeights;
 
     public int ParameterCount => _selfAttentionWeights.Rows * _selfAttentionWeights.Columns +
                                   _crossAttentionWeights.Rows * _crossAttentionWeights.Columns;
 
-    public InformerDecoderBlock(int embeddingDim, int numHeads)
+    public InformerDecoderBlock(int embeddingDim, int numHeads, int seed = 42)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _embeddingDim = embeddingDim;
 
-        var random = new Random(42);
+        var random = new Random(seed);
         double stddev = Math.Sqrt(2.0 / embeddingDim);
 
         _selfAttentionWeights = new Matrix<T>(embeddingDim, embeddingDim);
@@ -496,17 +518,31 @@ internal class InformerDecoderBlock<T>
 
     public Vector<T> Forward(Vector<T> target, Vector<T> memory)
     {
-        // Simplified decoder with cross-attention
-        var output = new Vector<T>(Math.Min(target.Length, _embeddingDim));
+        int outputDim = _selfAttentionWeights.Rows > 0 ? _selfAttentionWeights.Rows : Math.Min(target.Length, _embeddingDim);
+        var intermediate = new Vector<T>(outputDim);
 
-        for (int i = 0; i < output.Length; i++)
+        // Self-attention on target
+        for (int i = 0; i < outputDim && i < _selfAttentionWeights.Rows; i++)
+        {
+            T sum = _numOps.Zero;
+            for (int j = 0; j < Math.Min(target.Length, _selfAttentionWeights.Columns); j++)
+            {
+                sum = _numOps.Add(sum, _numOps.Multiply(_selfAttentionWeights[i, j], target[j]));
+            }
+            intermediate[i] = MathHelper.Tanh(sum);
+        }
+
+        // Cross-attention using encoder memory
+        var output = new Vector<T>(outputDim);
+        for (int i = 0; i < outputDim && i < _crossAttentionWeights.Rows; i++)
         {
             T sum = _numOps.Zero;
             for (int j = 0; j < Math.Min(memory.Length, _crossAttentionWeights.Columns); j++)
             {
                 sum = _numOps.Add(sum, _numOps.Multiply(_crossAttentionWeights[i, j], memory[j]));
             }
-            output[i] = MathHelper.Tanh(sum);
+            // Combine with self-attention intermediate result
+            output[i] = MathHelper.Tanh(_numOps.Add(sum, intermediate[i]));
         }
 
         return output;
@@ -541,6 +577,7 @@ internal class InformerDecoderBlock<T>
         int rows = reader.ReadInt32();
         int cols = reader.ReadInt32();
         block._selfAttentionWeights = new Matrix<T>(rows, cols);
+        block._embeddingDim = rows; // Set embedding dim from deserialized matrix size
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
                 block._selfAttentionWeights[i, j] = numOps.FromDouble(reader.ReadDouble());

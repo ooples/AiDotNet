@@ -44,24 +44,33 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
     /// Initializes a new instance of the DeepANT class.
     /// </summary>
     public DeepANT(DeepANTOptions<T>? options = null)
-        : base(options ?? new DeepANTOptions<T>())
+        : this(options ?? new DeepANTOptions<T>(), initializeModel: true)
     {
-        _options = options ?? new DeepANTOptions<T>();
+    }
+
+    /// <summary>
+    /// Private constructor for proper options instance management.
+    /// </summary>
+    private DeepANT(DeepANTOptions<T> options, bool initializeModel)
+        : base(options)
+    {
+        _options = options;
         _numOps = MathHelper.GetNumericOperations<T>();
         _convLayers = new List<ConvLayer<T>>();
         _anomalyThreshold = _numOps.FromDouble(3.0); // 3 sigma by default
 
-        InitializeModel();
+        if (initializeModel)
+            InitializeModel();
     }
 
     private void InitializeModel()
     {
         var random = new Random(42);
 
-        // Initialize convolutional layers
+        // Initialize convolutional layers with different seeds
         _convLayers.Clear();
-        _convLayers.Add(new ConvLayer<T>(_options.WindowSize, 32, 3));
-        _convLayers.Add(new ConvLayer<T>(32, 32, 3));
+        _convLayers.Add(new ConvLayer<T>(_options.WindowSize, 32, 3, seed: 42));
+        _convLayers.Add(new ConvLayer<T>(32, 32, 3, seed: 1042));
 
         // Initialize fully connected output layer
         double stddev = Math.Sqrt(2.0 / 32);
@@ -322,10 +331,23 @@ public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
     public DeepANTOptions(DeepANTOptions<T> other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
+        // Copy DeepANT-specific properties
         WindowSize = other.WindowSize;
         LearningRate = other.LearningRate;
         Epochs = other.Epochs;
         BatchSize = other.BatchSize;
+
+        // Copy TimeSeriesRegressionOptions properties
+        LagOrder = other.LagOrder;
+        IncludeTrend = other.IncludeTrend;
+        SeasonalPeriod = other.SeasonalPeriod;
+        AutocorrelationCorrection = other.AutocorrelationCorrection;
+        ModelType = other.ModelType;
+        LossFunction = other.LossFunction;
+
+        // Copy RegressionOptions properties
+        DecompositionMethod = other.DecompositionMethod;
+        UseIntercept = other.UseIntercept;
     }
 }
 
@@ -335,7 +357,6 @@ public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
 internal class ConvLayer<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private readonly int _inputChannels;
     private readonly int _outputChannels;
     private readonly int _kernelSize;
     private readonly Matrix<T> _kernels;
@@ -343,17 +364,17 @@ internal class ConvLayer<T>
 
     public int ParameterCount => _kernels.Rows * _kernels.Columns + _biases.Length;
 
-    public ConvLayer(int inputChannels, int outputChannels, int kernelSize)
+    public ConvLayer(int inputChannels, int outputChannels, int kernelSize, int seed = 42)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        _inputChannels = inputChannels;
         _outputChannels = outputChannels;
         _kernelSize = kernelSize;
 
-        var random = new Random(42);
-        double stddev = Math.Sqrt(2.0 / ((double)inputChannels * kernelSize));
+        var random = new Random(seed);
+        // Use kernelSize weights per output channel for 1D convolution
+        double stddev = Math.Sqrt(2.0 / kernelSize);
 
-        _kernels = new Matrix<T>(outputChannels, inputChannels * kernelSize);
+        _kernels = new Matrix<T>(outputChannels, kernelSize);
         for (int i = 0; i < _kernels.Rows; i++)
             for (int j = 0; j < _kernels.Columns; j++)
                 _kernels[i, j] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
@@ -379,11 +400,10 @@ internal class ConvLayer<T>
             {
                 T positionSum = _biases[outChannel];
 
-                // Apply kernel at this position
+                // Apply kernel at this position - use all kernelSize weights
                 for (int k = 0; k < _kernelSize && (pos + k) < input.Length; k++)
                 {
-                    int kernelIdx = k % _kernels.Columns;
-                    T weight = _kernels[outChannel, kernelIdx];
+                    T weight = _kernels[outChannel, k];
                     T inputVal = input[pos + k];
                     positionSum = _numOps.Add(positionSum, _numOps.Multiply(weight, inputVal));
                 }

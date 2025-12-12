@@ -181,11 +181,12 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     private void UpdateWeights(Matrix<T> x, Vector<T> y, int batchStart, int batchEnd, T learningRate)
     {
         T epsilon = _numOps.FromDouble(1e-6);
+        T twoEpsilon = _numOps.Multiply(_numOps.FromDouble(2.0), epsilon);
 
-        // Update mean weights (sample a few for efficiency)
-        for (int i = 0; i < Math.Min(5, _meanWeights.Rows); i++)
+        // Update all mean weights (shape is [1, HiddenSize])
+        for (int i = 0; i < _meanWeights.Rows; i++)
         {
-            for (int j = 0; j < Math.Min(5, _meanWeights.Columns); j++)
+            for (int j = 0; j < _meanWeights.Columns; j++)
             {
                 T original = _meanWeights[i, j];
 
@@ -197,13 +198,63 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
                 _meanWeights[i, j] = original;
 
-                T gradient = _numOps.Divide(
-                    _numOps.Subtract(lossPlus, lossMinus),
-                    _numOps.Multiply(_numOps.FromDouble(2.0), epsilon)
-                );
-
+                T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
                 _meanWeights[i, j] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
             }
+        }
+
+        // Update mean bias
+        for (int i = 0; i < _meanBias.Length; i++)
+        {
+            T original = _meanBias[i];
+
+            _meanBias[i] = _numOps.Add(original, epsilon);
+            T lossPlus = ComputeBatchLoss(x, y, batchStart, batchEnd);
+
+            _meanBias[i] = _numOps.Subtract(original, epsilon);
+            T lossMinus = ComputeBatchLoss(x, y, batchStart, batchEnd);
+
+            _meanBias[i] = original;
+
+            T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
+            _meanBias[i] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
+        }
+
+        // Update all scale weights (shape is [1, HiddenSize])
+        for (int i = 0; i < _scaleWeights.Rows; i++)
+        {
+            for (int j = 0; j < _scaleWeights.Columns; j++)
+            {
+                T original = _scaleWeights[i, j];
+
+                _scaleWeights[i, j] = _numOps.Add(original, epsilon);
+                T lossPlus = ComputeBatchLoss(x, y, batchStart, batchEnd);
+
+                _scaleWeights[i, j] = _numOps.Subtract(original, epsilon);
+                T lossMinus = ComputeBatchLoss(x, y, batchStart, batchEnd);
+
+                _scaleWeights[i, j] = original;
+
+                T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
+                _scaleWeights[i, j] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
+            }
+        }
+
+        // Update scale bias
+        for (int i = 0; i < _scaleBias.Length; i++)
+        {
+            T original = _scaleBias[i];
+
+            _scaleBias[i] = _numOps.Add(original, epsilon);
+            T lossPlus = ComputeBatchLoss(x, y, batchStart, batchEnd);
+
+            _scaleBias[i] = _numOps.Subtract(original, epsilon);
+            T lossMinus = ComputeBatchLoss(x, y, batchStart, batchEnd);
+
+            _scaleBias[i] = original;
+
+            T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
+            _scaleBias[i] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
         }
     }
 

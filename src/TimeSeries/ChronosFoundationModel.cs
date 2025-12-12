@@ -43,14 +43,23 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     private Vector<T> _outputBias = new Vector<T>(0);
 
     public ChronosFoundationModel(ChronosOptions<T>? options = null)
-        : base(options ?? new ChronosOptions<T>())
+        : this(options ?? new ChronosOptions<T>(), initializeModel: true)
     {
-        _options = options ?? new ChronosOptions<T>();
+    }
+
+    /// <summary>
+    /// Private constructor for proper options instance management.
+    /// </summary>
+    private ChronosFoundationModel(ChronosOptions<T> options, bool initializeModel)
+        : base(options)
+    {
+        _options = options;
         _numOps = MathHelper.GetNumericOperations<T>();
         _vocabularySize = _options.VocabularySize;
         _transformerLayers = new List<TransformerBlock<T>>();
 
-        InitializeModel();
+        if (initializeModel)
+            InitializeModel();
     }
 
     private void InitializeModel()
@@ -73,10 +82,10 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             for (int j = 0; j < _tokenEmbeddings.Columns; j++)
                 _tokenEmbeddings[i, j] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
 
-        // Transformer layers
+        // Transformer layers - use different seeds for each layer
         for (int i = 0; i < _options.NumLayers; i++)
         {
-            _transformerLayers.Add(new TransformerBlock<T>(_options.EmbeddingDim, _options.NumHeads));
+            _transformerLayers.Add(new TransformerBlock<T>(_options.EmbeddingDim, _options.NumHeads, seed: 42 + i * 1000));
         }
 
         // Output projection (back to vocabulary)
@@ -422,6 +431,7 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
     public ChronosOptions(ChronosOptions<T> other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
+        // Copy Chronos-specific properties
         ContextLength = other.ContextLength;
         ForecastHorizon = other.ForecastHorizon;
         VocabularySize = other.VocabularySize;
@@ -430,6 +440,18 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
         NumHeads = other.NumHeads;
         LearningRate = other.LearningRate;
         Epochs = other.Epochs;
+
+        // Copy TimeSeriesRegressionOptions properties
+        LagOrder = other.LagOrder;
+        IncludeTrend = other.IncludeTrend;
+        SeasonalPeriod = other.SeasonalPeriod;
+        AutocorrelationCorrection = other.AutocorrelationCorrection;
+        ModelType = other.ModelType;
+        LossFunction = other.LossFunction;
+
+        // Copy RegressionOptions properties
+        DecompositionMethod = other.DecompositionMethod;
+        UseIntercept = other.UseIntercept;
     }
 }
 
@@ -443,10 +465,10 @@ internal class TransformerBlock<T>
 
     public int ParameterCount => _weights.Rows * _weights.Columns;
 
-    public TransformerBlock(int embeddingDim, int numHeads)
+    public TransformerBlock(int embeddingDim, int numHeads, int seed = 42)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        var random = new Random(42);
+        var random = new Random(seed);
         double stddev = Math.Sqrt(2.0 / embeddingDim);
 
         _weights = new Matrix<T>(embeddingDim, embeddingDim);
