@@ -185,29 +185,26 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
     /// <returns>Boolean array where true indicates an anomaly.</returns>
     public bool[] DetectAnomalies(Vector<T> data)
     {
-        if (data.Length < _options.WindowSize)
-            throw new ArgumentException($"Data length must be at least {_options.WindowSize}");
+        if (data.Length <= _options.WindowSize)
+            throw new ArgumentException($"Data length must be greater than {_options.WindowSize}");
 
-        bool[] anomalies = new bool[data.Length - _options.WindowSize + 1];
+        // Each anomaly score corresponds to comparing prediction from window ending at i with actual value at i
+        int numResults = data.Length - _options.WindowSize;
+        bool[] anomalies = new bool[numResults];
 
-        for (int i = 0; i <= data.Length - _options.WindowSize; i++)
+        for (int i = 0; i < numResults; i++)
         {
-            // Extract window
+            // Extract window ending at position i + WindowSize - 1
             Vector<T> window = new Vector<T>(_options.WindowSize);
             for (int j = 0; j < _options.WindowSize; j++)
                 window[j] = data[i + j];
 
-            // Predict next value
+            // Predict next value and compare with actual
             T prediction = PredictSingle(window);
+            T actual = data[i + _options.WindowSize];
+            T error = _numOps.Abs(_numOps.Subtract(actual, prediction));
 
-            // Compare with actual next value (if available)
-            if (i + _options.WindowSize < data.Length)
-            {
-                T actual = data[i + _options.WindowSize];
-                T error = _numOps.Abs(_numOps.Subtract(actual, prediction));
-
-                anomalies[i] = _numOps.GreaterThan(error, _anomalyThreshold);
-            }
+            anomalies[i] = _numOps.GreaterThan(error, _anomalyThreshold);
         }
 
         return anomalies;
@@ -218,25 +215,23 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
     /// </summary>
     public Vector<T> ComputeAnomalyScores(Vector<T> data)
     {
-        if (data.Length < _options.WindowSize)
-            throw new ArgumentException($"Data length must be at least {_options.WindowSize}");
+        if (data.Length <= _options.WindowSize)
+            throw new ArgumentException($"Data length must be greater than {_options.WindowSize}");
 
-        var scores = new Vector<T>(data.Length - _options.WindowSize + 1);
+        // Each score corresponds to comparing prediction from window ending at i with actual value at i
+        int numResults = data.Length - _options.WindowSize;
+        var scores = new Vector<T>(numResults);
 
-        for (int i = 0; i <= data.Length - _options.WindowSize; i++)
+        for (int i = 0; i < numResults; i++)
         {
             Vector<T> window = new Vector<T>(_options.WindowSize);
             for (int j = 0; j < _options.WindowSize; j++)
                 window[j] = data[i + j];
 
             T prediction = PredictSingle(window);
-
-            if (i + _options.WindowSize < data.Length)
-            {
-                T actual = data[i + _options.WindowSize];
-                T error = _numOps.Abs(_numOps.Subtract(actual, prediction));
-                scores[i] = error;
-            }
+            T actual = data[i + _options.WindowSize];
+            T error = _numOps.Abs(_numOps.Subtract(actual, prediction));
+            scores[i] = error;
         }
 
         return scores;
