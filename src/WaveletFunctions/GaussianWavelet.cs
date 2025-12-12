@@ -24,30 +24,8 @@ namespace AiDotNet.WaveletFunctions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GaussianWavelet<T> : IWaveletFunction<T>
+public class GaussianWavelet<T> : WaveletFunctionBase<T>
 {
-    /// <summary>
-    /// Provides mathematical operations for the generic type T.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field holds an implementation of numeric operations that can work with the generic type T.
-    /// It provides methods for basic arithmetic operations, exponentials, comparisons, and conversions
-    /// that are used throughout the wavelet calculations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a helper that lets us do math with different number types.
-    /// 
-    /// Because this class can work with different types of numbers (like float, double, or decimal),
-    /// we need a special helper that knows how to:
-    /// - Perform addition, subtraction, multiplication, and division
-    /// - Calculate exponential functions (like those used in the bell curve)
-    /// - Convert between different number formats
-    /// 
-    /// This allows the wavelet code to work with whatever number type you choose,
-    /// without having to write separate code for each number type.
-    /// </para>
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// The standard deviation parameter that controls the width of the Gaussian wavelet.
@@ -97,8 +75,7 @@ public class GaussianWavelet<T> : IWaveletFunction<T>
     /// </remarks>
     public GaussianWavelet(double sigma = 1.0)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        _sigma = _numOps.FromDouble(sigma);
+        _sigma = NumOps.FromDouble(sigma);
     }
 
     /// <summary>
@@ -123,10 +100,10 @@ public class GaussianWavelet<T> : IWaveletFunction<T>
     /// It's highest at the center (x=0) and gradually decreases as you move away from the center.
     /// </para>
     /// </remarks>
-    public T Calculate(T x)
+    public override T Calculate(T x)
     {
-        T exponent = _numOps.Divide(_numOps.Multiply(x, x), _numOps.Multiply(_numOps.FromDouble(2.0), _numOps.Multiply(_sigma, _sigma)));
-        return _numOps.Exp(_numOps.Negate(exponent));
+        T exponent = NumOps.Divide(NumOps.Multiply(x, x), NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(_sigma, _sigma)));
+        return NumOps.Exp(NumOps.Negate(exponent));
     }
 
     /// <summary>
@@ -153,18 +130,18 @@ public class GaussianWavelet<T> : IWaveletFunction<T>
     /// and another that highlights the edges and boundaries (detail).
     /// </para>
     /// </remarks>
-    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int size = input.Length;
         var approximation = new Vector<T>(size);
         var detail = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = _numOps.FromDouble(i - size / 2);
+            T x = NumOps.FromDouble(i - size / 2);
             T waveletValue = Calculate(x);
             T derivativeValue = CalculateDerivative(x);
-            approximation[i] = _numOps.Multiply(waveletValue, input[i]);
-            detail[i] = _numOps.Multiply(derivativeValue, input[i]);
+            approximation[i] = NumOps.Multiply(waveletValue, input[i]);
+            detail[i] = NumOps.Multiply(derivativeValue, input[i]);
         }
 
         return (approximation, detail);
@@ -191,13 +168,13 @@ public class GaussianWavelet<T> : IWaveletFunction<T>
     /// continuous Gaussian function. The odd number ensures there's a center point exactly at zero.
     /// </para>
     /// </remarks>
-    public Vector<T> GetScalingCoefficients()
+    public override Vector<T> GetScalingCoefficients()
     {
         int size = 101; // Odd number to have a center point
         var coefficients = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = _numOps.FromDouble(i - size / 2);
+            T x = NumOps.FromDouble(i - size / 2);
             coefficients[i] = Calculate(x);
         }
 
@@ -226,13 +203,13 @@ public class GaussianWavelet<T> : IWaveletFunction<T>
     /// boundaries, or transitions between different states.
     /// </para>
     /// </remarks>
-    public Vector<T> GetWaveletCoefficients()
+    public override Vector<T> GetWaveletCoefficients()
     {
         int size = 101; // Odd number to have a center point
         var coefficients = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = _numOps.FromDouble(i - size / 2);
+            T x = NumOps.FromDouble(i - size / 2);
             coefficients[i] = CalculateDerivative(x);
         }
 
@@ -266,8 +243,8 @@ public class GaussianWavelet<T> : IWaveletFunction<T>
     private T CalculateDerivative(T x)
     {
         T gaussianValue = Calculate(x);
-        T factor = _numOps.Divide(x, _numOps.Multiply(_sigma, _sigma));
+        T factor = NumOps.Divide(x, NumOps.Multiply(_sigma, _sigma));
 
-        return _numOps.Multiply(_numOps.Negate(factor), gaussianValue);
+        return NumOps.Multiply(NumOps.Negate(factor), gaussianValue);
     }
 }
