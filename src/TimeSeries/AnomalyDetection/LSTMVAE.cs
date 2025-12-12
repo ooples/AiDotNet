@@ -69,8 +69,8 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
             {
                 Vector<T> input = x.GetRow(i);
 
-                // Forward pass
-                var (mean, logVar) = _encoder.Encode(input);
+                // Forward pass - logVar is available for full VAE training with KL loss
+                var (mean, _) = _encoder.Encode(input);
 
                 // Reparameterization trick (simplified - use mean in deterministic mode)
                 Vector<T> z = mean.Clone();
@@ -237,6 +237,10 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
         _options.LatentDim = reader.ReadInt32();
         _reconstructionThreshold = _numOps.FromDouble(reader.ReadDouble());
 
+        // Rebuild encoder/decoder to match deserialized dimensions
+        _encoder = new LSTMEncoder<T>(_options.WindowSize, _options.LatentDim, _options.HiddenSize);
+        _decoder = new LSTMDecoder<T>(_options.LatentDim, _options.WindowSize, _options.HiddenSize);
+
         int encoderParamCount = reader.ReadInt32();
         var encoderParams = new Vector<T>(encoderParamCount);
         for (int i = 0; i < encoderParamCount; i++)
@@ -362,7 +366,7 @@ internal class LSTMEncoder<T>
             {
                 sum = _numOps.Add(sum, _numOps.Multiply(_weights[i, j], input[j]));
             }
-            hidden[i] = _numOps.Tanh(sum);
+            hidden[i] = MathHelper.Tanh(sum);
         }
 
         // Compute mean
@@ -395,22 +399,44 @@ internal class LSTMEncoder<T>
     public Vector<T> GetParameters()
     {
         var parameters = new List<T>();
+        // Include all weights that contribute to ParameterCount
         for (int i = 0; i < _weights.Rows; i++)
             for (int j = 0; j < _weights.Columns; j++)
                 parameters.Add(_weights[i, j]);
         for (int i = 0; i < _bias.Length; i++)
             parameters.Add(_bias[i]);
+        for (int i = 0; i < _meanWeights.Rows; i++)
+            for (int j = 0; j < _meanWeights.Columns; j++)
+                parameters.Add(_meanWeights[i, j]);
+        for (int i = 0; i < _meanBias.Length; i++)
+            parameters.Add(_meanBias[i]);
+        for (int i = 0; i < _logVarWeights.Rows; i++)
+            for (int j = 0; j < _logVarWeights.Columns; j++)
+                parameters.Add(_logVarWeights[i, j]);
+        for (int i = 0; i < _logVarBias.Length; i++)
+            parameters.Add(_logVarBias[i]);
         return new Vector<T>(parameters.ToArray());
     }
 
     public void SetParameters(Vector<T> parameters)
     {
         int idx = 0;
+        // Set all weights that contribute to ParameterCount
         for (int i = 0; i < _weights.Rows && idx < parameters.Length; i++)
             for (int j = 0; j < _weights.Columns && idx < parameters.Length; j++)
                 _weights[i, j] = parameters[idx++];
         for (int i = 0; i < _bias.Length && idx < parameters.Length; i++)
             _bias[i] = parameters[idx++];
+        for (int i = 0; i < _meanWeights.Rows && idx < parameters.Length; i++)
+            for (int j = 0; j < _meanWeights.Columns && idx < parameters.Length; j++)
+                _meanWeights[i, j] = parameters[idx++];
+        for (int i = 0; i < _meanBias.Length && idx < parameters.Length; i++)
+            _meanBias[i] = parameters[idx++];
+        for (int i = 0; i < _logVarWeights.Rows && idx < parameters.Length; i++)
+            for (int j = 0; j < _logVarWeights.Columns && idx < parameters.Length; j++)
+                _logVarWeights[i, j] = parameters[idx++];
+        for (int i = 0; i < _logVarBias.Length && idx < parameters.Length; i++)
+            _logVarBias[i] = parameters[idx++];
     }
 }
 
@@ -469,7 +495,7 @@ internal class LSTMDecoder<T>
             {
                 sum = _numOps.Add(sum, _numOps.Multiply(_weights[i, j], latent[j]));
             }
-            hidden[i] = _numOps.Tanh(sum);
+            hidden[i] = MathHelper.Tanh(sum);
         }
 
         // Decode to output
@@ -490,21 +516,33 @@ internal class LSTMDecoder<T>
     public Vector<T> GetParameters()
     {
         var parameters = new List<T>();
+        // Include all weights that contribute to ParameterCount
         for (int i = 0; i < _weights.Rows; i++)
             for (int j = 0; j < _weights.Columns; j++)
                 parameters.Add(_weights[i, j]);
         for (int i = 0; i < _bias.Length; i++)
             parameters.Add(_bias[i]);
+        for (int i = 0; i < _outputWeights.Rows; i++)
+            for (int j = 0; j < _outputWeights.Columns; j++)
+                parameters.Add(_outputWeights[i, j]);
+        for (int i = 0; i < _outputBias.Length; i++)
+            parameters.Add(_outputBias[i]);
         return new Vector<T>(parameters.ToArray());
     }
 
     public void SetParameters(Vector<T> parameters)
     {
         int idx = 0;
+        // Set all weights that contribute to ParameterCount
         for (int i = 0; i < _weights.Rows && idx < parameters.Length; i++)
             for (int j = 0; j < _weights.Columns && idx < parameters.Length; j++)
                 _weights[i, j] = parameters[idx++];
         for (int i = 0; i < _bias.Length && idx < parameters.Length; i++)
             _bias[i] = parameters[idx++];
+        for (int i = 0; i < _outputWeights.Rows && idx < parameters.Length; i++)
+            for (int j = 0; j < _outputWeights.Columns && idx < parameters.Length; j++)
+                _outputWeights[i, j] = parameters[idx++];
+        for (int i = 0; i < _outputBias.Length && idx < parameters.Length; i++)
+            _outputBias[i] = parameters[idx++];
     }
 }

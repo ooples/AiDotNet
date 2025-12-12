@@ -40,15 +40,15 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     private readonly INumericOperations<T> _numOps;
 
     // LSTM layers
-    private List<LSTMLayer<T>> _lstmLayers;
-    private Matrix<T> _outputWeights;
-    private Vector<T> _outputBias;
+    private List<DeepARLstmCell<T>> _lstmLayers = new List<DeepARLstmCell<T>>();
+    private Matrix<T> _outputWeights = new Matrix<T>(0, 0);
+    private Vector<T> _outputBias = new Vector<T>(0);
 
     // Distribution parameters
-    private Matrix<T> _meanWeights;
-    private Vector<T> _meanBias;
-    private Matrix<T> _scaleWeights;
-    private Vector<T> _scaleBias;
+    private Matrix<T> _meanWeights = new Matrix<T>(0, 0);
+    private Vector<T> _meanBias = new Vector<T>(0);
+    private Matrix<T> _scaleWeights = new Matrix<T>(0, 0);
+    private Vector<T> _scaleBias = new Vector<T>(0);
 
     /// <summary>
     /// Initializes a new instance of the DeepARModel class.
@@ -59,7 +59,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     {
         _options = options ?? new DeepAROptions<T>();
         _numOps = MathHelper.GetNumericOperations<T>();
-        _lstmLayers = new List<LSTMLayer<T>>();
+        _lstmLayers = new List<DeepARLstmCell<T>>();
 
         ValidateDeepAROptions();
         InitializeModel();
@@ -100,7 +100,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < _options.NumLayers; i++)
         {
             int layerInputSize = (i == 0) ? inputSize : _options.HiddenSize;
-            _lstmLayers.Add(new LSTMLayer<T>(layerInputSize, _options.HiddenSize));
+            _lstmLayers.Add(new DeepARLstmCell<T>(layerInputSize, _options.HiddenSize));
         }
 
         // Output projection for distribution parameters
@@ -136,8 +136,8 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
             {
                 int batchEnd = Math.Min(batchStart + _options.BatchSize, numSamples);
 
-                // Compute loss and update weights
-                T batchLoss = ComputeBatchLoss(x, y, batchStart, batchEnd);
+                // Compute loss for training metrics and update weights
+                _ = ComputeBatchLoss(x, y, batchStart, batchEnd);
                 UpdateWeights(x, y, batchStart, batchEnd, learningRate);
             }
         }
@@ -435,7 +435,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 /// <summary>
 /// Simplified LSTM layer implementation.
 /// </summary>
-internal class LSTMLayer<T>
+internal class DeepARLstmCell<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _inputSize;
@@ -447,7 +447,7 @@ internal class LSTMLayer<T>
 
     public int ParameterCount => _weights.Rows * _weights.Columns + _bias.Length;
 
-    public LSTMLayer(int inputSize, int hiddenSize)
+    public DeepARLstmCell(int inputSize, int hiddenSize)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _inputSize = inputSize;
@@ -489,7 +489,7 @@ internal class LSTMLayer<T>
             {
                 sum = _numOps.Add(sum, _numOps.Multiply(_weights[i, j], combined[j]));
             }
-            output[i] = _numOps.Tanh(sum); // Simplified activation
+            output[i] = MathHelper.Tanh(sum); // Simplified activation
             _hiddenState[i] = output[i];
         }
 

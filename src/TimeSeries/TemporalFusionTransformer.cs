@@ -35,10 +35,10 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     private readonly INumericOperations<T> _numOps;
 
     // Model components
-    private List<Matrix<T>> _weights;
-    private List<Vector<T>> _biases;
-    private Matrix<T> _attentionWeights;
-    private Vector<T> _quantileOutputWeights;
+    private List<Matrix<T>> _weights = new List<Matrix<T>>();
+    private List<Vector<T>> _biases = new List<Vector<T>>();
+    private Matrix<T> _attentionWeights = new Matrix<T>(0, 0);
+    private Vector<T> _quantileOutputWeights = new Vector<T>(0);
 
     /// <summary>
     /// Initializes a new instance of the TemporalFusionTransformer class.
@@ -81,8 +81,8 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
         foreach (var q in _options.QuantileLevels)
         {
-            if (q <= 0 || q >= 1)
-                throw new ArgumentException("Quantile levels must be between 0 and 1.");
+            if (q < 0 || q > 1)
+                throw new ArgumentException("Quantile levels must be between 0 and 1 (inclusive).");
         }
     }
 
@@ -109,13 +109,12 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         }
 
         // Attention weights
-        int headDim = _options.HiddenSize / _options.NumAttentionHeads;
         stddev = Math.Sqrt(2.0 / _options.HiddenSize);
         _attentionWeights = CreateRandomMatrix(_options.HiddenSize, _options.HiddenSize, stddev, random);
 
         // Output projection for quantiles
         int numQuantiles = _options.QuantileLevels.Length;
-        stddev = Math.Sqrt(2.0 / (_options.HiddenSize + numQuantiles * _options.ForecastHorizon));
+        stddev = Math.Sqrt(2.0 / (_options.HiddenSize + (long)numQuantiles * _options.ForecastHorizon));
         _weights.Add(CreateRandomMatrix(numQuantiles * _options.ForecastHorizon, _options.HiddenSize, stddev, random));
         _biases.Add(new Vector<T>(numQuantiles * _options.ForecastHorizon));
 

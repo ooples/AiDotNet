@@ -49,7 +49,7 @@ public class TemporalFusionTransformerOptions<T> : TimeSeriesRegressionOptions<T
         LearningRate = other.LearningRate;
         Epochs = other.Epochs;
         BatchSize = other.BatchSize;
-        QuantileLevels = other.QuantileLevels != null ? (double[])other.QuantileLevels.Clone() : null;
+        QuantileLevels = other.QuantileLevels != null ? (double[])other.QuantileLevels.Clone() : new double[] { 0.1, 0.5, 0.9 };
         UseVariableSelection = other.UseVariableSelection;
         StaticCovariateSize = other.StaticCovariateSize;
         TimeVaryingKnownSize = other.TimeVaryingKnownSize;

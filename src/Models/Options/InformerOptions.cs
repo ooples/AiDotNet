@@ -100,5 +100,5 @@ public class InformerOptions<T> : TimeSeriesRegressionOptions<T>
     /// the sequence length of the previous one.
     /// </para>
     /// </remarks>
-    public int DistillingFactor { get; set} = 2;
+    public int DistillingFactor { get; set; } = 2;
 }

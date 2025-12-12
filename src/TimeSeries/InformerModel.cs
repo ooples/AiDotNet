@@ -29,19 +29,19 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private readonly INumericOperations<T> _numOps;
 
     // Model components
-    private Matrix<T> _embeddingWeights;
-    private List<TransformerEncoderLayer<T>> _encoderLayers;
-    private List<TransformerDecoderLayer<T>> _decoderLayers;
-    private Matrix<T> _outputProjection;
-    private Vector<T> _outputBias;
+    private Matrix<T> _embeddingWeights = new Matrix<T>(0, 0);
+    private List<InformerEncoderBlock<T>> _encoderLayers = new List<InformerEncoderBlock<T>>();
+    private List<InformerDecoderBlock<T>> _decoderLayers = new List<InformerDecoderBlock<T>>();
+    private Matrix<T> _outputProjection = new Matrix<T>(0, 0);
+    private Vector<T> _outputBias = new Vector<T>(0);
 
     public InformerModel(InformerOptions<T>? options = null)
         : base(options ?? new InformerOptions<T>())
     {
         _options = options ?? new InformerOptions<T>();
         _numOps = MathHelper.GetNumericOperations<T>();
-        _encoderLayers = new List<TransformerEncoderLayer<T>>();
-        _decoderLayers = new List<TransformerDecoderLayer<T>>();
+        _encoderLayers = new List<InformerEncoderBlock<T>>();
+        _decoderLayers = new List<InformerDecoderBlock<T>>();
 
         InitializeModel();
     }
@@ -60,7 +60,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         // Encoder layers with distilling
         for (int i = 0; i < _options.NumEncoderLayers; i++)
         {
-            _encoderLayers.Add(new TransformerEncoderLayer<T>(
+            _encoderLayers.Add(new InformerEncoderBlock<T>(
                 _options.EmbeddingDim,
                 _options.NumAttentionHeads
             ));
@@ -69,7 +69,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         // Decoder layers
         for (int i = 0; i < _options.NumDecoderLayers; i++)
         {
-            _decoderLayers.Add(new TransformerDecoderLayer<T>(
+            _decoderLayers.Add(new InformerDecoderBlock<T>(
                 _options.EmbeddingDim,
                 _options.NumAttentionHeads
             ));
@@ -87,23 +87,19 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
-        T learningRate = _numOps.FromDouble(_options.LearningRate);
-
+        // Note: This is a simplified training loop. In practice, gradients would be computed and applied.
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             for (int batchStart = 0; batchStart < x.Rows; batchStart += _options.BatchSize)
             {
                 int batchEnd = Math.Min(batchStart + _options.BatchSize, x.Rows);
 
-                // Simplified training - in practice, use proper gradient computation
                 for (int i = batchStart; i < batchEnd; i++)
                 {
                     Vector<T> input = x.GetRow(i);
-                    T target = y[i];
-                    T prediction = PredictSingle(input);
 
-                    // MSE loss (simplified)
-                    T error = _numOps.Subtract(target, prediction);
+                    // Forward pass - prediction computed for gradient calculation in full implementation
+                    _ = PredictSingle(input);
                 }
             }
         }
@@ -241,7 +237,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 /// <summary>
 /// Simplified Transformer Encoder Layer.
 /// </summary>
-internal class TransformerEncoderLayer<T>
+internal class InformerEncoderBlock<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _embeddingDim;
@@ -251,7 +247,7 @@ internal class TransformerEncoderLayer<T>
     public int ParameterCount => _attentionWeights.Rows * _attentionWeights.Columns +
                                   _ffnWeights.Rows * _ffnWeights.Columns;
 
-    public TransformerEncoderLayer(int embeddingDim, int numHeads)
+    public InformerEncoderBlock(int embeddingDim, int numHeads)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _embeddingDim = embeddingDim;
@@ -282,7 +278,7 @@ internal class TransformerEncoderLayer<T>
             {
                 sum = _numOps.Add(sum, _numOps.Multiply(_attentionWeights[i, j], input[j]));
             }
-            output[i] = _numOps.Tanh(sum);
+            output[i] = MathHelper.Tanh(sum);
         }
 
         return output;
@@ -292,7 +288,7 @@ internal class TransformerEncoderLayer<T>
 /// <summary>
 /// Simplified Transformer Decoder Layer.
 /// </summary>
-internal class TransformerDecoderLayer<T>
+internal class InformerDecoderBlock<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _embeddingDim;
@@ -302,7 +298,7 @@ internal class TransformerDecoderLayer<T>
     public int ParameterCount => _selfAttentionWeights.Rows * _selfAttentionWeights.Columns +
                                   _crossAttentionWeights.Rows * _crossAttentionWeights.Columns;
 
-    public TransformerDecoderLayer(int embeddingDim, int numHeads)
+    public InformerDecoderBlock(int embeddingDim, int numHeads)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _embeddingDim = embeddingDim;
@@ -333,7 +329,7 @@ internal class TransformerDecoderLayer<T>
             {
                 sum = _numOps.Add(sum, _numOps.Multiply(_crossAttentionWeights[i, j], memory[j]));
             }
-            output[i] = _numOps.Tanh(sum);
+            output[i] = MathHelper.Tanh(sum);
         }
 
         return output;

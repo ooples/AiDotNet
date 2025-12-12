@@ -33,9 +33,9 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
     private readonly INumericOperations<T> _numOps;
 
     // CNN layers
-    private List<ConvLayer<T>> _convLayers;
-    private Matrix<T> _fcWeights;
-    private Vector<T> _fcBias;
+    private List<ConvLayer<T>> _convLayers = new List<ConvLayer<T>>();
+    private Matrix<T> _fcWeights = new Matrix<T>(0, 0);
+    private Vector<T> _fcBias = new Vector<T>(0);
 
     // Anomaly detection threshold
     private T _anomalyThreshold;
@@ -168,21 +168,11 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
             features = conv.Forward(features);
         }
 
-        // Global average pooling
-        T pooled = _numOps.Zero;
-        if (features.Length > 0)
-        {
-            for (int i = 0; i < features.Length; i++)
-                pooled = _numOps.Add(pooled, features[i]);
-            pooled = _numOps.Divide(pooled, _numOps.FromDouble(features.Length));
-        }
-
-        // Fully connected output
+        // Fully connected output using features directly
         T output = _fcBias[0];
-        Vector<T> pooledVec = new Vector<T>(new[] { pooled });
-        for (int j = 0; j < Math.Min(_fcWeights.Columns, pooledVec.Length); j++)
+        for (int j = 0; j < Math.Min(_fcWeights.Columns, features.Length); j++)
         {
-            output = _numOps.Add(output, _numOps.Multiply(_fcWeights[0, j], pooledVec[Math.Min(j, pooledVec.Length - 1)]));
+            output = _numOps.Add(output, _numOps.Multiply(_fcWeights[0, j], features[j]));
         }
 
         return output;
@@ -366,7 +356,7 @@ internal class ConvLayer<T>
         _kernelSize = kernelSize;
 
         var random = new Random(42);
-        double stddev = Math.Sqrt(2.0 / (inputChannels * kernelSize));
+        double stddev = Math.Sqrt(2.0 / ((double)inputChannels * kernelSize));
 
         _kernels = new Matrix<T>(outputChannels, inputChannels * kernelSize);
         for (int i = 0; i < _kernels.Rows; i++)

@@ -143,32 +143,32 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         if (_stacks.Count > 0)
         {
             var stack = _stacks[0];
-            Vector<T> params = stack.GetParameters();
-            int sampleSize = Math.Min(20, params.Length);
+            Vector<T> stackParams = stack.GetParameters();
+            int sampleSize = Math.Min(20, stackParams.Length);
 
             for (int i = 0; i < sampleSize; i++)
             {
-                T original = params[i];
+                T original = stackParams[i];
 
-                params[i] = _numOps.Add(original, epsilon);
-                stack.SetParameters(params);
+                stackParams[i] = _numOps.Add(original, epsilon);
+                stack.SetParameters(stackParams);
                 T lossPlus = ComputeBatchLoss(x, y, batchStart, batchEnd);
 
-                params[i] = _numOps.Subtract(original, epsilon);
-                stack.SetParameters(params);
+                stackParams[i] = _numOps.Subtract(original, epsilon);
+                stack.SetParameters(stackParams);
                 T lossMinus = ComputeBatchLoss(x, y, batchStart, batchEnd);
 
-                params[i] = original;
+                stackParams[i] = original;
 
                 T gradient = _numOps.Divide(
                     _numOps.Subtract(lossPlus, lossMinus),
                     _numOps.Multiply(_numOps.FromDouble(2.0), epsilon)
                 );
 
-                params[i] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
+                stackParams[i] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
             }
 
-            stack.SetParameters(params);
+            stack.SetParameters(stackParams);
         }
     }
 

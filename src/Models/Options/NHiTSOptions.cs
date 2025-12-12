@@ -40,8 +40,8 @@ public class NHiTSOptions<T> : TimeSeriesRegressionOptions<T>
 
         NumStacks = other.NumStacks;
         NumBlocksPerStack = other.NumBlocksPerStack;
-        PoolingModes = other.PoolingModes != null ? (string[])other.PoolingModes.Clone() : null;
-        InterpolationModes = other.InterpolationModes != null ? (string[])other.InterpolationModes.Clone() : null;
+        PoolingModes = other.PoolingModes != null ? (string[])other.PoolingModes.Clone() : new string[] { "MaxPool", "AvgPool", "AvgPool" };
+        InterpolationModes = other.InterpolationModes != null ? (string[])other.InterpolationModes.Clone() : new string[] { "Linear", "Linear", "Linear" };
         LookbackWindow = other.LookbackWindow;
         ForecastHorizon = other.ForecastHorizon;
         HiddenLayerSize = other.HiddenLayerSize;
@@ -49,7 +49,7 @@ public class NHiTSOptions<T> : TimeSeriesRegressionOptions<T>
         LearningRate = other.LearningRate;
         Epochs = other.Epochs;
         BatchSize = other.BatchSize;
-        PoolingKernelSizes = other.PoolingKernelSizes != null ? (int[])other.PoolingKernelSizes.Clone() : null;
+        PoolingKernelSizes = other.PoolingKernelSizes != null ? (int[])other.PoolingKernelSizes.Clone() : new int[] { 2, 4, 8 };
         DropoutRate = other.DropoutRate;
     }
 

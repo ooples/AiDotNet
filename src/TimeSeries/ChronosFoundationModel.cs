@@ -33,14 +33,14 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     private readonly INumericOperations<T> _numOps;
 
     // Tokenization
-    private Vector<T> _vocabularyCentroids;
+    private Vector<T> _vocabularyCentroids = new Vector<T>(0);
     private int _vocabularySize;
 
     // Transformer components
-    private Matrix<T> _tokenEmbeddings;
-    private List<TransformerBlock<T>> _transformerLayers;
-    private Matrix<T> _outputProjection;
-    private Vector<T> _outputBias;
+    private Matrix<T> _tokenEmbeddings = new Matrix<T>(0, 0);
+    private List<TransformerBlock<T>> _transformerLayers = new List<TransformerBlock<T>>();
+    private Matrix<T> _outputProjection = new Matrix<T>(0, 0);
+    private Vector<T> _outputBias = new Vector<T>(0);
 
     public ChronosFoundationModel(ChronosOptions<T>? options = null)
         : base(options ?? new ChronosOptions<T>())
@@ -120,20 +120,15 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
-        T learningRate = _numOps.FromDouble(_options.LearningRate);
-
+        // Note: This is a simplified training loop. In practice, gradients would be computed and applied.
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             for (int i = 0; i < x.Rows; i++)
             {
                 Vector<T> input = x.GetRow(i);
-                T target = y[i];
 
-                // Forward pass
-                T prediction = PredictSingle(input);
-
-                // Simple gradient update (simplified)
-                T error = _numOps.Subtract(target, prediction);
+                // Forward pass - prediction computed for gradient calculation in full implementation
+                _ = PredictSingle(input);
             }
         }
     }
@@ -374,7 +369,7 @@ internal class TransformerBlock<T>
             {
                 sum = _numOps.Add(sum, _numOps.Multiply(_weights[i, j], input[j]));
             }
-            output[i] = _numOps.Tanh(sum);
+            output[i] = MathHelper.Tanh(sum);
         }
         return output;
     }
