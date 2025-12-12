@@ -30,13 +30,8 @@ namespace AiDotNet.WaveletFunctions;
 /// considers more neighboring points when analyzing a signal).
 /// </para>
 /// </remarks>
-public class BattleLemarieWavelet<T> : IWaveletFunction<T>
+public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
 {
-    /// <summary>
-    /// Provides numeric operations for the specific type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-    
     /// <summary>
     /// The order of the B-spline used to construct the wavelet.
     /// </summary>
@@ -63,7 +58,6 @@ public class BattleLemarieWavelet<T> : IWaveletFunction<T>
     /// </remarks>
     public BattleLemarieWavelet(int order = 1)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _order = order;
     }
 
@@ -90,13 +84,13 @@ public class BattleLemarieWavelet<T> : IWaveletFunction<T>
     /// to a signal at specific points.
     /// </para>
     /// </remarks>
-    public T Calculate(T x)
+    public override T Calculate(T x)
     {
-        T result = _numOps.Zero;
+        T result = NumOps.Zero;
         for (int k = -_order; k <= _order; k++)
         {
-            T term = BSpline(_numOps.Add(x, _numOps.FromDouble(k)));
-            result = _numOps.Add(result, _numOps.Multiply(_numOps.FromDouble(Math.Pow(-1, k)), term));
+            T term = BSpline(NumOps.Add(x, NumOps.FromDouble(k)));
+            result = NumOps.Add(result, NumOps.Multiply(NumOps.FromDouble(Math.Pow(-1, k)), term));
         }
 
         return result;
@@ -129,7 +123,7 @@ public class BattleLemarieWavelet<T> : IWaveletFunction<T>
     /// which is why the input length must be even.
     /// </para>
     /// </remarks>
-    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         if (input.Length % 2 != 0)
             throw new ArgumentException("Input length must be even for Battle-Lemarie wavelet decomposition.");
@@ -143,14 +137,14 @@ public class BattleLemarieWavelet<T> : IWaveletFunction<T>
 
         for (int i = 0; i < halfLength; i++)
         {
-            T approx = _numOps.Zero;
-            T det = _numOps.Zero;
+            T approx = NumOps.Zero;
+            T det = NumOps.Zero;
 
             for (int j = 0; j < scalingCoeffs.Length; j++)
             {
                 int index = (2 * i + j) % input.Length;
-                approx = _numOps.Add(approx, _numOps.Multiply(scalingCoeffs[j], input[index]));
-                det = _numOps.Add(det, _numOps.Multiply(waveletCoeffs[j], input[index]));
+                approx = NumOps.Add(approx, NumOps.Multiply(scalingCoeffs[j], input[index]));
+                det = NumOps.Add(det, NumOps.Multiply(waveletCoeffs[j], input[index]));
             }
 
             approximation[i] = approx;
@@ -184,7 +178,7 @@ public class BattleLemarieWavelet<T> : IWaveletFunction<T>
     /// how the signal's energy is distributed between approximation and detail coefficients.
     /// </para>
     /// </remarks>
-    public Vector<T> GetScalingCoefficients()
+    public override Vector<T> GetScalingCoefficients()
     {
         int order = _order;
         int numCoeffs = 4 * order + 1; // Increased support for better accuracy
@@ -196,10 +190,10 @@ public class BattleLemarieWavelet<T> : IWaveletFunction<T>
 
         for (int i = 0; i < numSamples; i++)
         {
-            T omega = _numOps.Multiply(_numOps.FromDouble(2 * Math.PI * i), _numOps.FromDouble(1.0 / numSamples));
+            T omega = NumOps.Multiply(NumOps.FromDouble(2 * Math.PI * i), NumOps.FromDouble(1.0 / numSamples));
             Complex<T> bSplineFourier = BSplineFourier(omega, order);
-            T denominator = _numOps.Sqrt(SumSquaredBSplineFourier(omega, order));
-            fftInput[i] = new Complex<T>(_numOps.Divide(bSplineFourier.Real, denominator), _numOps.Divide(bSplineFourier.Imaginary, denominator));
+            T denominator = NumOps.Sqrt(SumSquaredBSplineFourier(omega, order));
+            fftInput[i] = new Complex<T>(NumOps.Divide(bSplineFourier.Real, denominator), NumOps.Divide(bSplineFourier.Imaginary, denominator));
         }
 
         // Perform inverse FFT
@@ -216,7 +210,7 @@ public class BattleLemarieWavelet<T> : IWaveletFunction<T>
         T sum = coeffs.Sum();
         for (int i = 0; i < coeffs.Length; i++)
         {
-            coeffs[i] = _numOps.Divide(coeffs[i], sum);
+            coeffs[i] = NumOps.Divide(coeffs[i], sum);
         }
 
         return coeffs;
@@ -247,11 +241,11 @@ public class BattleLemarieWavelet<T> : IWaveletFunction<T>
     private Complex<T> BSplineFourier(T omega, int order)
     {
         var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-        Complex<T> result = new Complex<T>(_numOps.One, _numOps.Zero);
+        Complex<T> result = new Complex<T>(NumOps.One, NumOps.Zero);
         for (int i = 0; i < order; i++)
         {
-            T sinc = _numOps.Divide(MathHelper.Sin(_numOps.Divide(omega, _numOps.FromDouble(2))), _numOps.Divide(omega, _numOps.FromDouble(2)));
-            result = complexOps.Multiply(result, new Complex<T>(sinc, _numOps.Zero));
+            T sinc = NumOps.Divide(MathHelper.Sin(NumOps.Divide(omega, NumOps.FromDouble(2))), NumOps.Divide(omega, NumOps.FromDouble(2)));
+            result = complexOps.Multiply(result, new Complex<T>(sinc, NumOps.Zero));
         }
 
         return result;
@@ -285,12 +279,12 @@ public class BattleLemarieWavelet<T> : IWaveletFunction<T>
     /// </remarks>
     private T SumSquaredBSplineFourier(T omega, int order)
     {
-        T sum = _numOps.Zero;
+        T sum = NumOps.Zero;
         for (int k = -order; k <= order; k++)
         {
-            T shiftedOmega = _numOps.Add(omega, _numOps.Multiply(_numOps.FromDouble(2 * Math.PI), _numOps.FromDouble(k)));
+            T shiftedOmega = NumOps.Add(omega, NumOps.Multiply(NumOps.FromDouble(2 * Math.PI), NumOps.FromDouble(k)));
             Complex<T> bSpline = BSplineFourier(shiftedOmega, order);
-            sum = _numOps.Add(sum, _numOps.Add(_numOps.Multiply(bSpline.Real, bSpline.Real), _numOps.Multiply(bSpline.Imaginary, bSpline.Imaginary)));
+            sum = NumOps.Add(sum, NumOps.Add(NumOps.Multiply(bSpline.Real, bSpline.Real), NumOps.Multiply(bSpline.Imaginary, bSpline.Imaginary)));
         }
 
         return sum;
@@ -330,15 +324,15 @@ public class BattleLemarieWavelet<T> : IWaveletFunction<T>
         for (int k = 0; k < n; k++)
         {
             var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-            Complex<T> sum = new Complex<T>(_numOps.Zero, _numOps.Zero);
+            Complex<T> sum = new Complex<T>(NumOps.Zero, NumOps.Zero);
             for (int t = 0; t < n; t++)
             {
-                T angle = _numOps.Multiply(_numOps.FromDouble(2 * Math.PI * t * k), _numOps.FromDouble(1.0 / n));
+                T angle = NumOps.Multiply(NumOps.FromDouble(2 * Math.PI * t * k), NumOps.FromDouble(1.0 / n));
                 Complex<T> exp = new Complex<T>(MathHelper.Cos(angle), MathHelper.Sin(angle));
                 sum = complexOps.Add(sum, complexOps.Multiply(input[t], exp));
             }
 
-            output[k] = new Complex<T>(_numOps.Divide(sum.Real, _numOps.FromDouble(n)), _numOps.Divide(sum.Imaginary, _numOps.FromDouble(n)));
+            output[k] = new Complex<T>(NumOps.Divide(sum.Real, NumOps.FromDouble(n)), NumOps.Divide(sum.Imaginary, NumOps.FromDouble(n)));
         }
 
         return output;
@@ -373,7 +367,7 @@ public class BattleLemarieWavelet<T> : IWaveletFunction<T>
     /// the detail coefficients, which represent the fine structure of the signal.
     /// </para>
     /// </remarks>
-    public Vector<T> GetWaveletCoefficients()
+    public override Vector<T> GetWaveletCoefficients()
     {
         var scalingCoeffs = GetScalingCoefficients();
         int L = scalingCoeffs.Length;
@@ -381,7 +375,7 @@ public class BattleLemarieWavelet<T> : IWaveletFunction<T>
 
         for (int i = 0; i < L; i++)
         {
-            waveletCoeffs[i] = _numOps.Multiply(_numOps.FromDouble(Math.Pow(-1, i)), scalingCoeffs[L - 1 - i]);
+            waveletCoeffs[i] = NumOps.Multiply(NumOps.FromDouble(Math.Pow(-1, i)), scalingCoeffs[L - 1 - i]);
         }
 
         return new Vector<T>(waveletCoeffs);
@@ -413,17 +407,17 @@ public class BattleLemarieWavelet<T> : IWaveletFunction<T>
     /// </remarks>
     private T BSpline(T x)
     {
-        T absX = _numOps.Abs(x);
-        if (_numOps.LessThan(absX, _numOps.FromDouble(0.5)))
+        T absX = NumOps.Abs(x);
+        if (NumOps.LessThan(absX, NumOps.FromDouble(0.5)))
         {
-            return _numOps.One;
+            return NumOps.One;
         }
-        else if (_numOps.LessThanOrEquals(absX, _numOps.FromDouble(1.5)))
+        else if (NumOps.LessThanOrEquals(absX, NumOps.FromDouble(1.5)))
         {
-            T temp = _numOps.Subtract(_numOps.FromDouble(1.5), absX);
-            return _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Multiply(temp, temp));
+            T temp = NumOps.Subtract(NumOps.FromDouble(1.5), absX);
+            return NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Multiply(temp, temp));
         }
 
-        return _numOps.Zero;
+        return NumOps.Zero;
     }
 }
