@@ -24,30 +24,8 @@ namespace AiDotNet.WaveletFunctions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class MeyerWavelet<T> : IWaveletFunction<T>
+public class MeyerWavelet<T> : WaveletFunctionBase<T>
 {
-    /// <summary>
-    /// Provides mathematical operations for the generic type T.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field holds an implementation of numeric operations that can work with the generic type T.
-    /// It provides methods for basic arithmetic operations, comparisons, and conversions that are used
-    /// throughout the wavelet calculations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a helper that lets us do math with different number types.
-    /// 
-    /// Because this class can work with different types of numbers (like float, double, or decimal),
-    /// we need a special helper that knows how to:
-    /// - Add, subtract, multiply, and divide these numbers
-    /// - Compare them (greater than, less than, etc.)
-    /// - Convert between different number formats
-    /// 
-    /// This allows the wavelet code to work with whatever number type you choose,
-    /// without having to write separate code for each number type.
-    /// </para>
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Provides Fast Fourier Transform capabilities for frequency domain analysis.
@@ -95,7 +73,6 @@ public class MeyerWavelet<T> : IWaveletFunction<T>
     /// </remarks>
     public MeyerWavelet()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _fft = new FastFourierTransform<T>();
     }
 
@@ -123,10 +100,10 @@ public class MeyerWavelet<T> : IWaveletFunction<T>
     /// the wavelet or for direct application to signals in the time domain.
     /// </para>
     /// </remarks>
-    public T Calculate(T x)
+    public override T Calculate(T x)
     {
         double t = Convert.ToDouble(x);
-        return _numOps.FromDouble(MeyerFunction(t));
+        return NumOps.FromDouble(MeyerFunction(t));
     }
 
     /// <summary>
@@ -153,7 +130,7 @@ public class MeyerWavelet<T> : IWaveletFunction<T>
     /// while the detail coefficients represent the treble notes (quick changes, fine details).
     /// </para>
     /// </remarks>
-    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int size = input.Length;
 
@@ -167,26 +144,26 @@ public class MeyerWavelet<T> : IWaveletFunction<T>
 
         for (int i = 0; i < size; i++)
         {
-            T freq = _numOps.Divide(_numOps.FromDouble(i), _numOps.FromDouble(size));
-            if (_numOps.LessThanOrEquals(freq, _numOps.FromDouble(1.0 / 3)))
+            T freq = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(size));
+            if (NumOps.LessThanOrEquals(freq, NumOps.FromDouble(1.0 / 3)))
             {
                 lowPass[i] = spectrum[i];
             }
-            else if (_numOps.LessThanOrEquals(freq, _numOps.FromDouble(2.0 / 3)))
+            else if (NumOps.LessThanOrEquals(freq, NumOps.FromDouble(2.0 / 3)))
             {
-                T v = _numOps.Multiply(_numOps.FromDouble(Math.PI), _numOps.Subtract(_numOps.Multiply(_numOps.FromDouble(3), freq), _numOps.One));
-                T psi = _numOps.FromDouble(Math.Cos(Math.PI / 2 * Vf(Convert.ToDouble(v))));
-                Complex<T> complexPsi = new Complex<T>(psi, _numOps.Zero);
+                T v = NumOps.Multiply(NumOps.FromDouble(Math.PI), NumOps.Subtract(NumOps.Multiply(NumOps.FromDouble(3), freq), NumOps.One));
+                T psi = NumOps.FromDouble(Math.Cos(Math.PI / 2 * Vf(Convert.ToDouble(v))));
+                Complex<T> complexPsi = new Complex<T>(psi, NumOps.Zero);
                 lowPass[i] = complexOps.Multiply(spectrum[i], complexPsi);
-                T sqrtTerm = _numOps.Sqrt(_numOps.Subtract(_numOps.One, _numOps.Multiply(psi, psi)));
-                Complex<T> complexSqrtTerm = new Complex<T>(sqrtTerm, _numOps.Zero);
+                T sqrtTerm = NumOps.Sqrt(NumOps.Subtract(NumOps.One, NumOps.Multiply(psi, psi)));
+                Complex<T> complexSqrtTerm = new Complex<T>(sqrtTerm, NumOps.Zero);
                 highPass[i] = complexOps.Multiply(spectrum[i], complexSqrtTerm);
             }
-            else if (_numOps.LessThanOrEquals(freq, _numOps.FromDouble(4.0 / 3)))
+            else if (NumOps.LessThanOrEquals(freq, NumOps.FromDouble(4.0 / 3)))
             {
-                T v = _numOps.Multiply(_numOps.FromDouble(Math.PI), _numOps.Subtract(_numOps.Multiply(_numOps.FromDouble(3.0 / 2), freq), _numOps.One));
-                T psi = _numOps.FromDouble(Math.Sin(Math.PI / 2 * Vf(Convert.ToDouble(v))));
-                Complex<T> complexPsi = new Complex<T>(psi, _numOps.Zero);
+                T v = NumOps.Multiply(NumOps.FromDouble(Math.PI), NumOps.Subtract(NumOps.Multiply(NumOps.FromDouble(3.0 / 2), freq), NumOps.One));
+                T psi = NumOps.FromDouble(Math.Sin(Math.PI / 2 * Vf(Convert.ToDouble(v))));
+                Complex<T> complexPsi = new Complex<T>(psi, NumOps.Zero);
                 highPass[i] = complexOps.Multiply(spectrum[i], complexPsi);
             }
         }
@@ -221,7 +198,7 @@ public class MeyerWavelet<T> : IWaveletFunction<T>
     /// the filtering doesn't create artificial artifacts in your results.
     /// </para>
     /// </remarks>
-    public Vector<T> GetScalingCoefficients()
+    public override Vector<T> GetScalingCoefficients()
     {
         int size = 1024; // Use a power of 2 for efficient FFT
         var coefficients = new Vector<T>(size);
@@ -231,17 +208,17 @@ public class MeyerWavelet<T> : IWaveletFunction<T>
             double freq = (double)i / size;
             if (freq <= 1.0 / 3)
             {
-                coefficients[i] = _numOps.FromDouble(1);
+                coefficients[i] = NumOps.FromDouble(1);
             }
             else if (freq <= 2.0 / 3)
             {
                 double v = Math.PI * (3 * freq - 1);
                 double psi = Math.Cos(Math.PI / 2 * Vf(v));
-                coefficients[i] = _numOps.FromDouble(psi);
+                coefficients[i] = NumOps.FromDouble(psi);
             }
             else
             {
-                coefficients[i] = _numOps.FromDouble(0);
+                coefficients[i] = NumOps.FromDouble(0);
             }
         }
 
@@ -273,7 +250,7 @@ public class MeyerWavelet<T> : IWaveletFunction<T>
     /// the entire frequency spectrum of your data.
     /// </para>
     /// </remarks>
-    public Vector<T> GetWaveletCoefficients()
+    public override Vector<T> GetWaveletCoefficients()
     {
         int size = 1024; // Use a power of 2 for efficient FFT
         var coefficients = new Vector<T>(size);
@@ -283,23 +260,23 @@ public class MeyerWavelet<T> : IWaveletFunction<T>
             double freq = (double)i / size;
             if (freq <= 1.0 / 3)
             {
-                coefficients[i] = _numOps.FromDouble(0);
+                coefficients[i] = NumOps.FromDouble(0);
             }
             else if (freq <= 2.0 / 3)
             {
                 double v = Math.PI * (3 * freq - 1);
                 double psi = Math.Sin(Math.PI / 2 * Vf(v));
-                coefficients[i] = _numOps.FromDouble(psi);
+                coefficients[i] = NumOps.FromDouble(psi);
             }
             else if (freq <= 4.0 / 3)
             {
                 double v = Math.PI * (3 / 2 * freq - 1);
                 double psi = Math.Sin(Math.PI / 2 * Vf(v));
-                coefficients[i] = _numOps.FromDouble(psi);
+                coefficients[i] = NumOps.FromDouble(psi);
             }
             else
             {
-                coefficients[i] = _numOps.FromDouble(0);
+                coefficients[i] = NumOps.FromDouble(0);
             }
         }
 
