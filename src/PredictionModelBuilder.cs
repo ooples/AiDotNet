@@ -84,6 +84,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
+    private CompressionConfig? _compressionConfig;
     private CacheConfig? _cacheConfig;
     private VersioningConfig? _versioningConfig;
     private ABTestingConfig? _abTestingConfig;
@@ -950,7 +951,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _abTestingConfig,
             _telemetryConfig,
             _exportConfig,
-            _gpuAccelerationConfig);
+            _gpuAccelerationConfig,
+            _compressionConfig);
 
         // JIT COMPILATION (if configured and supported)
         Func<Tensor<T>[], Tensor<T>[]>? jitCompiledFunction = null;
@@ -1053,7 +1055,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _abTestingConfig,
             _telemetryConfig,
             _exportConfig,
-            _gpuAccelerationConfig);
+            _gpuAccelerationConfig,
+            _compressionConfig);
 
         // Create PredictionModelResult with meta-learning constructor
         var result = new PredictionModelResult<T, TInput, TOutput>(
@@ -1290,7 +1293,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _abTestingConfig,
             _telemetryConfig,
             _exportConfig,
-            _gpuAccelerationConfig);
+            _gpuAccelerationConfig,
+            _compressionConfig);
 
         // Return standard PredictionModelResult
         // Note: This Build() overload doesn't perform JIT compilation (only the main Build() does),
@@ -1911,6 +1915,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureQuantization(QuantizationConfig? config = null)
     {
         _quantizationConfig = config;
+        return this;
+    }
+
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCompression(CompressionConfig? config = null)
+    {
+        _compressionConfig = config ?? new CompressionConfig();
         return this;
     }
 
