@@ -243,11 +243,18 @@ public class CompressionMetrics<T>
     /// </remarks>
     public void CalculateDerivedMetrics()
     {
-        if (CompressedSize > 0)
+        if (CompressedSize > 0 && OriginalSize > 0)
         {
             CompressionRatio = NumOps.FromDouble((double)OriginalSize / CompressedSize);
             SizeReductionPercentage = NumOps.FromDouble((1.0 - (double)CompressedSize / OriginalSize) * 100.0);
             MemoryBandwidthSavings = CompressionRatio;
+        }
+        else if (CompressedSize > 0)
+        {
+            // Avoid NaN/Infinity when OriginalSize is unknown/zero
+            CompressionRatio = NumOps.FromDouble(0.0);
+            SizeReductionPercentage = NumOps.Zero;
+            MemoryBandwidthSavings = NumOps.Zero;
         }
 
         var compressedInferenceTime = NumOps.ToDouble(CompressedInferenceTimeMs);

@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json.Serialization;
 
 namespace AiDotNet.Serialization;
@@ -8,13 +11,15 @@ namespace AiDotNet.Serialization;
 /// <remarks>
 /// <para>
 /// This binder helps prevent deserialization attacks by only allowing types from the AiDotNet namespace
-/// and common .NET framework types to be deserialized. This is important when using TypeNameHandling.All
-/// with Newtonsoft.Json.
+/// and common .NET framework types to be deserialized. This is important when using TypeNameHandling.Auto
+/// (or other TypeNameHandling modes) with Newtonsoft.Json.
 /// </para>
 /// <para><b>For Beginners:</b> When loading a saved model from a file, we need to know what types of objects
 /// to create. However, if an attacker crafts a malicious file, they might try to trick the system into
 /// creating dangerous objects. This binder acts as a security guard, only allowing known-safe types.
 /// </para>
+/// <para><b>Security Note:</b> Always prefer TypeNameHandling.Auto over TypeNameHandling.All as it minimizes
+/// type information exposure while still supporting polymorphic deserialization.</para>
 /// </remarks>
 public class SafeSerializationBinder : ISerializationBinder
 {
@@ -27,9 +32,16 @@ public class SafeSerializationBinder : ISerializationBinder
     /// Allowed namespace prefixes for deserialization.
     /// </summary>
     private static readonly string[] AllowedNamespacePrefixes =
-    [
+    {
         "AiDotNet.",
         "System.Collections.Generic.",
+    };
+
+    /// <summary>
+    /// Exact allowed type full names.
+    /// </summary>
+    private static readonly HashSet<string> AllowedTypeFullNames = new HashSet<string>(StringComparer.Ordinal)
+    {
         "System.String",
         "System.Int32",
         "System.Int64",
@@ -48,9 +60,8 @@ public class SafeSerializationBinder : ISerializationBinder
         "System.UInt32",
         "System.UInt64",
         "System.Char",
-        "System.Nullable",
-        "System.ValueTuple"
-    ];
+        "System.Object",
+    };
 
     /// <summary>
     /// Gets the type to deserialize given the serialized type name.
@@ -61,16 +72,18 @@ public class SafeSerializationBinder : ISerializationBinder
     /// <exception cref="InvalidOperationException">Thrown when the type is not allowed for deserialization.</exception>
     public Type BindToType(string? assemblyName, string typeName)
     {
-        // Check if the type is in an allowed namespace
-        if (!IsAllowedType(typeName))
+        // Resolve the type first using the default binder
+        var resolvedType = _defaultBinder.BindToType(assemblyName, typeName);
+
+        // Then validate the resolved type recursively
+        if (!IsAllowedType(resolvedType))
         {
             throw new InvalidOperationException(
-                $"Type '{typeName}' is not allowed for deserialization. " +
+                $"Type '{typeName}' resolved to '{resolvedType?.FullName}' is not allowed for deserialization. " +
                 "Only types from the AiDotNet namespace and basic .NET types are permitted.");
         }
 
-        // Use the default binder to resolve the type
-        return _defaultBinder.BindToType(assemblyName, typeName);
+        return resolvedType;
     }
 
     /// <summary>
@@ -85,46 +98,76 @@ public class SafeSerializationBinder : ISerializationBinder
     }
 
     /// <summary>
-    /// Checks if a type name is allowed for deserialization.
+    /// Checks if a resolved type is allowed for deserialization.
+    /// This method recursively validates generic type arguments, array elements, and nullable types.
     /// </summary>
-    /// <param name="typeName">The full type name to check.</param>
-    /// <returns>True if the type is allowed, false otherwise.</returns>
-    private static bool IsAllowedType(string typeName)
+    /// <param name="type">The resolved type to check.</param>
+    /// <returns>True if the type and all its components are allowed, false otherwise.</returns>
+    private static bool IsAllowedType(Type? type)
     {
-        if (string.IsNullOrWhiteSpace(typeName))
+        if (type == null)
         {
             return false;
         }
 
-        // Check against allowed prefixes using LINQ
-        if (AllowedNamespacePrefixes.Any(prefix => typeName.StartsWith(prefix, StringComparison.Ordinal)))
+        // Reject dangerous type categories
+        if (type.IsPointer || type.IsByRef)
+        {
+            return false;
+        }
+
+        // Reject open generic types (unbound type parameters)
+        if (type.ContainsGenericParameters)
+        {
+            return false;
+        }
+
+        // Handle array types - recursively check element type
+        if (type.IsArray)
+        {
+            var elementType = type.GetElementType();
+            return IsAllowedType(elementType);
+        }
+
+        // Handle nullable value types - recursively check underlying type
+        var underlyingNullable = Nullable.GetUnderlyingType(type);
+        if (underlyingNullable != null)
+        {
+            return IsAllowedType(underlyingNullable);
+        }
+
+        // Check exact type full names (primitives and safe types)
+        var fullName = type.FullName ?? "";
+        if (AllowedTypeFullNames.Contains(fullName))
         {
             return true;
         }
 
-        // Also allow array types of allowed types
-        if (typeName.EndsWith("[]", StringComparison.Ordinal))
+        // Check namespace prefixes
+        var typeNamespace = type.Namespace ?? "";
+        if (typeNamespace.Length > 0)
         {
-            var elementType = typeName.Substring(0, typeName.Length - 2);
-            return IsAllowedType(elementType);
-        }
+            bool namespaceAllowed = AllowedNamespacePrefixes.Any(prefix =>
+                (typeNamespace + ".").StartsWith(prefix, StringComparison.Ordinal));
 
-        // Allow generic types where all type arguments are allowed
-        if (typeName.Contains('`'))
-        {
-            // Extract the base type name
-            int backtickIndex = typeName.IndexOf('`');
-            string baseTypeName = typeName.Substring(0, backtickIndex);
-
-            // Check if base type is allowed using LINQ
-            bool baseAllowed = AllowedNamespacePrefixes.Any(prefix =>
-                baseTypeName.StartsWith(prefix, StringComparison.Ordinal));
-
-            if (baseAllowed)
+            if (namespaceAllowed)
             {
-                // For simplicity, allow if base type is allowed
-                // A more thorough implementation would parse and check all type arguments
-                return true;
+                // For non-generic types in allowed namespaces, allow directly
+                if (!type.IsGenericType)
+                {
+                    return true;
+                }
+
+                // For generic types, validate the generic type definition is also allowed
+                var genericTypeDef = type.GetGenericTypeDefinition();
+                if (!IsAllowedType(genericTypeDef))
+                {
+                    return false;
+                }
+
+                // Recursively validate ALL generic type arguments
+                var genericArgs = type.GetGenericArguments();
+                return genericArgs.All(IsAllowedType);
             }
         }
 

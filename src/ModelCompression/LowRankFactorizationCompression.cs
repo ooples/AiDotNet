@@ -328,11 +328,12 @@ public class LowRankFactorizationCompression<T> : ModelCompressionBase<T>
 
             double sigma = 0;
             double prevSigma = 0;
+            var u = new double[rows];
 
             for (int iter = 0; iter < _maxIterations; iter++)
             {
                 // u = A * v
-                var u = new double[rows];
+                Array.Clear(u, 0, u.Length);
                 for (int i = 0; i < rows; i++)
                 {
                     double sum = 0;
@@ -369,8 +370,11 @@ public class LowRankFactorizationCompression<T> : ModelCompressionBase<T>
                     break;
                 }
                 prevSigma = sigma;
+            }
 
-                // Store result
+            // Persist final iterate for this component (after loop completes or breaks)
+            if (sigma >= 1e-10)
+            {
                 for (int i = 0; i < rows; i++)
                 {
                     U[i, r] = u[i];

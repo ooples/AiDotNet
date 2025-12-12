@@ -1351,9 +1351,11 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         try
         {
             // Create JSON settings with custom converters and safe type binding
+            // Use TypeNameHandling.Auto instead of All to minimize type info exposure
+            // Auto only emits type info when actual type differs from declared type
             var settings = new JsonSerializerSettings
             {
-                TypeNameHandling = TypeNameHandling.All,
+                TypeNameHandling = TypeNameHandling.Auto,
                 SerializationBinder = new SafeSerializationBinder(),
                 Formatting = Formatting.Indented
             };
@@ -1415,9 +1417,10 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             var jsonString = Encoding.UTF8.GetString(decompressedData);
 
             // Create JSON settings with custom converters and safe type binding
+            // Use TypeNameHandling.Auto to match serialization and minimize type info exposure
             var settings = new JsonSerializerSettings
             {
-                TypeNameHandling = TypeNameHandling.All,
+                TypeNameHandling = TypeNameHandling.Auto,
                 SerializationBinder = new SafeSerializationBinder()
             };
 
@@ -1601,9 +1604,10 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Decompress if needed (CompressionHelper automatically detects compressed data)
         var decompressedData = CompressionHelper.DecompressIfNeeded(data);
         var jsonString = Encoding.UTF8.GetString(decompressedData);
+        // Use TypeNameHandling.Auto to match serialization and minimize type info exposure
         var settings = new JsonSerializerSettings
         {
-            TypeNameHandling = TypeNameHandling.All,
+            TypeNameHandling = TypeNameHandling.Auto,
             SerializationBinder = new SafeSerializationBinder()
         };
         var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);

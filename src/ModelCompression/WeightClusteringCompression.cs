@@ -156,6 +156,11 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
         for (int i = 0; i < compressedWeights.Length; i++)
         {
             int clusterIndex = (int)NumOps.ToDouble(compressedWeights[i]);
+            if ((uint)clusterIndex >= (uint)clusterMetadata.ClusterCenters.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(compressedWeights),
+                    $"Invalid cluster index {clusterIndex} at position {i}. Valid range is 0-{clusterMetadata.ClusterCenters.Length - 1}.");
+            }
             decompressedArray[i] = clusterMetadata.ClusterCenters[clusterIndex];
         }
 

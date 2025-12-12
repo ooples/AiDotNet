@@ -484,7 +484,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 pruningMetadata, clusteringMetadata, huffmanMetadata, 10, new DeepCompressionStats());
 
             // Act & Assert
-            Assert.Equal(AiDotNet.Enums.CompressionType.HybridHuffmanClustering, metadata.Type);
+            // DeepCompression should return its own CompressionType, not HybridHuffmanClustering
+            Assert.Equal(AiDotNet.Enums.CompressionType.DeepCompression, metadata.Type);
         }
 
         #endregion

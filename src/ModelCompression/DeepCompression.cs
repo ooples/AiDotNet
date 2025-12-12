@@ -399,7 +399,7 @@ public class DeepCompressionMetadata<T> : ICompressionMetadata<T>
     /// <summary>
     /// Gets the compression type.
     /// </summary>
-    public CompressionType Type => CompressionType.HybridHuffmanClustering;
+    public CompressionType Type => CompressionType.DeepCompression;
 
     /// <summary>
     /// Gets the metadata from Stage 1 (Pruning).
