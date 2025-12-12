@@ -42,6 +42,17 @@ public class DeploymentConfiguration
     public GpuAccelerationConfig? GpuAcceleration { get; set; }
 
     /// <summary>
+    /// Gets or sets the compression configuration (null = no compression).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When configured, compression is automatically applied during
+    /// model serialization (saving) and reversed during deserialization (loading).
+    /// This reduces model file sizes by 50-90% with minimal accuracy impact.
+    /// </para>
+    /// </remarks>
+    public CompressionConfig? Compression { get; set; }
+
+    /// <summary>
     /// Creates a deployment configuration from individual config objects.
     /// </summary>
     public static DeploymentConfiguration Create(
@@ -51,7 +62,8 @@ public class DeploymentConfiguration
         ABTestingConfig? abTesting,
         TelemetryConfig? telemetry,
         ExportConfig? export,
-        GpuAccelerationConfig? gpuAcceleration)
+        GpuAccelerationConfig? gpuAcceleration,
+        CompressionConfig? compression = null)
     {
         return new DeploymentConfiguration
         {
@@ -61,7 +73,8 @@ public class DeploymentConfiguration
             ABTesting = abTesting,
             Telemetry = telemetry,
             Export = export,
-            GpuAcceleration = gpuAcceleration
+            GpuAcceleration = gpuAcceleration,
+            Compression = compression
         };
     }
 }
