@@ -270,6 +270,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         #region Performance Comparison Tests
 
         [Fact]
+        [Trait("Category", "Integration")]  // Skip on net471 - concurrent file I/O has locking issues on .NET Framework
         public async Task PerformanceComparison_BulkInsert_AsyncVsSync()
         {
             // This test demonstrates that async operations can handle bulk inserts efficiently
