@@ -1,5 +1,7 @@
 using System;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ModelCompression;
@@ -336,7 +338,16 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
 /// <summary>
 /// Metadata for weight clustering compression.
 /// </summary>
-public class WeightClusteringMetadata<T>
+/// <remarks>
+/// <para><b>For Beginners:</b> This metadata stores the information needed to decompress clustered weights:
+/// - The cluster centers (the actual weight values each cluster represents)
+/// - The number of clusters used
+/// - The original number of weights
+///
+/// When decompressing, each cluster index is replaced with its corresponding cluster center value.
+/// </para>
+/// </remarks>
+public class WeightClusteringMetadata<T> : ICompressionMetadata<T>
 {
     /// <summary>
     /// Initializes a new instance of the WeightClusteringMetadata class.
@@ -367,6 +378,11 @@ public class WeightClusteringMetadata<T>
     }
 
     /// <summary>
+    /// Gets the compression type.
+    /// </summary>
+    public CompressionType Type => CompressionType.WeightClustering;
+
+    /// <summary>
     /// Gets the cluster centers.
     /// </summary>
     public T[] ClusterCenters { get; private set; }
@@ -380,4 +396,16 @@ public class WeightClusteringMetadata<T>
     /// Gets the original length of the weights array.
     /// </summary>
     public int OriginalLength { get; private set; }
+
+    /// <summary>
+    /// Gets the size in bytes of this metadata structure.
+    /// </summary>
+    public long GetMetadataSize()
+    {
+        // Size = cluster centers + numClusters (int) + originalLength (int)
+        int elementSize = typeof(T) == typeof(float) ? 4 :
+                          typeof(T) == typeof(double) ? 8 :
+                          System.Runtime.InteropServices.Marshal.SizeOf(typeof(T));
+        return (ClusterCenters.Length * elementSize) + sizeof(int) + sizeof(int);
+    }
 }

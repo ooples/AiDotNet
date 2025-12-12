@@ -1,5 +1,7 @@
 using System.Collections;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ModelCompression;
@@ -521,7 +523,16 @@ public class HuffmanNode<T>
 /// Metadata for Huffman encoding compression.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class HuffmanEncodingMetadata<T>
+/// <remarks>
+/// <para><b>For Beginners:</b> This metadata stores the information needed to decompress Huffman-encoded weights:
+/// - The Huffman tree (for decoding variable-length codes back to values)
+/// - The encoding table (mapping values to their codes, used during compression)
+/// - The original length and bit length (for proper reconstruction)
+///
+/// Huffman encoding is lossless - you get exactly the original values back when decompressing.
+/// </para>
+/// </remarks>
+public class HuffmanEncodingMetadata<T> : ICompressionMetadata<T>
 {
     /// <summary>
     /// Initializes a new instance of the HuffmanEncodingMetadata class.
@@ -563,6 +574,11 @@ public class HuffmanEncodingMetadata<T>
     }
 
     /// <summary>
+    /// Gets the compression type.
+    /// </summary>
+    public CompressionType Type => CompressionType.HuffmanEncoding;
+
+    /// <summary>
     /// Gets the Huffman tree used for encoding.
     /// </summary>
     public HuffmanNode<T> HuffmanTree { get; private set; }
@@ -581,4 +597,38 @@ public class HuffmanEncodingMetadata<T>
     /// Gets the length of the encoded bit stream.
     /// </summary>
     public int BitLength { get; private set; }
+
+    /// <summary>
+    /// Gets the size in bytes of this metadata structure.
+    /// </summary>
+    public long GetMetadataSize()
+    {
+        // Approximate size: tree structure + encoding table + original length + bit length
+        long treeSize = EstimateTreeSize(HuffmanTree);
+        long tableSize = EncodingTable.Count * (sizeof(int) + 10); // Average code length ~10 chars
+        return treeSize + tableSize + sizeof(int) + sizeof(int);
+    }
+
+    private long EstimateTreeSize(HuffmanNode<T>? node)
+    {
+        if (node == null) return 0;
+
+        int elementSize = typeof(T) == typeof(float) ? 4 :
+                          typeof(T) == typeof(double) ? 8 :
+                          System.Runtime.InteropServices.Marshal.SizeOf(typeof(T));
+
+        long size = sizeof(int) + sizeof(bool); // Frequency + IsLeaf flag
+
+        if (node.IsLeaf)
+        {
+            size += elementSize; // Value
+        }
+        else
+        {
+            size += EstimateTreeSize(node.Left);
+            size += EstimateTreeSize(node.Right);
+        }
+
+        return size;
+    }
 }

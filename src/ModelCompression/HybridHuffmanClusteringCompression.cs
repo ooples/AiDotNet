@@ -1,3 +1,5 @@
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ModelCompression;
@@ -116,8 +118,10 @@ public class HybridHuffmanClusteringCompression<T> : ModelCompressionBase<T>
             // Stage 2: Apply Huffman encoding to cluster indices
             var (huffmanWeights, huffmanMetadata) = _huffmanCompression.Compress(clusteredWeights);
 
-            // Combine metadata
+            // Combine metadata using legacy non-generic class for compatibility with base class
+#pragma warning disable CS0618 // Type or member is obsolete
             var hybridMetadata = new HybridCompressionMetadata(clusteringMetadata, huffmanMetadata);
+#pragma warning restore CS0618
 
             return (huffmanWeights, hybridMetadata);
         }
@@ -141,7 +145,9 @@ public class HybridHuffmanClusteringCompression<T> : ModelCompressionBase<T>
             throw new ArgumentNullException(nameof(metadata));
         }
 
+#pragma warning disable CS0618 // Type or member is obsolete
         var hybridMetadata = metadata as HybridCompressionMetadata;
+#pragma warning restore CS0618
         if (hybridMetadata == null)
         {
             throw new ArgumentException("Invalid metadata type for hybrid compression.", nameof(metadata));
@@ -176,7 +182,9 @@ public class HybridHuffmanClusteringCompression<T> : ModelCompressionBase<T>
             throw new ArgumentNullException(nameof(metadata));
         }
 
+#pragma warning disable CS0618 // Type or member is obsolete
         var hybridMetadata = metadata as HybridCompressionMetadata;
+#pragma warning restore CS0618
         if (hybridMetadata == null)
         {
             throw new ArgumentException("Invalid metadata type.", nameof(metadata));
@@ -201,6 +209,76 @@ public class HybridHuffmanClusteringCompression<T> : ModelCompressionBase<T>
 /// <summary>
 /// Metadata for hybrid compression combining clustering and Huffman encoding.
 /// </summary>
+/// <typeparam name="T">The numeric type.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> This metadata combines information from both compression stages:
+/// - Clustering metadata (cluster centers and assignments)
+/// - Huffman metadata (encoding tree and table)
+///
+/// During decompression, Huffman decoding is applied first, then clustering decompression.
+/// </para>
+/// </remarks>
+public class HybridCompressionMetadata<T> : ICompressionMetadata<T>
+{
+    /// <summary>
+    /// Initializes a new instance of the HybridCompressionMetadata class.
+    /// </summary>
+    /// <param name="clusteringMetadata">Metadata from the clustering stage.</param>
+    /// <param name="huffmanMetadata">Metadata from the Huffman encoding stage.</param>
+    /// <param name="originalLength">The original length of the weights array.</param>
+    public HybridCompressionMetadata(
+        WeightClusteringMetadata<T> clusteringMetadata,
+        HuffmanEncodingMetadata<T> huffmanMetadata,
+        int originalLength)
+    {
+        if (clusteringMetadata == null)
+        {
+            throw new ArgumentNullException(nameof(clusteringMetadata));
+        }
+
+        if (huffmanMetadata == null)
+        {
+            throw new ArgumentNullException(nameof(huffmanMetadata));
+        }
+
+        ClusteringMetadata = clusteringMetadata;
+        HuffmanMetadata = huffmanMetadata;
+        OriginalLength = originalLength;
+    }
+
+    /// <summary>
+    /// Gets the compression type.
+    /// </summary>
+    public CompressionType Type => CompressionType.HybridHuffmanClustering;
+
+    /// <summary>
+    /// Gets the metadata from the clustering stage.
+    /// </summary>
+    public WeightClusteringMetadata<T> ClusteringMetadata { get; private set; }
+
+    /// <summary>
+    /// Gets the metadata from the Huffman encoding stage.
+    /// </summary>
+    public HuffmanEncodingMetadata<T> HuffmanMetadata { get; private set; }
+
+    /// <summary>
+    /// Gets the original length of the weights array.
+    /// </summary>
+    public int OriginalLength { get; private set; }
+
+    /// <summary>
+    /// Gets the size in bytes of this metadata structure.
+    /// </summary>
+    public long GetMetadataSize()
+    {
+        return ClusteringMetadata.GetMetadataSize() + HuffmanMetadata.GetMetadataSize();
+    }
+}
+
+/// <summary>
+/// Legacy non-generic metadata for backward compatibility.
+/// </summary>
+[Obsolete("Use HybridCompressionMetadata<T> for type-safe operations.")]
 public class HybridCompressionMetadata
 {
     /// <summary>
