@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ModelCompression;
 
@@ -313,7 +314,7 @@ public class LowRankFactorizationCompression<T> : ModelCompressionBase<T>
         double capturedEnergy = 0;
         int effectiveRank = 0;
 
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int r = 0; r < rank; r++)
         {

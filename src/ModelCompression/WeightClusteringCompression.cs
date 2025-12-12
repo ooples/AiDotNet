@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.ModelCompression;
 
@@ -88,7 +89,9 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
         _numClusters = numClusters;
         _maxIterations = maxIterations;
         _tolerance = tolerance;
-        _random = randomSeed.HasValue ? new Random(randomSeed.Value) : new Random();
+        _random = randomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(randomSeed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
