@@ -343,8 +343,8 @@ internal class ConvLayer<T>
     private readonly int _inputChannels;
     private readonly int _outputChannels;
     private readonly int _kernelSize;
-    private Matrix<T> _kernels;
-    private Vector<T> _biases;
+    private readonly Matrix<T> _kernels;
+    private readonly Vector<T> _biases;
 
     public int ParameterCount => _kernels.Rows * _kernels.Columns + _biases.Length;
 

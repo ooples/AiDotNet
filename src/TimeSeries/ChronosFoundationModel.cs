@@ -196,7 +196,6 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     public Dictionary<double, Vector<T>> ForecastWithQuantiles(Vector<T> history, double[] quantiles, int numSamples = 100)
     {
         var samples = new List<Vector<T>>();
-        var random = new Random();
 
         for (int s = 0; s < numSamples; s++)
         {
@@ -343,7 +342,7 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 internal class TransformerBlock<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private Matrix<T> _weights;
+    private readonly Matrix<T> _weights;
 
     public int ParameterCount => _weights.Rows * _weights.Columns;
 

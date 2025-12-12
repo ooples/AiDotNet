@@ -241,8 +241,8 @@ internal class InformerEncoderBlock<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _embeddingDim;
-    private Matrix<T> _attentionWeights;
-    private Matrix<T> _ffnWeights;
+    private readonly Matrix<T> _attentionWeights;
+    private readonly Matrix<T> _ffnWeights;
 
     public int ParameterCount => _attentionWeights.Rows * _attentionWeights.Columns +
                                   _ffnWeights.Rows * _ffnWeights.Columns;
@@ -292,8 +292,8 @@ internal class InformerDecoderBlock<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _embeddingDim;
-    private Matrix<T> _selfAttentionWeights;
-    private Matrix<T> _crossAttentionWeights;
+    private readonly Matrix<T> _selfAttentionWeights;
+    private readonly Matrix<T> _crossAttentionWeights;
 
     public int ParameterCount => _selfAttentionWeights.Rows * _selfAttentionWeights.Columns +
                                   _crossAttentionWeights.Rows * _crossAttentionWeights.Columns;
