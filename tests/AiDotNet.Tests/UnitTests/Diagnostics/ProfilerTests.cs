@@ -142,20 +142,22 @@ public class ProfilerTests : IDisposable
     {
         // Arrange
         Profiler.Enable();
+        var op1Name = $"Op1_{_testId}";
+        var op2Name = $"Op2_{_testId}";
 
-        using (Profiler.Scope("Op1")) { Thread.Sleep(10); }
-        using (Profiler.Scope("Op2")) { Thread.Sleep(20); }
-        using (Profiler.Scope("Op1")) { Thread.Sleep(10); }
+        using (Profiler.Scope(op1Name)) { Thread.Sleep(10); }
+        using (Profiler.Scope(op2Name)) { Thread.Sleep(20); }
+        using (Profiler.Scope(op1Name)) { Thread.Sleep(10); }
 
         // Act
         var report = Profiler.GetReport();
 
         // Assert
         Assert.NotNull(report);
-        Assert.Equal(2, report.Stats.Count);
+        Assert.True(report.Stats.Count >= 2, $"Expected at least 2 stats but got {report.Stats.Count}");
         Assert.True(report.TotalOperations >= 3);
 
-        var op1Stats = report.GetStats("Op1");
+        var op1Stats = report.GetStats(op1Name);
         Assert.NotNull(op1Stats);
         Assert.Equal(2, op1Stats.Count);
     }

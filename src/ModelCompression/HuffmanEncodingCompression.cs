@@ -237,14 +237,7 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
         var frequencies = new NumericDictionary<T, int>(weights.Length);
         foreach (var weight in weights)
         {
-            if (frequencies.TryGetValue(weight, out int count))
-            {
-                frequencies[weight] = count + 1;
-            }
-            else
-            {
-                frequencies[weight] = 1;
-            }
+            frequencies[weight] = frequencies.TryGetValue(weight, out int count) ? count + 1 : 1;
         }
         return frequencies;
     }
