@@ -315,12 +315,12 @@ internal class LSTMEncoder<T>
     private readonly int _inputSize;
     private readonly int _latentDim;
     private readonly int _hiddenSize;
-    private Matrix<T> _weights;
-    private Vector<T> _bias;
-    private Matrix<T> _meanWeights;
-    private Vector<T> _meanBias;
-    private Matrix<T> _logVarWeights;
-    private Vector<T> _logVarBias;
+    private readonly Matrix<T> _weights;
+    private readonly Vector<T> _bias;
+    private readonly Matrix<T> _meanWeights;
+    private readonly Vector<T> _meanBias;
+    private readonly Matrix<T> _logVarWeights;
+    private readonly Vector<T> _logVarBias;
 
     public int ParameterCount => _weights.Rows * _weights.Columns + _bias.Length +
                                   _meanWeights.Rows * _meanWeights.Columns + _meanBias.Length +
@@ -449,10 +449,10 @@ internal class LSTMDecoder<T>
     private readonly int _latentDim;
     private readonly int _outputSize;
     private readonly int _hiddenSize;
-    private Matrix<T> _weights;
-    private Vector<T> _bias;
-    private Matrix<T> _outputWeights;
-    private Vector<T> _outputBias;
+    private readonly Matrix<T> _weights;
+    private readonly Vector<T> _bias;
+    private readonly Matrix<T> _outputWeights;
+    private readonly Vector<T> _outputBias;
 
     public int ParameterCount => _weights.Rows * _weights.Columns + _bias.Length +
                                   _outputWeights.Rows * _outputWeights.Columns + _outputBias.Length;

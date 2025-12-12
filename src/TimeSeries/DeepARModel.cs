@@ -440,10 +440,10 @@ internal class DeepARLstmCell<T>
     private readonly INumericOperations<T> _numOps;
     private readonly int _inputSize;
     private readonly int _hiddenSize;
-    private Matrix<T> _weights;
-    private Vector<T> _bias;
-    private Vector<T> _hiddenState;
-    private Vector<T> _cellState;
+    private readonly Matrix<T> _weights;
+    private readonly Vector<T> _bias;
+    private readonly Vector<T> _hiddenState;
+    private readonly Vector<T> _cellState;
 
     public int ParameterCount => _weights.Rows * _weights.Columns + _bias.Length;
 
