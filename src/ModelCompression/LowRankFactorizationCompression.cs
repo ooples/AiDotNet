@@ -193,6 +193,16 @@ public class LowRankFactorizationCompression<T> : ModelCompressionBase<T>
         int cols = lrMetadata.Cols;
         int rank = lrMetadata.Rank;
 
+        // Validate compressed weights length matches expected layout
+        int expectedLength = (rows * rank) + rank + (rank * cols);
+        if (compressedWeights.Length != expectedLength)
+        {
+            throw new ArgumentException(
+                $"Compressed weights length ({compressedWeights.Length}) does not match expected layout " +
+                $"({expectedLength} = U[{rows}×{rank}] + S[{rank}] + V[{rank}×{cols}]).",
+                nameof(compressedWeights));
+        }
+
         // Extract U, S, V from compressed weights
         int idx = 0;
 
@@ -247,6 +257,11 @@ public class LowRankFactorizationCompression<T> : ModelCompressionBase<T>
     /// </summary>
     public override long GetCompressedSize(Vector<T> compressedWeights, object metadata)
     {
+        if (compressedWeights == null)
+        {
+            throw new ArgumentNullException(nameof(compressedWeights));
+        }
+
         var lrMetadata = metadata as LowRankFactorizationMetadata<T>;
         if (lrMetadata == null)
         {
@@ -256,10 +271,7 @@ public class LowRankFactorizationCompression<T> : ModelCompressionBase<T>
         // Size = U (rows × rank) + S (rank) + V (rank × cols)
         long dataSize = compressedWeights.Length * GetElementSize();
 
-        // Metadata overhead
-        long metadataSize = sizeof(int) * 4; // rows, cols, rank, originalLength
-
-        return dataSize + metadataSize;
+        return dataSize + lrMetadata.GetMetadataSize();
     }
 
     /// <summary>
@@ -372,18 +384,22 @@ public class LowRankFactorizationCompression<T> : ModelCompressionBase<T>
                 prevSigma = sigma;
             }
 
-            // Persist final iterate for this component (after loop completes or breaks)
-            if (sigma >= 1e-10)
+            // Skip this component if sigma is effectively zero
+            // (no more meaningful singular values remain)
+            if (sigma < 1e-10)
             {
-                for (int i = 0; i < rows; i++)
-                {
-                    U[i, r] = u[i];
-                }
-                S[r] = sigma;
-                for (int j = 0; j < cols; j++)
-                {
-                    V[r, j] = v[j];
-                }
+                break;
+            }
+
+            // Persist final iterate for this component
+            for (int i = 0; i < rows; i++)
+            {
+                U[i, r] = u[i];
+            }
+            S[r] = sigma;
+            for (int j = 0; j < cols; j++)
+            {
+                V[r, j] = v[j];
             }
 
             // Deflate: A = A - sigma * u * v^T
@@ -479,7 +495,7 @@ public class LowRankFactorizationMetadata<T> : ICompressionMetadata<T>
     /// <summary>
     /// Gets the compression type.
     /// </summary>
-    public CompressionType Type => CompressionType.HybridClusteringQuantization; // Using existing enum for low-rank
+    public CompressionType Type => CompressionType.LowRankFactorization;
 
     /// <summary>
     /// Gets the number of rows in the reshaped matrix.

@@ -42,6 +42,20 @@ namespace AiDotNet.ModelCompression;
 /// - Compressed: 8 × 8 bits + codebook = ~64 bits + codebook
 /// - Massive compression with minimal accuracy loss!
 /// </para>
+/// <para><b>Important Limitation:</b> This implementation is designed for compressing a single weight vector.
+/// Traditional PQ achieves compression by training codebooks on multiple vectors and amortizing codebook storage.
+/// For single-vector compression, the codebook overhead may exceed the original data size.
+///
+/// <b>When to use this compressor:</b>
+/// - When you have very high-dimensional weight vectors (thousands of dimensions)
+/// - When reconstruction quality is more important than compression ratio
+/// - When you plan to extend to batch compression of multiple similar vectors
+///
+/// <b>For better single-vector compression:</b>
+/// - Consider <see cref="WeightClusteringCompression{T}"/> for simpler k-means clustering
+/// - Consider <see cref="HuffmanEncodingCompression{T}"/> for lossless entropy coding
+/// - Consider <see cref="DeepCompression{T}"/> for a multi-stage pipeline
+/// </para>
 /// </remarks>
 public class ProductQuantizationCompression<T> : ModelCompressionBase<T>
 {
@@ -259,7 +273,6 @@ public class ProductQuantizationCompression<T> : ModelCompressionBase<T>
     private (T[] codebook, int code) CreateCodebookForSubvector(T[] subvector)
     {
         int subvectorDim = subvector.Length;
-        int effectiveCentroids = Math.Min(_numCentroids, 1); // For a single subvector, we need 1 centroid
 
         // For PQ, each subvector position gets its own codebook
         // The codebook stores D-dimensional centroid vectors (one per centroid)

@@ -40,6 +40,13 @@ public class SafeSerializationBinder : ISerializationBinder
     /// <summary>
     /// Exact allowed type full names.
     /// </summary>
+    /// <remarks>
+    /// Note: System.Object is intentionally NOT included in this list.
+    /// While System.Object itself is harmless, allowing it could enable polymorphic
+    /// deserialization attacks where object-typed properties are deserialized to
+    /// dangerous concrete types. The recursive validation in <see cref="IsAllowedType"/>
+    /// validates actual concrete types, but excluding System.Object provides defense in depth.
+    /// </remarks>
     private static readonly HashSet<string> AllowedTypeFullNames = new HashSet<string>(StringComparer.Ordinal)
     {
         "System.String",
@@ -60,7 +67,7 @@ public class SafeSerializationBinder : ISerializationBinder
         "System.UInt32",
         "System.UInt64",
         "System.Char",
-        "System.Object",
+        // Note: System.Object is intentionally excluded for security reasons
     };
 
     /// <summary>

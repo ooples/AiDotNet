@@ -280,7 +280,8 @@ public class DeepCompression<T> : ModelCompressionBase<T>
             clusteringMetadata: weightClusteringMetadata,
             huffmanMetadata: huffmanEncodingMetadata,
             originalLength: weights.Length,
-            compressionStats: CalculateCompressionStats(weights, huffmanWeights, sparseMetadata));
+            compressionStats: CalculateCompressionStats(
+                weights, huffmanWeights, sparseMetadata, weightClusteringMetadata, huffmanEncodingMetadata));
 
         return (huffmanWeights, deepCompressionMetadata);
     }
@@ -337,11 +338,14 @@ public class DeepCompression<T> : ModelCompressionBase<T>
             ? _huffmanCompressor.GetCompressedSize(compressedWeights, deepMetadata.HuffmanMetadata)
             : 0;
 
-        // Add metadata sizes
+        // Add metadata sizes from all stages and the composite metadata overhead
         long pruningMetadataSize = deepMetadata.PruningMetadata.GetMetadataSize();
         long clusteringMetadataSize = deepMetadata.ClusteringMetadata.GetMetadataSize();
+        long huffmanMetadataSize = deepMetadata.HuffmanMetadata.GetMetadataSize();
+        long deepMetadataOverhead = deepMetadata.GetMetadataSize();
 
-        return huffmanCompressedSize + pruningMetadataSize + clusteringMetadataSize;
+        return huffmanCompressedSize + pruningMetadataSize + clusteringMetadataSize +
+               huffmanMetadataSize + deepMetadataOverhead;
     }
 
     /// <summary>
@@ -350,16 +354,22 @@ public class DeepCompression<T> : ModelCompressionBase<T>
     private DeepCompressionStats CalculateCompressionStats(
         Vector<T> original,
         Vector<T> compressed,
-        SparsePruningMetadata<T> pruningMetadata)
+        SparsePruningMetadata<T> pruningMetadata,
+        WeightClusteringMetadata<T> clusteringMetadata,
+        HuffmanEncodingMetadata<T> huffmanMetadata)
     {
         long originalSize = original.Length * GetElementSize();
-        long compressedSize = GetCompressedSize(compressed,
-            new DeepCompressionMetadata<T>(
-                pruningMetadata,
-                new WeightClusteringMetadata<T>(new T[] { NumOps.Zero }, 1, pruningMetadata.NonZeroIndices.Length),
-                new HuffmanEncodingMetadata<T>(new HuffmanNode<T>(default, 0, true, 0, null, null), new NumericDictionary<T, string>(), compressed.Length > 0 ? compressed.Length : 1, 0),
-                original.Length,
-                new DeepCompressionStats()));
+
+        // Create a temporary DeepCompressionMetadata with the actual stage metadata
+        // to get accurate compressed size calculation
+        var tempMetadata = new DeepCompressionMetadata<T>(
+            pruningMetadata,
+            clusteringMetadata,
+            huffmanMetadata,
+            original.Length,
+            new DeepCompressionStats());
+
+        long compressedSize = GetCompressedSize(compressed, tempMetadata);
 
         return new DeepCompressionStats
         {
@@ -367,8 +377,8 @@ public class DeepCompression<T> : ModelCompressionBase<T>
             CompressedSizeBytes = compressedSize,
             CompressionRatio = compressedSize > 0 ? (double)originalSize / compressedSize : 1.0,
             Sparsity = pruningMetadata.ActualSparsity,
-            NumClusters = _numClusters,
-            BitsPerWeight = _numClusters > 0 ? Math.Log(_numClusters) / Math.Log(2) : 0
+            NumClusters = clusteringMetadata.NumClusters,
+            BitsPerWeight = clusteringMetadata.NumClusters > 0 ? Math.Log(clusteringMetadata.NumClusters) / Math.Log(2) : 0
         };
     }
 }

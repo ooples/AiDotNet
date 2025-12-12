@@ -86,6 +86,11 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
             throw new ArgumentException("Max iterations must be positive.", nameof(maxIterations));
         }
 
+        if (tolerance <= 0)
+        {
+            throw new ArgumentException("Tolerance must be positive.", nameof(tolerance));
+        }
+
         _numClusters = numClusters;
         _maxIterations = maxIterations;
         _tolerance = tolerance;
@@ -181,16 +186,16 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
             throw new ArgumentException("Invalid metadata type.", nameof(metadata));
         }
 
-        // Size of cluster centers (full precision)
-        long clusterCentersSize = clusterMetadata.NumClusters * GetElementSize();
-
-        // Size of cluster assignments (can use fewer bits, but we'll use int for simplicity)
+        // Size of cluster assignments - stored as indices (not full T values)
+        // With 256 clusters, each assignment needs only 8 bits (1 byte),
+        // but we use sizeof(int) as a reasonable practical representation.
+        // Note: An optimized implementation could use ceil(log2(NumClusters)) bits per assignment.
         long assignmentsSize = compressedWeights.Length * sizeof(int);
 
-        // Metadata overhead (NumClusters, OriginalLength)
-        long metadataSize = sizeof(int) * 2;
+        // Metadata size includes cluster centers + two int fields (numClusters, originalLength)
+        long metadataSize = clusterMetadata.GetMetadataSize();
 
-        return clusterCentersSize + assignmentsSize + metadataSize;
+        return assignmentsSize + metadataSize;
     }
 
     /// <summary>
