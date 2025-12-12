@@ -48,7 +48,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var compression = new HuffmanEncodingCompression<double>();
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => compression.Compress(null!));
+            Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
         }
 
         [Fact]
@@ -96,7 +96,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 right: null);
             var metadata = new HuffmanEncodingMetadata<double>(
                 huffmanTree: huffmanTree,
-                encodingTable: new System.Collections.Generic.Dictionary<double, string>(),
+                encodingTable: new AiDotNet.LinearAlgebra.NumericDictionary<double, string>(),
                 originalLength: 10,
                 bitLength: 10);
 

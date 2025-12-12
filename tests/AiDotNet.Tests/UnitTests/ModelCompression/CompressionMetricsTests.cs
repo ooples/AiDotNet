@@ -224,7 +224,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
             // Assert
             Assert.Equal(10.0, metrics.CompressionRatio);
-            Assert.Equal(90.0, metrics.SizeReductionPercentage);
+            Assert.Equal(90.0, metrics.SizeReductionPercentage, 2); // Use precision for floating-point comparison
             Assert.Equal(2.0, metrics.InferenceSpeedup);
             Assert.Equal(0.01, metrics.AccuracyLoss, 10);
         }

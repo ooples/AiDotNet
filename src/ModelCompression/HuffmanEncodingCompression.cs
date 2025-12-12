@@ -232,9 +232,9 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
     /// <summary>
     /// Builds a frequency table for the weights.
     /// </summary>
-    private Dictionary<T, int> BuildFrequencyTable(T[] weights)
+    private NumericDictionary<T, int> BuildFrequencyTable(T[] weights)
     {
-        var frequencies = new Dictionary<T, int>();
+        var frequencies = new NumericDictionary<T, int>(weights.Length);
         foreach (var weight in weights)
         {
             if (frequencies.TryGetValue(weight, out int count))
@@ -266,7 +266,7 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
     /// - The total encoded size is minimized
     /// </para>
     /// </remarks>
-    private HuffmanNode<T> BuildHuffmanTree(Dictionary<T, int> frequencies)
+    private HuffmanNode<T> BuildHuffmanTree(NumericDictionary<T, int> frequencies)
     {
         var priorityQueue = new SortedSet<HuffmanNode<T>>(Comparer<HuffmanNode<T>>.Create((a, b) =>
         {
@@ -318,14 +318,14 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
     /// <summary>
     /// Generates an encoding table from the Huffman tree.
     /// </summary>
-    private Dictionary<T, string> GenerateEncodingTable(HuffmanNode<T> root)
+    private NumericDictionary<T, string> GenerateEncodingTable(HuffmanNode<T> root)
     {
-        var encodingTable = new Dictionary<T, string>();
+        var encodingTable = new NumericDictionary<T, string>();
         GenerateEncodingTableRecursive(root, "", encodingTable);
         return encodingTable;
     }
 
-    private void GenerateEncodingTableRecursive(HuffmanNode<T> node, string code, Dictionary<T, string> table)
+    private void GenerateEncodingTableRecursive(HuffmanNode<T> node, string code, NumericDictionary<T, string> table)
     {
         if (node == null) return;
 
@@ -349,7 +349,7 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
     /// <summary>
     /// Encodes the weights using the encoding table.
     /// </summary>
-    private BitArray EncodeWeights(T[] weights, Dictionary<T, string> encodingTable)
+    private BitArray EncodeWeights(T[] weights, NumericDictionary<T, string> encodingTable)
     {
         var bits = new List<bool>();
         foreach (var weight in weights)
@@ -372,6 +372,21 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
     private T[] DecodeWeights(BitArray encodedBits, HuffmanNode<T> huffmanTree, int originalLength, int bitLength)
     {
         var decodedWeights = new List<T>();
+
+        // Handle degenerate case: single unique value (root is the only leaf)
+        if (huffmanTree.IsLeaf)
+        {
+            if (huffmanTree.Value == null)
+            {
+                throw new InvalidOperationException("Leaf node has null value.");
+            }
+            for (int i = 0; i < originalLength; i++)
+            {
+                decodedWeights.Add(huffmanTree.Value);
+            }
+            return decodedWeights.ToArray();
+        }
+
         var currentNode = huffmanTree;
 
         for (int i = 0; i < bitLength && decodedWeights.Count < originalLength; i++)
@@ -457,13 +472,13 @@ public class HuffmanNode<T>
     /// <summary>
     /// Initializes a new instance of the HuffmanNode class.
     /// </summary>
-    /// <param name="value">The value stored in this node (for leaf nodes).</param>
+    /// <param name="value">The value stored in this node (for leaf nodes, default for internal nodes).</param>
     /// <param name="frequency">The frequency of this value.</param>
     /// <param name="isLeaf">Whether this is a leaf node.</param>
     /// <param name="id">Unique identifier for stable sorting.</param>
-    /// <param name="left">Left child node.</param>
-    /// <param name="right">Right child node.</param>
-    public HuffmanNode(T value, int frequency, bool isLeaf, int id, HuffmanNode<T> left, HuffmanNode<T> right)
+    /// <param name="left">Left child node (null for leaf nodes).</param>
+    /// <param name="right">Right child node (null for leaf nodes).</param>
+    public HuffmanNode(T? value, int frequency, bool isLeaf, int id, HuffmanNode<T>? left, HuffmanNode<T>? right)
     {
         if (frequency < 0)
         {
@@ -479,9 +494,9 @@ public class HuffmanNode<T>
     }
 
     /// <summary>
-    /// Gets the value stored in this node (for leaf nodes).
+    /// Gets the value stored in this node (for leaf nodes, default for internal nodes).
     /// </summary>
-    public T Value { get; private set; }
+    public T? Value { get; private set; }
 
     /// <summary>
     /// Gets the frequency of this value or subtree.
@@ -499,14 +514,14 @@ public class HuffmanNode<T>
     public int Id { get; private set; }
 
     /// <summary>
-    /// Gets the left child node.
+    /// Gets the left child node (null for leaf nodes).
     /// </summary>
-    public HuffmanNode<T> Left { get; private set; }
+    public HuffmanNode<T>? Left { get; private set; }
 
     /// <summary>
-    /// Gets the right child node.
+    /// Gets the right child node (null for leaf nodes).
     /// </summary>
-    public HuffmanNode<T> Right { get; private set; }
+    public HuffmanNode<T>? Right { get; private set; }
 }
 
 /// <summary>
@@ -524,7 +539,7 @@ public class HuffmanEncodingMetadata<T>
     /// <param name="bitLength">The length of the encoded bit stream.</param>
     public HuffmanEncodingMetadata(
         HuffmanNode<T> huffmanTree,
-        Dictionary<T, string> encodingTable,
+        NumericDictionary<T, string> encodingTable,
         int originalLength,
         int bitLength)
     {
@@ -562,7 +577,7 @@ public class HuffmanEncodingMetadata<T>
     /// <summary>
     /// Gets the encoding table mapping values to codes.
     /// </summary>
-    public Dictionary<T, string> EncodingTable { get; private set; }
+    public NumericDictionary<T, string> EncodingTable { get; private set; }
 
     /// <summary>
     /// Gets the original length of the weights vector.
