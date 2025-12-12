@@ -6,6 +6,7 @@ using System.Runtime.Intrinsics.Arm;
 #endif
 using System.Runtime.CompilerServices;
 using AiDotNet.Tensors.Interfaces;
+using static AiDotNet.Tensors.ErrorMessages;
 
 namespace AiDotNet.Tensors.Helpers;
 
@@ -47,7 +48,7 @@ public static class TensorPrimitivesCore
         where TOperator : struct, IUnaryOperator<float, float>
     {
         if (x.Length != destination.Length)
-            throw new ArgumentException("Input and destination spans must have the same length.");
+            throw new ArgumentException(InputDestinationSameLength);
 
         TOperator op = default;
         int i = 0;
@@ -109,7 +110,7 @@ public static class TensorPrimitivesCore
         where TOperator : struct, IUnaryOperator<double, double>
     {
         if (x.Length != destination.Length)
-            throw new ArgumentException("Input and destination spans must have the same length.");
+            throw new ArgumentException(InputDestinationSameLength);
 
         TOperator op = default;
         int i = 0;
@@ -171,7 +172,7 @@ public static class TensorPrimitivesCore
         where TOperator : struct, IBinaryOperator<double, double>
     {
         if (x.Length != y.Length || x.Length != destination.Length)
-            throw new ArgumentException("All spans must have the same length.");
+            throw new ArgumentException(AllSpansSameLength);
 
         TOperator op = default;
         int i = 0;
@@ -230,7 +231,7 @@ public static class TensorPrimitivesCore
         where TOperator : struct, IBinaryOperator<float, float>
     {
         if (x.Length != y.Length || x.Length != destination.Length)
-            throw new ArgumentException("All spans must have the same length.");
+            throw new ArgumentException(AllSpansSameLength);
 
         TOperator op = default;
         int i = 0;
@@ -285,7 +286,7 @@ public static class TensorPrimitivesCore
         where TOperator : struct, IBinaryOperator<int, int>
     {
         if (x.Length != y.Length || x.Length != destination.Length)
-            throw new ArgumentException("All spans must have the same length.");
+            throw new ArgumentException(AllSpansSameLength);
 
         TOperator op = default;
         int i = 0;
@@ -340,7 +341,7 @@ public static class TensorPrimitivesCore
         where TOperator : struct, IBinaryOperator<long, long>
     {
         if (x.Length != y.Length || x.Length != destination.Length)
-            throw new ArgumentException("All spans must have the same length.");
+            throw new ArgumentException(AllSpansSameLength);
 
         TOperator op = default;
         int i = 0;
@@ -395,7 +396,7 @@ public static class TensorPrimitivesCore
         where TOperator : struct, IBinaryOperator<short, short>
     {
         if (x.Length != y.Length || x.Length != destination.Length)
-            throw new ArgumentException("All spans must have the same length.");
+            throw new ArgumentException(AllSpansSameLength);
 
         TOperator op = default;
         int i = 0;
@@ -439,7 +440,7 @@ public static class TensorPrimitivesCore
         where TOperator : struct, IBinaryOperator<ushort, ushort>
     {
         if (x.Length != y.Length || x.Length != destination.Length)
-            throw new ArgumentException("All spans must have the same length.");
+            throw new ArgumentException(AllSpansSameLength);
 
         TOperator op = default;
         int i = 0;
@@ -483,7 +484,7 @@ public static class TensorPrimitivesCore
         where TOperator : struct, IBinaryOperator<uint, uint>
     {
         if (x.Length != y.Length || x.Length != destination.Length)
-            throw new ArgumentException("All spans must have the same length.");
+            throw new ArgumentException(AllSpansSameLength);
 
         TOperator op = default;
         int i = 0;
@@ -527,7 +528,7 @@ public static class TensorPrimitivesCore
         where TOperator : struct, IBinaryOperator<ulong, ulong>
     {
         if (x.Length != y.Length || x.Length != destination.Length)
-            throw new ArgumentException("All spans must have the same length.");
+            throw new ArgumentException(AllSpansSameLength);
 
         TOperator op = default;
         int i = 0;
@@ -571,7 +572,7 @@ public static class TensorPrimitivesCore
         where TOperator : struct, IBinaryOperator<byte, byte>
     {
         if (x.Length != y.Length || x.Length != destination.Length)
-            throw new ArgumentException("All spans must have the same length.");
+            throw new ArgumentException(AllSpansSameLength);
 
         TOperator op = default;
         int i = 0;
@@ -615,7 +616,7 @@ public static class TensorPrimitivesCore
         where TOperator : struct, IBinaryOperator<sbyte, sbyte>
     {
         if (x.Length != y.Length || x.Length != destination.Length)
-            throw new ArgumentException("All spans must have the same length.");
+            throw new ArgumentException(AllSpansSameLength);
 
         TOperator op = default;
         int i = 0;
@@ -742,7 +743,7 @@ public static class TensorPrimitivesCore
     public static double Dot(ReadOnlySpan<double> x, ReadOnlySpan<double> y)
     {
         if (x.Length != y.Length)
-            throw new ArgumentException("Spans must have the same length.");
+            throw new ArgumentException(SpansSameLength);
 
         double sum = 0;
         int i = 0;
@@ -787,7 +788,7 @@ public static class TensorPrimitivesCore
     public static float Dot(ReadOnlySpan<float> x, ReadOnlySpan<float> y)
     {
         if (x.Length != y.Length)
-            throw new ArgumentException("Spans must have the same length.");
+            throw new ArgumentException(SpansSameLength);
 
         float sum = 0;
         int i = 0;
@@ -832,7 +833,7 @@ public static class TensorPrimitivesCore
     public static double Max(ReadOnlySpan<double> x)
     {
         if (x.Length == 0)
-            throw new ArgumentException("Span cannot be empty.");
+            throw new ArgumentException(SpanCannotBeEmpty);
 
         double max = x[0];
         int i = 1;
@@ -869,7 +870,7 @@ public static class TensorPrimitivesCore
     public static float Max(ReadOnlySpan<float> x)
     {
         if (x.Length == 0)
-            throw new ArgumentException("Span cannot be empty.");
+            throw new ArgumentException(SpanCannotBeEmpty);
 
         float max = x[0];
         int i = 1;
@@ -905,7 +906,7 @@ public static class TensorPrimitivesCore
     public static double Min(ReadOnlySpan<double> x)
     {
         if (x.Length == 0)
-            throw new ArgumentException("Span cannot be empty.");
+            throw new ArgumentException(SpanCannotBeEmpty);
 
         double min = x[0];
         int i = 1;
@@ -941,7 +942,7 @@ public static class TensorPrimitivesCore
     public static float Min(ReadOnlySpan<float> x)
     {
         if (x.Length == 0)
-            throw new ArgumentException("Span cannot be empty.");
+            throw new ArgumentException(SpanCannotBeEmpty);
 
         float min = x[0];
         int i = 1;
@@ -1057,7 +1058,7 @@ public static class TensorPrimitivesCore
     public static int Dot(ReadOnlySpan<int> x, ReadOnlySpan<int> y)
     {
         if (x.Length != y.Length)
-            throw new ArgumentException("Spans must have the same length.");
+            throw new ArgumentException(SpansSameLength);
 
         int sum = 0;
         int i = 0;
@@ -1102,7 +1103,7 @@ public static class TensorPrimitivesCore
     public static long Dot(ReadOnlySpan<long> x, ReadOnlySpan<long> y)
     {
         if (x.Length != y.Length)
-            throw new ArgumentException("Spans must have the same length.");
+            throw new ArgumentException(SpansSameLength);
 
         long sum = 0;
         int i = 0;
@@ -1147,7 +1148,7 @@ public static class TensorPrimitivesCore
     public static int Max(ReadOnlySpan<int> x)
     {
         if (x.Length == 0)
-            throw new ArgumentException("Span cannot be empty.");
+            throw new ArgumentException(SpanCannotBeEmpty);
 
         int max = x[0];
         int i = 1;
@@ -1183,7 +1184,7 @@ public static class TensorPrimitivesCore
     public static long Max(ReadOnlySpan<long> x)
     {
         if (x.Length == 0)
-            throw new ArgumentException("Span cannot be empty.");
+            throw new ArgumentException(SpanCannotBeEmpty);
 
         long max = x[0];
         int i = 1;
@@ -1219,7 +1220,7 @@ public static class TensorPrimitivesCore
     public static int Min(ReadOnlySpan<int> x)
     {
         if (x.Length == 0)
-            throw new ArgumentException("Span cannot be empty.");
+            throw new ArgumentException(SpanCannotBeEmpty);
 
         int min = x[0];
         int i = 1;
@@ -1255,7 +1256,7 @@ public static class TensorPrimitivesCore
     public static long Min(ReadOnlySpan<long> x)
     {
         if (x.Length == 0)
-            throw new ArgumentException("Span cannot be empty.");
+            throw new ArgumentException(SpanCannotBeEmpty);
 
         long min = x[0];
         int i = 1;
