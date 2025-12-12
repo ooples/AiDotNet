@@ -155,7 +155,7 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override async Task<string> GenerateAsyncCore(string prompt)
+    protected override async Task<string> GenerateAsyncCore(string prompt, CancellationToken cancellationToken)
     {
         // Build the request
         var requestPayload = new AnthropicRequest
@@ -186,8 +186,8 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
         request.Headers.Add("x-api-key", _apiKey);
         request.Headers.Add("anthropic-version", "2023-06-01");
 
-        // Make the API call
-        using var response = await HttpClient.SendAsync(request);
+        // Make the API call with cancellation support
+        using var response = await HttpClient.SendAsync(request, cancellationToken);
 
         // Check for errors
         if (!response.IsSuccessStatusCode)

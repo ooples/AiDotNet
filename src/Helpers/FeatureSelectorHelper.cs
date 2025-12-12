@@ -274,33 +274,29 @@ public static class FeatureSelectorHelper<T, TInput>
     /// </para>
     /// </remarks>
     public static TInput CreateFeatureSubset(
-        TInput originalData, 
+        TInput originalData,
         List<int> featureIndices)
     {
-        int numSamples = InputHelper<T, TInput>.GetBatchSize(originalData);
-    
         // Handle different input types
         if (originalData is Matrix<T> matrix)
         {
             // Extract the selected columns as vectors
-            var selectedColumns = new List<Vector<T>>();
-        
-            foreach (int featureIndex in featureIndices)
-            {
-                selectedColumns.Add(matrix.GetColumn(featureIndex));
-            }
-        
+            var selectedColumns = featureIndices
+                .Select(i => matrix.GetColumn(i))
+                .ToArray();
+
             // Create a new matrix from the selected columns
-            return (TInput)(object)Matrix<T>.FromColumns(selectedColumns.ToArray());
+            return (TInput)(object)Matrix<T>.FromColumns(selectedColumns);
         }
         else if (originalData is Tensor<T> tensor)
         {
             // For tensor inputs, create a new tensor with selected features
             int[] newShape = (int[])tensor.Shape.Clone();
             newShape[1] = featureIndices.Count; // Adjust feature dimension
-        
+
             var resultTensor = new Tensor<T>(newShape);
-        
+            int numSamples = tensor.Shape[0];
+
             // Copy the selected features to the result tensor
             for (int i = 0; i < numSamples; i++)
             {
@@ -309,7 +305,7 @@ public static class FeatureSelectorHelper<T, TInput>
                     CopyFeature(tensor, resultTensor, i, featureIndices[j], j);
                 }
             }
-        
+
             return (TInput)(object)resultTensor;
         }
         else
@@ -336,11 +332,11 @@ public static class FeatureSelectorHelper<T, TInput>
     {
         if (originalData is Matrix<T> matrix)
         {
-            var selectedFeatures = selectedFeatureIndices
+            var selectedColumns = selectedFeatureIndices
                 .Select(i => matrix.GetColumn(i))
-                .ToList();
-        
-            return (TInput)(object)new Matrix<T>(selectedFeatures);
+                .ToArray();
+
+            return (TInput)(object)Matrix<T>.FromColumns(selectedColumns);
         }
         else if (originalData is Tensor<T> tensor)
         {

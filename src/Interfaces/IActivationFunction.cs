@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -49,16 +51,101 @@ public interface IActivationFunction<T>
     /// <remarks>
     /// <b>For Beginners:</b> The derivative tells us how quickly the activation function's output
     /// changes when we make a small change to the input.
-    /// 
+    ///
     /// Think of it as the "slope" or "steepness" at a particular point on the activation function's curve.
-    /// 
+    ///
     /// This is crucial for training neural networks because:
     /// - It helps determine how much to adjust the network's weights during learning
     /// - A higher derivative means a stronger signal for learning
     /// - A derivative of zero means no learning signal (which can be a problem known as "vanishing gradient")
-    /// 
+    ///
     /// During training, the neural network uses this derivative to figure out how to adjust
     /// its internal parameters to improve its predictions.
     /// </remarks>
     T Derivative(T input);
+
+    /// <summary>
+    /// Applies the activation function to each element in a vector.
+    /// </summary>
+    /// <param name="input">The input vector.</param>
+    /// <returns>A new vector with the activation function applied to each element.</returns>
+    Vector<T> Activate(Vector<T> input);
+
+    /// <summary>
+    /// Calculates the derivative matrix for a vector input.
+    /// </summary>
+    /// <param name="input">The input vector.</param>
+    /// <returns>A diagonal matrix containing derivatives for each input element.</returns>
+    Matrix<T> Derivative(Vector<T> input);
+
+    /// <summary>
+    /// Applies the activation function to each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>A new tensor with the activation function applied to each element.</returns>
+    Tensor<T> Activate(Tensor<T> input);
+
+    /// <summary>
+    /// Calculates the derivative for each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>A new tensor containing derivatives for each input element.</returns>
+    Tensor<T> Derivative(Tensor<T> input);
+
+    /// <summary>
+    /// Gets whether this activation function supports JIT compilation.
+    /// </summary>
+    /// <value>True if the activation can be applied to computation graphs for JIT compilation.</value>
+    /// <remarks>
+    /// <para>
+    /// Activation functions return false if:
+    /// - Gradient computation (backward pass) is not yet implemented
+    /// - The activation uses operations not supported by TensorOperations
+    /// - The activation has dynamic behavior that cannot be represented in a static graph
+    /// </para>
+    /// <para>
+    /// Once gradient computation is implemented and tested, set this to true.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> JIT (Just-In-Time) compilation is an advanced optimization technique
+    /// that pre-compiles the neural network's operations into a faster execution graph.
+    /// This property indicates whether this activation function is ready to be part of that
+    /// optimized execution. If false, the activation will fall back to the standard execution path.
+    /// </para>
+    /// </remarks>
+    bool SupportsJitCompilation { get; }
+
+    /// <summary>
+    /// Applies this activation function to a computation graph node.
+    /// </summary>
+    /// <param name="input">The computation node to apply the activation to.</param>
+    /// <returns>A new computation node with the activation applied.</returns>
+    /// <exception cref="NotSupportedException">Thrown if SupportsJitCompilation is false.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method maps the activation to the corresponding TensorOperations method.
+    /// For example, ReLU returns TensorOperations&lt;T&gt;.ReLU(input).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method adds the activation function to the computation graph,
+    /// which is a data structure that represents all the operations in the neural network.
+    /// The graph can then be optimized and executed more efficiently through JIT compilation.
+    /// </para>
+    /// </remarks>
+    ComputationNode<T> ApplyToGraph(ComputationNode<T> input);
+
+    /// <summary>
+    /// Calculates the backward pass gradient for this activation function.
+    /// </summary>
+    /// <param name="input">The input tensor that was used in the forward pass.</param>
+    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes dL/dx = dL/dy * dy/dx.
+    /// For element-wise activations (ReLU, Sigmoid), this is element-wise multiplication.
+    /// For vector activations (Softmax), this involves Jacobian multiplication.
+    /// </para>
+    /// </remarks>
+    Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient);
 }

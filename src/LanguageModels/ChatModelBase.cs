@@ -101,12 +101,15 @@ public abstract class ChatModelBase<T> : IChatModel<T>
     }
 
     /// <inheritdoc/>
-    public async Task<string> GenerateAsync(string prompt)
+    public async Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(prompt))
         {
             throw new ArgumentException("Prompt cannot be null or whitespace.", nameof(prompt));
         }
+
+        // Check for cancellation before starting
+        cancellationToken.ThrowIfCancellationRequested();
 
         // Estimate token count and warn if it might exceed limits
         int estimatedTokens = EstimateTokenCount(prompt);
@@ -127,7 +130,7 @@ public abstract class ChatModelBase<T> : IChatModel<T>
         {
             try
             {
-                return await GenerateAsyncCore(prompt);
+                return await GenerateAsyncCore(prompt, cancellationToken);
             }
             catch (HttpRequestException ex) when (IsRetryable(ex) && retryCount < MaxRetries)
             {
@@ -140,7 +143,7 @@ public abstract class ChatModelBase<T> : IChatModel<T>
                     Console.WriteLine($"Retrying in {delayMs}ms...");
                 }
 
-                await Task.Delay(delayMs);
+                await Task.Delay(delayMs, cancellationToken);
                 delayMs *= 2; // Exponential backoff
             }
             catch (TaskCanceledException ex) when (retryCount < MaxRetries)
@@ -155,7 +158,7 @@ public abstract class ChatModelBase<T> : IChatModel<T>
                     Console.WriteLine($"Retrying in {delayMs}ms...");
                 }
 
-                await Task.Delay(delayMs);
+                await Task.Delay(delayMs, cancellationToken);
                 delayMs *= 2;
             }
             catch (JsonException ex)
@@ -191,10 +194,11 @@ public abstract class ChatModelBase<T> : IChatModel<T>
     }
 
     /// <inheritdoc/>
-    public Task<string> GenerateResponseAsync(string prompt)
+    public Task<string> GenerateResponseAsync(string prompt, CancellationToken cancellationToken = default)
     {
         // Alias for GenerateAsync for IChatModel compatibility
-        return GenerateAsync(prompt);
+        // Now properly propagates cancellation token
+        return GenerateAsync(prompt, cancellationToken);
     }
 
     /// <summary>
@@ -202,6 +206,7 @@ public abstract class ChatModelBase<T> : IChatModel<T>
     /// This method should make the actual API call to the language model.
     /// </summary>
     /// <param name="prompt">The validated prompt string.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains the generated response.</returns>
     /// <remarks>
     /// For Beginners:
@@ -213,8 +218,11 @@ public abstract class ChatModelBase<T> : IChatModel<T>
     /// 4. Return the generated text
     ///
     /// If anything goes wrong, just throw an exception - the base class will handle retries.
+    ///
+    /// IMPORTANT: Pass the cancellationToken to your HTTP calls (e.g., HttpClient.PostAsync)
+    /// to enable proper cancellation support.
     /// </remarks>
-    protected abstract Task<string> GenerateAsyncCore(string prompt);
+    protected abstract Task<string> GenerateAsyncCore(string prompt, CancellationToken cancellationToken);
 
     /// <summary>
     /// Estimates the number of tokens in a text string.

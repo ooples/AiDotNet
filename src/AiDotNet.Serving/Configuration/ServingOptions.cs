@@ -1,6 +1,57 @@
 namespace AiDotNet.Serving.Configuration;
 
 /// <summary>
+/// Batching strategies for request processing.
+/// </summary>
+public enum BatchingStrategyType
+{
+    /// <summary>Process batch after timeout expires.</summary>
+    Timeout,
+
+    /// <summary>Process batch when it reaches a certain size.</summary>
+    Size,
+
+    /// <summary>Group requests by sequence length into buckets.</summary>
+    Bucket,
+
+    /// <summary>Dynamically adjust batch size based on latency and throughput.</summary>
+    Adaptive,
+
+    /// <summary>Continuous batching - process requests as capacity becomes available.</summary>
+    Continuous
+}
+
+/// <summary>
+/// Padding strategies for variable-length sequences.
+/// </summary>
+public enum PaddingStrategyType
+{
+    /// <summary>Pad to the minimum required length for each batch.</summary>
+    Minimal,
+
+    /// <summary>Pad to predefined bucket sizes for better batching efficiency.</summary>
+    Bucket,
+
+    /// <summary>Pad all sequences to a fixed size.</summary>
+    Fixed
+}
+
+/// <summary>
+/// Numeric types supported for model inference.
+/// </summary>
+public enum NumericType
+{
+    /// <summary>64-bit floating point (double precision).</summary>
+    Double,
+
+    /// <summary>32-bit floating point (single precision).</summary>
+    Float,
+
+    /// <summary>128-bit decimal type.</summary>
+    Decimal
+}
+
+/// <summary>
 /// Configuration options for the model serving framework.
 /// This class defines settings for server behavior, request batching, and startup model loading.
 /// </summary>
@@ -33,11 +84,17 @@ public class ServingOptions
     public int MinBatchSize { get; set; } = 1;
 
     /// <summary>
-    /// Gets or sets the batching strategy to use.
-    /// Options: "Timeout", "Size", "Adaptive", "Bucket"
-    /// Default is "Adaptive".
+    /// Gets or sets whether to enable adaptive batch sizing based on latency feedback.
+    /// When enabled, the batch size is dynamically adjusted to meet latency targets.
+    /// Default is true.
     /// </summary>
-    public string BatchingStrategy { get; set; } = "Adaptive";
+    public bool AdaptiveBatchSize { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the batching strategy to use.
+    /// Default is Adaptive.
+    /// </summary>
+    public BatchingStrategyType BatchingStrategy { get; set; } = BatchingStrategyType.Adaptive;
 
     /// <summary>
     /// Gets or sets the target latency in milliseconds for adaptive batching.
@@ -69,10 +126,9 @@ public class ServingOptions
 
     /// <summary>
     /// Gets or sets the padding strategy to use for variable-length sequences.
-    /// Options: "Minimal", "Bucket", "Fixed"
-    /// Default is "Minimal".
+    /// Default is Minimal.
     /// </summary>
-    public string PaddingStrategy { get; set; } = "Minimal";
+    public PaddingStrategyType PaddingStrategy { get; set; } = PaddingStrategyType.Minimal;
 
     /// <summary>
     /// Gets or sets the bucket sizes for bucket-based batching and padding.
@@ -131,8 +187,7 @@ public class StartupModel
 
     /// <summary>
     /// Gets or sets the numeric type used by the model.
-    /// Supported values: "double", "float", "decimal"
-    /// Default is "double".
+    /// Default is Double.
     /// </summary>
-    public string NumericType { get; set; } = "double";
+    public NumericType NumericType { get; set; } = NumericType.Double;
 }

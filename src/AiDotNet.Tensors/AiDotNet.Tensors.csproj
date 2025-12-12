@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net471</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Version>1.0.0-preview</Version>
+    <Title>AiDotNet.Tensors</Title>
+    <Description>High-performance tensor operations with SIMD acceleration for .NET. Provides Vector, Matrix, and Tensor types with hardware-accelerated operations (Sin, Cos, Exp, Log, etc.) that work across .NET Framework 4.7.1 and .NET 8.0. Supports any numeric type via generic INumericOperations interface. GPU acceleration available.</Description>
+    <Company>Ooples Finance</Company>
+    <Authors>ooples</Authors>
+    <Copyright>Ooples Finance LLC 2025</Copyright>
+    <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
+    <PackageTags>tensors; simd; vectorization; linear-algebra; matrix; vector; performance; net471; net8; avx2; avx512; gpu</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <LangVersion>latest</LangVersion>
+    <PackageIcon>Favicon.jpg</PackageIcon>
+    <!-- <PackageReadmeFile>README.md</PackageReadmeFile> -->
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AiDotNet" />
+    <InternalsVisibleTo Include="AiDotNetTests" />
+    <InternalsVisibleTo Include="AiDotNetTestConsole" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Images\Favicon.jpg">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <!-- <None Include="README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None> -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Numerics.Tensors" Version="10.0.0" />
+  </ItemGroup>
+
+  <!-- ILGPU packages for GPU acceleration -->
+  <ItemGroup>
+    <PackageReference Include="ILGPU" Version="1.5.3" />
+    <PackageReference Include="ILGPU.Algorithms" Version="1.5.3" />
+  </ItemGroup>
+
+  <!-- Exclude files that require .NET Core intrinsics from .NET Framework builds -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net471'">
+    <Compile Remove="Helpers\SimdVector.cs" />
+  </ItemGroup>
+
+</Project>

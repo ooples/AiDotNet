@@ -108,7 +108,7 @@ namespace AiDotNet.Interpretability
                 throw new ArgumentNullException(nameof(inputs));
 
             if (sensitiveFeatureIndex < 0 || sensitiveFeatureIndex >= inputs.Columns)
-                throw new ArgumentException($"Sensitive feature index {sensitiveFeatureIndex} is out of range. Matrix has {inputs.Columns} columns.", nameof(sensitiveFeatureIndex));
+                throw new ArgumentOutOfRangeException(nameof(sensitiveFeatureIndex), sensitiveFeatureIndex, $"Sensitive feature index is out of range. Matrix has {inputs.Columns} columns.");
 
             if (actualLabels != null && actualLabels.Length != inputs.Rows)
                 throw new ArgumentException($"Actual labels length ({actualLabels.Length}) must match the number of input rows ({inputs.Rows}).", nameof(actualLabels));

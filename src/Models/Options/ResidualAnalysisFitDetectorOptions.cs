@@ -11,7 +11,7 @@ namespace AiDotNet.Models;
 /// configuration options for threshold values used to determine whether a model's residuals indicate 
 /// a good fit. The detector evaluates several statistical measures including the mean of residuals, 
 /// standard deviation of residuals, Mean Absolute Percentage Error (MAPE), and the coefficient of 
-/// determination (R²). By adjusting these thresholds, users can control how strictly the detector 
+/// determination (RÂ²). By adjusting these thresholds, users can control how strictly the detector 
 /// evaluates model fit according to their specific requirements and domain knowledge.
 /// </para>
 /// <para><b>For Beginners:</b> This class helps you decide if your prediction model is doing a good job.
@@ -22,8 +22,8 @@ namespace AiDotNet.Models;
 /// 
 /// Think of it like this:
 /// - You have a weather app that predicts temperatures
-/// - Some days it predicts 75°F when the actual temperature is 73°F (residual of -2°F)
-/// - Other days it predicts 68°F when the actual temperature is 72°F (residual of +4°F)
+/// - Some days it predicts 75Â°F when the actual temperature is 73Â°F (residual of -2Â°F)
+/// - Other days it predicts 68Â°F when the actual temperature is 72Â°F (residual of +4Â°F)
 /// - By analyzing all these differences, you can tell if your model is reliable
 /// 
 /// This class lets you set thresholds for different statistical measures:
@@ -145,15 +145,15 @@ public class ResidualAnalysisFitDetectorOptions
     public double MapeThreshold { get; set; } = 0.1;
     
     /// <summary>
-    /// Gets or sets the threshold for the coefficient of determination (R²).
+    /// Gets or sets the threshold for the coefficient of determination (RÂ²).
     /// </summary>
     /// <value>A double value between 0 and 1, defaulting to 0.1.</value>
     /// <remarks>
     /// <para>
-    /// The coefficient of determination (R²) measures the proportion of variance in the dependent variable 
+    /// The coefficient of determination (RÂ²) measures the proportion of variance in the dependent variable 
     /// that is predictable from the independent variables. It ranges from 0 to 1, where 1 indicates that 
     /// the model explains all the variability in the data, and 0 indicates that the model explains none 
-    /// of the variability. This threshold determines how close to 1 the R² value must be for the model to 
+    /// of the variability. This threshold determines how close to 1 the RÂ² value must be for the model to 
     /// be considered well-fitted. A larger threshold enforces a stricter requirement for the model to explain 
     /// more of the data variance, while a smaller threshold allows the model to explain less of the variance. 
     /// The default value of 0.1 is relatively lenient and may need adjustment based on the specific domain 
@@ -161,23 +161,23 @@ public class ResidualAnalysisFitDetectorOptions
     /// </para>
     /// <para><b>For Beginners:</b> This setting controls how much of the data variation your model should explain.
     /// 
-    /// R² (R-squared) is a measure between 0 and 1 that indicates how well your model explains the patterns in your data:
-    /// - R² = 1.0: Perfect model that explains 100% of the variation in your data
-    /// - R² = 0.0: Model that explains 0% of the variation (no better than guessing the average)
+    /// RÂ² (R-squared) is a measure between 0 and 1 that indicates how well your model explains the patterns in your data:
+    /// - RÂ² = 1.0: Perfect model that explains 100% of the variation in your data
+    /// - RÂ² = 0.0: Model that explains 0% of the variation (no better than guessing the average)
     /// 
     /// The R2Threshold value (default 0.1) has a special meaning:
-    /// - It's not the minimum R² value your model should have
-    /// - Instead, it's how close to 1.0 your R² value should be
-    /// - With the default of 0.1, your model's R² should be at least 0.9 (1.0 - 0.1)
-    /// - Lower values (like 0.05): Stricter requirement, R² should be at least 0.95
-    /// - Higher values (like 0.3): More lenient, R² can be as low as 0.7
+    /// - It's not the minimum RÂ² value your model should have
+    /// - Instead, it's how close to 1.0 your RÂ² value should be
+    /// - With the default of 0.1, your model's RÂ² should be at least 0.9 (1.0 - 0.1)
+    /// - Lower values (like 0.05): Stricter requirement, RÂ² should be at least 0.95
+    /// - Higher values (like 0.3): More lenient, RÂ² can be as low as 0.7
     /// 
-    /// For example, if your model has an R² of 0.85:
+    /// For example, if your model has an RÂ² of 0.85:
     /// - This means it explains 85% of the variation in your data
     /// - With the default threshold of 0.1, this wouldn't be good enough (as 0.85 < 0.9)
     /// - You'd need to either improve your model or increase the threshold
     /// 
-    /// R² is one of the most common ways to evaluate regression models, as it directly measures
+    /// RÂ² is one of the most common ways to evaluate regression models, as it directly measures
     /// how much of the data pattern your model captures.
     /// </para>
     /// </remarks>

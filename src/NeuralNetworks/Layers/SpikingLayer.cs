@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Autodiff;
+
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Represents a layer of spiking neurons that model the biological dynamics of neural activity.
@@ -99,79 +101,83 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This matrix stores the strength of connections between each input and output neuron. The weights determine
-    /// how strongly each input affects the membrane potential of each output neuron.
+    /// This tensor stores the strength of connections between each input and output neuron.
+    /// Shape: [inputSize, outputSize]. The weights determine how strongly each input affects
+    /// the membrane potential of each output neuron.
     /// </para>
     /// <para><b>For Beginners:</b> These are like the strength of connections between neurons.
-    /// 
+    ///
     /// Just like in other neural network layers, these weights determine:
     /// - How strongly each input affects each output neuron
     /// - Positive weights increase the neuron's charge when the input is active
     /// - Negative weights decrease the charge
-    /// 
+    ///
     /// These weights are adjusted during training to make the layer learn.
     /// </para>
     /// </remarks>
-    private Matrix<T> Weights;
+    private Tensor<T> _weights;
 
     /// <summary>
     /// Bias values for output neurons.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector contains the bias values for each output neuron. The bias adds a constant input to the neuron,
-    /// affecting its baseline membrane potential regardless of input.
+    /// This tensor contains the bias values for each output neuron. Shape: [outputSize].
+    /// The bias adds a constant input to the neuron, affecting its baseline membrane potential
+    /// regardless of input.
     /// </para>
     /// <para><b>For Beginners:</b> These are baseline charge levels for each neuron.
-    /// 
+    ///
     /// The bias values:
     /// - Determine how close each neuron starts to its firing threshold
     /// - A higher bias makes the neuron more "trigger-happy" (likely to fire)
     /// - A lower bias makes the neuron require stronger input to fire
-    /// 
+    ///
     /// Biases are adjusted during training along with the weights.
     /// </para>
     /// </remarks>
-    private Vector<T> Bias;
+    private Tensor<T> _bias;
 
     /// <summary>
     /// Accumulated gradients for weight updates during training.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This matrix stores the accumulated gradients for the weight parameters during training.
-    /// These gradients indicate how to adjust the weights to improve the network's performance.
+    /// This tensor stores the accumulated gradients for the weight parameters during training.
+    /// Shape: [inputSize, outputSize]. These gradients indicate how to adjust the weights to
+    /// improve the network's performance.
     /// </para>
     /// <para><b>For Beginners:</b> This tracks how the weights should change during training.
-    /// 
+    ///
     /// During training:
     /// - The network figures out which direction to adjust each weight
     /// - These adjustments are stored in the weight gradients
     /// - After processing a batch of examples, the weights are updated using these gradients
-    /// 
+    ///
     /// This helps the network gradually improve its performance on the given task.
     /// </para>
     /// </remarks>
-    private Matrix<T> _weightGradients;
+    private Tensor<T> _weightGradients;
 
     /// <summary>
     /// Accumulated gradients for bias updates during training.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the accumulated gradients for the bias parameters during training.
-    /// These gradients indicate how to adjust the biases to improve the network's performance.
+    /// This tensor stores the accumulated gradients for the bias parameters during training.
+    /// Shape: [outputSize]. These gradients indicate how to adjust the biases to improve the
+    /// network's performance.
     /// </para>
     /// <para><b>For Beginners:</b> This tracks how the biases should change during training.
-    /// 
+    ///
     /// Similar to weight gradients, these values show:
     /// - Which direction to adjust each bias value
     /// - How much to adjust it
-    /// 
+    ///
     /// The network uses these gradients to update the biases after processing a batch of examples.
     /// </para>
     /// </remarks>
-    private Vector<T> _biasGradients;
+    private Tensor<T> _biasGradients;
 
     /// <summary>
     /// Stores the input tensor from the most recent forward pass.
@@ -211,83 +217,83 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the current membrane potential (voltage) for each output neuron. The membrane potential
+    /// This tensor stores the current membrane potential (voltage) for each output neuron. The membrane potential
     /// integrates inputs over time and generates a spike when it crosses a threshold, after which it resets.
     /// </para>
     /// <para><b>For Beginners:</b> This is the current electrical charge of each neuron.
-    /// 
+    ///
     /// The membrane potential:
     /// - Increases when the neuron receives input
     /// - Decreases over time due to the leak (for LIF neurons)
     /// - When it reaches a threshold (usually 1.0), the neuron fires a spike
     /// - After firing, it resets to a lower value
-    /// 
+    ///
     /// This is the key internal state that determines when neurons fire.
     /// </para>
     /// </remarks>
-    private Vector<T> _membranePotential;
+    private Tensor<T> _membranePotential;
 
     /// <summary>
     /// Countdown timer for refractory period for each output neuron.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the remaining time steps in the refractory period for each output neuron. During the
+    /// This tensor stores the remaining time steps in the refractory period for each output neuron. During the
     /// refractory period, the neuron cannot generate another spike regardless of its membrane potential.
     /// </para>
     /// <para><b>For Beginners:</b> This is a timer that prevents neurons from firing too frequently.
-    /// 
+    ///
     /// After a neuron fires:
     /// - This countdown starts from the refractory period value
     /// - It decreases by 1 each time step
     /// - While it's above zero, the neuron cannot fire again
     /// - Once it reaches zero, the neuron can respond to inputs again
-    /// 
+    ///
     /// This prevents unrealistically rapid firing and better matches biological neurons.
     /// </para>
     /// </remarks>
-    private Vector<T> _refractoryCountdown;
+    private Tensor<T> _refractoryCountdown;
 
     /// <summary>
     /// Output spikes for each output neuron (1.0 for spike, 0.0 for no spike).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the current output spikes for each output neuron, where 1.0 indicates a spike and
+    /// This tensor stores the current output spikes for each output neuron, where 1.0 indicates a spike and
     /// 0.0 indicates no spike. This binary coding represents the discrete spike events.
     /// </para>
     /// <para><b>For Beginners:</b> This shows which neurons are currently firing.
-    /// 
+    ///
     /// For each neuron:
     /// - A value of 1.0 means the neuron is firing (spiking)
     /// - A value of 0.0 means the neuron is quiet (not spiking)
-    /// 
+    ///
     /// This binary on/off representation is how spiking neurons communicate,
     /// similar to how real neurons in the brain work.
     /// </para>
     /// </remarks>
-    private Vector<T> _spikes;
+    private Tensor<T> _spikes;
 
     /// <summary>
     /// Recovery variable for Izhikevich neuron model.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the recovery variable for each output neuron when using the Izhikevich model.
+    /// This tensor stores the recovery variable for each output neuron when using the Izhikevich model.
     /// The recovery variable provides negative feedback to the membrane potential, allowing the model to capture
     /// various firing patterns seen in biological neurons.
     /// </para>
     /// <para><b>For Beginners:</b> This is a second variable that helps model more complex neuron behaviors.
-    /// 
+    ///
     /// In the Izhikevich model:
     /// - This recovery variable provides negative feedback to the membrane potential
     /// - It allows modeling different firing patterns like bursting or chattering
     /// - It makes the model more biologically realistic
-    /// 
+    ///
     /// This is only used when _neuronType is Izhikevich.
     /// </para>
     /// </remarks>
-    private Vector<T>? _recoveryVariable;
+    private Tensor<T>? _recoveryVariable;
 
     /// <summary>
     /// Time scale of recovery variable in Izhikevich model.
@@ -362,21 +368,21 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the adaptation variable for each output neuron when using the Adaptive Exponential model.
+    /// This tensor stores the adaptation variable for each output neuron when using the Adaptive Exponential model.
     /// The adaptation variable provides negative feedback to the membrane potential and increases after each spike,
     /// allowing the model to adapt its firing rate over time.
     /// </para>
     /// <para><b>For Beginners:</b> This variable helps neurons adapt their firing rate over time.
-    /// 
+    ///
     /// In the Adaptive Exponential model:
     /// - This adaptation variable makes neurons fire less frequently with sustained input
     /// - It increases every time the neuron fires
     /// - It provides negative feedback to the membrane potential
-    /// 
+    ///
     /// This adaptation mimics how real neurons get "tired" when stimulated continuously.
     /// </para>
     /// </remarks>
-    private Vector<T>? _adaptationVariable;
+    private Tensor<T>? _adaptationVariable;
 
     /// <summary>
     /// Sharpness of exponential term in Adaptive Exponential model.
@@ -469,61 +475,61 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the potassium activation gating variable (n) for each output neuron when using the Hodgkin-Huxley model.
+    /// This tensor stores the potassium activation gating variable (n) for each output neuron when using the Hodgkin-Huxley model.
     /// This gate controls the flow of potassium ions, which repolarizes the membrane after a spike.
     /// </para>
     /// <para><b>For Beginners:</b> This controls the flow of potassium ions out of the neuron.
-    /// 
+    ///
     /// In the Hodgkin-Huxley model:
     /// - This variable represents potassium channels that open slowly but close slowly
     /// - When open, these channels let potassium leave the cell, lowering the membrane potential
     /// - This helps end the spike and return the neuron to its resting state
-    /// 
+    ///
     /// This is part of the most detailed biophysical model of neuron behavior.
     /// </para>
     /// </remarks>
-    private Vector<T>? _nGate;
+    private Tensor<T>? _nGate;
 
     /// <summary>
     /// Sodium activation gating variable for Hodgkin-Huxley model.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the sodium activation gating variable (m) for each output neuron when using the Hodgkin-Huxley model.
+    /// This tensor stores the sodium activation gating variable (m) for each output neuron when using the Hodgkin-Huxley model.
     /// This gate controls the rapid influx of sodium ions, which causes the initial depolarization during a spike.
     /// </para>
     /// <para><b>For Beginners:</b> This controls the flow of sodium ions into the neuron.
-    /// 
+    ///
     /// In the Hodgkin-Huxley model:
     /// - This variable represents sodium channels that open quickly but also close quickly
     /// - When open, these channels let sodium enter the cell, raising the membrane potential
     /// - This causes the rapid upswing of the membrane potential during a spike
-    /// 
+    ///
     /// These channels are primarily responsible for generating the spike.
     /// </para>
     /// </remarks>
-    private Vector<T>? _mGate;
+    private Tensor<T>? _mGate;
 
     /// <summary>
     /// Sodium inactivation gating variable for Hodgkin-Huxley model.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This vector stores the sodium inactivation gating variable (h) for each output neuron when using the Hodgkin-Huxley model.
+    /// This tensor stores the sodium inactivation gating variable (h) for each output neuron when using the Hodgkin-Huxley model.
     /// This gate controls the inactivation of sodium channels, which helps terminate the spike.
     /// </para>
     /// <para><b>For Beginners:</b> This controls the blocking of sodium channels.
-    /// 
+    ///
     /// In the Hodgkin-Huxley model:
     /// - This variable represents a mechanism that blocks sodium channels
     /// - It closes slowly but opens slowly
     /// - When closed (h is low), it prevents sodium from entering the cell
     /// - This helps terminate the spike and prevents continuous firing
-    /// 
+    ///
     /// This inactivation mechanism is crucial for the neuron to return to its resting state.
     /// </para>
     /// </remarks>
-    private Vector<T>? _hGate;
+    private Tensor<T>? _hGate;
 
     /// <summary>
     /// Gets the total number of trainable parameters in the layer.
@@ -545,7 +551,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// This gives you an idea of the layer's complexity and memory requirements.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => Weights.Rows * Weights.Columns + Bias.Length;
+    public override int ParameterCount => _weights.Shape[0] * _weights.Shape[1] + _bias.Shape[0];
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
@@ -606,20 +612,34 @@ public class SpikingLayer<T> : LayerBase<T>
         _neuronType = neuronType;
         _tau = tau;
         _refractoryPeriod = refractoryPeriod;
+
+        // Initialize weights with small random values as Tensor<T>
+        // CreateRandom gives [0,1], scale to [-0.1, 0.1]
+        _weights = Tensor<T>.CreateRandom(inputSize, outputSize);
+        var scaleFactor = NumOps.FromDouble(0.2); // scale [0,1] to [0, 0.2]
+        _weights = Engine.TensorMultiplyScalar(_weights, scaleFactor);
+        var offset = NumOps.FromDouble(0.1); // shift to [-0.1, 0.1]
+        var offsetTensor = new Tensor<T>([inputSize, outputSize]);
+        offsetTensor.Fill(offset);
+        _weights = Engine.TensorSubtract(_weights, offsetTensor);
+
+        _bias = new Tensor<T>([outputSize]);
+        _bias.Fill(NumOps.Zero);
+
+        // Initialize gradient accumulators as Tensor<T>
+        _weightGradients = new Tensor<T>([inputSize, outputSize]);
+        _weightGradients.Fill(NumOps.Zero);
+        _biasGradients = new Tensor<T>([outputSize]);
+        _biasGradients.Fill(NumOps.Zero);
     
-        // Initialize weights with small random values
-        Weights = Matrix<T>.CreateRandom(inputSize, outputSize, -0.1, 0.1);
-        Bias = Vector<T>.CreateDefault(outputSize, NumOps.Zero);
-    
-        // Initialize gradient accumulators
-        _weightGradients = Matrix<T>.CreateDefault(inputSize, outputSize, NumOps.Zero);
-        _biasGradients = Vector<T>.CreateDefault(outputSize, NumOps.Zero);
-    
-        // Initialize neuron state variables
-        _membranePotential = Vector<T>.CreateDefault(outputSize, NumOps.Zero);
-        _refractoryCountdown = Vector<T>.CreateDefault(outputSize, NumOps.Zero);
-        _spikes = Vector<T>.CreateDefault(outputSize, NumOps.Zero);
-    
+        // Initialize neuron state variables as Tensor<T>
+        _membranePotential = new Tensor<T>([outputSize]);
+        _membranePotential.Fill(NumOps.Zero);
+        _refractoryCountdown = new Tensor<T>([outputSize]);
+        _refractoryCountdown.Fill(NumOps.Zero);
+        _spikes = new Tensor<T>([outputSize]);
+        _spikes.Fill(NumOps.Zero);
+
         // Initialize model-specific variables based on neuron type
         if (neuronType == SpikingNeuronType.Izhikevich)
         {
@@ -627,7 +647,8 @@ public class SpikingLayer<T> : LayerBase<T>
             _b = 0.2;   // Sensitivity of recovery variable
             _c = -65.0; // After-spike reset value of membrane potential
             _d = 8.0;   // After-spike reset of recovery variable
-            _recoveryVariable = Vector<T>.CreateDefault(outputSize, NumOps.Zero);
+            _recoveryVariable = new Tensor<T>([outputSize]);
+            _recoveryVariable.Fill(NumOps.Zero);
         }
         else if (neuronType == SpikingNeuronType.AdaptiveExponential)
         {
@@ -636,13 +657,17 @@ public class SpikingLayer<T> : LayerBase<T>
             _tauw = 30.0;   // Adaptation time constant
             _a_adex = 4.0;  // Subthreshold adaptation
             _b_adex = 0.5;  // Spike-triggered adaptation
-            _adaptationVariable = Vector<T>.CreateDefault(outputSize, NumOps.Zero);
+            _adaptationVariable = new Tensor<T>([outputSize]);
+            _adaptationVariable.Fill(NumOps.Zero);
         }
         else if (neuronType == SpikingNeuronType.HodgkinHuxley)
         {
-            _nGate = Vector<T>.CreateDefault(outputSize, NumOps.FromDouble(0.32)); // Potassium activation
-            _mGate = Vector<T>.CreateDefault(outputSize, NumOps.FromDouble(0.05)); // Sodium activation
-            _hGate = Vector<T>.CreateDefault(outputSize, NumOps.FromDouble(0.60)); // Sodium inactivation
+            _nGate = new Tensor<T>([outputSize]);
+            _nGate.Fill(NumOps.FromDouble(0.32)); // Potassium activation
+            _mGate = new Tensor<T>([outputSize]);
+            _mGate.Fill(NumOps.FromDouble(0.05)); // Sodium activation
+            _hGate = new Tensor<T>([outputSize]);
+            _hGate.Fill(NumOps.FromDouble(0.60)); // Sodium inactivation
         }
     }
 
@@ -673,59 +698,71 @@ public class SpikingLayer<T> : LayerBase<T>
     {
         // Store the input for backward pass
         _lastInput = input;
-        
-        // Convert input tensor to vector for processing
-        Vector<T> inputVector;
+
+        // Flatten input to 1D tensor for processing
+        Tensor<T> inputFlat;
         if (input.Shape.Length == 1)
         {
-            inputVector = input.ToVector();
+            inputFlat = input;
         }
         else if (input.Shape.Length == 2 && input.Shape[0] == 1)
         {
             // Handle batch size of 1
-            inputVector = input.Reshape([input.Shape[1]]).ToVector();
+            inputFlat = input.Reshape([input.Shape[1]]);
         }
         else
         {
             throw new ArgumentException("Input tensor must be 1D or have batch size of 1");
         }
-        
-        // Process with the appropriate neuron model
-        Vector<T> outputVector = ProcessSpikes(inputVector);
-        
-        // Convert back to tensor and store for backward pass
-        var output = Tensor<T>.FromVector(outputVector);
+
+        // Process with the appropriate neuron model (all tensor-based)
+        var output = ProcessSpikes(inputFlat);
+
+        // Store for backward pass
         _lastOutput = output;
-        
+
         return output;
     }
 
     /// <summary>
     /// Processes input through the selected neuron model to generate spikes.
     /// </summary>
-    /// <param name="input">The input vector to process.</param>
-    /// <returns>The output vector containing spike events.</returns>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor containing spike events.</returns>
     /// <remarks>
     /// <para>
     /// This method routes the input to the appropriate neuron model implementation based on the selected neuron type.
     /// It calculates the input current for each neuron and then updates the neuron states according to the specific model.
     /// </para>
     /// <para><b>For Beginners:</b> This method selects the right mathematical model for processing.
-    /// 
+    ///
     /// The steps are:
     /// 1. Calculate the "current" flowing into each neuron using weights and biases
     /// 2. Choose the appropriate neuron model based on _neuronType
     /// 3. Update each neuron's state using that model's equations
     /// 4. Return the resulting spike pattern (which neurons fired)
-    /// 
+    ///
     /// This method delegates to specialized methods for each neuron type,
     /// allowing the layer to support multiple neuron models with different properties.
     /// </para>
     /// </remarks>
-    private Vector<T> ProcessSpikes(Vector<T> input)
+    private Tensor<T> ProcessSpikes(Tensor<T> input)
     {
-        // Calculate input current
-        Vector<T> current = Weights.Multiply(input).Add(Bias);
+        // Calculate input current using Engine operations
+        // Reshape input for matrix multiply
+        var inputReshaped = input.Reshape([input.Length, 1]);
+
+        // weights: [inputSize, outputSize], input: [inputSize, 1] -> result: [outputSize, 1]
+        // Need to transpose weights for proper matrix multiplication: [outputSize, inputSize] @ [inputSize, 1] = [outputSize, 1]
+        var weightsT = Engine.TensorTranspose(_weights);
+        var product = Engine.TensorMatMul(weightsT, inputReshaped);
+
+        // Add bias
+        var biasReshaped = _bias.Reshape([_bias.Shape[0], 1]);
+        var withBias = Engine.TensorAdd(product, biasReshaped);
+
+        // Flatten to 1D tensor for neuron update
+        var current = withBias.Reshape([_bias.Shape[0]]);
 
         // Update neuron states based on the neuron model
         return _neuronType switch
@@ -766,41 +803,48 @@ public class SpikingLayer<T> : LayerBase<T>
     /// remaining computationally efficient.
     /// </para>
     /// </remarks>
-    private Vector<T> UpdateLeakyIntegrateAndFire(Vector<T> current)
+    private Tensor<T> UpdateLeakyIntegrateAndFire(Tensor<T> current)
     {
-        // Decay membrane potential
+        // Decay membrane potential using Engine operations
         T decayFactor = NumOps.FromDouble(1.0 - 1.0/_tau);
-        _membranePotential = _membranePotential.Multiply(decayFactor);
-    
-        // Update membrane potential for neurons not in refractory period
-        for (int i = 0; i < _membranePotential.Length; i++)
-        {
-            if (Convert.ToDouble(_refractoryCountdown[i]) <= 0)
-            {
-                _membranePotential[i] = NumOps.Add(_membranePotential[i], current[i]);
-            }
-            else
-            {
-                _refractoryCountdown[i] = NumOps.Subtract(_refractoryCountdown[i], NumOps.One);
-            }
-        }
-    
-        // Generate spikes and reset
-        for (int i = 0; i < _membranePotential.Length; i++)
-        {
-            // Threshold for spiking (typically around 1.0)
-            if (Convert.ToDouble(_membranePotential[i]) >= 1.0)
-            {
-                _spikes[i] = NumOps.One;
-                _membranePotential[i] = NumOps.Zero; // Reset potential
-                _refractoryCountdown[i] = NumOps.FromDouble(_refractoryPeriod);
-            }
-            else
-            {
-                _spikes[i] = NumOps.Zero;
-            }
-        }
-    
+        _membranePotential = Engine.TensorMultiplyScalar(_membranePotential, decayFactor);
+
+        // Create threshold tensor for comparison
+        var zeroTensor = new Tensor<T>([_membranePotential.Length]);
+        zeroTensor.Fill(NumOps.Zero);
+
+        // Create mask for neurons not in refractory period (refractoryCountdown <= 0)
+        // Use Engine.TensorLessThan to create binary mask
+        var notInRefractoryMask = Engine.TensorLessThan(_refractoryCountdown, NumOps.FromDouble(0.001));
+        var onesTensorForMask = new Tensor<T>([_membranePotential.Length]);
+        onesTensorForMask.Fill(NumOps.One);
+        var inRefractoryMask = Engine.TensorSubtract(onesTensorForMask, notInRefractoryMask);
+
+        // Apply current to neurons not in refractory period
+        var currentMasked = Engine.TensorMultiply(current, notInRefractoryMask);
+        _membranePotential = Engine.TensorAdd(_membranePotential, currentMasked);
+
+        // Decrement refractory countdown for neurons in refractory
+        var onesTensor = new Tensor<T>([_membranePotential.Length]);
+        onesTensor.Fill(NumOps.One);
+        var refractoryDecrement = Engine.TensorMultiply(onesTensor, inRefractoryMask);
+        _refractoryCountdown = Engine.TensorSubtract(_refractoryCountdown, refractoryDecrement);
+
+        // Generate spikes: where membrane potential >= 1.0
+        var thresholdTensor = new Tensor<T>([_membranePotential.Length]);
+        thresholdTensor.Fill(NumOps.FromDouble(1.0));
+        _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.FromDouble(0.9999));
+
+        // Reset membrane potential where spikes occurred
+        var resetMask = Engine.TensorSubtract(onesTensor, _spikes);
+        _membranePotential = Engine.TensorMultiply(_membranePotential, resetMask);
+
+        // Set refractory countdown where spikes occurred
+        var refractorySet = Engine.TensorMultiplyScalar(_spikes, NumOps.FromDouble(_refractoryPeriod));
+        _refractoryCountdown = Engine.TensorAdd(
+            Engine.TensorMultiply(_refractoryCountdown, resetMask),
+            refractorySet);
+
         return _spikes;
     }
     
@@ -830,36 +874,37 @@ public class SpikingLayer<T> : LayerBase<T>
     /// so the membrane potential only resets after firing.
     /// </para>
     /// </remarks>
-    private Vector<T> UpdateIntegrateAndFire(Vector<T> current)
+    private Tensor<T> UpdateIntegrateAndFire(Tensor<T> current)
     {
-        // Similar to LIF but without leak
-        for (int i = 0; i < _membranePotential.Length; i++)
-        {
-            if (Convert.ToDouble(_refractoryCountdown[i]) <= 0)
-            {
-                _membranePotential[i] = NumOps.Add(_membranePotential[i], current[i]);
-            }
-            else
-            {
-                _refractoryCountdown[i] = NumOps.Subtract(_refractoryCountdown[i], NumOps.One);
-            }
-        }
-    
-        // Generate spikes and reset
-        for (int i = 0; i < _membranePotential.Length; i++)
-        {
-            if (Convert.ToDouble(_membranePotential[i]) >= 1.0)
-            {
-                _spikes[i] = NumOps.One;
-                _membranePotential[i] = NumOps.Zero;
-                _refractoryCountdown[i] = NumOps.FromDouble(_refractoryPeriod);
-            }
-            else
-            {
-                _spikes[i] = NumOps.Zero;
-            }
-        }
-    
+        // Similar to LIF but without leak - use Engine operations
+        var onesTensor = new Tensor<T>([_membranePotential.Length]);
+        onesTensor.Fill(NumOps.One);
+
+        // Create mask for neurons not in refractory period
+        var notInRefractoryMask = Engine.TensorLessThan(_refractoryCountdown, NumOps.FromDouble(0.001));
+        var inRefractoryMask = Engine.TensorSubtract(onesTensor, notInRefractoryMask);
+
+        // Add current to neurons not in refractory
+        var currentMasked = Engine.TensorMultiply(current, notInRefractoryMask);
+        _membranePotential = Engine.TensorAdd(_membranePotential, currentMasked);
+
+        // Decrement refractory countdown
+        var refractoryDecrement = Engine.TensorMultiply(onesTensor, inRefractoryMask);
+        _refractoryCountdown = Engine.TensorSubtract(_refractoryCountdown, refractoryDecrement);
+
+        // Generate spikes where membrane potential >= 1.0
+        _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.FromDouble(0.9999));
+
+        // Reset membrane potential where spikes occurred
+        var resetMask = Engine.TensorSubtract(onesTensor, _spikes);
+        _membranePotential = Engine.TensorMultiply(_membranePotential, resetMask);
+
+        // Set refractory countdown where spikes occurred
+        var refractorySet = Engine.TensorMultiplyScalar(_spikes, NumOps.FromDouble(_refractoryPeriod));
+        _refractoryCountdown = Engine.TensorAdd(
+            Engine.TensorMultiply(_refractoryCountdown, resetMask),
+            refractorySet);
+
         return _spikes;
     }
     
@@ -891,25 +936,26 @@ public class SpikingLayer<T> : LayerBase<T>
     /// firing patterns like regular spiking, bursting, chattering, etc.
     /// </para>
     /// </remarks>
-    private Vector<T> UpdateIzhikevich(Vector<T> current)
+    private Tensor<T> UpdateIzhikevich(Tensor<T> current)
     {
         if (_recoveryVariable == null)
             throw new InvalidOperationException("Recovery variable not initialized for Izhikevich model");
-            
-        // Izhikevich model update
+
+        // Izhikevich model - complex biophysical dynamics require element-wise computation
+        // These equations are inherently non-vectorizable due to their coupled nonlinear nature
         for (int i = 0; i < _membranePotential.Length; i++)
         {
             double v = Convert.ToDouble(_membranePotential[i]);
             double u = Convert.ToDouble(_recoveryVariable[i]);
             double I = Convert.ToDouble(current[i]);
-            
+
             // Update membrane potential and recovery variable
             double dv = 0.04 * v * v + 5 * v + 140 - u + I;
             double du = _a * (_b * v - u);
-            
+
             v += dv;
             u += du;
-            
+
             // Check for spike
             if (v >= 30)
             {
@@ -921,11 +967,11 @@ public class SpikingLayer<T> : LayerBase<T>
             {
                 _spikes[i] = NumOps.Zero;
             }
-            
+
             _membranePotential[i] = NumOps.FromDouble(v);
             _recoveryVariable[i] = NumOps.FromDouble(u);
         }
-        
+
         return _spikes;
     }
     
@@ -958,28 +1004,29 @@ public class SpikingLayer<T> : LayerBase<T>
     /// of firing rate seen in many types of neurons.
     /// </para>
     /// </remarks>
-    private Vector<T> UpdateAdaptiveExponential(Vector<T> current)
+    private Tensor<T> UpdateAdaptiveExponential(Tensor<T> current)
     {
         if (_adaptationVariable == null)
             throw new InvalidOperationException("Adaptation variable not initialized for AdEx model");
-            
+
         // Adaptive Exponential Integrate-and-Fire model
+        // Complex biophysical dynamics with exponential terms require element-wise computation
         for (int i = 0; i < _membranePotential.Length; i++)
         {
             double v = Convert.ToDouble(_membranePotential[i]);
             double w = Convert.ToDouble(_adaptationVariable[i]);
             double I = Convert.ToDouble(current[i]);
-            
+
             // Exponential term for spike initiation
             double expTerm = _deltaT * Math.Exp((v - _vT) / _deltaT);
-            
+
             // Update membrane potential and adaptation variable
             double dv = (-v + expTerm - w + I) / _tau;
             double dw = (_a_adex * (v - _vT) - w) / _tauw;
-            
+
             v += dv;
             w += dw;
-            
+
             // Check for spike
             if (v >= 0) // Spike threshold
             {
@@ -991,11 +1038,11 @@ public class SpikingLayer<T> : LayerBase<T>
             {
                 _spikes[i] = NumOps.Zero;
             }
-            
+
             _membranePotential[i] = NumOps.FromDouble(v);
             _adaptationVariable[i] = NumOps.FromDouble(w);
         }
-        
+
         return _spikes;
     }
 
@@ -1027,13 +1074,10 @@ public class SpikingLayer<T> : LayerBase<T>
     /// the biological mechanisms of real neurons.
     /// </para>
     /// </remarks>
-    private Vector<T> UpdateHodgkinHuxley(Vector<T> current)
+    private Tensor<T> UpdateHodgkinHuxley(Tensor<T> current)
     {
         if (_nGate == null || _mGate == null || _hGate == null)
             throw new InvalidOperationException("Gate variables not initialized for Hodgkin-Huxley model");
-    
-        // Ensure _spikes is initialized
-        _spikes ??= Vector<T>.CreateDefault(_membranePotential.Length, NumOps.Zero);
 
         // Constants for Hodgkin-Huxley model
         double ENa = 50.0;   // Sodium reversal potential (mV)
@@ -1043,7 +1087,9 @@ public class SpikingLayer<T> : LayerBase<T>
         double gK = 36.0;    // Maximum potassium conductance (mS/cm²)
         double gL = 0.3;     // Leak conductance (mS/cm²)
         double dt = 0.01;    // Time step (ms)
-    
+
+        // Hodgkin-Huxley model - complex biophysical ion channel dynamics require element-wise computation
+        // These differential equations with exponentials and powers are inherently non-vectorizable
         for (int i = 0; i < _membranePotential.Length; i++)
         {
             double v = Convert.ToDouble(_membranePotential[i]);
@@ -1051,35 +1097,35 @@ public class SpikingLayer<T> : LayerBase<T>
             double m = Convert.ToDouble(_mGate[i]);
             double h = Convert.ToDouble(_hGate[i]);
             double I = Convert.ToDouble(current[i]);
-        
+
             // Calculate alpha and beta values for each gate
             double alphaM = 0.1 * (v + 40.0) / (1.0 - Math.Exp(-(v + 40.0) / 10.0));
             double betaM = 4.0 * Math.Exp(-(v + 65.0) / 18.0);
-        
+
             double alphaN = 0.01 * (v + 55.0) / (1.0 - Math.Exp(-(v + 55.0) / 10.0));
             double betaN = 0.125 * Math.Exp(-(v + 65.0) / 80.0);
-        
+
             double alphaH = 0.07 * Math.Exp(-(v + 65.0) / 20.0);
             double betaH = 1.0 / (1.0 + Math.Exp(-(v + 35.0) / 10.0));
-        
+
             // Update gate variables
             double dn = alphaN * (1 - n) - betaN * n;
             double dm = alphaM * (1 - m) - betaM * m;
             double dh = alphaH * (1 - h) - betaH * h;
-        
+
             n += dt * dn;
             m += dt * dm;
             h += dt * dh;
-        
+
             // Calculate ionic currents
             double INa = gNa * Math.Pow(m, 3) * h * (v - ENa);
             double IK = gK * Math.Pow(n, 4) * (v - EK);
             double IL = gL * (v - EL);
-        
+
             // Update membrane potential
             double dv = I - INa - IK - IL;
             v += dt * dv;
-        
+
             // Check for spike (threshold crossing)
             if (v > 0 && NumOps.Equals(_spikes[i], NumOps.Zero))
             {
@@ -1089,14 +1135,14 @@ public class SpikingLayer<T> : LayerBase<T>
             {
                 _spikes[i] = NumOps.Zero;
             }
-        
+
             // Update state variables
             _membranePotential[i] = NumOps.FromDouble(v);
             _nGate[i] = NumOps.FromDouble(n);
             _mGate[i] = NumOps.FromDouble(m);
             _hGate[i] = NumOps.FromDouble(h);
         }
-    
+
         return _spikes;
     }
 
@@ -1123,23 +1169,12 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int weightCount = Weights.Rows * Weights.Columns;
-        
-        // Update weights
-        for (int i = 0; i < Weights.Rows; i++)
-        {
-            for (int j = 0; j < Weights.Columns; j++)
-            {
-                int index = i * Weights.Columns + j;
-                Weights[i, j] = parameters[index];
-            }
-        }
-        
-        // Update biases
-        for (int i = 0; i < Bias.Length; i++)
-        {
-            Bias[i] = parameters[weightCount + i];
-        }
+        int inputSize = _weights.Shape[0];
+        int outputSize = _weights.Shape[1];
+        int weightCount = inputSize * outputSize;
+
+        _weights = new Tensor<T>([inputSize, outputSize], parameters.Slice(0, weightCount));
+        _bias = new Tensor<T>([_bias.Shape[0]], parameters.Slice(weightCount, _bias.Shape[0]));
     }
     
     /// <summary>
@@ -1166,26 +1201,10 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        int weightCount = Weights.Rows * Weights.Columns;
-        Vector<T> parameters = Vector<T>.CreateDefault(ParameterCount, NumOps.Zero);
-        
-        // Flatten weights
-        for (int i = 0; i < Weights.Rows; i++)
-        {
-            for (int j = 0; j < Weights.Columns; j++)
-            {
-                int index = i * Weights.Columns + j;
-                parameters[index] = Weights[i, j];
-            }
-        }
-        
-        // Add biases
-        for (int i = 0; i < Bias.Length; i++)
-        {
-            parameters[weightCount + i] = Bias[i];
-        }
-        
-        return parameters;
+        // Use Vector<T>.Concatenate for efficient parameter collection
+        var flatWeights = new Vector<T>(_weights.ToArray());
+        var flatBias = new Vector<T>(_bias.ToArray());
+        return Vector<T>.Concatenate(flatWeights, flatBias);
     }
 
     /// <summary>
@@ -1216,34 +1235,53 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
-        // Reset all state variables
-        _membranePotential = Vector<T>.CreateDefault(_membranePotential.Length, NumOps.Zero);
-        _refractoryCountdown = Vector<T>.CreateDefault(_refractoryCountdown.Length, NumOps.Zero);
-        _spikes = Vector<T>.CreateDefault(_spikes.Length, NumOps.Zero);
-    
+        // Reset all state variables using Tensor<T>
+        _membranePotential = new Tensor<T>([_membranePotential.Length]);
+        _membranePotential.Fill(NumOps.Zero);
+        _refractoryCountdown = new Tensor<T>([_refractoryCountdown.Length]);
+        _refractoryCountdown.Fill(NumOps.Zero);
+        _spikes = new Tensor<T>([_spikes.Length]);
+        _spikes.Fill(NumOps.Zero);
+
         // Reset model-specific variables
         if (_neuronType == SpikingNeuronType.Izhikevich && _recoveryVariable != null)
         {
-            _recoveryVariable = Vector<T>.CreateDefault(_recoveryVariable.Length, NumOps.Zero);
+            _recoveryVariable = new Tensor<T>([_recoveryVariable.Length]);
+            _recoveryVariable.Fill(NumOps.Zero);
         }
         else if (_neuronType == SpikingNeuronType.AdaptiveExponential && _adaptationVariable != null)
         {
-            _adaptationVariable = Vector<T>.CreateDefault(_adaptationVariable.Length, NumOps.Zero);
+            _adaptationVariable = new Tensor<T>([_adaptationVariable.Length]);
+            _adaptationVariable.Fill(NumOps.Zero);
         }
         else if (_neuronType == SpikingNeuronType.HodgkinHuxley)
         {
-            if (_nGate != null) _nGate = Vector<T>.CreateDefault(_nGate.Length, NumOps.FromDouble(0.32));
-            if (_mGate != null) _mGate = Vector<T>.CreateDefault(_mGate.Length, NumOps.FromDouble(0.05));
-            if (_hGate != null) _hGate = Vector<T>.CreateDefault(_hGate.Length, NumOps.FromDouble(0.60));
+            if (_nGate != null)
+            {
+                _nGate = new Tensor<T>([_nGate.Length]);
+                _nGate.Fill(NumOps.FromDouble(0.32));
+            }
+            if (_mGate != null)
+            {
+                _mGate = new Tensor<T>([_mGate.Length]);
+                _mGate.Fill(NumOps.FromDouble(0.05));
+            }
+            if (_hGate != null)
+            {
+                _hGate = new Tensor<T>([_hGate.Length]);
+                _hGate.Fill(NumOps.FromDouble(0.60));
+            }
         }
-    
+
         // Clear cached values
         _lastInput = null;
         _lastOutput = null;
-    
-        // Reset gradient accumulators
-        _weightGradients = Matrix<T>.CreateDefault(Weights.Rows, Weights.Columns, NumOps.Zero);
-        _biasGradients = Vector<T>.CreateDefault(Bias.Length, NumOps.Zero);
+
+        // Reset gradient accumulators using Tensor<T>
+        _weightGradients = new Tensor<T>([_weights.Shape[0], _weights.Shape[1]]);
+        _weightGradients.Fill(NumOps.Zero);
+        _biasGradients = new Tensor<T>([_bias.Shape[0]]);
+        _biasGradients.Fill(NumOps.Zero);
     }
     
     /// <summary>
@@ -1274,19 +1312,21 @@ public class SpikingLayer<T> : LayerBase<T>
         writer.Write((int)_neuronType);
         writer.Write(_tau);
         writer.Write(_refractoryPeriod);
-        
-        // Write weights and biases
-        for (int i = 0; i < Weights.Rows; i++)
+
+        // Write weights and biases from tensors
+        int inputSize = _weights.Shape[0];
+        int outputSize = _weights.Shape[1];
+        for (int i = 0; i < inputSize; i++)
         {
-            for (int j = 0; j < Weights.Columns; j++)
+            for (int j = 0; j < outputSize; j++)
             {
-                writer.Write(Convert.ToDouble(Weights[i, j]));
+                writer.Write(Convert.ToDouble(_weights[i, j]));
             }
         }
-        
-        for (int i = 0; i < Bias.Length; i++)
+
+        for (int i = 0; i < _bias.Shape[0]; i++)
         {
-            writer.Write(Convert.ToDouble(Bias[i]));
+            writer.Write(Convert.ToDouble(_bias[i]));
         }
         
         // Write model-specific parameters
@@ -1334,19 +1374,21 @@ public class SpikingLayer<T> : LayerBase<T>
         _neuronType = (SpikingNeuronType)reader.ReadInt32();
         _tau = reader.ReadDouble();
         _refractoryPeriod = reader.ReadDouble();
-        
-        // Read weights and biases
-        for (int i = 0; i < Weights.Rows; i++)
+
+        // Read weights and biases into tensors
+        int inputSize = _weights.Shape[0];
+        int outputSize = _weights.Shape[1];
+        for (int i = 0; i < inputSize; i++)
         {
-            for (int j = 0; j < Weights.Columns; j++)
+            for (int j = 0; j < outputSize; j++)
             {
-                Weights[i, j] = NumOps.FromDouble(reader.ReadDouble());
+                _weights[i, j] = NumOps.FromDouble(reader.ReadDouble());
             }
         }
-        
-        for (int i = 0; i < Bias.Length; i++)
+
+        for (int i = 0; i < _bias.Shape[0]; i++)
         {
-            Bias[i] = NumOps.FromDouble(reader.ReadDouble());
+            _bias[i] = NumOps.FromDouble(reader.ReadDouble());
         }
         
         // Read model-specific parameters
@@ -1356,11 +1398,12 @@ public class SpikingLayer<T> : LayerBase<T>
             _b = reader.ReadDouble();
             _c = reader.ReadDouble();
             _d = reader.ReadDouble();
-            
+
             // Initialize recovery variable if needed
             if (_recoveryVariable == null)
             {
-                _recoveryVariable = Vector<T>.CreateDefault(OutputShape[0], NumOps.Zero);
+                _recoveryVariable = new Tensor<T>([OutputShape[0]]);
+                _recoveryVariable.Fill(NumOps.Zero);
             }
         }
         else if (_neuronType == SpikingNeuronType.AdaptiveExponential)
@@ -1370,26 +1413,42 @@ public class SpikingLayer<T> : LayerBase<T>
             _tauw = reader.ReadDouble();
             _a_adex = reader.ReadDouble();
             _b_adex = reader.ReadDouble();
-            
+
             // Initialize adaptation variable if needed
             if (_adaptationVariable == null)
             {
-                _adaptationVariable = Vector<T>.CreateDefault(OutputShape[0], NumOps.Zero);
+                _adaptationVariable = new Tensor<T>([OutputShape[0]]);
+                _adaptationVariable.Fill(NumOps.Zero);
             }
         }
         else if (_neuronType == SpikingNeuronType.HodgkinHuxley)
         {
-            // Initialize gate variables if needed
-            int outputSize = OutputShape[0];
-            if (_nGate == null) _nGate = Vector<T>.CreateDefault(outputSize, NumOps.FromDouble(0.32));
-            if (_mGate == null) _mGate = Vector<T>.CreateDefault(outputSize, NumOps.FromDouble(0.05));
-            if (_hGate == null) _hGate = Vector<T>.CreateDefault(outputSize, NumOps.FromDouble(0.60));
+            // Initialize gate variables if needed using Tensor<T>
+            int gateSize = OutputShape[0];
+            if (_nGate == null)
+            {
+                _nGate = new Tensor<T>([gateSize]);
+                _nGate.Fill(NumOps.FromDouble(0.32));
+            }
+            if (_mGate == null)
+            {
+                _mGate = new Tensor<T>([gateSize]);
+                _mGate.Fill(NumOps.FromDouble(0.05));
+            }
+            if (_hGate == null)
+            {
+                _hGate = new Tensor<T>([gateSize]);
+                _hGate.Fill(NumOps.FromDouble(0.60));
+            }
         }
-        
-        // Initialize state variables
-        _membranePotential = Vector<T>.CreateDefault(OutputShape[0], NumOps.Zero);
-        _refractoryCountdown = Vector<T>.CreateDefault(OutputShape[0], NumOps.Zero);
-        _spikes = Vector<T>.CreateDefault(OutputShape[0], NumOps.Zero);
+
+        // Initialize state variables using Tensor<T>
+        _membranePotential = new Tensor<T>([OutputShape[0]]);
+        _membranePotential.Fill(NumOps.Zero);
+        _refractoryCountdown = new Tensor<T>([OutputShape[0]]);
+        _refractoryCountdown.Fill(NumOps.Zero);
+        _spikes = new Tensor<T>([OutputShape[0]]);
+        _spikes.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -1422,58 +1481,192 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null)
             throw new InvalidOperationException("Cannot perform backward pass before forward pass");
 
-        // Convert tensor to vector for easier processing
-        Vector<T> gradientVector = outputGradient.ToVector();
-    
-        // Initialize input gradient
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-        Vector<T> inputGradientVector = Vector<T>.CreateDefault(_lastInput.Shape[0], NumOps.Zero);
-    
-        // Apply surrogate gradient for the non-differentiable spike function
-        // We use a sigmoid-based surrogate gradient approximation
+        // Flatten gradients if needed
+        var gradFlat = outputGradient.Length == outputGradient.Shape[0]
+            ? outputGradient
+            : outputGradient.Reshape([outputGradient.Length]);
+
+        // Compute surrogate gradients using vectorized operations
+        // surrogate(v) = 1 / (beta * cosh^2(v/beta))
+        // This is the derivative of the surrogate spike function tanh(v/beta)
+        double beta = 10.0;
+        var surrogateGradient = new Tensor<T>([_membranePotential.Length]);
+
+        // Surrogate gradient computation - element-wise because of cosh^2
         for (int i = 0; i < _membranePotential.Length; i++)
         {
-            // Get membrane potential
             double v = Convert.ToDouble(_membranePotential[i]);
-        
-            // Compute surrogate gradient using a sigmoid-based function
-            // This approximates the derivative of the spike function
-            double beta = 10.0; // Steepness of the surrogate function
-            double surrogate = 1.0 / (beta * Math.Pow(Math.Cosh(v / beta), 2));
-        
-            // Apply surrogate gradient to the output gradient
-            T surrogateGradient = NumOps.FromDouble(surrogate);
-            T gradientValue = NumOps.Multiply(gradientVector[i], surrogateGradient);
-        
-            // Compute weight gradients and accumulate them
-            for (int j = 0; j < _lastInput.Shape[0]; j++)
-            {
-                T inputValue = _lastInput.ToVector()[j];
-                T weightGradient = NumOps.Multiply(gradientValue, inputValue);
-            
-                // Accumulate weight gradients
-                _weightGradients[j, i] = NumOps.Add(_weightGradients[j, i], weightGradient);
-            
-                // Compute input gradients (for backpropagation to previous layer)
-                T currentInputGradient = NumOps.Multiply(gradientValue, Weights[j, i]);
-                inputGradientVector[j] = NumOps.Add(inputGradientVector[j], currentInputGradient);
-            }
-        
-            // Compute bias gradients
-            _biasGradients[i] = NumOps.Add(_biasGradients[i], gradientValue);
+            double coshVal = Math.Cosh(v / beta);
+            double surrogate = 1.0 / (beta * coshVal * coshVal);
+            surrogateGradient[i] = NumOps.FromDouble(surrogate);
         }
-    
-        // Convert input gradient vector back to tensor
-        for (int i = 0; i < inputGradientVector.Length; i++)
+
+        // Scaled gradient = outputGradient * surrogateGradient (element-wise)
+        var scaledGrad = Engine.TensorMultiply(gradFlat, surrogateGradient);
+
+        // Compute weight gradients: dL/dW = outer_product(input, scaledGrad)
+        // Reshape for outer product: input [inputSize, 1] @ scaledGrad [1, outputSize] = [inputSize, outputSize]
+        var inputFlat = _lastInput.Length == _lastInput.Shape[0]
+            ? _lastInput
+            : _lastInput.Reshape([_lastInput.Length]);
+
+        var inputReshaped = inputFlat.Reshape([inputFlat.Length, 1]);
+        var scaledGradReshaped = scaledGrad.Reshape([1, scaledGrad.Length]);
+        var weightGradUpdate = Engine.TensorMatMul(inputReshaped, scaledGradReshaped);
+
+        // Accumulate weight gradients
+        _weightGradients = Engine.TensorAdd(_weightGradients, weightGradUpdate);
+
+        // Bias gradients = scaledGrad (already computed)
+        _biasGradients = Engine.TensorAdd(_biasGradients, scaledGrad);
+
+        // Compute input gradients: dL/dX = W @ scaledGrad
+        // weights: [inputSize, outputSize], scaledGrad: [outputSize]
+        // result: [inputSize]
+        var scaledGradCol = scaledGrad.Reshape([scaledGrad.Length, 1]);
+        var inputGradCol = Engine.TensorMatMul(_weights, scaledGradCol);
+        var inputGradient = inputGradCol.Reshape([inputFlat.Length]);
+
+        // Reshape to match input shape if needed
+        if (_lastInput.Shape.Length > 1)
         {
-            inputGradient[i] = inputGradientVector[i];
+            inputGradient = inputGradient.Reshape(_lastInput.Shape);
         }
-    
+
         return inputGradient;
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation with a sigmoid-based surrogate gradient.
+    /// Spiking functions are non-differentiable, so we use a smooth approximation that enables
+    /// gradient-based learning while preserving the discrete nature of spikes.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Cannot perform backward pass before forward pass");
+
+        // Flatten input for computation graph
+        var inputFlat = _lastInput.Length == _lastInput.Shape[0]
+            ? _lastInput
+            : _lastInput.Reshape([_lastInput.Length]);
+
+        // Create computation graph nodes
+        var inputNode = TensorOperations<T>.Variable(inputFlat, "input", requiresGradient: true);
+        var weightsNode = TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
+        var biasNode = TensorOperations<T>.Variable(_bias, "bias", requiresGradient: true);
+
+        // Forward computation graph:
+        // 1. Transpose weights: [inputSize, outputSize] -> [outputSize, inputSize]
+        var weightsT = TensorOperations<T>.Transpose(weightsNode);
+
+        // 2. Compute input current: W^T @ input + bias
+        var inputReshaped = TensorOperations<T>.Reshape(inputNode, inputFlat.Length, 1);
+        var preActivation = TensorOperations<T>.MatrixMultiply(weightsT, inputReshaped);
+        var preActivationFlat = TensorOperations<T>.Reshape(preActivation, _bias.Length);
+        var withBias = TensorOperations<T>.Add(preActivationFlat, biasNode);
+
+        // 3. Apply surrogate spike function (tanh-based surrogate for differentiability)
+        // The forward pass uses hard threshold, but autodiff uses soft surrogate
+        double threshold = 1.0;
+        double surrogateBeta = 1.0 / _tau;
+        var output = TensorOperations<T>.SurrogateSpike(withBias, threshold, surrogateBeta);
+
+        // Set output gradient on the computation graph
+        output.Gradient = outputGradient.Length == outputGradient.Shape[0]
+            ? outputGradient
+            : outputGradient.Reshape([outputGradient.Length]);
+
+        // Inline topological sort for backward pass
+        var visited = new HashSet<ComputationNode<T>>();
+        var topoOrder = new List<ComputationNode<T>>();
+        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
+        stack.Push((output, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract and accumulate gradients
+        if (weightsNode.Gradient != null)
+        {
+            // weightsNode gradient is for transposed weights [outputSize, inputSize]
+            // Need to transpose back to [inputSize, outputSize] for accumulation
+            var weightsGradT = Engine.TensorTranspose(weightsNode.Gradient);
+            _weightGradients = _weightGradients == null
+                ? weightsGradT
+                : Engine.TensorAdd(_weightGradients, weightsGradT);
+        }
+
+        if (biasNode.Gradient != null)
+        {
+            _biasGradients = _biasGradients == null
+                ? biasNode.Gradient
+                : Engine.TensorAdd(_biasGradients, biasNode.Gradient);
+        }
+
+        // Return input gradient, reshaping if necessary
+        var inputGradient = inputNode.Gradient ?? new Tensor<T>(inputFlat.Shape);
+        if (_lastInput.Shape.Length > 1)
+        {
+            inputGradient = inputGradient.Reshape(_lastInput.Shape);
+        }
+
+        return inputGradient;
+    }
+
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients and learning rate.
@@ -1490,7 +1683,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// After calculating how the weights and biases should change in the backward pass:
     /// 1. The method applies these changes using the learning rate to control their size
     /// 2. For each weight and bias:
-    ///    - Compute the update as learning rate � gradient
+    ///    - Compute the update as learning rate × gradient
     ///    - Subtract this update from the current value (moving in the opposite direction of the gradient)
     ///    - Reset the gradient accumulator to zero for the next batch
     /// 
@@ -1503,29 +1696,86 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        // Update weights using accumulated gradients
-        for (int i = 0; i < Weights.Rows; i++)
-        {
-            for (int j = 0; j < Weights.Columns; j++)
-            {
-                // Compute weight update: w = w - lr * gradient
-                T update = NumOps.Multiply(_weightGradients[i, j], learningRate);
-                Weights[i, j] = NumOps.Subtract(Weights[i, j], update);
-            
-                // Reset gradient for next batch
-                _weightGradients[i, j] = NumOps.Zero;
-            }
-        }
-    
-        // Update biases using accumulated gradients
-        for (int i = 0; i < Bias.Length; i++)
-        {
-            // Compute bias update: b = b - lr * gradient
-            T update = NumOps.Multiply(_biasGradients[i], learningRate);
-            Bias[i] = NumOps.Subtract(Bias[i], update);
-        
-            // Reset gradient for next batch
-            _biasGradients[i] = NumOps.Zero;
-        }
+        // Update weights using Engine operations: w = w - lr * gradient
+        var scaledWeightGradients = Engine.TensorMultiplyScalar(_weightGradients, learningRate);
+        _weights = Engine.TensorSubtract(_weights, scaledWeightGradients);
+
+        // Reset weight gradients for next batch
+        _weightGradients.Fill(NumOps.Zero);
+
+        // Update biases using Engine operations: b = b - lr * gradient
+        var scaledBiasGradients = Engine.TensorMultiplyScalar(_biasGradients, learningRate);
+        _bias = Engine.TensorSubtract(_bias, scaledBiasGradients);
+
+        // Reset bias gradients for next batch
+        _biasGradients.Fill(NumOps.Zero);
     }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        // SpikingLayer JIT uses surrogate gradient for single-timestep computation:
+        // 1. Linear transformation: pre_activation = W @ input + bias
+        // 2. Surrogate spike: spikes = SurrogateSpike(pre_activation, threshold)
+        //
+        // This is a simplified model suitable for inference. Training uses full temporal simulation.
+
+        var input = inputNodes[0];
+
+        // Use weights and bias tensors directly
+        int inputSize = _weights.Shape[0];
+        int outputSize = _weights.Shape[1];
+
+        // Transpose weights for computation graph: [inputSize, outputSize] -> [outputSize, inputSize]
+        var weightsTensor = Engine.TensorTranspose(_weights);
+
+        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "spiking_weights");
+        var biasNode = TensorOperations<T>.Constant(_bias, "spiking_bias");
+
+        // Reshape input for matrix multiplication
+        var inputReshaped = TensorOperations<T>.Reshape(input, inputSize, 1);
+
+        // W @ input
+        var weighted = TensorOperations<T>.MatrixMultiply(weightsNode, inputReshaped);
+        var weightedFlat = TensorOperations<T>.Reshape(weighted, outputSize);
+
+        // W @ input + bias (this represents the membrane potential after one timestep)
+        var membranePotential = TensorOperations<T>.Add(weightedFlat, biasNode);
+
+        // Apply surrogate spike function with threshold
+        // Default threshold is typically 1.0 for normalized inputs
+        double threshold = 1.0;
+        double surrogateBeta = 1.0 / _tau; // Use tau to scale surrogate sharpness
+        var spikes = TensorOperations<T>.SurrogateSpike(membranePotential, threshold, surrogateBeta);
+
+        // Apply activation if present
+        var output = ApplyActivationToGraph(spikes);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c>. SpikingLayer uses surrogate gradients for JIT compilation.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for spiking neurons uses a surrogate gradient approach where the
+    /// non-differentiable spike threshold is approximated with a smooth function during
+    /// backpropagation. The forward pass produces discrete spikes (0 or 1), but gradients
+    /// are computed using a sigmoid-based surrogate.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
+
 }
