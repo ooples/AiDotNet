@@ -256,17 +256,14 @@ public class CompressionAnalyzer<T>
             histogram[bin]++;
         }
 
-        // Calculate entropy
+        // Calculate entropy using LINQ for cleaner filtering
         double entropy = 0;
         var total = (double)magnitudes.Length;
 
-        foreach (var count in histogram)
+        foreach (var count in histogram.Where(c => c > 0))
         {
-            if (count > 0)
-            {
-                var p = count / total;
-                entropy -= p * (Math.Log(p) / Math.Log(2));
-            }
+            var p = count / total;
+            entropy -= p * (Math.Log(p) / Math.Log(2));
         }
 
         return entropy;

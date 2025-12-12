@@ -139,7 +139,6 @@ public class ProductQuantizationCompression<T> : ModelCompressionBase<T>
 
         // Create codebooks for each subvector position
         var codebooks = new T[_numSubvectors][];
-        var codes = new int[_numSubvectors];
         var allCodes = new List<int>();
 
         for (int m = 0; m < _numSubvectors; m++)

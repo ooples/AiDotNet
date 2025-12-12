@@ -1,3 +1,4 @@
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -256,18 +257,22 @@ public class CompressionOptimizer<T>
                 trial.Success = true;
 
                 // Check if this is the best trial that meets quality thresholds
-                if (trial.Metrics.MeetsQualityThreshold(_options.MaxAccuracyLoss * 100, _options.MinCompressionRatio))
+                if (trial.Metrics.MeetsQualityThreshold(_options.MaxAccuracyLoss * 100, _options.MinCompressionRatio)
+                    && (_bestTrial == null || NumOps.ToDouble(trial.FitnessScore) > NumOps.ToDouble(_bestFitness)))
                 {
-                    if (_bestTrial == null || NumOps.ToDouble(trial.FitnessScore) > NumOps.ToDouble(_bestFitness))
-                    {
-                        _bestTrial = trial;
-                        _bestFitness = trial.FitnessScore;
-                    }
+                    _bestTrial = trial;
+                    _bestFitness = trial.FitnessScore;
                 }
 
                 _trialHistory.Add(trial);
             }
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
+            {
+                trial.Success = false;
+                trial.ErrorMessage = ex.Message;
+                _trialHistory.Add(trial);
+            }
+            catch (ArgumentException ex)
             {
                 trial.Success = false;
                 trial.ErrorMessage = ex.Message;
@@ -416,33 +421,32 @@ public class CompressionOptimizer<T>
         var successful = _trialHistory.Count(t => t.Success);
         var failed = _trialHistory.Count - successful;
 
-        var summary = $@"Compression Optimization Summary
-================================
-Trials: {_trialHistory.Count} ({successful} successful, {failed} failed)
-
-";
+        var summary = new StringBuilder();
+        summary.AppendLine("Compression Optimization Summary");
+        summary.AppendLine("================================");
+        summary.AppendLine($"Trials: {_trialHistory.Count} ({successful} successful, {failed} failed)");
+        summary.AppendLine();
 
         if (_bestTrial != null && _bestTrial.Metrics != null)
         {
-            summary += $@"Best Configuration:
-  Technique: {_bestTrial.Technique}
-  Fitness Score: {NumOps.ToDouble(_bestTrial.FitnessScore):F4}
-  Compression Ratio: {NumOps.ToDouble(_bestTrial.Metrics.CompressionRatio):F2}x
-  Accuracy Loss: {NumOps.ToDouble(_bestTrial.Metrics.AccuracyLoss) * 100:F2}%
-  Size Reduction: {NumOps.ToDouble(_bestTrial.Metrics.SizeReductionPercentage):F2}%
-
-Hyperparameters:
-";
+            summary.AppendLine("Best Configuration:");
+            summary.AppendLine($"  Technique: {_bestTrial.Technique}");
+            summary.AppendLine($"  Fitness Score: {NumOps.ToDouble(_bestTrial.FitnessScore):F4}");
+            summary.AppendLine($"  Compression Ratio: {NumOps.ToDouble(_bestTrial.Metrics.CompressionRatio):F2}x");
+            summary.AppendLine($"  Accuracy Loss: {NumOps.ToDouble(_bestTrial.Metrics.AccuracyLoss) * 100:F2}%");
+            summary.AppendLine($"  Size Reduction: {NumOps.ToDouble(_bestTrial.Metrics.SizeReductionPercentage):F2}%");
+            summary.AppendLine();
+            summary.AppendLine("Hyperparameters:");
             foreach (var param in _bestTrial.Hyperparameters)
             {
-                summary += $"  {param.Key}: {param.Value}\n";
+                summary.AppendLine($"  {param.Key}: {param.Value}");
             }
         }
         else
         {
-            summary += "No successful trials completed.\n";
+            summary.AppendLine("No successful trials completed.");
         }
 
-        return summary;
+        return summary.ToString();
     }
 }

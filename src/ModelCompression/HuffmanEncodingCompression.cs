@@ -438,21 +438,11 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
 
         long size = sizeof(int) + sizeof(bool); // Frequency + IsLeaf flag
 
-        if (root.IsLeaf)
-        {
-            size += GetElementSize(); // Value
-        }
-        else
-        {
-            if (root.Left != null)
-            {
-                size += EstimateHuffmanTreeSize(root.Left);
-            }
-            if (root.Right != null)
-            {
-                size += EstimateHuffmanTreeSize(root.Right);
-            }
-        }
+        // Use ternary for clarity - IsLeaf determines which size calculation to use
+        size += root.IsLeaf
+            ? GetElementSize()
+            : (root.Left != null ? EstimateHuffmanTreeSize(root.Left) : 0)
+              + (root.Right != null ? EstimateHuffmanTreeSize(root.Right) : 0);
 
         return size;
     }
@@ -619,15 +609,10 @@ public class HuffmanEncodingMetadata<T> : ICompressionMetadata<T>
 
         long size = sizeof(int) + sizeof(bool); // Frequency + IsLeaf flag
 
-        if (node.IsLeaf)
-        {
-            size += elementSize; // Value
-        }
-        else
-        {
-            size += EstimateTreeSize(node.Left);
-            size += EstimateTreeSize(node.Right);
-        }
+        // Use ternary for clarity - IsLeaf determines which size calculation to use
+        size += node.IsLeaf
+            ? elementSize
+            : EstimateTreeSize(node.Left) + EstimateTreeSize(node.Right);
 
         return size;
     }

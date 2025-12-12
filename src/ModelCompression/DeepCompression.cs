@@ -305,28 +305,14 @@ public class DeepCompression<T> : ModelCompressionBase<T>
         }
 
         // Stage 3 (reverse): Huffman Decoding
-        Vector<T> huffmanDecoded;
-        if (compressedWeights.Length > 0 && deepMetadata.HuffmanMetadata.OriginalLength > 0)
-        {
-            huffmanDecoded = _huffmanCompressor.Decompress(
-                compressedWeights, deepMetadata.HuffmanMetadata);
-        }
-        else
-        {
-            huffmanDecoded = compressedWeights;
-        }
+        var huffmanDecoded = compressedWeights.Length > 0 && deepMetadata.HuffmanMetadata.OriginalLength > 0
+            ? _huffmanCompressor.Decompress(compressedWeights, deepMetadata.HuffmanMetadata)
+            : compressedWeights;
 
         // Stage 2 (reverse): De-quantization
-        Vector<T> dequantized;
-        if (huffmanDecoded.Length > 0 && deepMetadata.ClusteringMetadata.OriginalLength > 0)
-        {
-            dequantized = _clusteringCompressor.Decompress(
-                huffmanDecoded, deepMetadata.ClusteringMetadata);
-        }
-        else
-        {
-            dequantized = huffmanDecoded;
-        }
+        var dequantized = huffmanDecoded.Length > 0 && deepMetadata.ClusteringMetadata.OriginalLength > 0
+            ? _clusteringCompressor.Decompress(huffmanDecoded, deepMetadata.ClusteringMetadata)
+            : huffmanDecoded;
 
         // Stage 1 (reverse): Un-pruning (restore zeros)
         var restored = _pruningCompressor.Decompress(

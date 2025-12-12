@@ -96,13 +96,10 @@ public class SafeSerializationBinder : ISerializationBinder
             return false;
         }
 
-        // Check against allowed prefixes
-        foreach (var prefix in AllowedNamespacePrefixes)
+        // Check against allowed prefixes using LINQ
+        if (AllowedNamespacePrefixes.Any(prefix => typeName.StartsWith(prefix, StringComparison.Ordinal)))
         {
-            if (typeName.StartsWith(prefix, StringComparison.Ordinal))
-            {
-                return true;
-            }
+            return true;
         }
 
         // Also allow array types of allowed types
@@ -119,16 +116,9 @@ public class SafeSerializationBinder : ISerializationBinder
             int backtickIndex = typeName.IndexOf('`');
             string baseTypeName = typeName.Substring(0, backtickIndex);
 
-            // Check if base type is allowed
-            bool baseAllowed = false;
-            foreach (var prefix in AllowedNamespacePrefixes)
-            {
-                if (baseTypeName.StartsWith(prefix, StringComparison.Ordinal))
-                {
-                    baseAllowed = true;
-                    break;
-                }
-            }
+            // Check if base type is allowed using LINQ
+            bool baseAllowed = AllowedNamespacePrefixes.Any(prefix =>
+                baseTypeName.StartsWith(prefix, StringComparison.Ordinal));
 
             if (baseAllowed)
             {
