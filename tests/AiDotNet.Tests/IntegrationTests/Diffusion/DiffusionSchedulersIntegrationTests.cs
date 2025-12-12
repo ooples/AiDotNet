@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;

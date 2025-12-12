@@ -619,9 +619,10 @@ public class RadialBasisFunctionsIntegrationTests
             values.Add(rbf.Compute(r));
         }
 
-        // Assert - Wave RBF can have negative values
-        bool hasNegative = values.Any(v => v < 0);
-        Assert.True(hasNegative || values.All(v => v >= 0)); // Accept either behavior
+        // Assert - Wave RBF produces oscillating values; verify we have variation in the output
+        double minValue = values.Min();
+        double maxValue = values.Max();
+        Assert.True(maxValue > minValue, "Wave RBF should produce varying output values");
     }
 
     #endregion
