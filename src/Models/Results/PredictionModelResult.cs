@@ -1350,10 +1350,11 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     {
         try
         {
-            // Create JSON settings with custom converters for our types
+            // Create JSON settings with custom converters and safe type binding
             var settings = new JsonSerializerSettings
             {
                 TypeNameHandling = TypeNameHandling.All,
+                SerializationBinder = new SafeSerializationBinder(),
                 Formatting = Formatting.Indented
             };
 
@@ -1413,10 +1414,11 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             var decompressedData = CompressionHelper.DecompressIfNeeded(data);
             var jsonString = Encoding.UTF8.GetString(decompressedData);
 
-            // Create JSON settings with custom converters for our types
+            // Create JSON settings with custom converters and safe type binding
             var settings = new JsonSerializerSettings
             {
-                TypeNameHandling = TypeNameHandling.All
+                TypeNameHandling = TypeNameHandling.All,
+                SerializationBinder = new SafeSerializationBinder()
             };
 
             // Deserialize the object
@@ -1601,7 +1603,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var jsonString = Encoding.UTF8.GetString(decompressedData);
         var settings = new JsonSerializerSettings
         {
-            TypeNameHandling = TypeNameHandling.All
+            TypeNameHandling = TypeNameHandling.All,
+            SerializationBinder = new SafeSerializationBinder()
         };
         var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
         return deserializedObject?.ModelMetaData ?? new();
