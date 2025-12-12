@@ -263,6 +263,12 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     private (T mean, T scale) PredictDistribution(Vector<T> input)
     {
+        // Reset LSTM states before each prediction to avoid contamination
+        foreach (var lstm in _lstmLayers)
+        {
+            lstm.ResetState();
+        }
+
         // Forward pass through LSTM layers
         Vector<T> hidden = input.Clone();
 
@@ -275,20 +281,55 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
             hidden = lstm.Forward(hidden);
         }
 
-        // Predict mean
+        // Validate dimension alignment - hidden must match weight dimensions
+        if (hidden.Length != _meanWeights.Columns)
+        {
+            // Resize hidden to match weight dimensions if needed
+            var resizedHidden = new Vector<T>(_meanWeights.Columns);
+            for (int j = 0; j < Math.Min(hidden.Length, _meanWeights.Columns); j++)
+            {
+                resizedHidden[j] = hidden[j];
+            }
+            hidden = resizedHidden;
+        }
+
+        // Predict mean using all weights
         T mean = _meanBias[0];
-        for (int j = 0; j < Math.Min(hidden.Length, _meanWeights.Columns); j++)
+        for (int j = 0; j < _meanWeights.Columns; j++)
         {
             mean = _numOps.Add(mean, _numOps.Multiply(_meanWeights[0, j], hidden[j]));
         }
 
-        // Predict scale (must be positive)
+        // Predict scale (must be positive) using proper softplus: log(1 + exp(x))
         T scaleRaw = _scaleBias[0];
-        for (int j = 0; j < Math.Min(hidden.Length, _scaleWeights.Columns); j++)
+        for (int j = 0; j < _scaleWeights.Columns; j++)
         {
             scaleRaw = _numOps.Add(scaleRaw, _numOps.Multiply(_scaleWeights[0, j], hidden[j]));
         }
-        T scale = _numOps.Exp(_numOps.Multiply(scaleRaw, _numOps.FromDouble(0.1))); // Softplus approximation
+        // Numerically stable softplus: for large x, softplus(x) ≈ x
+        // threshold at 20 to avoid exp overflow (exp(20) ≈ 5e8, exp(88) overflows double)
+        T scale;
+        T threshold = _numOps.FromDouble(20.0);
+        if (_numOps.GreaterThan(scaleRaw, threshold))
+        {
+            scale = scaleRaw;
+        }
+        else if (_numOps.LessThan(scaleRaw, _numOps.FromDouble(-20.0)))
+        {
+            // For very negative values, softplus(x) ≈ exp(x) which is very small but positive
+            scale = _numOps.Exp(scaleRaw);
+        }
+        else
+        {
+            // Standard softplus: log(1 + exp(x))
+            scale = _numOps.Log(_numOps.Add(_numOps.One, _numOps.Exp(scaleRaw)));
+        }
+        // Ensure minimum scale to avoid division by zero
+        T minScale = _numOps.FromDouble(1e-6);
+        if (_numOps.LessThan(scale, minScale))
+        {
+            scale = minScale;
+        }
 
         return (mean, scale);
     }
@@ -397,9 +438,21 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
         InitializeModel();
 
-        // Deserialize LSTM layers
+        // Deserialize LSTM layers with count validation
         int numLayers = reader.ReadInt32();
-        for (int i = 0; i < numLayers && i < _lstmLayers.Count; i++)
+        if (numLayers != _lstmLayers.Count)
+        {
+            // Recreate layers to match serialized count
+            _lstmLayers.Clear();
+            int inputSize = 1 + _options.CovariateSize;
+            for (int i = 0; i < numLayers; i++)
+            {
+                int layerInputSize = (i == 0) ? inputSize : _options.HiddenSize;
+                _lstmLayers.Add(new DeepARLstmCell<T>(layerInputSize, _options.HiddenSize));
+            }
+        }
+
+        for (int i = 0; i < numLayers; i++)
         {
             int paramCount = reader.ReadInt32();
             var parameters = new Vector<T>(paramCount);
@@ -524,29 +577,47 @@ internal class DeepARLstmCell<T>
         _cellState = new Vector<T>(hiddenSize);
     }
 
+    /// <summary>
+    /// Resets the hidden and cell states to prevent contamination between predictions.
+    /// </summary>
+    public void ResetState()
+    {
+        for (int i = 0; i < _hiddenSize; i++)
+        {
+            _hiddenState[i] = _numOps.Zero;
+            _cellState[i] = _numOps.Zero;
+        }
+    }
+
     public Vector<T> Forward(Vector<T> input)
     {
-        // Simplified LSTM forward pass (full implementation would include all gates)
-        var combined = new Vector<T>(_inputSize + _hiddenSize);
+        // Create combined vector with proper dimensions
+        int combinedSize = _inputSize + _hiddenSize;
+        var combined = new Vector<T>(combinedSize);
 
-        // Copy input
-        for (int i = 0; i < Math.Min(input.Length, _inputSize); i++)
-            combined[i] = input[i];
+        // Copy input - pad with zeros if input is smaller than expected
+        for (int i = 0; i < _inputSize; i++)
+        {
+            combined[i] = i < input.Length ? input[i] : _numOps.Zero;
+        }
 
         // Copy hidden state
         for (int i = 0; i < _hiddenSize; i++)
+        {
             combined[_inputSize + i] = _hiddenState[i];
+        }
 
-        // Compute gates (simplified)
+        // Compute gates using all weights (no truncation)
         var output = new Vector<T>(_hiddenSize);
         for (int i = 0; i < _hiddenSize; i++)
         {
             T sum = _bias[i];
-            for (int j = 0; j < combined.Length && j < _weights.Columns; j++)
+            // Use all weights columns (combined length matches weight columns)
+            for (int j = 0; j < _weights.Columns; j++)
             {
                 sum = _numOps.Add(sum, _numOps.Multiply(_weights[i, j], combined[j]));
             }
-            output[i] = MathHelper.Tanh(sum); // Simplified activation
+            output[i] = MathHelper.Tanh(sum);
             _hiddenState[i] = output[i];
         }
 

@@ -87,25 +87,34 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
         T learningRate = _numOps.FromDouble(_options.LearningRate);
         List<T> predictionErrors = new List<T>();
 
-        // Training loop
+        // Training loop with batch processing
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             predictionErrors.Clear();
 
-            for (int i = 0; i < x.Rows; i++)
+            // Process in batches using BatchSize
+            for (int batchStart = 0; batchStart < x.Rows; batchStart += _options.BatchSize)
             {
-                Vector<T> input = x.GetRow(i);
-                T target = y[i];
-                T prediction = PredictSingle(input);
+                int batchEnd = Math.Min(batchStart + _options.BatchSize, x.Rows);
 
-                // Compute prediction error
-                T error = _numOps.Subtract(target, prediction);
-                predictionErrors.Add(_numOps.Abs(error));
-
-                // Simplified weight update (in practice, use backpropagation)
-                if (epoch % 10 == 0 && i % 100 == 0)
+                for (int i = batchStart; i < batchEnd; i++)
                 {
-                    UpdateWeightsNumerically(input, target, learningRate);
+                    Vector<T> input = x.GetRow(i);
+                    T target = y[i];
+                    T prediction = PredictSingle(input);
+
+                    // Compute prediction error
+                    T error = _numOps.Subtract(target, prediction);
+                    predictionErrors.Add(_numOps.Abs(error));
+                }
+
+                // Update weights once per batch (instead of periodically)
+                if (batchEnd > batchStart)
+                {
+                    // Use a sample from the batch for gradient computation
+                    Vector<T> sampleInput = x.GetRow(batchStart);
+                    T sampleTarget = y[batchStart];
+                    UpdateWeightsNumerically(sampleInput, sampleTarget, learningRate);
                 }
             }
         }

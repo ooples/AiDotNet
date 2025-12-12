@@ -121,14 +121,12 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private void UpdateOutputWeights(Vector<T> input, T target, T learningRate)
     {
         T epsilon = _numOps.FromDouble(1e-5);
+        T twoEpsilon = _numOps.Multiply(_numOps.FromDouble(2.0), epsilon);
 
-        // Update a subset of output projection weights for efficiency
-        int rowsToUpdate = Math.Min(5, _outputProjection.Rows);
-        int colsToUpdate = Math.Min(5, _outputProjection.Columns);
-
-        for (int i = 0; i < rowsToUpdate; i++)
+        // Update all output projection weights (not just a 5x5 subset)
+        for (int i = 0; i < _outputProjection.Rows; i++)
         {
-            for (int j = 0; j < colsToUpdate; j++)
+            for (int j = 0; j < _outputProjection.Columns; j++)
             {
                 T original = _outputProjection[i, j];
 
@@ -147,13 +145,30 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                 // Restore and update
                 _outputProjection[i, j] = original;
 
-                T gradient = _numOps.Divide(
-                    _numOps.Subtract(lossPlus, lossMinus),
-                    _numOps.Multiply(_numOps.FromDouble(2.0), epsilon)
-                );
-
+                T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
                 _outputProjection[i, j] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
             }
+        }
+
+        // Also update output bias
+        for (int i = 0; i < _outputBias.Length; i++)
+        {
+            T original = _outputBias[i];
+
+            _outputBias[i] = _numOps.Add(original, epsilon);
+            T predPlus = PredictSingle(input);
+            T errorPlus = _numOps.Subtract(target, predPlus);
+            T lossPlus = _numOps.Multiply(errorPlus, errorPlus);
+
+            _outputBias[i] = _numOps.Subtract(original, epsilon);
+            T predMinus = PredictSingle(input);
+            T errorMinus = _numOps.Subtract(target, predMinus);
+            T lossMinus = _numOps.Multiply(errorMinus, errorMinus);
+
+            _outputBias[i] = original;
+
+            T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
+            _outputBias[i] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
         }
     }
 
@@ -204,15 +219,31 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private Vector<T> EmbedInput(Vector<T> input)
     {
         var embedded = new Vector<T>(_options.EmbeddingDim);
-        int inputLen = Math.Min(input.Length, _embeddingWeights.Columns);
 
-        // Linear embedding: project input through embedding weights
+        // Ensure input matches expected dimension - pad with zeros if shorter
+        int expectedLen = _embeddingWeights.Columns;
+        Vector<T> paddedInput;
+        if (input.Length < expectedLen)
+        {
+            paddedInput = new Vector<T>(expectedLen);
+            for (int i = 0; i < input.Length; i++)
+            {
+                paddedInput[i] = input[i];
+            }
+            // Remaining elements are already zero by default
+        }
+        else
+        {
+            paddedInput = input;
+        }
+
+        // Linear embedding: project input through embedding weights using all weights
         for (int i = 0; i < _options.EmbeddingDim; i++)
         {
             T sum = _numOps.Zero;
-            for (int j = 0; j < inputLen; j++)
+            for (int j = 0; j < expectedLen; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_embeddingWeights[i, j], input[j]));
+                sum = _numOps.Add(sum, _numOps.Multiply(_embeddingWeights[i, j], paddedInput[j]));
             }
             embedded[i] = sum;
         }
@@ -220,8 +251,12 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         return embedded;
     }
 
+    private const int SerializationVersion = 1;
+
     protected override void SerializeCore(BinaryWriter writer)
     {
+        writer.Write(SerializationVersion);
+
         // Serialize options
         writer.Write(_options.LookbackWindow);
         writer.Write(_options.ForecastHorizon);
@@ -267,7 +302,8 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 
     protected override void DeserializeCore(BinaryReader reader)
     {
-        // Deserialize options
+        _ = reader.ReadInt32(); // version
+
         _options.LookbackWindow = reader.ReadInt32();
         _options.ForecastHorizon = reader.ReadInt32();
         _options.EmbeddingDim = reader.ReadInt32();
