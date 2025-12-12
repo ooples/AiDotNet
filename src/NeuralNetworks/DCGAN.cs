@@ -72,7 +72,7 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         : base(
             CreateDCGANGeneratorArchitecture(latentSize, imageChannels, imageHeight, imageWidth, generatorFeatureMaps),
             CreateDCGANDiscriminatorArchitecture(imageChannels, imageHeight, imageWidth, discriminatorFeatureMaps),
-            InputType.Image,
+            InputType.TwoDimensional,
             lossFunction,
             initialLearningRate)
     {
@@ -113,20 +113,12 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         int imageWidth,
         int featureMaps)
     {
-        // Calculate the initial spatial size (typically 4x4 for 64x64 images)
-        // We need to work backwards from the desired output size
-        int initialSize = 4; // Standard starting size for DCGAN
-
         return new NeuralNetworkArchitecture<T>(
-            InputType.Vector,
+            InputType.OneDimensional,
             NeuralNetworkTaskType.Generative,
             NetworkComplexity.Medium,
             inputSize: latentSize,
-            outputSize: imageChannels * imageHeight * imageWidth,
-            hiddenLayerCount: 4, // Typical DCGAN has 4-5 layers
-            neuronsPerHiddenLayer: featureMaps * 8, // Will be adjusted by layer helper
-            activationFunctionType: ActivationFunctionType.ReLU,
-            outputActivationFunctionType: ActivationFunctionType.Tanh);
+            outputSize: imageChannels * imageHeight * imageWidth);
     }
 
     /// <summary>
@@ -163,14 +155,11 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         int featureMaps)
     {
         return new NeuralNetworkArchitecture<T>(
-            InputType.Image,
+            InputType.TwoDimensional,
             NeuralNetworkTaskType.BinaryClassification,
             NetworkComplexity.Medium,
-            inputSize: imageChannels * imageHeight * imageWidth,
-            outputSize: 1,
-            hiddenLayerCount: 4, // Typical DCGAN has 4-5 layers
-            neuronsPerHiddenLayer: featureMaps, // Will be adjusted by layer helper
-            activationFunctionType: ActivationFunctionType.LeakyReLU,
-            outputActivationFunctionType: ActivationFunctionType.Sigmoid);
+            inputHeight: imageHeight,
+            inputWidth: imageWidth * imageChannels,
+            outputSize: 1);
     }
 }

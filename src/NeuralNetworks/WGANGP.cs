@@ -39,7 +39,6 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     private T _beta2Power;
     private double _currentLearningRate;
     private double _initialLearningRate;
-    private double _learningRateDecay;
     private List<T> _criticLosses = [];
     private List<T> _generatorLosses = [];
 
@@ -111,7 +110,6 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         _currentLearningRate = initialLearningRate;
         _gradientPenaltyCoefficient = gradientPenaltyCoefficient;
         _criticIterations = criticIterations;
-        _learningRateDecay = 0.9999;
 
         // Initialize optimizer parameters
         _beta1Power = NumOps.One;
@@ -158,7 +156,6 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         Critic.SetTrainingMode(true);
 
         T totalCriticLoss = NumOps.Zero;
-        T totalGradientPenalty = NumOps.Zero;
 
         // Train critic multiple times
         for (int i = 0; i < _criticIterations; i++)
@@ -170,15 +167,13 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             int batchSize = realImages.Shape[0];
 
             // Train critic and get losses
-            var (criticLoss, gradientPenalty) = TrainCriticBatchWithGP(realImages, fakeImages, batchSize);
+            var (criticLoss, _) = TrainCriticBatchWithGP(realImages, fakeImages, batchSize);
 
             totalCriticLoss = NumOps.Add(totalCriticLoss, criticLoss);
-            totalGradientPenalty = NumOps.Add(totalGradientPenalty, gradientPenalty);
         }
 
-        // Average critic loss and gradient penalty
+        // Average critic loss
         T avgCriticLoss = NumOps.Divide(totalCriticLoss, NumOps.FromDouble(_criticIterations));
-        T avgGradientPenalty = NumOps.Divide(totalGradientPenalty, NumOps.FromDouble(_criticIterations));
 
         // Train generator
         Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
@@ -319,16 +314,15 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             // Interpolate: x_hat = epsilon * real + (1 - epsilon) * fake
             for (int i = 1; i < realImages.Shape.Length; i++)
             {
-                int idx = b * (realImages.Shape.Length - 1) + i - 1;
-                T realValue = realImages.Data[realImages.GetFlatIndex(new[] { b, i - 1 })];
-                T fakeValue = fakeImages.Data[fakeImages.GetFlatIndex(new[] { b, i - 1 })];
+                T realValue = realImages[b, i - 1];
+                T fakeValue = fakeImages[b, i - 1];
 
                 T interpolated = NumOps.Add(
                     NumOps.Multiply(epsilon, realValue),
                     NumOps.Multiply(NumOps.Subtract(NumOps.One, epsilon), fakeValue)
                 );
 
-                interpolatedImages.Data[interpolatedImages.GetFlatIndex(new[] { b, i - 1 })] = interpolated;
+                interpolatedImages[b, i - 1] = interpolated;
             }
         }
 
@@ -355,8 +349,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             // Compute squared norm for this sample
             for (int i = 1; i < inputGradients.Shape.Length; i++)
             {
-                int idx = b * (inputGradients.Shape.Length - 1) + i - 1;
-                T gradValue = inputGradients.Data[inputGradients.GetFlatIndex(new[] { b, i - 1 })];
+                T gradValue = inputGradients[b, i - 1];
                 gradNormSquared = NumOps.Add(gradNormSquared, NumOps.Multiply(gradValue, gradValue));
             }
 
@@ -690,5 +683,39 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             _initialLearningRate,
             _gradientPenaltyCoefficient,
             _criticIterations);
+    }
+
+    /// <summary>
+    /// Updates the parameters of both the generator and critic networks.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters for both networks.</param>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int generatorParameterCount = Generator.GetParameterCount();
+        int criticParameterCount = Critic.GetParameterCount();
+
+        if (parameters.Length != generatorParameterCount + criticParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {generatorParameterCount + criticParameterCount} parameters, " +
+                $"but received {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        // Split and update Generator parameters
+        var generatorParameters = new Vector<T>(generatorParameterCount);
+        for (int i = 0; i < generatorParameterCount; i++)
+        {
+            generatorParameters[i] = parameters[i];
+        }
+        Generator.UpdateParameters(generatorParameters);
+
+        // Split and update Critic parameters
+        var criticParameters = new Vector<T>(criticParameterCount);
+        for (int i = 0; i < criticParameterCount; i++)
+        {
+            criticParameters[i] = parameters[generatorParameterCount + i];
+        }
+        Critic.UpdateParameters(criticParameters);
     }
 }

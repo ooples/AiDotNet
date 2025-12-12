@@ -95,12 +95,12 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         double identityLambda = 5.0)
         : base(new NeuralNetworkArchitecture<T>(
             inputType,
-            NeuralNetworkTaskType.ImageToImage,
-            NetworkComplexity.High,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Deep,
             generatorAtoB.InputSize,
             generatorAtoB.OutputSize,
             0, 0, 0,
-            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.ImageToImage))
+            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
         _cycleConsistencyLambda = cycleConsistencyLambda;
         _identityLambda = identityLambda;
@@ -117,7 +117,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
         _momentum = Vector<T>.Empty();
         _secondMoment = Vector<T>.Empty();
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.ImageToImage);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
 
         InitializeLayers();
     }
@@ -230,11 +230,11 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     private T CalculateL1Loss(Tensor<T> predictions, Tensor<T> targets)
     {
         T totalLoss = NumOps.Zero;
-        int count = predictions.Data.Length;
+        int count = predictions.Length;
 
         for (int i = 0; i < count; i++)
         {
-            T diff = NumOps.Subtract(predictions.Data[i], targets.Data[i]);
+            T diff = NumOps.Subtract(predictions.GetFlat(i), targets.GetFlat(i));
             T absDiff = NumOps.GreaterThanOrEquals(diff, NumOps.Zero) ? diff : NumOps.Negate(diff);
             totalLoss = NumOps.Add(totalLoss, absDiff);
         }
@@ -357,5 +357,46 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
             _initialLearningRate,
             _cycleConsistencyLambda,
             _identityLambda);
+    }
+
+    /// <summary>
+    /// Updates the parameters of all networks in the CycleGAN.
+    /// </summary>
+    /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int genAtoBCount = GeneratorAtoB.GetParameterCount();
+        int genBtoACount = GeneratorBtoA.GetParameterCount();
+        int discACount = DiscriminatorA.GetParameterCount();
+        int discBCount = DiscriminatorB.GetParameterCount();
+
+        int offset = 0;
+
+        // Update GeneratorAtoB parameters
+        var genAtoBParams = new Vector<T>(genAtoBCount);
+        for (int i = 0; i < genAtoBCount; i++)
+            genAtoBParams[i] = parameters[offset + i];
+        GeneratorAtoB.UpdateParameters(genAtoBParams);
+        offset += genAtoBCount;
+
+        // Update GeneratorBtoA parameters
+        var genBtoAParams = new Vector<T>(genBtoACount);
+        for (int i = 0; i < genBtoACount; i++)
+            genBtoAParams[i] = parameters[offset + i];
+        GeneratorBtoA.UpdateParameters(genBtoAParams);
+        offset += genBtoACount;
+
+        // Update DiscriminatorA parameters
+        var discAParams = new Vector<T>(discACount);
+        for (int i = 0; i < discACount; i++)
+            discAParams[i] = parameters[offset + i];
+        DiscriminatorA.UpdateParameters(discAParams);
+        offset += discACount;
+
+        // Update DiscriminatorB parameters
+        var discBParams = new Vector<T>(discBCount);
+        for (int i = 0; i < discBCount; i++)
+            discBParams[i] = parameters[offset + i];
+        DiscriminatorB.UpdateParameters(discBParams);
     }
 }

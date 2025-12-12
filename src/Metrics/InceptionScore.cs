@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using AiDotNet.Mathematics;
 using AiDotNet.NeuralNetworks;
 
 namespace AiDotNet.Metrics
@@ -78,7 +77,7 @@ namespace AiDotNet.Metrics
             int numClasses = 1000,
             int numSplits = 10)
         {
-            NumOps = NumericOperations<T>.Instance;
+            NumOps = MathHelper.GetNumericOperations<T>();
             InceptionNetwork = inceptionNetwork;
             NumClasses = numClasses;
             NumSplits = numSplits;
@@ -91,7 +90,7 @@ namespace AiDotNet.Metrics
         /// <returns>Inception Score (higher is better, typical range 1-15+)</returns>
         public double ComputeIS(Tensor<T> generatedImages)
         {
-            var (mean, std) = ComputeISWithUncertainty(generatedImages);
+            var (mean, _) = ComputeISWithUncertainty(generatedImages);
             return mean;
         }
 
@@ -184,7 +183,10 @@ namespace AiDotNet.Metrics
                 // Extract single image
                 var imageSize = images.Length / numImages;
                 var singleImage = new Tensor<T>(new[] { 1, images.Shape[1], images.Shape[2], images.Shape[3] });
-                Array.Copy(images.Data, i * imageSize, singleImage.Data, 0, imageSize);
+                for (int idx = 0; idx < imageSize; idx++)
+                {
+                    singleImage.SetFlat(idx, images.GetFlat(i * imageSize + idx));
+                }
 
                 // Forward pass
                 var output = InceptionNetwork.Predict(singleImage);
@@ -195,7 +197,7 @@ namespace AiDotNet.Metrics
                 // Store predictions
                 for (int j = 0; j < Math.Min(probs.Length, NumClasses); j++)
                 {
-                    predictions[i, j] = probs.Data[j];
+                    predictions[i, j] = probs.GetFlat(j);
                 }
             }
 
@@ -213,9 +215,9 @@ namespace AiDotNet.Metrics
             // Find max for numerical stability
             for (int i = 0; i < logits.Length; i++)
             {
-                if (NumOps.Compare(logits.Data[i], maxLogit) > 0)
+                if (NumOps.GreaterThan(logits.GetFlat(i), maxLogit))
                 {
-                    maxLogit = logits.Data[i];
+                    maxLogit = logits.GetFlat(i);
                 }
             }
 
@@ -223,16 +225,16 @@ namespace AiDotNet.Metrics
             var sum = NumOps.Zero;
             for (int i = 0; i < logits.Length; i++)
             {
-                var shifted = NumOps.Subtract(logits.Data[i], maxLogit);
+                var shifted = NumOps.Subtract(logits.GetFlat(i), maxLogit);
                 var expVal = NumOps.Exp(shifted);
-                result.Data[i] = expVal;
+                result.SetFlat(i, expVal);
                 sum = NumOps.Add(sum, expVal);
             }
 
             // Normalize
             for (int i = 0; i < result.Length; i++)
             {
-                result.Data[i] = NumOps.Divide(result.Data[i], sum);
+                result.SetFlat(i, NumOps.Divide(result.GetFlat(i), sum));
             }
 
             return result;
@@ -325,7 +327,10 @@ namespace AiDotNet.Metrics
             }
 
             var subset = new Tensor<T>(subsetShape);
-            Array.Copy(images.Data, startIdx * imageSize, subset.Data, 0, count * imageSize);
+            for (int idx = 0; idx < count * imageSize; idx++)
+            {
+                subset.SetFlat(idx, images.GetFlat(startIdx * imageSize + idx));
+            }
 
             return subset;
         }

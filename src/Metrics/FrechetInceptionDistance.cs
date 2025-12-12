@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using AiDotNet.Mathematics;
 using AiDotNet.NeuralNetworks;
 
 namespace AiDotNet.Metrics
@@ -68,7 +67,7 @@ namespace AiDotNet.Metrics
             ConvolutionalNeuralNetwork<T>? inceptionNetwork = null,
             int featureDimension = 2048)
         {
-            NumOps = NumericOperations<T>.Instance;
+            NumOps = MathHelper.GetNumericOperations<T>();
             InceptionNetwork = inceptionNetwork;
             FeatureDimension = featureDimension;
             FeatureLayer = -2; // Second to last layer (before classification)
@@ -103,18 +102,18 @@ namespace AiDotNet.Metrics
         /// <returns>Feature matrix (num_images × feature_dim)</returns>
         private Matrix<T> ExtractFeatures(Tensor<T> images)
         {
+            var numImages = images.Shape[0];
+
             if (InceptionNetwork == null)
             {
                 // If no Inception network provided, return dummy features
                 // In a real implementation, you would load a pre-trained InceptionV3
-                var numImages = images.Shape[0];
                 return CreateDummyFeatures(numImages);
             }
 
             // Set to inference mode
             InceptionNetwork.SetTrainingMode(false);
 
-            var numImages = images.Shape[0];
             var features = new Matrix<T>(numImages, FeatureDimension);
 
             // Process each image
@@ -123,7 +122,12 @@ namespace AiDotNet.Metrics
                 // Extract single image
                 var imageSize = images.Length / numImages;
                 var singleImage = new Tensor<T>(new[] { 1, images.Shape[1], images.Shape[2], images.Shape[3] });
-                Array.Copy(images.Data, i * imageSize, singleImage.Data, 0, imageSize);
+
+                // Copy data from source tensor to single image tensor
+                for (int k = 0; k < imageSize; k++)
+                {
+                    singleImage.SetFlat(k, images.GetFlat(i * imageSize + k));
+                }
 
                 // Forward pass through Inception network
                 var output = InceptionNetwork.Predict(singleImage);
@@ -133,7 +137,7 @@ namespace AiDotNet.Metrics
                 // For now, use output
                 for (int j = 0; j < Math.Min(output.Length, FeatureDimension); j++)
                 {
-                    features[i, j] = output.Data[j];
+                    features[i, j] = output.GetFlat(j);
                 }
             }
 

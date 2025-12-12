@@ -144,7 +144,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         : base(new NeuralNetworkArchitecture<T>(
             inputType,
             NeuralNetworkTaskType.Generative,
-            NetworkComplexity.High,
+            NetworkComplexity.Deep,
             generatorArchitecture.InputSize,
             discriminatorArchitecture.OutputSize,
             0, 0, 0,
@@ -268,12 +268,13 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
 
         // Combine gradients
         var combinedGradients = new Tensor<T>(discInputGradients.Shape);
-        for (int i = 0; i < discInputGradients.Data.Length; i++)
+        int gradLength = discInputGradients.Shape.Aggregate(1, (a, b) => a * b);
+        for (int i = 0; i < gradLength; i++)
         {
-            combinedGradients.Data[i] = NumOps.Add(
-                discInputGradients.Data[i],
-                NumOps.Multiply(miCoeff, qInputGradients.Data[i])
-            );
+            combinedGradients.SetFlat(i, NumOps.Add(
+                discInputGradients.GetFlat(i),
+                NumOps.Multiply(miCoeff, qInputGradients.GetFlat(i))
+            ));
         }
 
         // Backpropagate through generator
@@ -313,7 +314,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             }
         }
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize * _latentCodeSize));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble((double)batchSize * _latentCodeSize));
     }
 
     /// <summary>
@@ -322,7 +323,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     private Tensor<T> CalculateMutualInfoGradients(Tensor<T> predictedCodes, Tensor<T> trueCodes, int batchSize)
     {
         var gradients = new Tensor<T>(predictedCodes.Shape);
-        T scale = NumOps.FromDouble(2.0 / (batchSize * _latentCodeSize));
+        T scale = NumOps.FromDouble(2.0 / ((double)batchSize * _latentCodeSize));
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -626,5 +627,38 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             _lossFunction,
             _initialLearningRate,
             _mutualInfoCoefficient);
+    }
+
+    /// <summary>
+    /// Updates the parameters of all networks in the InfoGAN.
+    /// </summary>
+    /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int generatorCount = Generator.GetParameterCount();
+        int discriminatorCount = Discriminator.GetParameterCount();
+        int qNetworkCount = QNetwork.GetParameterCount();
+
+        int offset = 0;
+
+        // Update Generator parameters
+        var generatorParams = new Vector<T>(generatorCount);
+        for (int i = 0; i < generatorCount; i++)
+            generatorParams[i] = parameters[offset + i];
+        Generator.UpdateParameters(generatorParams);
+        offset += generatorCount;
+
+        // Update Discriminator parameters
+        var discriminatorParams = new Vector<T>(discriminatorCount);
+        for (int i = 0; i < discriminatorCount; i++)
+            discriminatorParams[i] = parameters[offset + i];
+        Discriminator.UpdateParameters(discriminatorParams);
+        offset += discriminatorCount;
+
+        // Update QNetwork parameters
+        var qNetworkParams = new Vector<T>(qNetworkCount);
+        for (int i = 0; i < qNetworkCount; i++)
+            qNetworkParams[i] = parameters[offset + i];
+        QNetwork.UpdateParameters(qNetworkParams);
     }
 }

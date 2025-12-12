@@ -37,10 +37,10 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     private T _beta1Power;
     private T _beta2Power;
     private double _currentLearningRate;
-    private double _initialLearningRate;
-    private double _learningRateDecay;
-    private List<T> _generatorLosses = [];
-    private List<T> _discriminatorLosses = [];
+    private readonly double _initialLearningRate;
+    private readonly double _learningRateDecay;
+    private readonly List<T> _generatorLosses = [];
+    private readonly List<T> _discriminatorLosses = [];
 
     /// <summary>
     /// The number of classes for classification.
@@ -72,7 +72,7 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     /// </remarks>
     public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
 
-    private ILossFunction<T> _lossFunction;
+    private readonly ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ACGAN{T}"/> class.
@@ -535,5 +535,27 @@ public class ACGAN<T> : NeuralNetworkBase<T>
             Architecture.InputType,
             _lossFunction,
             _initialLearningRate);
+    }
+
+    /// <summary>
+    /// Updates the parameters of all networks in the ACGAN.
+    /// </summary>
+    /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int generatorCount = Generator.GetParameterCount();
+        int discriminatorCount = Discriminator.GetParameterCount();
+
+        // Update Generator parameters
+        var generatorParams = new Vector<T>(generatorCount);
+        for (int i = 0; i < generatorCount; i++)
+            generatorParams[i] = parameters[i];
+        Generator.UpdateParameters(generatorParams);
+
+        // Update Discriminator parameters
+        var discriminatorParams = new Vector<T>(discriminatorCount);
+        for (int i = 0; i < discriminatorCount; i++)
+            discriminatorParams[i] = parameters[generatorCount + i];
+        Discriminator.UpdateParameters(discriminatorParams);
     }
 }

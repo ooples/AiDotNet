@@ -589,4 +589,44 @@ public class WGAN<T> : NeuralNetworkBase<T>
             _weightClipValue,
             _criticIterations);
     }
+
+    /// <summary>
+    /// Updates the parameters of both the generator and critic networks.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters for both networks.</param>
+    /// <remarks>
+    /// <para>
+    /// The parameters vector is split between the generator and critic based on their
+    /// respective parameter counts. Generator parameters come first, followed by critic parameters.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int generatorParameterCount = Generator.GetParameterCount();
+        int criticParameterCount = Critic.GetParameterCount();
+
+        if (parameters.Length != generatorParameterCount + criticParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {generatorParameterCount + criticParameterCount} parameters, " +
+                $"but received {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        // Split and update Generator parameters
+        var generatorParameters = new Vector<T>(generatorParameterCount);
+        for (int i = 0; i < generatorParameterCount; i++)
+        {
+            generatorParameters[i] = parameters[i];
+        }
+        Generator.UpdateParameters(generatorParameters);
+
+        // Split and update Critic parameters
+        var criticParameters = new Vector<T>(criticParameterCount);
+        for (int i = 0; i < criticParameterCount; i++)
+        {
+            criticParameters[i] = parameters[generatorParameterCount + i];
+        }
+        Critic.UpdateParameters(criticParameters);
+    }
 }

@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -34,37 +36,18 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     private readonly ILayer<T> _innerLayer;
 
     /// <summary>
-    /// The vector used for power iteration to compute the spectral norm.
+    /// The left singular vector used for power iteration to compute the spectral norm.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This vector is used in the power iteration method to approximate the largest
-    /// singular value of the weight matrix. It's updated during each forward pass.
-    /// </para>
-    /// <para><b>For Beginners:</b> A helper vector used in the normalization calculation.
-    ///
-    /// - Updated each time the layer is used
-    /// - Helps efficiently compute the spectral norm
-    /// - Doesn't need to be perfect, approximation works well
-    /// </para>
-    /// </remarks>
-    private Vector<T> _u;
+    private Tensor<T> _u;
+
+    /// <summary>
+    /// The right singular vector used for power iteration.
+    /// </summary>
+    private Tensor<T> _v;
 
     /// <summary>
     /// The number of power iterations to perform when computing the spectral norm.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// More iterations give a more accurate estimate of the spectral norm, but require more computation.
-    /// Typically, 1 iteration is sufficient for training, as the vector u is carried across iterations.
-    /// </para>
-    /// <para><b>For Beginners:</b> How many times to refine the normalization calculation.
-    ///
-    /// - Default: 1 iteration (fast and usually sufficient)
-    /// - Higher values: more accurate but slower
-    /// - For training, 1 iteration works well because we do it repeatedly
-    /// </para>
-    /// </remarks>
     private readonly int _powerIterations;
 
     /// <summary>
@@ -73,280 +56,227 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     private readonly T _epsilon;
 
     /// <summary>
+    /// Cached input from the last forward pass.
+    /// </summary>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Cached output from the last forward pass.
+    /// </summary>
+    private Tensor<T>? _lastOutput;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    public override bool SupportsTraining => _innerLayer.SupportsTraining;
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    public override bool SupportsJitCompilation => false;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SpectralNormalizationLayer{T}"/> class.
     /// </summary>
     /// <param name="innerLayer">The layer whose weights will be spectrally normalized.</param>
     /// <param name="powerIterations">The number of power iterations to perform. Default is 1.</param>
-    /// <remarks>
-    /// <para>
-    /// This constructor wraps an existing layer with spectral normalization. The inner layer's
-    /// weights will be normalized by their spectral norm before each forward pass.
-    /// </para>
-    /// <para><b>For Beginners:</b> This wraps another layer to add spectral normalization.
-    ///
-    /// Example usage:
-    /// - Create a convolutional layer
-    /// - Wrap it with SpectralNormalizationLayer
-    /// - The layer now has normalized weights automatically
-    ///
-    /// Parameters:
-    /// - innerLayer: the layer to normalize (e.g., Conv2D, Dense)
-    /// - powerIterations: how many refinement steps (1 is usually fine)
-    /// </para>
-    /// </remarks>
     public SpectralNormalizationLayer(ILayer<T> innerLayer, int powerIterations = 1)
-        : base(innerLayer.InputSize, innerLayer.OutputSize)
+        : base(innerLayer.GetInputShape(), innerLayer.GetOutputShape())
     {
         _innerLayer = innerLayer;
         _powerIterations = powerIterations;
         _epsilon = NumOps.FromDouble(1e-12);
 
-        // Initialize u vector randomly
-        var random = new Random();
-        _u = new Vector<T>(innerLayer.OutputSize);
+        // Initialize u and v vectors for power iteration
+        // u has shape [outputSize], v has shape [inputSize]
+        var inputShape = innerLayer.GetInputShape();
+        var outputShape = innerLayer.GetOutputShape();
+        int inputSize = inputShape.Aggregate(1, (a, b) => a * b);
+        int outputSize = outputShape.Aggregate(1, (a, b) => a * b);
 
-        for (int i = 0; i < _u.Length; i++)
+        _u = new Tensor<T>([outputSize]);
+        _v = new Tensor<T>([inputSize]);
+
+        // Initialize with random values
+        var random = RandomHelper.ThreadSafeRandom;
+
+        for (int i = 0; i < outputSize; i++)
         {
             _u[i] = NumOps.FromDouble(random.NextDouble() * 2 - 1);
         }
-
-        // Normalize u
-        T norm = _u.L2Norm();
-        for (int i = 0; i < _u.Length; i++)
+        for (int i = 0; i < inputSize; i++)
         {
-            _u[i] = NumOps.Divide(_u[i], NumOps.Add(norm, _epsilon));
+            _v[i] = NumOps.FromDouble(random.NextDouble() * 2 - 1);
         }
+
+        // Normalize u and v
+        NormalizeVector(ref _u);
+        NormalizeVector(ref _v);
     }
 
     /// <summary>
-    /// Computes the spectral norm of the weight matrix using power iteration.
+    /// Normalizes a vector tensor in-place using Engine operations.
     /// </summary>
-    /// <param name="weights">The weight matrix to normalize.</param>
-    /// <returns>The spectral norm (largest singular value) of the weight matrix.</returns>
-    /// <remarks>
-    /// <para>
-    /// The power iteration method is an efficient way to approximate the largest singular value
-    /// of a matrix. It iteratively updates vectors u and v to converge to the largest singular
-    /// value and its corresponding singular vectors.
-    /// </para>
-    /// <para><b>For Beginners:</b> Calculates the "spectral norm" of the weights.
-    ///
-    /// What's the spectral norm:
-    /// - It's the largest value that describes how much the weights can "stretch" the input
-    /// - Mathematically, it's the largest singular value of the weight matrix
-    /// - We want to keep this value under control for stable training
-    ///
-    /// The power iteration method:
-    /// - Starts with a random vector
-    /// - Repeatedly multiplies by the weight matrix and its transpose
-    /// - Converges to the largest singular value
-    /// - Very efficient, especially with just 1 iteration
-    /// </para>
-    /// </remarks>
-    private T ComputeSpectralNorm(Matrix<T> weights)
+    private void NormalizeVector(ref Tensor<T> vector)
     {
-        Vector<T> u = _u;
-        Vector<T> v = Vector<T>.Empty();
-
-        // Perform power iterations
-        for (int i = 0; i < _powerIterations; i++)
+        // Compute L2 norm using vectorized operations
+        var squared = vector.Multiply(vector);
+        T sumSquared = NumOps.Zero;
+        for (int i = 0; i < squared.Length; i++)
         {
-            // v = W^T @ u
-            v = weights.TransposeMultiply(u);
+            sumSquared = NumOps.Add(sumSquared, squared[i]);
+        }
+        T norm = NumOps.Sqrt(sumSquared);
+        T normPlusEps = NumOps.Add(norm, _epsilon);
 
-            // Normalize v
-            T vNorm = v.L2Norm();
-            for (int j = 0; j < v.Length; j++)
-            {
-                v[j] = NumOps.Divide(v[j], NumOps.Add(vNorm, _epsilon));
-            }
+        // Divide by norm - element-wise division
+        var result = new Tensor<T>(vector.Shape);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            result[i] = NumOps.Divide(vector[i], normPlusEps);
+        }
+        vector = result;
+    }
 
-            // u = W @ v
-            u = weights.Multiply(v);
+    /// <summary>
+    /// Computes the spectral norm using power iteration with vectorized operations.
+    /// </summary>
+    private T ComputeSpectralNorm(Tensor<T> weights)
+    {
+        // weights shape: [outputSize, inputSize]
+        int outputSize = weights.Shape[0];
+        int inputSize = weights.Shape[1];
 
-            // Normalize u
-            T uNorm = u.L2Norm();
-            for (int j = 0; j < u.Length; j++)
-            {
-                u[j] = NumOps.Divide(u[j], NumOps.Add(uNorm, _epsilon));
-            }
+        var u = _u;
+        var v = _v;
+
+        // Power iteration using vectorized matrix operations
+        for (int iter = 0; iter < _powerIterations; iter++)
+        {
+            // v = W^T @ u, then normalize
+            // W^T shape: [inputSize, outputSize]
+            var wT = Engine.TensorTranspose(weights);
+
+            // Reshape u for matrix multiplication: [outputSize] -> [outputSize, 1]
+            var uReshaped = u.Reshape(outputSize, 1);
+
+            // v_new = W^T @ u: [inputSize, outputSize] @ [outputSize, 1] -> [inputSize, 1]
+            var vNew = Engine.TensorMatMul(wT, uReshaped);
+            v = vNew.Reshape(inputSize);
+            NormalizeVector(ref v);
+
+            // u = W @ v, then normalize
+            // Reshape v for matrix multiplication: [inputSize] -> [inputSize, 1]
+            var vReshaped = v.Reshape(inputSize, 1);
+
+            // u_new = W @ v: [outputSize, inputSize] @ [inputSize, 1] -> [outputSize, 1]
+            var uNew = Engine.TensorMatMul(weights, vReshaped);
+            u = uNew.Reshape(outputSize);
+            NormalizeVector(ref u);
         }
 
-        // Update _u for next iteration
+        // Save updated u and v for next iteration
         _u = u;
+        _v = v;
 
         // Compute spectral norm: u^T @ W @ v
-        Vector<T> Wv = weights.Multiply(v);
-        T spectralNorm = NumOps.Zero;
+        var vReshaped2 = v.Reshape(inputSize, 1);
+        var Wv = Engine.TensorMatMul(weights, vReshaped2).Reshape(outputSize);
 
-        for (int i = 0; i < u.Length; i++)
+        // Dot product u^T @ Wv
+        var dotProduct = u.Multiply(Wv);
+        T spectralNorm = NumOps.Zero;
+        for (int i = 0; i < dotProduct.Length; i++)
         {
-            spectralNorm = NumOps.Add(spectralNorm, NumOps.Multiply(u[i], Wv[i]));
+            spectralNorm = NumOps.Add(spectralNorm, dotProduct[i]);
         }
 
         return spectralNorm;
     }
 
     /// <summary>
-    /// Performs a forward pass through the layer with spectrally normalized weights.
-    /// </summary>
-    /// <param name="input">The input vector.</param>
-    /// <returns>The output vector after applying the spectrally normalized layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method normalizes the inner layer's weights by their spectral norm before
-    /// performing the forward pass. This ensures the Lipschitz constant is constrained.
-    /// </para>
-    /// <para><b>For Beginners:</b> Processes input through the layer with normalized weights.
-    ///
-    /// Steps:
-    /// 1. Get the current weights from the inner layer
-    /// 2. Calculate the spectral norm
-    /// 3. Divide all weights by the spectral norm
-    /// 4. Apply the normalized weights to the input
-    /// 5. Return the result
-    ///
-    /// This happens automatically every time data passes through the layer.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Forward(Vector<T> input)
-    {
-        // Get weights from inner layer
-        var weights = GetWeightMatrix();
-
-        // Compute spectral norm
-        T spectralNorm = ComputeSpectralNorm(weights);
-
-        // Normalize weights
-        var normalizedWeights = new Matrix<T>(weights.Rows, weights.Cols);
-        for (int i = 0; i < weights.Rows; i++)
-        {
-            for (int j = 0; j < weights.Cols; j++)
-            {
-                normalizedWeights[i, j] = NumOps.Divide(
-                    weights[i, j],
-                    NumOps.Add(spectralNorm, _epsilon)
-                );
-            }
-        }
-
-        // Apply normalized weights to the inner layer (temporarily)
-        ApplyWeightMatrix(normalizedWeights);
-
-        // Forward pass through inner layer
-        var output = _innerLayer.Forward(input);
-
-        // Restore original weights (will be updated during backprop)
-        ApplyWeightMatrix(weights);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Performs a forward pass using a tensor input.
+    /// Performs the forward pass through the layer with spectrally normalized weights.
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        return _innerLayer.Forward(input);
+        _lastInput = input;
+
+        // Get weights from inner layer and reshape to matrix
+        var parameters = _innerLayer.GetParameters();
+        int outputSize = OutputShape.Aggregate(1, (a, b) => a * b);
+        int inputSize = InputShape.Aggregate(1, (a, b) => a * b);
+
+        // Create weight tensor [outputSize, inputSize]
+        var weights = new Tensor<T>([outputSize, inputSize]);
+        int paramIdx = 0;
+        for (int i = 0; i < outputSize && paramIdx < parameters.Length; i++)
+        {
+            for (int j = 0; j < inputSize && paramIdx < parameters.Length; j++)
+            {
+                weights[new int[] { i, j }] = parameters[paramIdx++];
+            }
+        }
+
+        // Compute spectral norm
+        T spectralNorm = ComputeSpectralNorm(weights);
+        T normPlusEps = NumOps.Add(spectralNorm, _epsilon);
+
+        // Normalize weights - element-wise division
+        var normalizedWeights = new Tensor<T>([outputSize, inputSize]);
+        for (int i = 0; i < outputSize; i++)
+        {
+            for (int j = 0; j < inputSize; j++)
+            {
+                T weightValue = weights[new int[] { i, j }];
+                normalizedWeights[new int[] { i, j }] = NumOps.Divide(weightValue, normPlusEps);
+            }
+        }
+
+        // Apply normalized weights to inner layer
+        var normalizedParams = new Vector<T>(parameters.Length);
+        paramIdx = 0;
+        for (int i = 0; i < outputSize && paramIdx < parameters.Length; i++)
+        {
+            for (int j = 0; j < inputSize && paramIdx < parameters.Length; j++)
+            {
+                normalizedParams[paramIdx] = normalizedWeights[new int[] { i, j }];
+                paramIdx++;
+            }
+        }
+        // Copy any remaining parameters (biases)
+        for (; paramIdx < parameters.Length; paramIdx++)
+        {
+            normalizedParams[paramIdx] = parameters[paramIdx];
+        }
+
+        _innerLayer.SetParameters(normalizedParams);
+
+        // Forward through inner layer
+        _lastOutput = _innerLayer.Forward(input);
+
+        // Restore original weights
+        _innerLayer.SetParameters(parameters);
+
+        return _lastOutput;
     }
 
     /// <summary>
     /// Performs backpropagation through the layer.
     /// </summary>
-    /// <param name="gradientOutput">The gradient from the next layer.</param>
-    /// <returns>The gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// Backpropagation through spectral normalization requires computing the derivative
-    /// of the normalization operation. However, in practice, many implementations simply
-    /// backpropagate through the inner layer without explicitly computing this derivative,
-    /// as the approximation works well and simplifies implementation.
-    /// </para>
-    /// <para><b>For Beginners:</b> Passes gradients back through the layer.
-    ///
-    /// During training:
-    /// - Forward pass normalizes the weights
-    /// - Backward pass updates the weights based on the error
-    /// - The spectral normalization is recomputed in the next forward pass
-    ///
-    /// This simple approach works well in practice.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> Backward(Vector<T> gradientOutput)
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return _innerLayer.Backward(gradientOutput);
-    }
-
-    /// <summary>
-    /// Performs backpropagation using a tensor gradient.
-    /// </summary>
-    public override Tensor<T> Backward(Tensor<T> gradientOutput)
-    {
-        return _innerLayer.Backward(gradientOutput);
+        // Backpropagate through inner layer
+        // Note: For simplicity, we pass gradients directly through
+        // A more accurate implementation would compute the Jacobian of spectral normalization
+        return _innerLayer.Backward(outputGradient);
     }
 
     /// <summary>
     /// Updates the parameters of the inner layer.
     /// </summary>
-    /// <param name="learningRate">The learning rate.</param>
-    /// <remarks>
-    /// <para>
-    /// The weight updates are applied to the inner layer. The spectral normalization
-    /// will be recomputed in the next forward pass with the updated weights.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(double learningRate)
+    public override void UpdateParameters(T learningRate)
     {
         _innerLayer.UpdateParameters(learningRate);
-    }
-
-    /// <summary>
-    /// Gets the weight matrix from the inner layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method extracts the weight matrix from the inner layer. The implementation
-    /// depends on the type of inner layer (Dense, Convolutional, etc.).
-    /// </para>
-    /// </remarks>
-    private Matrix<T> GetWeightMatrix()
-    {
-        var parameters = _innerLayer.GetParameters();
-
-        // Assuming the inner layer's parameters can be reshaped into a matrix
-        // The exact implementation depends on the layer type
-        int rows = OutputSize;
-        int cols = InputSize;
-
-        var weights = new Matrix<T>(rows, cols);
-
-        for (int i = 0; i < rows && i * cols < parameters.Length; i++)
-        {
-            for (int j = 0; j < cols && i * cols + j < parameters.Length; j++)
-            {
-                weights[i, j] = parameters[i * cols + j];
-            }
-        }
-
-        return weights;
-    }
-
-    /// <summary>
-    /// Applies a weight matrix to the inner layer.
-    /// </summary>
-    private void ApplyWeightMatrix(Matrix<T> weights)
-    {
-        var parameters = new Vector<T>(weights.Rows * weights.Cols);
-
-        for (int i = 0; i < weights.Rows; i++)
-        {
-            for (int j = 0; j < weights.Cols; j++)
-            {
-                parameters[i * weights.Cols + j] = weights[i, j];
-            }
-        }
-
-        _innerLayer.SetParameters(parameters);
     }
 
     /// <summary>
@@ -374,20 +304,23 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets metadata about this layer.
+    /// Resets the internal state of the layer.
     /// </summary>
-    public override LayerMetadata GetLayerMetadata()
+    public override void ResetState()
     {
-        return new LayerMetadata
-        {
-            LayerType = "SpectralNormalization",
-            InputSize = InputSize,
-            OutputSize = OutputSize,
-            Parameters = new Dictionary<string, object>
-            {
-                { "PowerIterations", _powerIterations },
-                { "InnerLayerType", _innerLayer.GetType().Name }
-            }
-        };
+        _lastInput = null;
+        _lastOutput = null;
+        _innerLayer.ResetState();
+    }
+
+    /// <summary>
+    /// Exports the computation graph for JIT compilation.
+    /// </summary>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        // Spectral normalization doesn't support JIT compilation due to dynamic weight normalization
+        throw new NotSupportedException(
+            "SpectralNormalizationLayer does not support JIT compilation. " +
+            "The spectral norm is computed dynamically during each forward pass.");
     }
 }

@@ -53,7 +53,6 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     private T _beta2Power;
     private double _currentLearningRate;
     private double _initialLearningRate;
-    private double _learningRateDecay;
 
     /// <summary>
     /// The size of the latent code Z.
@@ -177,7 +176,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         : base(new NeuralNetworkArchitecture<T>(
             inputType,
             NeuralNetworkTaskType.Generative,
-            NetworkComplexity.VeryHigh,
+            NetworkComplexity.VeryDeep,
             latentSize,
             discriminatorArchitecture.OutputSize,
             0, 0, 0,
@@ -189,7 +188,6 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         _styleMixingProbability = styleMixingProbability;
         _initialLearningRate = initialLearningRate;
         _currentLearningRate = initialLearningRate;
-        _learningRateDecay = 0.9999;
 
         _beta1Power = NumOps.One;
         _beta2Power = NumOps.One;
@@ -581,5 +579,38 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
             _initialLearningRate,
             _enableStyleMixing,
             _styleMixingProbability);
+    }
+
+    /// <summary>
+    /// Updates the parameters of all networks in the StyleGAN.
+    /// </summary>
+    /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int mappingCount = MappingNetwork.GetParameterCount();
+        int synthesisCount = SynthesisNetwork.GetParameterCount();
+        int discriminatorCount = Discriminator.GetParameterCount();
+
+        int offset = 0;
+
+        // Update MappingNetwork parameters
+        var mappingParams = new Vector<T>(mappingCount);
+        for (int i = 0; i < mappingCount; i++)
+            mappingParams[i] = parameters[offset + i];
+        MappingNetwork.UpdateParameters(mappingParams);
+        offset += mappingCount;
+
+        // Update SynthesisNetwork parameters
+        var synthesisParams = new Vector<T>(synthesisCount);
+        for (int i = 0; i < synthesisCount; i++)
+            synthesisParams[i] = parameters[offset + i];
+        SynthesisNetwork.UpdateParameters(synthesisParams);
+        offset += synthesisCount;
+
+        // Update Discriminator parameters
+        var discriminatorParams = new Vector<T>(discriminatorCount);
+        for (int i = 0; i < discriminatorCount; i++)
+            discriminatorParams[i] = parameters[offset + i];
+        Discriminator.UpdateParameters(discriminatorParams);
     }
 }

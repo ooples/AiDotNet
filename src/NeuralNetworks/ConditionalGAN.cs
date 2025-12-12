@@ -282,7 +282,7 @@ public class ConditionalGAN<T> : NeuralNetworkBase<T>
     private Tensor<T> ConcatenateImageAndCondition(Tensor<T> images, Tensor<T> conditions)
     {
         int batchSize = images.Shape[0];
-        int imageSize = images.Data.Length / batchSize;
+        int imageSize = images.Length / batchSize;
         int conditionSize = conditions.Shape[1];
 
         // Create result tensor with space for both image and condition
@@ -293,7 +293,7 @@ public class ConditionalGAN<T> : NeuralNetworkBase<T>
             // Copy image data
             for (int i = 0; i < imageSize; i++)
             {
-                result[b, i] = images.Data[b * imageSize + i];
+                result[b, i] = images.GetFlatIndexValue(b * imageSize + i);
             }
 
             // Append condition
@@ -369,14 +369,14 @@ public class ConditionalGAN<T> : NeuralNetworkBase<T>
 
         // Extract gradients for the image part (not the condition part)
         int batchSize = generatorInput.Shape[0];
-        int imageSize = discriminatorInputGradients.Data.Length / batchSize - _numConditionClasses;
+        int imageSize = discriminatorInputGradients.Length / batchSize - _numConditionClasses;
 
         var generatorGradients = new Tensor<T>(new int[] { batchSize, imageSize });
         for (int b = 0; b < batchSize; b++)
         {
             for (int i = 0; i < imageSize; i++)
             {
-                generatorGradients.Data[b * imageSize + i] = discriminatorInputGradients.Data[b * (imageSize + _numConditionClasses) + i];
+                generatorGradients.SetFlatIndex(b * imageSize + i, discriminatorInputGradients.GetFlatIndexValue(b * (imageSize + _numConditionClasses) + i));
             }
         }
 
@@ -659,5 +659,27 @@ public class ConditionalGAN<T> : NeuralNetworkBase<T>
             Architecture.InputType,
             _lossFunction,
             _initialLearningRate);
+    }
+
+    /// <summary>
+    /// Updates the parameters of all networks in the ConditionalGAN.
+    /// </summary>
+    /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int generatorCount = Generator.GetParameterCount();
+        int discriminatorCount = Discriminator.GetParameterCount();
+
+        // Update Generator parameters
+        var generatorParams = new Vector<T>(generatorCount);
+        for (int i = 0; i < generatorCount; i++)
+            generatorParams[i] = parameters[i];
+        Generator.UpdateParameters(generatorParams);
+
+        // Update Discriminator parameters
+        var discriminatorParams = new Vector<T>(discriminatorCount);
+        for (int i = 0; i < discriminatorCount; i++)
+            discriminatorParams[i] = parameters[generatorCount + i];
+        Discriminator.UpdateParameters(discriminatorParams);
     }
 }

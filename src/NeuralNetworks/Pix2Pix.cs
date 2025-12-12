@@ -40,7 +40,6 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     private T _beta2Power;
     private double _currentLearningRate;
     private double _initialLearningRate;
-    private double _learningRateDecay;
 
     /// <summary>
     /// The coefficient for the L1 reconstruction loss.
@@ -106,17 +105,16 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         double l1Lambda = 100.0)
         : base(new NeuralNetworkArchitecture<T>(
             inputType,
-            NeuralNetworkTaskType.ImageToImage,
-            NetworkComplexity.High,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Deep,
             generatorArchitecture.InputSize,
             generatorArchitecture.OutputSize,
             0, 0, 0,
-            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.ImageToImage))
+            null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
         _l1Lambda = l1Lambda;
         _initialLearningRate = initialLearningRate;
         _currentLearningRate = initialLearningRate;
-        _learningRateDecay = 0.9999;
 
         _beta1Power = NumOps.One;
         _beta2Power = NumOps.One;
@@ -125,7 +123,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
         _momentum = Vector<T>.Empty();
         _secondMoment = Vector<T>.Empty();
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.ImageToImage);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
 
         InitializeLayers();
     }
@@ -204,13 +202,15 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
 
         // Combine adversarial and L1 gradients
         var combinedGradients = new Tensor<T>(l1Gradients.Shape);
-        for (int i = 0; i < l1Gradients.Data.Length; i++)
+        int l1Length = l1Gradients.Shape.Aggregate(1, (a, b) => a * b);
+        int discLength = discInputGradients.Shape.Aggregate(1, (a, b) => a * b);
+        for (int i = 0; i < l1Length; i++)
         {
             // Note: discInputGradients needs to be split/processed appropriately
-            combinedGradients.Data[i] = NumOps.Add(
-                l1Gradients.Data[i],
-                discInputGradients.Data[i % discInputGradients.Data.Length]
-            );
+            combinedGradients.SetFlat(i, NumOps.Add(
+                l1Gradients.GetFlat(i),
+                discInputGradients.GetFlat(i % discLength)
+            ));
         }
 
         Generator.Backpropagate(combinedGradients);
@@ -234,8 +234,10 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     {
         // Simplified: concatenate along channel dimension
         int batchSize = images1.Shape[0];
-        int size1 = images1.Data.Length / batchSize;
-        int size2 = images2.Data.Length / batchSize;
+        int totalSize1 = images1.Shape.Aggregate(1, (a, b) => a * b);
+        int totalSize2 = images2.Shape.Aggregate(1, (a, b) => a * b);
+        int size1 = totalSize1 / batchSize;
+        int size2 = totalSize2 / batchSize;
 
         var result = new Tensor<T>(new int[] { batchSize, size1 + size2 });
 
@@ -243,11 +245,11 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         {
             for (int i = 0; i < size1; i++)
             {
-                result.Data[b * (size1 + size2) + i] = images1.Data[b * size1 + i];
+                result.SetFlat(b * (size1 + size2) + i, images1.GetFlat(b * size1 + i));
             }
             for (int i = 0; i < size2; i++)
             {
-                result.Data[b * (size1 + size2) + size1 + i] = images2.Data[b * size2 + i];
+                result.SetFlat(b * (size1 + size2) + size1 + i, images2.GetFlat(b * size2 + i));
             }
         }
 
@@ -257,11 +259,11 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     private T CalculateL1Loss(Tensor<T> predictions, Tensor<T> targets)
     {
         T totalLoss = NumOps.Zero;
-        int count = predictions.Data.Length;
+        int count = predictions.Shape.Aggregate(1, (a, b) => a * b);
 
         for (int i = 0; i < count; i++)
         {
-            T diff = NumOps.Subtract(predictions.Data[i], targets.Data[i]);
+            T diff = NumOps.Subtract(predictions.GetFlat(i), targets.GetFlat(i));
             T absDiff = NumOps.GreaterThanOrEquals(diff, NumOps.Zero) ? diff : NumOps.Negate(diff);
             totalLoss = NumOps.Add(totalLoss, absDiff);
         }
@@ -272,14 +274,15 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     private Tensor<T> CalculateL1Gradients(Tensor<T> predictions, Tensor<T> targets)
     {
         var gradients = new Tensor<T>(predictions.Shape);
-        T scale = NumOps.FromDouble(_l1Lambda / predictions.Data.Length);
+        int count = predictions.Shape.Aggregate(1, (a, b) => a * b);
+        T scale = NumOps.FromDouble(_l1Lambda / count);
 
-        for (int i = 0; i < predictions.Data.Length; i++)
+        for (int i = 0; i < count; i++)
         {
-            T diff = NumOps.Subtract(predictions.Data[i], targets.Data[i]);
+            T diff = NumOps.Subtract(predictions.GetFlat(i), targets.GetFlat(i));
             // Sign of difference
             T sign = NumOps.GreaterThanOrEquals(diff, NumOps.Zero) ? NumOps.One : NumOps.Negate(NumOps.One);
-            gradients.Data[i] = NumOps.Multiply(scale, sign);
+            gradients.SetFlat(i, NumOps.Multiply(scale, sign));
         }
 
         return gradients;
@@ -454,5 +457,27 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
             _lossFunction,
             _initialLearningRate,
             _l1Lambda);
+    }
+
+    /// <summary>
+    /// Updates the parameters of all networks in the Pix2Pix GAN.
+    /// </summary>
+    /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int generatorCount = Generator.GetParameterCount();
+        int discriminatorCount = Discriminator.GetParameterCount();
+
+        // Update Generator parameters
+        var generatorParams = new Vector<T>(generatorCount);
+        for (int i = 0; i < generatorCount; i++)
+            generatorParams[i] = parameters[i];
+        Generator.UpdateParameters(generatorParams);
+
+        // Update Discriminator parameters
+        var discriminatorParams = new Vector<T>(discriminatorCount);
+        for (int i = 0; i < discriminatorCount; i++)
+            discriminatorParams[i] = parameters[generatorCount + i];
+        Discriminator.UpdateParameters(discriminatorParams);
     }
 }
