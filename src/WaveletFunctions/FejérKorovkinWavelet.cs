@@ -22,30 +22,8 @@ namespace AiDotNet.WaveletFunctions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
+public class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
 {
-    /// <summary>
-    /// Provides mathematical operations for the generic type T.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field holds an implementation of numeric operations that can work with the generic type T.
-    /// It provides methods for basic arithmetic operations, comparisons, and conversions that are used
-    /// throughout the wavelet calculations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a helper that lets us do math with different number types.
-    /// 
-    /// Because this class can work with different types of numbers (like float, double, or decimal),
-    /// we need a special helper that knows how to:
-    /// - Add, subtract, multiply, and divide these numbers
-    /// - Compare them (greater than, less than, etc.)
-    /// - Convert between different number formats
-    /// 
-    /// This allows the wavelet code to work with whatever number type you choose,
-    /// without having to write separate code for each number type.
-    /// </para>
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// The order of the Fejér-Korovkin wavelet.
@@ -158,7 +136,6 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// </remarks>
     public FejérKorovkinWavelet(int order = 4)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _order = order;
         _coefficients = GetFejérKorovkinCoefficients(_order);
         _scalingCoefficients = new Vector<T>(_order);
@@ -188,13 +165,13 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// This is like asking: "How much does my data at this point look like this specific pattern?"
     /// </para>
     /// </remarks>
-    public T Calculate(T x)
+    public override T Calculate(T x)
     {
-        T result = _numOps.Zero;
+        T result = NumOps.Zero;
         for (int k = 0; k < _coefficients.Length; k++)
         {
-            T shiftedX = _numOps.Subtract(x, _numOps.FromDouble(k));
-            result = _numOps.Add(result, _numOps.Multiply(_coefficients[k], ScalingFunction(shiftedX)));
+            T shiftedX = NumOps.Subtract(x, NumOps.FromDouble(k));
+            result = NumOps.Add(result, NumOps.Multiply(_coefficients[k], ScalingFunction(shiftedX)));
         }
 
         return result;
@@ -227,7 +204,7 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// The input must have at least as many elements as the wavelet order.
     /// </para>
     /// </remarks>
-    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         if (input.Length < _order)
         {
@@ -240,14 +217,14 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
 
         for (int i = 0; i < outputLength; i++)
         {
-            T approx = _numOps.Zero;
-            T det = _numOps.Zero;
+            T approx = NumOps.Zero;
+            T det = NumOps.Zero;
 
             for (int j = 0; j < _order; j++)
             {
                 int index = (2 * i + j) % input.Length;
-                approx = _numOps.Add(approx, _numOps.Multiply(_scalingCoefficients[j], input[index]));
-                det = _numOps.Add(det, _numOps.Multiply(_waveletCoefficients[j], input[index]));
+                approx = NumOps.Add(approx, NumOps.Multiply(_scalingCoefficients[j], input[index]));
+                det = NumOps.Add(det, NumOps.Multiply(_waveletCoefficients[j], input[index]));
             }
 
             approximation[i] = approx;
@@ -277,7 +254,7 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// or understand the mathematical details of how this wavelet works.
     /// </para>
     /// </remarks>
-    public Vector<T> GetScalingCoefficients()
+    public override Vector<T> GetScalingCoefficients()
     {
         return _scalingCoefficients;
     }
@@ -302,7 +279,7 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// or high-frequency components in your data.
     /// </para>
     /// </remarks>
-    public Vector<T> GetWaveletCoefficients()
+    public override Vector<T> GetWaveletCoefficients()
     {
         return _waveletCoefficients;
     }
@@ -330,12 +307,12 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// </remarks>
     private T ScalingFunction(T x)
     {
-        if (_numOps.GreaterThanOrEquals(x, _numOps.Zero) && _numOps.LessThan(x, _numOps.One))
+        if (NumOps.GreaterThanOrEquals(x, NumOps.Zero) && NumOps.LessThan(x, NumOps.One))
         {
-            return _numOps.One;
+            return NumOps.One;
         }
 
-        return _numOps.Zero;
+        return NumOps.Zero;
     }
 
     /// <summary>
@@ -387,7 +364,7 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
         coefficients = [.. coefficients.Select(c => c / sum)];
 
         // Convert to type T and return as Vector<T>
-        return new Vector<T>([.. coefficients.Select(c => _numOps.FromDouble(c))]);
+        return new Vector<T>([.. coefficients.Select(c => NumOps.FromDouble(c))]);
     }
 
     /// <summary>
@@ -425,8 +402,8 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
             double scalingCoeff = Math.Sqrt(2.0 / _order) * Math.Cos(t);
             double waveletCoeff = Math.Sqrt(2.0 / _order) * Math.Sin(t);
 
-            _scalingCoefficients[k] = _numOps.FromDouble(scalingCoeff);
-            _waveletCoefficients[k] = _numOps.FromDouble(waveletCoeff);
+            _scalingCoefficients[k] = NumOps.FromDouble(scalingCoeff);
+            _waveletCoefficients[k] = NumOps.FromDouble(waveletCoeff);
         }
 
         NormalizeCoefficients(_scalingCoefficients);
@@ -457,17 +434,17 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// </remarks>
     private void NormalizeCoefficients(Vector<T> coefficients)
     {
-        T sum = _numOps.Zero;
+        T sum = NumOps.Zero;
         for (int i = 0; i < coefficients.Length; i++)
         {
-            sum = _numOps.Add(sum, _numOps.Square(coefficients[i]));
+            sum = NumOps.Add(sum, NumOps.Square(coefficients[i]));
         }
 
-        T normalizationFactor = _numOps.Sqrt(_numOps.Divide(_numOps.One, sum));
+        T normalizationFactor = NumOps.Sqrt(NumOps.Divide(NumOps.One, sum));
 
         for (int i = 0; i < coefficients.Length; i++)
         {
-            coefficients[i] = _numOps.Multiply(coefficients[i], normalizationFactor);
+            coefficients[i] = NumOps.Multiply(coefficients[i], normalizationFactor);
         }
     }
 }

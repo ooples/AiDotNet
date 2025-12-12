@@ -1,4 +1,5 @@
 using AiDotNet.Configuration;
+using AiDotNet.Deployment.Configuration;
 using AiDotNet.Models.Results;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
@@ -726,6 +727,50 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="config">The quantization configuration (optional, uses no quantization if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureQuantization(QuantizationConfig? config = null);
+
+    /// <summary>
+    /// Configures model compression for reducing model size during serialization.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Compression makes your model smaller for storage and faster to load.
+    /// When you save (serialize) your model, compression automatically reduces its size.
+    /// When you load (deserialize) it, decompression happens transparently.
+    ///
+    /// Benefits:
+    /// - 50-90% smaller model files
+    /// - Faster model loading and deployment
+    /// - Lower storage and bandwidth costs
+    /// - Enables deployment on resource-constrained devices
+    ///
+    /// Compression is applied during serialization (saving) and reversed during deserialization (loading).
+    /// You never need to handle compression manually - it happens behind the scenes.
+    ///
+    /// Example:
+    /// <code>
+    /// // Use automatic compression (recommended for most cases)
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureCompression()  // Uses industry-standard defaults
+    ///     .BuildAsync(x, y);
+    ///
+    /// // Model is now configured to compress on save
+    /// builder.SaveModel(result, "model.bin");  // Compressed automatically
+    /// var loaded = builder.LoadModel("model.bin");  // Decompressed automatically
+    ///
+    /// // Or customize compression settings
+    /// var result = await builder
+    ///     .ConfigureCompression(new CompressionConfig
+    ///     {
+    ///         Mode = ModelCompressionMode.Full,
+    ///         Type = CompressionType.HybridHuffmanClustering,
+    ///         NumClusters = 256
+    ///     })
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </remarks>
+    /// <param name="config">The compression configuration (optional, uses automatic mode if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureCompression(CompressionConfig? config = null);
 
     /// <summary>
     /// Configures model caching to avoid reloading models from disk repeatedly.

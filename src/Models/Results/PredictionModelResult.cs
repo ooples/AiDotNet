@@ -21,6 +21,7 @@ using AiDotNet.Enums;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Configuration;
 using AiDotNet.Tokenization.Models;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Models.Results;
 
@@ -1349,16 +1350,28 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     {
         try
         {
-            // Create JSON settings with custom converters for our types
+            // Create JSON settings with custom converters and safe type binding
+            // Use TypeNameHandling.Auto instead of All to minimize type info exposure
+            // Auto only emits type info when actual type differs from declared type
             var settings = new JsonSerializerSettings
             {
-                TypeNameHandling = TypeNameHandling.All,
+                TypeNameHandling = TypeNameHandling.Auto,
+                SerializationBinder = new SafeSerializationBinder(),
                 Formatting = Formatting.Indented
             };
 
-            // Serialize the object
+            // Serialize the object to JSON bytes
             var jsonString = JsonConvert.SerializeObject(this, settings);
-            return Encoding.UTF8.GetBytes(jsonString);
+            var jsonBytes = Encoding.UTF8.GetBytes(jsonString);
+
+            // Apply compression if configured
+            var compressionConfig = DeploymentConfiguration?.Compression;
+            if (compressionConfig != null && compressionConfig.Mode != ModelCompressionMode.None)
+            {
+                return CompressionHelper.Compress(jsonBytes, compressionConfig);
+            }
+
+            return jsonBytes;
         }
         catch (Exception ex)
         {
@@ -1399,12 +1412,16 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     {
         try
         {
-            var jsonString = Encoding.UTF8.GetString(data);
+            // Decompress if needed (CompressionHelper automatically detects compressed data)
+            var decompressedData = CompressionHelper.DecompressIfNeeded(data);
+            var jsonString = Encoding.UTF8.GetString(decompressedData);
 
-            // Create JSON settings with custom converters for our types
+            // Create JSON settings with custom converters and safe type binding
+            // Use TypeNameHandling.Auto to match serialization and minimize type info exposure
             var settings = new JsonSerializerSettings
             {
-                TypeNameHandling = TypeNameHandling.All
+                TypeNameHandling = TypeNameHandling.Auto,
+                SerializationBinder = new SafeSerializationBinder()
             };
 
             // Deserialize the object
@@ -1584,10 +1601,14 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
     private static ModelMetadata<T> ExtractMetadataFromSerializedData(byte[] data)
     {
-        var jsonString = Encoding.UTF8.GetString(data);
+        // Decompress if needed (CompressionHelper automatically detects compressed data)
+        var decompressedData = CompressionHelper.DecompressIfNeeded(data);
+        var jsonString = Encoding.UTF8.GetString(decompressedData);
+        // Use TypeNameHandling.Auto to match serialization and minimize type info exposure
         var settings = new JsonSerializerSettings
         {
-            TypeNameHandling = TypeNameHandling.All
+            TypeNameHandling = TypeNameHandling.Auto,
+            SerializationBinder = new SafeSerializationBinder()
         };
         var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
         return deserializedObject?.ModelMetaData ?? new();

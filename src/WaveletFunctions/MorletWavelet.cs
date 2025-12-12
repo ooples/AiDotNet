@@ -24,31 +24,8 @@ namespace AiDotNet.WaveletFunctions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class MorletWavelet<T> : IWaveletFunction<T>
+public class MorletWavelet<T> : WaveletFunctionBase<T>
 {
-    /// <summary>
-    /// Provides mathematical operations for the generic type T.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field holds an implementation of numeric operations that can work with the generic type T.
-    /// It provides methods for basic arithmetic operations, trigonometric functions, exponentials,
-    /// comparisons, and conversions that are used throughout the wavelet calculations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a helper that lets us do math with different number types.
-    /// 
-    /// Because this class can work with different types of numbers (like float, double, or decimal),
-    /// we need a special helper that knows how to:
-    /// - Perform addition, subtraction, multiplication, and division
-    /// - Calculate exponential functions, trigonometric functions, and squares
-    /// - Convert between different number formats
-    /// 
-    /// This allows the wavelet code to work with whatever number type you choose,
-    /// without having to write separate code for each number type.
-    /// </para>
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
-
     /// <summary>
     /// The central frequency parameter of the Morlet wavelet.
     /// </summary>
@@ -117,8 +94,7 @@ public class MorletWavelet<T> : IWaveletFunction<T>
     /// </remarks>
     public MorletWavelet(double omega = 5)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        _omega = _numOps.FromDouble(omega);
+        _omega = NumOps.FromDouble(omega);
         _fft = new FastFourierTransform<T>();
     }
 
@@ -145,12 +121,12 @@ public class MorletWavelet<T> : IWaveletFunction<T>
     /// the omega parameter you set when creating the wavelet.
     /// </para>
     /// </remarks>
-    public T Calculate(T x)
+    public override T Calculate(T x)
     {
-        T x2 = _numOps.Square(x);
-        T cosine = MathHelper.Cos(_numOps.Multiply(_omega, x));
-        T gaussian = _numOps.Exp(_numOps.Divide(_numOps.Negate(x2), _numOps.FromDouble(2)));
-        return _numOps.Multiply(cosine, gaussian);
+        T x2 = NumOps.Square(x);
+        T cosine = MathHelper.Cos(NumOps.Multiply(_omega, x));
+        T gaussian = NumOps.Exp(NumOps.Divide(NumOps.Negate(x2), NumOps.FromDouble(2)));
+        return NumOps.Multiply(cosine, gaussian);
     }
 
     /// <summary>
@@ -177,7 +153,7 @@ public class MorletWavelet<T> : IWaveletFunction<T>
     /// while the detail coefficients represent the rapid changes (like treble notes).
     /// </para>
     /// </remarks>
-    public (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
+    public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int size = input.Length;
         var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
@@ -188,17 +164,17 @@ public class MorletWavelet<T> : IWaveletFunction<T>
         var waveletSpectrum = new Vector<Complex<T>>(size);
         for (int i = 0; i < size; i++)
         {
-            T freq = _numOps.Divide(_numOps.FromDouble(i - size / 2), _numOps.FromDouble(size));
+            T freq = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size));
             Complex<T> psi = MorletFourierTransform(freq);
-            
+
             // Low-pass (scaling) filter
-            if (_numOps.LessThanOrEquals(_numOps.Abs(freq), _numOps.FromDouble(0.5)))
+            if (NumOps.LessThanOrEquals(NumOps.Abs(freq), NumOps.FromDouble(0.5)))
             {
                 scalingSpectrum[i] = complexOps.Multiply(spectrum[i], psi);
             }
             // High-pass (wavelet) filter
-            waveletSpectrum[i] = complexOps.Multiply(spectrum[i], 
-                complexOps.Subtract(new Complex<T>(_numOps.One, _numOps.Zero), psi));
+            waveletSpectrum[i] = complexOps.Multiply(spectrum[i],
+                complexOps.Subtract(new Complex<T>(NumOps.One, NumOps.Zero), psi));
         }
         // Perform inverse FFT
         var approximation = _fft.Inverse(scalingSpectrum);
@@ -229,16 +205,16 @@ public class MorletWavelet<T> : IWaveletFunction<T>
     /// the overall trends and slower changes.
     /// </para>
     /// </remarks>
-    public Vector<T> GetScalingCoefficients()
+    public override Vector<T> GetScalingCoefficients()
     {
         int size = 1024; // Use a power of 2 for efficient FFT
         var coeffs = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T freq = _numOps.Divide(_numOps.FromDouble(i - size / 2), _numOps.FromDouble(size));
-            coeffs[i] = _numOps.LessThanOrEquals(_numOps.Abs(freq), _numOps.FromDouble(0.5)) 
-                ? MorletFourierTransform(freq).Magnitude 
-                : _numOps.Zero;
+            T freq = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size));
+            coeffs[i] = NumOps.LessThanOrEquals(NumOps.Abs(freq), NumOps.FromDouble(0.5))
+                ? MorletFourierTransform(freq).Magnitude
+                : NumOps.Zero;
         }
 
         return coeffs;
@@ -267,14 +243,14 @@ public class MorletWavelet<T> : IWaveletFunction<T>
     /// the fine details and rapid changes.
     /// </para>
     /// </remarks>
-    public Vector<T> GetWaveletCoefficients()
+    public override Vector<T> GetWaveletCoefficients()
     {
         int size = 1024; // Use a power of 2 for efficient FFT
         var coeffs = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T freq = _numOps.Divide(_numOps.FromDouble(i - size / 2), _numOps.FromDouble(size));
-            coeffs[i] = _numOps.Subtract(_numOps.One, MorletFourierTransform(freq).Magnitude);
+            T freq = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size));
+            coeffs[i] = NumOps.Subtract(NumOps.One, MorletFourierTransform(freq).Magnitude);
         }
 
         return coeffs;
@@ -305,10 +281,10 @@ public class MorletWavelet<T> : IWaveletFunction<T>
     /// </remarks>
     private Complex<T> MorletFourierTransform(T omega)
     {
-        T term1 = _numOps.Exp(_numOps.Multiply(_numOps.FromDouble(-0.5), _numOps.Multiply(omega, omega)));
-        T term2 = _numOps.Exp(_numOps.Multiply(_numOps.FromDouble(-0.5), _numOps.Multiply(_numOps.Subtract(omega, _omega), _numOps.Subtract(omega, _omega))));
-        T real = _numOps.Subtract(term2, term1);
+        T term1 = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(-0.5), NumOps.Multiply(omega, omega)));
+        T term2 = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(-0.5), NumOps.Multiply(NumOps.Subtract(omega, _omega), NumOps.Subtract(omega, _omega))));
+        T real = NumOps.Subtract(term2, term1);
 
-        return new Complex<T>(real, _numOps.Zero);
+        return new Complex<T>(real, NumOps.Zero);
     }
 }

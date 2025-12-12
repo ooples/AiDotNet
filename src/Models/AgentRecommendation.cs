@@ -308,4 +308,97 @@ public class AgentRecommendation<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public string? ReasoningTrace { get; set; }
+
+    /// <summary>
+    /// Gets or sets the AI agent's recommended compression technique for model deployment.
+    /// </summary>
+    /// <value>The suggested compression type, or null if compression analysis was not enabled.</value>
+    /// <remarks>
+    /// <para>
+    /// This property contains the specific compression technique that the AI agent recommends
+    /// based on the model architecture, deployment constraints, and accuracy requirements.
+    /// The recommendation considers factors like model size, layer types, and target platform.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you which compression method to use to make your model smaller.
+    ///
+    /// Common recommendations include:
+    /// - **SparsePruning**: Remove small weights (good for large, dense models)
+    /// - **WeightClustering**: Group similar weights (good for moderate compression)
+    /// - **DeepCompression**: Combine multiple techniques (best for maximum compression)
+    ///
+    /// The agent chooses based on:
+    /// - Your model's architecture (CNNs vs fully-connected)
+    /// - Your accuracy tolerance (how much accuracy loss is acceptable)
+    /// - Your deployment target (mobile, cloud, edge devices)
+    /// </para>
+    /// </remarks>
+    public Enums.CompressionType? SuggestedCompressionType { get; set; }
+
+    /// <summary>
+    /// Gets or sets the AI agent's detailed explanation for the compression recommendation.
+    /// </summary>
+    /// <value>A detailed text explanation of the compression selection rationale, or null if not available.</value>
+    /// <remarks>
+    /// <para>
+    /// This property explains why the agent recommended a specific compression technique,
+    /// including analysis of the model structure and expected compression-accuracy tradeoffs.
+    /// </para>
+    /// <para><b>For Beginners:</b> This explains why a particular compression technique was chosen.
+    ///
+    /// For example:
+    /// "Deep Compression (pruning + quantization + Huffman) is recommended because:
+    /// 1. Your model has many fully-connected layers with high redundancy
+    /// 2. 92% of weights have magnitude less than 0.1 (good pruning candidates)
+    /// 3. Expected compression: 35-50x with less than 1% accuracy loss
+    /// 4. Target platform (mobile) requires small model size
+    ///
+    /// Alternative considered: Weight Clustering alone would give 8x compression,
+    /// but Deep Compression's multi-stage approach will achieve better results
+    /// for your deployment constraints."
+    /// </para>
+    /// </remarks>
+    public string? CompressionReasoning { get; set; }
+
+    /// <summary>
+    /// Gets or sets the recommended hyperparameters for the compression technique.
+    /// </summary>
+    /// <value>A dictionary mapping parameter names to recommended values, or null if not available.</value>
+    /// <remarks>
+    /// <para>
+    /// This property contains the specific hyperparameter values recommended for the suggested
+    /// compression technique. These are tuned based on the model characteristics and constraints.
+    /// </para>
+    /// <para><b>For Beginners:</b> These are the settings to use with the recommended compression technique.
+    ///
+    /// For example, for Deep Compression:
+    /// - "pruningSparsity": 0.9 (remove 90% of smallest weights)
+    /// - "numClusters": 32 (use 5-bit quantization)
+    /// - "huffmanPrecision": 4 (4 decimal places for encoding)
+    ///
+    /// These values were chosen based on your model's characteristics to balance
+    /// compression and accuracy.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, object>? SuggestedCompressionParameters { get; set; }
+
+    /// <summary>
+    /// Gets or sets the expected compression metrics after applying the recommended technique.
+    /// </summary>
+    /// <value>Predicted compression metrics, or null if not available.</value>
+    /// <remarks>
+    /// <para>
+    /// This property contains the agent's prediction of what compression metrics you can expect
+    /// if you apply the recommended compression technique. These are estimates based on model analysis.
+    /// </para>
+    /// <para><b>For Beginners:</b> This shows what to expect from compression before you apply it.
+    ///
+    /// Typical information includes:
+    /// - Expected compression ratio (e.g., "20-30x smaller")
+    /// - Expected accuracy loss (e.g., "less than 1%")
+    /// - Expected inference speedup (e.g., "2-3x faster")
+    ///
+    /// These are estimates - actual results depend on your specific model and data.
+    /// </para>
+    /// </remarks>
+    public string? ExpectedCompressionMetrics { get; set; }
 }

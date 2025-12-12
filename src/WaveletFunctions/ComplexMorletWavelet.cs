@@ -37,18 +37,13 @@ namespace AiDotNet.WaveletFunctions;
 /// and control how precise it is in time versus frequency.
 /// </para>
 /// </remarks>
-public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
+public class ComplexMorletWavelet<T> : ComplexWaveletFunctionBase<T>
 {
-    /// <summary>
-    /// Provides numeric operations for the specific type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-    
     /// <summary>
     /// The central frequency of the wavelet.
     /// </summary>
     private readonly T _omega;
-    
+
     /// <summary>
     /// The bandwidth parameter controlling the width of the Gaussian window.
     /// </summary>
@@ -88,9 +83,8 @@ public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
     /// </remarks>
     public ComplexMorletWavelet(double omega = 5.0, double sigma = 1.0)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        _omega = _numOps.FromDouble(omega);
-        _sigma = _numOps.FromDouble(sigma);
+        _omega = NumOps.FromDouble(omega);
+        _sigma = NumOps.FromDouble(sigma);
     }
 
     /// <summary>
@@ -122,17 +116,17 @@ public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
     /// to a signal at specific points.
     /// </para>
     /// </remarks>
-    public Complex<T> Calculate(Complex<T> z)
+    public override Complex<T> Calculate(Complex<T> z)
     {
         T x = z.Real;
         T y = z.Imaginary;
 
-        T expTerm = _numOps.Exp(_numOps.Negate(_numOps.Divide(_numOps.Add(_numOps.Multiply(x, x), _numOps.Multiply(y, y)), _numOps.Multiply(_numOps.FromDouble(2.0), _numOps.Multiply(_sigma, _sigma)))));
-        T cosTerm = MathHelper.Cos(_numOps.Multiply(_omega, x));
-        T sinTerm = MathHelper.Sin(_numOps.Multiply(_omega, x));
+        T expTerm = NumOps.Exp(NumOps.Negate(NumOps.Divide(NumOps.Add(NumOps.Multiply(x, x), NumOps.Multiply(y, y)), NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(_sigma, _sigma)))));
+        T cosTerm = MathHelper.Cos(NumOps.Multiply(_omega, x));
+        T sinTerm = MathHelper.Sin(NumOps.Multiply(_omega, x));
 
-        T real = _numOps.Multiply(expTerm, cosTerm);
-        T imag = _numOps.Multiply(expTerm, sinTerm);
+        T real = NumOps.Multiply(expTerm, cosTerm);
+        T imag = NumOps.Multiply(expTerm, sinTerm);
 
         return new Complex<T>(real, imag);
     }
@@ -167,7 +161,7 @@ public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
     /// which makes wavelet decomposition efficient for compression and multi-resolution analysis.
     /// </para>
     /// </remarks>
-    public (Vector<Complex<T>> approximation, Vector<Complex<T>> detail) Decompose(Vector<Complex<T>> input)
+    public override (Vector<Complex<T>> approximation, Vector<Complex<T>> detail) Decompose(Vector<Complex<T>> input)
     {
         var waveletCoeffs = GetWaveletCoefficients();
         var scalingCoeffs = GetScalingCoefficients();
@@ -210,26 +204,26 @@ public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
     /// to a finite length for practical implementation.
     /// </para>
     /// </remarks>
-    public Vector<Complex<T>> GetScalingCoefficients()
+    public override Vector<Complex<T>> GetScalingCoefficients()
     {
         int length = 64; // Adjust as needed
         var coeffs = new Complex<T>[length];
-        T sum = _numOps.Zero;
+        T sum = NumOps.Zero;
 
         for (int i = 0; i < length; i++)
         {
-            T x = _numOps.Divide(_numOps.FromDouble(i - length / 2), _numOps.FromDouble(length / 4));
-            T value = _numOps.Equals(x, _numOps.Zero)
-                ? _numOps.One
-                : _numOps.Divide(MathHelper.Sin(_numOps.Divide(MathHelper.Pi<T>(), x)), _numOps.Multiply(MathHelper.Pi<T>(), x));
-            coeffs[i] = new Complex<T>(value, _numOps.Zero);
-            sum = _numOps.Add(sum, _numOps.Abs(value));
+            T x = NumOps.Divide(NumOps.FromDouble(i - length / 2), NumOps.FromDouble(length / 4));
+            T value = NumOps.Equals(x, NumOps.Zero)
+                ? NumOps.One
+                : NumOps.Divide(MathHelper.Sin(NumOps.Divide(MathHelper.Pi<T>(), x)), NumOps.Multiply(MathHelper.Pi<T>(), x));
+            coeffs[i] = new Complex<T>(value, NumOps.Zero);
+            sum = NumOps.Add(sum, NumOps.Abs(value));
         }
 
         // Normalize
         for (int i = 0; i < length; i++)
         {
-            coeffs[i] = new Complex<T>(_numOps.Divide(coeffs[i].Real, sum), _numOps.Zero);
+            coeffs[i] = new Complex<T>(NumOps.Divide(coeffs[i].Real, sum), NumOps.Zero);
         }
 
         return new Vector<Complex<T>>(coeffs);
@@ -264,130 +258,35 @@ public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
     /// vibration analysis, and EEG analysis.
     /// </para>
     /// </remarks>
-    public Vector<Complex<T>> GetWaveletCoefficients()
+    public override Vector<Complex<T>> GetWaveletCoefficients()
     {
         int length = 256; // Adjust based on desired precision
         var coeffs = new Complex<T>[length];
-        T sum = _numOps.Zero;
+        T sum = NumOps.Zero;
 
         for (int i = 0; i < length; i++)
         {
-            T t = _numOps.Divide(_numOps.FromDouble(i - length / 2), _numOps.FromDouble(length / 4));
-            T realPart = MathHelper.Cos(_numOps.Multiply(_omega, t));
-            T imagPart = MathHelper.Sin(_numOps.Multiply(_omega, t));
-            T envelope = _numOps.Exp(_numOps.Divide(_numOps.Negate(_numOps.Multiply(t, t)), _numOps.Multiply(_numOps.FromDouble(2), _numOps.Multiply(_sigma, _sigma))));
+            T t = NumOps.Divide(NumOps.FromDouble(i - length / 2), NumOps.FromDouble(length / 4));
+            T realPart = MathHelper.Cos(NumOps.Multiply(_omega, t));
+            T imagPart = MathHelper.Sin(NumOps.Multiply(_omega, t));
+            T envelope = NumOps.Exp(NumOps.Divide(NumOps.Negate(NumOps.Multiply(t, t)), NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(_sigma, _sigma))));
 
             coeffs[i] = new Complex<T>(
-                _numOps.Multiply(envelope, realPart),
-                _numOps.Multiply(envelope, imagPart)
+                NumOps.Multiply(envelope, realPart),
+                NumOps.Multiply(envelope, imagPart)
             );
-            sum = _numOps.Add(sum, _numOps.Abs(coeffs[i].Real));
+            sum = NumOps.Add(sum, NumOps.Abs(coeffs[i].Real));
         }
 
         // Normalize
         for (int i = 0; i < length; i++)
         {
             coeffs[i] = new Complex<T>(
-                _numOps.Divide(coeffs[i].Real, sum),
-                _numOps.Divide(coeffs[i].Imaginary, sum)
+                NumOps.Divide(coeffs[i].Real, sum),
+                NumOps.Divide(coeffs[i].Imaginary, sum)
             );
         }
 
         return new Vector<Complex<T>>(coeffs);
-    }
-
-    /// <summary>
-    /// Performs convolution of a complex input signal with a complex filter.
-    /// </summary>
-    /// <param name="input">The complex input signal vector.</param>
-    /// <param name="kernel">The complex filter vector.</param>
-    /// <returns>The convolved complex signal vector.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// Convolution is a mathematical operation that combines two functions to produce a third function.
-    /// In signal processing, it's like sliding a filter over a signal and calculating a weighted sum
-    /// at each position.
-    /// 
-    /// For complex signals, convolution works similarly but involves complex multiplication:
-    /// 
-    /// (a + bi) * (c + di) = (ac - bd) + (ad + bc)i
-    /// 
-    /// The process works like this:
-    /// 1. For each position in the output:
-    ///    a. Center the filter at that position
-    ///    b. Multiply each filter coefficient by the corresponding signal value (using complex multiplication)
-    ///    c. Sum these products to get the output value at that position
-    /// 
-    /// This implementation produces a result with length equal to input.length + kernel.length - 1,
-    /// which is the full convolution without truncation. This ensures that no information is lost
-    /// at the boundaries.
-    /// 
-    /// Complex convolution is essential for processing signals that contain phase information,
-    /// such as in communications, radar, audio processing, and many other fields.
-    /// </para>
-    /// </remarks>
-    private Vector<Complex<T>> Convolve(Vector<Complex<T>> input, Vector<Complex<T>> kernel)
-    {
-        int resultLength = input.Length + kernel.Length - 1;
-        var result = new Complex<T>[resultLength];
-
-        for (int i = 0; i < resultLength; i++)
-        {
-            Complex<T> sum = new(_numOps.Zero, _numOps.Zero);
-            for (int j = 0; j < kernel.Length; j++)
-            {
-                if (i - j >= 0 && i - j < input.Length)
-                {
-                    sum += input[i - j] * kernel[j];
-                }
-            }
-
-            result[i] = sum;
-        }
-
-        return new Vector<Complex<T>>(result);
-    }
-
-    /// <summary>
-    /// Downsamples a complex signal by keeping only every nth sample.
-    /// </summary>
-    /// <param name="input">The complex input signal vector.</param>
-    /// <param name="factor">The downsampling factor.</param>
-    /// <returns>The downsampled complex signal vector.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// Downsampling reduces the sampling rate of a signal by keeping only a subset of the samples.
-    /// 
-    /// For example, with a factor of 2:
-    /// - Original signal: [10+2i, 20+3i, 30+4i, 40+5i, 50+6i, 60+7i]
-    /// - Downsampled signal: [10+2i, 30+4i, 50+6i]
-    /// 
-    /// This method keeps every nth sample (where n is the factor) and discards the rest.
-    /// In wavelet decomposition, downsampling by 2 is standard after filtering, because:
-    /// 
-    /// 1. The filters have already removed frequency components that would cause aliasing
-    /// 2. It reduces the data size by half at each decomposition level
-    /// 3. It ensures that the total size of approximation and detail coefficients equals the input size
-    /// 
-    /// For complex signals, both the real and imaginary parts are downsampled together,
-    /// preserving the phase relationship between them.
-    /// 
-    /// Downsampling is crucial for the efficiency of wavelet transforms, especially for
-    /// multi-level decomposition and compression applications.
-    /// </para>
-    /// </remarks>
-    private Vector<Complex<T>> Downsample(Vector<Complex<T>> input, int factor)
-    {
-        int newLength = input.Length / factor;
-        var result = new Complex<T>[newLength];
-
-        for (int i = 0; i < newLength; i++)
-        {
-            result[i] = input[i * factor];
-        }
-
-        return new Vector<Complex<T>>(result);
     }
 }
