@@ -10,7 +10,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         public void CalculateDerivedMetrics_ComputesCompressionRatio()
         {
             // Arrange
-            var metrics = new CompressionMetrics
+            var metrics = new CompressionMetrics<double>
             {
                 OriginalSize = 1000,
                 CompressedSize = 100
@@ -27,7 +27,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         public void CalculateDerivedMetrics_ComputesSizeReductionPercentage()
         {
             // Arrange
-            var metrics = new CompressionMetrics
+            var metrics = new CompressionMetrics<double>
             {
                 OriginalSize = 1000,
                 CompressedSize = 250
@@ -44,7 +44,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         public void CalculateDerivedMetrics_ComputesInferenceSpeedup()
         {
             // Arrange
-            var metrics = new CompressionMetrics
+            var metrics = new CompressionMetrics<double>
             {
                 OriginalInferenceTimeMs = 100.0,
                 CompressedInferenceTimeMs = 50.0
@@ -61,7 +61,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         public void CalculateDerivedMetrics_ComputesAccuracyLoss()
         {
             // Arrange
-            var metrics = new CompressionMetrics
+            var metrics = new CompressionMetrics<double>
             {
                 OriginalAccuracy = 0.95,
                 CompressedAccuracy = 0.93
@@ -78,7 +78,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         public void MeetsQualityThreshold_WithAcceptableMetrics_ReturnsTrue()
         {
             // Arrange
-            var metrics = new CompressionMetrics
+            var metrics = new CompressionMetrics<double>
             {
                 OriginalSize = 1000,
                 CompressedSize = 100,
@@ -100,7 +100,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         public void MeetsQualityThreshold_WithExcessiveAccuracyLoss_ReturnsFalse()
         {
             // Arrange
-            var metrics = new CompressionMetrics
+            var metrics = new CompressionMetrics<double>
             {
                 OriginalSize = 1000,
                 CompressedSize = 100,
@@ -122,7 +122,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         public void MeetsQualityThreshold_WithInsufficientCompression_ReturnsFalse()
         {
             // Arrange
-            var metrics = new CompressionMetrics
+            var metrics = new CompressionMetrics<double>
             {
                 OriginalSize = 1000,
                 CompressedSize = 600, // Only 1.67x compression
@@ -144,7 +144,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         public void ToString_ReturnsFormattedSummary()
         {
             // Arrange
-            var metrics = new CompressionMetrics
+            var metrics = new CompressionMetrics<double>
             {
                 CompressionTechnique = "Weight Clustering",
                 OriginalSize = 1000000,
@@ -173,7 +173,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         public void CalculateDerivedMetrics_WithZeroCompressedSize_HandlesGracefully()
         {
             // Arrange
-            var metrics = new CompressionMetrics
+            var metrics = new CompressionMetrics<double>
             {
                 OriginalSize = 1000,
                 CompressedSize = 0
@@ -191,7 +191,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         public void CalculateDerivedMetrics_WithZeroInferenceTime_HandlesGracefully()
         {
             // Arrange
-            var metrics = new CompressionMetrics
+            var metrics = new CompressionMetrics<double>
             {
                 OriginalInferenceTimeMs = 100.0,
                 CompressedInferenceTimeMs = 0.0
@@ -209,7 +209,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         public void CalculateDerivedMetrics_WithAllMetrics_ComputesAllValues()
         {
             // Arrange
-            var metrics = new CompressionMetrics
+            var metrics = new CompressionMetrics<double>
             {
                 OriginalSize = 10000,
                 CompressedSize = 1000,
@@ -233,7 +233,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         public void MeetsQualityThreshold_WithCustomThresholds_UsesProvidedValues()
         {
             // Arrange
-            var metrics = new CompressionMetrics
+            var metrics = new CompressionMetrics<double>
             {
                 OriginalSize = 1000,
                 CompressedSize = 100,
@@ -253,6 +253,126 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Assert
             Assert.False(meetsStrictThreshold);
             Assert.True(meetsRelaxedThreshold);
+        }
+
+        [Fact]
+        public void CalculateCompositeFitness_ReturnsValueInRange()
+        {
+            // Arrange
+            var metrics = new CompressionMetrics<double>
+            {
+                OriginalSize = 10000,
+                CompressedSize = 1000,
+                OriginalInferenceTimeMs = 100.0,
+                CompressedInferenceTimeMs = 50.0,
+                OriginalAccuracy = 0.95,
+                CompressedAccuracy = 0.94
+            };
+            metrics.CalculateDerivedMetrics();
+
+            // Act
+            var fitness = metrics.CalculateCompositeFitness();
+
+            // Assert
+            Assert.True(fitness >= 0.0 && fitness <= 1.0);
+        }
+
+        [Fact]
+        public void IsBetterThan_WithHigherFitness_ReturnsTrue()
+        {
+            // Arrange
+            var better = new CompressionMetrics<double>
+            {
+                OriginalSize = 10000,
+                CompressedSize = 500, // 20x compression
+                OriginalAccuracy = 0.95,
+                CompressedAccuracy = 0.94
+            };
+            better.CalculateDerivedMetrics();
+
+            var worse = new CompressionMetrics<double>
+            {
+                OriginalSize = 10000,
+                CompressedSize = 5000, // Only 2x compression
+                OriginalAccuracy = 0.95,
+                CompressedAccuracy = 0.90 // More accuracy loss
+            };
+            worse.CalculateDerivedMetrics();
+
+            // Act & Assert
+            Assert.True(better.IsBetterThan(worse));
+            Assert.False(worse.IsBetterThan(better));
+        }
+
+        [Fact]
+        public void IsBetterThan_WithNullOther_ReturnsTrue()
+        {
+            // Arrange
+            var metrics = new CompressionMetrics<double>
+            {
+                OriginalSize = 1000,
+                CompressedSize = 100
+            };
+            metrics.CalculateDerivedMetrics();
+
+            // Act & Assert
+            Assert.True(metrics.IsBetterThan(null!));
+        }
+
+        [Fact]
+        public void FromDeepCompressionStats_CreatesMetricsCorrectly()
+        {
+            // Arrange
+            var stats = new DeepCompressionStats
+            {
+                OriginalSizeBytes = 1000000,
+                CompressedSizeBytes = 50000,
+                Sparsity = 0.9,
+                BitsPerWeight = 5.0
+            };
+
+            // Act
+            var metrics = CompressionMetrics<double>.FromDeepCompressionStats(stats, "Test Compression");
+
+            // Assert
+            Assert.Equal(1000000, metrics.OriginalSize);
+            Assert.Equal(50000, metrics.CompressedSize);
+            Assert.Equal(0.9, metrics.Sparsity);
+            Assert.Equal(5.0, metrics.BitsPerWeight);
+            Assert.Equal("Test Compression", metrics.CompressionTechnique);
+        }
+
+        [Fact]
+        public void CompressionMetrics_WithFloatType_WorksCorrectly()
+        {
+            // Arrange
+            var metrics = new CompressionMetrics<float>
+            {
+                OriginalSize = 1000,
+                CompressedSize = 100,
+                OriginalAccuracy = 0.95f,
+                CompressedAccuracy = 0.94f
+            };
+
+            // Act
+            metrics.CalculateDerivedMetrics();
+
+            // Assert
+            Assert.Equal(10.0f, metrics.CompressionRatio);
+            Assert.True(metrics.MeetsQualityThreshold(2.0, 2.0));
+        }
+
+        [Fact]
+        public void NewProperties_HaveDefaultValues()
+        {
+            // Arrange & Act
+            var metrics = new CompressionMetrics<double>();
+
+            // Assert
+            Assert.Equal(0.0, metrics.Sparsity);
+            Assert.Equal(0.0, metrics.BitsPerWeight);
+            Assert.Equal(0.0, metrics.MemoryBandwidthSavings);
+            Assert.Equal(0.0, metrics.ReconstructionError);
         }
     }
 }

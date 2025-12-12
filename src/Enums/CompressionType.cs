@@ -94,5 +94,47 @@ public enum CompressionType
     /// Fiction) and rare categories get longer codes. This layered approach maximizes compression.
     /// </para>
     /// </remarks>
-    HybridHuffmanClustering
+    HybridHuffmanClustering,
+
+    /// <summary>
+    /// Sparse pruning removes small-magnitude weights, setting them to zero.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Sparse pruning is like weeding a garden - you remove the smallest,
+    /// least important weights (weeds) to make room for the important ones (flowers). Research shows
+    /// that 90%+ of neural network weights can often be removed with minimal accuracy loss.
+    /// The remaining weights are stored in a sparse format that only records non-zero values.
+    /// </para>
+    /// </remarks>
+    SparsePruning,
+
+    /// <summary>
+    /// Low-rank matrix factorization approximates weight matrices with lower-rank representations.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Low-rank factorization is like summarizing a complex document.
+    /// A large weight matrix is replaced with two smaller matrices that, when multiplied together,
+    /// approximate the original. This reduces both storage and computation. It works especially
+    /// well for layers with redundant patterns in their weights.
+    /// </para>
+    /// </remarks>
+    LowRankFactorization,
+
+    /// <summary>
+    /// Deep Compression combines pruning, quantization, and Huffman coding (Han et al. 2015).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Deep Compression is the "full treatment" that combines multiple techniques:
+    /// 1. Prune: Remove unimportant weights (typically 90%+ of weights)
+    /// 2. Quantize: Group remaining weights into clusters (8-256 clusters)
+    /// 3. Encode: Use Huffman coding for efficient storage
+    ///
+    /// This three-stage pipeline from the famous Han et al. 2015 paper achieves 35-50x compression
+    /// on large neural networks with minimal accuracy loss.
+    /// </para>
+    /// </remarks>
+    DeepCompression
 }
