@@ -22,10 +22,10 @@ namespace AiDotNet.Kernels;
 /// </para>
 /// <para>
 /// The formula for the Polynomial kernel is:
-/// k(x, y) = (x·y + c)^d
+/// k(x, y) = (xÂ·y + c)^d
 /// where:
 /// - x and y are the two data points being compared
-/// - x·y is the dot product (a measure of how aligned the vectors are)
+/// - xÂ·y is the dot product (a measure of how aligned the vectors are)
 /// - c is a constant term (coef0) that influences the kernel's behavior
 /// - d is the degree of the polynomial
 /// </para>

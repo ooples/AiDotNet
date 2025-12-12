@@ -1,13 +1,13 @@
 namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
-/// Implements a Gaussian Radial Basis Function (RBF) of the form exp(-e*r²).
+/// Implements a Gaussian Radial Basis Function (RBF) of the form exp(-e*rÂ²).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides an implementation of a Radial Basis Function (RBF) that uses a Gaussian form
-/// of f(r) = exp(-e*r²), where r is the radial distance and e (epsilon) is a width parameter
+/// of f(r) = exp(-e*rÂ²), where r is the radial distance and e (epsilon) is a width parameter
 /// controlling how quickly the function decreases with distance. The Gaussian RBF is one of the most
 /// widely used RBFs due to its smooth behavior and mathematical properties. It is infinitely differentiable
 /// and has exponential decay, making it suitable for a wide range of applications in machine learning,
@@ -70,18 +70,18 @@ public class GaussianRBF<T> : IRadialBasisFunction<T>
     /// Computes the value of the Gaussian Radial Basis Function for a given radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
-    /// <returns>The computed function value exp(-e*r²).</returns>
+    /// <returns>The computed function value exp(-e*rÂ²).</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the value of the Gaussian RBF for a given radius r. The formula used is
-    /// exp(-e*r²), which decreases exponentially with the square of the distance. The function equals 1
+    /// exp(-e*rÂ²), which decreases exponentially with the square of the distance. The function equals 1
     /// at r = 0 and approaches 0 as r approaches infinity.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes the "height" or "value" of the Gaussian function
     /// at a specific distance (r) from the center.
     /// 
     /// The calculation involves:
-    /// 1. Squaring the distance (r² = r * r)
+    /// 1. Squaring the distance (rÂ² = r * r)
     /// 2. Multiplying the squared distance by the epsilon parameter
     /// 3. Negating this product to make it negative
     /// 4. Computing the exponential function (e raised to this power)
@@ -105,7 +105,7 @@ public class GaussianRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Gaussian RBF with respect to the radius r.
-    /// The formula for the derivative is -2er * exp(-e*r²), which is always negative for positive r and e,
+    /// The formula for the derivative is -2er * exp(-e*rÂ²), which is always negative for positive r and e,
     /// indicating that the function always decreases with distance.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes how fast the function's value changes
@@ -124,7 +124,7 @@ public class GaussianRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeDerivative(T r)
     {
-        // Derivative with respect to r: -2er * exp(-e*r²)
+        // Derivative with respect to r: -2er * exp(-e*rÂ²)
         
         // Calculate -2er
         T minusTwoEpsilonR = _numOps.Multiply(
@@ -132,7 +132,7 @@ public class GaussianRBF<T> : IRadialBasisFunction<T>
             r
         );
         
-        // Multiply by exp(-e*r²)
+        // Multiply by exp(-e*rÂ²)
         return _numOps.Multiply(minusTwoEpsilonR, Compute(r));
     }
     
@@ -144,7 +144,7 @@ public class GaussianRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Gaussian RBF with respect to the width parameter epsilon.
-    /// The formula for this derivative is -r² * exp(-e*r²). The sign of this derivative depends on r: it is
+    /// The formula for this derivative is -rÂ² * exp(-e*rÂ²). The sign of this derivative depends on r: it is
     /// negative for non-zero r, indicating that increasing epsilon decreases the function value at any non-zero radius.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the function's value would change
@@ -163,13 +163,13 @@ public class GaussianRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeWidthDerivative(T r)
     {
-        // Derivative with respect to e: -r² * exp(-e*r²)
+        // Derivative with respect to e: -rÂ² * exp(-e*rÂ²)
         
-        // Calculate -r²
+        // Calculate -rÂ²
         T rSquared = _numOps.Multiply(r, r);
         T negativeRSquared = _numOps.Negate(rSquared);
         
-        // Multiply by exp(-e*r²)
+        // Multiply by exp(-e*rÂ²)
         return _numOps.Multiply(negativeRSquared, Compute(r));
     }
 }

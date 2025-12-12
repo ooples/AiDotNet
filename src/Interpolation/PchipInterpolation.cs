@@ -230,7 +230,7 @@ public class PchipInterpolation<T> : IInterpolation<T>
     /// Imagine your data points as dots connected by line segments:
     /// 
     ///     Point 0      Point 1      Point 2      Point 3
-    ///        •-----------•-----------•-----------•
+    ///        â€¢-----------â€¢-----------â€¢-----------â€¢
     ///        |    0     |     1     |     2     |
     ///     Segments between points, labeled by index
     /// </para>

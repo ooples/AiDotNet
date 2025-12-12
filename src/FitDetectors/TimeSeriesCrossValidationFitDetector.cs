@@ -97,7 +97,7 @@ public class TimeSeriesCrossValidationFitDetector<T, TInput, TOutput> : FitDetec
     /// 
     /// The method uses two main metrics:
     /// - RMSE (Root Mean Square Error): Measures prediction errors (lower is better)
-    /// - R² (R-squared): Measures how well your model explains the data (higher is better)
+    /// - RÂ² (R-squared): Measures how well your model explains the data (higher is better)
     /// 
     /// By comparing these metrics across different datasets, it can detect:
     /// - Overfitting: When your model performs much better on training data than new data
@@ -156,7 +156,7 @@ public class TimeSeriesCrossValidationFitDetector<T, TInput, TOutput> : FitDetec
     /// - 0.0 means "not confident at all"
     /// 
     /// The confidence is calculated by looking at how consistent your model's performance is between
-    /// the validation and test datasets. If the performance metrics (RMSE and R²) are very similar
+    /// the validation and test datasets. If the performance metrics (RMSE and RÂ²) are very similar
     /// between these datasets, the confidence will be high. If they're very different, the confidence
     /// will be low.
     /// 
@@ -214,7 +214,7 @@ public class TimeSeriesCrossValidationFitDetector<T, TInput, TOutput> : FitDetec
     /// - RMSE (Root Mean Square Error): Measures how far your predictions are from the actual values.
     ///   Lower values are better. Think of it as the average "distance" between predictions and reality.
     ///   
-    /// - R² (R-squared): Measures how well your model explains the variation in the data.
+    /// - RÂ² (R-squared): Measures how well your model explains the variation in the data.
     ///   Values closer to 1 are better. Think of it as a percentage of how much your model "understands" the data.
     /// </para>
     /// </remarks>

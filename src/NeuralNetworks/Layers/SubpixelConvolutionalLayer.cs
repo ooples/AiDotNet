@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -16,8 +18,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - First, the layer creates many detailed patterns from the input (convolution step)
 /// - Then, it rearranges these patterns to form a larger, higher-resolution output (pixel shuffling step)
 /// 
-/// For example, if you're working with a low-resolution image that's 32×32 pixels, this layer can help
-/// transform it into a higher-resolution image of 64×64 or 128×128 pixels by intelligently filling in 
+/// For example, if you're working with a low-resolution image that's 32Ã—32 pixels, this layer can help
+/// transform it into a higher-resolution image of 64Ã—64 or 128Ã—128 pixels by intelligently filling in 
 /// the details between the original pixels.
 /// 
 /// This is often used in applications like:
@@ -79,9 +81,9 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This determines how much larger the output will be compared to the input.
     /// 
     /// For example:
-    /// - With an upscale factor of 2: A 32×32 image becomes 64×64
-    /// - With an upscale factor of 3: A 32×32 image becomes 96×96
-    /// - With an upscale factor of 4: A 32×32 image becomes 128×128
+    /// - With an upscale factor of 2: A 32Ã—32 image becomes 64Ã—64
+    /// - With an upscale factor of 3: A 32Ã—32 image becomes 96Ã—96
+    /// - With an upscale factor of 4: A 32Ã—32 image becomes 128Ã—128
     /// 
     /// Higher upscale factors create larger outputs but require more channels in the intermediate step,
     /// which makes the layer more computationally intensive.
@@ -95,16 +97,16 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This field stores the size of the square convolutional kernel used in the layer. A common value is 3,
-    /// which creates a 3×3 kernel that examines a 3×3 region of the input for each output value.
+    /// which creates a 3Ã—3 kernel that examines a 3Ã—3 region of the input for each output value.
     /// </para>
     /// <para><b>For Beginners:</b> This determines the area size that the network looks at when analyzing patterns.
     /// 
     /// The kernel is like a small window that slides over the input:
-    /// - A 3×3 kernel looks at each pixel and its 8 neighbors
-    /// - A 5×5 kernel examines a wider area around each pixel
+    /// - A 3Ã—3 kernel looks at each pixel and its 8 neighbors
+    /// - A 5Ã—5 kernel examines a wider area around each pixel
     /// - Larger kernels can detect larger patterns but require more computation
     /// 
-    /// Most commonly, a 3×3 kernel is used as it provides a good balance between detecting
+    /// Most commonly, a 3Ã—3 kernel is used as it provides a good balance between detecting
     /// useful patterns and computational efficiency.
     /// </para>
     /// </remarks>
@@ -141,17 +143,17 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// There is one bias value for each output channel in the convolution step (before pixel shuffling).
     /// </para>
     /// <para><b>For Beginners:</b> These are adjustable values that help the network make better predictions.
-    /// 
+    ///
     /// Biases work like this:
     /// - Each output channel has its own bias value
     /// - The bias is added to every position in that channel
     /// - They help the network adjust the "baseline" of each feature detector
-    /// 
+    ///
     /// Think of them as brightness adjustments that can make certain patterns more or less prominent
     /// across the entire feature map.
     /// </para>
     /// </remarks>
-    private Vector<T> _biases;
+    private Tensor<T> _biases;
 
     /// <summary>
     /// The cached input from the last forward pass.
@@ -221,14 +223,14 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// the backward pass. These gradients indicate how the biases should be adjusted to reduce the loss.
     /// </para>
     /// <para><b>For Beginners:</b> This shows how each bias should change to improve the network's performance.
-    /// 
+    ///
     /// Similar to kernel gradients:
     /// - These indicate how much and in what direction to adjust each bias value
     /// - They help fine-tune the "baseline" level of each feature detector
     /// - The update step uses these to modify the biases during training
     /// </para>
     /// </remarks>
-    private Vector<T>? _biasGradients;
+    private Tensor<T>? _biasGradients;
 
     /// <summary>
     /// The accumulated momentum for kernel updates.
@@ -260,17 +262,17 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// the optimization process during training.
     /// </para>
     /// <para><b>For Beginners:</b> This works the same way as kernel momentum, but for bias values.
-    /// 
+    ///
     /// It helps bias parameters:
     /// - Learn more consistently
     /// - Avoid getting stuck in suboptimal values
     /// - Converge faster to good values
-    /// 
+    ///
     /// Like kernel momentum, it acts as a memory of previous update directions
     /// to smooth out the learning process.
     /// </para>
     /// </remarks>
-    private Vector<T>? _biasMomentum;
+    private Tensor<T>? _biasMomentum;
 
     /// <summary>
     /// The factor controlling how much previous gradients influence current updates.
@@ -381,7 +383,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _weightDecay = NumOps.FromDouble(0.0001);
 
         _kernels = new Tensor<T>([_outputDepth * _upscaleFactor * _upscaleFactor, _inputDepth, _kernelSize, _kernelSize]);
-        _biases = new Vector<T>(_outputDepth * _upscaleFactor * _upscaleFactor);
+        _biases = new Tensor<T>([_outputDepth * _upscaleFactor * _upscaleFactor]);
 
         InitializeWeights();
     }
@@ -426,7 +428,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _weightDecay = NumOps.FromDouble(0.0001);
 
         _kernels = new Tensor<T>([_outputDepth * _upscaleFactor * _upscaleFactor, _inputDepth, _kernelSize, _kernelSize]);
-        _biases = new Vector<T>(_outputDepth * _upscaleFactor * _upscaleFactor);
+        _biases = new Tensor<T>([_outputDepth * _upscaleFactor * _upscaleFactor]);
 
         InitializeWeights();
     }
@@ -460,24 +462,12 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         // Xavier initialization
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputDepth * _kernelSize * _kernelSize + _outputDepth * _upscaleFactor * _upscaleFactor)));
 
-        for (int i = 0; i < _kernels.Shape[0]; i++)
-        {
-            for (int j = 0; j < _kernels.Shape[1]; j++)
-            {
-                for (int k = 0; k < _kernels.Shape[2]; k++)
-                {
-                    for (int l = 0; l < _kernels.Shape[3]; l++)
-                    {
-                        _kernels[i, j, k, l] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-                    }
-                }
-            }
-        }
+        // Vectorized random init in [-0.5, 0.5], scaled by Xavier factor
+        var randVec = Vector<T>.CreateRandom(_kernels.Length, -0.5, 0.5);
+        var randTensor = new Tensor<T>(_kernels.Shape, randVec);
+        _kernels = Engine.TensorMultiplyScalar(randTensor, scale);
 
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            _biases[i] = NumOps.Zero;
-        }
+        _biases.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -511,77 +501,35 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     ///    - The final output has higher resolution but fewer channels
     /// 
     /// For example, with upscaleFactor=2:
-    /// - A 32×32×64 input might become 32×32×256 after convolution
-    /// - Then become 64×64×64 after pixel shuffling (4 times more pixels, 1/4 the channels)
+    /// - A 32Ã—32Ã—64 input might become 32Ã—32Ã—256 after convolution
+    /// - Then become 64Ã—64Ã—64 after pixel shuffling (4 times more pixels, 1/4 the channels)
     /// </para>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        int batchSize = input.Shape[0];
-        int inputHeight = input.Shape[1];
-        int inputWidth = input.Shape[2];
-        int outputHeight = inputHeight * _upscaleFactor;
-        int outputWidth = inputWidth * _upscaleFactor;
 
-        var convOutput = new Tensor<T>([batchSize, inputHeight, inputWidth, _outputDepth * _upscaleFactor * _upscaleFactor]);
+        // Convert input from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
+        var inputNCHW = input.Transpose([0, 3, 1, 2]);
 
-        // Perform convolution
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < inputHeight; h++)
-            {
-                for (int w = 0; w < inputWidth; w++)
-                {
-                    for (int od = 0; od < _outputDepth * _upscaleFactor * _upscaleFactor; od++)
-                    {
-                        T sum = _biases[od];
+        // Perform convolution using Engine with same padding
+        int padSize = _kernelSize / 2;
+        var strideArr = new int[] { 1, 1 };
+        var paddingArr = new int[] { padSize, padSize };
+        var dilationArr = new int[] { 1, 1 };
 
-                        for (int kh = 0; kh < _kernelSize; kh++)
-                        {
-                            for (int kw = 0; kw < _kernelSize; kw++)
-                            {
-                                int ih = h + kh - _kernelSize / 2;
-                                int iw = w + kw - _kernelSize / 2;
+        var convOutputNCHW = Engine.Conv2D(inputNCHW, _kernels, strideArr, paddingArr, dilationArr);
 
-                                if (ih >= 0 && ih < inputHeight && iw >= 0 && iw < inputWidth)
-                                {
-                                    for (int id = 0; id < _inputDepth; id++)
-                                    {
-                                        sum = NumOps.Add(sum, NumOps.Multiply(input[b, ih, iw, id], _kernels[od, id, kh, kw]));
-                                    }
-                                }
-                            }
-                        }
+        // Add bias using broadcast: reshape to [1, numChannels, 1, 1]
+        int numOutChannels = _outputDepth * _upscaleFactor * _upscaleFactor;
+        var biasReshaped = _biases.Reshape([1, numOutChannels, 1, 1]);
+        convOutputNCHW = Engine.TensorBroadcastAdd(convOutputNCHW, biasReshaped);
 
-                        convOutput[b, h, w, od] = sum;
-                    }
-                }
-            }
-        }
+        // Perform pixel shuffle using Engine
+        var shuffledNCHW = Engine.PixelShuffle(convOutputNCHW, _upscaleFactor);
 
-        // Perform pixel shuffle
-        var output = new Tensor<T>([batchSize, outputHeight, outputWidth, _outputDepth]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < inputHeight; h++)
-            {
-                for (int w = 0; w < inputWidth; w++)
-                {
-                    for (int c = 0; c < _outputDepth * _upscaleFactor * _upscaleFactor; c++)
-                    {
-                        int outputChannel = c % _outputDepth;
-                        int offsetY = (c / _outputDepth) / _upscaleFactor;
-                        int offsetX = (c / _outputDepth) % _upscaleFactor;
-                        int outputY = h * _upscaleFactor + offsetY;
-                        int outputX = w * _upscaleFactor + offsetX;
-
-                        output[b, outputY, outputX, outputChannel] = convOutput[b, h, w, c];
-                    }
-                }
-            }
-        }
+        // Convert output from NCHW back to NHWC
+        var output = shuffledNCHW.Transpose([0, 2, 3, 1]);
 
         _lastOutput = ApplyActivation(output);
         return _lastOutput;
@@ -601,101 +549,143 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
     /// and parameters should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass, we reverse the steps from the forward pass:
-    /// 
+    ///
     /// 1. First, calculate how the activation function affects the gradient
-    /// 
+    ///
     /// 2. Reverse the pixel shuffling:
     ///    - Convert the gradient from high resolution back to the lower resolution with more channels
     ///    - This helps determine how each output channel contributed to the errors
-    /// 
+    ///
     /// 3. Calculate three types of gradients:
     ///    - How the input should change (inputGradient)
     ///    - How the kernels should change (kernelGradients)
     ///    - How the biases should change (biasGradients)
-    /// 
+    ///
     /// These gradients tell the network how to adjust its parameters during the update step
     /// to improve its performance on the next forward pass.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when trying to perform a backward pass before a forward pass.</exception>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int batchSize = _lastInput.Shape[0];
-        int inputHeight = _lastInput.Shape[1];
-        int inputWidth = _lastInput.Shape[2];
-        int outputHeight = inputHeight * _upscaleFactor;
-        int outputWidth = inputWidth * _upscaleFactor;
+        // Apply activation derivative
+        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
 
-        // Step 1: Compute gradient with respect to the activation function
-        Tensor<T> activationGradient = ComputeActivationGradient(outputGradient, _lastOutput);
+        // Convert gradients from NHWC to NCHW for Engine operations
+        var deltaNCHW = delta.Transpose([0, 3, 1, 2]);
+        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
 
-        // Step 2: Reverse pixel shuffle
-        var convOutputGradient = new Tensor<T>([batchSize, inputHeight, inputWidth, _outputDepth * _upscaleFactor * _upscaleFactor]);
-        for (int b = 0; b < batchSize; b++)
+        int padSize = _kernelSize / 2;
+        var strideArr = new int[] { 1, 1 };
+        var paddingArr = new int[] { padSize, padSize };
+        var dilationArr = new int[] { 1, 1 };
+
+        // Reverse pixel shuffle using Engine
+        int numOutChannels = _outputDepth * _upscaleFactor * _upscaleFactor;
+        var convGradShape = new int[] { inputNCHW.Shape[0], numOutChannels, inputNCHW.Shape[2], inputNCHW.Shape[3] };
+        var convOutputGradientNCHW = Engine.PixelShuffleBackward(deltaNCHW, convGradShape, _upscaleFactor);
+
+        // Calculate bias gradient: sum over batch, height, width (axes 0, 2, 3 in NCHW)
+        _biasGradients = Engine.ReduceSum(convOutputGradientNCHW, new[] { 0, 2, 3 }, keepDims: false);
+
+        // Calculate kernel gradient using Engine
+        _kernelGradients = Engine.Conv2DBackwardKernel(convOutputGradientNCHW, inputNCHW, _kernels.Shape, strideArr, paddingArr, dilationArr);
+
+        // Calculate input gradient using Engine
+        var inputGradientNCHW = Engine.Conv2DBackwardInput(convOutputGradientNCHW, _kernels, inputNCHW.Shape, strideArr, paddingArr, dilationArr);
+
+        // Convert input gradient from NCHW back to NHWC
+        return inputGradientNCHW.Transpose([0, 2, 3, 1]);
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Currently, subpixel convolution operations
+    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
+    /// </para>
+    /// <para>
+    /// Once subpixel convolution operations are added to TensorOperations, this method will provide:
+    /// - Automatic gradient computation through the computation graph
+    /// - Verification of manual gradient implementations
+    /// - Support for rapid prototyping with custom modifications
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastOutput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert input to computation node
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Apply pixel shuffle operation
+        var outputNode = Autodiff.TensorOperations<T>.PixelShuffle(inputNode, _upscaleFactor);
+
+        // Set gradient on output node
+        outputNode.Gradient = outputGradient;
+
+        // Inline topological sort and backward pass
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var topoOrder = new List<Autodiff.ComputationNode<T>>();
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((outputNode, false));
+
+        while (stack.Count > 0)
         {
-            for (int h = 0; h < inputHeight; h++)
-            {
-                for (int w = 0; w < inputWidth; w++)
-                {
-                    for (int c = 0; c < _outputDepth * _upscaleFactor * _upscaleFactor; c++)
-                    {
-                        int outputChannel = c % _outputDepth;
-                        int offsetY = (c / _outputDepth) / _upscaleFactor;
-                        int offsetX = (c / _outputDepth) % _upscaleFactor;
-                        int outputY = h * _upscaleFactor + offsetY;
-                        int outputX = w * _upscaleFactor + offsetX;
+            var (node, processed) = stack.Pop();
+            if (visited.Contains(node)) continue;
 
-                        convOutputGradient[b, h, w, c] = activationGradient[b, outputY, outputX, outputChannel];
+            if (processed)
+            {
+                visited.Add(node);
+                topoOrder.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                            stack.Push((parent, false));
                     }
                 }
             }
         }
 
-        // Step 3: Initialize gradients
-        _kernelGradients = new Tensor<T>(_kernels.Shape);
-        _biasGradients = new Vector<T>(_biases.Length);
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
-
-        // Step 4: Compute gradients
-        for (int b = 0; b < batchSize; b++)
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
-            for (int h = 0; h < inputHeight; h++)
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
             {
-                for (int w = 0; w < inputWidth; w++)
-                {
-                    for (int od = 0; od < _outputDepth * _upscaleFactor * _upscaleFactor; od++)
-                    {
-                        T gradOutput = convOutputGradient[b, h, w, od];
-                        _biasGradients[od] = NumOps.Add(_biasGradients[od], gradOutput);
-
-                        for (int kh = 0; kh < _kernelSize; kh++)
-                        {
-                            for (int kw = 0; kw < _kernelSize; kw++)
-                            {
-                                int ih = h + kh - _kernelSize / 2;
-                                int iw = w + kw - _kernelSize / 2;
-
-                                if (ih >= 0 && ih < inputHeight && iw >= 0 && iw < inputWidth)
-                                {
-                                    for (int id = 0; id < _inputDepth; id++)
-                                    {
-                                        T inputValue = _lastInput[b, ih, iw, id];
-                                        _kernelGradients[od, id, kh, kw] = NumOps.Add(_kernelGradients[od, id, kh, kw], NumOps.Multiply(gradOutput, inputValue));
-                                        inputGradient[b, ih, iw, id] = NumOps.Add(inputGradient[b, ih, iw, id], NumOps.Multiply(gradOutput, _kernels[od, id, kh, kw]));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                node.BackwardFunction(node.Gradient);
             }
         }
 
-        return inputGradient;
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>
@@ -761,7 +751,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// - Width: How wide the input feature map is
     /// - Depth: How many channels or features each position has
     /// 
-    /// For example, a 32×32 RGB image would have a shape of [32, 32, 3].
+    /// For example, a 32Ã—32 RGB image would have a shape of [32, 32, 3].
     /// This helps the layer know exactly what kind of data it should expect.
     /// </para>
     /// </remarks>
@@ -789,7 +779,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// - Width: How wide the output will be (upscaled from input)
     /// - Depth: How many channels the output will have
     /// 
-    /// For example, if upscaleFactor=2, a 32×32×64 input might produce a 64×64×32 output.
+    /// For example, if upscaleFactor=2, a 32Ã—32Ã—64 input might produce a 64Ã—64Ã—32 output.
     /// The spatial dimensions increase by the upscale factor, while the number of channels
     /// is determined by the outputDepth parameter.
     /// </para>
@@ -837,37 +827,30 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         // Initialize momentum if not already done
+        int numOutChannels = _outputDepth * _upscaleFactor * _upscaleFactor;
         _kernelMomentum ??= new Tensor<T>(_kernels.Shape);
-        _biasMomentum ??= new Vector<T>(_biases.Length);
+        _biasMomentum ??= new Tensor<T>([numOutChannels]);
 
-        // Update kernels
-        for (int i = 0; i < _kernels.Length; i++)
-        {
-            // Compute momentum
-            _kernelMomentum[i] = NumOps.Add(
-                NumOps.Multiply(_momentumFactor, _kernelMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, _momentumFactor), _kernelGradients[i])
-            );
+        T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentumFactor);
 
-            // Update kernel with momentum and weight decay
-            _kernels[i] = NumOps.Subtract(
-                NumOps.Subtract(_kernels[i], NumOps.Multiply(learningRate, _kernelMomentum[i])),
-                NumOps.Multiply(NumOps.Multiply(learningRate, _weightDecay), _kernels[i])
-            );
-        }
+        // Update kernel momentum: momentum = momentum_factor * momentum + (1 - momentum_factor) * gradient
+        _kernelMomentum = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(_kernelMomentum, _momentumFactor),
+            Engine.TensorMultiplyScalar(_kernelGradients, oneMinusMomentum));
 
-        // Update biases
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            // Compute momentum
-            _biasMomentum[i] = NumOps.Add(
-                NumOps.Multiply(_momentumFactor, _biasMomentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, _momentumFactor), _biasGradients[i])
-            );
+        // Update kernels with momentum and weight decay
+        T lrTimesWd = NumOps.Multiply(learningRate, _weightDecay);
+        var kernelUpdate = Engine.TensorMultiplyScalar(_kernelMomentum, learningRate);
+        var weightDecayTerm = Engine.TensorMultiplyScalar(_kernels, lrTimesWd);
+        _kernels = Engine.TensorSubtract(Engine.TensorSubtract(_kernels, kernelUpdate), weightDecayTerm);
 
-            // Update bias with momentum (no weight decay for biases)
-            _biases[i] = NumOps.Subtract(_biases[i], NumOps.Multiply(learningRate, _biasMomentum[i]));
-        }
+        // Update bias momentum
+        _biasMomentum = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(_biasMomentum, _momentumFactor),
+            Engine.TensorMultiplyScalar(_biasGradients, oneMinusMomentum));
+
+        // Update biases with momentum (no weight decay for biases)
+        _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasMomentum, learningRate));
 
         // Clear gradients after update
         _kernelGradients = null;
@@ -899,29 +882,89 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Calculate total number of parameters
-        int kernelParamCount = _kernels.Length;
-        int biasParamCount = _biases.Length;
-        int totalParamCount = kernelParamCount + biasParamCount;
-    
-        // Create a vector to hold all parameters
-        var parameters = new Vector<T>(totalParamCount);
-    
-        // Copy kernel parameters
-        int index = 0;
-        for (int i = 0; i < _kernels.Length; i++)
-        {
-            parameters[index++] = _kernels[i];
-        }
-    
-        // Copy bias parameters
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            parameters[index++] = _biases[i];
-        }
-    
-        return parameters;
+        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
     }
+
+    /// <summary>
+    /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to which input variable nodes should be added.</param>
+    /// <returns>The output computation node representing this layer's operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when weights/biases are not initialized or activation is not supported.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representation of the subpixel convolution operation.
+    /// Subpixel convolution combines convolution with pixel shuffling (depth-to-space rearrangement).
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates an optimized version for faster inference.
+    ///
+    /// For subpixel convolutional layers:
+    /// - Creates placeholders for input, convolution kernels, and biases
+    /// - Applies convolution operation
+    /// - Applies pixel shuffle (depth-to-space) rearrangement
+    /// - Applies activation function
+    /// - Returns a computation graph for efficient execution
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_kernels == null || _biases == null)
+            throw new InvalidOperationException("Layer weights not initialized. Call Initialize() or train the layer first.");
+
+        if (!CanActivationBeJitted())
+        {
+            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax");
+        }
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input node with batch dimension
+        // Input shape: [batch, height, width, channels] (NHWC format)
+        var symbolicInput = new Tensor<T>(new int[] { 1, InputShape[0], InputShape[1], InputShape[2] });
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "subpixel_input");
+        inputNodes.Add(inputNode);
+
+        // Create constant nodes for kernels and biases (biases is already a Tensor<T>)
+        var kernelNode = TensorOperations<T>.Constant(_kernels, "subpixel_kernels");
+        var biasNode = TensorOperations<T>.Constant(_biases, "subpixel_biases");
+
+        // Step 1: Apply 2D convolution
+        // Conv2D expects NCHW format, so we may need to transpose if our layer uses NHWC
+        // For simplicity, we assume the input is compatible with Conv2D operation
+        var convOutput = TensorOperations<T>.Conv2D(inputNode, kernelNode, stride: new[] { 1, 1 }, padding: new[] { _kernelSize / 2, _kernelSize / 2 });
+
+        // Step 2: Add bias (broadcast across spatial dimensions)
+        var withBias = TensorOperations<T>.Add(convOutput, biasNode);
+
+        // Step 3: Apply PixelShuffle (depth-to-space) for upscaling
+        var shuffled = TensorOperations<T>.PixelShuffle(withBias, _upscaleFactor);
+
+        // Step 4: Apply activation function using base class helper
+        var output = ApplyActivationToGraph(shuffled);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>True, as all required operations (Conv2D, PixelShuffle) are available.</value>
+    /// <remarks>
+    /// <para>
+    /// Subpixel convolutional layers support JIT compilation using Conv2D and PixelShuffle
+    /// operations from TensorOperations. The layer requires both convolution and pixel shuffling
+    /// operations which are available in the computation graph.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Resets the internal state of the layer and reinitializes weights.
@@ -933,18 +976,18 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// or when implementing networks that need to reset their state between sequences.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory and starts fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - Stored inputs and outputs are cleared
     /// - Calculated gradients are cleared
     /// - Momentum is reset to zero
     /// - Weights and biases are reinitialized to new random values
-    /// 
+    ///
     /// This is useful for:
     /// - Starting a new training session
     /// - Getting out of a "stuck" state where learning has plateaued
     /// - Testing how the layer performs with different initializations
-    /// 
+    ///
     /// Think of it like wiping a whiteboard clean and starting over with a fresh approach.
     /// </para>
     /// </remarks>
@@ -955,11 +998,11 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _lastOutput = null;
         _kernelGradients = null;
         _biasGradients = null;
-    
+
         // Reset momentum if using momentum
         _kernelMomentum = null;
         _biasMomentum = null;
-    
+
         // Reinitialize weights
         InitializeWeights();
     }

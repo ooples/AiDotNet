@@ -159,7 +159,7 @@ public class TripletLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculato
 
             if (positiveIndices.Count == 0) continue; // Skip if no positive example found
 
-            var positiveIndex = positiveIndices[new Random().Next(positiveIndices.Count)];
+            var positiveIndex = positiveIndices[RandomHelper.CreateSecureRandom().Next(positiveIndices.Count)];
             var positive = X.GetRow(positiveIndex);
 
             // Find a negative example (different class from anchor)
@@ -170,7 +170,7 @@ public class TripletLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculato
 
             if (negativeIndices.Count == 0) continue; // Skip if no negative example found
 
-            var negativeIndex = negativeIndices[new Random().Next(negativeIndices.Count)];
+            var negativeIndex = negativeIndices[RandomHelper.CreateSecureRandom().Next(negativeIndices.Count)];
             var negative = X.GetRow(negativeIndex);
 
             anchorList.Add(anchor);

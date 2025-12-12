@@ -226,11 +226,11 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
     /// <b>For Beginners:</b> This method calculates what happens when you multiply a number by itself
     /// multiple times. For example:
     /// - x^1 = x
-    /// - x^2 = x × x
-    /// - x^3 = x × x × x
+    /// - x^2 = x Ã— x
+    /// - x^3 = x Ã— x Ã— x
     /// 
     /// In the context of spline interpolation, we need these calculations to evaluate
-    /// polynomial terms like x, x², x³, etc., which are used to create the smooth curve.
+    /// polynomial terms like x, xÂ², xÂ³, etc., which are used to create the smooth curve.
     /// </remarks>
     /// <param name="x">The base value to be raised to a power.</param>
     /// <param name="power">The exponent (how many times to multiply x by itself).</param>
