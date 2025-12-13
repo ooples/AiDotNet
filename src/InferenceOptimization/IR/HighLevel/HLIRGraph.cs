@@ -690,12 +690,16 @@ public class HLIRGraph<T> where T : struct
             mapping[orderedNodes[i].Id] = i;
         }
 
-        // Update all node IDs
+        // First pass: Update all InputIds arrays using old IDs (before node IDs change)
+        foreach (var node in orderedNodes)
+        {
+            node.InputIds = node.Inputs.Select(inp => mapping[inp.Id]).ToArray();
+        }
+
+        // Second pass: Update all node IDs and rebuild node map
         _nodeMap.Clear();
         foreach (var node in orderedNodes)
         {
-            // Update InputIds array
-            node.InputIds = node.Inputs.Select(inp => mapping[inp.Id]).ToArray();
             node.Id = mapping[node.Id];
             _nodeMap[node.Id] = node;
         }

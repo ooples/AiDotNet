@@ -406,7 +406,8 @@ public class ElementwiseOp : LLIROp
             FLOPs = elements * (ElementwiseType == ElementwiseOpType.FusedMultiplyAdd ? 2 : 1),
             MemoryRead = elements * elemSize * InputIds.Length,
             MemoryWrite = elements * elemSize,
-            LatencyNs = elements / 1000
+            // Use ceiling division to ensure non-zero latency for small arrays
+            LatencyNs = Math.Max(1, (elements + 999) / 1000)
         };
     }
 }

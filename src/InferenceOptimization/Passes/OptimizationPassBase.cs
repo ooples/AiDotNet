@@ -126,8 +126,8 @@ public abstract class OptimizationPassBase<T> : IOptimizationPass<T> where T : s
             input.Outputs.Remove(firstNode);
         }
 
-        // Connect outputs from last node
-        foreach (var output in lastNode.Outputs)
+        // Connect outputs from last node (iterate over copy since ReplaceInput modifies the collection)
+        foreach (var output in lastNode.Outputs.ToList())
         {
             output.ReplaceInput(lastNode, fusedNode);
         }
