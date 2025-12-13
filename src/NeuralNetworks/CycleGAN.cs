@@ -37,12 +37,36 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type.</typeparam>
 public class CycleGAN<T> : NeuralNetworkBase<T>
 {
-    private Vector<T> _momentum;
-    private Vector<T> _secondMoment;
-    private T _beta1Power;
-    private T _beta2Power;
-    private double _currentLearningRate;
+    // GeneratorAtoB optimizer state
+    private Vector<T> _genAtoBMomentum;
+    private Vector<T> _genAtoBSecondMoment;
+    private T _genAtoBBeta1Power;
+    private T _genAtoBBeta2Power;
+    private double _genAtoBCurrentLearningRate;
+
+    // GeneratorBtoA optimizer state
+    private Vector<T> _genBtoAMomentum;
+    private Vector<T> _genBtoASecondMoment;
+    private T _genBtoABeta1Power;
+    private T _genBtoABeta2Power;
+    private double _genBtoACurrentLearningRate;
+
+    // DiscriminatorA optimizer state
+    private Vector<T> _discAMomentum;
+    private Vector<T> _discASecondMoment;
+    private T _discABeta1Power;
+    private T _discABeta2Power;
+    private double _discACurrentLearningRate;
+
+    // DiscriminatorB optimizer state
+    private Vector<T> _discBMomentum;
+    private Vector<T> _discBSecondMoment;
+    private T _discBBeta1Power;
+    private T _discBBeta2Power;
+    private double _discBCurrentLearningRate;
+
     private double _initialLearningRate;
+    private double _learningRateDecay;
 
     /// <summary>
     /// Coefficient for cycle consistency loss.
@@ -105,18 +129,45 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         _cycleConsistencyLambda = cycleConsistencyLambda;
         _identityLambda = identityLambda;
         _initialLearningRate = initialLearningRate;
-        _currentLearningRate = initialLearningRate;
-
-        _beta1Power = NumOps.One;
-        _beta2Power = NumOps.One;
+        _learningRateDecay = 0.0001;
 
         GeneratorAtoB = new ConvolutionalNeuralNetwork<T>(generatorAtoB);
         GeneratorBtoA = new ConvolutionalNeuralNetwork<T>(generatorBtoA);
         DiscriminatorA = new ConvolutionalNeuralNetwork<T>(discriminatorA);
         DiscriminatorB = new ConvolutionalNeuralNetwork<T>(discriminatorB);
 
-        _momentum = Vector<T>.Empty();
-        _secondMoment = Vector<T>.Empty();
+        // Initialize GeneratorAtoB optimizer state
+        int genAtoBParamCount = GeneratorAtoB.GetParameterCount();
+        _genAtoBMomentum = new Vector<T>(genAtoBParamCount);
+        _genAtoBSecondMoment = new Vector<T>(genAtoBParamCount);
+        _genAtoBBeta1Power = NumOps.One;
+        _genAtoBBeta2Power = NumOps.One;
+        _genAtoBCurrentLearningRate = initialLearningRate;
+
+        // Initialize GeneratorBtoA optimizer state
+        int genBtoAParamCount = GeneratorBtoA.GetParameterCount();
+        _genBtoAMomentum = new Vector<T>(genBtoAParamCount);
+        _genBtoASecondMoment = new Vector<T>(genBtoAParamCount);
+        _genBtoABeta1Power = NumOps.One;
+        _genBtoABeta2Power = NumOps.One;
+        _genBtoACurrentLearningRate = initialLearningRate;
+
+        // Initialize DiscriminatorA optimizer state
+        int discAParamCount = DiscriminatorA.GetParameterCount();
+        _discAMomentum = new Vector<T>(discAParamCount);
+        _discASecondMoment = new Vector<T>(discAParamCount);
+        _discABeta1Power = NumOps.One;
+        _discABeta2Power = NumOps.One;
+        _discACurrentLearningRate = initialLearningRate;
+
+        // Initialize DiscriminatorB optimizer state
+        int discBParamCount = DiscriminatorB.GetParameterCount();
+        _discBMomentum = new Vector<T>(discBParamCount);
+        _discBSecondMoment = new Vector<T>(discBParamCount);
+        _discBBeta1Power = NumOps.One;
+        _discBBeta2Power = NumOps.One;
+        _discBCurrentLearningRate = initialLearningRate;
+
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
 
         InitializeLayers();
@@ -133,33 +184,64 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
         // ----- Train Discriminators -----
 
-        // Generate fake images
+        // Generate fake images (detached for discriminator training)
         var fakeB = GeneratorAtoB.Predict(realA);
         var fakeA = GeneratorBtoA.Predict(realB);
 
-        // Train discriminator A
+        // Train DiscriminatorA: real A vs fake A
         var realAPred = DiscriminatorA.Predict(realA);
         var fakeAPred = DiscriminatorA.Predict(fakeA);
         T discALoss = CalculateDiscriminatorLoss(realAPred, fakeAPred, batchSize);
 
-        // Train discriminator B
+        // Backprop for DiscriminatorA
+        var realALabels = CreateLabelTensor(batchSize, NumOps.One);
+        var fakeALabels = CreateLabelTensor(batchSize, NumOps.Zero);
+        var realAGrad = CalculateBinaryGradients(realAPred, realALabels, batchSize);
+        var fakeAGrad = CalculateBinaryGradients(fakeAPred, fakeALabels, batchSize);
+
+        DiscriminatorA.Backward(realAGrad);
+        DiscriminatorA.Backward(fakeAGrad);
+        UpdateDiscriminatorAParameters();
+
+        // Train DiscriminatorB: real B vs fake B
         var realBPred = DiscriminatorB.Predict(realB);
         var fakeBPred = DiscriminatorB.Predict(fakeB);
         T discBLoss = CalculateDiscriminatorLoss(realBPred, fakeBPred, batchSize);
+
+        // Backprop for DiscriminatorB
+        var realBLabels = CreateLabelTensor(batchSize, NumOps.One);
+        var fakeBLabels = CreateLabelTensor(batchSize, NumOps.Zero);
+        var realBGrad = CalculateBinaryGradients(realBPred, realBLabels, batchSize);
+        var fakeBGrad = CalculateBinaryGradients(fakeBPred, fakeBLabels, batchSize);
+
+        DiscriminatorB.Backward(realBGrad);
+        DiscriminatorB.Backward(fakeBGrad);
+        UpdateDiscriminatorBParameters();
 
         T discriminatorLoss = NumOps.Divide(NumOps.Add(discALoss, discBLoss), NumOps.FromDouble(2.0));
 
         // ----- Train Generators -----
 
-        // Adversarial losses
+        // Adversarial loss for GeneratorAtoB (fool DiscriminatorB)
         fakeB = GeneratorAtoB.Predict(realA);
-        fakeA = GeneratorBtoA.Predict(realB);
-
         var fakeBPred2 = DiscriminatorB.Predict(fakeB);
-        var fakeAPred2 = DiscriminatorA.Predict(fakeA);
-
         T advLossB = CalculateAdversarialLoss(fakeBPred2, batchSize);
+
+        // Backprop adversarial loss through DiscriminatorB to GeneratorAtoB
+        var genAtoBAdvGrad = CalculateBinaryGradients(fakeBPred2, CreateLabelTensor(batchSize, NumOps.One), batchSize);
+        var discBInputGrad = DiscriminatorB.BackwardWithInputGradient(genAtoBAdvGrad);
+        var genAtoBGrad = discBInputGrad.Clone();
+
+        // Adversarial loss for GeneratorBtoA (fool DiscriminatorA)
+        fakeA = GeneratorBtoA.Predict(realB);
+        var fakeAPred2 = DiscriminatorA.Predict(fakeA);
         T advLossA = CalculateAdversarialLoss(fakeAPred2, batchSize);
+
+        // Backprop adversarial loss through DiscriminatorA to GeneratorBtoA
+        var genBtoAAdvGrad = CalculateBinaryGradients(fakeAPred2, CreateLabelTensor(batchSize, NumOps.One), batchSize);
+        var discAInputGrad = DiscriminatorA.BackwardWithInputGradient(genBtoAAdvGrad);
+        var genBtoAGrad = discAInputGrad.Clone();
+
         T advLoss = NumOps.Add(advLossB, advLossA);
 
         // Cycle consistency losses
@@ -170,13 +252,40 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         T cycleB = CalculateL1Loss(reconstructedB, realB);
         T cycleLoss = NumOps.Add(cycleA, cycleB);
 
-        // Identity losses (optional)
+        // Cycle consistency gradients: A -> B -> A (back to A)
+        var cycleAGrad = CalculateL1Gradient(reconstructedA, realA, _cycleConsistencyLambda);
+        var genBtoACycleGradInput = GeneratorBtoA.BackwardWithInputGradient(cycleAGrad);
+        // Add cycle gradient to GeneratorAtoB (from fakeB that was used to reconstruct A)
+        for (int i = 0; i < genAtoBGrad.Length; i++)
+            genAtoBGrad.SetFlat(i, NumOps.Add(genAtoBGrad.GetFlat(i), genBtoACycleGradInput.GetFlat(i)));
+
+        // Cycle consistency gradients: B -> A -> B (back to B)
+        var cycleBGrad = CalculateL1Gradient(reconstructedB, realB, _cycleConsistencyLambda);
+        var genAtoBCycleGradInput = GeneratorAtoB.BackwardWithInputGradient(cycleBGrad);
+        // Add cycle gradient to GeneratorBtoA (from fakeA that was used to reconstruct B)
+        for (int i = 0; i < genBtoAGrad.Length; i++)
+            genBtoAGrad.SetFlat(i, NumOps.Add(genBtoAGrad.GetFlat(i), genAtoBCycleGradInput.GetFlat(i)));
+
+        // Identity losses (optional, helps preserve color composition)
         var identityA = GeneratorBtoA.Predict(realA);
         var identityB = GeneratorAtoB.Predict(realB);
 
         T idLossA = CalculateL1Loss(identityA, realA);
         T idLossB = CalculateL1Loss(identityB, realB);
         T identityLoss = NumOps.Add(idLossA, idLossB);
+
+        // Identity gradients
+        var identityAGrad = CalculateL1Gradient(identityA, realA, _identityLambda);
+        var identityBGrad = CalculateL1Gradient(identityB, realB, _identityLambda);
+
+        // Apply combined gradients to generators
+        GeneratorAtoB.Backward(genAtoBGrad);
+        GeneratorAtoB.Backward(identityBGrad);
+        UpdateGeneratorAtoBParameters();
+
+        GeneratorBtoA.Backward(genBtoAGrad);
+        GeneratorBtoA.Backward(identityAGrad);
+        UpdateGeneratorBtoAParameters();
 
         // Total generator loss
         T cycleCoeff = NumOps.FromDouble(_cycleConsistencyLambda);
@@ -276,6 +385,271 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         return tensor;
     }
 
+    private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
+    {
+        var gradients = new Tensor<T>(predictions.Shape);
+        T epsilon = NumOps.FromDouble(1e-10);
+        T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            T p = predictions[i, 0];
+            T t = targets[i, 0];
+
+            // Clamp predictions to avoid numerical instability
+            if (NumOps.LessThan(p, epsilon))
+                p = epsilon;
+            else if (NumOps.GreaterThan(p, oneMinusEpsilon))
+                p = oneMinusEpsilon;
+
+            // BCE gradient w.r.t. probability: dL/dp = (p - t) / (p * (1 - p))
+            T oneMinusP = NumOps.Subtract(NumOps.One, p);
+            T pTimesOneMinusP = NumOps.Multiply(p, oneMinusP);
+            T gradient = NumOps.Divide(
+                NumOps.Subtract(p, t),
+                NumOps.Add(pTimesOneMinusP, epsilon)
+            );
+            gradients[i, 0] = NumOps.Divide(gradient, NumOps.FromDouble(batchSize));
+        }
+
+        return gradients;
+    }
+
+    private Tensor<T> CalculateL1Gradient(Tensor<T> predictions, Tensor<T> targets, double coefficient)
+    {
+        var gradients = new Tensor<T>(predictions.Shape);
+        int count = predictions.Length;
+        T coeff = NumOps.FromDouble(coefficient / count);
+
+        for (int i = 0; i < count; i++)
+        {
+            T diff = NumOps.Subtract(predictions.GetFlat(i), targets.GetFlat(i));
+            // Sign of difference: 1 if positive, -1 if negative
+            T sign = NumOps.GreaterThanOrEquals(diff, NumOps.Zero) ? NumOps.One : NumOps.Negate(NumOps.One);
+            gradients.SetFlat(i, NumOps.Multiply(coeff, sign));
+        }
+
+        return gradients;
+    }
+
+    private void UpdateGeneratorAtoBParameters()
+    {
+        var gradients = GeneratorAtoB.GetParameterGradients();
+        var parameters = GeneratorAtoB.GetParameters();
+        int paramCount = parameters.Length;
+
+        // Adam hyperparameters
+        T beta1 = NumOps.FromDouble(0.0); // GANs often use beta1=0
+        T beta2 = NumOps.FromDouble(0.999);
+        T epsilon = NumOps.FromDouble(1e-8);
+        T lr = NumOps.FromDouble(_genAtoBCurrentLearningRate);
+
+        // Update beta powers
+        _genAtoBBeta1Power = NumOps.Multiply(_genAtoBBeta1Power, beta1);
+        _genAtoBBeta2Power = NumOps.Multiply(_genAtoBBeta2Power, beta2);
+
+        // Bias correction factors
+        T beta1Correction = NumOps.Subtract(NumOps.One, _genAtoBBeta1Power);
+        T beta2Correction = NumOps.Subtract(NumOps.One, _genAtoBBeta2Power);
+
+        // Clip gradients
+        T maxGradNorm = NumOps.FromDouble(5.0);
+        T gradNormSq = NumOps.Zero;
+        for (int i = 0; i < paramCount; i++)
+            gradNormSq = NumOps.Add(gradNormSq, NumOps.Multiply(gradients[i], gradients[i]));
+        T gradNorm = NumOps.Sqrt(gradNormSq);
+
+        T scale = NumOps.One;
+        if (NumOps.GreaterThan(gradNorm, maxGradNorm))
+            scale = NumOps.Divide(maxGradNorm, NumOps.Add(gradNorm, epsilon));
+
+        for (int i = 0; i < paramCount; i++)
+        {
+            T g = NumOps.Multiply(gradients[i], scale);
+
+            // Update biased first moment estimate
+            _genAtoBMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _genAtoBMomentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), g)
+            );
+
+            // Update biased second raw moment estimate
+            _genAtoBSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _genAtoBSecondMoment[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta2), NumOps.Multiply(g, g))
+            );
+
+            // Compute bias-corrected estimates
+            T mHat = NumOps.Divide(_genAtoBMomentum[i], beta1Correction);
+            T vHat = NumOps.Divide(_genAtoBSecondMoment[i], beta2Correction);
+
+            // Update parameters
+            T update = NumOps.Divide(NumOps.Multiply(lr, mHat), NumOps.Add(NumOps.Sqrt(vHat), epsilon));
+            parameters[i] = NumOps.Subtract(parameters[i], update);
+        }
+
+        GeneratorAtoB.UpdateParameters(parameters);
+
+        // Learning rate decay
+        _genAtoBCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_genAtoBBeta1Power));
+    }
+
+    private void UpdateGeneratorBtoAParameters()
+    {
+        var gradients = GeneratorBtoA.GetParameterGradients();
+        var parameters = GeneratorBtoA.GetParameters();
+        int paramCount = parameters.Length;
+
+        T beta1 = NumOps.FromDouble(0.0);
+        T beta2 = NumOps.FromDouble(0.999);
+        T epsilon = NumOps.FromDouble(1e-8);
+        T lr = NumOps.FromDouble(_genBtoACurrentLearningRate);
+
+        _genBtoABeta1Power = NumOps.Multiply(_genBtoABeta1Power, beta1);
+        _genBtoABeta2Power = NumOps.Multiply(_genBtoABeta2Power, beta2);
+
+        T beta1Correction = NumOps.Subtract(NumOps.One, _genBtoABeta1Power);
+        T beta2Correction = NumOps.Subtract(NumOps.One, _genBtoABeta2Power);
+
+        T maxGradNorm = NumOps.FromDouble(5.0);
+        T gradNormSq = NumOps.Zero;
+        for (int i = 0; i < paramCount; i++)
+            gradNormSq = NumOps.Add(gradNormSq, NumOps.Multiply(gradients[i], gradients[i]));
+        T gradNorm = NumOps.Sqrt(gradNormSq);
+
+        T scale = NumOps.One;
+        if (NumOps.GreaterThan(gradNorm, maxGradNorm))
+            scale = NumOps.Divide(maxGradNorm, NumOps.Add(gradNorm, epsilon));
+
+        for (int i = 0; i < paramCount; i++)
+        {
+            T g = NumOps.Multiply(gradients[i], scale);
+
+            _genBtoAMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _genBtoAMomentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), g)
+            );
+
+            _genBtoASecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _genBtoASecondMoment[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta2), NumOps.Multiply(g, g))
+            );
+
+            T mHat = NumOps.Divide(_genBtoAMomentum[i], beta1Correction);
+            T vHat = NumOps.Divide(_genBtoASecondMoment[i], beta2Correction);
+
+            T update = NumOps.Divide(NumOps.Multiply(lr, mHat), NumOps.Add(NumOps.Sqrt(vHat), epsilon));
+            parameters[i] = NumOps.Subtract(parameters[i], update);
+        }
+
+        GeneratorBtoA.UpdateParameters(parameters);
+        _genBtoACurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_genBtoABeta1Power));
+    }
+
+    private void UpdateDiscriminatorAParameters()
+    {
+        var gradients = DiscriminatorA.GetParameterGradients();
+        var parameters = DiscriminatorA.GetParameters();
+        int paramCount = parameters.Length;
+
+        T beta1 = NumOps.FromDouble(0.0);
+        T beta2 = NumOps.FromDouble(0.999);
+        T epsilon = NumOps.FromDouble(1e-8);
+        T lr = NumOps.FromDouble(_discACurrentLearningRate);
+
+        _discABeta1Power = NumOps.Multiply(_discABeta1Power, beta1);
+        _discABeta2Power = NumOps.Multiply(_discABeta2Power, beta2);
+
+        T beta1Correction = NumOps.Subtract(NumOps.One, _discABeta1Power);
+        T beta2Correction = NumOps.Subtract(NumOps.One, _discABeta2Power);
+
+        T maxGradNorm = NumOps.FromDouble(5.0);
+        T gradNormSq = NumOps.Zero;
+        for (int i = 0; i < paramCount; i++)
+            gradNormSq = NumOps.Add(gradNormSq, NumOps.Multiply(gradients[i], gradients[i]));
+        T gradNorm = NumOps.Sqrt(gradNormSq);
+
+        T scale = NumOps.One;
+        if (NumOps.GreaterThan(gradNorm, maxGradNorm))
+            scale = NumOps.Divide(maxGradNorm, NumOps.Add(gradNorm, epsilon));
+
+        for (int i = 0; i < paramCount; i++)
+        {
+            T g = NumOps.Multiply(gradients[i], scale);
+
+            _discAMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _discAMomentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), g)
+            );
+
+            _discASecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _discASecondMoment[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta2), NumOps.Multiply(g, g))
+            );
+
+            T mHat = NumOps.Divide(_discAMomentum[i], beta1Correction);
+            T vHat = NumOps.Divide(_discASecondMoment[i], beta2Correction);
+
+            T update = NumOps.Divide(NumOps.Multiply(lr, mHat), NumOps.Add(NumOps.Sqrt(vHat), epsilon));
+            parameters[i] = NumOps.Subtract(parameters[i], update);
+        }
+
+        DiscriminatorA.UpdateParameters(parameters);
+        _discACurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_discABeta1Power));
+    }
+
+    private void UpdateDiscriminatorBParameters()
+    {
+        var gradients = DiscriminatorB.GetParameterGradients();
+        var parameters = DiscriminatorB.GetParameters();
+        int paramCount = parameters.Length;
+
+        T beta1 = NumOps.FromDouble(0.0);
+        T beta2 = NumOps.FromDouble(0.999);
+        T epsilon = NumOps.FromDouble(1e-8);
+        T lr = NumOps.FromDouble(_discBCurrentLearningRate);
+
+        _discBBeta1Power = NumOps.Multiply(_discBBeta1Power, beta1);
+        _discBBeta2Power = NumOps.Multiply(_discBBeta2Power, beta2);
+
+        T beta1Correction = NumOps.Subtract(NumOps.One, _discBBeta1Power);
+        T beta2Correction = NumOps.Subtract(NumOps.One, _discBBeta2Power);
+
+        T maxGradNorm = NumOps.FromDouble(5.0);
+        T gradNormSq = NumOps.Zero;
+        for (int i = 0; i < paramCount; i++)
+            gradNormSq = NumOps.Add(gradNormSq, NumOps.Multiply(gradients[i], gradients[i]));
+        T gradNorm = NumOps.Sqrt(gradNormSq);
+
+        T scale = NumOps.One;
+        if (NumOps.GreaterThan(gradNorm, maxGradNorm))
+            scale = NumOps.Divide(maxGradNorm, NumOps.Add(gradNorm, epsilon));
+
+        for (int i = 0; i < paramCount; i++)
+        {
+            T g = NumOps.Multiply(gradients[i], scale);
+
+            _discBMomentum[i] = NumOps.Add(
+                NumOps.Multiply(beta1, _discBMomentum[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), g)
+            );
+
+            _discBSecondMoment[i] = NumOps.Add(
+                NumOps.Multiply(beta2, _discBSecondMoment[i]),
+                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta2), NumOps.Multiply(g, g))
+            );
+
+            T mHat = NumOps.Divide(_discBMomentum[i], beta1Correction);
+            T vHat = NumOps.Divide(_discBSecondMoment[i], beta2Correction);
+
+            T update = NumOps.Divide(NumOps.Multiply(lr, mHat), NumOps.Add(NumOps.Sqrt(vHat), epsilon));
+            parameters[i] = NumOps.Subtract(parameters[i], update);
+        }
+
+        DiscriminatorB.UpdateParameters(parameters);
+        _discBCurrentLearningRate = _initialLearningRate / (1.0 + _learningRateDecay * Convert.ToDouble(_discBBeta1Power));
+    }
+
     protected override void InitializeLayers() { }
 
     public override Tensor<T> Predict(Tensor<T> input) => GeneratorAtoB.Predict(input);
@@ -305,9 +679,16 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_currentLearningRate);
+        writer.Write(_initialLearningRate);
+        writer.Write(_learningRateDecay);
         writer.Write(_cycleConsistencyLambda);
         writer.Write(_identityLambda);
+
+        // Write per-network learning rates
+        writer.Write(_genAtoBCurrentLearningRate);
+        writer.Write(_genBtoACurrentLearningRate);
+        writer.Write(_discACurrentLearningRate);
+        writer.Write(_discBCurrentLearningRate);
 
         var genAtoB = GeneratorAtoB.Serialize();
         writer.Write(genAtoB.Length);
@@ -328,9 +709,16 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _currentLearningRate = reader.ReadDouble();
+        _initialLearningRate = reader.ReadDouble();
+        _learningRateDecay = reader.ReadDouble();
         _cycleConsistencyLambda = reader.ReadDouble();
         _identityLambda = reader.ReadDouble();
+
+        // Read per-network learning rates
+        _genAtoBCurrentLearningRate = reader.ReadDouble();
+        _genBtoACurrentLearningRate = reader.ReadDouble();
+        _discACurrentLearningRate = reader.ReadDouble();
+        _discBCurrentLearningRate = reader.ReadDouble();
 
         int genAtoB_Length = reader.ReadInt32();
         GeneratorAtoB.Deserialize(reader.ReadBytes(genAtoB_Length));
