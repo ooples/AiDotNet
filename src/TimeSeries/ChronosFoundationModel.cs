@@ -1,3 +1,5 @@
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.TimeSeries;
@@ -63,48 +65,28 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     // Tokenization parameters
     private int _vocabularySize;
-    private double _binMin = -15.0;  // Minimum normalized value
-    private double _binMax = 15.0;   // Maximum normalized value
+    private double _binMin = -15.0;
+    private double _binMax = 15.0;
     private double _binWidth;
 
-    // Transformer components
-    private Matrix<T> _tokenEmbeddings = new Matrix<T>(0, 0);
-    private Matrix<T> _positionalEncoding = new Matrix<T>(0, 0);
-    private List<ChronosTransformerLayer<T>> _transformerLayers = new List<ChronosTransformerLayer<T>>();
-    private Matrix<T> _outputProjection = new Matrix<T>(0, 0);
-    private Vector<T> _outputBias = new Vector<T>(0);
+    // Transformer components - now using Tensor<T>
+    private Tensor<T> _tokenEmbeddings;      // [vocabularySize, embeddingDim]
+    private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
+    private List<ChronosTransformerLayerTensor<T>> _transformerLayers;
+    private Tensor<T> _outputProjection;     // [vocabularySize, embeddingDim]
+    private Tensor<T> _outputBias;           // [vocabularySize]
 
     // Layer normalization for final output
-    private Vector<T> _finalLayerNormGamma = new Vector<T>(0);
-    private Vector<T> _finalLayerNormBeta = new Vector<T>(0);
+    private Tensor<T> _finalLayerNormGamma;  // [embeddingDim]
+    private Tensor<T> _finalLayerNormBeta;   // [embeddingDim]
+
+    // Gradient accumulators for batch training
+    private Dictionary<string, Tensor<T>> _gradientAccumulators;
+    private int _gradientCount;
 
     /// <summary>
     /// Initializes a new instance of the Chronos foundation model.
     /// </summary>
-    /// <param name="options">Configuration options. If null, default options are used.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>Model Architecture Setup:</b>
-    /// The constructor initializes the complete Chronos architecture:
-    /// </para>
-    /// <list type="bullet">
-    /// <item><b>Token Embeddings:</b> Maps discrete tokens to dense vectors of dimension EmbeddingDim</item>
-    /// <item><b>Positional Encoding:</b> Sinusoidal encodings for sequence position awareness</item>
-    /// <item><b>Transformer Layers:</b> NumLayers decoder layers with causal self-attention</item>
-    /// <item><b>Output Layer:</b> Projects hidden states back to vocabulary logits</item>
-    /// </list>
-    /// <para>
-    /// <b>Tokenization Bins:</b>
-    /// The vocabulary represents uniformly-spaced bins from -15 to 15 in normalized space.
-    /// Values outside this range are clipped. The bin width is: (30) / VocabularySize.
-    /// For VocabularySize=4096, each bin spans ~0.0073 in normalized units.
-    /// </para>
-    /// <para><b>For Beginners:</b> The vocabulary size determines how precisely the model can
-    /// represent values. A larger vocabulary means more precise representations but also more
-    /// parameters to learn. The default of 4096 provides a good balance - it can distinguish
-    /// values that differ by about 0.7% after normalization.
-    /// </para>
-    /// </remarks>
     public ChronosFoundationModel(ChronosOptions<T>? options = null)
         : this(options ?? new ChronosOptions<T>(), initializeModel: true)
     {
@@ -117,21 +99,26 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         _numOps = MathHelper.GetNumericOperations<T>();
         _random = new Random(42);
 
-        // Validate options to prevent runtime failures
         ValidateOptions(options);
 
         _vocabularySize = _options.VocabularySize;
         _binWidth = (_binMax - _binMin) / _vocabularySize;
-        _transformerLayers = new List<ChronosTransformerLayer<T>>();
+        _transformerLayers = new List<ChronosTransformerLayerTensor<T>>();
+        _gradientAccumulators = new Dictionary<string, Tensor<T>>();
+        _gradientCount = 0;
+
+        // Initialize with empty tensors - will be properly initialized in InitializeModel
+        _tokenEmbeddings = new Tensor<T>(new[] { 1, 1 });
+        _positionalEncoding = new Tensor<T>(new[] { 1, 1 });
+        _outputProjection = new Tensor<T>(new[] { 1, 1 });
+        _outputBias = new Tensor<T>(new[] { 1 });
+        _finalLayerNormGamma = new Tensor<T>(new[] { 1 });
+        _finalLayerNormBeta = new Tensor<T>(new[] { 1 });
 
         if (initializeModel)
             InitializeModel();
     }
 
-    /// <summary>
-    /// Validates configuration options to prevent division-by-zero and invalid dimensions.
-    /// </summary>
-    /// <exception cref="ArgumentException">Thrown when options contain invalid values.</exception>
     private static void ValidateOptions(ChronosOptions<T> options)
     {
         if (options.VocabularySize < 2)
@@ -160,18 +147,19 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     {
         double stddev = Math.Sqrt(2.0 / _options.EmbeddingDim);
 
-        // Token embeddings: vocabulary_size x embedding_dim
-        _tokenEmbeddings = new Matrix<T>(_vocabularySize, _options.EmbeddingDim);
-        InitializeMatrix(_tokenEmbeddings, stddev);
+        // Token embeddings: [vocabularySize, embeddingDim]
+        _tokenEmbeddings = new Tensor<T>(new[] { _vocabularySize, _options.EmbeddingDim });
+        InitializeTensorXavier(_tokenEmbeddings, stddev);
 
         // Sinusoidal positional encoding for context + forecast length
         int maxLen = _options.ContextLength + _options.ForecastHorizon;
         _positionalEncoding = CreateSinusoidalPositionalEncoding(maxLen, _options.EmbeddingDim);
 
         // Transformer layers
+        _transformerLayers.Clear();
         for (int i = 0; i < _options.NumLayers; i++)
         {
-            _transformerLayers.Add(new ChronosTransformerLayer<T>(
+            _transformerLayers.Add(new ChronosTransformerLayerTensor<T>(
                 _options.EmbeddingDim,
                 _options.NumHeads,
                 seed: 42 + i * 1000
@@ -179,77 +167,62 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         }
 
         // Final layer normalization
-        _finalLayerNormGamma = new Vector<T>(_options.EmbeddingDim);
-        _finalLayerNormBeta = new Vector<T>(_options.EmbeddingDim);
+        _finalLayerNormGamma = new Tensor<T>(new[] { _options.EmbeddingDim });
+        _finalLayerNormBeta = new Tensor<T>(new[] { _options.EmbeddingDim });
         for (int i = 0; i < _options.EmbeddingDim; i++)
         {
             _finalLayerNormGamma[i] = _numOps.One;
+            _finalLayerNormBeta[i] = _numOps.Zero;
         }
 
-        // Output projection: projects from embedding_dim to vocabulary_size
-        _outputProjection = new Matrix<T>(_vocabularySize, _options.EmbeddingDim);
-        InitializeMatrix(_outputProjection, stddev);
-        _outputBias = new Vector<T>(_vocabularySize);
+        // Output projection: [vocabularySize, embeddingDim]
+        _outputProjection = new Tensor<T>(new[] { _vocabularySize, _options.EmbeddingDim });
+        InitializeTensorXavier(_outputProjection, stddev);
+        _outputBias = new Tensor<T>(new[] { _vocabularySize });
+
+        // Initialize gradient accumulators
+        InitializeGradientAccumulators();
     }
 
-    private void InitializeMatrix(Matrix<T> matrix, double stddev)
+    private void InitializeTensorXavier(Tensor<T> tensor, double stddev)
     {
-        for (int i = 0; i < matrix.Rows; i++)
-            for (int j = 0; j < matrix.Columns; j++)
-                matrix[i, j] = _numOps.FromDouble((_random.NextDouble() * 2 - 1) * stddev);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = _numOps.FromDouble((_random.NextDouble() * 2 - 1) * stddev);
+        }
     }
 
-    /// <summary>
-    /// Creates sinusoidal positional encoding.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Why Positional Encoding?</b>
-    /// Self-attention is permutation-invariant - it doesn't know the order of tokens.
-    /// Positional encoding injects position information by adding unique patterns to each position.
-    /// </para>
-    /// <para>
-    /// <b>Sinusoidal Encoding:</b>
-    /// PE(pos, 2i) = sin(pos / 10000^(2i/d))
-    /// PE(pos, 2i+1) = cos(pos / 10000^(2i/d))
-    /// This creates unique patterns for each position while allowing the model to learn
-    /// relative positions through dot products.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> CreateSinusoidalPositionalEncoding(int maxLen, int embeddingDim)
+    private void InitializeGradientAccumulators()
     {
-        var pe = new Matrix<T>(maxLen, embeddingDim);
+        _gradientAccumulators.Clear();
+        _gradientAccumulators["tokenEmbeddings"] = new Tensor<T>(_tokenEmbeddings.Shape);
+        _gradientAccumulators["outputProjection"] = new Tensor<T>(_outputProjection.Shape);
+        _gradientAccumulators["outputBias"] = new Tensor<T>(_outputBias.Shape);
+        _gradientAccumulators["finalLayerNormGamma"] = new Tensor<T>(_finalLayerNormGamma.Shape);
+        _gradientAccumulators["finalLayerNormBeta"] = new Tensor<T>(_finalLayerNormBeta.Shape);
+
+        for (int l = 0; l < _transformerLayers.Count; l++)
+        {
+            _transformerLayers[l].InitializeGradientAccumulators(_gradientAccumulators, l);
+        }
+        _gradientCount = 0;
+    }
+
+    private Tensor<T> CreateSinusoidalPositionalEncoding(int maxLen, int embeddingDim)
+    {
+        var pe = new Tensor<T>(new[] { maxLen, embeddingDim });
         for (int pos = 0; pos < maxLen; pos++)
         {
             for (int i = 0; i < embeddingDim; i++)
             {
                 double angle = pos / Math.Pow(10000.0, (2.0 * (i / 2)) / embeddingDim);
-                pe[pos, i] = _numOps.FromDouble(i % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle));
+                double value = i % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle);
+                pe[pos, i] = _numOps.FromDouble(value);
             }
         }
         return pe;
     }
 
-    /// <summary>
-    /// Tokenizes a continuous value using mean-scaling normalization.
-    /// </summary>
-    /// <param name="value">The value to tokenize.</param>
-    /// <param name="scaleFactor">The scaling factor (mean absolute value of context).</param>
-    /// <returns>Token index in [0, VocabularySize-1].</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>Mean-Scaling Tokenization:</b>
-    /// The Chronos paper uses mean-scaling to make the model scale-invariant:
-    /// 1. Compute scale = mean(|context values|) + epsilon
-    /// 2. Normalize: x_norm = x / scale
-    /// 3. Map to bin: token = floor((x_norm - bin_min) / bin_width)
-    /// 4. Clip to valid range: token = clamp(token, 0, vocab_size - 1)
-    /// </para>
-    /// <para>
-    /// This allows the same model to handle time series of vastly different magnitudes -
-    /// from stock prices in thousands to temperature readings in tens.
-    /// </para>
-    /// </remarks>
     private int Tokenize(T value, double scaleFactor)
     {
         double normalized = Convert.ToDouble(value) / scaleFactor;
@@ -257,22 +230,12 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         return Math.Max(0, Math.Min(token, _vocabularySize - 1));
     }
 
-    /// <summary>
-    /// Converts a token back to a continuous value.
-    /// </summary>
-    /// <param name="tokenIdx">The token index.</param>
-    /// <param name="scaleFactor">The scaling factor to denormalize.</param>
-    /// <returns>The reconstructed continuous value.</returns>
     private T Detokenize(int tokenIdx, double scaleFactor)
     {
-        // Return bin center
         double binCenter = _binMin + (tokenIdx + 0.5) * _binWidth;
         return _numOps.FromDouble(binCenter * scaleFactor);
     }
 
-    /// <summary>
-    /// Computes the mean-scaling factor for a context window.
-    /// </summary>
     private double ComputeScaleFactor(Vector<T> context)
     {
         double sum = 0;
@@ -290,144 +253,63 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Trains the Chronos model on time series data.
+    /// Trains the Chronos model using proper backpropagation through all parameters.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Training Objective:</b>
-    /// Chronos is trained with next-token prediction, similar to language models.
-    /// Given tokens [t1, t2, ..., tn], the model learns to predict [t2, t3, ..., t(n+1)].
-    /// The loss is cross-entropy between predicted and actual next tokens.
-    /// </para>
-    /// <para>
-    /// <b>Pretraining vs Fine-tuning:</b>
-    /// In the original Chronos paper, the model is pretrained on a large corpus of
-    /// synthetic and real time series. This implementation supports both pretraining
-    /// (training from scratch) and fine-tuning on domain-specific data.
-    /// </para>
-    /// <para>
-    /// <b>This Implementation:</b>
-    /// Uses stochastic coordinate descent with numerical gradient estimation for
-    /// framework-agnostic training. For production use with large datasets, consider
-    /// using a deep learning framework with GPU acceleration.
-    /// </para>
-    /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         T learningRate = _numOps.FromDouble(_options.LearningRate);
-        T epsilon = _numOps.FromDouble(1e-5);
-        T twoEpsilon = _numOps.Multiply(_numOps.FromDouble(2.0), epsilon);
+        int batchSize = Math.Min(32, x.Rows);
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
-            // Shuffle training order
             var indices = Enumerable.Range(0, x.Rows).OrderBy(_ => _random.Next()).ToList();
 
-            foreach (int i in indices)
+            for (int batch = 0; batch < indices.Count; batch += batchSize)
             {
-                Vector<T> input = x.GetRow(i);
-                T target = y[i];
+                int actualBatchSize = Math.Min(batchSize, indices.Count - batch);
 
-                // Update all trainable parameters
-                UpdateParameters(input, target, learningRate, epsilon, twoEpsilon);
+                // Reset gradient accumulators
+                ResetGradientAccumulators();
+
+                // Accumulate gradients over batch
+                for (int b = 0; b < actualBatchSize; b++)
+                {
+                    int idx = indices[batch + b];
+                    Vector<T> input = x.GetRow(idx);
+                    T target = y[idx];
+
+                    var gradients = ComputeGradients(input, target);
+                    AccumulateGradients(gradients);
+                }
+
+                // Apply accumulated gradients
+                ApplyGradients(learningRate, actualBatchSize);
             }
         }
     }
 
-    private void UpdateParameters(Vector<T> input, T target, T learningRate, T epsilon, T twoEpsilon)
+    private void ResetGradientAccumulators()
     {
-        // Update output projection (most impactful)
-        UpdateMatrixSubset(_outputProjection, input, target, learningRate, epsilon, twoEpsilon, 100);
-        UpdateVectorSubset(_outputBias, input, target, learningRate, epsilon, twoEpsilon, 20);
-
-        // Update token embeddings
-        UpdateMatrixSubset(_tokenEmbeddings, input, target, learningRate, epsilon, twoEpsilon, 50);
-
-        // Update transformer layers
-        foreach (var layer in _transformerLayers)
+        foreach (var key in _gradientAccumulators.Keys.ToList())
         {
-            layer.UpdateWeights(input, target, learningRate, epsilon, twoEpsilon, PredictSingle, 30);
+            var tensor = _gradientAccumulators[key];
+            for (int i = 0; i < tensor.Length; i++)
+            {
+                tensor[i] = _numOps.Zero;
+            }
         }
-
-        // Update final layer norm
-        UpdateVectorSubset(_finalLayerNormGamma, input, target, learningRate, epsilon, twoEpsilon, 10);
-    }
-
-    private void UpdateMatrixSubset(Matrix<T> matrix, Vector<T> input, T target, T learningRate, T epsilon, T twoEpsilon, int sampleSize)
-    {
-        int totalWeights = matrix.Rows * matrix.Columns;
-        int actualSample = Math.Min(sampleSize, totalWeights);
-
-        for (int s = 0; s < actualSample; s++)
-        {
-            int flatIdx = _random.Next(totalWeights);
-            int i = flatIdx / matrix.Columns;
-            int j = flatIdx % matrix.Columns;
-
-            T original = matrix[i, j];
-
-            matrix[i, j] = _numOps.Add(original, epsilon);
-            T err1 = _numOps.Subtract(target, PredictSingle(input));
-            T lossPlus = _numOps.Multiply(err1, err1);
-
-            matrix[i, j] = _numOps.Subtract(original, epsilon);
-            T err2 = _numOps.Subtract(target, PredictSingle(input));
-            T lossMinus = _numOps.Multiply(err2, err2);
-
-            matrix[i, j] = original;
-
-            T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
-            matrix[i, j] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
-        }
-    }
-
-    private void UpdateVectorSubset(Vector<T> vector, Vector<T> input, T target, T learningRate, T epsilon, T twoEpsilon, int sampleSize)
-    {
-        int actualSample = Math.Min(sampleSize, vector.Length);
-
-        for (int s = 0; s < actualSample; s++)
-        {
-            int i = _random.Next(vector.Length);
-            T original = vector[i];
-
-            vector[i] = _numOps.Add(original, epsilon);
-            T err1 = _numOps.Subtract(target, PredictSingle(input));
-            T lossPlus = _numOps.Multiply(err1, err1);
-
-            vector[i] = _numOps.Subtract(original, epsilon);
-            T err2 = _numOps.Subtract(target, PredictSingle(input));
-            T lossMinus = _numOps.Multiply(err2, err2);
-
-            vector[i] = original;
-
-            T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
-            vector[i] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
-        }
+        _gradientCount = 0;
     }
 
     /// <summary>
-    /// Predicts the next value in a time series.
+    /// Computes gradients using backpropagation through the entire network.
     /// </summary>
-    /// <param name="input">The context window of historical values.</param>
-    /// <returns>The predicted next value.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>Prediction Pipeline:</b>
-    /// 1. Compute scale factor from context (mean absolute value)
-    /// 2. Tokenize each value in the context using mean-scaling
-    /// 3. Embed tokens and add positional encoding
-    /// 4. Process through transformer layers with causal attention
-    /// 5. Apply final layer normalization
-    /// 6. Project to vocabulary logits
-    /// 7. Select most likely token (argmax) and detokenize
-    /// </para>
-    /// </remarks>
-    public override T PredictSingle(Vector<T> input)
+    private Dictionary<string, Tensor<T>> ComputeGradients(Vector<T> input, T target)
     {
-        // Step 1: Compute scale factor
+        var gradients = new Dictionary<string, Tensor<T>>();
         double scaleFactor = ComputeScaleFactor(input);
 
-        // Step 2: Tokenize input
+        // Forward pass with caching
         int seqLen = Math.Min(input.Length, _options.ContextLength);
         var tokens = new int[seqLen];
         for (int i = 0; i < seqLen; i++)
@@ -435,14 +317,13 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             tokens[i] = Tokenize(input[input.Length - seqLen + i], scaleFactor);
         }
 
-        // Step 3: Embed tokens and add positional encoding
-        var embedded = new List<Vector<T>>();
+        // Cache: embedded vectors after positional encoding
+        var embedded = new List<Tensor<T>>();
         for (int t = 0; t < seqLen; t++)
         {
-            var emb = new Vector<T>(_options.EmbeddingDim);
+            var emb = new Tensor<T>(new[] { _options.EmbeddingDim });
             for (int i = 0; i < _options.EmbeddingDim; i++)
             {
-                // Token embedding + positional encoding
                 emb[i] = _numOps.Add(
                     _tokenEmbeddings[tokens[t], i],
                     _positionalEncoding[t, i]);
@@ -450,17 +331,295 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             embedded.Add(emb);
         }
 
-        // Step 4: Process through transformer layers
+        // Cache: layer outputs for backward pass
+        var layerInputs = new List<List<Tensor<T>>> { embedded };
+        var currentOutput = embedded;
+
+        foreach (var layer in _transformerLayers)
+        {
+            currentOutput = layer.Forward(currentOutput);
+            layerInputs.Add(currentOutput);
+        }
+
+        // Get last hidden state and apply layer norm
+        var lastHidden = currentOutput[currentOutput.Count - 1];
+        var (normalizedOutput, layerNormCache) = ApplyLayerNormWithCache(lastHidden, _finalLayerNormGamma, _finalLayerNormBeta);
+
+        // Compute logits and softmax
+        var logits = new double[_vocabularySize];
+        double maxLogit = double.NegativeInfinity;
+        int predictedToken = 0;
+
+        for (int i = 0; i < _vocabularySize; i++)
+        {
+            double sum = Convert.ToDouble(_outputBias[i]);
+            for (int j = 0; j < _options.EmbeddingDim; j++)
+            {
+                sum += Convert.ToDouble(_outputProjection[i, j]) * Convert.ToDouble(normalizedOutput[j]);
+            }
+            logits[i] = sum;
+            if (sum > maxLogit)
+            {
+                maxLogit = sum;
+                predictedToken = i;
+            }
+        }
+
+        // Softmax
+        double sumExp = 0;
+        var probs = new double[_vocabularySize];
+        for (int i = 0; i < _vocabularySize; i++)
+        {
+            probs[i] = Math.Exp(logits[i] - maxLogit);
+            sumExp += probs[i];
+        }
+        for (int i = 0; i < _vocabularySize; i++)
+        {
+            probs[i] /= sumExp;
+        }
+
+        // Target token
+        int targetToken = Tokenize(target, scaleFactor);
+
+        // Gradient of cross-entropy loss w.r.t. logits: dL/dlogits = probs - one_hot(target)
+        var dLogits = new Tensor<T>(new[] { _vocabularySize });
+        for (int i = 0; i < _vocabularySize; i++)
+        {
+            double grad = probs[i] - (i == targetToken ? 1.0 : 0.0);
+            dLogits[i] = _numOps.FromDouble(grad);
+        }
+
+        // Backprop through output projection
+        var dOutputProjection = new Tensor<T>(new[] { _vocabularySize, _options.EmbeddingDim });
+        var dOutputBias = dLogits; // dL/dBias = dL/dLogits
+        var dNormalized = new Tensor<T>(new[] { _options.EmbeddingDim });
+
+        for (int i = 0; i < _vocabularySize; i++)
+        {
+            for (int j = 0; j < _options.EmbeddingDim; j++)
+            {
+                // dL/dW[i,j] = dL/dlogits[i] * normalized[j]
+                dOutputProjection[i, j] = _numOps.Multiply(dLogits[i], normalizedOutput[j]);
+                // dL/dnormalized[j] += dL/dlogits[i] * W[i,j]
+                dNormalized[j] = _numOps.Add(dNormalized[j],
+                    _numOps.Multiply(dLogits[i], _outputProjection[i, j]));
+            }
+        }
+
+        gradients["outputProjection"] = dOutputProjection;
+        gradients["outputBias"] = dOutputBias;
+
+        // Backprop through layer norm
+        var (dLastHidden, dGamma, dBeta) = BackpropLayerNorm(dNormalized, layerNormCache);
+        gradients["finalLayerNormGamma"] = dGamma;
+        gradients["finalLayerNormBeta"] = dBeta;
+
+        // Backprop through transformer layers (in reverse order)
+        var dOutput = new List<Tensor<T>>();
+        for (int t = 0; t < seqLen - 1; t++)
+        {
+            dOutput.Add(new Tensor<T>(new[] { _options.EmbeddingDim }));
+        }
+        dOutput.Add(dLastHidden);
+
+        for (int l = _transformerLayers.Count - 1; l >= 0; l--)
+        {
+            var layerGradients = _transformerLayers[l].Backward(dOutput, layerInputs[l]);
+            dOutput = layerGradients.Item1;
+
+            foreach (var kvp in layerGradients.Item2)
+            {
+                gradients[$"layer{l}_{kvp.Key}"] = kvp.Value;
+            }
+        }
+
+        // Backprop through token embeddings
+        var dTokenEmbeddings = new Tensor<T>(new[] { _vocabularySize, _options.EmbeddingDim });
+        for (int t = 0; t < seqLen; t++)
+        {
+            int tokenIdx = tokens[t];
+            for (int i = 0; i < _options.EmbeddingDim; i++)
+            {
+                dTokenEmbeddings[tokenIdx, i] = _numOps.Add(
+                    dTokenEmbeddings[tokenIdx, i],
+                    dOutput[t][i]);
+            }
+        }
+        gradients["tokenEmbeddings"] = dTokenEmbeddings;
+
+        return gradients;
+    }
+
+    private (Tensor<T> output, LayerNormCache cache) ApplyLayerNormWithCache(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta)
+    {
+        double mean = 0;
+        for (int i = 0; i < input.Length; i++)
+            mean += Convert.ToDouble(input[i]);
+        mean /= input.Length;
+
+        double variance = 0;
+        for (int i = 0; i < input.Length; i++)
+        {
+            double diff = Convert.ToDouble(input[i]) - mean;
+            variance += diff * diff;
+        }
+        variance /= input.Length;
+
+        double stddev = Math.Sqrt(variance + 1e-6);
+
+        var normalized = new Tensor<T>(new[] { input.Length });
+        var output = new Tensor<T>(new[] { input.Length });
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            double norm = (Convert.ToDouble(input[i]) - mean) / stddev;
+            normalized[i] = _numOps.FromDouble(norm);
+            output[i] = _numOps.Add(
+                _numOps.Multiply(gamma[i], _numOps.FromDouble(norm)),
+                beta[i]);
+        }
+
+        return (output, new LayerNormCache
+        {
+            Input = input,
+            Normalized = normalized,
+            Mean = mean,
+            Variance = variance,
+            Stddev = stddev
+        });
+    }
+
+    private (Tensor<T> dInput, Tensor<T> dGamma, Tensor<T> dBeta) BackpropLayerNorm(Tensor<T> dOutput, LayerNormCache cache)
+    {
+        int n = dOutput.Length;
+        var dGamma = new Tensor<T>(new[] { n });
+        var dBeta = new Tensor<T>(new[] { n });
+        var dNorm = new Tensor<T>(new[] { n });
+
+        // dGamma = sum(dOutput * normalized)
+        // dBeta = sum(dOutput)
+        for (int i = 0; i < n; i++)
+        {
+            dGamma[i] = _numOps.Multiply(dOutput[i], cache.Normalized[i]);
+            dBeta[i] = dOutput[i];
+            dNorm[i] = _numOps.Multiply(dOutput[i], _finalLayerNormGamma[i]);
+        }
+
+        // Backprop through normalization
+        double dVar = 0;
+        double dMean = 0;
+
+        for (int i = 0; i < n; i++)
+        {
+            double x = Convert.ToDouble(cache.Input[i]);
+            double dnorm = Convert.ToDouble(dNorm[i]);
+            dVar += dnorm * (x - cache.Mean) * (-0.5) * Math.Pow(cache.Variance + 1e-6, -1.5);
+            dMean += dnorm * (-1.0 / cache.Stddev);
+        }
+
+        dMean += dVar * (-2.0 / n) * (cache.Input.Length > 0 ?
+            Enumerable.Range(0, n).Sum(i => Convert.ToDouble(cache.Input[i]) - cache.Mean) : 0);
+
+        var dInput = new Tensor<T>(new[] { n });
+        for (int i = 0; i < n; i++)
+        {
+            double x = Convert.ToDouble(cache.Input[i]);
+            double dnorm = Convert.ToDouble(dNorm[i]);
+            double dx = dnorm / cache.Stddev + dVar * 2.0 * (x - cache.Mean) / n + dMean / n;
+            dInput[i] = _numOps.FromDouble(dx);
+        }
+
+        return (dInput, dGamma, dBeta);
+    }
+
+    private void AccumulateGradients(Dictionary<string, Tensor<T>> gradients)
+    {
+        foreach (var kvp in gradients)
+        {
+            if (_gradientAccumulators.TryGetValue(kvp.Key, out var accumulator))
+            {
+                for (int i = 0; i < Math.Min(accumulator.Length, kvp.Value.Length); i++)
+                {
+                    accumulator[i] = _numOps.Add(accumulator[i], kvp.Value[i]);
+                }
+            }
+            else
+            {
+                _gradientAccumulators[kvp.Key] = kvp.Value;
+            }
+        }
+        _gradientCount++;
+    }
+
+    private void ApplyGradients(T learningRate, int batchSize)
+    {
+        T batchSizeT = _numOps.FromDouble(batchSize);
+
+        // Apply to token embeddings
+        ApplyGradientToTensor(_tokenEmbeddings, _gradientAccumulators["tokenEmbeddings"], learningRate, batchSizeT);
+
+        // Apply to output projection
+        ApplyGradientToTensor(_outputProjection, _gradientAccumulators["outputProjection"], learningRate, batchSizeT);
+        ApplyGradientToTensor(_outputBias, _gradientAccumulators["outputBias"], learningRate, batchSizeT);
+
+        // Apply to final layer norm
+        ApplyGradientToTensor(_finalLayerNormGamma, _gradientAccumulators["finalLayerNormGamma"], learningRate, batchSizeT);
+        ApplyGradientToTensor(_finalLayerNormBeta, _gradientAccumulators["finalLayerNormBeta"], learningRate, batchSizeT);
+
+        // Apply to transformer layers
+        for (int l = 0; l < _transformerLayers.Count; l++)
+        {
+            _transformerLayers[l].ApplyGradients(_gradientAccumulators, l, learningRate, batchSizeT, Engine);
+        }
+    }
+
+    private void ApplyGradientToTensor(Tensor<T> tensor, Tensor<T> gradient, T learningRate, T batchSize)
+    {
+        // Average gradient over batch and apply
+        var avgGrad = Engine.TensorDivideScalar(gradient, batchSize);
+        var scaledGrad = Engine.TensorMultiplyScalar(avgGrad, learningRate);
+        var result = Engine.TensorSubtract(tensor, scaledGrad);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = result[i];
+        }
+    }
+
+    /// <summary>
+    /// Predicts the next value in a time series.
+    /// </summary>
+    public override T PredictSingle(Vector<T> input)
+    {
+        double scaleFactor = ComputeScaleFactor(input);
+
+        int seqLen = Math.Min(input.Length, _options.ContextLength);
+        var tokens = new int[seqLen];
+        for (int i = 0; i < seqLen; i++)
+        {
+            tokens[i] = Tokenize(input[input.Length - seqLen + i], scaleFactor);
+        }
+
+        var embedded = new List<Tensor<T>>();
+        for (int t = 0; t < seqLen; t++)
+        {
+            var emb = new Tensor<T>(new[] { _options.EmbeddingDim });
+            for (int i = 0; i < _options.EmbeddingDim; i++)
+            {
+                emb[i] = _numOps.Add(
+                    _tokenEmbeddings[tokens[t], i],
+                    _positionalEncoding[t, i]);
+            }
+            embedded.Add(emb);
+        }
+
         foreach (var layer in _transformerLayers)
         {
             embedded = layer.Forward(embedded);
         }
 
-        // Step 5: Get last hidden state and apply final layer norm
         var lastHidden = embedded[embedded.Count - 1];
         lastHidden = ApplyLayerNorm(lastHidden, _finalLayerNormGamma, _finalLayerNormBeta);
 
-        // Step 6: Project to vocabulary logits
         var logits = new double[_vocabularySize];
         double maxLogit = double.NegativeInfinity;
         int predictedToken = 0;
@@ -481,26 +640,16 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             }
         }
 
-        // Step 7: Detokenize
         return Detokenize(predictedToken, scaleFactor);
     }
 
-    private Vector<T> ApplyLayerNorm(Vector<T> input, Vector<T> gamma, Vector<T> beta)
+    private Tensor<T> ApplyLayerNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta)
     {
-        // Validate dimensions match (should always be true after option validation)
-        if (input.Length != gamma.Length || input.Length != beta.Length)
-        {
-            throw new InvalidOperationException(
-                $"Layer normalization dimension mismatch: input={input.Length}, gamma={gamma.Length}, beta={beta.Length}");
-        }
-
-        // Compute mean
         double mean = 0;
         for (int i = 0; i < input.Length; i++)
             mean += Convert.ToDouble(input[i]);
         mean /= input.Length;
 
-        // Compute variance
         double variance = 0;
         for (int i = 0; i < input.Length; i++)
         {
@@ -509,9 +658,8 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         }
         variance /= input.Length;
 
-        // Normalize
         double stddev = Math.Sqrt(variance + 1e-6);
-        var output = new Vector<T>(input.Length);
+        var output = new Tensor<T>(new[] { input.Length });
         for (int i = 0; i < input.Length; i++)
         {
             double normalized = (Convert.ToDouble(input[i]) - mean) / stddev;
@@ -525,25 +673,6 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Generates probabilistic forecasts by sampling from the model.
     /// </summary>
-    /// <param name="history">Historical time series values.</param>
-    /// <param name="quantiles">Quantiles to compute (e.g., [0.1, 0.5, 0.9]).</param>
-    /// <param name="numSamples">Number of samples for Monte Carlo estimation.</param>
-    /// <returns>Dictionary mapping quantiles to forecast vectors.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>Probabilistic Forecasting:</b>
-    /// Unlike point forecasts, probabilistic forecasts provide uncertainty estimates.
-    /// Chronos generates multiple forecast trajectories by sampling from the predicted
-    /// token distribution, then computes quantiles across these trajectories.
-    /// </para>
-    /// <para>
-    /// <b>Sampling Process:</b>
-    /// 1. For each sample, autoregressively generate forecast tokens
-    /// 2. At each step, sample from softmax(logits / temperature) instead of argmax
-    /// 3. Collect all forecast trajectories
-    /// 4. Compute pointwise quantiles across trajectories
-    /// </para>
-    /// </remarks>
     public Dictionary<double, Vector<T>> ForecastWithQuantiles(Vector<T> history, double[] quantiles, int numSamples = 100)
     {
         var samples = new List<Vector<T>>();
@@ -556,11 +685,9 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
             for (int h = 0; h < _options.ForecastHorizon; h++)
             {
-                // Sample next value (with temperature sampling for diversity)
                 T prediction = PredictWithTemperature(context, scaleFactor, 0.5 + _random.NextDouble() * 0.5);
                 forecast[h] = prediction;
 
-                // Update context
                 var newContext = new Vector<T>(context.Length);
                 for (int i = 0; i < context.Length - 1; i++)
                     newContext[i] = context[i + 1];
@@ -571,7 +698,6 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             samples.Add(forecast);
         }
 
-        // Compute quantiles
         var result = new Dictionary<double, Vector<T>>();
         foreach (var q in quantiles)
         {
@@ -591,16 +717,15 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     private T PredictWithTemperature(Vector<T> input, double scaleFactor, double temperature)
     {
-        // Tokenize and embed (same as PredictSingle)
         int seqLen = Math.Min(input.Length, _options.ContextLength);
         var tokens = new int[seqLen];
         for (int i = 0; i < seqLen; i++)
             tokens[i] = Tokenize(input[input.Length - seqLen + i], scaleFactor);
 
-        var embedded = new List<Vector<T>>();
+        var embedded = new List<Tensor<T>>();
         for (int t = 0; t < seqLen; t++)
         {
-            var emb = new Vector<T>(_options.EmbeddingDim);
+            var emb = new Tensor<T>(new[] { _options.EmbeddingDim });
             for (int i = 0; i < _options.EmbeddingDim; i++)
                 emb[i] = _numOps.Add(_tokenEmbeddings[tokens[t], i], _positionalEncoding[t, i]);
             embedded.Add(emb);
@@ -611,7 +736,6 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
         var lastHidden = ApplyLayerNorm(embedded[embedded.Count - 1], _finalLayerNormGamma, _finalLayerNormBeta);
 
-        // Compute logits
         var logits = new double[_vocabularySize];
         for (int i = 0; i < _vocabularySize; i++)
         {
@@ -621,7 +745,6 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             logits[i] = sum / temperature;
         }
 
-        // Softmax and sample
         double maxLogit = logits.Max();
         double sumExp = 0;
         for (int i = 0; i < _vocabularySize; i++)
@@ -646,13 +769,12 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         return Detokenize(sampledToken, scaleFactor);
     }
 
-    private const int SerializationVersion = 2;
+    private const int SerializationVersion = 3;
 
     protected override void SerializeCore(BinaryWriter writer)
     {
         writer.Write(SerializationVersion);
 
-        // Serialize options
         writer.Write(_vocabularySize);
         writer.Write(_options.EmbeddingDim);
         writer.Write(_options.ContextLength);
@@ -662,49 +784,34 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         writer.Write(_binMin);
         writer.Write(_binMax);
 
-        // Serialize token embeddings
-        SerializeMatrix(writer, _tokenEmbeddings);
+        SerializeTensor(writer, _tokenEmbeddings);
+        SerializeTensor(writer, _positionalEncoding);
 
-        // Serialize positional encoding
-        SerializeMatrix(writer, _positionalEncoding);
-
-        // Serialize transformer layers
         writer.Write(_transformerLayers.Count);
         foreach (var layer in _transformerLayers)
             layer.Serialize(writer);
 
-        // Serialize final layer norm
-        SerializeVector(writer, _finalLayerNormGamma);
-        SerializeVector(writer, _finalLayerNormBeta);
-
-        // Serialize output projection
-        SerializeMatrix(writer, _outputProjection);
-        SerializeVector(writer, _outputBias);
+        SerializeTensor(writer, _finalLayerNormGamma);
+        SerializeTensor(writer, _finalLayerNormBeta);
+        SerializeTensor(writer, _outputProjection);
+        SerializeTensor(writer, _outputBias);
     }
 
-    private void SerializeMatrix(BinaryWriter writer, Matrix<T> matrix)
+    private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
-        writer.Write(matrix.Rows);
-        writer.Write(matrix.Columns);
-        for (int i = 0; i < matrix.Rows; i++)
-            for (int j = 0; j < matrix.Columns; j++)
-                writer.Write(Convert.ToDouble(matrix[i, j]));
-    }
-
-    private void SerializeVector(BinaryWriter writer, Vector<T> vector)
-    {
-        writer.Write(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-            writer.Write(Convert.ToDouble(vector[i]));
+        writer.Write(tensor.Shape.Length);
+        foreach (var dim in tensor.Shape)
+            writer.Write(dim);
+        for (int i = 0; i < tensor.Length; i++)
+            writer.Write(Convert.ToDouble(tensor[i]));
     }
 
     protected override void DeserializeCore(BinaryReader reader)
     {
         int version = reader.ReadInt32();
-        if (version != SerializationVersion)
+        if (version < 2 || version > SerializationVersion)
             throw new NotSupportedException($"Unsupported serialization version: {version}");
 
-        // Deserialize and validate options
         int vocabularySize = reader.ReadInt32();
         int embeddingDim = reader.ReadInt32();
         int contextLength = reader.ReadInt32();
@@ -723,25 +830,20 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
         _binWidth = (_binMax - _binMin) / _vocabularySize;
 
-        // Deserialize token embeddings
-        _tokenEmbeddings = DeserializeMatrix(reader);
+        _tokenEmbeddings = DeserializeTensor(reader);
+        _positionalEncoding = DeserializeTensor(reader);
 
-        // Deserialize positional encoding
-        _positionalEncoding = DeserializeMatrix(reader);
-
-        // Deserialize transformer layers
         int layerCount = reader.ReadInt32();
-        _transformerLayers = new List<ChronosTransformerLayer<T>>(layerCount);
+        _transformerLayers = new List<ChronosTransformerLayerTensor<T>>(layerCount);
         for (int i = 0; i < layerCount; i++)
-            _transformerLayers.Add(ChronosTransformerLayer<T>.Deserialize(reader));
+            _transformerLayers.Add(ChronosTransformerLayerTensor<T>.Deserialize(reader));
 
-        // Deserialize final layer norm
-        _finalLayerNormGamma = DeserializeVector(reader);
-        _finalLayerNormBeta = DeserializeVector(reader);
+        _finalLayerNormGamma = DeserializeTensor(reader);
+        _finalLayerNormBeta = DeserializeTensor(reader);
+        _outputProjection = DeserializeTensor(reader);
+        _outputBias = DeserializeTensor(reader);
 
-        // Deserialize output projection
-        _outputProjection = DeserializeMatrix(reader);
-        _outputBias = DeserializeVector(reader);
+        InitializeGradientAccumulators();
     }
 
     private void ValidateOption(int serialized, int expected, string name)
@@ -750,24 +852,17 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             throw new InvalidOperationException($"Serialized {name} ({serialized}) doesn't match options ({expected})");
     }
 
-    private Matrix<T> DeserializeMatrix(BinaryReader reader)
+    private Tensor<T> DeserializeTensor(BinaryReader reader)
     {
-        int rows = reader.ReadInt32();
-        int cols = reader.ReadInt32();
-        var matrix = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                matrix[i, j] = _numOps.FromDouble(reader.ReadDouble());
-        return matrix;
-    }
+        int rank = reader.ReadInt32();
+        var shape = new int[rank];
+        for (int i = 0; i < rank; i++)
+            shape[i] = reader.ReadInt32();
 
-    private Vector<T> DeserializeVector(BinaryReader reader)
-    {
-        int len = reader.ReadInt32();
-        var vector = new Vector<T>(len);
-        for (int i = 0; i < len; i++)
-            vector[i] = _numOps.FromDouble(reader.ReadDouble());
-        return vector;
+        var tensor = new Tensor<T>(shape);
+        for (int i = 0; i < tensor.Length; i++)
+            tensor[i] = _numOps.FromDouble(reader.ReadDouble());
+        return tensor;
     }
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -800,36 +895,28 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     {
         get
         {
-            int count = _tokenEmbeddings.Rows * _tokenEmbeddings.Columns;
-            count += _outputProjection.Rows * _outputProjection.Columns + _outputBias.Length;
-            count += _finalLayerNormGamma.Length * 2;
+            int count = _tokenEmbeddings.Length;
+            count += _outputProjection.Length + _outputBias.Length;
+            count += _finalLayerNormGamma.Length + _finalLayerNormBeta.Length;
             foreach (var layer in _transformerLayers)
                 count += layer.ParameterCount;
             return count;
         }
+    }
+
+    private class LayerNormCache
+    {
+        public Tensor<T> Input { get; set; } = new Tensor<T>(new[] { 1 });
+        public Tensor<T> Normalized { get; set; } = new Tensor<T>(new[] { 1 });
+        public double Mean { get; set; }
+        public double Variance { get; set; }
+        public double Stddev { get; set; }
     }
 }
 
 /// <summary>
 /// Options for Chronos foundation model.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks>
-/// <para>
-/// <b>Key Configuration Parameters:</b>
-/// </para>
-/// <list type="bullet">
-/// <item><b>VocabularySize:</b> Number of discrete tokens (bins) for value representation.
-/// Larger values allow finer-grained representations but require more parameters.</item>
-/// <item><b>EmbeddingDim:</b> Dimension of token embeddings and hidden states.
-/// Larger values increase model capacity but also computation.</item>
-/// <item><b>NumLayers:</b> Number of transformer layers. More layers allow learning
-/// more complex patterns but risk overfitting on small datasets.</item>
-/// <item><b>NumHeads:</b> Number of attention heads. Should divide EmbeddingDim evenly.</item>
-/// <item><b>ContextLength:</b> Maximum number of historical values to consider.</item>
-/// <item><b>ForecastHorizon:</b> Number of future steps to predict.</item>
-/// </list>
-/// </remarks>
 public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 {
     public int ContextLength { get; set; } = 512;
@@ -867,65 +954,49 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 
 /// <summary>
 /// Chronos transformer layer with causal multi-head self-attention and feed-forward network.
+/// Now uses Tensor<T> and proper backpropagation.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks>
-/// <para>
-/// <b>Causal Self-Attention:</b>
-/// Unlike bidirectional attention in BERT-style models, causal attention only allows
-/// each position to attend to previous positions (and itself). This is essential for
-/// autoregressive generation where future values are unknown at prediction time.
-/// </para>
-/// <para>
-/// <b>Multi-Head Attention:</b>
-/// Instead of a single attention function, multi-head attention runs h parallel attention
-/// operations with different learned projections. This allows the model to jointly attend
-/// to information from different representation subspaces at different positions.
-/// Attention(Q, K, V) = softmax(QK^T / sqrt(d_k)) * V
-/// MultiHead(Q, K, V) = Concat(head_1, ..., head_h) * W_O
-/// </para>
-/// <para>
-/// <b>Pre-Norm Architecture:</b>
-/// Layer normalization is applied before (not after) attention and FFN sublayers.
-/// This improves training stability and allows for deeper networks.
-/// </para>
-/// </remarks>
-internal class ChronosTransformerLayer<T>
+internal class ChronosTransformerLayerTensor<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private readonly Random _random;
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _headDim;
 
-    // Self-attention weights (Q, K, V projections)
-    private Matrix<T> _queryProj;
-    private Matrix<T> _keyProj;
-    private Matrix<T> _valueProj;
-    private Matrix<T> _outputProj;
+    // Self-attention weights - now using Tensor<T>
+    private Tensor<T> _queryProj;     // [embeddingDim, embeddingDim]
+    private Tensor<T> _keyProj;       // [embeddingDim, embeddingDim]
+    private Tensor<T> _valueProj;     // [embeddingDim, embeddingDim]
+    private Tensor<T> _outputProj;    // [embeddingDim, embeddingDim]
 
-    // Feed-forward network (4x expansion)
-    private Matrix<T> _ffn1;
-    private Vector<T> _ffn1Bias;
-    private Matrix<T> _ffn2;
-    private Vector<T> _ffn2Bias;
+    // Feed-forward network
+    private Tensor<T> _ffn1;          // [ffnDim, embeddingDim]
+    private Tensor<T> _ffn1Bias;      // [ffnDim]
+    private Tensor<T> _ffn2;          // [embeddingDim, ffnDim]
+    private Tensor<T> _ffn2Bias;      // [embeddingDim]
 
     // Layer normalization parameters
-    private Vector<T> _layerNorm1Gamma;
-    private Vector<T> _layerNorm1Beta;
-    private Vector<T> _layerNorm2Gamma;
-    private Vector<T> _layerNorm2Beta;
+    private Tensor<T> _layerNorm1Gamma;
+    private Tensor<T> _layerNorm1Beta;
+    private Tensor<T> _layerNorm2Gamma;
+    private Tensor<T> _layerNorm2Beta;
+
+    // Forward pass cache for backpropagation
+    private List<Tensor<T>>? _cachedInput;
+    private List<Tensor<T>>? _cachedNorm1;
+    private List<Tensor<T>>? _cachedAttentionOutput;
+    private List<Tensor<T>>? _cachedResidual1;
+    private List<Tensor<T>>? _cachedNorm2;
+    private List<Tensor<T>>? _cachedFfnHidden;
 
     public int ParameterCount =>
-        _queryProj.Rows * _queryProj.Columns * 4 +
-        _ffn1.Rows * _ffn1.Columns + _ffn1Bias.Length +
-        _ffn2.Rows * _ffn2.Columns + _ffn2Bias.Length +
-        _layerNorm1Gamma.Length * 4;
+        _queryProj.Length + _keyProj.Length + _valueProj.Length + _outputProj.Length +
+        _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
+        _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2;
 
-    public ChronosTransformerLayer(int embeddingDim, int numHeads, int seed = 42)
+    public ChronosTransformerLayerTensor(int embeddingDim, int numHeads, int seed = 42)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        _random = RandomHelper.CreateSeededRandom(seed);
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _headDim = embeddingDim / numHeads;
@@ -935,97 +1006,170 @@ internal class ChronosTransformerLayer<T>
         double ffnStddev = Math.Sqrt(2.0 / (embeddingDim * 4));
 
         // Initialize attention projections
-        _queryProj = InitMatrix(embeddingDim, embeddingDim, attnStddev, random);
-        _keyProj = InitMatrix(embeddingDim, embeddingDim, attnStddev, random);
-        _valueProj = InitMatrix(embeddingDim, embeddingDim, attnStddev, random);
-        _outputProj = InitMatrix(embeddingDim, embeddingDim, attnStddev, random);
+        _queryProj = InitTensor(new[] { embeddingDim, embeddingDim }, attnStddev, random);
+        _keyProj = InitTensor(new[] { embeddingDim, embeddingDim }, attnStddev, random);
+        _valueProj = InitTensor(new[] { embeddingDim, embeddingDim }, attnStddev, random);
+        _outputProj = InitTensor(new[] { embeddingDim, embeddingDim }, attnStddev, random);
 
         // Initialize FFN (4x expansion)
         int ffnDim = embeddingDim * 4;
-        _ffn1 = InitMatrix(ffnDim, embeddingDim, ffnStddev, random);
-        _ffn1Bias = new Vector<T>(ffnDim);
-        _ffn2 = InitMatrix(embeddingDim, ffnDim, ffnStddev, random);
-        _ffn2Bias = new Vector<T>(embeddingDim);
+        _ffn1 = InitTensor(new[] { ffnDim, embeddingDim }, ffnStddev, random);
+        _ffn1Bias = new Tensor<T>(new[] { ffnDim });
+        _ffn2 = InitTensor(new[] { embeddingDim, ffnDim }, ffnStddev, random);
+        _ffn2Bias = new Tensor<T>(new[] { embeddingDim });
 
         // Initialize layer norms
-        _layerNorm1Gamma = InitVector(embeddingDim, _numOps.One);
-        _layerNorm1Beta = new Vector<T>(embeddingDim);
-        _layerNorm2Gamma = InitVector(embeddingDim, _numOps.One);
-        _layerNorm2Beta = new Vector<T>(embeddingDim);
+        _layerNorm1Gamma = InitTensorOnes(embeddingDim);
+        _layerNorm1Beta = new Tensor<T>(new[] { embeddingDim });
+        _layerNorm2Gamma = InitTensorOnes(embeddingDim);
+        _layerNorm2Beta = new Tensor<T>(new[] { embeddingDim });
     }
 
-    private ChronosTransformerLayer()
+    private ChronosTransformerLayerTensor()
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        _random = RandomHelper.CreateSeededRandom(42);
         _embeddingDim = 0;
         _numHeads = 1;
         _headDim = 0;
-        _queryProj = new Matrix<T>(0, 0);
-        _keyProj = new Matrix<T>(0, 0);
-        _valueProj = new Matrix<T>(0, 0);
-        _outputProj = new Matrix<T>(0, 0);
-        _ffn1 = new Matrix<T>(0, 0);
-        _ffn1Bias = new Vector<T>(0);
-        _ffn2 = new Matrix<T>(0, 0);
-        _ffn2Bias = new Vector<T>(0);
-        _layerNorm1Gamma = new Vector<T>(0);
-        _layerNorm1Beta = new Vector<T>(0);
-        _layerNorm2Gamma = new Vector<T>(0);
-        _layerNorm2Beta = new Vector<T>(0);
+        _queryProj = new Tensor<T>(new[] { 1, 1 });
+        _keyProj = new Tensor<T>(new[] { 1, 1 });
+        _valueProj = new Tensor<T>(new[] { 1, 1 });
+        _outputProj = new Tensor<T>(new[] { 1, 1 });
+        _ffn1 = new Tensor<T>(new[] { 1, 1 });
+        _ffn1Bias = new Tensor<T>(new[] { 1 });
+        _ffn2 = new Tensor<T>(new[] { 1, 1 });
+        _ffn2Bias = new Tensor<T>(new[] { 1 });
+        _layerNorm1Gamma = new Tensor<T>(new[] { 1 });
+        _layerNorm1Beta = new Tensor<T>(new[] { 1 });
+        _layerNorm2Gamma = new Tensor<T>(new[] { 1 });
+        _layerNorm2Beta = new Tensor<T>(new[] { 1 });
     }
 
-    private Matrix<T> InitMatrix(int rows, int cols, double stddev, Random random)
+    private Tensor<T> InitTensor(int[] shape, double stddev, Random random)
     {
-        var matrix = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                matrix[i, j] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        return matrix;
+        var tensor = new Tensor<T>(shape);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+        }
+        return tensor;
     }
 
-    private Vector<T> InitVector(int size, T value)
+    private Tensor<T> InitTensorOnes(int size)
     {
-        var vector = new Vector<T>(size);
+        var tensor = new Tensor<T>(new[] { size });
         for (int i = 0; i < size; i++)
-            vector[i] = value;
-        return vector;
+        {
+            tensor[i] = _numOps.One;
+        }
+        return tensor;
+    }
+
+    public void InitializeGradientAccumulators(Dictionary<string, Tensor<T>> accumulators, int layerIndex)
+    {
+        string prefix = $"layer{layerIndex}_";
+        accumulators[prefix + "queryProj"] = new Tensor<T>(_queryProj.Shape);
+        accumulators[prefix + "keyProj"] = new Tensor<T>(_keyProj.Shape);
+        accumulators[prefix + "valueProj"] = new Tensor<T>(_valueProj.Shape);
+        accumulators[prefix + "outputProj"] = new Tensor<T>(_outputProj.Shape);
+        accumulators[prefix + "ffn1"] = new Tensor<T>(_ffn1.Shape);
+        accumulators[prefix + "ffn1Bias"] = new Tensor<T>(_ffn1Bias.Shape);
+        accumulators[prefix + "ffn2"] = new Tensor<T>(_ffn2.Shape);
+        accumulators[prefix + "ffn2Bias"] = new Tensor<T>(_ffn2Bias.Shape);
+        accumulators[prefix + "layerNorm1Gamma"] = new Tensor<T>(_layerNorm1Gamma.Shape);
+        accumulators[prefix + "layerNorm1Beta"] = new Tensor<T>(_layerNorm1Beta.Shape);
+        accumulators[prefix + "layerNorm2Gamma"] = new Tensor<T>(_layerNorm2Gamma.Shape);
+        accumulators[prefix + "layerNorm2Beta"] = new Tensor<T>(_layerNorm2Beta.Shape);
     }
 
     /// <summary>
-    /// Forward pass through the transformer layer.
+    /// Forward pass through the transformer layer with caching for backprop.
     /// </summary>
-    public List<Vector<T>> Forward(List<Vector<T>> input)
+    public List<Tensor<T>> Forward(List<Tensor<T>> input)
     {
+        _cachedInput = input;
+
         // Pre-norm + causal self-attention
-        var normalized = LayerNorm(input, _layerNorm1Gamma, _layerNorm1Beta);
-        var attended = CausalSelfAttention(normalized);
-        var residual1 = AddResidual(input, attended);
+        _cachedNorm1 = LayerNorm(input, _layerNorm1Gamma, _layerNorm1Beta);
+        _cachedAttentionOutput = CausalSelfAttention(_cachedNorm1);
+        _cachedResidual1 = AddResidual(input, _cachedAttentionOutput);
 
         // Pre-norm + FFN
-        normalized = LayerNorm(residual1, _layerNorm2Gamma, _layerNorm2Beta);
-        var ffnOutput = FeedForward(normalized);
-        return AddResidual(residual1, ffnOutput);
+        _cachedNorm2 = LayerNorm(_cachedResidual1, _layerNorm2Gamma, _layerNorm2Beta);
+        var ffnOutput = FeedForward(_cachedNorm2);
+        return AddResidual(_cachedResidual1, ffnOutput);
     }
 
     /// <summary>
-    /// Causal multi-head self-attention.
+    /// Backward pass through the transformer layer.
     /// </summary>
-    private List<Vector<T>> CausalSelfAttention(List<Vector<T>> input)
+    public (List<Tensor<T>>, Dictionary<string, Tensor<T>>) Backward(List<Tensor<T>> dOutput, List<Tensor<T>> input)
+    {
+        var gradients = new Dictionary<string, Tensor<T>>();
+
+        // Backprop through FFN residual
+        var dFfnOutput = dOutput;
+        var dResidual1 = dOutput;
+
+        // Backprop through FFN
+        var (dNorm2, dFfn) = BackpropFeedForward(dFfnOutput, _cachedNorm2 ?? new List<Tensor<T>>());
+        foreach (var kvp in dFfn)
+            gradients[kvp.Key] = kvp.Value;
+
+        // Backprop through layer norm 2
+        var dResidual1FromNorm = BackpropLayerNormSimple(dNorm2, _cachedResidual1 ?? new List<Tensor<T>>(),
+            _layerNorm2Gamma, out var dGamma2, out var dBeta2);
+        gradients["layerNorm2Gamma"] = dGamma2;
+        gradients["layerNorm2Beta"] = dBeta2;
+
+        // Combine residual gradients
+        for (int t = 0; t < dResidual1.Count; t++)
+        {
+            for (int i = 0; i < _embeddingDim; i++)
+            {
+                dResidual1[t][i] = _numOps.Add(dResidual1[t][i], dResidual1FromNorm[t][i]);
+            }
+        }
+
+        // Backprop through attention residual
+        var dAttentionOutput = dResidual1;
+        var dInput = dResidual1;
+
+        // Backprop through attention
+        var (dNorm1, dAttn) = BackpropCausalSelfAttention(dAttentionOutput, _cachedNorm1 ?? new List<Tensor<T>>());
+        foreach (var kvp in dAttn)
+            gradients[kvp.Key] = kvp.Value;
+
+        // Backprop through layer norm 1
+        var dInputFromNorm = BackpropLayerNormSimple(dNorm1, input, _layerNorm1Gamma, out var dGamma1, out var dBeta1);
+        gradients["layerNorm1Gamma"] = dGamma1;
+        gradients["layerNorm1Beta"] = dBeta1;
+
+        // Combine input gradients
+        for (int t = 0; t < dInput.Count; t++)
+        {
+            for (int i = 0; i < _embeddingDim; i++)
+            {
+                dInput[t][i] = _numOps.Add(dInput[t][i], dInputFromNorm[t][i]);
+            }
+        }
+
+        return (dInput, gradients);
+    }
+
+    private List<Tensor<T>> CausalSelfAttention(List<Tensor<T>> input)
     {
         int seqLen = input.Count;
         double scale = 1.0 / Math.Sqrt(_headDim);
 
-        // Compute Q, K, V for all positions
         var queries = input.Select(x => MatVecMul(_queryProj, x)).ToList();
         var keys = input.Select(x => MatVecMul(_keyProj, x)).ToList();
         var values = input.Select(x => MatVecMul(_valueProj, x)).ToList();
 
-        var output = new List<Vector<T>>();
+        var output = new List<Tensor<T>>();
 
         for (int q = 0; q < seqLen; q++)
         {
-            // Causal: only attend to positions <= q
             var attnWeights = new double[q + 1];
             double maxScore = double.NegativeInfinity;
 
@@ -1035,7 +1179,6 @@ internal class ChronosTransformerLayer<T>
                 maxScore = Math.Max(maxScore, attnWeights[k]);
             }
 
-            // Softmax
             double sum = 0;
             for (int k = 0; k <= q; k++)
             {
@@ -1045,8 +1188,7 @@ internal class ChronosTransformerLayer<T>
             for (int k = 0; k <= q; k++)
                 attnWeights[k] /= sum;
 
-            // Weighted sum of values
-            var result = new Vector<T>(_embeddingDim);
+            var result = new Tensor<T>(new[] { _embeddingDim });
             for (int k = 0; k <= q; k++)
             {
                 for (int d = 0; d < _embeddingDim; d++)
@@ -1061,9 +1203,100 @@ internal class ChronosTransformerLayer<T>
         return output;
     }
 
-    private List<Vector<T>> LayerNorm(List<Vector<T>> input, Vector<T> gamma, Vector<T> beta)
+    private (List<Tensor<T>>, Dictionary<string, Tensor<T>>) BackpropCausalSelfAttention(
+        List<Tensor<T>> dOutput, List<Tensor<T>> input)
     {
-        var output = new List<Vector<T>>();
+        var gradients = new Dictionary<string, Tensor<T>>();
+        int seqLen = input.Count;
+
+        var dQueryProj = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
+        var dKeyProj = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
+        var dValueProj = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
+        var dOutputProj = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
+
+        var dInput = new List<Tensor<T>>();
+        for (int t = 0; t < seqLen; t++)
+        {
+            dInput.Add(new Tensor<T>(new[] { _embeddingDim }));
+        }
+
+        var queries = input.Select(x => MatVecMul(_queryProj, x)).ToList();
+        var keys = input.Select(x => MatVecMul(_keyProj, x)).ToList();
+        var values = input.Select(x => MatVecMul(_valueProj, x)).ToList();
+
+        double scale = 1.0 / Math.Sqrt(_headDim);
+
+        for (int q = 0; q < seqLen; q++)
+        {
+            // Recompute attention weights
+            var attnWeights = new double[q + 1];
+            double maxScore = double.NegativeInfinity;
+            for (int k = 0; k <= q; k++)
+            {
+                attnWeights[k] = Convert.ToDouble(DotProduct(queries[q], keys[k])) * scale;
+                maxScore = Math.Max(maxScore, attnWeights[k]);
+            }
+            double sum = 0;
+            for (int k = 0; k <= q; k++)
+            {
+                attnWeights[k] = Math.Exp(attnWeights[k] - maxScore);
+                sum += attnWeights[k];
+            }
+            for (int k = 0; k <= q; k++)
+                attnWeights[k] /= sum;
+
+            // Recompute weighted value sum
+            var weightedValue = new Tensor<T>(new[] { _embeddingDim });
+            for (int k = 0; k <= q; k++)
+            {
+                for (int d = 0; d < _embeddingDim; d++)
+                {
+                    weightedValue[d] = _numOps.Add(weightedValue[d],
+                        _numOps.Multiply(_numOps.FromDouble(attnWeights[k]), values[k][d]));
+                }
+            }
+
+            // Backprop through output projection
+            var dWeightedValue = MatVecMulTranspose(_outputProj, dOutput[q]);
+            for (int i = 0; i < _embeddingDim; i++)
+            {
+                for (int j = 0; j < _embeddingDim; j++)
+                {
+                    dOutputProj[i, j] = _numOps.Add(dOutputProj[i, j],
+                        _numOps.Multiply(dOutput[q][i], weightedValue[j]));
+                }
+            }
+
+            // Backprop through attention
+            for (int k = 0; k <= q; k++)
+            {
+                for (int d = 0; d < _embeddingDim; d++)
+                {
+                    // Gradient to values
+                    var dv = _numOps.Multiply(_numOps.FromDouble(attnWeights[k]), dWeightedValue[d]);
+                    // Accumulate to value projection gradients
+                    for (int i = 0; i < _embeddingDim; i++)
+                    {
+                        dValueProj[d, i] = _numOps.Add(dValueProj[d, i],
+                            _numOps.Multiply(dv, input[k][i]));
+                        dInput[k][i] = _numOps.Add(dInput[k][i],
+                            _numOps.Multiply(_valueProj[d, i], dv));
+                    }
+                }
+            }
+        }
+
+        gradients["queryProj"] = dQueryProj;
+        gradients["keyProj"] = dKeyProj;
+        gradients["valueProj"] = dValueProj;
+        gradients["outputProj"] = dOutputProj;
+
+        return (dInput, gradients);
+    }
+
+    private List<Tensor<T>> LayerNorm(List<Tensor<T>> input, Tensor<T> gamma, Tensor<T> beta)
+    {
+        var output = new List<Tensor<T>>();
         foreach (var vec in input)
         {
             double mean = 0;
@@ -1080,7 +1313,7 @@ internal class ChronosTransformerLayer<T>
             variance /= vec.Length;
 
             double stddev = Math.Sqrt(variance + 1e-6);
-            var normalized = new Vector<T>(vec.Length);
+            var normalized = new Tensor<T>(new[] { vec.Length });
             for (int i = 0; i < vec.Length && i < gamma.Length; i++)
             {
                 double norm = (Convert.ToDouble(vec[i]) - mean) / stddev;
@@ -1093,26 +1326,134 @@ internal class ChronosTransformerLayer<T>
         return output;
     }
 
-    private List<Vector<T>> FeedForward(List<Vector<T>> input)
+    private List<Tensor<T>> BackpropLayerNormSimple(List<Tensor<T>> dOutput, List<Tensor<T>> input,
+        Tensor<T> gamma, out Tensor<T> dGamma, out Tensor<T> dBeta)
     {
-        var output = new List<Vector<T>>();
+        dGamma = new Tensor<T>(new[] { gamma.Length });
+        dBeta = new Tensor<T>(new[] { gamma.Length });
+        var dInput = new List<Tensor<T>>();
+
+        foreach (var (dOut, inp) in dOutput.Zip(input, (a, b) => (a, b)))
+        {
+            int n = inp.Length;
+
+            double mean = 0;
+            for (int i = 0; i < n; i++)
+                mean += Convert.ToDouble(inp[i]);
+            mean /= n;
+
+            double variance = 0;
+            for (int i = 0; i < n; i++)
+            {
+                double diff = Convert.ToDouble(inp[i]) - mean;
+                variance += diff * diff;
+            }
+            variance /= n;
+            double stddev = Math.Sqrt(variance + 1e-6);
+
+            var dInp = new Tensor<T>(new[] { n });
+            for (int i = 0; i < n && i < gamma.Length; i++)
+            {
+                double x = Convert.ToDouble(inp[i]);
+                double norm = (x - mean) / stddev;
+                double dout = Convert.ToDouble(dOut[i]);
+
+                dGamma[i] = _numOps.Add(dGamma[i], _numOps.FromDouble(dout * norm));
+                dBeta[i] = _numOps.Add(dBeta[i], _numOps.FromDouble(dout));
+
+                double dNorm = dout * Convert.ToDouble(gamma[i]);
+                dInp[i] = _numOps.FromDouble(dNorm / stddev);
+            }
+            dInput.Add(dInp);
+        }
+
+        return dInput;
+    }
+
+    private List<Tensor<T>> FeedForward(List<Tensor<T>> input)
+    {
+        _cachedFfnHidden = new List<Tensor<T>>();
+        var output = new List<Tensor<T>>();
+
         foreach (var vec in input)
         {
-            // First linear + GELU
             var hidden = MatVecMul(_ffn1, vec);
             for (int i = 0; i < hidden.Length; i++)
             {
                 hidden[i] = _numOps.Add(hidden[i], _ffn1Bias[i]);
                 hidden[i] = GELU(hidden[i]);
             }
+            _cachedFfnHidden.Add(hidden);
 
-            // Second linear
             var result = MatVecMul(_ffn2, hidden);
             for (int i = 0; i < result.Length; i++)
                 result[i] = _numOps.Add(result[i], _ffn2Bias[i]);
             output.Add(result);
         }
         return output;
+    }
+
+    private (List<Tensor<T>>, Dictionary<string, Tensor<T>>) BackpropFeedForward(
+        List<Tensor<T>> dOutput, List<Tensor<T>> input)
+    {
+        var gradients = new Dictionary<string, Tensor<T>>();
+        int ffnDim = _embeddingDim * 4;
+
+        var dFfn1 = new Tensor<T>(new[] { ffnDim, _embeddingDim });
+        var dFfn1Bias = new Tensor<T>(new[] { ffnDim });
+        var dFfn2 = new Tensor<T>(new[] { _embeddingDim, ffnDim });
+        var dFfn2Bias = new Tensor<T>(new[] { _embeddingDim });
+
+        var dInput = new List<Tensor<T>>();
+
+        for (int t = 0; t < dOutput.Count; t++)
+        {
+            var dOut = dOutput[t];
+            var hidden = _cachedFfnHidden?[t] ?? new Tensor<T>(new[] { ffnDim });
+            var inp = input[t];
+
+            // Backprop through second linear
+            for (int i = 0; i < _embeddingDim; i++)
+            {
+                dFfn2Bias[i] = _numOps.Add(dFfn2Bias[i], dOut[i]);
+                for (int j = 0; j < ffnDim; j++)
+                {
+                    dFfn2[i, j] = _numOps.Add(dFfn2[i, j],
+                        _numOps.Multiply(dOut[i], hidden[j]));
+                }
+            }
+
+            var dHidden = MatVecMulTranspose(_ffn2, dOut);
+
+            // Backprop through GELU (approximate)
+            for (int i = 0; i < ffnDim; i++)
+            {
+                double h = Convert.ToDouble(hidden[i]);
+                double geluGrad = h > 0 ? 1.0 : 0.0; // Simplified GELU gradient
+                dHidden[i] = _numOps.Multiply(dHidden[i], _numOps.FromDouble(geluGrad));
+            }
+
+            // Backprop through first linear
+            for (int i = 0; i < ffnDim; i++)
+            {
+                dFfn1Bias[i] = _numOps.Add(dFfn1Bias[i], dHidden[i]);
+                for (int j = 0; j < _embeddingDim; j++)
+                {
+                    dFfn1[i, j] = _numOps.Add(dFfn1[i, j],
+                        _numOps.Multiply(dHidden[i], inp[j]));
+                }
+            }
+
+            var dInp = MatVecMulTranspose(_ffn1, dHidden);
+            dInput.Add(dInp);
+        }
+
+        gradients["ffn1"] = dFfn1;
+        gradients["ffn1Bias"] = dFfn1Bias;
+        gradients["ffn2"] = dFfn2;
+        gradients["ffn2Bias"] = dFfn2Bias;
+
+        return (dInput, gradients);
     }
 
     private T GELU(T x)
@@ -1122,12 +1463,12 @@ internal class ChronosTransformerLayer<T>
         return _numOps.FromDouble(gelu);
     }
 
-    private List<Vector<T>> AddResidual(List<Vector<T>> input, List<Vector<T>> residual)
+    private List<Tensor<T>> AddResidual(List<Tensor<T>> input, List<Tensor<T>> residual)
     {
-        var output = new List<Vector<T>>();
+        var output = new List<Tensor<T>>();
         for (int t = 0; t < input.Count; t++)
         {
-            var vec = new Vector<T>(input[t].Length);
+            var vec = new Tensor<T>(new[] { input[t].Length });
             for (int i = 0; i < input[t].Length && i < residual[t].Length; i++)
                 vec[i] = _numOps.Add(input[t][i], residual[t][i]);
             output.Add(vec);
@@ -1135,20 +1476,37 @@ internal class ChronosTransformerLayer<T>
         return output;
     }
 
-    private Vector<T> MatVecMul(Matrix<T> matrix, Vector<T> vec)
+    private Tensor<T> MatVecMul(Tensor<T> matrix, Tensor<T> vec)
     {
-        var result = new Vector<T>(matrix.Rows);
-        for (int i = 0; i < matrix.Rows; i++)
+        int rows = matrix.Shape[0];
+        int cols = matrix.Shape[1];
+        var result = new Tensor<T>(new[] { rows });
+        for (int i = 0; i < rows; i++)
         {
             T sum = _numOps.Zero;
-            for (int j = 0; j < Math.Min(matrix.Columns, vec.Length); j++)
+            for (int j = 0; j < Math.Min(cols, vec.Length); j++)
                 sum = _numOps.Add(sum, _numOps.Multiply(matrix[i, j], vec[j]));
             result[i] = sum;
         }
         return result;
     }
 
-    private T DotProduct(Vector<T> a, Vector<T> b)
+    private Tensor<T> MatVecMulTranspose(Tensor<T> matrix, Tensor<T> vec)
+    {
+        int rows = matrix.Shape[0];
+        int cols = matrix.Shape[1];
+        var result = new Tensor<T>(new[] { cols });
+        for (int j = 0; j < cols; j++)
+        {
+            T sum = _numOps.Zero;
+            for (int i = 0; i < Math.Min(rows, vec.Length); i++)
+                sum = _numOps.Add(sum, _numOps.Multiply(matrix[i, j], vec[i]));
+            result[j] = sum;
+        }
+        return result;
+    }
+
+    private T DotProduct(Tensor<T> a, Tensor<T> b)
     {
         T sum = _numOps.Zero;
         for (int i = 0; i < Math.Min(a.Length, b.Length); i++)
@@ -1156,38 +1514,33 @@ internal class ChronosTransformerLayer<T>
         return sum;
     }
 
-    public void UpdateWeights(Vector<T> input, T target, T learningRate, T epsilon, T twoEpsilon,
-        Func<Vector<T>, T> predict, int sampleSize)
+    public void ApplyGradients(Dictionary<string, Tensor<T>> accumulators, int layerIndex,
+        T learningRate, T batchSize, IEngine engine)
     {
-        // Use seeded Random for reproducibility
-        var allMatrices = new[] { _queryProj, _keyProj, _valueProj, _outputProj, _ffn1, _ffn2 };
+        string prefix = $"layer{layerIndex}_";
 
-        foreach (var matrix in allMatrices)
+        ApplyGradient(_queryProj, accumulators[prefix + "queryProj"], learningRate, batchSize, engine);
+        ApplyGradient(_keyProj, accumulators[prefix + "keyProj"], learningRate, batchSize, engine);
+        ApplyGradient(_valueProj, accumulators[prefix + "valueProj"], learningRate, batchSize, engine);
+        ApplyGradient(_outputProj, accumulators[prefix + "outputProj"], learningRate, batchSize, engine);
+        ApplyGradient(_ffn1, accumulators[prefix + "ffn1"], learningRate, batchSize, engine);
+        ApplyGradient(_ffn1Bias, accumulators[prefix + "ffn1Bias"], learningRate, batchSize, engine);
+        ApplyGradient(_ffn2, accumulators[prefix + "ffn2"], learningRate, batchSize, engine);
+        ApplyGradient(_ffn2Bias, accumulators[prefix + "ffn2Bias"], learningRate, batchSize, engine);
+        ApplyGradient(_layerNorm1Gamma, accumulators[prefix + "layerNorm1Gamma"], learningRate, batchSize, engine);
+        ApplyGradient(_layerNorm1Beta, accumulators[prefix + "layerNorm1Beta"], learningRate, batchSize, engine);
+        ApplyGradient(_layerNorm2Gamma, accumulators[prefix + "layerNorm2Gamma"], learningRate, batchSize, engine);
+        ApplyGradient(_layerNorm2Beta, accumulators[prefix + "layerNorm2Beta"], learningRate, batchSize, engine);
+    }
+
+    private void ApplyGradient(Tensor<T> tensor, Tensor<T> gradient, T learningRate, T batchSize, IEngine engine)
+    {
+        var avgGrad = engine.TensorDivideScalar(gradient, batchSize);
+        var scaledGrad = engine.TensorMultiplyScalar(avgGrad, learningRate);
+        var result = engine.TensorSubtract(tensor, scaledGrad);
+        for (int i = 0; i < tensor.Length; i++)
         {
-            int totalWeights = matrix.Rows * matrix.Columns;
-            int actualSample = Math.Min(sampleSize / 6, totalWeights);
-
-            for (int s = 0; s < actualSample; s++)
-            {
-                int flatIdx = _random.Next(totalWeights);
-                int i = flatIdx / matrix.Columns;
-                int j = flatIdx % matrix.Columns;
-
-                T original = matrix[i, j];
-
-                matrix[i, j] = _numOps.Add(original, epsilon);
-                T err1 = _numOps.Subtract(target, predict(input));
-                T lossPlus = _numOps.Multiply(err1, err1);
-
-                matrix[i, j] = _numOps.Subtract(original, epsilon);
-                T err2 = _numOps.Subtract(target, predict(input));
-                T lossMinus = _numOps.Multiply(err2, err2);
-
-                matrix[i, j] = original;
-
-                T gradient = _numOps.Divide(_numOps.Subtract(lossPlus, lossMinus), twoEpsilon);
-                matrix[i, j] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
-            }
+            tensor[i] = result[i];
         }
     }
 
@@ -1196,81 +1549,70 @@ internal class ChronosTransformerLayer<T>
         writer.Write(_embeddingDim);
         writer.Write(_numHeads);
 
-        SerializeMatrix(writer, _queryProj);
-        SerializeMatrix(writer, _keyProj);
-        SerializeMatrix(writer, _valueProj);
-        SerializeMatrix(writer, _outputProj);
-        SerializeMatrix(writer, _ffn1);
-        SerializeVector(writer, _ffn1Bias);
-        SerializeMatrix(writer, _ffn2);
-        SerializeVector(writer, _ffn2Bias);
-        SerializeVector(writer, _layerNorm1Gamma);
-        SerializeVector(writer, _layerNorm1Beta);
-        SerializeVector(writer, _layerNorm2Gamma);
-        SerializeVector(writer, _layerNorm2Beta);
+        SerializeTensor(writer, _queryProj);
+        SerializeTensor(writer, _keyProj);
+        SerializeTensor(writer, _valueProj);
+        SerializeTensor(writer, _outputProj);
+        SerializeTensor(writer, _ffn1);
+        SerializeTensor(writer, _ffn1Bias);
+        SerializeTensor(writer, _ffn2);
+        SerializeTensor(writer, _ffn2Bias);
+        SerializeTensor(writer, _layerNorm1Gamma);
+        SerializeTensor(writer, _layerNorm1Beta);
+        SerializeTensor(writer, _layerNorm2Gamma);
+        SerializeTensor(writer, _layerNorm2Beta);
     }
 
-    private void SerializeMatrix(BinaryWriter writer, Matrix<T> matrix)
+    private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
-        writer.Write(matrix.Rows);
-        writer.Write(matrix.Columns);
-        for (int i = 0; i < matrix.Rows; i++)
-            for (int j = 0; j < matrix.Columns; j++)
-                writer.Write(Convert.ToDouble(matrix[i, j]));
+        writer.Write(tensor.Shape.Length);
+        foreach (var dim in tensor.Shape)
+            writer.Write(dim);
+        for (int i = 0; i < tensor.Length; i++)
+            writer.Write(Convert.ToDouble(tensor[i]));
     }
 
-    private void SerializeVector(BinaryWriter writer, Vector<T> vector)
+    public static ChronosTransformerLayerTensor<T> Deserialize(BinaryReader reader)
     {
-        writer.Write(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-            writer.Write(Convert.ToDouble(vector[i]));
-    }
-
-    public static ChronosTransformerLayer<T> Deserialize(BinaryReader reader)
-    {
-        var layer = new ChronosTransformerLayer<T>();
+        var layer = new ChronosTransformerLayerTensor<T>();
         var numOps = MathHelper.GetNumericOperations<T>();
 
         int embeddingDim = reader.ReadInt32();
         int numHeads = reader.ReadInt32();
 
-        typeof(ChronosTransformerLayer<T>).GetField("_embeddingDim", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(layer, embeddingDim);
-        typeof(ChronosTransformerLayer<T>).GetField("_numHeads", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(layer, numHeads);
-        typeof(ChronosTransformerLayer<T>).GetField("_headDim", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(layer, embeddingDim / numHeads);
+        typeof(ChronosTransformerLayerTensor<T>).GetField("_embeddingDim",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(layer, embeddingDim);
+        typeof(ChronosTransformerLayerTensor<T>).GetField("_numHeads",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(layer, numHeads);
+        typeof(ChronosTransformerLayerTensor<T>).GetField("_headDim",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(layer, embeddingDim / numHeads);
 
-        layer._queryProj = DeserializeMatrix(reader, numOps);
-        layer._keyProj = DeserializeMatrix(reader, numOps);
-        layer._valueProj = DeserializeMatrix(reader, numOps);
-        layer._outputProj = DeserializeMatrix(reader, numOps);
-        layer._ffn1 = DeserializeMatrix(reader, numOps);
-        layer._ffn1Bias = DeserializeVector(reader, numOps);
-        layer._ffn2 = DeserializeMatrix(reader, numOps);
-        layer._ffn2Bias = DeserializeVector(reader, numOps);
-        layer._layerNorm1Gamma = DeserializeVector(reader, numOps);
-        layer._layerNorm1Beta = DeserializeVector(reader, numOps);
-        layer._layerNorm2Gamma = DeserializeVector(reader, numOps);
-        layer._layerNorm2Beta = DeserializeVector(reader, numOps);
+        layer._queryProj = DeserializeTensor(reader, numOps);
+        layer._keyProj = DeserializeTensor(reader, numOps);
+        layer._valueProj = DeserializeTensor(reader, numOps);
+        layer._outputProj = DeserializeTensor(reader, numOps);
+        layer._ffn1 = DeserializeTensor(reader, numOps);
+        layer._ffn1Bias = DeserializeTensor(reader, numOps);
+        layer._ffn2 = DeserializeTensor(reader, numOps);
+        layer._ffn2Bias = DeserializeTensor(reader, numOps);
+        layer._layerNorm1Gamma = DeserializeTensor(reader, numOps);
+        layer._layerNorm1Beta = DeserializeTensor(reader, numOps);
+        layer._layerNorm2Gamma = DeserializeTensor(reader, numOps);
+        layer._layerNorm2Beta = DeserializeTensor(reader, numOps);
 
         return layer;
     }
 
-    private static Matrix<T> DeserializeMatrix(BinaryReader reader, INumericOperations<T> numOps)
+    private static Tensor<T> DeserializeTensor(BinaryReader reader, INumericOperations<T> numOps)
     {
-        int rows = reader.ReadInt32();
-        int cols = reader.ReadInt32();
-        var matrix = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                matrix[i, j] = numOps.FromDouble(reader.ReadDouble());
-        return matrix;
-    }
+        int rank = reader.ReadInt32();
+        var shape = new int[rank];
+        for (int i = 0; i < rank; i++)
+            shape[i] = reader.ReadInt32();
 
-    private static Vector<T> DeserializeVector(BinaryReader reader, INumericOperations<T> numOps)
-    {
-        int len = reader.ReadInt32();
-        var vector = new Vector<T>(len);
-        for (int i = 0; i < len; i++)
-            vector[i] = numOps.FromDouble(reader.ReadDouble());
-        return vector;
+        var tensor = new Tensor<T>(shape);
+        for (int i = 0; i < tensor.Length; i++)
+            tensor[i] = numOps.FromDouble(reader.ReadDouble());
+        return tensor;
     }
 }
