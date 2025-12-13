@@ -22,6 +22,8 @@ export default {
     // Ignore manual merge commits (e.g., "merge: resolve conflicts...")
     (message) => /^merge:/i.test(message),
     // Ignore general merge commits containing "Merge" followed by common patterns
-    (message) => /^Merge (origin|upstream|master|main)/i.test(message)
+    (message) => /^Merge (origin|upstream|master|main)/i.test(message),
+    // Ignore legacy commit from Work Session Planning PR (#411)
+    (message) => /^Work Session Planning/.test(message)
   ]
 };
