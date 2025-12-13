@@ -205,7 +205,8 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         // ----- Train Generator -----
 
         Generator.SetTrainingMode(true);
-        Discriminator.SetTrainingMode(false);
+        // Keep Discriminator in training mode - required for backpropagation
+        // We just don't call UpdateDiscriminatorParameters() during generator training
 
         // Generate new fake images
         var newGeneratorInput = ConcatenateTensors(noise, fakeLabels);
@@ -219,13 +220,11 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         T genClassLoss = CalculateClassificationLoss(genDiscOutput, fakeLabels, batchSize);
         T generatorLoss = NumOps.Add(genAuthLoss, genClassLoss);
 
-        // Backpropagate through discriminator and generator
+        // Backpropagate through discriminator to get input gradients, then through generator
         var genGradients = CalculateDiscriminatorGradients(genDiscOutput, fakeLabels, isReal: true, batchSize);
-        var discInputGradients = Discriminator.Backpropagate(genGradients);
-        Generator.Backpropagate(discInputGradients);
+        var discInputGradients = Discriminator.BackwardWithInputGradient(genGradients);
+        Generator.Backward(discInputGradients);
         UpdateGeneratorParameters();
-
-        Discriminator.SetTrainingMode(true);
 
         // Track losses
         _discriminatorLosses.Add(discriminatorLoss);

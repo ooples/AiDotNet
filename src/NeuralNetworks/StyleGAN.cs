@@ -288,7 +288,8 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
 
         MappingNetwork.SetTrainingMode(true);
         SynthesisNetwork.SetTrainingMode(true);
-        Discriminator.SetTrainingMode(false);
+        // Keep Discriminator in training mode - required for backpropagation
+        // We just don't call UpdateDiscriminatorParameters() during generator training
 
         // Generate new images
         var newLatentCodes = GenerateRandomLatentCodes(batchSize);
@@ -300,21 +301,19 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
         T generatorLoss = CalculateBinaryLoss(genPredictions, allRealLabels, batchSize);
 
-        // Backpropagate
+        // Backpropagate through discriminator to get input gradients
         var genGradients = CalculateBinaryGradients(genPredictions, allRealLabels, batchSize);
-        var discInputGradients = Discriminator.Backpropagate(genGradients);
+        var discInputGradients = Discriminator.BackwardWithInputGradient(genGradients);
 
         // Backprop through synthesis network
-        var styleGradients = SynthesisNetwork.Backpropagate(discInputGradients);
+        var styleGradients = SynthesisNetwork.BackwardWithInputGradient(discInputGradients);
 
         // Backprop through mapping network
-        MappingNetwork.Backpropagate(styleGradients);
+        MappingNetwork.Backward(styleGradients);
 
         // Update both generator networks
         UpdateSynthesisNetworkParameters();
         UpdateMappingNetworkParameters();
-
-        Discriminator.SetTrainingMode(true);
 
         return (discriminatorLoss, generatorLoss);
     }

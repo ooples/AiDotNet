@@ -269,7 +269,8 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         // ----- Train Generator and Q Network -----
 
         Generator.SetTrainingMode(true);
-        Discriminator.SetTrainingMode(false);
+        // Keep Discriminator and QNetwork in training mode - required for backpropagation
+        // We just don't call UpdateDiscriminatorParameters() during generator training
         QNetwork.SetTrainingMode(true);
 
         // Generate new fake images
@@ -289,13 +290,13 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         T miCoeff = NumOps.FromDouble(_mutualInfoCoefficient);
         T generatorLoss = NumOps.Add(ganLoss, NumOps.Multiply(miCoeff, mutualInfoLoss));
 
-        // Backpropagate through discriminator (for GAN loss)
+        // Backpropagate through discriminator (for GAN loss) to get input gradients
         var ganGradients = CalculateBinaryGradients(genPredictions, allRealLabels, batchSize);
-        var discInputGradients = Discriminator.Backpropagate(ganGradients);
+        var discInputGradients = Discriminator.BackwardWithInputGradient(ganGradients);
 
-        // Backpropagate through Q network (for MI loss)
+        // Backpropagate through Q network (for MI loss) to get input gradients
         var miGradients = CalculateMutualInfoGradients(predictedCodes, latentCodes, batchSize);
-        var qInputGradients = QNetwork.Backpropagate(miGradients);
+        var qInputGradients = QNetwork.BackwardWithInputGradient(miGradients);
 
         // Combine gradients
         var combinedGradients = new Tensor<T>(discInputGradients.Shape);
@@ -309,11 +310,9 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         }
 
         // Backpropagate through generator
-        Generator.Backpropagate(combinedGradients);
+        Generator.Backward(combinedGradients);
         UpdateGeneratorParameters();
         UpdateQNetworkParameters();
-
-        Discriminator.SetTrainingMode(true);
 
         // Track losses
         _discriminatorLosses.Add(discriminatorLoss);

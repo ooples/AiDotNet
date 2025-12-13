@@ -531,7 +531,8 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     private T TrainGeneratorBatch(Tensor<T> noise)
     {
         Generator.SetTrainingMode(true);
-        Critic.SetTrainingMode(false); // Freeze critic
+        // Keep Critic in training mode - required for backpropagation
+        // We just don't call UpdateCriticParameters() during generator training
 
         // Generate fake images
         var generatedImages = Generator.Predict(noise);
@@ -558,16 +559,14 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             gradients[i, 0] = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
         }
 
-        // Backpropagate through critic (frozen) to get gradients for generator
-        var criticInputGradients = Critic.Backpropagate(gradients);
+        // Backpropagate through critic to get gradients for generator
+        var criticInputGradients = Critic.BackwardWithInputGradient(gradients);
 
         // Backpropagate through generator
-        Generator.Backpropagate(criticInputGradients);
+        Generator.Backward(criticInputGradients);
 
         // Update generator parameters
         UpdateGeneratorParameters();
-
-        Critic.SetTrainingMode(true);
 
         return loss;
     }
