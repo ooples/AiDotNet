@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
@@ -35,10 +36,18 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type for computations (e.g., double, float)</typeparam>
 public class BigGAN<T> : NeuralNetworkBase<T>
 {
-    private Vector<T> _momentum;
-    private Vector<T> _secondMoment;
-    private T _beta1Power;
-    private T _beta2Power;
+    // Generator optimizer state
+    private Vector<T> _genMomentum;
+    private Vector<T> _genSecondMoment;
+    private T _genBeta1Power;
+    private T _genBeta2Power;
+
+    // Discriminator optimizer state
+    private Vector<T> _discMomentum;
+    private Vector<T> _discSecondMoment;
+    private T _discBeta1Power;
+    private T _discBeta2Power;
+
     private double _currentLearningRate;
     private double _initialLearningRate;
     private List<T> _generatorLosses = [];
@@ -97,6 +106,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     public bool UseSelfAttention { get; set; }
 
     private Matrix<T> _classEmbeddings;
+    private Matrix<T> _discClassProjection;
     private int _imageChannels;
     private int _imageHeight;
     private int _imageWidth;
@@ -143,6 +153,62 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             0, 0, 0,
             null), lossFunction ?? new HingeLoss<T>())
     {
+        // Input validation
+        if (generatorArchitecture is null)
+        {
+            throw new ArgumentNullException(nameof(generatorArchitecture), "Generator architecture cannot be null.");
+        }
+
+        if (discriminatorArchitecture is null)
+        {
+            throw new ArgumentNullException(nameof(discriminatorArchitecture), "Discriminator architecture cannot be null.");
+        }
+
+        if (latentSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(latentSize), latentSize, "Latent size must be positive.");
+        }
+
+        if (numClasses <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numClasses), numClasses, "Number of classes must be positive.");
+        }
+
+        if (classEmbeddingDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(classEmbeddingDim), classEmbeddingDim, "Class embedding dimension must be positive.");
+        }
+
+        if (imageChannels <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(imageChannels), imageChannels, "Image channels must be positive.");
+        }
+
+        if (imageHeight <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(imageHeight), imageHeight, "Image height must be positive.");
+        }
+
+        if (imageWidth <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(imageWidth), imageWidth, "Image width must be positive.");
+        }
+
+        if (generatorChannels <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(generatorChannels), generatorChannels, "Generator channels must be positive.");
+        }
+
+        if (discriminatorChannels <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(discriminatorChannels), discriminatorChannels, "Discriminator channels must be positive.");
+        }
+
+        if (initialLearningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), initialLearningRate, "Initial learning rate must be positive.");
+        }
+
         LatentSize = latentSize;
         NumClasses = numClasses;
         ClassEmbeddingDim = classEmbeddingDim;
@@ -158,19 +224,28 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         _initialLearningRate = initialLearningRate;
         _currentLearningRate = initialLearningRate;
 
-        // Initialize optimizer parameters
-        _beta1Power = NumOps.One;
-        _beta2Power = NumOps.One;
+        // Initialize generator optimizer state
+        _genBeta1Power = NumOps.One;
+        _genBeta2Power = NumOps.One;
+        _genMomentum = Vector<T>.Empty();
+        _genSecondMoment = Vector<T>.Empty();
+
+        // Initialize discriminator optimizer state
+        _discBeta1Power = NumOps.One;
+        _discBeta2Power = NumOps.One;
+        _discMomentum = Vector<T>.Empty();
+        _discSecondMoment = Vector<T>.Empty();
 
         // Initialize class embeddings with orthogonal initialization
         _classEmbeddings = InitializeClassEmbeddings();
+
+        // Initialize discriminator class projection for projection discriminator
+        _discClassProjection = InitializeDiscriminatorProjection();
 
         // Create generator and discriminator
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
 
-        _momentum = Vector<T>.Empty();
-        _secondMoment = Vector<T>.Empty();
         _lossFunction = lossFunction ?? new HingeLoss<T>();
 
         InitializeLayers();
@@ -196,6 +271,65 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         }
 
         return embeddings;
+    }
+
+    /// <summary>
+    /// Initializes the discriminator class projection matrix for the projection discriminator.
+    /// This matrix projects class embeddings to the discriminator feature space.
+    /// </summary>
+    private Matrix<T> InitializeDiscriminatorProjection()
+    {
+        // The projection maps from class embedding dimension to discriminator output dimension
+        // For BigGAN, we project to a single scalar output dimension
+        var projection = new Matrix<T>(NumClasses, ClassEmbeddingDim);
+
+        // Use scaled uniform random initialization
+        double scale = Math.Sqrt(6.0 / (NumClasses + ClassEmbeddingDim));
+        for (int i = 0; i < NumClasses; i++)
+        {
+            for (int j = 0; j < ClassEmbeddingDim; j++)
+            {
+                projection[i, j] = NumOps.FromDouble((Random.NextDouble() * 2.0 - 1.0) * scale);
+            }
+        }
+
+        return projection;
+    }
+
+    /// <summary>
+    /// Gets the discriminator output with class conditioning using projection discriminator pattern.
+    /// The final score is: D(x) + y^T * V * embed(y)
+    /// where V is the class projection matrix and embed(y) is the class embedding.
+    /// </summary>
+    /// <param name="images">Input images tensor</param>
+    /// <param name="classIndices">Class labels for each image</param>
+    /// <returns>Discriminator scores conditioned on class labels</returns>
+    private Tensor<T> DiscriminatorPredictWithLabels(Tensor<T> images, int[] classIndices)
+    {
+        // Get base discriminator output (unconditional score)
+        var baseOutput = Discriminator.Predict(images);
+        int batchSize = classIndices.Length;
+
+        // Apply projection discriminator: add inner product of class embedding and projection
+        for (int i = 0; i < batchSize; i++)
+        {
+            int classIdx = classIndices[i];
+
+            // Compute projection term: embed(y)^T * V_y
+            // This adds a class-conditional bias to the discriminator output
+            T projectionTerm = NumOps.Zero;
+            for (int j = 0; j < ClassEmbeddingDim; j++)
+            {
+                T embedding = _classEmbeddings[classIdx, j];
+                T projection = _discClassProjection[classIdx, j];
+                projectionTerm = NumOps.Add(projectionTerm, NumOps.Multiply(embedding, projection));
+            }
+
+            // Add projection term to discriminator output
+            baseOutput.SetFlat(i, NumOps.Add(baseOutput.GetFlat(i), projectionTerm));
+        }
+
+        return baseOutput;
     }
 
     /// <summary>
@@ -311,9 +445,15 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="numImages">Number of images to generate</param>
     /// <returns>Generated images</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when numImages is not positive.</exception>
     public Tensor<T> Generate(int numImages)
     {
-        var noise = GenerateNoise(numImages);
+        if (numImages <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numImages), numImages, "Number of images must be positive.");
+        }
+
+        var noise = GenerateGaussianNoise(numImages);
         var classIndices = new int[numImages];
 
         for (int i = 0; i < numImages; i++)
@@ -325,35 +465,20 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Generates random noise for the generator input.
-    /// Uses Gaussian distribution (standard normal).
+    /// Generates random noise for the generator input using vectorized Gaussian noise generation.
+    /// Uses Engine.GenerateGaussianNoise for SIMD/GPU acceleration.
     /// </summary>
-    private Tensor<T> GenerateNoise(int batchSize)
+    private Tensor<T> GenerateGaussianNoise(int batchSize)
     {
-        var noise = new Tensor<T>([batchSize, LatentSize]);
+        var totalElements = batchSize * LatentSize;
+        var mean = NumOps.Zero;
+        var stddev = NumOps.One;
 
-        // Sample from approximate Gaussian using Box-Muller transform
-        for (int i = 0; i < noise.Length; i += 2)
-        {
-            // Clamp u1 to (0, 1] to avoid log(0) = -Infinity
-            var u1 = Random.NextDouble();
-            if (u1 <= double.Epsilon)
-            {
-                u1 = double.Epsilon;
-            }
-            var u2 = Random.NextDouble();
+        // Use Engine's vectorized Gaussian noise generation
+        var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev);
 
-            var z1 = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            noise.SetFlat(i, NumOps.FromDouble(z1));
-
-            if (i + 1 < noise.Length)
-            {
-                var z2 = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                noise.SetFlat(i + 1, NumOps.FromDouble(z2));
-            }
-        }
-
-        return noise;
+        // Reshape to [batchSize, LatentSize]
+        return Tensor<T>.FromVector(noiseVector, [batchSize, LatentSize]);
     }
 
     /// <summary>
@@ -398,14 +523,51 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// <param name="realLabels">Class labels for real images</param>
     /// <param name="batchSize">Number of images in the batch</param>
     /// <returns>Tuple of (discriminator loss, generator loss)</returns>
+    /// <exception cref="ArgumentNullException">Thrown when realImages or realLabels is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when batchSize is not positive.</exception>
+    /// <exception cref="ArgumentException">Thrown when array lengths don't match or labels are out of range.</exception>
     public (T discriminatorLoss, T generatorLoss) TrainStep(Tensor<T> realImages, int[] realLabels, int batchSize)
     {
+        // Input validation
+        if (realImages is null)
+        {
+            throw new ArgumentNullException(nameof(realImages), "Real images tensor cannot be null.");
+        }
+
+        if (realLabels is null)
+        {
+            throw new ArgumentNullException(nameof(realLabels), "Real labels array cannot be null.");
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
+        }
+
+        if (realLabels.Length != batchSize)
+        {
+            throw new ArgumentException(
+                $"Number of labels ({realLabels.Length}) must match batch size ({batchSize}).",
+                nameof(realLabels));
+        }
+
+        // Validate class indices are in valid range
+        for (int i = 0; i < realLabels.Length; i++)
+        {
+            if (realLabels[i] < 0 || realLabels[i] >= NumClasses)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(realLabels),
+                    $"Class index {realLabels[i]} at position {i} is out of range. Must be in [0, {NumClasses}).");
+            }
+        }
+
         // === Train Discriminator ===
         Discriminator.SetTrainingMode(true);
         Generator.SetTrainingMode(false);
 
-        // Real images - maximize D(real)
-        var realOutput = Discriminator.Predict(realImages);
+        // Real images - maximize D(real) with class conditioning
+        var realOutput = DiscriminatorPredictWithLabels(realImages, realLabels);
         var realLoss = CalculateHingeLoss(realOutput, true, batchSize);
 
         // Compute gradients for real images: dL/d(output) for hinge loss
@@ -413,7 +575,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         Discriminator.Backward(realGradients);
 
         // Fake images - minimize D(fake)
-        var noise = GenerateNoise(batchSize);
+        var noise = GenerateGaussianNoise(batchSize);
         var fakeLabels = new int[batchSize];
         for (int i = 0; i < batchSize; i++)
         {
@@ -421,7 +583,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         }
 
         var fakeImages = Generate(noise, fakeLabels);
-        var fakeOutput = Discriminator.Predict(fakeImages);
+        var fakeOutput = DiscriminatorPredictWithLabels(fakeImages, fakeLabels);
         var fakeLoss = CalculateHingeLoss(fakeOutput, false, batchSize);
 
         // Compute gradients for fake images
@@ -439,16 +601,16 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         // Keep Discriminator in training mode - required for backpropagation
         // We just don't call UpdateDiscriminatorParameters() during generator training
 
-        var generatorNoise = GenerateNoise(batchSize);
+        var generatorNoise = GenerateGaussianNoise(batchSize);
         var generatorLabels = new int[batchSize];
         for (int i = 0; i < batchSize; i++)
         {
             generatorLabels[i] = Random.Next(NumClasses);
         }
 
-        // Generate images and get discriminator output
+        // Generate images and get discriminator output with class conditioning
         var generatedImages = GenerateWithGradients(generatorNoise, generatorLabels);
-        var generatorOutput = Discriminator.Predict(generatedImages);
+        var generatorOutput = DiscriminatorPredictWithLabels(generatedImages, generatorLabels);
         var generatorLoss = CalculateHingeLoss(generatorOutput, true, batchSize);
         _generatorLosses.Add(generatorLoss);
 
@@ -526,96 +688,143 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates discriminator parameters using Adam optimizer.
+    /// Updates discriminator parameters using vectorized Adam optimizer.
+    /// Uses Engine operations for SIMD/GPU acceleration.
     /// </summary>
     private void UpdateDiscriminatorParameters()
     {
         var parameters = Discriminator.GetParameters();
         var gradients = Discriminator.GetParameterGradients();
 
-        // Initialize optimizer state if needed
-        if (_momentum == null || _momentum.Length != parameters.Length)
+        // Initialize discriminator optimizer state if needed
+        if (_discMomentum.Length != parameters.Length)
         {
-            _momentum = new Vector<T>(parameters.Length);
-            _momentum.Fill(NumOps.Zero);
+            _discMomentum = new Vector<T>(parameters.Length);
+            _discMomentum.Fill(NumOps.Zero);
         }
 
-        if (_secondMoment == null || _secondMoment.Length != parameters.Length)
+        if (_discSecondMoment.Length != parameters.Length)
         {
-            _secondMoment = new Vector<T>(parameters.Length);
-            _secondMoment.Fill(NumOps.Zero);
+            _discSecondMoment = new Vector<T>(parameters.Length);
+            _discSecondMoment.Fill(NumOps.Zero);
         }
 
-        // Adam optimizer parameters (beta1=0 for GANs)
-        var learningRate = NumOps.FromDouble(_currentLearningRate);
+        // Adam optimizer parameters (beta1=0 for GANs as per BigGAN paper)
         var beta1 = NumOps.FromDouble(0.0);
         var beta2 = NumOps.FromDouble(0.999);
+        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
+        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
         var epsilon = NumOps.FromDouble(1e-8);
+        var learningRate = NumOps.FromDouble(_currentLearningRate);
 
-        var updatedParameters = new Vector<T>(parameters.Length);
+        // Update beta powers for bias correction
+        _discBeta1Power = NumOps.Multiply(_discBeta1Power, beta1);
+        _discBeta2Power = NumOps.Multiply(_discBeta2Power, beta2);
 
-        for (int i = 0; i < parameters.Length; i++)
+        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
+        var mScaled = (Vector<T>)Engine.Multiply(_discMomentum, beta1);
+        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
+        _discMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
+
+        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
+        var vScaled = (Vector<T>)Engine.Multiply(_discSecondMoment, beta2);
+        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
+        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
+        _discSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
+
+        // Bias correction (only needed when beta1 > 0)
+        Vector<T> mCorrected;
+        if (NumOps.GreaterThan(beta1, NumOps.Zero))
         {
-            _momentum[i] = NumOps.Add(
-                NumOps.Multiply(beta1, _momentum[i]),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, beta1), gradients[i])
-            );
-
-            _secondMoment[i] = NumOps.Add(
-                NumOps.Multiply(beta2, _secondMoment[i]),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, beta2),
-                    NumOps.Multiply(gradients[i], gradients[i])
-                )
-            );
-
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(_secondMoment[i]), epsilon)
-            );
-
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, _momentum[i])
-            );
+            var biasCorrection1 = NumOps.Subtract(NumOps.One, _discBeta1Power);
+            mCorrected = (Vector<T>)Engine.Divide(_discMomentum, biasCorrection1);
         }
+        else
+        {
+            mCorrected = _discMomentum;
+        }
+
+        var biasCorrection2 = NumOps.Subtract(NumOps.One, _discBeta2Power);
+        var vCorrected = (Vector<T>)Engine.Divide(_discSecondMoment, biasCorrection2);
+
+        // Vectorized parameter update: p = p - lr * m_corrected / (sqrt(v_corrected) + epsilon)
+        var sqrtV = (Vector<T>)Engine.Sqrt(vCorrected);
+        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
+        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
+        var adaptiveGradient = (Vector<T>)Engine.Divide(mCorrected, sqrtVPlusEps);
+        var update = (Vector<T>)Engine.Multiply(adaptiveGradient, learningRate);
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
 
         Discriminator.UpdateParameters(updatedParameters);
     }
 
     /// <summary>
-    /// Updates generator parameters using Adam optimizer.
+    /// Updates generator parameters using vectorized Adam optimizer.
+    /// Uses Engine operations for SIMD/GPU acceleration.
     /// </summary>
     private void UpdateGeneratorParameters()
     {
         var parameters = Generator.GetParameters();
         var gradients = Generator.GetParameterGradients();
 
-        // Adam optimizer parameters (beta1=0 for GANs)
-        var learningRate = NumOps.FromDouble(_currentLearningRate);
+        // Initialize generator optimizer state if needed
+        if (_genMomentum.Length != parameters.Length)
+        {
+            _genMomentum = new Vector<T>(parameters.Length);
+            _genMomentum.Fill(NumOps.Zero);
+        }
+
+        if (_genSecondMoment.Length != parameters.Length)
+        {
+            _genSecondMoment = new Vector<T>(parameters.Length);
+            _genSecondMoment.Fill(NumOps.Zero);
+        }
+
+        // Adam optimizer parameters (beta1=0 for GANs as per BigGAN paper)
         var beta1 = NumOps.FromDouble(0.0);
         var beta2 = NumOps.FromDouble(0.999);
+        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
+        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
         var epsilon = NumOps.FromDouble(1e-8);
+        var learningRate = NumOps.FromDouble(_currentLearningRate);
 
-        var updatedParameters = new Vector<T>(parameters.Length);
+        // Update beta powers for bias correction
+        _genBeta1Power = NumOps.Multiply(_genBeta1Power, beta1);
+        _genBeta2Power = NumOps.Multiply(_genBeta2Power, beta2);
 
-        for (int i = 0; i < parameters.Length; i++)
+        // Vectorized momentum update: m = beta1 * m + (1 - beta1) * g
+        var mScaled = (Vector<T>)Engine.Multiply(_genMomentum, beta1);
+        var gScaled = (Vector<T>)Engine.Multiply(gradients, oneMinusBeta1);
+        _genMomentum = (Vector<T>)Engine.Add(mScaled, gScaled);
+
+        // Vectorized second moment update: v = beta2 * v + (1 - beta2) * g^2
+        var vScaled = (Vector<T>)Engine.Multiply(_genSecondMoment, beta2);
+        var gSquared = (Vector<T>)Engine.Multiply(gradients, gradients);
+        var gSquaredScaled = (Vector<T>)Engine.Multiply(gSquared, oneMinusBeta2);
+        _genSecondMoment = (Vector<T>)Engine.Add(vScaled, gSquaredScaled);
+
+        // Bias correction (only needed when beta1 > 0)
+        Vector<T> mCorrected;
+        if (NumOps.GreaterThan(beta1, NumOps.Zero))
         {
-            // Note: Using shared momentum/secondMoment isn't ideal but matches original design
-            // A production implementation would use separate optimizer state per network
-            var mHat = gradients[i]; // With beta1=0, momentum is just the gradient
-            var vHat = NumOps.Multiply(gradients[i], gradients[i]);
-
-            var adaptiveLR = NumOps.Divide(
-                learningRate,
-                NumOps.Add(NumOps.Sqrt(vHat), epsilon)
-            );
-
-            updatedParameters[i] = NumOps.Subtract(
-                parameters[i],
-                NumOps.Multiply(adaptiveLR, mHat)
-            );
+            var biasCorrection1 = NumOps.Subtract(NumOps.One, _genBeta1Power);
+            mCorrected = (Vector<T>)Engine.Divide(_genMomentum, biasCorrection1);
         }
+        else
+        {
+            mCorrected = _genMomentum;
+        }
+
+        var biasCorrection2 = NumOps.Subtract(NumOps.One, _genBeta2Power);
+        var vCorrected = (Vector<T>)Engine.Divide(_genSecondMoment, biasCorrection2);
+
+        // Vectorized parameter update: p = p - lr * m_corrected / (sqrt(v_corrected) + epsilon)
+        var sqrtV = (Vector<T>)Engine.Sqrt(vCorrected);
+        var epsilonVec = Vector<T>.CreateDefault(sqrtV.Length, epsilon);
+        var sqrtVPlusEps = (Vector<T>)Engine.Add(sqrtV, epsilonVec);
+        var adaptiveGradient = (Vector<T>)Engine.Divide(mCorrected, sqrtVPlusEps);
+        var update = (Vector<T>)Engine.Multiply(adaptiveGradient, learningRate);
+        var updatedParameters = (Vector<T>)Engine.Subtract(parameters, update);
 
         Generator.UpdateParameters(updatedParameters);
     }
@@ -660,7 +869,11 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Hinge loss implementation for use with the loss function interface.
+    /// GAN hinge loss implementation for use with the loss function interface.
+    /// Uses GAN-specific formulation:
+    /// - For real samples (actual > 0.5): max(0, 1 - predicted)
+    /// - For fake samples (actual &lt;= 0.5): max(0, 1 + predicted)
+    /// This differs from SVM hinge loss which uses y*t formulation.
     /// </summary>
     private class HingeLoss<TLoss> : ILossFunction<TLoss>
     {
@@ -670,16 +883,27 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         {
             var loss = _ops.Zero;
             var one = _ops.One;
+            var half = _ops.FromDouble(0.5);
 
             for (int i = 0; i < predicted.Length; i++)
             {
-                // Hinge loss: max(0, 1 - y * t) where t is target
-                var yt = _ops.Multiply(actual[i], predicted[i]);
-                var margin = _ops.Subtract(one, yt);
-                if (_ops.GreaterThan(margin, _ops.Zero))
+                TLoss hingeLoss;
+                bool isReal = _ops.GreaterThan(actual[i], half);
+
+                if (isReal)
                 {
-                    loss = _ops.Add(loss, margin);
+                    // Real: max(0, 1 - predicted)
+                    var margin = _ops.Subtract(one, predicted[i]);
+                    hingeLoss = _ops.GreaterThan(margin, _ops.Zero) ? margin : _ops.Zero;
                 }
+                else
+                {
+                    // Fake: max(0, 1 + predicted)
+                    var margin = _ops.Add(one, predicted[i]);
+                    hingeLoss = _ops.GreaterThan(margin, _ops.Zero) ? margin : _ops.Zero;
+                }
+
+                loss = _ops.Add(loss, hingeLoss);
             }
 
             return _ops.Divide(loss, _ops.FromDouble(predicted.Length));
@@ -689,18 +913,28 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         {
             var gradient = new Vector<TLoss>(predicted.Length);
             var one = _ops.One;
+            var half = _ops.FromDouble(0.5);
+            var scale = _ops.FromDouble(1.0 / predicted.Length);
 
             for (int i = 0; i < predicted.Length; i++)
             {
-                var yt = _ops.Multiply(actual[i], predicted[i]);
-                var margin = _ops.Subtract(one, yt);
-                if (_ops.GreaterThan(margin, _ops.Zero))
+                bool isReal = _ops.GreaterThan(actual[i], half);
+
+                if (isReal)
                 {
-                    gradient[i] = _ops.Negate(_ops.Divide(actual[i], _ops.FromDouble(predicted.Length)));
+                    // Real: d/dx max(0, 1 - x) = -1 if (1 - x) > 0, else 0
+                    var margin = _ops.Subtract(one, predicted[i]);
+                    gradient[i] = _ops.GreaterThan(margin, _ops.Zero)
+                        ? _ops.Negate(scale)
+                        : _ops.Zero;
                 }
                 else
                 {
-                    gradient[i] = _ops.Zero;
+                    // Fake: d/dx max(0, 1 + x) = 1 if (1 + x) > 0, else 0
+                    var margin = _ops.Add(one, predicted[i]);
+                    gradient[i] = _ops.GreaterThan(margin, _ops.Zero)
+                        ? scale
+                        : _ops.Zero;
                 }
             }
 
@@ -837,10 +1071,14 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     protected override void InitializeLayers()
     {
         // Layers are initialized in the constructor via the Generator and Discriminator CNNs
-        // Initialize momentum vectors for Adam optimizer
-        var paramCount = Generator.GetParameterCount() + Discriminator.GetParameterCount();
-        _momentum = new Vector<T>(paramCount);
-        _secondMoment = new Vector<T>(paramCount);
+        // Initialize momentum vectors for Adam optimizer - separate for generator and discriminator
+        var genParamCount = Generator.GetParameterCount();
+        var discParamCount = Discriminator.GetParameterCount();
+
+        _genMomentum = new Vector<T>(genParamCount);
+        _genSecondMoment = new Vector<T>(genParamCount);
+        _discMomentum = new Vector<T>(discParamCount);
+        _discSecondMoment = new Vector<T>(discParamCount);
     }
 
     /// <inheritdoc/>
@@ -858,6 +1096,8 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         writer.Write(UseTruncation);
         writer.Write(UseSpectralNormalization);
         writer.Write(UseSelfAttention);
+        writer.Write(_initialLearningRate);
+        writer.Write(_currentLearningRate);
 
         // Serialize class embeddings
         for (int i = 0; i < NumClasses; i++)
@@ -865,6 +1105,15 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             for (int j = 0; j < ClassEmbeddingDim; j++)
             {
                 writer.Write(Convert.ToDouble(_classEmbeddings[i, j]));
+            }
+        }
+
+        // Serialize discriminator class projection
+        for (int i = 0; i < NumClasses; i++)
+        {
+            for (int j = 0; j < ClassEmbeddingDim; j++)
+            {
+                writer.Write(Convert.ToDouble(_discClassProjection[i, j]));
             }
         }
 
@@ -876,6 +1125,30 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         byte[] discriminatorData = Discriminator.Serialize();
         writer.Write(discriminatorData.Length);
         writer.Write(discriminatorData);
+
+        // Serialize optimizer state for complete training state preservation
+        SerializationHelper<T>.SerializeVector(writer, _genMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _genSecondMoment);
+        writer.Write(Convert.ToDouble(_genBeta1Power));
+        writer.Write(Convert.ToDouble(_genBeta2Power));
+
+        SerializationHelper<T>.SerializeVector(writer, _discMomentum);
+        SerializationHelper<T>.SerializeVector(writer, _discSecondMoment);
+        writer.Write(Convert.ToDouble(_discBeta1Power));
+        writer.Write(Convert.ToDouble(_discBeta2Power));
+
+        // Serialize loss history
+        writer.Write(_generatorLosses.Count);
+        foreach (var loss in _generatorLosses)
+        {
+            writer.Write(Convert.ToDouble(loss));
+        }
+
+        writer.Write(_discriminatorLosses.Count);
+        foreach (var loss in _discriminatorLosses)
+        {
+            writer.Write(Convert.ToDouble(loss));
+        }
     }
 
     /// <inheritdoc/>
@@ -893,6 +1166,8 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         UseTruncation = reader.ReadBoolean();
         UseSpectralNormalization = reader.ReadBoolean();
         UseSelfAttention = reader.ReadBoolean();
+        _initialLearningRate = reader.ReadDouble();
+        _currentLearningRate = reader.ReadDouble();
 
         // Deserialize class embeddings
         _classEmbeddings = new Matrix<T>(NumClasses, ClassEmbeddingDim);
@@ -904,12 +1179,48 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             }
         }
 
+        // Deserialize discriminator class projection
+        _discClassProjection = new Matrix<T>(NumClasses, ClassEmbeddingDim);
+        for (int i = 0; i < NumClasses; i++)
+        {
+            for (int j = 0; j < ClassEmbeddingDim; j++)
+            {
+                _discClassProjection[i, j] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+
         // Deserialize networks
         int generatorLength = reader.ReadInt32();
         Generator.Deserialize(reader.ReadBytes(generatorLength));
 
         int discriminatorLength = reader.ReadInt32();
         Discriminator.Deserialize(reader.ReadBytes(discriminatorLength));
+
+        // Deserialize optimizer state
+        _genMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _genSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _genBeta1Power = NumOps.FromDouble(reader.ReadDouble());
+        _genBeta2Power = NumOps.FromDouble(reader.ReadDouble());
+
+        _discMomentum = SerializationHelper<T>.DeserializeVector(reader);
+        _discSecondMoment = SerializationHelper<T>.DeserializeVector(reader);
+        _discBeta1Power = NumOps.FromDouble(reader.ReadDouble());
+        _discBeta2Power = NumOps.FromDouble(reader.ReadDouble());
+
+        // Deserialize loss history
+        int genLossCount = reader.ReadInt32();
+        _generatorLosses = new List<T>(genLossCount);
+        for (int i = 0; i < genLossCount; i++)
+        {
+            _generatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
+        }
+
+        int discLossCount = reader.ReadInt32();
+        _discriminatorLosses = new List<T>(discLossCount);
+        for (int i = 0; i < discLossCount; i++)
+        {
+            _discriminatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
+        }
     }
 
     /// <inheritdoc/>
