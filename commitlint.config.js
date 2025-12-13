@@ -23,7 +23,7 @@ export default {
     (message) => /^merge:/i.test(message),
     // Ignore general merge commits containing "Merge" followed by common patterns
     (message) => /^Merge (origin|upstream|master|main)/i.test(message),
-    // Ignore legacy commit from Work Session Planning PR (#411)
-    (message) => /^Work Session Planning/.test(message)
+    // Ignore legacy commits from Work Session PRs (before conventional commits)
+    (message) => /^Work (Session Planning|on Issue)/.test(message)
   ]
 };
