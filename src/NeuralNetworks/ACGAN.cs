@@ -109,6 +109,11 @@ public class ACGAN<T> : NeuralNetworkBase<T>
             0, 0, 0,
             null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
+        if (discriminatorArchitecture.OutputSize != 1 + numClasses)
+            throw new ArgumentException($"Discriminator output size must be 1 + numClasses ({1 + numClasses}), but was {discriminatorArchitecture.OutputSize}.", nameof(discriminatorArchitecture));
+
         _numClasses = numClasses;
         _initialLearningRate = initialLearningRate;
         _genCurrentLearningRate = initialLearningRate;
@@ -242,6 +247,11 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Calculates the authenticity loss (real vs fake).
     /// </summary>
+    /// <remarks>
+    /// This method assumes the discriminator outputs probabilities (after sigmoid activation),
+    /// not raw logits. If the discriminator outputs logits, apply sigmoid activation first
+    /// or use a numerically stable BCEWithLogits loss function.
+    /// </remarks>
     private T CalculateAuthenticityLoss(Tensor<T> discOutput, bool isReal, int batchSize)
     {
         T totalLoss = NumOps.Zero;
@@ -250,8 +260,9 @@ public class ACGAN<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < batchSize; i++)
         {
-            // First output is authenticity score
-            T prediction = discOutput[i, 0];
+            // First output is authenticity probability (should be in [0,1] range after sigmoid)
+            // Clamp prediction to valid probability range for numerical stability
+            T prediction = MathHelper.Clamp(discOutput[i, 0], epsilon, NumOps.Subtract(NumOps.One, epsilon));
 
             // Binary cross-entropy
             T logP = NumOps.Log(NumOps.Add(prediction, epsilon));
@@ -271,6 +282,10 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Calculates the classification loss for the class predictions.
     /// </summary>
+    /// <remarks>
+    /// This method assumes the discriminator outputs probabilities (after softmax activation)
+    /// for class predictions, not raw logits. Values should be in [0,1] range.
+    /// </remarks>
     private T CalculateClassificationLoss(Tensor<T> discOutput, Tensor<T> labels, int batchSize)
     {
         T totalLoss = NumOps.Zero;
@@ -281,7 +296,8 @@ public class ACGAN<T> : NeuralNetworkBase<T>
             // Class outputs start from index 1 (index 0 is authenticity)
             for (int c = 0; c < _numClasses; c++)
             {
-                T prediction = discOutput[i, 1 + c];
+                // Clamp prediction to valid probability range for numerical stability
+                T prediction = MathHelper.Clamp(discOutput[i, 1 + c], epsilon, NumOps.Subtract(NumOps.One, epsilon));
                 T target = labels[i, c];
 
                 // Cross-entropy for class prediction
@@ -332,7 +348,13 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> ConcatenateTensors(Tensor<T> noise, Tensor<T> labels)
     {
+        if (noise.Shape.Length != 2 || labels.Shape.Length != 2)
+            throw new ArgumentException("noise and labels must be rank-2 tensors [batch, features].");
+
         int batchSize = noise.Shape[0];
+        if (labels.Shape[0] != batchSize)
+            throw new ArgumentException($"noise and labels must have the same batch size. noise: {batchSize}, labels: {labels.Shape[0]}");
+
         int noiseSize = noise.Shape[1];
         int labelSize = labels.Shape[1];
 
@@ -389,7 +411,7 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     public Tensor<T> GenerateRandomNoiseTensor(int batchSize, int noiseSize)
     {
-        var random = new Random();
+        var random = RandomHelper.CreateSecureRandom();
         var shape = new int[] { batchSize, noiseSize };
         var noise = new Tensor<T>(shape);
 
@@ -553,9 +575,18 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         return Generator.Predict(input);
     }
 
+    /// <summary>
+    /// Simplified training interface. For proper GAN training, use TrainStep directly.
+    /// </summary>
+    /// <remarks>
+    /// This method maps inputs to TrainStep but may not provide optimal GAN training semantics.
+    /// Parameters are interpreted as: expectedOutput = real images, input = noise.
+    /// All samples are assigned to class 0. For multi-class training, use TrainStep.
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Simplified training interface
+        // Simplified training interface - maps to TrainStep with class 0
+        // For proper GAN training, use TrainStep directly with appropriate labels
         int batchSize = expectedOutput.Shape[0];
         var labels = CreateOneHotLabels(batchSize, 0);
         TrainStep(expectedOutput, labels, input, labels);
@@ -625,6 +656,10 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     {
         int generatorCount = Generator.GetParameterCount();
         int discriminatorCount = Discriminator.GetParameterCount();
+        int totalCount = generatorCount + discriminatorCount;
+
+        if (parameters.Length < totalCount)
+            throw new ArgumentException($"parameters vector length ({parameters.Length}) must be at least {totalCount} (generator: {generatorCount} + discriminator: {discriminatorCount}).", nameof(parameters));
 
         // Update Generator parameters
         var generatorParams = new Vector<T>(generatorCount);

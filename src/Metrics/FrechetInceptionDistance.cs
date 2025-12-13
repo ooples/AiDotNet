@@ -333,30 +333,47 @@ namespace AiDotNet.Metrics
                 }
             }
 
-            // Newton-Schulz iteration: Y_{k+1} = 0.5 * Y_k * (3I - Y_k * Y_k)
-            // Run for a fixed number of iterations
+            // Newton-Schulz iteration for matrix inverse square root: Y_{k+1} = 0.5 * Y_k * (3I - A * Y_k * Y_k)
+            // where A is the scaled symmetric product matrix
+            // This converges to A^{-1/2}, then we compute Tr(A^{1/2}) = Tr(A * A^{-1/2})
             const int maxIterations = 15;
             var identity = Matrix<T>.CreateIdentity(n);
+
+            // Store the scaled matrix A for the iteration
+            var A = new Matrix<T>(n, n);
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    A[i, j] = Y[i, j];  // Y was initialized to symProduct/scale
+                }
+            }
+
+            // Initialize Y to identity for inverse square root iteration
+            Y = Matrix<T>.CreateIdentity(n);
 
             for (int iter = 0; iter < maxIterations; iter++)
             {
                 // Compute Y * Y
                 var YY = MatrixMultiply(Y, Y);
 
-                // Compute 3I - Y*Y
-                var threeIMinusYY = new Matrix<T>(n, n);
+                // Compute A * Y * Y
+                var AYY = MatrixMultiply(A, YY);
+
+                // Compute 3I - A*Y*Y
+                var threeIMinusAYY = new Matrix<T>(n, n);
                 for (int i = 0; i < n; i++)
                 {
                     for (int j = 0; j < n; j++)
                     {
-                        threeIMinusYY[i, j] = NumOps.Subtract(
+                        threeIMinusAYY[i, j] = NumOps.Subtract(
                             NumOps.Multiply(NumOps.FromDouble(3.0), identity[i, j]),
-                            YY[i, j]);
+                            AYY[i, j]);
                     }
                 }
 
-                // Y = 0.5 * Y * (3I - Y*Y)
-                var newY = MatrixMultiply(Y, threeIMinusYY);
+                // Y = 0.5 * Y * (3I - A*Y*Y)
+                var newY = MatrixMultiply(Y, threeIMinusAYY);
                 for (int i = 0; i < n; i++)
                 {
                     for (int j = 0; j < n; j++)
@@ -366,16 +383,23 @@ namespace AiDotNet.Metrics
                 }
             }
 
-            // Y now approximates √(A/scale), so √A ≈ Y * √scale
-            // Tr(√A) = √scale * Tr(Y)
+            // Y now approximates A^{-1/2} where A = symProduct/scale
+            // To get Tr(√symProduct), compute Tr(A * Y) * √scale = Tr(symProduct/scale * (symProduct/scale)^{-1/2}) * √scale
+            // = Tr((symProduct/scale)^{1/2}) * √scale = Tr(√symProduct) / √(√scale) * √scale = Tr(√symProduct) * scale^{1/4}
+            // Actually: Tr(√(A*scale)) = √scale * Tr(√A) where A = symProduct/scale
+            // And √A = A * A^{-1/2}, so Tr(√A) = Tr(A * Y)
+            var AY = MatrixMultiply(A, Y);
+
+            // AY = A * A^{-1/2} = A^{1/2} (the matrix square root of A)
+            // Tr(√symProduct) = Tr(√(A*scale)) = √scale * Tr(√A) = √scale * Tr(AY)
             var sqrtScale = NumOps.Sqrt(scale);
-            var traceY = NumOps.Zero;
+            var traceAY = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                traceY = NumOps.Add(traceY, Y[i, i]);
+                traceAY = NumOps.Add(traceAY, AY[i, i]);
             }
 
-            return NumOps.Multiply(sqrtScale, traceY);
+            return NumOps.Multiply(sqrtScale, traceAY);
         }
 
         /// <summary>

@@ -30,18 +30,14 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class WGAN<T> : NeuralNetworkBase<T>
 {
-    // Generator optimizer state
+    // Generator optimizer state (RMSprop)
     private Vector<T> _genMomentum;
     private Vector<T> _genSecondMoment;
-    private T _genBeta1Power;
-    private T _genBeta2Power;
     private double _genCurrentLearningRate;
 
-    // Critic optimizer state
+    // Critic optimizer state (RMSprop)
     private Vector<T> _criticMomentum;
     private Vector<T> _criticSecondMoment;
-    private T _criticBeta1Power;
-    private T _criticBeta2Power;
     private double _criticCurrentLearningRate;
 
     private double _initialLearningRate;
@@ -147,16 +143,12 @@ public class WGAN<T> : NeuralNetworkBase<T>
         _criticIterations = criticIterations;
         _learningRateDecay = 0.9999;
 
-        // Initialize Generator optimizer state
-        _genBeta1Power = NumOps.One;
-        _genBeta2Power = NumOps.One;
+        // Initialize Generator optimizer state (RMSprop)
         _genCurrentLearningRate = initialLearningRate;
         _genMomentum = Vector<T>.Empty();
         _genSecondMoment = Vector<T>.Empty();
 
-        // Initialize Critic optimizer state
-        _criticBeta1Power = NumOps.One;
-        _criticBeta2Power = NumOps.One;
+        // Initialize Critic optimizer state (RMSprop)
         _criticCurrentLearningRate = initialLearningRate;
         _criticMomentum = Vector<T>.Empty();
         _criticSecondMoment = Vector<T>.Empty();
