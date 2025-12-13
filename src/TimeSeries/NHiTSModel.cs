@@ -205,14 +205,12 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
         // Compute gradients for each stack using backpropagation
         var gradients = new Dictionary<string, Tensor<T>>();
-        // Use full gradient tensor for proper multi-step gradient flow
-        T outputGradient = outputGradients[0];
 
         for (int stackIdx = 0; stackIdx < _stacks.Count; stackIdx++)
         {
             var stack = _stacks[stackIdx];
             var pooledInput = ApplyPoolingTensor(input, stack.PoolingSize);
-            var stackGradients = stack.Backward(outputGradient, pooledInput);
+            var stackGradients = stack.Backward(outputGradients, pooledInput);
 
             foreach (var kvp in stackGradients)
             {
@@ -606,7 +604,9 @@ internal class NHiTSStackTensor<T>
     /// <summary>
     /// Backward pass computing gradients for all parameters.
     /// </summary>
-    public Dictionary<string, Tensor<T>> Backward(T outputGradient, Tensor<T> originalInput)
+    /// <param name="outputGradient">Tensor of gradients for each output (multi-horizon forecast).</param>
+    /// <param name="originalInput">The original input tensor (unused but kept for API consistency).</param>
+    public Dictionary<string, Tensor<T>> Backward(Tensor<T> outputGradient, Tensor<T> originalInput)
     {
         var gradients = new Dictionary<string, Tensor<T>>();
 
@@ -616,9 +616,13 @@ internal class NHiTSStackTensor<T>
             return gradients;
         }
 
-        // Start with output gradient for first output element
+        // Initialize delta from full output gradient tensor for proper multi-horizon training
         var delta = new Tensor<T>([_outputLength]);
-        delta[0] = outputGradient;
+        int n = Math.Min(_outputLength, outputGradient.Shape[0]);
+        for (int i = 0; i < n; i++)
+        {
+            delta[i] = outputGradient[i];
+        }
 
         // Backpropagate through layers in reverse
         for (int layer = _weights.Count - 1; layer >= 0; layer--)
@@ -763,9 +767,14 @@ internal class NHiTSStackTensor<T>
             for (int d = 0; d < rank; d++)
                 shape[d] = reader.ReadInt32();
 
+            // Always consume all serialized doubles to keep stream aligned
             int total = shape.Aggregate(1, (a, b) => a * b);
-            for (int i = 0; i < total && i < _weights[w].Length; i++)
-                _weights[w][i] = _numOps.FromDouble(reader.ReadDouble());
+            for (int i = 0; i < total; i++)
+            {
+                double v = reader.ReadDouble();
+                if (i < _weights[w].Length)
+                    _weights[w][i] = _numOps.FromDouble(v);
+            }
         }
 
         int biasCount = reader.ReadInt32();
@@ -776,9 +785,14 @@ internal class NHiTSStackTensor<T>
             for (int d = 0; d < rank; d++)
                 shape[d] = reader.ReadInt32();
 
+            // Always consume all serialized doubles to keep stream aligned
             int total = shape.Aggregate(1, (a, b) => a * b);
-            for (int i = 0; i < total && i < _biases[b].Length; i++)
-                _biases[b][i] = _numOps.FromDouble(reader.ReadDouble());
+            for (int i = 0; i < total; i++)
+            {
+                double v = reader.ReadDouble();
+                if (i < _biases[b].Length)
+                    _biases[b][i] = _numOps.FromDouble(v);
+            }
         }
     }
 }

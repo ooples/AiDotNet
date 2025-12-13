@@ -271,9 +271,8 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         // Backprop through layers in reverse
         var dHidden = BackwardLinear(dOutput, outputLayer, gradients);
 
-        // Backprop through attention (simplified - just passes gradient through)
-        var dAttention = dHidden;
-        ComputeAttentionGradients(dAttention, gradients);
+        // Backprop through attention - returns gradient w.r.t. attention input
+        dHidden = ComputeAttentionGradients(dHidden, gradients);
 
         // Backprop through hidden layers
         for (int layer = _layerWeights.Count - 2; layer >= 0; layer--)
@@ -330,76 +329,175 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Applies proper multi-head self-attention.
+    /// Applies proper multi-head self-attention over the temporal dimension.
     /// </summary>
+    /// <remarks>
+    /// Implements scaled dot-product attention: Attention(Q,K,V) = softmax(QK^T / sqrt(d_k)) * V
+    /// The input is reshaped to [seqLen, hiddenSize] and attention is computed over positions.
+    /// Each head operates on a subset of dimensions, and results are concatenated.
+    /// </remarks>
     private Tensor<T> ApplyMultiHeadAttention(Tensor<T> input)
     {
         int hiddenSize = _options.HiddenSize;
         int numHeads = _options.NumAttentionHeads;
         int headDim = hiddenSize / numHeads;
 
-        // Resize input if needed
-        if (input.Length != hiddenSize)
+        // Determine sequence length from input and hidden size
+        // Input is flattened [seqLen * hiddenSize], reshape to attend over positions
+        int seqLen = Math.Max(1, input.Length / hiddenSize);
+        if (seqLen * hiddenSize > input.Length)
         {
-            var resized = new Tensor<T>([hiddenSize]);
-            for (int i = 0; i < Math.Min(input.Length, hiddenSize); i++)
-            {
-                resized[i] = input[i];
-            }
-            input = resized;
+            seqLen = 1;
         }
 
-        // Compute Q, K, V projections
-        var query = ForwardLinear(input, _queryWeight, new Tensor<T>([hiddenSize]));
-        var key = ForwardLinear(input, _keyWeight, new Tensor<T>([hiddenSize]));
-        var value = ForwardLinear(input, _valueWeight, new Tensor<T>([hiddenSize]));
+        // Resize/reshape input to [seqLen, hiddenSize]
+        var reshapedInput = new Tensor<T>([seqLen, hiddenSize]);
+        for (int t = 0; t < seqLen; t++)
+        {
+            for (int d = 0; d < hiddenSize; d++)
+            {
+                int srcIdx = t * hiddenSize + d;
+                if (srcIdx < input.Length)
+                {
+                    reshapedInput[t * hiddenSize + d] = input[srcIdx];
+                }
+            }
+        }
 
-        // Multi-head attention
-        var attentionOutput = new Tensor<T>([hiddenSize]);
+        // Compute Q, K, V projections for each position in sequence
+        var queries = new Tensor<T>([seqLen, hiddenSize]);
+        var keys = new Tensor<T>([seqLen, hiddenSize]);
+        var values = new Tensor<T>([seqLen, hiddenSize]);
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            // Extract position t's hidden state
+            var posInput = new Tensor<T>([hiddenSize]);
+            for (int d = 0; d < hiddenSize; d++)
+            {
+                posInput[d] = reshapedInput[t * hiddenSize + d];
+            }
+
+            // Project to Q, K, V
+            var q = ForwardLinear(posInput, _queryWeight, new Tensor<T>([hiddenSize]));
+            var k = ForwardLinear(posInput, _keyWeight, new Tensor<T>([hiddenSize]));
+            var v = ForwardLinear(posInput, _valueWeight, new Tensor<T>([hiddenSize]));
+
+            for (int d = 0; d < hiddenSize; d++)
+            {
+                queries[t * hiddenSize + d] = q[d];
+                keys[t * hiddenSize + d] = k[d];
+                values[t * hiddenSize + d] = v[d];
+            }
+        }
+
+        // Multi-head attention with softmax over positions
+        var attentionOutput = new Tensor<T>([seqLen, hiddenSize]);
 
         for (int h = 0; h < numHeads; h++)
         {
-            int offset = h * headDim;
+            int headOffset = h * headDim;
 
-            // Compute attention scores for this head
-            T score = NumOps.Zero;
-            for (int d = 0; d < headDim; d++)
+            // For each query position
+            for (int qi = 0; qi < seqLen; qi++)
             {
-                int idx = offset + d;
-                if (idx < query.Length && idx < key.Length)
+                // Compute attention scores against all key positions
+                var scores = new T[seqLen];
+                T scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
+
+                for (int ki = 0; ki < seqLen; ki++)
                 {
-                    score = NumOps.Add(score, NumOps.Multiply(query[idx], key[idx]));
+                    T score = NumOps.Zero;
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        int qIdx = qi * hiddenSize + headOffset + d;
+                        int kIdx = ki * hiddenSize + headOffset + d;
+                        score = NumOps.Add(score, NumOps.Multiply(queries[qIdx], keys[kIdx]));
+                    }
+                    scores[ki] = NumOps.Multiply(score, scale);
+                }
+
+                // Softmax over key positions
+                var weights = Softmax(scores);
+
+                // Weighted sum of values
+                for (int d = 0; d < headDim; d++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int vi = 0; vi < seqLen; vi++)
+                    {
+                        int vIdx = vi * hiddenSize + headOffset + d;
+                        sum = NumOps.Add(sum, NumOps.Multiply(weights[vi], values[vIdx]));
+                    }
+                    int outIdx = qi * hiddenSize + headOffset + d;
+                    attentionOutput[outIdx] = sum;
                 }
             }
+        }
 
-            // Scale by sqrt(headDim)
-            T scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
-            score = NumOps.Multiply(score, scale);
-
-            // Softmax (for single sequence, just use sigmoid-like scaling)
-            T weight = Sigmoid(score);
-
-            // Apply attention weight to values
-            for (int d = 0; d < headDim; d++)
-            {
-                int idx = offset + d;
-                if (idx < value.Length && idx < attentionOutput.Length)
-                {
-                    attentionOutput[idx] = NumOps.Multiply(weight, value[idx]);
-                }
-            }
+        // Flatten back to [seqLen * hiddenSize] and take final position or pool
+        // Use last position output (common for sequence-to-one models)
+        var finalHidden = new Tensor<T>([hiddenSize]);
+        int lastPos = (seqLen - 1) * hiddenSize;
+        for (int d = 0; d < hiddenSize; d++)
+        {
+            finalHidden[d] = attentionOutput[lastPos + d];
         }
 
         // Output projection
-        var output = ForwardLinear(attentionOutput, _outputWeight, new Tensor<T>([hiddenSize]));
+        var output = ForwardLinear(finalHidden, _outputWeight, new Tensor<T>([hiddenSize]));
 
-        // Residual connection
-        for (int i = 0; i < Math.Min(output.Length, input.Length); i++)
+        // Residual connection (with matching dimensions)
+        var residualInput = new Tensor<T>([hiddenSize]);
+        for (int d = 0; d < hiddenSize && d < input.Length; d++)
         {
-            output[i] = NumOps.Add(output[i], input[i]);
+            residualInput[d] = input[(seqLen - 1) * hiddenSize + d < input.Length
+                ? (seqLen - 1) * hiddenSize + d
+                : d];
+        }
+
+        for (int i = 0; i < hiddenSize; i++)
+        {
+            output[i] = NumOps.Add(output[i], residualInput[i]);
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Computes softmax over an array of scores.
+    /// </summary>
+    private T[] Softmax(T[] scores)
+    {
+        int n = scores.Length;
+        var result = new T[n];
+
+        // Find max for numerical stability
+        T max = scores[0];
+        for (int i = 1; i < n; i++)
+        {
+            if (NumOps.GreaterThan(scores[i], max))
+            {
+                max = scores[i];
+            }
+        }
+
+        // Compute exp(x - max) and sum
+        T sum = NumOps.Zero;
+        var exps = new T[n];
+        for (int i = 0; i < n; i++)
+        {
+            exps[i] = NumOps.Exp(NumOps.Subtract(scores[i], max));
+            sum = NumOps.Add(sum, exps[i]);
+        }
+
+        // Normalize
+        for (int i = 0; i < n; i++)
+        {
+            result[i] = NumOps.Divide(exps[i], sum);
+        }
+
+        return result;
     }
 
     private T Sigmoid(T x)
@@ -457,7 +555,10 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         return dInput;
     }
 
-    private void ComputeAttentionGradients(Tensor<T> dOutput, Dictionary<string, Tensor<T>> gradients)
+    /// <summary>
+    /// Computes attention gradients and returns gradient w.r.t. attention input.
+    /// </summary>
+    private Tensor<T> ComputeAttentionGradients(Tensor<T> dOutput, Dictionary<string, Tensor<T>> gradients)
     {
         var input = _attentionInput;
         int hiddenSize = _options.HiddenSize;
@@ -625,6 +726,42 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         gradients["attention_query_weight"] = dQWeight;
         gradients["attention_key_weight"] = dKWeight;
         gradients["attention_value_weight"] = dVWeight;
+
+        // Compute gradient w.r.t. attention input
+        // dInput = dOutput (residual path) + W_q^T * dQuery + W_k^T * dKey + W_v^T * dValue
+        var dInput = new Tensor<T>([hiddenSize]);
+
+        // Residual path: output = attention_output + input, so dInput += dOutput
+        for (int i = 0; i < hiddenSize && i < dOutput.Length; i++)
+        {
+            dInput[i] = NumOps.Add(dInput[i], dOutput[i]);
+        }
+
+        // Projection paths: input -> Q/K/V linears
+        // dInput += W_q^T * dQuery + W_k^T * dKey + W_v^T * dValue
+        for (int j = 0; j < hiddenSize; j++)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < hiddenSize; i++)
+            {
+                int wIdx = i * hiddenSize + j;
+                if (wIdx < _queryWeight.Length && i < dQuery.Length)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(dQuery[i], _queryWeight[wIdx]));
+                }
+                if (wIdx < _keyWeight.Length && i < dKey.Length)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(dKey[i], _keyWeight[wIdx]));
+                }
+                if (wIdx < _valueWeight.Length && i < dValue.Length)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(dValue[i], _valueWeight[wIdx]));
+                }
+            }
+            dInput[j] = NumOps.Add(dInput[j], sum);
+        }
+
+        return dInput;
     }
 
     private void ApplyGradients(Dictionary<string, Tensor<T>> gradients, T learningRate, int batchSize)
