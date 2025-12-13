@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -114,12 +116,44 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         _options = options;
         _numOps = MathHelper.GetNumericOperations<T>();
         _random = new Random(42);
+
+        // Validate options to prevent runtime failures
+        ValidateOptions(options);
+
         _vocabularySize = _options.VocabularySize;
         _binWidth = (_binMax - _binMin) / _vocabularySize;
         _transformerLayers = new List<ChronosTransformerLayer<T>>();
 
         if (initializeModel)
             InitializeModel();
+    }
+
+    /// <summary>
+    /// Validates configuration options to prevent division-by-zero and invalid dimensions.
+    /// </summary>
+    /// <exception cref="ArgumentException">Thrown when options contain invalid values.</exception>
+    private static void ValidateOptions(ChronosOptions<T> options)
+    {
+        if (options.VocabularySize < 2)
+            throw new ArgumentException($"VocabularySize must be at least 2, got {options.VocabularySize}", nameof(options));
+
+        if (options.EmbeddingDim <= 0)
+            throw new ArgumentException($"EmbeddingDim must be positive, got {options.EmbeddingDim}", nameof(options));
+
+        if (options.NumHeads <= 0)
+            throw new ArgumentException($"NumHeads must be positive, got {options.NumHeads}", nameof(options));
+
+        if (options.EmbeddingDim % options.NumHeads != 0)
+            throw new ArgumentException($"EmbeddingDim ({options.EmbeddingDim}) must be divisible by NumHeads ({options.NumHeads})", nameof(options));
+
+        if (options.NumLayers <= 0)
+            throw new ArgumentException($"NumLayers must be positive, got {options.NumLayers}", nameof(options));
+
+        if (options.ContextLength <= 0)
+            throw new ArgumentException($"ContextLength must be positive, got {options.ContextLength}", nameof(options));
+
+        if (options.ForecastHorizon <= 0)
+            throw new ArgumentException($"ForecastHorizon must be positive, got {options.ForecastHorizon}", nameof(options));
     }
 
     private void InitializeModel()
@@ -453,6 +487,13 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     private Vector<T> ApplyLayerNorm(Vector<T> input, Vector<T> gamma, Vector<T> beta)
     {
+        // Validate dimensions match (should always be true after option validation)
+        if (input.Length != gamma.Length || input.Length != beta.Length)
+        {
+            throw new InvalidOperationException(
+                $"Layer normalization dimension mismatch: input={input.Length}, gamma={gamma.Length}, beta={beta.Length}");
+        }
+
         // Compute mean
         double mean = 0;
         for (int i = 0; i < input.Length; i++)
@@ -471,7 +512,7 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         // Normalize
         double stddev = Math.Sqrt(variance + 1e-6);
         var output = new Vector<T>(input.Length);
-        for (int i = 0; i < input.Length && i < gamma.Length; i++)
+        for (int i = 0; i < input.Length; i++)
         {
             double normalized = (Convert.ToDouble(input[i]) - mean) / stddev;
             output[i] = _numOps.Add(
@@ -852,6 +893,7 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 internal class ChronosTransformerLayer<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private readonly Random _random;
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _headDim;
@@ -883,11 +925,12 @@ internal class ChronosTransformerLayer<T>
     public ChronosTransformerLayer(int embeddingDim, int numHeads, int seed = 42)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
+        _random = RandomHelper.CreateSeededRandom(seed);
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _headDim = embeddingDim / numHeads;
 
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         double attnStddev = Math.Sqrt(2.0 / embeddingDim);
         double ffnStddev = Math.Sqrt(2.0 / (embeddingDim * 4));
 
@@ -914,6 +957,7 @@ internal class ChronosTransformerLayer<T>
     private ChronosTransformerLayer()
     {
         _numOps = MathHelper.GetNumericOperations<T>();
+        _random = RandomHelper.CreateSeededRandom(42);
         _embeddingDim = 0;
         _numHeads = 1;
         _headDim = 0;
@@ -1115,7 +1159,7 @@ internal class ChronosTransformerLayer<T>
     public void UpdateWeights(Vector<T> input, T target, T learningRate, T epsilon, T twoEpsilon,
         Func<Vector<T>, T> predict, int sampleSize)
     {
-        var random = new Random();
+        // Use seeded Random for reproducibility
         var allMatrices = new[] { _queryProj, _keyProj, _valueProj, _outputProj, _ffn1, _ffn2 };
 
         foreach (var matrix in allMatrices)
@@ -1125,7 +1169,7 @@ internal class ChronosTransformerLayer<T>
 
             for (int s = 0; s < actualSample; s++)
             {
-                int flatIdx = random.Next(totalWeights);
+                int flatIdx = _random.Next(totalWeights);
                 int i = flatIdx / matrix.Columns;
                 int j = flatIdx % matrix.Columns;
 

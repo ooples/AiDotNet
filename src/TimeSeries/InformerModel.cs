@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -467,6 +469,23 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     /// Embeds input time series into embedding space.
     /// Each time step is projected from scalar to embedding dimension.
     /// </summary>
+    /// <param name="input">The input time series vector.</param>
+    /// <returns>A list of embedding vectors, one per time step.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Input Length Handling:</b>
+    /// The input is adjusted to match the configured LookbackWindow size:
+    /// - If input.Length &gt; LookbackWindow: Only the first LookbackWindow elements are used.
+    ///   This truncation is intentional as Informer uses a fixed encoder length for efficiency.
+    /// - If input.Length &lt; LookbackWindow: Zero-padding is added at the beginning (left-padding)
+    ///   to reach the required length.
+    /// </para>
+    /// <para><b>For Beginners:</b> The model needs a fixed-length input to work efficiently.
+    /// If you provide more data than the lookback window, the extra oldest data points are ignored.
+    /// If you provide less data, zeros are added at the start. For best results, provide exactly
+    /// LookbackWindow data points.
+    /// </para>
+    /// </remarks>
     private List<Vector<T>> EmbedSequence(Vector<T> input)
     {
         var embedded = new List<Vector<T>>();
@@ -824,6 +843,7 @@ internal class InformerEncoderLayer<T>
     private readonly int _numHeads;
     private readonly int _headDim;
     private readonly int _sparsityFactor;
+    private readonly Random _random;
 
     // Multi-head attention weights (Q, K, V projections)
     private Matrix<T> _queryProj;
@@ -855,12 +875,13 @@ internal class InformerEncoderLayer<T>
     public InformerEncoderLayer(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
+        _random = RandomHelper.CreateSeededRandom(seed);
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _headDim = embeddingDim / numHeads;
         _sparsityFactor = sparsityFactor;
 
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         double attnStddev = Math.Sqrt(2.0 / embeddingDim);
         double ffnStddev = Math.Sqrt(2.0 / (embeddingDim * 4));
 
@@ -887,6 +908,7 @@ internal class InformerEncoderLayer<T>
     private InformerEncoderLayer()
     {
         _numOps = MathHelper.GetNumericOperations<T>();
+        _random = RandomHelper.CreateSeededRandom(42);
         _embeddingDim = 0;
         _numHeads = 1;
         _headDim = 0;
@@ -1166,8 +1188,7 @@ internal class InformerEncoderLayer<T>
     public void UpdateWeights(Vector<T> input, T target, T learningRate, T epsilon, T twoEpsilon,
         Func<Vector<T>, T> predict, int sampleSize)
     {
-        // Update a random subset of weights using numerical gradients
-        var random = new Random();
+        // Update a random subset of weights using numerical gradients (using seeded Random for reproducibility)
         var allMatrices = new[] { _queryProj, _keyProj, _valueProj, _outputProj, _ffn1, _ffn2 };
 
         foreach (var matrix in allMatrices)
@@ -1177,7 +1198,7 @@ internal class InformerEncoderLayer<T>
 
             for (int s = 0; s < actualSample; s++)
             {
-                int flatIdx = random.Next(totalWeights);
+                int flatIdx = _random.Next(totalWeights);
                 int i = flatIdx / matrix.Columns;
                 int j = flatIdx % matrix.Columns;
 
@@ -1329,6 +1350,7 @@ internal class InformerEncoderLayer<T>
 internal class DistillingConv<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private readonly Random _random;
     private Matrix<T> _convWeights;
     private Vector<T> _convBias;
     private readonly int _poolingFactor;
@@ -1338,9 +1360,10 @@ internal class DistillingConv<T>
     public DistillingConv(int embeddingDim, int poolingFactor, int seed = 42)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
+        _random = RandomHelper.CreateSeededRandom(seed);
         _poolingFactor = poolingFactor;
 
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         double stddev = Math.Sqrt(2.0 / embeddingDim);
 
         // 1D convolution weights (kernel size = 3, same embedding dim)
@@ -1355,6 +1378,7 @@ internal class DistillingConv<T>
     private DistillingConv()
     {
         _numOps = MathHelper.GetNumericOperations<T>();
+        _random = RandomHelper.CreateSeededRandom(42);
         _convWeights = new Matrix<T>(0, 0);
         _convBias = new Vector<T>(0);
         _poolingFactor = 2;
@@ -1423,13 +1447,13 @@ internal class DistillingConv<T>
     public void UpdateWeights(Vector<T> input, T target, T learningRate, T epsilon, T twoEpsilon,
         Func<Vector<T>, T> predict, int sampleSize)
     {
-        var random = new Random();
+        // Use seeded Random for reproducibility
         int totalWeights = _convWeights.Rows * _convWeights.Columns;
         int actualSample = Math.Min(sampleSize, totalWeights);
 
         for (int s = 0; s < actualSample; s++)
         {
-            int flatIdx = random.Next(totalWeights);
+            int flatIdx = _random.Next(totalWeights);
             int i = flatIdx / _convWeights.Columns;
             int j = flatIdx % _convWeights.Columns;
 
@@ -1531,6 +1555,7 @@ internal class DistillingConv<T>
 internal class InformerDecoderLayer<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private readonly Random _random;
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _headDim;
@@ -1571,11 +1596,12 @@ internal class InformerDecoderLayer<T>
     public InformerDecoderLayer(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
+        _random = RandomHelper.CreateSeededRandom(seed);
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _headDim = embeddingDim / numHeads;
 
-        var random = new Random(seed);
+        var random = RandomHelper.CreateSeededRandom(seed);
         double attnStddev = Math.Sqrt(2.0 / embeddingDim);
         double ffnStddev = Math.Sqrt(2.0 / (embeddingDim * 4));
 
@@ -1610,6 +1636,7 @@ internal class InformerDecoderLayer<T>
     private InformerDecoderLayer()
     {
         _numOps = MathHelper.GetNumericOperations<T>();
+        _random = RandomHelper.CreateSeededRandom(42);
         _embeddingDim = 0;
         _numHeads = 1;
         _headDim = 0;
@@ -1862,7 +1889,7 @@ internal class InformerDecoderLayer<T>
     public void UpdateWeights(Vector<T> input, T target, T learningRate, T epsilon, T twoEpsilon,
         Func<Vector<T>, T> predict, int sampleSize)
     {
-        var random = new Random();
+        // Use seeded Random for reproducibility
         var allMatrices = new[] {
             _selfQueryProj, _selfKeyProj, _selfValueProj, _selfOutputProj,
             _crossQueryProj, _crossKeyProj, _crossValueProj, _crossOutputProj,
@@ -1876,7 +1903,7 @@ internal class InformerDecoderLayer<T>
 
             for (int s = 0; s < actualSample; s++)
             {
-                int flatIdx = random.Next(totalWeights);
+                int flatIdx = _random.Next(totalWeights);
                 int i = flatIdx / matrix.Columns;
                 int j = flatIdx % matrix.Columns;
 

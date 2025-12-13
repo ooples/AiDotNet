@@ -362,7 +362,7 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "WindowSize", _options.WindowSize },
-                { "AnomalyThreshold", Convert.ToDouble(_anomalyThreshold) }
+                { "AnomalyThreshold", _numOps.ToDouble(_anomalyThreshold) }
             }
         };
     }
