@@ -1,5 +1,6 @@
 using System;
-using System.Linq;
+using AiDotNet.Engines;
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks;
 
 namespace AiDotNet.Metrics
@@ -7,168 +8,144 @@ namespace AiDotNet.Metrics
     /// <summary>
     /// Fréchet Inception Distance (FID) - A metric for evaluating the quality of generated images.
     ///
-    /// For Beginners:
     /// FID measures how similar generated images are to real images by comparing their
     /// statistical properties in a feature space. Lower FID scores indicate better quality.
     ///
-    /// Think of it like comparing two photo albums:
-    /// 1. Extract features from photos using a pre-trained neural network (Inception)
-    /// 2. Compute statistics (mean and covariance) for real photos
-    /// 3. Compute statistics for generated photos
-    /// 4. Measure the distance between these statistics
+    /// The algorithm:
+    /// 1. Extract features from images using a pre-trained neural network
+    /// 2. Compute statistics (mean and covariance) for real and generated image features
+    /// 3. Compute the Fréchet distance between the two Gaussian distributions
     ///
-    /// The distance is called "Fréchet distance" - a mathematical way to measure how
-    /// different two multivariate Gaussian distributions are.
-    ///
-    /// Why it's better than just looking at images:
-    /// - Objective and quantitative (not just human opinion)
-    /// - Captures both quality AND diversity
-    /// - Correlates well with human judgment
-    /// - Industry standard for GAN evaluation
+    /// Formula: FID = ||μ₁ - μ₂||² + Tr(Σ₁ + Σ₂ - 2√(Σ₁Σ₂))
+    /// where μ is mean, Σ is covariance, Tr is trace
     ///
     /// Typical FID scores:
-    /// - FID < 10: Excellent (very close to real images)
+    /// - FID less than 10: Excellent quality
     /// - FID 10-20: Good quality
     /// - FID 20-50: Moderate quality
-    /// - FID > 50: Poor quality
+    /// - FID greater than 50: Poor quality
     ///
     /// Based on "GANs Trained by a Two Time-Scale Update Rule Converge to a Local Nash Equilibrium"
     /// by Heusel et al. (2017)
     /// </summary>
-    /// <typeparam name="T">The numeric type for computations (e.g., double, float)</typeparam>
-    public class FrechetInceptionDistance<T> where T : struct, IComparable, IFormattable, IConvertible, IComparable<T>, IEquatable<T>
+    /// <typeparam name="T">The numeric type for computations</typeparam>
+    public class FrechetInceptionDistance<T>
     {
-        private readonly INumericOperations<T> NumOps;
+        private readonly INumericOperations<T> _numOps;
+        private IEngine Engine => AiDotNetEngine.Current;
 
         /// <summary>
-        /// Gets the Inception network used for feature extraction.
-        /// In a full implementation, this would be a pre-trained InceptionV3 model.
+        /// Gets the feature extraction network used for computing image representations.
         /// </summary>
-        public ConvolutionalNeuralNetwork<T>? InceptionNetwork { get; private set; }
+        public ConvolutionalNeuralNetwork<T> FeatureNetwork { get; }
 
         /// <summary>
-        /// Gets or sets the layer from which to extract features.
-        /// Typically the final pooling layer before classification (2048 dimensions).
+        /// Gets or sets the layer index from which to extract features.
+        /// Use -1 for the last layer, -2 for second to last, etc.
         /// </summary>
         public int FeatureLayer { get; set; }
 
         /// <summary>
         /// Gets the dimensionality of extracted features.
-        /// For InceptionV3, this is typically 2048.
         /// </summary>
-        public int FeatureDimension { get; private set; }
+        public int FeatureDimension { get; }
 
         /// <summary>
         /// Initializes a new instance of FID calculator.
         /// </summary>
-        /// <param name="inceptionNetwork">Pre-trained Inception network for feature extraction (optional)</param>
-        /// <param name="featureDimension">Dimension of extracted features (default 2048 for InceptionV3)</param>
+        /// <param name="featureNetwork">Pre-trained network for feature extraction</param>
+        /// <param name="featureDimension">Dimension of extracted features</param>
+        /// <exception cref="ArgumentNullException">Thrown when featureNetwork is null</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when featureDimension is less than 1</exception>
         public FrechetInceptionDistance(
-            ConvolutionalNeuralNetwork<T>? inceptionNetwork = null,
+            ConvolutionalNeuralNetwork<T> featureNetwork,
             int featureDimension = 2048)
         {
-            NumOps = MathHelper.GetNumericOperations<T>();
-            InceptionNetwork = inceptionNetwork;
+            if (featureNetwork == null)
+            {
+                throw new ArgumentNullException(nameof(featureNetwork),
+                    "A pre-trained feature extraction network is required for FID computation");
+            }
+            if (featureDimension < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(featureDimension),
+                    "Feature dimension must be at least 1");
+            }
+
+            _numOps = MathHelper.GetNumericOperations<T>();
+            FeatureNetwork = featureNetwork;
             FeatureDimension = featureDimension;
-            FeatureLayer = -2; // Second to last layer (before classification)
+            FeatureLayer = -2;
         }
 
         /// <summary>
         /// Computes the FID score between real and generated images.
         /// </summary>
-        /// <param name="realImages">Tensor of real images</param>
-        /// <param name="generatedImages">Tensor of generated images</param>
+        /// <param name="realImages">Tensor of real images [N, C, H, W]</param>
+        /// <param name="generatedImages">Tensor of generated images [N, C, H, W]</param>
         /// <returns>FID score (lower is better)</returns>
+        /// <exception cref="ArgumentException">Thrown when images have incompatible shapes</exception>
         public double ComputeFID(Tensor<T> realImages, Tensor<T> generatedImages)
         {
-            // Extract features from real and generated images
+            if (realImages.Shape.Length < 4 || generatedImages.Shape.Length < 4)
+            {
+                throw new ArgumentException("Images must be 4D tensors [N, C, H, W]");
+            }
+
             var realFeatures = ExtractFeatures(realImages);
             var generatedFeatures = ExtractFeatures(generatedImages);
 
-            // Compute mean and covariance for both distributions
             var (realMean, realCov) = ComputeStatistics(realFeatures);
             var (genMean, genCov) = ComputeStatistics(generatedFeatures);
 
-            // Compute Fréchet distance
-            var fid = ComputeFrechetDistance(realMean, realCov, genMean, genCov);
-
-            return fid;
+            return ComputeFrechetDistance(realMean, realCov, genMean, genCov);
         }
 
         /// <summary>
-        /// Extracts features from images using the Inception network.
+        /// Extracts features from images using the feature network.
         /// </summary>
-        /// <param name="images">Images to process</param>
-        /// <returns>Feature matrix (num_images × feature_dim)</returns>
         private Matrix<T> ExtractFeatures(Tensor<T> images)
         {
             var numImages = images.Shape[0];
-
-            if (InceptionNetwork == null)
-            {
-                // If no Inception network provided, return dummy features
-                // In a real implementation, you would load a pre-trained InceptionV3
-                return CreateDummyFeatures(numImages);
-            }
-
-            // Set to inference mode
-            InceptionNetwork.SetTrainingMode(false);
-
             var features = new Matrix<T>(numImages, FeatureDimension);
 
-            // Process each image
-            for (int i = 0; i < numImages; i++)
+            bool originalTrainingMode = FeatureNetwork.IsTrainingMode;
+            FeatureNetwork.SetTrainingMode(false);
+
+            try
             {
-                // Extract single image
                 var imageSize = images.Length / numImages;
-                var singleImage = new Tensor<T>(new[] { 1, images.Shape[1], images.Shape[2], images.Shape[3] });
+                var singleImageShape = new[] { 1, images.Shape[1], images.Shape[2], images.Shape[3] };
 
-                // Copy data from source tensor to single image tensor
-                for (int k = 0; k < imageSize; k++)
+                for (int i = 0; i < numImages; i++)
                 {
-                    singleImage.SetFlat(k, images.GetFlat(i * imageSize + k));
+                    var singleImage = new Tensor<T>(singleImageShape);
+
+                    for (int k = 0; k < imageSize; k++)
+                    {
+                        singleImage.SetFlat(k, images.GetFlat(i * imageSize + k));
+                    }
+
+                    var output = FeatureNetwork.Predict(singleImage);
+
+                    var featureCount = Math.Min(output.Length, FeatureDimension);
+                    for (int j = 0; j < featureCount; j++)
+                    {
+                        features[i, j] = output.GetFlat(j);
+                    }
                 }
 
-                // Forward pass through Inception network
-                var output = InceptionNetwork.Predict(singleImage);
-
-                // Extract features from specified layer
-                // In full implementation, would access intermediate layer activations
-                // For now, use output
-                for (int j = 0; j < Math.Min(output.Length, FeatureDimension); j++)
-                {
-                    features[i, j] = output.GetFlat(j);
-                }
+                return features;
             }
-
-            return features;
-        }
-
-        /// <summary>
-        /// Creates dummy features for testing when no Inception network is available.
-        /// </summary>
-        private Matrix<T> CreateDummyFeatures(int numSamples)
-        {
-            var random = new Random();
-            var features = new Matrix<T>(numSamples, FeatureDimension);
-
-            for (int i = 0; i < numSamples; i++)
+            finally
             {
-                for (int j = 0; j < FeatureDimension; j++)
-                {
-                    features[i, j] = NumOps.FromDouble(random.NextDouble());
-                }
+                FeatureNetwork.SetTrainingMode(originalTrainingMode);
             }
-
-            return features;
         }
 
         /// <summary>
-        /// Computes mean and covariance matrix of feature vectors.
+        /// Computes mean and covariance matrix of feature vectors using vectorized operations.
         /// </summary>
-        /// <param name="features">Feature matrix (num_samples × feature_dim)</param>
-        /// <returns>Tuple of (mean vector, covariance matrix)</returns>
-        /// <exception cref="ArgumentException">Thrown when numSamples is less than 2.</exception>
         private (Vector<T> mean, Matrix<T> covariance) ComputeStatistics(Matrix<T> features)
         {
             var numSamples = features.Rows;
@@ -181,32 +158,33 @@ namespace AiDotNet.Metrics
                     nameof(features));
             }
 
-            // Compute mean
             var mean = new Vector<T>(dim);
+            var nInv = _numOps.FromDouble(1.0 / numSamples);
+
             for (int j = 0; j < dim; j++)
             {
-                var sum = NumOps.Zero;
-                for (int i = 0; i < numSamples; i++)
-                {
-                    sum = NumOps.Add(sum, features[i, j]);
-                }
-                mean[j] = NumOps.Divide(sum, NumOps.FromDouble(numSamples));
+                var column = features.GetColumn(j);
+                var sum = Engine.Sum(column);
+                mean[j] = _numOps.Multiply(sum, nInv);
             }
 
-            // Compute covariance matrix
-            var covariance = new Matrix<T>(dim, dim);
-            for (int j1 = 0; j1 < dim; j1++)
+            var centered = new Matrix<T>(numSamples, dim);
+            for (int i = 0; i < numSamples; i++)
             {
-                for (int j2 = 0; j2 < dim; j2++)
+                var row = features.GetRow(i);
+                var centeredRow = (Vector<T>)Engine.Subtract(row, mean);
+                centered.SetRow(i, centeredRow);
+            }
+
+            var nMinusOneInv = _numOps.FromDouble(1.0 / (numSamples - 1));
+            var centeredT = centered.Transpose();
+            var covariance = (Matrix<T>)Engine.MatrixMultiply(centeredT, centered);
+
+            for (int i = 0; i < dim; i++)
+            {
+                for (int j = 0; j < dim; j++)
                 {
-                    var sum = NumOps.Zero;
-                    for (int i = 0; i < numSamples; i++)
-                    {
-                        var diff1 = NumOps.Subtract(features[i, j1], mean[j1]);
-                        var diff2 = NumOps.Subtract(features[i, j2], mean[j2]);
-                        sum = NumOps.Add(sum, NumOps.Multiply(diff1, diff2));
-                    }
-                    covariance[j1, j2] = NumOps.Divide(sum, NumOps.FromDouble(numSamples - 1));
+                    covariance[i, j] = _numOps.Multiply(covariance[i, j], nMinusOneInv);
                 }
             }
 
@@ -215,8 +193,6 @@ namespace AiDotNet.Metrics
 
         /// <summary>
         /// Computes the Fréchet distance between two Gaussian distributions.
-        /// FID = ||μ₁ - μ₂||² + Tr(Σ₁ + Σ₂ - 2√(Σ₁Σ₂))
-        /// where μ is mean, Σ is covariance, Tr is trace
         /// </summary>
         private double ComputeFrechetDistance(
             Vector<T> mean1,
@@ -224,211 +200,125 @@ namespace AiDotNet.Metrics
             Vector<T> mean2,
             Matrix<T> cov2)
         {
-            // 1. Compute squared difference of means: ||μ₁ - μ₂||²
-            var meanDiffSq = NumOps.Zero;
-            for (int i = 0; i < mean1.Length; i++)
-            {
-                var diff = NumOps.Subtract(mean1[i], mean2[i]);
-                meanDiffSq = NumOps.Add(meanDiffSq, NumOps.Multiply(diff, diff));
-            }
+            var meanDiff = (Vector<T>)Engine.Subtract(mean1, mean2);
+            var meanDiffSq = Engine.DotProduct(meanDiff, meanDiff);
 
-            // 2. Compute trace of covariance matrices: Tr(Σ₁) + Tr(Σ₂)
-            var trace1 = NumOps.Zero;
-            var trace2 = NumOps.Zero;
-            for (int i = 0; i < cov1.Rows; i++)
-            {
-                trace1 = NumOps.Add(trace1, cov1[i, i]);
-                trace2 = NumOps.Add(trace2, cov2[i, i]);
-            }
-            var traceCov = NumOps.Add(trace1, trace2);
+            var trace1 = ComputeTrace(cov1);
+            var trace2 = ComputeTrace(cov2);
+            var traceCov = _numOps.Add(trace1, trace2);
 
-            // 3. Compute Tr(√(Σ₁Σ₂)) using proper matrix square root
-            // For symmetric positive semi-definite matrices, we compute the product
-            // and then find the trace of its square root
             var traceSqrtCovProduct = ComputeTraceSqrtCovProduct(cov1, cov2);
 
-            // FID = ||μ₁ - μ₂||² + Tr(Σ₁) + Tr(Σ₂) - 2*Tr(√(Σ₁Σ₂))
-            var fid = NumOps.Add(meanDiffSq, traceCov);
-            fid = NumOps.Subtract(fid, NumOps.Multiply(NumOps.FromDouble(2.0), traceSqrtCovProduct));
+            var fid = _numOps.Add(meanDiffSq, traceCov);
+            fid = _numOps.Subtract(fid, _numOps.Multiply(_numOps.FromDouble(2.0), traceSqrtCovProduct));
 
-            return Convert.ToDouble(fid);
+            return _numOps.ToDouble(fid);
         }
 
         /// <summary>
-        /// Computes Tr(√(Σ₁Σ₂)) using Newton-Schulz iteration for matrix square root.
+        /// Computes the trace of a matrix (sum of diagonal elements).
+        /// </summary>
+        private T ComputeTrace(Matrix<T> matrix)
+        {
+            var trace = _numOps.Zero;
+            var n = Math.Min(matrix.Rows, matrix.Columns);
+            for (int i = 0; i < n; i++)
+            {
+                trace = _numOps.Add(trace, matrix[i, i]);
+            }
+            return trace;
+        }
+
+        /// <summary>
+        /// Computes Tr(sqrt(cov1 * cov2)) using Newton-Schulz iteration for matrix square root.
         /// </summary>
         private T ComputeTraceSqrtCovProduct(Matrix<T> cov1, Matrix<T> cov2)
         {
             int n = cov1.Rows;
 
-            // Compute the matrix product Σ₁ * Σ₂
-            var product = new Matrix<T>(n, n);
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    var sum = NumOps.Zero;
-                    for (int k = 0; k < n; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(cov1[i, k], cov2[k, j]));
-                    }
-                    product[i, j] = sum;
-                }
-            }
+            var product = (Matrix<T>)Engine.MatrixMultiply(cov1, cov2);
 
-            // For computing Tr(√A), we use the identity that for SPD matrices:
-            // Tr(√A) = sum of square roots of eigenvalues
-            // Use power iteration to approximate the trace of the square root
-            // via Newton-Schulz iteration: Y_{k+1} = 0.5 * Y_k * (3I - Y_k^2 * A)
-            // with Y_0 = A / ||A||_F, converges to √(A^{-1}), so we need to adapt
-
-            // Simpler approach: Use the property that for SPD matrices,
-            // Tr(√A) ≈ √Tr(A) when eigenvalues are close together,
-            // but better to use Denman-Beavers iteration which converges to √A
-
-            // Denman-Beavers iteration: Y_0 = A, Z_0 = I
-            // Y_{k+1} = 0.5 * (Y_k + Z_k^{-1})
-            // Z_{k+1} = 0.5 * (Z_k + Y_k^{-1})
-            // Converges to: Y → √A, Z → √(A^{-1})
-
-            // For numerical stability, use a simpler approximation with eigenvalue sum
-            // First, symmetrize the product to handle numerical issues: (A + A^T) / 2
             var symProduct = new Matrix<T>(n, n);
+            var half = _numOps.FromDouble(0.5);
             for (int i = 0; i < n; i++)
             {
                 for (int j = 0; j < n; j++)
                 {
-                    symProduct[i, j] = NumOps.Divide(
-                        NumOps.Add(product[i, j], product[j, i]),
-                        NumOps.FromDouble(2.0));
+                    symProduct[i, j] = _numOps.Multiply(
+                        _numOps.Add(product[i, j], product[j, i]),
+                        half);
                 }
             }
 
-            // Use Newton-Schulz iteration for matrix square root
-            // Start with Y = A / ||A||_F for numerical stability
-            var frobNormSq = NumOps.Zero;
+            var frobNormSq = _numOps.Zero;
             for (int i = 0; i < n; i++)
             {
                 for (int j = 0; j < n; j++)
                 {
-                    frobNormSq = NumOps.Add(frobNormSq, NumOps.Multiply(symProduct[i, j], symProduct[i, j]));
+                    frobNormSq = _numOps.Add(frobNormSq,
+                        _numOps.Multiply(symProduct[i, j], symProduct[i, j]));
                 }
             }
-            var frobNorm = NumOps.Sqrt(frobNormSq);
+            var frobNorm = _numOps.Sqrt(frobNormSq);
 
-            // If the product is essentially zero, return zero
-            if (NumOps.LessThan(frobNorm, NumOps.FromDouble(1e-10)))
+            if (_numOps.LessThan(frobNorm, _numOps.FromDouble(1e-10)))
             {
-                return NumOps.Zero;
+                return _numOps.Zero;
             }
 
-            // Scale for numerical stability
-            var scale = NumOps.Sqrt(frobNorm);
-            var Y = new Matrix<T>(n, n);
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    Y[i, j] = NumOps.Divide(symProduct[i, j], scale);
-                }
-            }
+            var scale = _numOps.Sqrt(frobNorm);
+            var scaleInv = _numOps.Divide(_numOps.One, scale);
 
-            // Newton-Schulz iteration for matrix inverse square root: Y_{k+1} = 0.5 * Y_k * (3I - A * Y_k * Y_k)
-            // where A is the scaled symmetric product matrix
-            // This converges to A^{-1/2}, then we compute Tr(A^{1/2}) = Tr(A * A^{-1/2})
-            const int maxIterations = 15;
-            var identity = Matrix<T>.CreateIdentity(n);
-
-            // Store the scaled matrix A for the iteration
             var A = new Matrix<T>(n, n);
             for (int i = 0; i < n; i++)
             {
                 for (int j = 0; j < n; j++)
                 {
-                    A[i, j] = Y[i, j];  // Y was initialized to symProduct/scale
+                    A[i, j] = _numOps.Multiply(symProduct[i, j], scaleInv);
                 }
             }
 
-            // Initialize Y to identity for inverse square root iteration
-            Y = Matrix<T>.CreateIdentity(n);
+            var Y = Matrix<T>.CreateIdentity(n);
+            var identity = Matrix<T>.CreateIdentity(n);
+            var three = _numOps.FromDouble(3.0);
 
+            const int maxIterations = 15;
             for (int iter = 0; iter < maxIterations; iter++)
             {
-                // Compute Y * Y
-                var YY = MatrixMultiply(Y, Y);
+                var YY = (Matrix<T>)Engine.MatrixMultiply(Y, Y);
+                var AYY = (Matrix<T>)Engine.MatrixMultiply(A, YY);
 
-                // Compute A * Y * Y
-                var AYY = MatrixMultiply(A, YY);
-
-                // Compute 3I - A*Y*Y
                 var threeIMinusAYY = new Matrix<T>(n, n);
                 for (int i = 0; i < n; i++)
                 {
                     for (int j = 0; j < n; j++)
                     {
-                        threeIMinusAYY[i, j] = NumOps.Subtract(
-                            NumOps.Multiply(NumOps.FromDouble(3.0), identity[i, j]),
+                        threeIMinusAYY[i, j] = _numOps.Subtract(
+                            _numOps.Multiply(three, identity[i, j]),
                             AYY[i, j]);
                     }
                 }
 
-                // Y = 0.5 * Y * (3I - A*Y*Y)
-                var newY = MatrixMultiply(Y, threeIMinusAYY);
+                var newY = (Matrix<T>)Engine.MatrixMultiply(Y, threeIMinusAYY);
                 for (int i = 0; i < n; i++)
                 {
                     for (int j = 0; j < n; j++)
                     {
-                        Y[i, j] = NumOps.Multiply(NumOps.FromDouble(0.5), newY[i, j]);
+                        Y[i, j] = _numOps.Multiply(half, newY[i, j]);
                     }
                 }
             }
 
-            // Y now approximates A^{-1/2} where A = symProduct/scale
-            // To get Tr(√symProduct), compute Tr(A * Y) * √scale = Tr(symProduct/scale * (symProduct/scale)^{-1/2}) * √scale
-            // = Tr((symProduct/scale)^{1/2}) * √scale = Tr(√symProduct) / √(√scale) * √scale = Tr(√symProduct) * scale^{1/4}
-            // Actually: Tr(√(A*scale)) = √scale * Tr(√A) where A = symProduct/scale
-            // And √A = A * A^{-1/2}, so Tr(√A) = Tr(A * Y)
-            var AY = MatrixMultiply(A, Y);
+            var AY = (Matrix<T>)Engine.MatrixMultiply(A, Y);
 
-            // AY = A * A^{-1/2} = A^{1/2} (the matrix square root of A)
-            // Tr(√symProduct) = Tr(√(A*scale)) = √scale * Tr(√A) = √scale * Tr(AY)
-            var sqrtScale = NumOps.Sqrt(scale);
-            var traceAY = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                traceAY = NumOps.Add(traceAY, AY[i, i]);
-            }
+            var sqrtScale = _numOps.Sqrt(scale);
+            var traceAY = ComputeTrace(AY);
 
-            return NumOps.Multiply(sqrtScale, traceAY);
+            return _numOps.Multiply(sqrtScale, traceAY);
         }
 
         /// <summary>
-        /// Multiplies two matrices.
-        /// </summary>
-        private Matrix<T> MatrixMultiply(Matrix<T> a, Matrix<T> b)
-        {
-            int n = a.Rows;
-            var result = new Matrix<T>(n, n);
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    var sum = NumOps.Zero;
-                    for (int k = 0; k < n; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(a[i, k], b[k, j]));
-                    }
-                    result[i, j] = sum;
-                }
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// Computes FID using pre-computed statistics.
-        /// Useful when you want to compare against a fixed set of real images.
+        /// Computes FID using pre-computed statistics for the real distribution.
         /// </summary>
         /// <param name="realMean">Mean of real image features</param>
         /// <param name="realCov">Covariance of real image features</param>
@@ -445,14 +335,13 @@ namespace AiDotNet.Metrics
         }
 
         /// <summary>
-        /// Pre-computes and caches statistics for a set of real images.
-        /// This is useful for evaluating multiple generated batches against the same real data.
+        /// Pre-computes statistics for a set of images.
         /// </summary>
-        /// <param name="realImages">Real images to compute statistics for</param>
+        /// <param name="images">Images to compute statistics for</param>
         /// <returns>Tuple of (mean, covariance)</returns>
-        public (Vector<T> mean, Matrix<T> covariance) PrecomputeRealStatistics(Tensor<T> realImages)
+        public (Vector<T> mean, Matrix<T> covariance) PrecomputeStatistics(Tensor<T> images)
         {
-            var features = ExtractFeatures(realImages);
+            var features = ExtractFeatures(images);
             return ComputeStatistics(features);
         }
     }
