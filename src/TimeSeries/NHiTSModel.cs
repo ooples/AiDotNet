@@ -114,8 +114,6 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
-            T epochLoss = NumOps.Zero;
-
             // Shuffle training order for each epoch
             var indices = Enumerable.Range(0, numSamples).OrderBy(_ => _random.Next()).ToList();
 
@@ -126,7 +124,6 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
                 // Accumulate gradients over batch
                 var batchGradients = new List<Dictionary<string, Tensor<T>>>();
-                T batchLoss = NumOps.Zero;
 
                 for (int bi = 0; bi < batchSize; bi++)
                 {
@@ -135,14 +132,12 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
                     T target = y[i];
 
                     // Forward pass and compute loss with gradient tracking
-                    var (loss, gradients) = ForwardWithGradients(input, target);
-                    batchLoss = NumOps.Add(batchLoss, loss);
+                    var (_, gradients) = ForwardWithGradients(input, target);
                     batchGradients.Add(gradients);
                 }
 
                 // Average and apply gradients
                 ApplyGradients(batchGradients, learningRate, batchSize);
-                epochLoss = NumOps.Add(epochLoss, batchLoss);
             }
         }
     }
