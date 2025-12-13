@@ -130,8 +130,8 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     public bool UsePixelNormalization { get; set; }
 
-    private readonly int _imageChannels;
-    private readonly int _baseFeatureMaps;
+    private int _imageChannels;
+    private int _baseFeatureMaps;
     private readonly ILossFunction<T> _lossFunction;
 
     // Alpha blending state for progressive growth fade-in
@@ -435,6 +435,10 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
             throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
         }
 
+        // Save original training modes to restore after training step
+        bool originalGenTrainingMode = Generator.IsTrainingMode;
+        bool originalDiscTrainingMode = Discriminator.IsTrainingMode;
+
         var batchSizeT = NumOps.FromDouble(batchSize);
 
         // === Train Discriminator ===
@@ -508,6 +512,10 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 
         // Update generator parameters using vectorized Adam optimizer
         UpdateGeneratorParametersVectorized();
+
+        // Restore original training modes for predictable behavior after training step
+        Generator.SetTrainingMode(originalGenTrainingMode);
+        Discriminator.SetTrainingMode(originalDiscTrainingMode);
 
         return (discriminatorLoss, generatorLoss);
     }
@@ -1059,9 +1067,8 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         Alpha = reader.ReadDouble();
         UseMinibatchStdDev = reader.ReadBoolean();
         UsePixelNormalization = reader.ReadBoolean();
-        // _imageChannels and _baseFeatureMaps are readonly, set via constructor
-        reader.ReadInt32(); // _imageChannels
-        reader.ReadInt32(); // _baseFeatureMaps
+        _imageChannels = reader.ReadInt32();
+        _baseFeatureMaps = reader.ReadInt32();
 
         // Hyperparameters
         reader.ReadDouble(); // _initialLearningRate (readonly)
