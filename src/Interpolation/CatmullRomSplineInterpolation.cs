@@ -104,6 +104,15 @@ public class CatmullRomSplineInterpolation<T> : IInterpolation<T>
     /// <returns>The interpolated y-value at the specified x-coordinate.</returns>
     public T Interpolate(T x)
     {
+        // Check if x exactly matches a known point
+        for (int k = 0; k < _x.Length; k++)
+        {
+            if (_numOps.Equals(x, _x[k]))
+            {
+                return _y[k];
+            }
+        }
+
         int i = FindInterval(x);
 
         // Get the four points needed for the spline calculation
