@@ -291,7 +291,10 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             // The hybrid detector should incorporate residual analysis insights
             Assert.NotNull(hybridResult);
             Assert.NotNull(residualResult);
-            // Recommendations should include insights
+            // Verify the residual analyzer produced valid output that can influence hybrid
+            Assert.True(System.Enum.IsDefined(typeof(FitType), residualResult.FitType));
+            Assert.NotNull(residualResult.ConfidenceLevel);
+            // Recommendations should include insights from residual analysis
             Assert.True(hybridResult.Recommendations.Count > 0);
         }
 
@@ -315,6 +318,9 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             // The hybrid detector should incorporate learning curve insights
             Assert.NotNull(hybridResult);
             Assert.NotNull(learningResult);
+            // Verify the learning curve detector produced valid output that can influence hybrid
+            Assert.True(System.Enum.IsDefined(typeof(FitType), learningResult.FitType));
+            Assert.NotNull(learningResult.ConfidenceLevel);
             // Recommendations should include insights from learning curve detector
             Assert.True(hybridResult.Recommendations.Count > 0);
         }
@@ -387,6 +393,12 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             Assert.NotNull(hybridResult);
             Assert.NotNull(residualResult);
             Assert.NotNull(learningResult);
+
+            // Verify both components produced valid outputs
+            Assert.True(System.Enum.IsDefined(typeof(FitType), residualResult.FitType));
+            Assert.True(System.Enum.IsDefined(typeof(FitType), learningResult.FitType));
+            Assert.NotNull(residualResult.ConfidenceLevel);
+            Assert.NotNull(learningResult.ConfidenceLevel);
 
             // Check that the hybrid incorporates information from both
             Assert.True(hybridResult.Recommendations.Count >= 1);

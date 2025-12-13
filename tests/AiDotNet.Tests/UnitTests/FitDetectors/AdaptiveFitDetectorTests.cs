@@ -201,6 +201,10 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             var lowThresholdRecommendations = string.Join(" ", lowThresholdResult.Recommendations);
             var highThresholdRecommendations = string.Join(" ", highThresholdResult.Recommendations);
 
+            // Verify recommendations are non-empty strings
+            Assert.False(string.IsNullOrWhiteSpace(lowThresholdRecommendations));
+            Assert.False(string.IsNullOrWhiteSpace(highThresholdRecommendations));
+
             // At minimum, both should have valid confidence levels
             Assert.True(lowThresholdResult.ConfidenceLevel >= 0.0 && lowThresholdResult.ConfidenceLevel <= 1.0);
             Assert.True(highThresholdResult.ConfidenceLevel >= 0.0 && highThresholdResult.ConfidenceLevel <= 1.0);
@@ -240,6 +244,10 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             // With low threshold (0.01), model likely appears "good"; with high (0.99), likely "poor"
             var lowRecommendations = string.Join(" ", lowThresholdResult.Recommendations);
             var highRecommendations = string.Join(" ", highThresholdResult.Recommendations);
+
+            // Verify recommendations are non-empty strings
+            Assert.False(string.IsNullOrWhiteSpace(lowRecommendations));
+            Assert.False(string.IsNullOrWhiteSpace(highRecommendations));
 
             // At minimum, verify the results are deterministic and valid
             Assert.True(Enum.IsDefined(typeof(FitType), lowThresholdResult.FitType));
@@ -327,7 +335,8 @@ namespace AiDotNetTests.UnitTests.FitDetectors
 
             // Assert
             Assert.NotNull(result);
-            Assert.NotNull(result.FitType);
+            // FitType is an enum (value type) - verify it's a valid defined value
+            Assert.True(System.Enum.IsDefined(typeof(FitType), result.FitType));
             Assert.NotNull(result.ConfidenceLevel);
             Assert.NotNull(result.Recommendations);
             Assert.NotEmpty(result.Recommendations);
